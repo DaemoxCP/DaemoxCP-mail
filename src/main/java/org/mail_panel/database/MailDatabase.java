@@ -227,6 +227,7 @@ public class MailDatabase {
         // ========== PANEL TABLES ==========
 
         // Admin users table
+        // theme: 'auto' = follow browser, 'light' = always light, 'dark' = always dark
         String createPanelAdmin = """
             CREATE TABLE IF NOT EXISTS panel_admin (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -238,7 +239,8 @@ public class MailDatabase {
                 totp_secret VARCHAR(64) NULL,
                 totp_enabled BOOLEAN DEFAULT FALSE,
                 backup_codes TEXT NULL,
-                role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin'
+                role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin',
+                theme VARCHAR(10) DEFAULT 'auto'
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """;
 
@@ -589,6 +591,64 @@ public class MailDatabase {
             return rs.next();
         } catch (SQLException e) {
             return false;
+        }
+    }
+
+    // ========== THEME MANAGEMENT ==========
+
+    /**
+     * Get admin theme preference
+     * @return 'auto', 'light', or 'dark'
+     */
+    public String getAdminTheme(String username) {
+        String sql = "SELECT theme FROM panel_admin WHERE username = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                String theme = rs.getString("theme");
+                return (theme != null && !theme.isEmpty()) ? theme : "auto";
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting theme: " + e.getMessage());
+        }
+        return "auto";
+    }
+
+    /**
+     * Set admin theme preference
+     */
+    public boolean setAdminTheme(String username, String theme) {
+        // Validate theme value
+        if (!theme.equals("auto") && !theme.equals("light") && !theme.equals("dark")) {
+            theme = "auto";
+        }
+        String sql = "UPDATE panel_admin SET theme = ? WHERE username = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, theme);
+            stmt.setString(2, username);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error setting theme: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Ensure theme column exists (for database migration)
+     */
+    public void ensureThemeColumn() {
+        try (Statement stmt = connection.createStatement()) {
+            ResultSet rs = stmt.executeQuery(
+                "SELECT COUNT(*) FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'panel_admin' AND column_name = 'theme'"
+            );
+            if (rs.next() && rs.getInt(1) == 0) {
+                stmt.executeUpdate("ALTER TABLE panel_admin ADD COLUMN theme VARCHAR(10) DEFAULT 'auto'");
+                System.out.println("Added theme column to panel_admin table");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error ensuring theme column: " + e.getMessage());
         }
     }
 
@@ -1003,6 +1063,15 @@ public class MailDatabase {
             stmt.setInt(2, domainId);
             return stmt.executeUpdate() > 0;
             // Postfix uses MySQL directly - no file sync needed
+        }
+    }
+
+    public boolean updateDomainDescription(int domainId, String description) throws SQLException {
+        String sql = "UPDATE domains SET description = ? WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, description);
+            stmt.setInt(2, domainId);
+            return stmt.executeUpdate() > 0;
         }
     }
 

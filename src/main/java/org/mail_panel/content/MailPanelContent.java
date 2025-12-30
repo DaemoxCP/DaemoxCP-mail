@@ -79,7 +79,12 @@ public class MailPanelContent {
                 <li class="nav-item"><a class="nav-link" href="/logs" data-page="logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
                 <li class="nav-item"><a class="nav-link" href="/settings" data-page="settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
             </ul>
-            <ul class="navbar-nav">
+            <ul class="navbar-nav align-items-center">
+                <li class="nav-item me-2">
+                    <button class="theme-toggle" id="themeToggle" title="Cambia tema">
+                        <i class="fas fa-sun" id="themeIcon"></i>
+                    </button>
+                </li>
                 <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
             </ul>
         </div>
@@ -107,16 +112,102 @@ public class MailPanelContent {
      */
     private static String getCommonStyles() {
         return """
-        body { display: flex; flex-direction: column; min-height: 100vh; background-color: #f5f5f5; }
+        /* ===== THEME VARIABLES ===== */
+        :root {
+            --bg-body: #f5f5f5;
+            --bg-card: #ffffff;
+            --bg-input: #ffffff;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --text-muted: #6c757d;
+            --border-color: #dee2e6;
+            --table-bg: #ffffff;
+            --table-stripe: #f8f9fa;
+            --table-hover: #e9ecef;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --dropdown-bg: #ffffff;
+            --modal-bg: #ffffff;
+            --alert-bg: #f8f9fa;
+        }
+        [data-theme="dark"] {
+            --bg-body: #1a1d21;
+            --bg-card: #2d3238;
+            --bg-input: #3d4249;
+            --text-primary: #e9ecef;
+            --text-secondary: #adb5bd;
+            --text-muted: #adb5bd;
+            --border-color: #495057;
+            --table-bg: #2d3238;
+            --table-stripe: #343a40;
+            --table-hover: #3d4249;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+            --dropdown-bg: #2d3238;
+            --modal-bg: #2d3238;
+            --alert-bg: #343a40;
+        }
+        /* ===== BASE STYLES ===== */
+        body { display: flex; flex-direction: column; min-height: 100vh; background-color: var(--bg-body); color: var(--text-primary); transition: background-color 0.3s, color 0.3s; }
         .content { flex: 1 0 auto; }
         .footer { flex-shrink: 0; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
+        .content-container { background-color: var(--bg-card); border-radius: 10px; box-shadow: 0 0 20px var(--shadow-color); padding: 30px; margin-top: 30px; }
         .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
         .btn-mail { background-color: #e94560; border-color: #e94560; color: white; }
         .btn-mail:hover { background-color: #d63850; border-color: #d63850; color: white; }
         .btn-logout { background-color: #dc3545; border-color: #dc3545; }
         .btn-logout:hover { background-color: #c82333; border-color: #bd2130; color: white; }
         .stat-card { border-left: 4px solid #e94560; }
+        /* ===== DARK THEME OVERRIDES ===== */
+        [data-theme="dark"] .card { background-color: var(--bg-card); border-color: var(--border-color); }
+        [data-theme="dark"] .card-header { background-color: var(--table-stripe); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .card-body { background-color: var(--bg-card); color: var(--text-primary); }
+        [data-theme="dark"] .table { --bs-table-bg: var(--table-bg); --bs-table-striped-bg: var(--table-stripe); --bs-table-hover-bg: var(--table-hover); color: var(--text-primary); }
+        [data-theme="dark"] .table th, [data-theme="dark"] .table td { border-color: var(--border-color); }
+        [data-theme="dark"] .form-control, [data-theme="dark"] .form-select { background-color: var(--bg-input); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .form-control:focus, [data-theme="dark"] .form-select:focus { background-color: var(--bg-input); color: var(--text-primary); border-color: #e94560; box-shadow: 0 0 0 0.2rem rgba(233, 69, 96, 0.25); }
+        [data-theme="dark"] .form-control::placeholder { color: var(--text-muted); }
+        [data-theme="dark"] .modal-content { background-color: var(--modal-bg); color: var(--text-primary); }
+        [data-theme="dark"] .modal-header, [data-theme="dark"] .modal-footer { border-color: var(--border-color); }
+        [data-theme="dark"] .dropdown-menu { background-color: var(--dropdown-bg); border-color: var(--border-color); }
+        [data-theme="dark"] .dropdown-item { color: var(--text-primary); }
+        [data-theme="dark"] .dropdown-item:hover { background-color: var(--table-hover); color: var(--text-primary); }
+        [data-theme="dark"] .dropdown-divider { border-color: var(--border-color); }
+        [data-theme="dark"] .alert { background-color: var(--alert-bg); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .alert-info { background-color: rgba(13, 202, 240, 0.15); border-color: rgba(13, 202, 240, 0.3); color: #6edff6; }
+        [data-theme="dark"] .alert-warning { background-color: rgba(255, 193, 7, 0.15); border-color: rgba(255, 193, 7, 0.3); color: #ffda6a; }
+        [data-theme="dark"] .alert-success { background-color: rgba(25, 135, 84, 0.15); border-color: rgba(25, 135, 84, 0.3); color: #75d9a3; }
+        [data-theme="dark"] .alert-danger { background-color: rgba(220, 53, 69, 0.15); border-color: rgba(220, 53, 69, 0.3); color: #f1aeb5; }
+        [data-theme="dark"] .list-group-item { background-color: var(--bg-card); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .nav-tabs .nav-link { color: var(--text-secondary); }
+        [data-theme="dark"] .nav-tabs .nav-link.active { background-color: var(--bg-card); border-color: var(--border-color) var(--border-color) var(--bg-card); color: var(--text-primary); }
+        [data-theme="dark"] .footer { background-color: var(--bg-card) !important; }
+        [data-theme="dark"] .text-muted { color: var(--text-muted) !important; }
+        [data-theme="dark"] .bg-light { background-color: var(--table-stripe) !important; }
+        [data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3, [data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6 { color: var(--text-primary); }
+        [data-theme="dark"] .input-group-text { background-color: var(--table-stripe); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .btn-secondary { background-color: var(--table-stripe); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .btn-outline-secondary { border-color: var(--border-color); color: var(--text-secondary); }
+        [data-theme="dark"] .btn-outline-secondary:hover { background-color: var(--table-hover); color: var(--text-primary); }
+        [data-theme="dark"] pre, [data-theme="dark"] code { background-color: var(--table-stripe); color: #f8f9fa; }
+        [data-theme="dark"] .table-light { --bs-table-bg: var(--table-stripe) !important; --bs-table-color: var(--text-primary) !important; }
+        [data-theme="dark"] .table-light th { background-color: var(--table-stripe) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
+        [data-theme="dark"] .table-bordered { border-color: var(--border-color); }
+        [data-theme="dark"] .table-bordered td, [data-theme="dark"] .table-bordered th { border-color: var(--border-color) !important; }
+        [data-theme="dark"] .table > :not(caption) > * > * { background-color: var(--table-bg); color: var(--text-primary); }
+        [data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * { background-color: var(--table-stripe); }
+        [data-theme="dark"] .table-hover > tbody > tr:hover > * { background-color: var(--table-hover); }
+        [data-theme="dark"] strong { color: var(--text-primary); }
+        [data-theme="dark"] .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+        [data-theme="dark"] .form-label { color: var(--text-primary); }
+        [data-theme="dark"] .form-check-label { color: var(--text-primary); }
+        [data-theme="dark"] label { color: var(--text-primary); }
+        [data-theme="dark"] .alert-primary { background-color: rgba(13, 110, 253, 0.15); border-color: rgba(13, 110, 253, 0.3); color: var(--text-primary); }
+        [data-theme="dark"] p { color: var(--text-primary); }
+        [data-theme="dark"] .bg-white { background-color: var(--bg-input) !important; color: var(--text-primary) !important; }
+        [data-theme="dark"] .border { border-color: var(--border-color) !important; }
+        [data-theme="dark"] .form-control.bg-light, [data-theme="dark"] .bg-light { background-color: var(--table-stripe) !important; color: var(--text-primary) !important; }
+        /* Theme toggle button */
+        .theme-toggle { cursor: pointer; padding: 8px 12px; border-radius: 6px; background: transparent; border: none; color: white; font-size: 1.1rem; }
+        .theme-toggle:hover { background: rgba(255,255,255,0.1); }
         .table-responsive { overflow: visible; }
         .dropdown-menu { z-index: 1050; }
         #nav-placeholder, #footer-placeholder { display: contents; }
@@ -199,6 +290,76 @@ public class MailPanelContent {
     <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // ===== THEME MANAGEMENT =====
+        (function() {
+            let savedTheme = 'auto';
+
+            // Get browser preference
+            function getBrowserTheme() {
+                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+
+            // Apply theme to document
+            function applyTheme(theme) {
+                const effectiveTheme = theme === 'auto' ? getBrowserTheme() : theme;
+                document.documentElement.setAttribute('data-theme', effectiveTheme);
+                updateIcon(effectiveTheme);
+            }
+
+            // Update toggle icon
+            function updateIcon(effectiveTheme) {
+                const icon = document.getElementById('themeIcon');
+                if (icon) {
+                    icon.className = effectiveTheme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+                }
+            }
+
+            // Load theme from server
+            function loadTheme() {
+                fetch('/api/theme').then(r => r.json()).then(data => {
+                    if (data.success) {
+                        savedTheme = data.theme || 'auto';
+                        applyTheme(savedTheme);
+                    }
+                }).catch(() => applyTheme('auto'));
+            }
+
+            // Save theme to server
+            function saveTheme(theme) {
+                fetch('/api/theme', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ theme: theme })
+                });
+            }
+
+            // Cycle through themes: auto -> light -> dark -> auto
+            function cycleTheme() {
+                if (savedTheme === 'auto') savedTheme = 'light';
+                else if (savedTheme === 'light') savedTheme = 'dark';
+                else savedTheme = 'auto';
+                applyTheme(savedTheme);
+                saveTheme(savedTheme);
+            }
+
+            // Listen for browser theme changes (for auto mode)
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                if (savedTheme === 'auto') applyTheme('auto');
+            });
+
+            // Initialize theme toggle
+            document.addEventListener('DOMContentLoaded', function() {
+                loadTheme();
+                const toggle = document.getElementById('themeToggle');
+                if (toggle) {
+                    toggle.addEventListener('click', cycleTheme);
+                }
+            });
+
+            // Apply immediately (before DOM ready) to prevent flash
+            applyTheme(getBrowserTheme());
+        })();
+
         // Logout handler
         document.getElementById('logoutButton').addEventListener('click', function(e) {
             e.preventDefault();
@@ -294,14 +455,33 @@ public class MailPanelContent {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; background-color: #f8f9fa; }
+        /* Theme Variables */
+        :root {
+            --bg-body: #f8f9fa;
+            --bg-card: #ffffff;
+            --bg-input: #ffffff;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --border-color: #dee2e6;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+        [data-theme="dark"] {
+            --bg-body: #1a1d21;
+            --bg-card: #2d3238;
+            --bg-input: #3d4249;
+            --text-primary: #e9ecef;
+            --text-secondary: #adb5bd;
+            --border-color: #495057;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+        body { display: flex; flex-direction: column; min-height: 100vh; background-color: var(--bg-body); color: var(--text-primary); transition: background-color 0.3s, color 0.3s; }
         .content { flex: 1 0 auto; }
         .footer { flex-shrink: 0; }
-        .login-container { max-width: 450px; margin: 50px auto; padding: 30px; background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); }
+        .login-container { max-width: 450px; margin: 50px auto; padding: 30px; background-color: var(--bg-card); border-radius: 10px; box-shadow: 0 0 20px var(--shadow-color); }
         .login-logo { text-align: center; margin-bottom: 30px; }
         .login-logo i { font-size: 64px; color: #e94560; }
-        .char-hint { font-size: 0.75rem; color: #6c757d; margin-top: 4px; }
-        .char-hint code { background-color: #e9ecef; padding: 1px 4px; border-radius: 3px; font-size: 0.7rem; }
+        .char-hint { font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px; }
+        .char-hint code { background-color: var(--bg-input); padding: 1px 4px; border-radius: 3px; font-size: 0.7rem; }
         .validation-error { color: #dc3545; font-size: 0.8rem; margin-top: 4px; display: none; }
         .input-valid { border-color: #198754 !important; }
         .input-invalid { border-color: #dc3545 !important; }
@@ -311,17 +491,65 @@ public class MailPanelContent {
         .btn-passkey:hover { background-color: #5a32a3; border-color: #5a32a3; }
         .step { display: none; }
         .step.active { display: block; }
-        .user-info { background: #f8f9fa; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+        .user-info { background: var(--bg-input); padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
         .user-info .username { font-weight: 600; }
         .user-info .change-user { color: #e94560; cursor: pointer; font-size: 0.9rem; }
         .passkey-prompt { text-align: center; padding: 30px 20px; }
         .passkey-prompt i { font-size: 48px; color: #6f42c1; margin-bottom: 15px; }
         .divider { display: flex; align-items: center; text-align: center; margin: 20px 0; }
-        .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid #dee2e6; }
-        .divider span { padding: 0 10px; color: #6c757d; font-size: 0.9rem; }
+        .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid var(--border-color); }
+        .divider span { padding: 0 10px; color: var(--text-secondary); font-size: 0.9rem; }
+        /* Dark mode overrides */
+        [data-theme="dark"] .form-control, [data-theme="dark"] .input-group-text { background-color: var(--bg-input); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .form-control::placeholder { color: var(--text-secondary); }
+        [data-theme="dark"] .form-control:focus { background-color: var(--bg-input); color: var(--text-primary); border-color: #e94560; box-shadow: 0 0 0 0.2rem rgba(233, 69, 96, 0.25); }
+        [data-theme="dark"] .alert { background-color: #343a40; border-color: var(--border-color); }
+        [data-theme="dark"] .alert-success { background-color: rgba(25, 135, 84, 0.15); border-color: rgba(25, 135, 84, 0.3); color: #75d9a3; }
+        [data-theme="dark"] .alert-danger { background-color: rgba(220, 53, 69, 0.15); border-color: rgba(220, 53, 69, 0.3); color: #f1aeb5; }
+        [data-theme="dark"] .text-muted { color: var(--text-secondary) !important; }
+        [data-theme="dark"] h2 { color: var(--text-primary); }
+        [data-theme="dark"] .footer { background-color: var(--bg-card) !important; }
+        /* Theme toggle */
+        .theme-toggle-login { position: fixed; top: 15px; right: 15px; cursor: pointer; padding: 10px 14px; border-radius: 50%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-size: 1.2rem; box-shadow: 0 2px 10px var(--shadow-color); z-index: 1000; }
+        .theme-toggle-login:hover { background: var(--bg-input); }
     </style>
+    <script>
+        // Theme management for login page (uses localStorage before login)
+        (function() {
+            function getBrowserTheme() {
+                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            function getTheme() {
+                const saved = localStorage.getItem('theme');
+                if (saved === 'light' || saved === 'dark') return saved;
+                return getBrowserTheme(); // auto = follow browser
+            }
+            function applyTheme(theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+                const icon = document.getElementById('themeIconLogin');
+                if (icon) icon.className = theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+            }
+            function toggleTheme() {
+                const current = document.documentElement.getAttribute('data-theme');
+                const newTheme = current === 'dark' ? 'light' : 'dark';
+                localStorage.setItem('theme', newTheme);
+                applyTheme(newTheme);
+            }
+            // Apply immediately
+            applyTheme(getTheme());
+            // Listen for browser changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                if (!localStorage.getItem('theme')) applyTheme(getBrowserTheme());
+            });
+            // Expose toggle function
+            window.toggleLoginTheme = toggleTheme;
+        })();
+    </script>
 </head>
 <body>
+    <button class="theme-toggle-login" onclick="toggleLoginTheme()" title="Cambia tema">
+        <i class="fas fa-sun" id="themeIconLogin"></i>
+    </button>
     <div class="content">
         <div class="container">
             <div class="login-container">
@@ -838,7 +1066,7 @@ public class MailPanelContent {
 
             <h5 class="mt-4"><i class="fas fa-server me-2"></i>Hostname Mail Server</h5>
             <div class="mb-3">
-                <div class="form-control bg-light" style="background-color: #e9ecef !important;">
+                <div class="form-control bg-light">
                     <strong id="mailHostnameDisplay">{{MAIL_HOSTNAME}}</strong>
                 </div>
                 <small class="text-muted">Configurato durante l'installazione dal terminale</small>
@@ -1182,6 +1410,30 @@ public class MailPanelContent {
         </div>
     </div>
 
+    <!-- Edit Description Modal -->
+    <div class="modal fade" id="editDescModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-edit me-2"></i>Modifica Descrizione</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <input type="hidden" id="editDomainId">
+                    <div class="mb-3">
+                        <label class="form-label">Dominio</label>
+                        <input type="text" class="form-control" id="editDomainName" readonly disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descrizione</label>
+                        <input type="text" class="form-control" id="editDomainDesc" placeholder="Mail aziendale">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-mail" onclick="saveDomainDesc()">Salva</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 """ + getFooter() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
@@ -1201,6 +1453,7 @@ public class MailPanelContent {
                         <td><span class="badge bg-info">${d.alias_count || 0}</span></td>
                         <td>${d.has_dkim ? '<span class="badge bg-success">Attivo</span>' : '<span class="badge bg-warning">Non configurato</span>'}</td>
                         <td>
+                            <button class="btn btn-sm btn-secondary" onclick="editDomain(${d.id}, '${d.domain}', '${(d.description || '').replace(/'/g, "\\'")}')"><i class="fas fa-edit"></i></button>
                             <button class="btn btn-sm btn-primary" onclick="viewDns('${d.domain}')"><i class="fas fa-server"></i> DNS</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteDomain(${d.id})"><i class="fas fa-trash"></i></button>
                         </td>
@@ -1234,6 +1487,30 @@ public class MailPanelContent {
 
         function viewDns(domain) {
             window.location.href = '/dns?domain=' + domain;
+        }
+
+        function editDomain(id, domain, desc) {
+            document.getElementById('editDomainId').value = id;
+            document.getElementById('editDomainName').value = domain;
+            document.getElementById('editDomainDesc').value = desc;
+            new bootstrap.Modal(document.getElementById('editDescModal')).show();
+        }
+
+        function saveDomainDesc() {
+            const id = document.getElementById('editDomainId').value;
+            const desc = document.getElementById('editDomainDesc').value;
+            fetch('/api/domains', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: parseInt(id), description: desc, csrf_token: csrfToken })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('editDescModal')).hide();
+                    loadDomains();
+                } else {
+                    alert('Errore: ' + (data.error || 'sconosciuto'));
+                }
+            });
         }
 
 """ + getLogoutScript() + """
@@ -2166,6 +2443,13 @@ public class MailPanelContent {
         .score-badge { font-size: 1.5rem; }
         .check-passed { color: #198754; }
         .check-failed { color: #dc3545; }
+        /* Dark mode overrides */
+        [data-theme="dark"] .dns-record { background: var(--table-stripe); color: var(--text-primary); }
+        [data-theme="dark"] .record-name { background: var(--bg-input); color: var(--text-primary); }
+        [data-theme="dark"] .record-value { background: var(--bg-input); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .card-header.bg-dark { background-color: #1a1d21 !important; }
+        [data-theme="dark"] .bg-white { background-color: var(--bg-input) !important; color: var(--text-primary) !important; }
+        [data-theme="dark"] .border { border-color: var(--border-color) !important; }
         """;
         return getHead("DNS", extraStyles) + getNavbar("dns") + """
     <div class="content container mt-4">
@@ -2404,6 +2688,17 @@ public class MailPanelContent {
         .copy-btn { cursor: pointer; }
         .copy-btn:hover { color: #0d6efd; }
         .cert-self-signed { border-left: 4px solid #dc3545; }
+        /* Dark mode overrides */
+        [data-theme="dark"] .cert-info { background: var(--table-stripe); color: var(--text-primary); }
+        [data-theme="dark"] .dns-record { background: var(--table-stripe); color: var(--text-primary); }
+        [data-theme="dark"] .option-card { background: var(--bg-card); }
+        [data-theme="dark"] .option-card:hover { box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        [data-theme="dark"] .form-control.bg-light, [data-theme="dark"] .bg-light { background-color: var(--table-stripe) !important; color: var(--text-primary) !important; }
+        [data-theme="dark"] .card-body { color: var(--text-primary); }
+        [data-theme="dark"] .text-muted { color: var(--text-muted) !important; }
+        [data-theme="dark"] .card-header.bg-success { background-color: #198754 !important; }
+        [data-theme="dark"] .card-header.bg-primary { background-color: #0d6efd !important; }
+        [data-theme="dark"] .card-header.bg-warning { background-color: #ffc107 !important; color: #000 !important; }
         """;
         return getHead("SSL", extraStyles) + getNavbar("ssl") + """
     <div class="content container mt-4">
@@ -2483,7 +2778,7 @@ public class MailPanelContent {
                     <form id="http01Form">
                         <div class="mb-3">
                             <label class="form-label">Hostname Mail Server</label>
-                            <div class="form-control bg-light" style="background-color: #e9ecef !important;">
+                            <div class="form-control bg-light">
                                 <strong>{{MAIL_HOSTNAME}}</strong>
                             </div>
                             <input type="hidden" id="http01Hostname" value="{{MAIL_HOSTNAME}}">
@@ -2513,7 +2808,7 @@ public class MailPanelContent {
                     <div id="dns01Step1">
                         <h5><span class="step-number">1</span>Hostname del mail server</h5>
                         <div class="mb-3">
-                            <div class="form-control bg-light" style="background-color: #e9ecef !important;">
+                            <div class="form-control bg-light">
                                 <strong>{{MAIL_HOSTNAME}}</strong>
                             </div>
                             <input type="hidden" id="dns01Hostname" value="{{MAIL_HOSTNAME}}">

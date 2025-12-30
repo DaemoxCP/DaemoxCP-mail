@@ -199,6 +199,7 @@ public class SSLMailServer {
 
         // API endpoints - Email statistics
         server.createContext("/api/statistics", this::handleApiStatistics);
+        server.createContext("/api/theme", this::handleApiTheme);
     }
 
     private void initializeManagers() {
@@ -231,6 +232,9 @@ public class SSLMailServer {
 
             // Ensure receive_enabled column exists in mailboxes (for upgrades)
             Main.mailDatabase.ensureMailboxReceiveEnabledColumn();
+
+            // Ensure theme column exists in panel_admin (for upgrades)
+            Main.mailDatabase.ensureThemeColumn();
 
             // Get the panel hostname from SQLite config
             String panelHost = "";
@@ -1115,6 +1119,33 @@ public class SSLMailServer {
                             response.put("success", false);
                             response.put("error", "Dominio gia' esistente");
                         }
+                    }
+                }
+                case "PUT" -> {
+                    String body = readRequestBodyWithLimit(exchange);
+                    if (body == null) {
+                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        return;
+                    }
+                    JSONObject req = new JSONObject(body);
+
+                    if (!validateCsrfForRequest(exchange, req)) {
+                        sendCsrfError(exchange);
+                        return;
+                    }
+
+                    int id = req.optInt("id", 0);
+                    String description = req.optString("description", "");
+
+                    if (id > 0) {
+                        boolean updated = Main.mailDatabase.updateDomainDescription(id, description);
+                        response.put("success", updated);
+                        if (updated) {
+                            logAudit("DOMAIN_UPDATED", getClientIp(exchange), "Domain ID: " + id);
+                        }
+                    } else {
+                        response.put("success", false);
+                        response.put("error", "ID non valido");
                     }
                 }
                 case "DELETE" -> {
@@ -4347,6 +4378,61 @@ public class SSLMailServer {
                 response.put("today", todaySummary);
                 response.put("spam_trained", spamTrained);
                 response.put("ham_trained", hamTrained);
+            } else {
+                sendJsonError(exchange, 405, "Method not allowed");
+                return;
+            }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+
+        sendJsonResponse(exchange, response);
+    }
+
+    // ============== THEME API ==============
+
+    private void handleApiTheme(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+
+        String method = exchange.getRequestMethod();
+        JSONObject response = new JSONObject();
+
+        try {
+            String username = getSessionUsername(exchange);
+            if (username == null || username.isEmpty()) {
+                response.put("success", false);
+                response.put("error", "Utente non trovato");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            if ("GET".equals(method)) {
+                // Get current theme preference
+                String theme = Main.mailDatabase.getAdminTheme(username);
+                response.put("success", true);
+                response.put("theme", theme);
+            } else if ("POST".equals(method)) {
+                String body = readRequestBodyWithLimit(exchange);
+                if (body == null) {
+                    sendJsonError(exchange, 413, "Richiesta troppo grande");
+                    return;
+                }
+                JSONObject req = new JSONObject(body);
+
+                String theme = req.optString("theme", "auto");
+                boolean saved = Main.mailDatabase.setAdminTheme(username, theme);
+
+                response.put("success", saved);
+                if (saved) {
+                    response.put("theme", theme);
+                    response.put("message", "Tema salvato");
+                } else {
+                    response.put("error", "Errore salvataggio tema");
+                }
             } else {
                 sendJsonError(exchange, 405, "Method not allowed");
                 return;
