@@ -98,11 +98,12 @@ public class MailPanelContent {
      * Generates footer.html - the centralized footer loaded by all pages
      */
     private static String getFooterHtml() {
+        int year = java.time.Year.now().getValue();
         return """
 <footer class="footer bg-light text-center mt-4">
-    <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel</div>
+    <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; {{YEAR}} FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
 </footer>
-""";
+""".replace("{{YEAR}}", String.valueOf(year));
     }
 
     // ============== COMMON TEMPLATES FOR PAGES ==============
@@ -281,12 +282,13 @@ public class MailPanelContent {
      * Common footer section with inline footer HTML and logout script
      */
     private static String getFooterSection() {
-        return """
+        int year = java.time.Year.now().getValue();
+        return ("""
     <footer class="footer bg-dark text-white py-3 mt-4">
         <div class="container text-center">
-            <small>FreeBSD Mail Panel - Pannello di controllo mail</small>
+            <small>&copy; {{YEAR}} FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</small>
         </div>
-    </footer>
+    </footer>""").replace("{{YEAR}}", String.valueOf(year)) + """
     <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -445,6 +447,7 @@ public class MailPanelContent {
 
     // ============== INDEX.HTML (Login Page) ==============
     public static String getIndexHtml() {
+        int year = java.time.Year.now().getValue();
         return """
 <!DOCTYPE html>
 <html lang="it">
@@ -651,7 +654,7 @@ public class MailPanelContent {
         </div>
     </div>
     <footer class="footer bg-light text-center text-lg-start mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD Mail Control Panel</div>
+        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; {{YEAR}} FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -963,7 +966,7 @@ public class MailPanelContent {
     </script>
 </body>
 </html>
-""";
+""".replace("{{YEAR}}", String.valueOf(year));
     }
 
     // ============== SETUP.HTML ==============
