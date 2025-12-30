@@ -3548,7 +3548,7 @@ public class MailPanelContent {
                     <div class="card mb-4">
                         <div class="card-header"><i class="fas fa-server me-2"></i>Mail Hostname</div>
                         <div class="card-body">
-                            <div class="form-control bg-light" id="mailHostnameDisplay" style="background-color: #e9ecef !important;">
+                            <div class="form-control bg-light" id="mailHostnameDisplay">
                                 {{MAIL_HOSTNAME}}
                             </div>
                             <small class="text-muted"><i class="fas fa-lock me-1"></i>Configurato durante l'installazione dal terminale</small>
