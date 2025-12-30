@@ -52,7 +52,7 @@ public class TotpManager {
     }
 
     /**
-     * Get URL for Google Charts QR code image
+     * Get URL for QR code image (using QRServer.com API)
      * @param secret Base32 encoded secret
      * @param email User email
      * @param issuer Application name
@@ -61,7 +61,7 @@ public class TotpManager {
     public static String getQrCodeImageUrl(String secret, String email, String issuer) {
         String otpUrl = getQrCodeUrl(secret, email, issuer);
         return String.format(
-            "https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl=%s",
+            "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=%s",
             urlEncode(otpUrl)
         );
     }

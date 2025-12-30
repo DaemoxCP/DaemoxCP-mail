@@ -265,19 +265,26 @@ public class LogManager {
                 entry.level = LogLevel.INFO;
             }
 
-            // Parse SMTP events
-            if (msg.contains("smtp connected")) {
-                entry.eventType = "connection";
-            } else if (msg.contains("message-in")) {
-                entry.eventType = "received";
-            } else if (msg.contains("message-out") || msg.contains("mta delivery")) {
-                entry.eventType = "sent";
-            } else if (msg.contains("reject") || msg.contains("rejected")) {
-                entry.eventType = "rejected";
-            } else if (msg.contains("deferred")) {
+            // Parse SMTP events (Postfix format)
+            // Distinguish between outgoing (smtp) and local delivery (lmtp/local/virtual/dovecot)
+            String proc = entry.process != null ? entry.process.toLowerCase() : "";
+            if (msg.contains("status=sent")) {
+                // Check if it's outgoing (smtp client) or local delivery
+                if (proc.contains("smtp") && !proc.contains("smtpd")) {
+                    // postfix/smtp or smtp = Outgoing mail to external server
+                    entry.eventType = "sent";
+                } else if (proc.contains("lmtp") || proc.contains("local") ||
+                           proc.contains("virtual") || proc.contains("dovecot") ||
+                           msg.contains("delivered to maildir") || msg.contains("saved to")) {
+                    // Local delivery = incoming mail received
+                    entry.eventType = "received";
+                }
+            } else if (msg.contains("status=deferred")) {
                 entry.eventType = "deferred";
-            } else if (msg.contains("bounced")) {
+            } else if (msg.contains("status=bounced")) {
                 entry.eventType = "bounced";
+            } else if (msg.contains("reject") || msg.contains("rejected") || msg.contains("noqueue: reject")) {
+                entry.eventType = "rejected";
             }
 
             // Extract email addresses

@@ -428,6 +428,23 @@ public class MailDatabase {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """;
 
+        // Passkeys (WebAuthn) for passwordless login
+        String createPasskeys = """
+            CREATE TABLE IF NOT EXISTS admin_passkeys (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                admin_id INT NOT NULL,
+                credential_id VARBINARY(1024) NOT NULL,
+                public_key_cose VARBINARY(2048) NOT NULL,
+                sign_count BIGINT DEFAULT 0,
+                name VARCHAR(100) DEFAULT 'Passkey',
+                aaguid VARBINARY(16) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used TIMESTAMP NULL,
+                FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE,
+                UNIQUE KEY unique_credential (credential_id(255))
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """;
+
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(createPanelAdmin);
             stmt.execute(createSettings);
@@ -443,6 +460,7 @@ public class MailDatabase {
             stmt.execute(createEmailStats);
             stmt.execute(createRspamdTraining);
             stmt.execute(createAuditLog);
+            stmt.execute(createPasskeys);
         }
     }
 
@@ -525,6 +543,40 @@ public class MailDatabase {
     }
 
     /**
+     * Verify admin password by admin ID
+     */
+    public boolean verifyAdminPassword(int adminId, String password) {
+        String sql = "SELECT password_hash FROM panel_admin WHERE id = ? AND active = TRUE";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, adminId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                String hashedPassword = rs.getString("password_hash");
+                return BCrypt.checkpw(password, hashedPassword);
+            }
+        } catch (SQLException e) {
+            System.err.println("Password verification error: " + e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Update admin password by admin ID
+     */
+    public boolean updateAdminPassword(int adminId, String newPassword) {
+        String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
+        String sql = "UPDATE panel_admin SET password_hash = ? WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, hashedPassword);
+            stmt.setInt(2, adminId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Failed to update password: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Check if any admin exists
      */
     public boolean hasAdminUser() {
@@ -535,6 +587,280 @@ public class MailDatabase {
         } catch (SQLException e) {
             return false;
         }
+    }
+
+    // ========== PASSKEY (WebAuthn) MANAGEMENT ==========
+
+    /**
+     * Ensure the passkeys table exists (for upgrades from older versions)
+     */
+    public void ensurePasskeysTable() {
+        String createPasskeys = """
+            CREATE TABLE IF NOT EXISTS admin_passkeys (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                admin_id INT NOT NULL,
+                credential_id VARBINARY(1024) NOT NULL,
+                public_key_cose VARBINARY(2048) NOT NULL,
+                sign_count BIGINT DEFAULT 0,
+                name VARCHAR(100) DEFAULT 'Passkey',
+                aaguid VARBINARY(16) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used TIMESTAMP NULL,
+                FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE,
+                UNIQUE KEY unique_credential (credential_id(255))
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """;
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(createPasskeys);
+        } catch (SQLException e) {
+            System.out.println("Error ensuring passkeys table: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Passkey record
+     */
+    public static class Passkey {
+        public int id;
+        public int adminId;
+        public byte[] credentialId;
+        public byte[] publicKeyCose;
+        public long signCount;
+        public String name;
+        public byte[] aaguid;
+        public java.sql.Timestamp createdAt;
+        public java.sql.Timestamp lastUsed;
+    }
+
+    /**
+     * Check if admin has any passkeys configured
+     */
+    public boolean hasPasskey(int adminId) {
+        String sql = "SELECT 1 FROM admin_passkeys WHERE admin_id = ? LIMIT 1";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, adminId);
+            ResultSet rs = stmt.executeQuery();
+            return rs.next();
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if username has passkey (for login flow)
+     */
+    public boolean usernameHasPasskey(String username) {
+        String sql = """
+            SELECT 1 FROM admin_passkeys ap
+            JOIN panel_admin pa ON ap.admin_id = pa.id
+            WHERE pa.username = ? AND pa.active = TRUE
+            LIMIT 1
+            """;
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            return rs.next();
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get all passkeys for an admin
+     */
+    public java.util.List<Passkey> getPasskeys(int adminId) {
+        java.util.List<Passkey> passkeys = new java.util.ArrayList<>();
+        String sql = "SELECT * FROM admin_passkeys WHERE admin_id = ? ORDER BY created_at DESC";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, adminId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                Passkey p = new Passkey();
+                p.id = rs.getInt("id");
+                p.adminId = rs.getInt("admin_id");
+                p.credentialId = rs.getBytes("credential_id");
+                p.publicKeyCose = rs.getBytes("public_key_cose");
+                p.signCount = rs.getLong("sign_count");
+                p.name = rs.getString("name");
+                p.aaguid = rs.getBytes("aaguid");
+                p.createdAt = rs.getTimestamp("created_at");
+                p.lastUsed = rs.getTimestamp("last_used");
+                passkeys.add(p);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting passkeys: " + e.getMessage());
+        }
+        return passkeys;
+    }
+
+    /**
+     * Get passkeys by username (for login)
+     */
+    public java.util.List<Passkey> getPasskeysByUsername(String username) {
+        java.util.List<Passkey> passkeys = new java.util.ArrayList<>();
+        String sql = """
+            SELECT ap.* FROM admin_passkeys ap
+            JOIN panel_admin pa ON ap.admin_id = pa.id
+            WHERE pa.username = ? AND pa.active = TRUE
+            """;
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                Passkey p = new Passkey();
+                p.id = rs.getInt("id");
+                p.adminId = rs.getInt("admin_id");
+                p.credentialId = rs.getBytes("credential_id");
+                p.publicKeyCose = rs.getBytes("public_key_cose");
+                p.signCount = rs.getLong("sign_count");
+                p.name = rs.getString("name");
+                p.aaguid = rs.getBytes("aaguid");
+                p.createdAt = rs.getTimestamp("created_at");
+                p.lastUsed = rs.getTimestamp("last_used");
+                passkeys.add(p);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting passkeys by username: " + e.getMessage());
+        }
+        return passkeys;
+    }
+
+    /**
+     * Get passkey by credential ID
+     */
+    public Passkey getPasskeyByCredentialId(byte[] credentialId) {
+        String sql = "SELECT * FROM admin_passkeys WHERE credential_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setBytes(1, credentialId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                Passkey p = new Passkey();
+                p.id = rs.getInt("id");
+                p.adminId = rs.getInt("admin_id");
+                p.credentialId = rs.getBytes("credential_id");
+                p.publicKeyCose = rs.getBytes("public_key_cose");
+                p.signCount = rs.getLong("sign_count");
+                p.name = rs.getString("name");
+                p.aaguid = rs.getBytes("aaguid");
+                p.createdAt = rs.getTimestamp("created_at");
+                p.lastUsed = rs.getTimestamp("last_used");
+                return p;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting passkey: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Save a new passkey
+     */
+    public boolean savePasskey(int adminId, byte[] credentialId, byte[] publicKeyCose, long signCount, String name, byte[] aaguid) {
+        String sql = "INSERT INTO admin_passkeys (admin_id, credential_id, public_key_cose, sign_count, name, aaguid) VALUES (?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, adminId);
+            stmt.setBytes(2, credentialId);
+            stmt.setBytes(3, publicKeyCose);
+            stmt.setLong(4, signCount);
+            stmt.setString(5, name != null ? name : "Passkey");
+            stmt.setBytes(6, aaguid);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error saving passkey: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Update passkey sign count and last used after successful auth
+     */
+    public boolean updatePasskeySignCount(byte[] credentialId, long newSignCount) {
+        String sql = "UPDATE admin_passkeys SET sign_count = ?, last_used = CURRENT_TIMESTAMP WHERE credential_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setLong(1, newSignCount);
+            stmt.setBytes(2, credentialId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating passkey sign count: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Rename a passkey
+     */
+    public boolean renamePasskey(int passkeyId, int adminId, String newName) {
+        String sql = "UPDATE admin_passkeys SET name = ? WHERE id = ? AND admin_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, newName);
+            stmt.setInt(2, passkeyId);
+            stmt.setInt(3, adminId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error renaming passkey: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Delete a passkey
+     */
+    public boolean deletePasskey(int passkeyId, int adminId) {
+        String sql = "DELETE FROM admin_passkeys WHERE id = ? AND admin_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, passkeyId);
+            stmt.setInt(2, adminId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error deleting passkey: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get admin ID by username (for passkey login)
+     */
+    public int getAdminIdByUsername(String username) {
+        String sql = "SELECT id FROM panel_admin WHERE username = ? AND active = TRUE";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt("id");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting admin ID: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    /**
+     * Check what auth methods a user has
+     */
+    public static class AuthMethods {
+        public boolean exists;
+        public boolean hasPassword;
+        public boolean hasPasskey;
+        public boolean has2FA;
+    }
+
+    public AuthMethods getAuthMethods(String username) {
+        AuthMethods methods = new AuthMethods();
+        String sql = "SELECT id, password_hash, totp_enabled FROM panel_admin WHERE username = ? AND active = TRUE";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                methods.exists = true;
+                methods.hasPassword = rs.getString("password_hash") != null && !rs.getString("password_hash").isEmpty();
+                methods.has2FA = rs.getBoolean("totp_enabled");
+                int adminId = rs.getInt("id");
+                methods.hasPasskey = hasPasskey(adminId);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting auth methods: " + e.getMessage());
+        }
+        return methods;
     }
 
     // ========== SETTINGS MANAGEMENT ==========
@@ -1233,6 +1559,33 @@ public class MailDatabase {
         }
     }
 
+    /**
+     * Try to use a backup code for 2FA. Returns true if valid and removes it.
+     */
+    public boolean useBackupCode(int adminId, String code) {
+        if (code == null || code.isEmpty()) return false;
+
+        String codesJson = getBackupCodes(adminId);
+        if (codesJson == null || codesJson.isEmpty()) return false;
+
+        try {
+            org.json.JSONArray codes = new org.json.JSONArray(codesJson);
+            String hashedInput = org.mail_panel.security.TotpManager.hashBackupCode(code);
+
+            for (int i = 0; i < codes.length(); i++) {
+                if (codes.getString(i).equals(hashedInput)) {
+                    // Found - remove it and save
+                    codes.remove(i);
+                    updateBackupCodes(adminId, codes.toString());
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
     // ========== MULTI-ADMIN / ROLES ==========
 
     public static class AdminUser {
@@ -1265,6 +1618,29 @@ public class MailDatabase {
             e.printStackTrace();
         }
         return admins;
+    }
+
+    public AdminUser getAdminUserById(int adminId) {
+        String sql = "SELECT id, username, role, active, totp_enabled, created_at, last_login FROM panel_admin WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, adminId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    AdminUser admin = new AdminUser();
+                    admin.id = rs.getInt("id");
+                    admin.username = rs.getString("username");
+                    admin.role = rs.getString("role");
+                    admin.active = rs.getBoolean("active");
+                    admin.totpEnabled = rs.getBoolean("totp_enabled");
+                    admin.createdAt = rs.getTimestamp("created_at");
+                    admin.lastLogin = rs.getTimestamp("last_login");
+                    return admin;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     public boolean createAdmin(String username, String password, String role) {

@@ -59,7 +59,10 @@ public class FullMailStackScript {
             pkill -9 redis-server 2>/dev/null || true
             pkill -9 mysqld 2>/dev/null || true
 
-            sleep 2
+            sleep 3
+
+            # Flush Redis data (Rspamd uses Redis for some stats)
+            redis-cli FLUSHALL 2>/dev/null || true
 
             echo "[CLEANUP] Removing packages..."
 

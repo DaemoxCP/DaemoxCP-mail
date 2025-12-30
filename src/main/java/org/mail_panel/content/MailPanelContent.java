@@ -27,6 +27,10 @@ public class MailPanelContent {
 
             Files.createDirectories(adminPath);
 
+            // Centralized header and footer
+            writeFile(adminDir + "/header.html", getHeaderHtml());
+            writeFile(adminDir + "/footer.html", getFooterHtml());
+
             writeFile(adminDir + "/index.html", getIndexHtml());
             writeFile(adminDir + "/setup.html", getSetupHtml());
             writeFile(adminDir + "/home.html", getHomeHtml());
@@ -54,6 +58,230 @@ public class MailPanelContent {
         Files.writeString(path, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
+    // ============== CENTRALIZED HEADER.HTML ==============
+    /**
+     * Generates header.html - the centralized navbar loaded by all pages
+     */
+    private static String getHeaderHtml() {
+        return """
+<nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item"><a class="nav-link" href="/home" data-page="home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="/domains" data-page="domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
+                <li class="nav-item"><a class="nav-link" href="/mailboxes" data-page="mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
+                <li class="nav-item"><a class="nav-link" href="/aliases" data-page="aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
+                <li class="nav-item"><a class="nav-link" href="/dns" data-page="dns"><i class="fas fa-server me-1"></i>DNS</a></li>
+                <li class="nav-item"><a class="nav-link" href="/ssl" data-page="ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
+                <li class="nav-item"><a class="nav-link" href="/logs" data-page="logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
+                <li class="nav-item"><a class="nav-link" href="/settings" data-page="settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
+            </ul>
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+""";
+    }
+
+    // ============== CENTRALIZED FOOTER.HTML ==============
+    /**
+     * Generates footer.html - the centralized footer loaded by all pages
+     */
+    private static String getFooterHtml() {
+        return """
+<footer class="footer bg-light text-center mt-4">
+    <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel</div>
+</footer>
+""";
+    }
+
+    // ============== COMMON TEMPLATES FOR PAGES ==============
+
+    /**
+     * Common CSS styles used across all pages
+     */
+    private static String getCommonStyles() {
+        return """
+        body { display: flex; flex-direction: column; min-height: 100vh; background-color: #f5f5f5; }
+        .content { flex: 1 0 auto; }
+        .footer { flex-shrink: 0; }
+        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
+        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
+        .btn-mail { background-color: #e94560; border-color: #e94560; color: white; }
+        .btn-mail:hover { background-color: #d63850; border-color: #d63850; color: white; }
+        .btn-logout { background-color: #dc3545; border-color: #dc3545; }
+        .btn-logout:hover { background-color: #c82333; border-color: #bd2130; color: white; }
+        .stat-card { border-left: 4px solid #e94560; }
+        .table-responsive { overflow: visible; }
+        .dropdown-menu { z-index: 1050; }
+        #nav-placeholder, #footer-placeholder { display: contents; }
+        """;
+    }
+
+    /**
+     * Common HTML head section - pages load header.html and footer.html dynamically
+     * @param title Page title
+     * @param pageName The page name for active nav highlighting (e.g., "home", "domains")
+     * @param extraStyles Additional page-specific CSS (can be empty)
+     */
+    private static String getHead(String title, String pageName, String extraStyles) {
+        return String.format("""
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s - Mail Control Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        %s
+        %s
+    </style>
+</head>
+<body data-page="%s">
+%s
+""", title, getCommonStyles(), extraStyles != null ? extraStyles : "", pageName, getNavbarHtml(pageName));
+    }
+
+    /**
+     * Generates the navbar HTML with the active page highlighted
+     */
+    private static String getNavbarHtml(String activePage) {
+        return """
+<nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("home") ? " active" : "") + """
+" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("domains") ? " active" : "") + """
+" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("mailboxes") ? " active" : "") + """
+" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("aliases") ? " active" : "") + """
+" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("dns") ? " active" : "") + """
+" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("ssl") ? " active" : "") + """
+" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("logs") ? " active" : "") + """
+" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("settings") ? " active" : "") + """
+" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
+            </ul>
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+""";
+    }
+
+    /**
+     * Common footer section with inline footer HTML and logout script
+     */
+    private static String getFooterSection() {
+        return """
+    <footer class="footer bg-dark text-white py-3 mt-4">
+        <div class="container text-center">
+            <small>FreeBSD Mail Panel - Pannello di controllo mail</small>
+        </div>
+    </footer>
+    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Logout handler
+        document.getElementById('logoutButton').addEventListener('click', function(e) {
+            e.preventDefault();
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csrf_token: document.getElementById('csrf_token').value })
+            }).then(() => window.location.href = '/');
+        });
+    </script>
+""";
+    }
+
+    /**
+     * Script section start - includes csrfToken variable
+     */
+    private static String getScriptStart() {
+        return """
+    <script>
+        let csrfToken = document.getElementById('csrf_token').value;
+""";
+    }
+
+    /**
+     * Script section end
+     */
+    private static String getScriptEnd() {
+        return """
+    </script>
+</body>
+</html>
+""";
+    }
+
+    // ============== BACKWARD COMPATIBILITY (temporary) ==============
+    // These methods will be removed after all pages are updated
+
+    /**
+     * @deprecated Use getHead(title, pageName, extraStyles) instead
+     */
+    private static String getHead(String title, String extraStyles) {
+        // Infer pageName from title for backward compatibility
+        String pageName = switch (title.toLowerCase()) {
+            case "dashboard" -> "home";
+            case "domini" -> "domains";
+            case "caselle email" -> "mailboxes";
+            case "alias" -> "aliases";
+            case "dns" -> "dns";
+            case "ssl" -> "ssl";
+            case "logs" -> "logs";
+            case "impostazioni" -> "settings";
+            case "coda email" -> "queue";
+            case "sicurezza" -> "security";
+            case "installazione" -> "install";
+            case "statistiche" -> "statistics";
+            case "gestione admin" -> "admins";
+            case "rate limits" -> "ratelimits";
+            default -> "";
+        };
+        return getHead(title, pageName, extraStyles);
+    }
+
+    /**
+     * @deprecated Navbar is now loaded from header.html
+     */
+    private static String getNavbar(String activePage) {
+        return ""; // Navbar now loaded dynamically
+    }
+
+    /**
+     * @deprecated Use getFooterSection() instead
+     */
+    private static String getFooter() {
+        return getFooterSection();
+    }
+
+    /**
+     * @deprecated Logout is now handled in header.html loading
+     */
+    private static String getLogoutScript() {
+        return ""; // Logout now handled in getFooterSection
+    }
+
     // ============== INDEX.HTML (Login Page) ==============
     public static String getIndexHtml() {
         return """
@@ -79,6 +307,18 @@ public class MailPanelContent {
         .input-invalid { border-color: #dc3545 !important; }
         .btn-mail { background-color: #e94560; border-color: #e94560; }
         .btn-mail:hover { background-color: #d63850; border-color: #d63850; }
+        .btn-passkey { background-color: #6f42c1; border-color: #6f42c1; }
+        .btn-passkey:hover { background-color: #5a32a3; border-color: #5a32a3; }
+        .step { display: none; }
+        .step.active { display: block; }
+        .user-info { background: #f8f9fa; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+        .user-info .username { font-weight: 600; }
+        .user-info .change-user { color: #e94560; cursor: pointer; font-size: 0.9rem; }
+        .passkey-prompt { text-align: center; padding: 30px 20px; }
+        .passkey-prompt i { font-size: 48px; color: #6f42c1; margin-bottom: 15px; }
+        .divider { display: flex; align-items: center; text-align: center; margin: 20px 0; }
+        .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid #dee2e6; }
+        .divider span { padding: 0 10px; color: #6c757d; font-size: 0.9rem; }
     </style>
 </head>
 <body>
@@ -89,106 +329,409 @@ public class MailPanelContent {
                 <h2 class="text-center mb-4">Mail Control Panel</h2>
                 <div class="alert alert-success d-none" id="successAlert" role="alert">Login effettuato con successo!</div>
                 <div class="alert alert-danger d-none" id="errorAlert" role="alert">
-                    <span id="errorMessage">Errore di login. Controlla le tue credenziali e riprova.</span>
+                    <span id="errorMessage">Errore di login.</span>
                 </div>
-                <form id="loginForm" autocomplete="off">
-                    <input type="hidden" id="csrf_token" name="csrf_token" value="{{CSRF_TOKEN}}">
+                <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
+
+                <!-- STEP 1: Username -->
+                <div id="step-username" class="step active">
                     <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-user"></i></span>
-                            <input type="text" class="form-control" id="username" name="username" required
-                                   placeholder="Inserisci il tuo username" pattern="^[a-zA-Z0-9_-]{3,50}$"
-                                   minlength="3" maxlength="50" autocomplete="off">
+                            <input type="text" class="form-control" id="username" placeholder="Inserisci il tuo username"
+                                   pattern="^[a-zA-Z0-9_-]{3,50}$" minlength="3" maxlength="50" autocomplete="username">
                         </div>
-                        <div class="char-hint"><i class="fas fa-info-circle"></i> Caratteri ammessi: <code>a-z A-Z 0-9 _ -</code> (3-50 caratteri)</div>
                         <div class="validation-error" id="usernameError">Username non valido.</div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-mail btn-lg text-white" id="btnContinue">
+                            <span id="continueText">Continua</span>
+                            <span id="continueSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 2: Passkey -->
+                <div id="step-passkey" class="step">
+                    <div class="user-info">
+                        <span><i class="fas fa-user me-2"></i><span class="username" id="displayUsername"></span></span>
+                        <span class="change-user" onclick="goToStep('username')"><i class="fas fa-edit me-1"></i>Cambia</span>
+                    </div>
+                    <div class="passkey-prompt">
+                        <i class="fas fa-fingerprint"></i>
+                        <h5>Usa la tua Passkey</h5>
+                        <p class="text-muted mb-3">Tocca il sensore biometrico o inserisci il PIN del dispositivo</p>
+                        <button type="button" class="btn btn-passkey btn-lg text-white w-100" id="btnPasskey">
+                            <i class="fas fa-key me-2"></i>Usa Passkey
+                        </button>
+                    </div>
+                    <div class="divider"><span>oppure</span></div>
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-secondary" id="btnUsePassword">
+                            <i class="fas fa-lock me-2"></i>Usa Password
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 3: Password -->
+                <div id="step-password" class="step">
+                    <div class="user-info">
+                        <span><i class="fas fa-user me-2"></i><span class="username" id="displayUsername2"></span></span>
+                        <span class="change-user" onclick="goToStep('username')"><i class="fas fa-edit me-1"></i>Cambia</span>
                     </div>
                     <div class="mb-3">
                         <label for="password" class="form-label">Password</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                            <input type="password" class="form-control" id="password" name="password" required
-                                   placeholder="Inserisci la tua password" minlength="8" maxlength="128" autocomplete="off">
+                            <input type="password" class="form-control" id="password" placeholder="Inserisci la tua password"
+                                   minlength="8" maxlength="128" autocomplete="current-password">
                         </div>
-                        <div class="char-hint"><i class="fas fa-info-circle"></i> Caratteri ammessi: <code>a-z A-Z 0-9 ! @ # $ % ^ & * ( ) _ + - = [ ] { } | ; : , . ?</code></div>
                         <div class="validation-error" id="passwordError">Password non valida.</div>
                     </div>
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-mail btn-lg text-white" id="submitBtn">
-                            <span id="submitText">Accedi</span>
-                            <span id="submitSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                        <button type="button" class="btn btn-mail btn-lg text-white" id="btnLogin">
+                            <span id="loginText">Accedi</span>
+                            <span id="loginSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
                         </button>
                     </div>
-                </form>
+                </div>
+
+                <!-- STEP 4: 2FA/OTP -->
+                <div id="step-2fa" class="step">
+                    <div class="user-info">
+                        <span><i class="fas fa-user me-2"></i><span class="username" id="displayUsername3"></span></span>
+                        <span class="change-user" onclick="goToStep('username')"><i class="fas fa-edit me-1"></i>Cambia</span>
+                    </div>
+                    <div class="mb-3">
+                        <label for="otpCode" class="form-label">Codice di Verifica</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-shield-alt"></i></span>
+                            <input type="text" class="form-control text-center" id="otpCode" placeholder="000000"
+                                   maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" style="letter-spacing: 8px; font-size: 1.5rem;">
+                        </div>
+                        <div class="char-hint"><i class="fas fa-info-circle"></i> Inserisci il codice a 6 cifre dalla tua app di autenticazione</div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-mail btn-lg text-white" id="btnVerify2FA">
+                            <span id="verifyText">Verifica</span>
+                            <span id="verifySpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     <footer class="footer bg-light text-center text-lg-start mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
+        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD Mail Control Panel</div>
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,50}$/;
-        const PASSWORD_PATTERN = /^[a-zA-Z0-9!@#$%^&*()_+\\-=\\[\\]{}|;:,.?]{8,128}$/;
+        // State
+        let currentUsername = '';
+        let authMethods = {};
+        let tempPassword = '';
+
+        // Elements
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
-        const usernameError = document.getElementById('usernameError');
-        const passwordError = document.getElementById('passwordError');
-        const submitBtn = document.getElementById('submitBtn');
-        const submitText = document.getElementById('submitText');
-        const submitSpinner = document.getElementById('submitSpinner');
+        const otpInput = document.getElementById('otpCode');
 
-        function validateUsername() {
-            const value = usernameInput.value;
-            if (value === '') { usernameInput.classList.remove('input-valid', 'input-invalid'); usernameError.style.display = 'none'; return false; }
-            if (USERNAME_PATTERN.test(value)) { usernameInput.classList.remove('input-invalid'); usernameInput.classList.add('input-valid'); usernameError.style.display = 'none'; return true; }
-            else { usernameInput.classList.remove('input-valid'); usernameInput.classList.add('input-invalid'); usernameError.style.display = 'block'; return false; }
+        // Utility functions
+        function showError(msg) {
+            document.getElementById('errorMessage').textContent = msg;
+            document.getElementById('errorAlert').classList.remove('d-none');
+        }
+        function hideError() { document.getElementById('errorAlert').classList.add('d-none'); }
+        function showSuccess(msg) {
+            document.getElementById('successAlert').textContent = msg || 'Login effettuato con successo!';
+            document.getElementById('successAlert').classList.remove('d-none');
         }
 
-        function validatePassword() {
-            const value = passwordInput.value;
-            if (value === '') { passwordInput.classList.remove('input-valid', 'input-invalid'); passwordError.style.display = 'none'; return false; }
-            if (PASSWORD_PATTERN.test(value)) { passwordInput.classList.remove('input-invalid'); passwordInput.classList.add('input-valid'); passwordError.style.display = 'none'; return true; }
-            else { passwordInput.classList.remove('input-valid'); passwordInput.classList.add('input-invalid'); passwordError.style.display = 'block'; return false; }
+        function goToStep(step) {
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+            document.getElementById('step-' + step).classList.add('active');
+            hideError();
+            if (step === 'username') {
+                currentUsername = '';
+                authMethods = {};
+                tempPassword = '';
+                usernameInput.value = '';
+                passwordInput.value = '';
+                otpInput.value = '';
+                usernameInput.focus();
+            } else if (step === 'password') {
+                document.getElementById('displayUsername2').textContent = currentUsername;
+                passwordInput.focus();
+            } else if (step === 'passkey') {
+                document.getElementById('displayUsername').textContent = currentUsername;
+            } else if (step === '2fa') {
+                document.getElementById('displayUsername3').textContent = currentUsername;
+                otpInput.focus();
+            }
         }
 
-        usernameInput.addEventListener('input', function() { this.value = this.value.replace(/[^a-zA-Z0-9_-]/g, ''); validateUsername(); });
-        passwordInput.addEventListener('input', function() { this.value = this.value.replace(/[^a-zA-Z0-9!@#$%^&*()\\[\\]{}|;:,.?_+\\-=]/g, ''); validatePassword(); });
-
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            if (!validateUsername() || !validatePassword()) {
-                document.getElementById('errorAlert').classList.remove('d-none');
-                document.getElementById('errorMessage').textContent = 'Controlla i campi evidenziati.';
+        // Step 1: Check username
+        document.getElementById('btnContinue').addEventListener('click', async function() {
+            const username = usernameInput.value.trim();
+            if (!username || username.length < 3) {
+                showError('Inserisci un username valido');
                 return;
             }
-            submitBtn.disabled = true; submitText.textContent = 'Accesso in corso...'; submitSpinner.classList.remove('d-none');
-            document.getElementById('errorAlert').classList.add('d-none'); document.getElementById('successAlert').classList.add('d-none');
 
-            fetch('/login_check', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: usernameInput.value, password: passwordInput.value, csrf_token: document.getElementById('csrf_token').value })
-            })
-            .then(response => response.json())
-            .then(data => {
-                submitBtn.disabled = false; submitText.textContent = 'Accedi'; submitSpinner.classList.add('d-none');
-                if (data.success) {
-                    document.getElementById('successAlert').classList.remove('d-none');
-                    if (data.csrf_token) sessionStorage.setItem('csrf_token', data.csrf_token);
+            const btn = this;
+            btn.disabled = true;
+            document.getElementById('continueSpinner').classList.remove('d-none');
+            document.getElementById('continueText').textContent = 'Verifica...';
+            hideError();
+
+            try {
+                const res = await fetch('/api/auth/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: username })
+                });
+                const data = await res.json();
+
+                if (!data.exists) {
+                    showError('Utente non trovato');
+                    btn.disabled = false;
+                    document.getElementById('continueSpinner').classList.add('d-none');
+                    document.getElementById('continueText').textContent = 'Continua';
+                    return;
+                }
+
+                currentUsername = username;
+                authMethods = data;
+
+                // If user has passkey, show passkey step
+                if (data.hasPasskey) {
+                    goToStep('passkey');
+                } else {
+                    // No passkey, go to password
+                    goToStep('password');
+                }
+            } catch (err) {
+                showError('Errore di connessione');
+            }
+
+            btn.disabled = false;
+            document.getElementById('continueSpinner').classList.add('d-none');
+            document.getElementById('continueText').textContent = 'Continua';
+        });
+
+        // Enter key on username
+        usernameInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') document.getElementById('btnContinue').click();
+        });
+
+        // Step 2: Passkey authentication
+        document.getElementById('btnPasskey').addEventListener('click', async function() {
+            hideError();
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Attendere...';
+
+            try {
+                // Start passkey authentication
+                const startRes = await fetch('/api/passkey/login/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUsername })
+                });
+                const startData = await startRes.json();
+
+                if (!startData.success || startData.error) {
+                    showError(startData.error || 'Errore nell avvio passkey');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-key me-2"></i>Usa Passkey';
+                    return;
+                }
+
+                // Parse the options from JSON string
+                const options = JSON.parse(startData.options);
+
+                // Convert base64url to ArrayBuffer for WebAuthn API
+                options.publicKey.challenge = base64ToArrayBuffer(options.publicKey.challenge);
+                if (options.publicKey.allowCredentials) {
+                    options.publicKey.allowCredentials = options.publicKey.allowCredentials.map(c => ({
+                        ...c,
+                        id: base64ToArrayBuffer(c.id)
+                    }));
+                }
+
+                btn.innerHTML = '<i class="fas fa-fingerprint fa-spin me-2"></i>Conferma...';
+
+                // Call WebAuthn API
+                const credential = await navigator.credentials.get(options);
+
+                // Build credential object for server
+                const credentialObj = {
+                    id: credential.id,
+                    rawId: arrayBufferToBase64(credential.rawId),
+                    type: credential.type,
+                    response: {
+                        clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
+                        authenticatorData: arrayBufferToBase64(credential.response.authenticatorData),
+                        signature: arrayBufferToBase64(credential.response.signature),
+                        userHandle: credential.response.userHandle ? arrayBufferToBase64(credential.response.userHandle) : null
+                    },
+                    clientExtensionResults: credential.getClientExtensionResults ? credential.getClientExtensionResults() : {}
+                };
+
+                // Send to server
+                const finishRes = await fetch('/api/passkey/login/finish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        challengeId: startData.challengeId,
+                        credential: JSON.stringify(credentialObj)
+                    })
+                });
+                const finishData = await finishRes.json();
+
+                if (finishData.success) {
+                    showSuccess();
                     setTimeout(() => { window.location.href = './home'; }, 1000);
                 } else {
-                    document.getElementById('errorAlert').classList.remove('d-none');
-                    document.getElementById('errorMessage').textContent = data.Message || 'Errore di login.';
+                    showError(finishData.error || 'Autenticazione passkey fallita');
                 }
-            })
-            .catch(error => {
-                submitBtn.disabled = false; submitText.textContent = 'Accedi'; submitSpinner.classList.add('d-none');
-                document.getElementById('errorAlert').classList.remove('d-none');
-                document.getElementById('errorMessage').textContent = 'Errore di connessione.';
-            });
+            } catch (err) {
+                if (err.name === 'NotAllowedError') {
+                    showError('Autenticazione annullata');
+                } else {
+                    console.error('Passkey error:', err);
+                    showError('Errore passkey: ' + err.message);
+                }
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-key me-2"></i>Usa Passkey';
         });
+
+        // Use password instead of passkey
+        document.getElementById('btnUsePassword').addEventListener('click', function() {
+            goToStep('password');
+        });
+
+        // Step 3: Password login
+        document.getElementById('btnLogin').addEventListener('click', async function() {
+            const password = passwordInput.value;
+            if (!password || password.length < 8) {
+                showError('Password non valida (minimo 8 caratteri)');
+                return;
+            }
+
+            const btn = this;
+            btn.disabled = true;
+            document.getElementById('loginSpinner').classList.remove('d-none');
+            document.getElementById('loginText').textContent = 'Verifica...';
+            hideError();
+
+            try {
+                const res = await fetch('/login_check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: currentUsername,
+                        password: password,
+                        csrf_token: document.getElementById('csrf_token').value
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showSuccess();
+                    setTimeout(() => { window.location.href = './home'; }, 1000);
+                } else if (data.requires_2fa) {
+                    tempPassword = password;
+                    goToStep('2fa');
+                } else {
+                    showError(data.Message || 'Password errata');
+                }
+            } catch (err) {
+                showError('Errore di connessione');
+            }
+
+            btn.disabled = false;
+            document.getElementById('loginSpinner').classList.add('d-none');
+            document.getElementById('loginText').textContent = 'Accedi';
+        });
+
+        // Enter key on password
+        passwordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') document.getElementById('btnLogin').click();
+        });
+
+        // Step 4: 2FA verification
+        document.getElementById('btnVerify2FA').addEventListener('click', async function() {
+            const code = otpInput.value.trim();
+            if (!code || code.length !== 6) {
+                showError('Inserisci un codice a 6 cifre');
+                return;
+            }
+
+            const btn = this;
+            btn.disabled = true;
+            document.getElementById('verifySpinner').classList.remove('d-none');
+            document.getElementById('verifyText').textContent = 'Verifica...';
+            hideError();
+
+            try {
+                const res = await fetch('/login_check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: currentUsername,
+                        password: tempPassword,
+                        totp_code: code,
+                        csrf_token: document.getElementById('csrf_token').value
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showSuccess();
+                    setTimeout(() => { window.location.href = './home'; }, 1000);
+                } else {
+                    showError(data.Message || 'Codice non valido');
+                }
+            } catch (err) {
+                showError('Errore di connessione');
+            }
+
+            btn.disabled = false;
+            document.getElementById('verifySpinner').classList.add('d-none');
+            document.getElementById('verifyText').textContent = 'Verifica';
+        });
+
+        // Enter key on OTP
+        otpInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') document.getElementById('btnVerify2FA').click();
+        });
+
+        // Only allow digits in OTP
+        otpInput.addEventListener('input', function() {
+            this.value = this.value.replace(/[^0-9]/g, '');
+        });
+
+        // WebAuthn helper functions
+        function base64ToArrayBuffer(base64) {
+            const binary = atob(base64.replace(/-/g, '+').replace(/_/g, '/'));
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes.buffer;
+        }
+
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');
+        }
+
+        // Focus username on load
+        usernameInput.focus();
     </script>
 </body>
 </html>
@@ -414,51 +957,11 @@ public class MailPanelContent {
 
     // ============== HOME.HTML ==============
     public static String getHomeHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .footer { flex-shrink: 0; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
+        String extraStyles = """
         .welcome-banner { background: linear-gradient(135deg, #e94560 0%, #0f3460 100%); color: #ffffff; padding: 20px; border-radius: 10px; margin-bottom: 30px; }
-        .btn-logout { background-color: #dc3545; border-color: #dc3545; }
-        .btn-logout:hover { background-color: #c82333; border-color: #bd2130; }
         .action-btn { padding: 0.25rem 0.5rem; font-size: 0.875rem; line-height: 1.5; border-radius: 0.2rem; margin-right: 5px; }
-        .stat-card { border-left: 4px solid #e94560; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link active" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Dashboard", "home", extraStyles) + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="welcome-banner">
@@ -564,16 +1067,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
-
-    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        let csrfToken = document.getElementById('csrf_token').value;
-
+""" + getFooterSection() + getScriptStart() + """
         function serviceAction(service, action) {
             fetch('/api/service', {
                 method: 'POST',
@@ -617,8 +1111,6 @@ public class MailPanelContent {
                 const dnsWarning = document.getElementById('dnsSetupWarning');
 
                 if (mailHostname && serverIp) {
-                    // Parse hostname to get subdomain and parent domain
-                    // e.g. mail.example.com -> subdomain=mail, domain=example.com
                     const dotIndex = mailHostname.indexOf('.');
                     let subdomain = 'mail';
                     let parentDomain = mailHostname;
@@ -633,70 +1125,18 @@ public class MailPanelContent {
                     document.getElementById('mailHostnameDisplay').textContent = mailHostname;
                     dnsWarning.style.display = 'block';
                 } else {
-                    // Hide warning if not configured yet
                     dnsWarning.style.display = 'none';
                 }
             });
         }
 
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf_token: csrfToken }) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
-
         checkStatus();
-    </script>
-</body>
-</html>
-""";
+""" + getScriptEnd();
     }
 
     // ============== DOMAINS.HTML ==============
     public static String getDomainsHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Domini - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .footer { flex-shrink: 0; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .btn-logout { background-color: #dc3545; border-color: #dc3545; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
-        .btn-mail { background-color: #e94560; border-color: #e94560; color: white; }
-        .btn-mail:hover { background-color: #d63850; border-color: #d63850; color: white; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        return getHead("Domini", "") + getNavbar("domains") + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -742,12 +1182,7 @@ public class MailPanelContent {
         </div>
     </div>
 
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
-
-    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
 
@@ -801,12 +1236,7 @@ public class MailPanelContent {
             window.location.href = '/dns?domain=' + domain;
         }
 
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf_token: csrfToken }) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
-
+""" + getLogoutScript() + """
         loadDomains();
     </script>
 </body>
@@ -816,54 +1246,14 @@ public class MailPanelContent {
 
     // ============== MAILBOXES.HTML ==============
     public static String getMailboxesHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Caselle - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .footer { flex-shrink: 0; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .btn-logout { background-color: #dc3545; border-color: #dc3545; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
-        .btn-mail { background-color: #e94560; border-color: #e94560; color: white; }
-        .btn-mail:hover { background-color: #d63850; border-color: #d63850; color: white; }
+        String extraStyles = """
         .btn-webmail { background-color: #3498db; border-color: #3498db; }
         .feature-badge { font-size: 0.7rem; padding: 2px 6px; margin-left: 4px; }
         .action-dropdown .dropdown-menu { min-width: 200px; }
         .filter-rule { background: #f8f9fa; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 3px solid #0d6efd; }
         .condition-row, .action-row { background: #fff; padding: 8px; margin: 5px 0; border-radius: 4px; border: 1px solid #dee2e6; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Caselle Email", extraStyles) + getNavbar("mailboxes") + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -1072,12 +1462,7 @@ public class MailPanelContent {
         </div>
     </div>
 
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
-
-    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
         let domains = [];
@@ -1451,12 +1836,7 @@ public class MailPanelContent {
             });
         }
 
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf_token: csrfToken }) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
-
+""" + getLogoutScript() + """
         loadDomains();
         loadMailboxes();
     </script>
@@ -1467,45 +1847,7 @@ public class MailPanelContent {
 
     // ============== ALIASES.HTML ==============
     public static String getAliasesHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alias - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
-        .btn-mail { background-color: #e94560; border-color: #e94560; color: white; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+        return getHead("Alias", "") + getNavbar("aliases") + """
     <div class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-share me-2"></i>Alias Email</h2>
@@ -1518,10 +1860,9 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
-        const csrfToken = document.getElementById('csrf_token').value;
+        let csrfToken = document.getElementById('csrf_token').value;
         fetch('/api/aliases').then(r => r.json()).then(data => {
             const tbody = document.getElementById('aliasesTable');
             if (!data.aliases || data.aliases.length === 0) {
@@ -1530,15 +1871,8 @@ public class MailPanelContent {
             }
             tbody.innerHTML = data.aliases.map(a => '<tr><td>' + a.source + '</td><td>' + a.destination + '</td><td><button class="btn btn-sm btn-danger">Elimina</button></td></tr>').join('');
         });
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf_token: csrfToken }) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
+""" + getLogoutScript() + """
     </script>
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
 </body>
 </html>
 """;
@@ -1546,21 +1880,7 @@ public class MailPanelContent {
 
     // ============== DNS.HTML - Full DNS Records Page ==============
     public static String getDnsHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DNS Records - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
-        .btn-mail { background-color: #e94560; border-color: #e94560; color: white; }
+        String extraStyles = """
         .dns-record { background: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 15px; border-left: 4px solid #e94560; }
         .dns-record.required { border-left-color: #dc3545; }
         .dns-record.optional { border-left-color: #6c757d; }
@@ -1572,31 +1892,8 @@ public class MailPanelContent {
         .score-badge { font-size: 1.5rem; }
         .check-passed { color: #198754; }
         .check-failed { color: #dc3545; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("DNS", extraStyles) + getNavbar("dns") + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -1647,9 +1944,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
         let currentDomainId = null;
 
@@ -1812,16 +2107,9 @@ public class MailPanelContent {
             });
         }
 
-        const csrfToken = document.getElementById('csrf_token').value;
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf_token: csrfToken }) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
+        let csrfToken = document.getElementById('csrf_token').value;
+""" + getLogoutScript() + """
     </script>
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
 </body>
 </html>
 """;
@@ -1829,25 +2117,11 @@ public class MailPanelContent {
 
     // ============== SSL.HTML - SSL Certificate Management ==============
     public static String getSslHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SSL/TLS - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
-        .btn-mail { background-color: #e94560; border-color: #e94560; color: white; }
-        .cert-info { background: #f8f9fa; border-radius: 8px; padding: 20px; }
+        String extraStyles = """
+        .cert-info { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
         .cert-valid { border-left: 4px solid #198754; }
-        .cert-self-signed { border-left: 4px solid #dc3545; }
         .cert-expiring { border-left: 4px solid #ffc107; }
+        .cert-expired { border-left: 4px solid #dc3545; }
         .option-card { transition: all 0.3s; cursor: pointer; }
         .option-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         .option-card.selected { border: 2px solid #0d6efd; }
@@ -1855,31 +2129,9 @@ public class MailPanelContent {
         .dns-record { font-family: monospace; background: #f1f1f1; padding: 10px; border-radius: 5px; word-break: break-all; }
         .copy-btn { cursor: pointer; }
         .copy-btn:hover { color: #0d6efd; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        .cert-self-signed { border-left: 4px solid #dc3545; }
+        """;
+        return getHead("SSL", extraStyles) + getNavbar("ssl") + """
     <div class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-lock me-2"></i>Certificati SSL/TLS Mail Server</h2>
@@ -2093,9 +2345,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
         let currentDnsChallenge = null;
 
@@ -2374,16 +2624,9 @@ public class MailPanelContent {
 
         loadSslStatus();
 
-        const csrfToken = document.getElementById('csrf_token').value;
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf_token: csrfToken }) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
+        let csrfToken = document.getElementById('csrf_token').value;
+""" + getLogoutScript() + """
     </script>
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
 </body>
 </html>
 """;
@@ -2391,21 +2634,12 @@ public class MailPanelContent {
 
     // ============== LOGS.HTML - Logs & Monitoring Page ==============
     public static String getLogsHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Logs & Monitoring - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
-        .btn-mail { background-color: #e94560; border-color: #e94560; color: white; }
+        String extraStyles = """
+        .log-container { background: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace; font-size: 12px; padding: 15px; border-radius: 8px; max-height: 500px; overflow-y: auto; }
+        .log-line { margin: 0; padding: 2px 0; }
+        .log-error { color: #f14c4c; }
+        .log-warning { color: #cca700; }
+        .log-info { color: #3794ff; }
         .log-viewer { background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 0.85rem; padding: 15px; border-radius: 8px; max-height: 500px; overflow-y: auto; }
         .log-entry { padding: 2px 0; border-bottom: 1px solid #333; }
         .log-entry:hover { background: #2d2d2d; }
@@ -2413,34 +2647,9 @@ public class MailPanelContent {
         .log-WARNING { color: #ff9800; }
         .log-INFO { color: #4caf50; }
         .log-DEBUG { color: #9e9e9e; }
-        .stat-card { border-left: 4px solid #e94560; transition: transform 0.2s; }
-        .stat-card:hover { transform: translateY(-2px); }
         .stat-number { font-size: 2rem; font-weight: bold; color: #e94560; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Logs", extraStyles) + getNavbar("logs") + """
     <div class="content container mt-4">
         <!-- Statistics -->
         <div class="row mb-4">
@@ -2499,9 +2708,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
         // Load stats
         fetch('/api/stats').then(r => r.json()).then(data => {
@@ -2576,16 +2783,9 @@ public class MailPanelContent {
         // Auto-refresh every 30 seconds
         setInterval(loadLogs, 30000);
 
-        const csrfToken = document.getElementById('csrf_token').value;
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf_token: csrfToken }) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
+        let csrfToken = document.getElementById('csrf_token').value;
+""" + getLogoutScript() + """
     </script>
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
 </body>
 </html>
 """;
@@ -2593,43 +2793,13 @@ public class MailPanelContent {
 
     // ============== INSTALL.HTML ==============
     public static String getInstallHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Installazione - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
+        String extraStyles = """
+        .install-progress { max-height: 400px; overflow-y: auto; background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.85rem; }
         .component-card { border: 2px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 15px; transition: all 0.2s; }
         .component-card:hover { border-color: #e94560; }
         .component-card.installed { background: #d4edda; border-color: #28a745; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <div class="collapse navbar-collapse">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains">Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes">Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns">DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl">SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs">Logs</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/install">Installa</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Installazione", extraStyles) + getNavbar("") + """
     <div class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-download me-2"></i>Installazione Componenti</h2>
@@ -2686,10 +2856,10 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
+        let csrfToken = document.getElementById('csrf_token').value;
+
         function installComponent(component) {
             if (!confirm('Vuoi installare/reinstallare ' + component + '? Questo rimuovera i dati esistenti.')) return;
 
@@ -2699,7 +2869,7 @@ public class MailPanelContent {
             fetch('/api/install', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ component: component })
+                body: JSON.stringify({ component: component, csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
                 document.getElementById('outputText').textContent = data.output || data.error || 'Completato';
                 if (data.success) {
@@ -2707,6 +2877,7 @@ public class MailPanelContent {
                 }
             });
         }
+""" + getLogoutScript() + """
     </script>
 </body>
 </html>
@@ -2715,50 +2886,14 @@ public class MailPanelContent {
 
     // ============== SETTINGS.HTML ==============
     public static String getSettingsHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Impostazioni - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
+        String extraStyles = """
         .totp-enabled { color: #198754; }
         .totp-disabled { color: #dc3545; }
         .backup-code { font-family: monospace; background: #f8f9fa; padding: 4px 8px; margin: 2px; display: inline-block; border-radius: 4px; }
         .qr-container { text-align: center; padding: 20px; }
         .qr-container img { max-width: 200px; border: 1px solid #dee2e6; border-radius: 8px; padding: 10px; background: white; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Impostazioni", extraStyles) + getNavbar("settings") + """
     <div class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-cog me-2"></i>Impostazioni</h2>
@@ -2814,6 +2949,26 @@ public class MailPanelContent {
                             </div>
                             <button class="btn btn-primary" onclick="changePassword()">
                                 <i class="fas fa-save me-1"></i>Cambia Password
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Passkeys Section -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <i class="fas fa-fingerprint me-2"></i>Passkey (Autenticazione Senza Password)
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Le passkey ti permettono di accedere senza password usando biometria o chiavi di sicurezza.</p>
+
+                            <div id="passkeysList" class="mb-3">
+                                <div class="text-center text-muted py-3">
+                                    <i class="fas fa-spinner fa-spin"></i> Caricamento...
+                                </div>
+                            </div>
+
+                            <button class="btn btn-success" onclick="addPasskey()" id="addPasskeyBtn">
+                                <i class="fas fa-plus me-1"></i>Aggiungi Passkey
                             </button>
                         </div>
                     </div>
@@ -2920,10 +3075,55 @@ public class MailPanelContent {
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Passkey Name Modal -->
+    <div class="modal fade" id="passkeyNameModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-fingerprint me-2"></i>Nome Passkey</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Dai un nome a questa passkey</label>
+                        <input type="text" class="form-control" id="passkeyName" placeholder="Es: MacBook Touch ID, iPhone, YubiKey">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmPasskeyName()">Salva</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Passkey Modal -->
+    <div class="modal fade" id="renamePasskeyModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Rinomina Passkey</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="renamePasskeyId">
+                    <div class="mb-3">
+                        <label class="form-label">Nuovo nome</label>
+                        <input type="text" class="form-control" id="renamePasskeyName">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmRenamePasskey()">Salva</button>
+                </div>
+            </div>
+        </div>
+    </div>
+""" + getFooter() + """
     <script>
         let currentSecret = '';
         let backupCodes = [];
+        let pendingPasskeyChallenge = null;
 
         function load2FAStatus() {
             fetch('/api/2fa?action=status')
@@ -2976,10 +3176,11 @@ public class MailPanelContent {
             fetch('/api/2fa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'verify', code: code, secret: currentSecret })
+                body: JSON.stringify({ action: 'enable', code: code, secret: currentSecret })
             })
             .then(r => r.json())
             .then(data => {
+                console.log('2FA verify response:', data);
                 if (data.success) {
                     backupCodes = data.backup_codes || [];
                     document.getElementById('setup2FAStep1').style.display = 'none';
@@ -2990,6 +3191,10 @@ public class MailPanelContent {
                 } else {
                     alert(data.error || 'Codice non valido');
                 }
+            })
+            .catch(err => {
+                console.error('2FA verify error:', err);
+                alert('Errore: ' + err.message);
             });
         }
 
@@ -3019,12 +3224,22 @@ public class MailPanelContent {
             fetch('/api/2fa?action=backup_codes')
                 .then(r => r.json())
                 .then(data => {
-                    if (data.codes) {
-                        document.getElementById('existingBackupCodes').innerHTML =
-                            data.codes.map(c => `<span class="backup-code">${c}</span>`).join(' ');
+                    if (data.success) {
+                        if (data.codes && data.codes.length > 0) {
+                            document.getElementById('existingBackupCodes').innerHTML =
+                                data.codes.map(c => `<span class="backup-code">${c}</span>`).join(' ');
+                        } else {
+                            document.getElementById('existingBackupCodes').innerHTML =
+                                '<p class="text-warning"><i class="fas fa-exclamation-triangle me-2"></i>' +
+                                'I codici di backup sono stati generati durante l\\'attivazione della 2FA.<br>' +
+                                'Se li hai persi, usa il pulsante "Rigenera Codici" per crearne di nuovi.</p>';
+                        }
                         new bootstrap.Modal(document.getElementById('backupCodesModal')).show();
+                    } else {
+                        alert(data.error || 'Errore nel recupero dei codici');
                     }
-                });
+                })
+                .catch(err => alert('Errore: ' + err.message));
         }
 
         function regenerateBackupCodes() {
@@ -3096,18 +3311,230 @@ public class MailPanelContent {
             });
         }
 
+        // ========== PASSKEY FUNCTIONS ==========
+
+        function loadPasskeys() {
+            fetch('/api/passkeys')
+                .then(r => r.json())
+                .then(data => {
+                    const container = document.getElementById('passkeysList');
+                    if (data.success && data.passkeys.length > 0) {
+                        container.innerHTML = data.passkeys.map(pk => `
+                            <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded mb-2">
+                                <div>
+                                    <i class="fas fa-key me-2 text-primary"></i>
+                                    <strong>${escapeHtml(pk.name)}</strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        Creata: ${pk.createdAt} | Ultimo uso: ${pk.lastUsed}
+                                    </small>
+                                </div>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="renamePasskey(${pk.id}, '${escapeHtml(pk.name)}')">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deletePasskey(${pk.id}, '${escapeHtml(pk.name)}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('');
+                    } else {
+                        container.innerHTML = '<p class="text-muted text-center py-2">Nessuna passkey registrata</p>';
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('passkeysList').innerHTML =
+                        '<p class="text-danger text-center py-2">Errore nel caricamento</p>';
+                });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function addPasskey() {
+            const btn = document.getElementById('addPasskeyBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Avvio...';
+
+            try {
+                // Start registration
+                const startRes = await fetch('/api/passkey/register/start', { method: 'POST' });
+                const startData = await startRes.json();
+
+                if (!startData.success) {
+                    alert(startData.error || 'Errore nell avvio della registrazione');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-plus me-1"></i>Aggiungi Passkey';
+                    return;
+                }
+
+                // Parse WebAuthn options
+                const options = JSON.parse(startData.options);
+
+                // Convert base64url to ArrayBuffer for WebAuthn API
+                options.publicKey.challenge = base64urlToBuffer(options.publicKey.challenge);
+                options.publicKey.user.id = base64urlToBuffer(options.publicKey.user.id);
+                if (options.publicKey.excludeCredentials) {
+                    options.publicKey.excludeCredentials = options.publicKey.excludeCredentials.map(c => ({
+                        ...c,
+                        id: base64urlToBuffer(c.id)
+                    }));
+                }
+
+                btn.innerHTML = '<i class="fas fa-fingerprint fa-spin me-1"></i>Conferma sul dispositivo...';
+
+                // Call WebAuthn API
+                const credential = await navigator.credentials.create(options);
+
+                // Store challenge ID and show name modal
+                pendingPasskeyChallenge = {
+                    challengeId: startData.challengeId,
+                    credential: {
+                        id: credential.id,
+                        rawId: bufferToBase64url(credential.rawId),
+                        type: credential.type,
+                        response: {
+                            clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+                            attestationObject: bufferToBase64url(credential.response.attestationObject)
+                        },
+                        clientExtensionResults: credential.getClientExtensionResults ? credential.getClientExtensionResults() : {}
+                    }
+                };
+
+                document.getElementById('passkeyName').value = '';
+                new bootstrap.Modal(document.getElementById('passkeyNameModal')).show();
+
+            } catch (err) {
+                console.error('Passkey registration error:', err);
+                if (err.name === 'NotAllowedError') {
+                    alert('Registrazione annullata o timeout');
+                } else {
+                    alert('Errore: ' + err.message);
+                }
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-plus me-1"></i>Aggiungi Passkey';
+        }
+
+        async function confirmPasskeyName() {
+            if (!pendingPasskeyChallenge) return;
+
+            const name = document.getElementById('passkeyName').value.trim() || 'Passkey';
+
+            try {
+                const res = await fetch('/api/passkey/register/finish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        challengeId: pendingPasskeyChallenge.challengeId,
+                        credential: JSON.stringify(pendingPasskeyChallenge.credential),
+                        name: name
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('passkeyNameModal')).hide();
+                    alert('Passkey registrata con successo!');
+                    loadPasskeys();
+                } else {
+                    alert(data.error || 'Errore nella registrazione');
+                }
+            } catch (err) {
+                alert('Errore: ' + err.message);
+            }
+
+            pendingPasskeyChallenge = null;
+        }
+
+        function renamePasskey(id, currentName) {
+            document.getElementById('renamePasskeyId').value = id;
+            document.getElementById('renamePasskeyName').value = currentName;
+            new bootstrap.Modal(document.getElementById('renamePasskeyModal')).show();
+        }
+
+        async function confirmRenamePasskey() {
+            const id = document.getElementById('renamePasskeyId').value;
+            const name = document.getElementById('renamePasskeyName').value.trim();
+
+            if (!name) {
+                alert('Inserisci un nome');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/passkeys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: parseInt(id), name: name })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('renamePasskeyModal')).hide();
+                    loadPasskeys();
+                } else {
+                    alert(data.error || 'Errore nella rinomina');
+                }
+            } catch (err) {
+                alert('Errore: ' + err.message);
+            }
+        }
+
+        async function deletePasskey(id, name) {
+            if (!confirm(`Eliminare la passkey "${name}"? Non potrai piu usarla per accedere.`)) return;
+
+            try {
+                const res = await fetch('/api/passkeys', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    loadPasskeys();
+                } else {
+                    alert(data.error || 'Errore nell eliminazione');
+                }
+            } catch (err) {
+                alert('Errore: ' + err.message);
+            }
+        }
+
+        // Base64url helpers for WebAuthn
+        function base64urlToBuffer(base64url) {
+            const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+            const padding = '='.repeat((4 - base64.length % 4) % 4);
+            const binary = atob(base64 + padding);
+            const buffer = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                buffer[i] = binary.charCodeAt(i);
+            }
+            return buffer.buffer;
+        }
+
+        function bufferToBase64url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');
+        }
+
         // Load on page load
         load2FAStatus();
+        loadPasskeys();
 
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
+        let csrfToken = document.getElementById('csrf_token').value;
+""" + getLogoutScript() + """
     </script>
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
 </body>
 </html>
 """;
@@ -3115,21 +3542,9 @@ public class MailPanelContent {
 
     // ============== QUEUE.HTML ==============
     public static String getQueueHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coda Email - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
-        .stat-card { border-left: 4px solid; }
+        String extraStyles = """
+        .queue-item { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #e94560; }
+        .queue-item:hover { background: #e9ecef; }
         .stat-pending { border-color: #ffc107; }
         .stat-inflight { border-color: #17a2b8; }
         .stat-tempfail { border-color: #fd7e14; }
@@ -3140,31 +3555,8 @@ public class MailPanelContent {
         .state-inflight { background: #d1ecf1; color: #0c5460; }
         .state-tempfail { background: #ffe5d0; color: #8a4600; }
         .state-permfail { background: #f8d7da; color: #721c24; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Coda Email", extraStyles) + getNavbar("") + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -3265,9 +3657,9 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
+        let csrfToken = document.getElementById('csrf_token').value;
         let paused = false;
 
         function loadStats() {
@@ -3439,16 +3831,8 @@ public class MailPanelContent {
         loadQueue();
         // Auto-refresh every 30 seconds
         setInterval(() => { loadStats(); loadQueue(); }, 30000);
-
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
+""" + getLogoutScript() + """
     </script>
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
 </body>
 </html>
 """;
@@ -3456,51 +3840,15 @@ public class MailPanelContent {
 
     // ============== SECURITY.HTML (FAIL2BAN) ==============
     public static String getSecurityHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sicurezza - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
+        String extraStyles = """
         .jail-card { border-left: 4px solid #dc3545; }
         .jail-card.enabled { border-color: #28a745; }
         .ban-event { font-size: 0.85rem; padding: 8px; border-left: 3px solid; margin-bottom: 5px; }
         .ban-event.ban { border-color: #dc3545; background: #fff5f5; }
         .ban-event.unban { border-color: #28a745; background: #f5fff5; }
         .ip-badge { font-family: monospace; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Sicurezza", extraStyles) + getNavbar("") + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -3636,9 +3984,10 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
+        let csrfToken = document.getElementById('csrf_token').value;
+
         function loadStatus() {
             fetch('/api/fail2ban?action=status')
                 .then(r => r.json())
@@ -3799,16 +4148,8 @@ public class MailPanelContent {
         loadStatus();
         // Auto-refresh every minute
         setInterval(loadStatus, 60000);
-
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
+""" + getLogoutScript() + """
     </script>
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
 </body>
 </html>
 """;
@@ -3816,21 +4157,7 @@ public class MailPanelContent {
 
     // ============== STATISTICS.HTML ==============
     public static String getStatisticsHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Statistiche - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
+        String extraStyles = """
         .stat-card { border-left: 4px solid; transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-2px); }
         .stat-card.sent { border-color: #28a745; }
@@ -3838,31 +4165,8 @@ public class MailPanelContent {
         .stat-card.spam { border-color: #dc3545; }
         .stat-card.rejected { border-color: #ffc107; }
         .chart-container { position: relative; height: 300px; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Statistiche", extraStyles) + getNavbar("") + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -4025,9 +4329,10 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        let csrfToken = document.getElementById('csrf_token').value;
         let trafficChart, distributionChart;
 
         function loadStats() {
@@ -4181,16 +4486,8 @@ public class MailPanelContent {
 
         // Load on page load
         loadStats();
-
-        document.getElementById('logoutButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-            .then(r => r.json()).then(data => { if (data.success) window.location.href = '/index'; });
-        });
+""" + getLogoutScript() + """
     </script>
-    <footer class="footer bg-light text-center mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; <script>document.write(new Date().getFullYear())</script> FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
-    </footer>
 </body>
 </html>
 """;
@@ -4198,49 +4495,15 @@ public class MailPanelContent {
 
     // ============== ADMINS.HTML ==============
     public static String getAdminsHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestione Admin - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
+        String extraStyles = """
         .role-badge.superadmin { background-color: #dc3545; }
         .role-badge.admin { background-color: #0d6efd; }
         .role-badge.operator { background-color: #198754; }
         .role-badge.viewer { background-color: #6c757d; }
         .totp-enabled { color: #198754; }
         .totp-disabled { color: #dc3545; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <div class="collapse navbar-collapse">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains">Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns">DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl">SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/queue">Coda</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/security">Sicurezza</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/statistics">Statistiche</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/admins">Admin</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs">Logs</a></li>
-                </ul>
-                <a href="/logout" class="btn btn-outline-light btn-sm">Logout</a>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Gestione Admin", extraStyles) + getNavbar("") + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -4377,9 +4640,10 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
+        let csrfToken = document.getElementById('csrf_token').value;
+
         function loadAdmins() {
             fetch('/api/admins?action=list')
                 .then(r => r.json())
@@ -4504,6 +4768,7 @@ public class MailPanelContent {
 
         // Load on page load
         loadAdmins();
+""" + getLogoutScript() + """
     </script>
 </body>
 </html>
@@ -4512,47 +4777,13 @@ public class MailPanelContent {
 
     // ============== RATELIMITS.HTML ==============
     public static String getRateLimitsHtml() {
-        return """
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rate Limits - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <style>
-        body { display: flex; flex-direction: column; min-height: 100vh; }
-        .content { flex: 1 0 auto; }
-        .content-container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.1); padding: 30px; margin-top: 30px; }
-        .navbar-mail { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
+        String extraStyles = """
         .limit-card { border-left: 4px solid #0d6efd; }
         .limit-enabled { border-color: #198754; }
         .limit-disabled { border-color: #dc3545; }
         .usage-bar { height: 6px; border-radius: 3px; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-            <div class="collapse navbar-collapse">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="/home">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/domains">Domini</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/dns">DNS</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/ssl">SSL</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/queue">Coda</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/security">Sicurezza</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/statistics">Statistiche</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admins">Admin</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logs">Logs</a></li>
-                </ul>
-                <a href="/logout" class="btn btn-outline-light btn-sm">Logout</a>
-            </div>
-        </div>
-    </nav>
-
+        """;
+        return getHead("Rate Limits", extraStyles) + getNavbar("") + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -4689,9 +4920,10 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+""" + getFooter() + """
     <script>
+        let csrfToken = document.getElementById('csrf_token').value;
+
         function loadRateLimits() {
             // Load global limits
             fetch('/api/ratelimits?action=global')
@@ -4879,6 +5111,7 @@ public class MailPanelContent {
 
         // Load on page load
         loadRateLimits();
+""" + getLogoutScript() + """
     </script>
 </body>
 </html>

@@ -15,6 +15,7 @@ import org.mail_panel.security.AcmeManager;
 import org.mail_panel.security.DkimManager;
 import org.mail_panel.security.DnsRecordsGenerator;
 import org.mail_panel.security.Fail2banManager;
+import org.mail_panel.security.PasskeyManager;
 import org.mail_panel.security.TotpManager;
 
 import javax.net.ssl.*;
@@ -51,6 +52,7 @@ public class SSLMailServer {
     private MailQueueManager queueManager;
     private RoundcubeSsoManager ssoManager;
     private Fail2banManager fail2banManager;
+    private PasskeyManager passkeyManager;
 
     // SSL certificate content (for constructor with PEM)
     private String sslCertContent;
@@ -126,6 +128,7 @@ public class SSLMailServer {
         server.createContext("/queue", this::handleProtectedPage);
         server.createContext("/security", this::handleProtectedPage);
         server.createContext("/logout", this::handleLogout);
+        server.createContext("/api/logout", this::handleLogout);
 
         // API endpoints - Core
         server.createContext("/api/status", this::handleApiStatus);
@@ -165,6 +168,16 @@ public class SSLMailServer {
         // API endpoints - 2FA
         server.createContext("/api/2fa", this::handleApi2FA);
 
+        // API endpoints - Auth check (for login flow)
+        server.createContext("/api/auth/check", this::handleApiAuthCheck);
+
+        // API endpoints - Passkey (WebAuthn)
+        server.createContext("/api/passkey/register/start", this::handleApiPasskeyRegisterStart);
+        server.createContext("/api/passkey/register/finish", this::handleApiPasskeyRegisterFinish);
+        server.createContext("/api/passkey/login/start", this::handleApiPasskeyLoginStart);
+        server.createContext("/api/passkey/login/finish", this::handleApiPasskeyLoginFinish);
+        server.createContext("/api/passkeys", this::handleApiPasskeys);
+
         // API endpoints - Admin management
         server.createContext("/api/admins", this::handleApiAdmins);
 
@@ -199,11 +212,61 @@ public class SSLMailServer {
             this.rspamdManager = new RspamdManager();
             this.sieveGenerator = new SieveGenerator();
 
+            // Initialize PasskeyManager for WebAuthn
+            initializePasskeyManager();
+
             // Start auto-renewal for certificates
             acmeManager.startAutoRenewal();
 
             // Auto-install/update Roundcube SSO plugin if Roundcube is installed
             autoInstallSsoPlugin();
+        }
+    }
+
+    private void initializePasskeyManager() {
+        try {
+            // Ensure passkeys table exists (for upgrades)
+            Main.mailDatabase.ensurePasskeysTable();
+
+            // Get the panel hostname from SQLite config
+            String panelHost = "";
+            try {
+                java.sql.ResultSet rs = Main.dbManager.get_data_config();
+                if (rs.next()) {
+                    panelHost = rs.getString("mail_panel_host");
+                }
+            } catch (Exception e) {
+                LOGGER.warning("Could not read panel host from SQLite: " + e.getMessage());
+            }
+
+            if (panelHost == null || panelHost.isEmpty() || panelHost.equals("127.0.0.1")) {
+                LOGGER.warning("Panel hostname not set, passkeys will not work until configured");
+                return;
+            }
+
+            // Extract the base domain for RP ID (e.g., "server.example.com" -> "example.com")
+            String rpId = panelHost;
+            String[] parts = panelHost.split("\\.");
+            if (parts.length >= 2) {
+                // Use the last two parts as RP ID (e.g., example.com)
+                rpId = parts[parts.length - 2] + "." + parts[parts.length - 1];
+            }
+
+            // Build origins set - panel hostname with and without port
+            Set<String> origins = new HashSet<>();
+            origins.add("https://" + panelHost);
+            origins.add("https://" + panelHost + ":" + port);
+
+            this.passkeyManager = new PasskeyManager(
+                    Main.mailDatabase,
+                    rpId,
+                    "FreeBSD Mail Panel",
+                    origins
+            );
+
+            LOGGER.info("PasskeyManager initialized with RP ID: " + rpId + ", origins: " + origins);
+        } catch (Exception e) {
+            LOGGER.warning("Failed to initialize PasskeyManager: " + e.getMessage());
         }
     }
 
@@ -738,8 +801,38 @@ public class SSLMailServer {
         // Check credentials from database (BCrypt hashed)
         int adminId = Main.mailDatabase.getAdminIdIfValidLogin(username, password);
         if (adminId > 0) {
-            // Successful login - reset rate limiter
+            // Successful password - reset rate limiter
             resetLoginAttempts(clientIp);
+
+            // Check if 2FA is enabled
+            boolean has2FA = Main.mailDatabase.is2FAEnabled(adminId);
+            String totpCode = request.optString("totp_code", "");
+
+            if (has2FA) {
+                // 2FA is enabled - check if code was provided
+                if (totpCode.isEmpty()) {
+                    // First step - password OK, need TOTP
+                    sendJsonResponse(exchange, new JSONObject()
+                        .put("success", false)
+                        .put("requires_2fa", true)
+                        .put("Message", "Inserisci il codice 2FA"));
+                    return;
+                }
+
+                // Verify TOTP code
+                String secret = Main.mailDatabase.getTotpSecret(adminId);
+                if (secret == null || !TotpManager.verifyCode(secret, totpCode)) {
+                    // Check backup codes
+                    if (!Main.mailDatabase.useBackupCode(adminId, totpCode)) {
+                        logAudit("LOGIN_2FA_FAILURE", clientIp, "Invalid 2FA code for: " + username);
+                        sendJsonResponse(exchange, new JSONObject()
+                            .put("success", false)
+                            .put("requires_2fa", true)
+                            .put("Message", "Codice 2FA non valido"));
+                        return;
+                    }
+                }
+            }
 
             // Create session
             String userAgent = exchange.getRequestHeaders().getFirst("User-Agent");
@@ -759,7 +852,7 @@ public class SSLMailServer {
             exchange.getResponseHeaders().add("Set-Cookie",
                 "MailPanel=" + sessionCode + "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600");
 
-            logAudit("LOGIN_SUCCESS", clientIp, "User logged in: " + username);
+            logAudit("LOGIN_SUCCESS", clientIp, "User logged in: " + username + (has2FA ? " (with 2FA)" : ""));
 
             sendJsonResponse(exchange, new JSONObject()
                 .put("success", true)
@@ -2318,51 +2411,58 @@ public class SSLMailServer {
             return;
         }
 
-        if (logManager == null) {
-            logManager = new LogManager();
-        }
-
         JSONObject response = new JSONObject();
 
         try {
-            LogManager.MailStats stats = logManager.getStats();
+            // Get stats from Rspamd (accurate email counting)
+            RspamdManager.RspamdStats rspamdStats = null;
+            if (rspamdManager != null) {
+                rspamdStats = rspamdManager.getStatistics();
+            }
+
+            // Get active users count from database
+            int activeMailboxes = Main.mailDatabase.getMailboxCount();
 
             response.put("success", true);
-            response.put("generated_at", stats.generatedAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            response.put("period", stats.period);
+            response.put("generated_at", java.time.LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            response.put("period", "total");
 
-            // SMTP stats
+            // SMTP stats from Rspamd
             JSONObject smtp = new JSONObject();
-            smtp.put("received", stats.messagesReceived);
-            smtp.put("sent", stats.messagesSent);
-            smtp.put("rejected", stats.messagesRejected);
-            smtp.put("bounced", stats.messagesBounced);
-            smtp.put("deferred", stats.messagesDeferred);
-            smtp.put("total", stats.totalMessages);
+            if (rspamdStats != null) {
+                // hamCount = legitimate emails (received + sent that passed)
+                // scanned = total processed
+                smtp.put("received", rspamdStats.hamCount);
+                smtp.put("sent", 0); // Rspamd doesn't distinguish, would need log parsing
+                smtp.put("rejected", rspamdStats.spamCount);
+                smtp.put("total", rspamdStats.scanned);
+            } else {
+                smtp.put("received", 0);
+                smtp.put("sent", 0);
+                smtp.put("rejected", 0);
+                smtp.put("total", 0);
+            }
             response.put("smtp", smtp);
 
             // IMAP stats
             JSONObject imap = new JSONObject();
-            imap.put("logins", stats.imapLogins);
-            imap.put("active_users", stats.activeUsers);
-            imap.put("auth_failures", stats.authFailures);
+            imap.put("logins", 0);
+            imap.put("active_users", activeMailboxes);
+            imap.put("auth_failures", 0);
             response.put("imap", imap);
 
-            // Security stats
+            // Security stats from Rspamd
             JSONObject security = new JSONObject();
-            security.put("spam_detected", stats.spamDetected);
-            security.put("viruses_found", stats.virusesFound);
-            security.put("spam_percentage", Math.round(stats.spamPercentage * 100) / 100.0);
-            security.put("rejection_rate", Math.round(stats.rejectionRate * 100) / 100.0);
-            response.put("security", security);
-
-            // Hourly distribution
-            Map<Integer, Integer> hourly = logManager.getHourlyDistribution();
-            JSONObject hourlyJson = new JSONObject();
-            for (Map.Entry<Integer, Integer> entry : hourly.entrySet()) {
-                hourlyJson.put(String.valueOf(entry.getKey()), entry.getValue());
+            if (rspamdStats != null) {
+                security.put("spam_detected", rspamdStats.spamCount);
+                security.put("viruses_found", 0);
+                security.put("spam_percentage", Math.round(rspamdStats.spamPercent * 100) / 100.0);
+            } else {
+                security.put("spam_detected", 0);
+                security.put("viruses_found", 0);
+                security.put("spam_percentage", 0);
             }
-            response.put("hourly_distribution", hourlyJson);
+            response.put("security", security);
 
         } catch (Exception e) {
             response.put("success", false);
@@ -2889,10 +2989,37 @@ public class SSLMailServer {
 
             switch (method) {
                 case "GET" -> {
-                    // Get 2FA status
-                    boolean enabled = Main.mailDatabase.is2FAEnabled(adminId);
-                    response.put("success", true);
-                    response.put("enabled", enabled);
+                    // Check for action in query string
+                    String query = exchange.getRequestURI().getQuery();
+                    String action = "";
+                    if (query != null && query.contains("action=")) {
+                        for (String param : query.split("&")) {
+                            if (param.startsWith("action=")) {
+                                action = param.substring(7);
+                                break;
+                            }
+                        }
+                    }
+
+                    if ("backup_codes".equals(action)) {
+                        // Get backup codes (show hashed, user needs originals)
+                        String codesJson = Main.mailDatabase.getBackupCodes(adminId);
+                        if (codesJson != null && !codesJson.isEmpty()) {
+                            // Note: we can't show original codes, only that they exist
+                            // User should have saved them during setup
+                            response.put("success", true);
+                            response.put("message", "I codici di backup sono stati generati durante l'attivazione della 2FA. Se li hai persi, rigenerali.");
+                            response.put("codes", new JSONArray()); // Empty - can't recover hashed codes
+                        } else {
+                            response.put("success", false);
+                            response.put("error", "Nessun codice di backup trovato");
+                        }
+                    } else {
+                        // Get 2FA status
+                        boolean enabled = Main.mailDatabase.is2FAEnabled(adminId);
+                        response.put("success", true);
+                        response.put("enabled", enabled);
+                    }
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
@@ -2945,6 +3072,22 @@ public class SSLMailServer {
                                 response.put("error", "Codice non valido");
                             }
                         }
+                        case "regenerate_backup" -> {
+                            // Generate new backup codes
+                            if (!Main.mailDatabase.is2FAEnabled(adminId)) {
+                                response.put("success", false);
+                                response.put("error", "2FA non attiva");
+                            } else {
+                                String[] backupCodes = TotpManager.generateBackupCodes(8);
+                                JSONArray codesJson = new JSONArray();
+                                for (String bc : backupCodes) {
+                                    codesJson.put(TotpManager.hashBackupCode(bc));
+                                }
+                                Main.mailDatabase.updateBackupCodes(adminId, codesJson.toString());
+                                response.put("success", true);
+                                response.put("codes", new JSONArray(backupCodes));
+                            }
+                        }
                         default -> {
                             response.put("success", false);
                             response.put("error", "Azione sconosciuta");
@@ -2964,6 +3107,367 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
+    // ============== PASSKEY/WEBAUTHN API ==============
+
+    /**
+     * Check username and return available auth methods (no auth required)
+     */
+    private void handleApiAuthCheck(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, "Method not allowed");
+            return;
+        }
+
+        JSONObject response = new JSONObject();
+        try {
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) {
+                sendJsonError(exchange, 413, "Request too large");
+                return;
+            }
+            JSONObject req = new JSONObject(body);
+            String username = req.optString("username", "").trim();
+
+            if (username.isEmpty()) {
+                response.put("success", false);
+                response.put("error", "Username required");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            // Check if user exists and get auth methods
+            MailDatabase.AuthMethods authMethods = Main.mailDatabase.getAuthMethods(username);
+
+            response.put("success", true);
+            response.put("exists", authMethods.exists);
+            response.put("hasPassword", authMethods.hasPassword);
+            response.put("hasPasskey", authMethods.hasPasskey);
+            response.put("has2FA", authMethods.has2FA);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * Start passkey registration (requires auth)
+     */
+    private void handleApiPasskeyRegisterStart(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, "Method not allowed");
+            return;
+        }
+
+        JSONObject response = new JSONObject();
+        try {
+            if (passkeyManager == null) {
+                response.put("success", false);
+                response.put("error", "Passkey non configurate. Verificare il mail hostname nelle impostazioni.");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            int adminId = getSessionAdminId(exchange);
+            MailDatabase.AdminUser admin = Main.mailDatabase.getAdminUserById(adminId);
+
+            if (admin == null) {
+                response.put("success", false);
+                response.put("error", "Admin non trovato");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            PasskeyManager.RegistrationStartResponse regStart = passkeyManager.startRegistration(
+                    adminId,
+                    admin.username,
+                    admin.username
+            );
+
+            response.put("success", true);
+            response.put("challengeId", regStart.challengeId());
+            // Convert the options to JSON for JavaScript WebAuthn API
+            response.put("options", regStart.options().toCredentialsCreateJson());
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * Finish passkey registration (requires auth)
+     */
+    private void handleApiPasskeyRegisterFinish(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, "Method not allowed");
+            return;
+        }
+
+        JSONObject response = new JSONObject();
+        try {
+            if (passkeyManager == null) {
+                response.put("success", false);
+                response.put("error", "Passkey non configurate");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) {
+                sendJsonError(exchange, 413, "Request too large");
+                return;
+            }
+            JSONObject req = new JSONObject(body);
+
+            String challengeId = req.optString("challengeId", "");
+            String credential = req.optString("credential", "");
+            String passkeyName = req.optString("name", "Passkey");
+
+            if (challengeId.isEmpty() || credential.isEmpty()) {
+                response.put("success", false);
+                response.put("error", "Dati mancanti");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            PasskeyManager.RegistrationResult result = passkeyManager.finishRegistration(
+                    challengeId,
+                    credential,
+                    passkeyName
+            );
+
+            response.put("success", result.success());
+            if (result.success()) {
+                response.put("message", result.message());
+            } else {
+                response.put("error", result.message());
+            }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * Start passkey login (no auth required)
+     */
+    private void handleApiPasskeyLoginStart(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, "Method not allowed");
+            return;
+        }
+
+        JSONObject response = new JSONObject();
+        try {
+            if (passkeyManager == null) {
+                response.put("success", false);
+                response.put("error", "Passkey non configurate");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) {
+                sendJsonError(exchange, 413, "Request too large");
+                return;
+            }
+            JSONObject req = new JSONObject(body);
+            String username = req.optString("username", "").trim();
+
+            if (username.isEmpty()) {
+                response.put("success", false);
+                response.put("error", "Username required");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            PasskeyManager.AuthenticationStartResponse authStart = passkeyManager.startAuthentication(username);
+
+            if (authStart.error() != null) {
+                response.put("success", false);
+                response.put("error", authStart.error());
+            } else {
+                response.put("success", true);
+                response.put("challengeId", authStart.challengeId());
+                response.put("options", authStart.options().toCredentialsGetJson());
+            }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * Finish passkey login (no auth required)
+     */
+    private void handleApiPasskeyLoginFinish(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, "Method not allowed");
+            return;
+        }
+
+        JSONObject response = new JSONObject();
+        try {
+            if (passkeyManager == null) {
+                response.put("success", false);
+                response.put("error", "Passkey non configurate");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) {
+                sendJsonError(exchange, 413, "Request too large");
+                return;
+            }
+            JSONObject req = new JSONObject(body);
+
+            String challengeId = req.optString("challengeId", "");
+            String credential = req.optString("credential", "");
+
+            if (challengeId.isEmpty() || credential.isEmpty()) {
+                response.put("success", false);
+                response.put("error", "Dati mancanti");
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            PasskeyManager.AuthenticationResult result = passkeyManager.finishAuthentication(challengeId, credential);
+
+            if (result.success()) {
+                // Create session for the authenticated admin
+                MailDatabase.AdminUser admin = Main.mailDatabase.getAdminUserById(result.adminId());
+                if (admin != null && admin.active) {
+                    // Create session using existing session manager
+                    String userAgent = exchange.getRequestHeaders().getFirst("User-Agent");
+                    String clientIp = getClientIp(exchange);
+                    Object[] sessionData = Main.sessions.Add_Session(userAgent, clientIp);
+                    String sessionCode = (String) sessionData[1];
+
+                    // Save admin info in session
+                    Main.sessions.setSessionAdmin(sessionCode, result.adminId(), admin.username);
+
+                    // Set session cookie
+                    exchange.getResponseHeaders().add("Set-Cookie",
+                        "MailPanel=" + sessionCode + "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600");
+
+                    logAudit("PASSKEY_LOGIN_SUCCESS", clientIp, "User logged in via passkey: " + admin.username);
+
+                    response.put("success", true);
+                    response.put("message", "Login con passkey riuscito");
+                } else {
+                    response.put("success", false);
+                    response.put("error", "Account disabilitato");
+                }
+            } else {
+                response.put("success", false);
+                response.put("error", result.error());
+            }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * Manage passkeys (list, rename, delete) - requires auth
+     */
+    private void handleApiPasskeys(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+
+        String method = exchange.getRequestMethod();
+        JSONObject response = new JSONObject();
+        int adminId = getSessionAdminId(exchange);
+
+        try {
+            switch (method) {
+                case "GET" -> {
+                    // List passkeys for current user
+                    List<MailDatabase.Passkey> passkeys = Main.mailDatabase.getPasskeys(adminId);
+                    JSONArray arr = new JSONArray();
+                    for (MailDatabase.Passkey pk : passkeys) {
+                        JSONObject p = new JSONObject();
+                        p.put("id", pk.id);
+                        p.put("name", pk.name);
+                        p.put("createdAt", pk.createdAt != null ? pk.createdAt.toString() : "");
+                        p.put("lastUsed", pk.lastUsed != null ? pk.lastUsed.toString() : "Mai");
+                        arr.put(p);
+                    }
+                    response.put("success", true);
+                    response.put("passkeys", arr);
+                }
+                case "POST" -> {
+                    // Rename passkey
+                    String body = readRequestBodyWithLimit(exchange);
+                    if (body == null) {
+                        sendJsonError(exchange, 413, "Request too large");
+                        return;
+                    }
+                    JSONObject req = new JSONObject(body);
+                    int passkeyId = req.optInt("id", 0);
+                    String newName = req.optString("name", "").trim();
+
+                    if (passkeyId <= 0 || newName.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "ID e nome richiesti");
+                    } else if (Main.mailDatabase.renamePasskey(passkeyId, adminId, newName)) {
+                        response.put("success", true);
+                        response.put("message", "Passkey rinominata");
+                    } else {
+                        response.put("success", false);
+                        response.put("error", "Errore durante la rinomina");
+                    }
+                }
+                case "DELETE" -> {
+                    // Delete passkey
+                    String body = readRequestBodyWithLimit(exchange);
+                    if (body == null) {
+                        sendJsonError(exchange, 413, "Request too large");
+                        return;
+                    }
+                    JSONObject req = new JSONObject(body);
+                    int passkeyId = req.optInt("id", 0);
+
+                    if (passkeyId <= 0) {
+                        response.put("success", false);
+                        response.put("error", "ID passkey richiesto");
+                    } else if (Main.mailDatabase.deletePasskey(passkeyId, adminId)) {
+                        response.put("success", true);
+                        response.put("message", "Passkey eliminata");
+                    } else {
+                        response.put("success", false);
+                        response.put("error", "Errore durante l'eliminazione");
+                    }
+                }
+                default -> {
+                    sendJsonError(exchange, 405, "Method not allowed");
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        sendJsonResponse(exchange, response);
+    }
+
     // ============== ADMIN MANAGEMENT API ==============
 
     private void handleApiAdmins(HttpExchange exchange) throws IOException {
@@ -2978,6 +3482,43 @@ public class SSLMailServer {
         try {
             int currentAdminId = getSessionAdminId(exchange);
             String currentRole = Main.mailDatabase.getAdminRole(currentAdminId);
+
+            // Handle password change first (any authenticated user can change their own password)
+            if ("POST".equals(method)) {
+                String body = readRequestBodyWithLimit(exchange);
+                if (body == null) {
+                    sendJsonError(exchange, 413, "Richiesta troppo grande");
+                    return;
+                }
+                JSONObject req = new JSONObject(body);
+                String action = req.optString("action", "");
+
+                if ("change_password".equals(action)) {
+                    String currentPassword = req.optString("current_password", "");
+                    String newPassword = req.optString("new_password", "");
+
+                    if (currentPassword.isEmpty() || newPassword.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "Password corrente e nuova richieste");
+                    } else if (newPassword.length() < 8) {
+                        response.put("success", false);
+                        response.put("error", "La nuova password deve essere di almeno 8 caratteri");
+                    } else if (Main.mailDatabase.verifyAdminPassword(currentAdminId, currentPassword)) {
+                        if (Main.mailDatabase.updateAdminPassword(currentAdminId, newPassword)) {
+                            response.put("success", true);
+                            response.put("message", "Password cambiata con successo");
+                        } else {
+                            response.put("success", false);
+                            response.put("error", "Errore durante il salvataggio della password");
+                        }
+                    } else {
+                        response.put("success", false);
+                        response.put("error", "Password corrente non valida");
+                    }
+                    sendJsonResponse(exchange, response);
+                    return;
+                }
+            }
 
             // Only superadmin can manage other admins
             if (!"superadmin".equals(currentRole)) {

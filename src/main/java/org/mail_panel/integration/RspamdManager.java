@@ -136,20 +136,9 @@ public class RspamdManager {
                 stats.scanned = json.optLong("scanned", 0);
                 stats.learned = json.optLong("learned", 0);
 
-                JSONArray actions = json.optJSONArray("actions");
-                if (actions != null) {
-                    for (int i = 0; i < actions.length(); i++) {
-                        JSONObject action = actions.getJSONObject(i);
-                        String name = action.optString("action", "");
-                        long count = action.optLong("count", 0);
-
-                        if (name.equals("reject") || name.equals("add header") || name.equals("rewrite subject")) {
-                            stats.spamCount += count;
-                        } else if (name.equals("no action")) {
-                            stats.hamCount += count;
-                        }
-                    }
-                }
+                // Rspamd returns spam_count and ham_count directly
+                stats.spamCount = json.optLong("spam_count", 0);
+                stats.hamCount = json.optLong("ham_count", 0);
 
                 if (stats.scanned > 0) {
                     stats.spamPercent = (stats.spamCount * 100.0) / stats.scanned;
