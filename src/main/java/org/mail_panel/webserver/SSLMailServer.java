@@ -134,6 +134,7 @@ public class SSLMailServer {
         server.createContext("/api/status", this::handleApiStatus);
         server.createContext("/api/domains", this::handleApiDomains);
         server.createContext("/api/mailboxes", this::handleApiMailboxes);
+        server.createContext("/api/mailconfig", this::handleApiMailConfig);
         server.createContext("/api/aliases", this::handleApiAliases);
         server.createContext("/api/webmail", this::handleApiWebmail);
         server.createContext("/api/service", this::handleApiService);
@@ -227,6 +228,9 @@ public class SSLMailServer {
         try {
             // Ensure passkeys table exists (for upgrades)
             Main.mailDatabase.ensurePasskeysTable();
+
+            // Ensure receive_enabled column exists in mailboxes (for upgrades)
+            Main.mailDatabase.ensureMailboxReceiveEnabledColumn();
 
             // Get the panel hostname from SQLite config
             String panelHost = "";
@@ -1153,23 +1157,50 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
-                    JSONArray mailboxes = new JSONArray();
-                    for (MailDatabase.Mailbox m : Main.mailDatabase.getAllMailboxes()) {
-                        JSONObject mbox = new JSONObject();
-                        mbox.put("id", m.id);
-                        mbox.put("email", m.email);
-                        mbox.put("name", m.name != null ? m.name : "");
-                        mbox.put("domain", m.domainName);
-                        mbox.put("quota_mb", m.quotaMb);
-                        mbox.put("active", m.active);
-                        mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : "Mai");
-                        mbox.put("autoresponder_enabled", m.autoresponderEnabled);
-                        mbox.put("forwarding_count", m.forwardingCount);
-                        mbox.put("filters_count", m.filtersCount);
-                        mailboxes.put(mbox);
+                    // Check if requesting a single mailbox by ID
+                    String query = exchange.getRequestURI().getQuery();
+                    int singleId = extractIdFromQuery(query);
+
+                    if (singleId > 0) {
+                        // Return single mailbox for editing
+                        MailDatabase.Mailbox m = Main.mailDatabase.getMailbox(singleId);
+                        if (m != null) {
+                            JSONObject mbox = new JSONObject();
+                            mbox.put("id", m.id);
+                            mbox.put("email", m.email);
+                            mbox.put("name", m.name != null ? m.name : "");
+                            mbox.put("domain", m.domainName);
+                            mbox.put("quota_mb", m.quotaMb);
+                            mbox.put("active", m.active);
+                            mbox.put("receive_enabled", m.receiveEnabled);
+                            mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : "Mai");
+                            response.put("success", true);
+                            response.put("mailbox", mbox);
+                        } else {
+                            response.put("success", false);
+                            response.put("error", "Mailbox non trovata");
+                        }
+                    } else {
+                        // Return all mailboxes
+                        JSONArray mailboxes = new JSONArray();
+                        for (MailDatabase.Mailbox m : Main.mailDatabase.getAllMailboxes()) {
+                            JSONObject mbox = new JSONObject();
+                            mbox.put("id", m.id);
+                            mbox.put("email", m.email);
+                            mbox.put("name", m.name != null ? m.name : "");
+                            mbox.put("domain", m.domainName);
+                            mbox.put("quota_mb", m.quotaMb);
+                            mbox.put("active", m.active);
+                            mbox.put("receive_enabled", m.receiveEnabled);
+                            mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : "Mai");
+                            mbox.put("autoresponder_enabled", m.autoresponderEnabled);
+                            mbox.put("forwarding_count", m.forwardingCount);
+                            mbox.put("filters_count", m.filtersCount);
+                            mailboxes.put(mbox);
+                        }
+                        response.put("success", true);
+                        response.put("mailboxes", mailboxes);
                     }
-                    response.put("success", true);
-                    response.put("mailboxes", mailboxes);
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
@@ -1189,6 +1220,7 @@ public class SSLMailServer {
                     String password = req.optString("password", "");
                     String name = req.optString("name", "");
                     int quotaMb = req.optInt("quota_mb", 1024);
+                    boolean receiveEnabled = req.optBoolean("receive_enabled", true);
 
                     if (!SecurityUtils.isValidEmail(email)) {
                         response.put("success", false);
@@ -1205,7 +1237,7 @@ public class SSLMailServer {
                             response.put("success", false);
                             response.put("error", "Dominio non esistente: " + domainName);
                         } else {
-                            int id = Main.mailDatabase.addMailbox(domain.id, email, password, name, quotaMb);
+                            int id = Main.mailDatabase.addMailbox(domain.id, email, password, name, quotaMb, receiveEnabled);
                             if (id > 0) {
                                 response.put("success", true);
                                 response.put("id", id);
@@ -1214,6 +1246,54 @@ public class SSLMailServer {
                                 response.put("success", false);
                                 response.put("error", "Mailbox gia' esistente");
                             }
+                        }
+                    }
+                }
+                case "PUT" -> {
+                    // Update existing mailbox
+                    String body = readRequestBodyWithLimit(exchange);
+                    if (body == null) {
+                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        return;
+                    }
+                    JSONObject req = new JSONObject(body);
+
+                    // Validate CSRF token
+                    if (!validateCsrfForRequest(exchange, req)) {
+                        sendCsrfError(exchange);
+                        return;
+                    }
+
+                    int id = req.optInt("id", 0);
+                    if (id <= 0) {
+                        response.put("success", false);
+                        response.put("error", "ID mailbox non valido");
+                    } else {
+                        String name = req.optString("name", "");
+                        int quotaMb = req.optInt("quota_mb", 1024);  // 0 = unlimited
+                        boolean active = req.optBoolean("active", true);
+                        boolean receiveEnabled = req.optBoolean("receive_enabled", true);
+                        String newPassword = req.optString("password", "");
+
+                        // Update mailbox
+                        boolean updated = Main.mailDatabase.updateMailbox(id, name, quotaMb, active, receiveEnabled);
+
+                        // If password provided, update it too
+                        if (updated && !newPassword.isEmpty()) {
+                            if (SecurityUtils.isValidPassword(newPassword)) {
+                                Main.mailDatabase.updateMailboxPassword(id, newPassword);
+                            } else {
+                                response.put("warning", "Password non valida, non aggiornata");
+                            }
+                        }
+
+                        if (updated) {
+                            response.put("success", true);
+                            response.put("message", "Mailbox aggiornata");
+                            regenerateMailConfigs();
+                        } else {
+                            response.put("success", false);
+                            response.put("error", "Errore aggiornamento mailbox");
                         }
                     }
                 }
@@ -1234,6 +1314,106 @@ public class SSLMailServer {
                     return;
                 }
             }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * API endpoint for mail client configuration info
+     * Returns IMAP/SMTP/POP3 settings for configuring email clients
+     */
+    private void handleApiMailConfig(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+
+        JSONObject response = new JSONObject();
+
+        try {
+            // Get mail server hostname from SQLite config
+            String mailServer = Main.dbManager.getMailHostname();
+            if (mailServer == null || mailServer.isEmpty()) {
+                mailServer = "mail.example.com";
+            }
+
+            response.put("success", true);
+            response.put("server", mailServer);
+
+            // IMAP Configuration
+            JSONObject imap = new JSONObject();
+            imap.put("server", mailServer);
+            imap.put("port_ssl", 993);
+            imap.put("port_starttls", 143);
+            imap.put("security", "SSL/TLS");
+            imap.put("auth_method", "Password normale");
+            response.put("imap", imap);
+
+            // POP3 Configuration
+            JSONObject pop3 = new JSONObject();
+            pop3.put("server", mailServer);
+            pop3.put("port_ssl", 995);
+            pop3.put("port_starttls", 110);
+            pop3.put("security", "SSL/TLS");
+            pop3.put("auth_method", "Password normale");
+            response.put("pop3", pop3);
+
+            // SMTP Configuration
+            JSONObject smtp = new JSONObject();
+            smtp.put("server", mailServer);
+            smtp.put("port_ssl", 465);
+            smtp.put("port_starttls", 587);
+            smtp.put("security", "STARTTLS");
+            smtp.put("auth_method", "Password normale");
+            response.put("smtp", smtp);
+
+            // General info
+            response.put("username_format", "email completa (es: utente@dominio.it)");
+            response.put("password_info", "La password dell'account email");
+
+            // Client-specific instructions
+            JSONObject clients = new JSONObject();
+
+            // Outlook
+            JSONObject outlook = new JSONObject();
+            outlook.put("name", "Microsoft Outlook");
+            outlook.put("imap_port", 993);
+            outlook.put("smtp_port", 587);
+            outlook.put("security", "SSL/TLS per IMAP, STARTTLS per SMTP");
+            clients.put("outlook", outlook);
+
+            // Thunderbird
+            JSONObject thunderbird = new JSONObject();
+            thunderbird.put("name", "Mozilla Thunderbird");
+            thunderbird.put("imap_port", 993);
+            thunderbird.put("smtp_port", 587);
+            thunderbird.put("security", "SSL/TLS per IMAP, STARTTLS per SMTP");
+            thunderbird.put("note", "Thunderbird auto-rileva le impostazioni");
+            clients.put("thunderbird", thunderbird);
+
+            // Apple Mail
+            JSONObject appleMail = new JSONObject();
+            appleMail.put("name", "Apple Mail (macOS/iOS)");
+            appleMail.put("imap_port", 993);
+            appleMail.put("smtp_port", 587);
+            appleMail.put("security", "SSL per IMAP, STARTTLS per SMTP");
+            clients.put("apple", appleMail);
+
+            // Android
+            JSONObject android = new JSONObject();
+            android.put("name", "Gmail App / Android");
+            android.put("imap_port", 993);
+            android.put("smtp_port", 587);
+            android.put("security", "SSL/TLS");
+            android.put("note", "Seleziona 'Altro' quando aggiungi account");
+            clients.put("android", android);
+
+            response.put("clients", clients);
+
         } catch (Exception e) {
             response.put("success", false);
             response.put("error", e.getMessage());

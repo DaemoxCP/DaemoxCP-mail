@@ -1300,14 +1300,192 @@ public class MailPanelContent {
                             <input type="text" class="form-control" id="mbName" placeholder="Mario Rossi">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Quota (MB)</label>
-                            <input type="number" class="form-control" id="mbQuota" value="1024" min="100">
+                            <label class="form-label">Quota</label>
+                            <select class="form-select" id="mbQuota">
+                                <option value="1024" selected>1 GB</option>
+                                <option value="256">256 MB</option>
+                                <option value="512">512 MB</option>
+                                <option value="2048">2 GB</option>
+                                <option value="5120">5 GB</option>
+                                <option value="10240">10 GB</option>
+                                <option value="0">Illimitato</option>
+                            </select>
+                        </div>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="mbReceive" checked>
+                            <label class="form-check-label" for="mbReceive">Ricevi Email</label>
+                            <small class="d-block text-muted">Disattiva per creare un account no-reply (solo invio)</small>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
                     <button type="button" class="btn btn-mail" onclick="addMailbox()">Crea Casella</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Mailbox Modal -->
+    <div class="modal fade" id="editMailboxModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Modifica Casella</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editMbId">
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="text" class="form-control" id="editMbEmail" readonly disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nome Completo</label>
+                        <input type="text" class="form-control" id="editMbName" placeholder="Mario Rossi">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nuova Password <small class="text-muted">(lascia vuoto per non cambiare)</small></label>
+                        <input type="password" class="form-control" id="editMbPass" placeholder="Nuova password...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Quota</label>
+                        <select class="form-select" id="editMbQuota">
+                            <option value="0">Illimitato</option>
+                            <option value="256">256 MB</option>
+                            <option value="512">512 MB</option>
+                            <option value="1024">1 GB</option>
+                            <option value="2048">2 GB</option>
+                            <option value="5120">5 GB</option>
+                            <option value="10240">10 GB</option>
+                            <option value="51200">50 GB</option>
+                            <option value="102400">100 GB</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="editMbActive" checked>
+                                <label class="form-check-label" for="editMbActive">Account Attivo</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="editMbReceive" checked>
+                                <label class="form-check-label" for="editMbReceive">Ricevi Email</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>No-Reply:</strong> Disattiva "Ricevi Email" per creare un account che può solo inviare, non ricevere.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-mail" onclick="saveMailbox()">Salva Modifiche</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mail Client Config Modal -->
+    <div class="modal fade" id="mailConfigModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-mobile-alt me-2"></i>Configurazione Client Email</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-primary">
+                        <i class="fas fa-envelope me-2"></i>
+                        <strong id="configEmail"></strong>
+                    </div>
+
+                    <ul class="nav nav-tabs mb-3" id="configTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#configGeneral">Generale</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configOutlook">Outlook</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configApple">iPhone/Mac</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configAndroid">Android</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="configGeneral">
+                            <table class="table table-bordered">
+                                <thead><tr><th>Impostazione</th><th>IMAP (Consigliato)</th><th>POP3</th></tr></thead>
+                                <tbody>
+                                    <tr><td><strong>Server Posta in Arrivo</strong></td><td id="cfgImapServer"></td><td id="cfgPop3Server"></td></tr>
+                                    <tr><td><strong>Porta</strong></td><td id="cfgImapPort"></td><td id="cfgPop3Port"></td></tr>
+                                    <tr><td><strong>Sicurezza</strong></td><td>SSL/TLS</td><td>SSL/TLS</td></tr>
+                                </tbody>
+                            </table>
+                            <table class="table table-bordered mt-3">
+                                <thead><tr><th>Impostazione</th><th>SMTP (Posta in Uscita)</th></tr></thead>
+                                <tbody>
+                                    <tr><td><strong>Server</strong></td><td id="cfgSmtpServer"></td></tr>
+                                    <tr><td><strong>Porta</strong></td><td id="cfgSmtpPort"></td></tr>
+                                    <tr><td><strong>Sicurezza</strong></td><td>STARTTLS</td></tr>
+                                    <tr><td><strong>Autenticazione</strong></td><td>Password normale</td></tr>
+                                </tbody>
+                            </table>
+                            <div class="alert alert-warning mt-3">
+                                <i class="fas fa-user me-2"></i><strong>Username:</strong> L'indirizzo email completo<br>
+                                <i class="fas fa-key me-2"></i><strong>Password:</strong> La password dell'account email
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="configOutlook">
+                            <h6><i class="fab fa-microsoft me-2"></i>Microsoft Outlook</h6>
+                            <ol class="mt-3">
+                                <li>Apri Outlook e vai su <strong>File > Aggiungi Account</strong></li>
+                                <li>Inserisci l'indirizzo email e clicca <strong>Connetti</strong></li>
+                                <li>Seleziona <strong>IMAP</strong></li>
+                                <li>Inserisci i seguenti dati:<br>
+                                    <code>Server IMAP: <span id="cfgOutlookImap"></span></code><br>
+                                    <code>Porta: 993, SSL/TLS</code><br>
+                                    <code>Server SMTP: <span id="cfgOutlookSmtp"></span></code><br>
+                                    <code>Porta: 587, STARTTLS</code>
+                                </li>
+                                <li>Inserisci la password e completa la configurazione</li>
+                            </ol>
+                        </div>
+                        <div class="tab-pane fade" id="configApple">
+                            <h6><i class="fab fa-apple me-2"></i>iPhone / iPad / Mac</h6>
+                            <ol class="mt-3">
+                                <li>Vai in <strong>Impostazioni > Mail > Account > Aggiungi Account</strong></li>
+                                <li>Seleziona <strong>Altro > Aggiungi account Mail</strong></li>
+                                <li>Inserisci nome, email e password</li>
+                                <li>Seleziona <strong>IMAP</strong></li>
+                                <li>Server posta in arrivo: <code id="cfgAppleImap"></code></li>
+                                <li>Server posta in uscita: <code id="cfgAppleSmtp"></code></li>
+                                <li>Salva e attendi la verifica</li>
+                            </ol>
+                        </div>
+                        <div class="tab-pane fade" id="configAndroid">
+                            <h6><i class="fab fa-android me-2"></i>Android (Gmail App)</h6>
+                            <ol class="mt-3">
+                                <li>Apri l'app Gmail e vai su <strong>Impostazioni > Aggiungi account</strong></li>
+                                <li>Seleziona <strong>Altro</strong></li>
+                                <li>Inserisci l'indirizzo email</li>
+                                <li>Seleziona <strong>Personale (IMAP)</strong></li>
+                                <li>Inserisci la password</li>
+                                <li>Server in arrivo: <code id="cfgAndroidImap"></code>, Porta: 993, SSL</li>
+                                <li>Server in uscita: <code id="cfgAndroidSmtp"></code>, Porta: 587, STARTTLS</li>
+                                <li>Completa la configurazione</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
                 </div>
             </div>
         </div>
@@ -1486,9 +1664,13 @@ public class MailPanelContent {
                 }
                 tbody.innerHTML = currentMailboxes.map(m => `
                     <tr>
-                        <td><strong>${m.email}</strong></td>
+                        <td>
+                            <strong>${m.email}</strong>
+                            ${!m.receive_enabled ? '<span class="badge bg-secondary ms-1" title="Solo invio (No-Reply)"><i class="fas fa-ban"></i> No-Reply</span>' : ''}
+                            ${!m.active ? '<span class="badge bg-danger ms-1">Disattivo</span>' : ''}
+                        </td>
                         <td>${m.name || '-'}</td>
-                        <td>${m.quota_mb} MB</td>
+                        <td>${m.quota_mb === 0 ? '<span class="text-success"><i class="fas fa-infinity"></i> Illimitato</span>' : m.quota_mb + ' MB'}</td>
                         <td>
                             ${m.autoresponder_enabled ? '<span class="badge bg-info feature-badge" title="Auto-Responder Attivo"><i class="fas fa-reply-all"></i></span>' : ''}
                             ${m.forwarding_count > 0 ? '<span class="badge bg-warning feature-badge" title="Inoltro Attivo"><i class="fas fa-share"></i> ' + m.forwarding_count + '</span>' : ''}
@@ -1496,8 +1678,14 @@ public class MailPanelContent {
                         </td>
                         <td>
                             <div class="btn-group">
-                                <button class="btn btn-sm btn-webmail text-white" onclick="openWebmail('${m.email}')">
+                                <button class="btn btn-sm btn-webmail text-white" onclick="openWebmail('${m.email}')" title="Apri Webmail">
                                     <i class="fas fa-envelope-open"></i>
+                                </button>
+                                <button class="btn btn-sm btn-primary" onclick="editMailbox(${m.id})" title="Modifica">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-info" onclick="showMailConfig('${m.email}')" title="Configurazione Client">
+                                    <i class="fas fa-mobile-alt"></i>
                                 </button>
                                 <button class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown">
                                     <i class="fas fa-cog"></i>
@@ -1537,12 +1725,19 @@ public class MailPanelContent {
                     password: document.getElementById('mbPass').value,
                     name: document.getElementById('mbName').value,
                     quota_mb: parseInt(document.getElementById('mbQuota').value),
+                    receive_enabled: document.getElementById('mbReceive').checked,
                     csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(data => {
                 if (data.success) {
                     bootstrap.Modal.getInstance(document.getElementById('addMailboxModal')).hide();
                     loadMailboxes();
+                    // Reset form
+                    document.getElementById('mbUser').value = '';
+                    document.getElementById('mbPass').value = '';
+                    document.getElementById('mbName').value = '';
+                    document.getElementById('mbQuota').value = '1024';
+                    document.getElementById('mbReceive').checked = true;
                 } else {
                     alert('Errore: ' + (data.error || 'sconosciuto'));
                 }
@@ -1552,6 +1747,85 @@ public class MailPanelContent {
         function deleteMailbox(id) {
             if (!confirm('Eliminare questa casella e tutte le email?')) return;
             fetch('/api/mailboxes?id=' + id, { method: 'DELETE' }).then(() => loadMailboxes());
+        }
+
+        function editMailbox(id) {
+            fetch('/api/mailboxes?id=' + id).then(r => r.json()).then(data => {
+                if (data.success && data.mailbox) {
+                    const m = data.mailbox;
+                    document.getElementById('editMbId').value = m.id;
+                    document.getElementById('editMbEmail').value = m.email;
+                    document.getElementById('editMbName').value = m.name || '';
+                    document.getElementById('editMbPass').value = '';
+                    document.getElementById('editMbQuota').value = m.quota_mb;
+                    document.getElementById('editMbActive').checked = m.active;
+                    document.getElementById('editMbReceive').checked = m.receive_enabled;
+                    new bootstrap.Modal(document.getElementById('editMailboxModal')).show();
+                } else {
+                    alert('Errore: impossibile caricare i dati della mailbox');
+                }
+            });
+        }
+
+        function saveMailbox() {
+            const id = parseInt(document.getElementById('editMbId').value);
+            const data = {
+                id: id,
+                name: document.getElementById('editMbName').value,
+                password: document.getElementById('editMbPass').value,
+                quota_mb: parseInt(document.getElementById('editMbQuota').value),
+                active: document.getElementById('editMbActive').checked,
+                receive_enabled: document.getElementById('editMbReceive').checked,
+                csrf_token: csrfToken
+            };
+
+            fetch('/api/mailboxes', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).then(r => r.json()).then(result => {
+                if (result.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('editMailboxModal')).hide();
+                    loadMailboxes();
+                    if (result.warning) {
+                        alert(result.warning);
+                    }
+                } else {
+                    alert('Errore: ' + (result.error || 'sconosciuto'));
+                }
+            });
+        }
+
+        function showMailConfig(email) {
+            document.getElementById('configEmail').textContent = email;
+
+            fetch('/api/mailconfig').then(r => r.json()).then(data => {
+                if (data.success) {
+                    const server = data.server;
+
+                    // General tab
+                    document.getElementById('cfgImapServer').textContent = server;
+                    document.getElementById('cfgPop3Server').textContent = server;
+                    document.getElementById('cfgImapPort').textContent = '993 (SSL)';
+                    document.getElementById('cfgPop3Port').textContent = '995 (SSL)';
+                    document.getElementById('cfgSmtpServer').textContent = server;
+                    document.getElementById('cfgSmtpPort').textContent = '587 (STARTTLS)';
+
+                    // Outlook tab
+                    document.getElementById('cfgOutlookImap').textContent = server;
+                    document.getElementById('cfgOutlookSmtp').textContent = server;
+
+                    // Apple tab
+                    document.getElementById('cfgAppleImap').textContent = server;
+                    document.getElementById('cfgAppleSmtp').textContent = server;
+
+                    // Android tab
+                    document.getElementById('cfgAndroidImap').textContent = server;
+                    document.getElementById('cfgAndroidSmtp').textContent = server;
+                }
+
+                new bootstrap.Modal(document.getElementById('mailConfigModal')).show();
+            });
         }
 
         function openWebmail(email) {

@@ -279,6 +279,8 @@ public class MailDatabase {
             """;
 
         // Mailboxes table (virtual users)
+        // quota_mb: 0 = unlimited, >0 = limit in MB
+        // receive_enabled: false = no-reply account (can only send, not receive)
         String createMailboxes = """
             CREATE TABLE IF NOT EXISTS mailboxes (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -288,6 +290,7 @@ public class MailDatabase {
                 name VARCHAR(255),
                 quota_mb INT DEFAULT 1024,
                 active BOOLEAN DEFAULT TRUE,
+                receive_enabled BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP NULL,
                 FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
@@ -1075,18 +1078,23 @@ public class MailDatabase {
     // ========== MAILBOX MANAGEMENT ==========
 
     public int addMailbox(int domainId, String email, String password, String name, int quotaMb) throws SQLException {
+        return addMailbox(domainId, email, password, name, quotaMb, true);
+    }
+
+    public int addMailbox(int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
         // Hash password with bcrypt (compatible with Dovecot)
         // Dovecot uses default_pass_scheme = BLF-CRYPT, so no prefix needed
         // Postfix authenticates via Dovecot SASL
         String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
 
-        String sql = "INSERT INTO mailboxes (domain_id, email, password, name, quota_mb) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO mailboxes (domain_id, email, password, name, quota_mb, receive_enabled) VALUES (?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, domainId);
             stmt.setString(2, email.toLowerCase());
             stmt.setString(3, hashedPassword);
             stmt.setString(4, name);
             stmt.setInt(5, quotaMb);
+            stmt.setBoolean(6, receiveEnabled);
             stmt.executeUpdate();
             ResultSet rs = stmt.getGeneratedKeys();
             if (rs.next()) {
@@ -1135,6 +1143,58 @@ public class MailDatabase {
             stmt.setInt(1, quotaMb);
             stmt.setInt(2, mailboxId);
             return stmt.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Update mailbox receive_enabled status (no-reply toggle)
+     */
+    public boolean updateMailboxReceiveEnabled(int mailboxId, boolean receiveEnabled) throws SQLException {
+        String sql = "UPDATE mailboxes SET receive_enabled = ? WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setBoolean(1, receiveEnabled);
+            stmt.setInt(2, mailboxId);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Full mailbox update - updates all editable fields
+     * @param mailboxId The mailbox ID
+     * @param name Display name
+     * @param quotaMb Quota in MB (0 = unlimited)
+     * @param active Account active status
+     * @param receiveEnabled Can receive emails (false = no-reply)
+     */
+    public boolean updateMailbox(int mailboxId, String name, int quotaMb, boolean active, boolean receiveEnabled) throws SQLException {
+        String sql = "UPDATE mailboxes SET name = ?, quota_mb = ?, active = ?, receive_enabled = ? WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, name);
+            stmt.setInt(2, quotaMb);
+            stmt.setBoolean(3, active);
+            stmt.setBoolean(4, receiveEnabled);
+            stmt.setInt(5, mailboxId);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Ensure receive_enabled column exists (for database migration)
+     */
+    public void ensureMailboxReceiveEnabledColumn() {
+        try (Statement stmt = connection.createStatement()) {
+            // Check if column exists
+            ResultSet rs = stmt.executeQuery(
+                "SELECT COUNT(*) FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'mailboxes' AND column_name = 'receive_enabled'"
+            );
+            if (rs.next() && rs.getInt(1) == 0) {
+                // Column doesn't exist, add it
+                stmt.executeUpdate("ALTER TABLE mailboxes ADD COLUMN receive_enabled BOOLEAN DEFAULT TRUE AFTER active");
+                System.out.println("Added receive_enabled column to mailboxes table");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error ensuring receive_enabled column: " + e.getMessage());
         }
     }
 
@@ -1255,6 +1315,12 @@ public class MailDatabase {
         m.active = rs.getBoolean("active");
         m.createdAt = rs.getTimestamp("created_at");
         m.lastLogin = rs.getTimestamp("last_login");
+        // receive_enabled field (default true if column doesn't exist yet)
+        try {
+            m.receiveEnabled = rs.getBoolean("receive_enabled");
+        } catch (SQLException ignored) {
+            m.receiveEnabled = true; // Default for old databases
+        }
         // Additional UI counts (may not be present in all queries)
         try {
             m.forwardingCount = rs.getInt("forwarding_count");
@@ -1459,8 +1525,9 @@ public class MailDatabase {
         public String domainName;
         public String email;
         public String name;
-        public int quotaMb;
+        public int quotaMb;  // 0 = unlimited
         public boolean active;
+        public boolean receiveEnabled;  // false = no-reply (send only)
         public Timestamp createdAt;
         public Timestamp lastLogin;
         // Additional counts for UI display

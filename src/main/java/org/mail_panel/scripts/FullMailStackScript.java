@@ -219,7 +219,7 @@ public class FullMailStackScript {
                 dkim_public_key TEXT
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-            -- Mailboxes
+            -- Mailboxes (quota_mb: 0 = unlimited, receive_enabled: false = no-reply)
             CREATE TABLE IF NOT EXISTS mailboxes (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 domain_id INT NOT NULL,
@@ -228,6 +228,7 @@ public class FullMailStackScript {
                 name VARCHAR(255),
                 quota_mb INT DEFAULT 1024,
                 active BOOLEAN DEFAULT TRUE,
+                receive_enabled BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP NULL,
                 FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
@@ -399,7 +400,7 @@ user = mailpanel
 password = ${MAILSERVER_PASS}
 hosts = 127.0.0.1
 dbname = mailpanel
-query = SELECT CONCAT(SUBSTRING_INDEX(email,'@',-1),'/',SUBSTRING_INDEX(email,'@',1),'/') FROM mailboxes WHERE email='%s' AND active=1
+query = SELECT CONCAT(SUBSTRING_INDEX(email,'@',-1),'/',SUBSTRING_INDEX(email,'@',1),'/') FROM mailboxes WHERE email='%s' AND active=1 AND receive_enabled=1
 MYSQLCONF
 
             cat > /usr/local/etc/postfix/mysql-virtual-aliases.cf << MYSQLCONF
