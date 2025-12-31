@@ -68,9 +68,9 @@ public class DovecotScript {
             # PHASE 2: FRESH INSTALLATION
             #############################################
 
-            # Install Dovecot
+            # Install Dovecot with MySQL and Sieve support
             echo "[1/7] Installing Dovecot..."
-            pkg install -y dovecot-mysql dovecot-pigeonhole
+            pkg install -y dovecot-mysql dovecot-pigeonhole-mysql
 
             # Create vmail user if not exists
             echo "[2/7] Creating vmail user..."
@@ -95,6 +95,9 @@ listen = *, ::
 mail_privileged_group = mail
 first_valid_uid = 5000
 first_valid_gid = 5000
+
+# Use Postfix for sending vacation responses (not dma)
+sendmail_path = /usr/local/sbin/sendmail
 
 !include conf.d/*.conf
 
@@ -195,8 +198,13 @@ protocol lmtp {
 }
 
 plugin {
-  sieve = ~/.dovecot.sieve
-  sieve_dir = ~/sieve
+  # Sieve script path - matches SieveGenerator output
+  sieve = /var/mail/sieve/%d/%n/.dovecot.sieve
+  sieve_dir = /var/mail/sieve/%d/%n/
+  sieve_global_dir = /var/mail/sieve/global/
+
+  # Enable all required extensions (date is needed for vacation with date range)
+  sieve_extensions = +fileinto +reject +envelope +vacation +copy +imap4flags +regex +relational +comparator-i;ascii-numeric +date +variables
 }
 DOVECOT_MASTER
 
@@ -280,6 +288,11 @@ MASTER_EOF
             # Create run directory
             mkdir -p /var/run/dovecot
             chown root:dovecot /var/run/dovecot
+
+            # Create Sieve directory for auto-responders and filters
+            mkdir -p /var/mail/sieve/global
+            chown -R vmail:vmail /var/mail/sieve
+            chmod -R 755 /var/mail/sieve
 
             # Create Postfix spool directory for SASL socket
             mkdir -p /var/spool/postfix/private

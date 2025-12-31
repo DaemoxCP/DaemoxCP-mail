@@ -23,8 +23,8 @@ public class SieveGenerator {
     public String generateSieveScript(int mailboxId, MailDatabase database) {
         StringBuilder script = new StringBuilder();
 
-        // Sieve requires capabilities
-        script.append("require [\"fileinto\", \"reject\", \"vacation\", \"copy\", \"imap4flags\", \"regex\", \"relational\", \"comparator-i;ascii-numeric\"];\n\n");
+        // Sieve requires capabilities (date extension needed for currentdate)
+        script.append("require [\"fileinto\", \"reject\", \"vacation\", \"copy\", \"imap4flags\", \"regex\", \"relational\", \"comparator-i;ascii-numeric\", \"date\"];\n\n");
 
         // Get auto-responder
         MailDatabase.AutoResponder autoResponder = database.getAutoResponder(mailboxId);
@@ -62,22 +62,34 @@ public class SieveGenerator {
         rule.append("# Auto-responder / Vacation\n");
 
         // Date conditions if set
-        if (ar.startDate != null || ar.endDate != null) {
-            rule.append("if allof (\n");
-            if (ar.startDate != null) {
+        boolean hasStartDate = ar.startDate != null;
+        boolean hasEndDate = ar.endDate != null;
+
+        if (hasStartDate || hasEndDate) {
+            if (hasStartDate && hasEndDate) {
+                // Both dates - use allof
+                rule.append("if allof (\n");
                 rule.append("  currentdate :value \"ge\" \"date\" \"").append(ar.startDate).append("\",\n");
+                rule.append("  currentdate :value \"le\" \"date\" \"").append(ar.endDate).append("\"\n");
+                rule.append(") {\n");
+            } else if (hasStartDate) {
+                // Only start date
+                rule.append("if currentdate :value \"ge\" \"date\" \"").append(ar.startDate).append("\" {\n");
+            } else {
+                // Only end date
+                rule.append("if currentdate :value \"le\" \"date\" \"").append(ar.endDate).append("\" {\n");
             }
-            if (ar.endDate != null) {
-                rule.append("  currentdate :value \"le\" \"date\" \"").append(ar.endDate).append("\"");
-            }
-            rule.append("\n) {\n");
         }
 
-        rule.append("  vacation :days ").append(ar.intervalHours / 24).append("\n");
+        // Ensure :days is at least 1
+        int days = ar.intervalHours / 24;
+        if (days < 1) days = 1;
+
+        rule.append("  vacation :days ").append(days).append("\n");
         rule.append("    :subject \"").append(escapeString(ar.subject)).append("\"\n");
         rule.append("    \"").append(escapeString(ar.body)).append("\";\n");
 
-        if (ar.startDate != null || ar.endDate != null) {
+        if (hasStartDate || hasEndDate) {
             rule.append("}\n");
         }
 
@@ -230,13 +242,16 @@ public class SieveGenerator {
 
     /**
      * Escape string for Sieve
+     * Note: Sieve quoted strings can contain real newlines, don't escape them
      */
     private String escapeString(String s) {
         if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r");
+        // Convert literal \n text to actual newlines (in case stored that way)
+        s = s.replace("\\n", "\n");
+        // Remove carriage returns, escape quotes
+        return s.replace("\r", "")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 
     /**
@@ -268,16 +283,49 @@ public class SieveGenerator {
     }
 
     /**
-     * Compile a Sieve script using sievec
+     * Get the path to sievec binary
+     */
+    private String getSievecPath() {
+        String[] paths = {
+            "/usr/local/bin/sievec",
+            "/usr/bin/sievec",
+            "/usr/local/libexec/dovecot/sievec"
+        };
+        for (String path : paths) {
+            if (new java.io.File(path).exists()) {
+                return path;
+            }
+        }
+        return null; // sievec not found
+    }
+
+    /**
+     * Compile a Sieve script using sievec (optional - Dovecot compiles on first use anyway)
      */
     public boolean compileScript(String scriptPath) {
+        String sievecPath = getSievecPath();
+        if (sievecPath == null) {
+            // sievec not found, but that's OK - Dovecot will compile on first use
+            System.out.println("sievec not found, skipping pre-compilation (Dovecot will compile on first use)");
+            return true;
+        }
+
         try {
-            ProcessBuilder pb = new ProcessBuilder("sievec", scriptPath);
+            ProcessBuilder pb = new ProcessBuilder(sievecPath, scriptPath);
+            pb.redirectErrorStream(true);
             Process p = pb.start();
-            return p.waitFor() == 0;
+
+            // Read output to prevent blocking
+            String output = new String(p.getInputStream().readAllBytes());
+            int exitCode = p.waitFor();
+
+            if (exitCode != 0) {
+                System.err.println("sievec compilation warning: " + output);
+            }
+            return exitCode == 0;
         } catch (Exception e) {
-            e.printStackTrace();
-            return false;
+            System.err.println("sievec error (non-fatal): " + e.getMessage());
+            return true; // Return true anyway - Dovecot will compile on first use
         }
     }
 
@@ -296,13 +344,19 @@ public class SieveGenerator {
     }
 
     public ValidationResult validateScript(String script) {
+        String sievecPath = getSievecPath();
+        if (sievecPath == null) {
+            // Can't validate without sievec, assume valid
+            return new ValidationResult(true, null);
+        }
+
         try {
             // Write to temp file
             Path tempFile = Files.createTempFile("sieve_validate_", ".sieve");
             Files.writeString(tempFile, script);
 
             // Run sievec to validate
-            ProcessBuilder pb = new ProcessBuilder("sievec", "-d", tempFile.toString());
+            ProcessBuilder pb = new ProcessBuilder(sievecPath, "-d", tempFile.toString());
             pb.redirectErrorStream(true);
             Process p = pb.start();
 

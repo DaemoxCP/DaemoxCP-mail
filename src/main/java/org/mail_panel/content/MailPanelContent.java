@@ -1813,6 +1813,9 @@ public class MailPanelContent {
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-warning" onclick="resetVacationTracking()" title="Permette di inviare nuovamente la risposta automatica agli stessi mittenti">
+                        <i class="fas fa-redo me-1"></i>Reset Tracking
+                    </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
                     <button type="button" class="btn btn-primary" onclick="saveAutoResponder()">Salva</button>
                 </div>
@@ -2132,13 +2135,14 @@ public class MailPanelContent {
             fetch('/api/autoresponder?mailbox_id=' + mailboxId)
                 .then(r => r.json())
                 .then(data => {
-                    const ar = data.autoresponder || {};
-                    document.getElementById('arEnabled').checked = ar.enabled || false;
-                    document.getElementById('arSubject').value = ar.subject || '';
-                    document.getElementById('arBody').value = ar.body || '';
-                    document.getElementById('arStartDate').value = ar.start_date || '';
-                    document.getElementById('arEndDate').value = ar.end_date || '';
-                    document.getElementById('arInterval').value = ar.interval_hours || 24;
+                    if (data.success) {
+                        document.getElementById('arEnabled').checked = data.enabled || false;
+                        document.getElementById('arSubject').value = data.subject || '';
+                        document.getElementById('arBody').value = data.body || '';
+                        document.getElementById('arStartDate').value = data.start_date || '';
+                        document.getElementById('arEndDate').value = data.end_date || '';
+                        document.getElementById('arInterval').value = data.interval_hours || 24;
+                    }
                     new bootstrap.Modal(document.getElementById('autoResponderModal')).show();
                 });
         }
@@ -2160,6 +2164,26 @@ public class MailPanelContent {
                 if (data.success) {
                     bootstrap.Modal.getInstance(document.getElementById('autoResponderModal')).hide();
                     loadMailboxes();
+                } else {
+                    alert(data.error || 'Errore');
+                }
+            });
+        }
+
+        function resetVacationTracking() {
+            if (!confirm('Vuoi resettare il tracking delle risposte automatiche?\\n\\nQuesto permetterà di inviare nuovamente la risposta ai mittenti che l\\'hanno già ricevuta.')) {
+                return;
+            }
+            fetch('/api/autoresponder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'reset_tracking',
+                    mailbox_id: parseInt(document.getElementById('arMailboxId').value)
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    alert('Tracking resettato! Ora puoi testare di nuovo la risposta automatica.');
                 } else {
                     alert(data.error || 'Errore');
                 }

@@ -75,7 +75,7 @@ public class MailDatabase {
     public boolean connect() {
         try {
             String url = String.format(
-                "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&createDatabaseIfNotExist=true",
+                "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&createDatabaseIfNotExist=true&autoReconnect=true",
                 host, port, database
             );
             connection = DriverManager.getConnection(url, username, password);

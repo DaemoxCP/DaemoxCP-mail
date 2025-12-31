@@ -3861,29 +3861,69 @@ public class SSLMailServer {
             return;
         }
                     JSONObject req = new JSONObject(body);
+                    String action = req.optString("action", "save");
 
-                    int mailboxId = req.optInt("mailbox_id", 0);
-                    boolean enabled = req.optBoolean("enabled", false);
-                    String subject = req.optString("subject", "Out of Office");
-                    String bodyText = req.optString("body", "");
-                    String startDateStr = req.optString("start_date", "");
-                    String endDateStr = req.optString("end_date", "");
-                    int intervalHours = req.optInt("interval_hours", 24);
-
-                    java.sql.Date startDate = startDateStr.isEmpty() ? null : java.sql.Date.valueOf(startDateStr);
-                    java.sql.Date endDate = endDateStr.isEmpty() ? null : java.sql.Date.valueOf(endDateStr);
-
-                    if (Main.mailDatabase.saveAutoResponder(mailboxId, enabled, subject, bodyText, startDate, endDate, intervalHours)) {
-                        // Regenerate Sieve script
+                    if ("reset_tracking".equals(action)) {
+                        // Reset vacation tracking files
+                        int mailboxId = req.optInt("mailbox_id", 0);
                         MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
-                        if (mailbox != null && sieveGenerator != null) {
-                            String sieveScript = sieveGenerator.generateSieveScript(mailboxId, Main.mailDatabase);
-                            sieveGenerator.saveSieveScript(mailbox.email, sieveScript);
+                        if (mailbox != null) {
+                            String[] parts = mailbox.email.split("@");
+                            if (parts.length == 2) {
+                                String user = parts[0];
+                                String domain = parts[1];
+                                // Delete vacation tracking files
+                                try {
+                                    java.nio.file.Path vmailDupes = java.nio.file.Path.of("/var/vmail", domain, user, ".dovecot.lda-dupes");
+                                    java.nio.file.Path sieveDb = java.nio.file.Path.of("/var/mail/sieve", domain, user, ".dovecot.sieve.db");
+                                    java.nio.file.Files.deleteIfExists(vmailDupes);
+                                    java.nio.file.Files.deleteIfExists(sieveDb);
+                                    // Also delete any .svbin compiled file to force recompile
+                                    java.nio.file.Path svbin = java.nio.file.Path.of("/var/mail/sieve", domain, user, ".dovecot.svbin");
+                                    java.nio.file.Files.deleteIfExists(svbin);
+                                    // Restart Dovecot to clear in-memory vacation cache
+                                    ProcessBuilder pb = new ProcessBuilder("service", "dovecot", "restart");
+                                    pb.redirectErrorStream(true);
+                                    Process p = pb.start();
+                                    p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+                                    response.put("success", true);
+                                } catch (Exception e) {
+                                    response.put("success", false);
+                                    response.put("error", "Errore: " + e.getMessage());
+                                }
+                            } else {
+                                response.put("success", false);
+                                response.put("error", "Email non valida");
+                            }
+                        } else {
+                            response.put("success", false);
+                            response.put("error", "Mailbox non trovata");
                         }
-                        response.put("success", true);
                     } else {
-                        response.put("success", false);
-                        response.put("error", "Impossibile salvare auto-responder");
+                        // Save auto-responder
+                        int mailboxId = req.optInt("mailbox_id", 0);
+                        boolean enabled = req.optBoolean("enabled", false);
+                        String subject = req.optString("subject", "Out of Office");
+                        String bodyText = req.optString("body", "");
+                        String startDateStr = req.optString("start_date", "");
+                        String endDateStr = req.optString("end_date", "");
+                        int intervalHours = req.optInt("interval_hours", 24);
+
+                        java.sql.Date startDate = startDateStr.isEmpty() ? null : java.sql.Date.valueOf(startDateStr);
+                        java.sql.Date endDate = endDateStr.isEmpty() ? null : java.sql.Date.valueOf(endDateStr);
+
+                        if (Main.mailDatabase.saveAutoResponder(mailboxId, enabled, subject, bodyText, startDate, endDate, intervalHours)) {
+                            // Regenerate Sieve script
+                            MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
+                            if (mailbox != null && sieveGenerator != null) {
+                                String sieveScript = sieveGenerator.generateSieveScript(mailboxId, Main.mailDatabase);
+                                sieveGenerator.saveSieveScript(mailbox.email, sieveScript);
+                            }
+                            response.put("success", true);
+                        } else {
+                            response.put("success", false);
+                            response.put("error", "Impossibile salvare auto-responder");
+                        }
                     }
                 }
                 default -> {
