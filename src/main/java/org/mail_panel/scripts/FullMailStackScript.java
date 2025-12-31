@@ -360,7 +360,6 @@ virtual_uid_maps = static:5000
 virtual_gid_maps = static:5000
 
 # TLS settings (will be updated with real certs)
-smtpd_use_tls = yes
 smtpd_tls_cert_file = /usr/local/etc/ssl/mail/fullchain.pem
 smtpd_tls_key_file = /usr/local/etc/ssl/mail/privkey.pem
 smtpd_tls_security_level = may

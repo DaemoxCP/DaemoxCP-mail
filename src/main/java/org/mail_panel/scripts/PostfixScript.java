@@ -110,7 +110,7 @@ virtual_uid_maps = static:5000
 virtual_gid_maps = static:5000
 
 # TLS settings (will be configured with certificates)
-smtpd_use_tls = no
+smtpd_tls_security_level = none
 
 # Mailbox size limits
 message_size_limit = 52428800

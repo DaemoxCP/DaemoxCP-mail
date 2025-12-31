@@ -56,15 +56,27 @@ public class AcmeManager {
      * Start automatic renewal checker (runs daily)
      */
     public void startAutoRenewal() {
-        scheduler.scheduleAtFixedRate(() -> {
+        // Run check immediately at startup
+        scheduler.execute(() -> {
             try {
+                System.out.println("[ACME] Checking certificate status at startup...");
                 checkAndRenewCertificates();
             } catch (Exception e) {
-                System.err.println("Auto-renewal check failed: " + e.getMessage());
+                System.err.println("[ACME] Startup check failed: " + e.getMessage());
             }
-        }, 1, 24, TimeUnit.HOURS);
+        });
 
-        System.out.println("ACME auto-renewal scheduler started (checks daily)");
+        // Then schedule daily checks
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                System.out.println("[ACME] Daily certificate check...");
+                checkAndRenewCertificates();
+            } catch (Exception e) {
+                System.err.println("[ACME] Auto-renewal check failed: " + e.getMessage());
+            }
+        }, 24, 24, TimeUnit.HOURS);
+
+        System.out.println("[ACME] Auto-renewal scheduler started (checks at startup + daily)");
     }
 
     /**
@@ -319,12 +331,14 @@ public class AcmeManager {
             config += "\nsmtpd_tls_key_file = " + KEY_FILE;
         }
 
-        // Ensure TLS is enabled
-        if (!config.contains("smtpd_use_tls")) {
-            config += "\nsmtpd_use_tls = yes";
+        // Ensure TLS is enabled (use smtpd_tls_security_level instead of deprecated smtpd_use_tls)
+        if (!config.contains("smtpd_tls_security_level")) {
+            config += "\nsmtpd_tls_security_level = may";
         } else {
-            config = config.replaceAll("smtpd_use_tls\\s*=.*", "smtpd_use_tls = yes");
+            config = config.replaceAll("smtpd_tls_security_level\\s*=\\s*none", "smtpd_tls_security_level = may");
         }
+        // Remove deprecated smtpd_use_tls if present
+        config = config.replaceAll("(?m)^smtpd_use_tls\\s*=.*\\n?", "");
 
         Files.writeString(postfixConf, config);
     }
@@ -364,18 +378,26 @@ public class AcmeManager {
         try {
             CertificateInfo info = getCertificateInfo();
             if (info == null || info.expiresAt == null) {
+                System.out.println("[ACME] No certificate installed or cannot read expiry date");
                 return;
             }
 
             long daysUntilExpiry = ChronoUnit.DAYS.between(LocalDateTime.now(), info.expiresAt);
-            if (daysUntilExpiry <= RENEWAL_THRESHOLD_DAYS) {
-                System.out.println("Certificate expires in " + daysUntilExpiry + " days, renewing...");
+
+            if (daysUntilExpiry <= 0) {
+                System.err.println("[ACME] WARNING: Certificate EXPIRED! Attempting renewal...");
                 CertificateResult result = renewCertificate(info.commonName);
-                System.out.println("Renewal result: " + result.message);
+                System.out.println("[ACME] Renewal result: " + result.message);
+            } else if (daysUntilExpiry <= RENEWAL_THRESHOLD_DAYS) {
+                System.out.println("[ACME] Certificate expires in " + daysUntilExpiry + " days (threshold: " + RENEWAL_THRESHOLD_DAYS + "), renewing...");
+                CertificateResult result = renewCertificate(info.commonName);
+                System.out.println("[ACME] Renewal result: " + result.message);
+            } else {
+                System.out.println("[ACME] Certificate OK - expires in " + daysUntilExpiry + " days (" + info.commonName + ")");
             }
 
         } catch (Exception e) {
-            System.err.println("Certificate check failed: " + e.getMessage());
+            System.err.println("[ACME] Certificate check failed: " + e.getMessage());
         }
     }
 

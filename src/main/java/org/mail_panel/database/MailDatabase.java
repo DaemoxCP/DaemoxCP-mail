@@ -158,7 +158,7 @@ public class MailDatabase {
      * Create the mailpanel database and user (run as root)
      */
     public void createDatabaseAndUser(String panelPassword) throws SQLException {
-        try (Statement stmt = connection.createStatement()) {
+        try (Statement stmt = getConnection().createStatement()) {
             // Create database
             stmt.execute("CREATE DATABASE IF NOT EXISTS mailpanel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
 
@@ -184,7 +184,7 @@ public class MailDatabase {
     public void dropAllTables() throws SQLException {
         if (!connected || connection == null) return;
 
-        Statement stmt = connection.createStatement();
+        Statement stmt = getConnection().createStatement();
 
         // Drop in reverse order of dependencies
         // Includes both current table names AND legacy names for migration cleanup
@@ -450,7 +450,7 @@ public class MailDatabase {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """;
 
-        try (Statement stmt = connection.createStatement()) {
+        try (Statement stmt = getConnection().createStatement()) {
             stmt.execute(createPanelAdmin);
             stmt.execute(createSettings);
             stmt.execute(createComponents);
@@ -480,7 +480,7 @@ public class MailDatabase {
             INSERT INTO panel_admin (username, password_hash) VALUES (?, ?)
             ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             stmt.setString(2, hashedPassword);
             stmt.executeUpdate();
@@ -503,7 +503,7 @@ public class MailDatabase {
      */
     public int getAdminIdIfValidLogin(String username, String password) {
         String sql = "SELECT id, password_hash FROM panel_admin WHERE username = ? AND active = TRUE";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -523,7 +523,7 @@ public class MailDatabase {
 
     private void updateAdminLastLogin(String username) {
         String sql = "UPDATE panel_admin SET last_login = CURRENT_TIMESTAMP WHERE username = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             stmt.executeUpdate();
         } catch (SQLException e) {
@@ -537,7 +537,7 @@ public class MailDatabase {
     public boolean changeAdminPassword(String username, String newPassword) {
         String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
         String sql = "UPDATE panel_admin SET password_hash = ? WHERE username = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, hashedPassword);
             stmt.setString(2, username);
             return stmt.executeUpdate() > 0;
@@ -552,7 +552,7 @@ public class MailDatabase {
      */
     public boolean verifyAdminPassword(int adminId, String password) {
         String sql = "SELECT password_hash FROM panel_admin WHERE id = ? AND active = TRUE";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -571,7 +571,7 @@ public class MailDatabase {
     public boolean updateAdminPassword(int adminId, String newPassword) {
         String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
         String sql = "UPDATE panel_admin SET password_hash = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, hashedPassword);
             stmt.setInt(2, adminId);
             return stmt.executeUpdate() > 0;
@@ -586,7 +586,7 @@ public class MailDatabase {
      */
     public boolean hasAdminUser() {
         String sql = "SELECT 1 FROM panel_admin WHERE active = TRUE LIMIT 1";
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             return rs.next();
         } catch (SQLException e) {
@@ -602,7 +602,7 @@ public class MailDatabase {
      */
     public String getAdminTheme(String username) {
         String sql = "SELECT theme FROM panel_admin WHERE username = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -624,7 +624,7 @@ public class MailDatabase {
             theme = "auto";
         }
         String sql = "UPDATE panel_admin SET theme = ? WHERE username = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, theme);
             stmt.setString(2, username);
             return stmt.executeUpdate() > 0;
@@ -638,7 +638,7 @@ public class MailDatabase {
      * Ensure theme column exists (for database migration)
      */
     public void ensureThemeColumn() {
-        try (Statement stmt = connection.createStatement()) {
+        try (Statement stmt = getConnection().createStatement()) {
             ResultSet rs = stmt.executeQuery(
                 "SELECT COUNT(*) FROM information_schema.columns " +
                 "WHERE table_schema = DATABASE() AND table_name = 'panel_admin' AND column_name = 'theme'"
@@ -673,7 +673,7 @@ public class MailDatabase {
                 UNIQUE KEY unique_credential (credential_id(255))
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """;
-        try (Statement stmt = connection.createStatement()) {
+        try (Statement stmt = getConnection().createStatement()) {
             stmt.execute(createPasskeys);
         } catch (SQLException e) {
             System.out.println("Error ensuring passkeys table: " + e.getMessage());
@@ -700,7 +700,7 @@ public class MailDatabase {
      */
     public boolean hasPasskey(int adminId) {
         String sql = "SELECT 1 FROM admin_passkeys WHERE admin_id = ? LIMIT 1";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             ResultSet rs = stmt.executeQuery();
             return rs.next();
@@ -719,7 +719,7 @@ public class MailDatabase {
             WHERE pa.username = ? AND pa.active = TRUE
             LIMIT 1
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             ResultSet rs = stmt.executeQuery();
             return rs.next();
@@ -734,7 +734,7 @@ public class MailDatabase {
     public java.util.List<Passkey> getPasskeys(int adminId) {
         java.util.List<Passkey> passkeys = new java.util.ArrayList<>();
         String sql = "SELECT * FROM admin_passkeys WHERE admin_id = ? ORDER BY created_at DESC";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -766,7 +766,7 @@ public class MailDatabase {
             JOIN panel_admin pa ON ap.admin_id = pa.id
             WHERE pa.username = ? AND pa.active = TRUE
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -793,7 +793,7 @@ public class MailDatabase {
      */
     public Passkey getPasskeyByCredentialId(byte[] credentialId) {
         String sql = "SELECT * FROM admin_passkeys WHERE credential_id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setBytes(1, credentialId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -820,7 +820,7 @@ public class MailDatabase {
      */
     public boolean savePasskey(int adminId, byte[] credentialId, byte[] publicKeyCose, long signCount, String name, byte[] aaguid) {
         String sql = "INSERT INTO admin_passkeys (admin_id, credential_id, public_key_cose, sign_count, name, aaguid) VALUES (?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             stmt.setBytes(2, credentialId);
             stmt.setBytes(3, publicKeyCose);
@@ -839,7 +839,7 @@ public class MailDatabase {
      */
     public boolean updatePasskeySignCount(byte[] credentialId, long newSignCount) {
         String sql = "UPDATE admin_passkeys SET sign_count = ?, last_used = CURRENT_TIMESTAMP WHERE credential_id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setLong(1, newSignCount);
             stmt.setBytes(2, credentialId);
             return stmt.executeUpdate() > 0;
@@ -854,7 +854,7 @@ public class MailDatabase {
      */
     public boolean renamePasskey(int passkeyId, int adminId, String newName) {
         String sql = "UPDATE admin_passkeys SET name = ? WHERE id = ? AND admin_id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, newName);
             stmt.setInt(2, passkeyId);
             stmt.setInt(3, adminId);
@@ -870,7 +870,7 @@ public class MailDatabase {
      */
     public boolean deletePasskey(int passkeyId, int adminId) {
         String sql = "DELETE FROM admin_passkeys WHERE id = ? AND admin_id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, passkeyId);
             stmt.setInt(2, adminId);
             return stmt.executeUpdate() > 0;
@@ -885,7 +885,7 @@ public class MailDatabase {
      */
     public int getAdminIdByUsername(String username) {
         String sql = "SELECT id FROM panel_admin WHERE username = ? AND active = TRUE";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -908,9 +908,10 @@ public class MailDatabase {
     }
 
     public AuthMethods getAuthMethods(String username) {
+        ensureConnection();
         AuthMethods methods = new AuthMethods();
         String sql = "SELECT id, password_hash, totp_enabled FROM panel_admin WHERE username = ? AND active = TRUE";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -930,7 +931,7 @@ public class MailDatabase {
 
     public String getSetting(String key, String defaultValue) {
         String sql = "SELECT setting_value FROM panel_settings WHERE setting_key = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, key);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -947,7 +948,7 @@ public class MailDatabase {
             INSERT INTO panel_settings (setting_key, setting_value) VALUES (?, ?)
             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, key);
             stmt.setString(2, value);
             stmt.executeUpdate();
@@ -958,7 +959,7 @@ public class MailDatabase {
 
     public void deleteSetting(String key) {
         String sql = "DELETE FROM panel_settings WHERE setting_key = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, key);
             stmt.executeUpdate();
         } catch (SQLException e) {
@@ -970,7 +971,7 @@ public class MailDatabase {
 
     public boolean isComponentInstalled(String componentName) {
         String sql = "SELECT 1 FROM installed_components WHERE component_name = ? AND status = 'installed'";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, componentName);
             ResultSet rs = stmt.executeQuery();
             return rs.next();
@@ -988,7 +989,7 @@ public class MailDatabase {
                 installed_at = CURRENT_TIMESTAMP,
                 status = 'installed'
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, componentName);
             stmt.setString(2, version);
             stmt.executeUpdate();
@@ -999,7 +1000,7 @@ public class MailDatabase {
 
     public void markComponentUninstalled(String componentName) {
         String sql = "UPDATE installed_components SET status = 'uninstalled' WHERE component_name = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, componentName);
             stmt.executeUpdate();
         } catch (SQLException e) {
@@ -1010,7 +1011,7 @@ public class MailDatabase {
     public String getInstalledComponentsJson() {
         StringBuilder json = new StringBuilder("[");
         String sql = "SELECT component_name, version, installed_at FROM installed_components WHERE status = 'installed'";
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             boolean first = true;
             while (rs.next()) {
@@ -1033,7 +1034,7 @@ public class MailDatabase {
 
     public int addDomain(String domain, String description) throws SQLException {
         String sql = "INSERT INTO domains (domain, description) VALUES (?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setString(1, domain.toLowerCase());
             stmt.setString(2, description);
             stmt.executeUpdate();
@@ -1049,7 +1050,7 @@ public class MailDatabase {
 
     public boolean deleteDomain(int domainId) throws SQLException {
         String sql = "DELETE FROM domains WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, domainId);
             return stmt.executeUpdate() > 0;
             // Postfix uses MySQL directly - no file sync needed
@@ -1058,7 +1059,7 @@ public class MailDatabase {
 
     public boolean updateDomainStatus(int domainId, boolean active) throws SQLException {
         String sql = "UPDATE domains SET active = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setBoolean(1, active);
             stmt.setInt(2, domainId);
             return stmt.executeUpdate() > 0;
@@ -1068,7 +1069,7 @@ public class MailDatabase {
 
     public boolean updateDomainDescription(int domainId, String description) throws SQLException {
         String sql = "UPDATE domains SET description = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, description);
             stmt.setInt(2, domainId);
             return stmt.executeUpdate() > 0;
@@ -1077,7 +1078,7 @@ public class MailDatabase {
 
     public Domain getDomain(int domainId) throws SQLException {
         String sql = "SELECT * FROM domains WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, domainId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1089,7 +1090,7 @@ public class MailDatabase {
 
     public Domain getDomainByName(String domainName) throws SQLException {
         String sql = "SELECT * FROM domains WHERE domain = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, domainName.toLowerCase());
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1107,7 +1108,7 @@ public class MailDatabase {
                    (SELECT COUNT(*) FROM aliases a WHERE a.domain_id = d.id) as alias_count
             FROM domains d ORDER BY d.domain
             """;
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 Domain d = mapDomain(rs);
@@ -1135,7 +1136,7 @@ public class MailDatabase {
 
     public void setDkim(int domainId, String selector, String privateKey, String publicKey) throws SQLException {
         String sql = "UPDATE domains SET dkim_selector = ?, dkim_private_key = ?, dkim_public_key = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, selector);
             stmt.setString(2, privateKey);
             stmt.setString(3, publicKey);
@@ -1157,7 +1158,7 @@ public class MailDatabase {
         String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
 
         String sql = "INSERT INTO mailboxes (domain_id, email, password, name, quota_mb, receive_enabled) VALUES (?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, domainId);
             stmt.setString(2, email.toLowerCase());
             stmt.setString(3, hashedPassword);
@@ -1177,7 +1178,7 @@ public class MailDatabase {
 
     public boolean deleteMailbox(int mailboxId) throws SQLException {
         String sql = "DELETE FROM mailboxes WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, mailboxId);
             return stmt.executeUpdate() > 0;
             // Postfix uses MySQL directly - no file sync needed
@@ -1188,7 +1189,7 @@ public class MailDatabase {
         // Bcrypt hash (compatible with Dovecot)
         String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
         String sql = "UPDATE mailboxes SET password = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, hashedPassword);
             stmt.setInt(2, mailboxId);
             return stmt.executeUpdate() > 0;
@@ -1198,7 +1199,7 @@ public class MailDatabase {
 
     public boolean updateMailboxStatus(int mailboxId, boolean active) throws SQLException {
         String sql = "UPDATE mailboxes SET active = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setBoolean(1, active);
             stmt.setInt(2, mailboxId);
             return stmt.executeUpdate() > 0;
@@ -1208,7 +1209,7 @@ public class MailDatabase {
 
     public boolean updateMailboxQuota(int mailboxId, int quotaMb) throws SQLException {
         String sql = "UPDATE mailboxes SET quota_mb = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, quotaMb);
             stmt.setInt(2, mailboxId);
             return stmt.executeUpdate() > 0;
@@ -1220,7 +1221,7 @@ public class MailDatabase {
      */
     public boolean updateMailboxReceiveEnabled(int mailboxId, boolean receiveEnabled) throws SQLException {
         String sql = "UPDATE mailboxes SET receive_enabled = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setBoolean(1, receiveEnabled);
             stmt.setInt(2, mailboxId);
             return stmt.executeUpdate() > 0;
@@ -1237,7 +1238,7 @@ public class MailDatabase {
      */
     public boolean updateMailbox(int mailboxId, String name, int quotaMb, boolean active, boolean receiveEnabled) throws SQLException {
         String sql = "UPDATE mailboxes SET name = ?, quota_mb = ?, active = ?, receive_enabled = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, name);
             stmt.setInt(2, quotaMb);
             stmt.setBoolean(3, active);
@@ -1251,7 +1252,7 @@ public class MailDatabase {
      * Ensure receive_enabled column exists (for database migration)
      */
     public void ensureMailboxReceiveEnabledColumn() {
-        try (Statement stmt = connection.createStatement()) {
+        try (Statement stmt = getConnection().createStatement()) {
             // Check if column exists
             ResultSet rs = stmt.executeQuery(
                 "SELECT COUNT(*) FROM information_schema.columns " +
@@ -1274,8 +1275,10 @@ public class MailDatabase {
      *
      * Postfix queries MySQL directly via:
      * - mysql-virtual-domains.cf → SELECT domain FROM domains WHERE domain='%s' AND active=1
-     * - mysql-virtual-mailboxes.cf → SELECT ... FROM mailboxes WHERE email='%s' AND active=1
+     * - mysql-virtual-mailboxes.cf → SELECT ... FROM mailboxes WHERE email='%s' AND active=1 AND receive_enabled=1
      * - mysql-virtual-aliases.cf → SELECT destination FROM aliases WHERE source='%s' AND active=1
+     *
+     * Note: receive_enabled=1 ensures no-reply accounts (receive_enabled=0) reject incoming mail
      */
     public boolean reloadPostfix() {
         try {
@@ -1304,7 +1307,7 @@ public class MailDatabase {
 
     public Mailbox getMailbox(int mailboxId) throws SQLException {
         String sql = "SELECT m.*, d.domain as domain_name FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, mailboxId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1316,7 +1319,7 @@ public class MailDatabase {
 
     public Mailbox getMailboxByEmail(String email) throws SQLException {
         String sql = "SELECT m.*, d.domain as domain_name FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.email = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, email.toLowerCase());
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1328,7 +1331,7 @@ public class MailDatabase {
 
     public Mailbox getMailboxById(int id) {
         String sql = "SELECT m.*, d.domain as domain_name FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, id);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1343,7 +1346,7 @@ public class MailDatabase {
     public List<Mailbox> getMailboxes(int domainId) throws SQLException {
         List<Mailbox> mailboxes = new ArrayList<>();
         String sql = "SELECT m.*, d.domain as domain_name FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.domain_id = ? ORDER BY m.email";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, domainId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -1364,7 +1367,7 @@ public class MailDatabase {
             JOIN domains d ON m.domain_id = d.id
             ORDER BY m.email
             """;
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 mailboxes.add(mapMailbox(rs));
@@ -1405,7 +1408,7 @@ public class MailDatabase {
 
     public int addAlias(int domainId, String source, String destination) throws SQLException {
         String sql = "INSERT INTO aliases (domain_id, source, destination) VALUES (?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, domainId);
             stmt.setString(2, source.toLowerCase());
             stmt.setString(3, destination.toLowerCase());
@@ -1422,7 +1425,7 @@ public class MailDatabase {
 
     public boolean deleteAlias(int aliasId) throws SQLException {
         String sql = "DELETE FROM aliases WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, aliasId);
             return stmt.executeUpdate() > 0;
             // Postfix uses MySQL directly - no file sync needed
@@ -1431,7 +1434,7 @@ public class MailDatabase {
 
     public boolean updateAliasStatus(int aliasId, boolean active) throws SQLException {
         String sql = "UPDATE aliases SET active = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setBoolean(1, active);
             stmt.setInt(2, aliasId);
             return stmt.executeUpdate() > 0;
@@ -1442,7 +1445,7 @@ public class MailDatabase {
     public List<Alias> getAliases(int domainId) throws SQLException {
         List<Alias> aliases = new ArrayList<>();
         String sql = "SELECT * FROM aliases WHERE domain_id = ? ORDER BY source";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, domainId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -1455,7 +1458,7 @@ public class MailDatabase {
     public List<Alias> getAllAliases() throws SQLException {
         List<Alias> aliases = new ArrayList<>();
         String sql = "SELECT a.*, d.domain as domain_name FROM aliases a JOIN domains d ON a.domain_id = d.id ORDER BY a.source";
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 Alias a = mapAlias(rs);
@@ -1482,7 +1485,7 @@ public class MailDatabase {
     public String createAutoLoginToken(int mailboxId) throws SQLException {
         String token = UUID.randomUUID().toString().replace("-", "");
         String sql = "INSERT INTO roundcube_tokens (token, mailbox_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, token);
             stmt.setInt(2, mailboxId);
             stmt.executeUpdate();
@@ -1497,12 +1500,12 @@ public class MailDatabase {
             JOIN domains d ON m.domain_id = d.id
             WHERE t.token = ? AND t.expires_at > NOW() AND t.used = FALSE
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, token);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
                 // Mark token as used
-                try (PreparedStatement update = connection.prepareStatement(
+                try (PreparedStatement update = getConnection().prepareStatement(
                         "UPDATE roundcube_tokens SET used = TRUE WHERE token = ?")) {
                     update.setString(1, token);
                     update.executeUpdate();
@@ -1515,7 +1518,7 @@ public class MailDatabase {
 
     public void cleanupExpiredTokens() throws SQLException {
         String sql = "DELETE FROM roundcube_tokens WHERE expires_at < NOW() OR used = TRUE";
-        try (Statement stmt = connection.createStatement()) {
+        try (Statement stmt = getConnection().createStatement()) {
             stmt.executeUpdate(sql);
         }
     }
@@ -1535,7 +1538,7 @@ public class MailDatabase {
     }
 
     private int getCount(String sql) {
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             if (rs.next()) {
                 return rs.getInt(1);
@@ -1569,7 +1572,32 @@ public class MailDatabase {
     }
 
     public Connection getConnection() {
+        // Check if connection is still valid, reconnect if needed
+        try {
+            if (connection == null || connection.isClosed() || !connection.isValid(5)) {
+                System.out.println("Connection lost, attempting to reconnect...");
+                connect();
+            }
+        } catch (SQLException e) {
+            System.err.println("Error checking connection validity: " + e.getMessage());
+            connect();
+        }
         return connection;
+    }
+
+    /**
+     * Ensure connection is valid before use
+     */
+    public void ensureConnection() {
+        try {
+            if (connection == null || connection.isClosed() || !connection.isValid(5)) {
+                System.out.println("Reconnecting to MySQL...");
+                connect();
+            }
+        } catch (SQLException e) {
+            System.err.println("Error checking connection: " + e.getMessage());
+            connect();
+        }
     }
 
     // ========== MODEL CLASSES ==========
@@ -1619,7 +1647,7 @@ public class MailDatabase {
 
     public boolean enable2FA(int adminId, String totpSecret, String backupCodes) {
         String sql = "UPDATE panel_admin SET totp_secret = ?, totp_enabled = TRUE, backup_codes = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, totpSecret);
             stmt.setString(2, backupCodes);
             stmt.setInt(3, adminId);
@@ -1632,7 +1660,7 @@ public class MailDatabase {
 
     public boolean disable2FA(int adminId) {
         String sql = "UPDATE panel_admin SET totp_secret = NULL, totp_enabled = FALSE, backup_codes = NULL WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -1643,7 +1671,7 @@ public class MailDatabase {
 
     public String getTotpSecret(int adminId) {
         String sql = "SELECT totp_secret FROM panel_admin WHERE id = ? AND totp_enabled = TRUE";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1657,7 +1685,7 @@ public class MailDatabase {
 
     public boolean is2FAEnabled(int adminId) {
         String sql = "SELECT totp_enabled FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1671,7 +1699,7 @@ public class MailDatabase {
 
     public String getBackupCodes(int adminId) {
         String sql = "SELECT backup_codes FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1685,7 +1713,7 @@ public class MailDatabase {
 
     public boolean updateBackupCodes(int adminId, String backupCodes) {
         String sql = "UPDATE panel_admin SET backup_codes = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, backupCodes);
             stmt.setInt(2, adminId);
             return stmt.executeUpdate() > 0;
@@ -1737,7 +1765,7 @@ public class MailDatabase {
     public List<AdminUser> getAdminUsers() {
         List<AdminUser> admins = new ArrayList<>();
         String sql = "SELECT id, username, role, active, totp_enabled, created_at, last_login FROM panel_admin ORDER BY id";
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 AdminUser admin = new AdminUser();
@@ -1758,7 +1786,7 @@ public class MailDatabase {
 
     public AdminUser getAdminUserById(int adminId) {
         String sql = "SELECT id, username, role, active, totp_enabled, created_at, last_login FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
@@ -1781,7 +1809,7 @@ public class MailDatabase {
 
     public boolean createAdmin(String username, String password, String role) {
         String sql = "INSERT INTO panel_admin (username, password_hash, role) VALUES (?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, username);
             stmt.setString(2, BCrypt.hashpw(password, BCrypt.gensalt(12)));
             stmt.setString(3, role);
@@ -1794,7 +1822,7 @@ public class MailDatabase {
 
     public boolean updateAdminRole(int adminId, String role) {
         String sql = "UPDATE panel_admin SET role = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, role);
             stmt.setInt(2, adminId);
             return stmt.executeUpdate() > 0;
@@ -1806,7 +1834,7 @@ public class MailDatabase {
 
     public boolean deleteAdmin(int adminId) {
         String sql = "DELETE FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -1817,7 +1845,7 @@ public class MailDatabase {
 
     public String getAdminRole(int adminId) {
         String sql = "SELECT role FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, adminId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1849,7 +1877,7 @@ public class MailDatabase {
             JOIN mailboxes m ON ar.mailbox_id = m.id
             WHERE ar.mailbox_id = ?
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, mailboxId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -1878,7 +1906,7 @@ public class MailDatabase {
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE enabled = ?, subject = ?, body = ?, start_date = ?, end_date = ?, interval_hours = ?
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, mailboxId);
             stmt.setBoolean(2, enabled);
             stmt.setString(3, subject);
@@ -1909,7 +1937,7 @@ public class MailDatabase {
             AND (ar.start_date IS NULL OR ar.start_date <= CURDATE())
             AND (ar.end_date IS NULL OR ar.end_date >= CURDATE())
             """;
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 AutoResponder ar = new AutoResponder();
@@ -1951,7 +1979,7 @@ public class MailDatabase {
             WHERE sf.mailbox_id = ?
             ORDER BY sf.priority, sf.id
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, mailboxId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -1974,7 +2002,7 @@ public class MailDatabase {
 
     public boolean createSieveFilter(int mailboxId, String name, int priority, String conditions, String actions) {
         String sql = "INSERT INTO sieve_filters (mailbox_id, name, priority, conditions, actions) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, mailboxId);
             stmt.setString(2, name);
             stmt.setInt(3, priority);
@@ -1989,7 +2017,7 @@ public class MailDatabase {
 
     public boolean updateSieveFilter(int filterId, String name, int priority, boolean enabled, String conditions, String actions) {
         String sql = "UPDATE sieve_filters SET name = ?, priority = ?, enabled = ?, conditions = ?, actions = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, name);
             stmt.setInt(2, priority);
             stmt.setBoolean(3, enabled);
@@ -2005,7 +2033,7 @@ public class MailDatabase {
 
     public boolean deleteSieveFilter(int filterId) {
         String sql = "DELETE FROM sieve_filters WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, filterId);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -2032,7 +2060,7 @@ public class MailDatabase {
             JOIN mailboxes m ON fr.mailbox_id = m.id
             WHERE fr.mailbox_id = ?
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, mailboxId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -2053,7 +2081,7 @@ public class MailDatabase {
 
     public boolean createForwardingRule(int mailboxId, String destination, boolean keepCopy) {
         String sql = "INSERT INTO forwarding_rules (mailbox_id, destination, keep_copy) VALUES (?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, mailboxId);
             stmt.setString(2, destination);
             stmt.setBoolean(3, keepCopy);
@@ -2066,7 +2094,7 @@ public class MailDatabase {
 
     public boolean updateForwardingRule(int ruleId, String destination, boolean keepCopy, boolean enabled) {
         String sql = "UPDATE forwarding_rules SET destination = ?, keep_copy = ?, enabled = ? WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, destination);
             stmt.setBoolean(2, keepCopy);
             stmt.setBoolean(3, enabled);
@@ -2080,7 +2108,7 @@ public class MailDatabase {
 
     public boolean deleteForwardingRule(int ruleId) {
         String sql = "DELETE FROM forwarding_rules WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, ruleId);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -2114,7 +2142,7 @@ public class MailDatabase {
             FROM rate_limits rl
             ORDER BY rl.target_type, rl.target_id
             """;
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 RateLimit rl = new RateLimit();
@@ -2140,7 +2168,7 @@ public class MailDatabase {
             VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE max_per_hour = ?, max_per_day = ?, max_recipients = ?, enabled = ?
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, targetType);
             if (targetId != null) {
                 stmt.setInt(2, targetId);
@@ -2164,7 +2192,7 @@ public class MailDatabase {
 
     public boolean deleteRateLimit(int limitId) {
         String sql = "DELETE FROM rate_limits WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, limitId);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -2200,7 +2228,7 @@ public class MailDatabase {
             WHERE es.stat_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
             ORDER BY es.stat_date DESC, es.domain_id, es.mailbox_id
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, days);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -2238,7 +2266,7 @@ public class MailDatabase {
             FROM email_statistics
             WHERE stat_date = CURDATE()
             """;
-        try (Statement stmt = connection.createStatement();
+        try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             if (rs.next()) {
                 EmailStat stat = new EmailStat();
@@ -2278,7 +2306,7 @@ public class MailDatabase {
             ON DUPLICATE KEY UPDATE %s = %s + ?, %s = %s + ?
             """, column, bytesColumn, column, column, bytesColumn, bytesColumn);
 
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             if (mailboxId != null) {
                 stmt.setInt(1, mailboxId);
             } else {
@@ -2303,7 +2331,7 @@ public class MailDatabase {
 
     public boolean logRspamdTraining(String messageId, String trainedAs, int trainedBy) {
         String sql = "INSERT INTO rspamd_training (message_id, trained_as, trained_by) VALUES (?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, messageId);
             stmt.setString(2, trainedAs);
             stmt.setInt(3, trainedBy);
@@ -2316,7 +2344,7 @@ public class MailDatabase {
 
     public int getTrainingCount(String trainedAs, int days) {
         String sql = "SELECT COUNT(*) FROM rspamd_training WHERE trained_as = ? AND trained_at >= DATE_SUB(NOW(), INTERVAL ? DAY)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, trainedAs);
             stmt.setInt(2, days);
             ResultSet rs = stmt.executeQuery();
@@ -2340,7 +2368,7 @@ public class MailDatabase {
      */
     public void logAuditEvent(String action, String ipAddress, String details, String username) {
         String sql = "INSERT INTO audit_log (action, username, ip_address, details) VALUES (?, ?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, action);
             stmt.setString(2, username);
             stmt.setString(3, ipAddress);
@@ -2357,7 +2385,7 @@ public class MailDatabase {
      */
     public void logAuditEventFull(String action, String ipAddress, String details, String username, String userAgent) {
         String sql = "INSERT INTO audit_log (action, username, ip_address, details, user_agent) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, action);
             stmt.setString(2, username);
             stmt.setString(3, ipAddress);
@@ -2412,7 +2440,7 @@ public class MailDatabase {
 
         java.util.List<AuditLogEntry> entries = new java.util.ArrayList<>();
 
-        try (PreparedStatement stmt = connection.prepareStatement(sql.toString())) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql.toString())) {
             for (int i = 0; i < params.size(); i++) {
                 Object param = params.get(i);
                 if (param instanceof String) {
@@ -2454,7 +2482,7 @@ public class MailDatabase {
             """;
         java.util.Map<String, Integer> stats = new java.util.LinkedHashMap<>();
 
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, days);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -2474,7 +2502,7 @@ public class MailDatabase {
      */
     public int cleanupAuditLog(int days) {
         String sql = "DELETE FROM audit_log WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setInt(1, days);
             return stmt.executeUpdate();
         } catch (SQLException e) {
@@ -2496,7 +2524,7 @@ public class MailDatabase {
             AND ip_address = ?
             AND created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
             """;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, ipAddress);
             stmt.setInt(2, minutes);
             ResultSet rs = stmt.executeQuery();

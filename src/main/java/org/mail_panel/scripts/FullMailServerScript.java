@@ -589,7 +589,7 @@ user = $MYSQL_USER
 password = $MYSQL_PASSWORD
 hosts = 127.0.0.1
 dbname = $MYSQL_DATABASE
-query = SELECT CONCAT(SUBSTRING_INDEX(email,'@',-1),'/',SUBSTRING_INDEX(email,'@',1),'/') FROM mailboxes WHERE email='%s' AND active=1
+query = SELECT CONCAT(SUBSTRING_INDEX(email,'@',-1),'/',SUBSTRING_INDEX(email,'@',1),'/') FROM mailboxes WHERE email='%s' AND active=1 AND receive_enabled=1
 MYSQL_MAILBOXES
 
 # MySQL virtual aliases
