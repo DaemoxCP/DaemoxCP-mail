@@ -13,6 +13,7 @@ Similar to Mailcow but **100% native** - NO Docker required.
 - [Overview](#overview)
 - [Mail Server Stack](#mail-server-stack)
 - [System Requirements](#system-requirements)
+- [Dependencies](#dependencies)
 - [Directory Structure](#directory-structure)
 - [Configuration Files](#configuration-files)
 - [Database Schema](#database-schema)
@@ -22,6 +23,7 @@ Similar to Mailcow but **100% native** - NO Docker required.
 - [Web Panel](#web-panel)
 - [SSL Certificates](#ssl-certificates)
 - [Cloudflare Integration](#cloudflare-integration)
+- [Security Features](#security-features)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -36,7 +38,7 @@ FreeBSD Mail Panel is a complete mail server solution that installs and manages:
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
-│   │  OpenSMTPD  │    │   Dovecot   │    │   Rspamd    │        │
+│   │   Postfix   │    │   Dovecot   │    │   Rspamd    │        │
 │   │    SMTP     │───▶│  IMAP/POP3  │    │  Anti-Spam  │        │
 │   │  Port 25    │    │  Port 993   │    │ Port 11332  │        │
 │   └─────────────┘    └─────────────┘    └─────────────┘        │
@@ -44,13 +46,17 @@ FreeBSD Mail Panel is a complete mail server solution that installs and manages:
 │          ▼                  ▼                  ▼                │
 │   ┌─────────────────────────────────────────────────┐          │
 │   │                   MySQL 8.0                      │          │
-│   │     virtual_domains, virtual_users, aliases      │          │
+│   │       domains, mailboxes, aliases, panel_admin   │          │
 │   └─────────────────────────────────────────────────┘          │
 │                                                                 │
 │   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
-│   │   ClamAV    │    │    Redis    │    │  Web Panel  │        │
-│   │  Antivirus  │    │    Cache    │    │  Port 2096  │        │
+│   │   ClamAV    │    │    Redis    │    │  Roundcube  │        │
+│   │  Antivirus  │    │    Cache    │    │   Webmail   │        │
 │   └─────────────┘    └─────────────┘    └─────────────┘        │
+│                                                                 │
+│   ┌─────────────────────────────────────────────────┐          │
+│   │              Web Panel (Port 2096)               │          │
+│   └─────────────────────────────────────────────────┘          │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -59,39 +65,36 @@ FreeBSD Mail Panel is a complete mail server solution that installs and manages:
 
 ## Mail Server Stack
 
-> **IMPORTANT: We use OpenSMTPD, NOT Postfix!**
->
-> OpenSMTPD is the native FreeBSD mail transfer agent.
-
-### SMTP Server: OpenSMTPD
+### SMTP Server: Postfix
 
 | Property | Value |
 |----------|-------|
-| **Package** | `opensmtpd`, `opensmtpd-extras` |
-| **Service** | `smtpd` |
-| **Config** | `/usr/local/etc/mail/smtpd.conf` |
+| **Package** | `postfix-mysql` |
+| **Service** | `postfix` |
+| **Config** | `/usr/local/etc/postfix/main.cf` |
 | **Port 25** | Incoming mail (STARTTLS) |
 | **Port 587** | Submission (STARTTLS + Auth) |
 | **Port 465** | Submission SSL (SMTPS + Auth) |
 
 MySQL lookup tables:
-- `/usr/local/etc/mail/mysql-domains.cf`
-- `/usr/local/etc/mail/mysql-users.cf`
-- `/usr/local/etc/mail/mysql-aliases.cf`
-- `/usr/local/etc/mail/mysql-credentials.cf`
+- `/usr/local/etc/postfix/mysql-virtual-domains.cf`
+- `/usr/local/etc/postfix/mysql-virtual-mailboxes.cf`
+- `/usr/local/etc/postfix/mysql-virtual-aliases.cf`
+
+Postfix delivers mail to Dovecot via LMTP on port 24.
 
 ### IMAP/POP3 Server: Dovecot
 
 | Property | Value |
 |----------|-------|
-| **Package** | `dovecot`, `dovecot-pigeonhole` |
+| **Package** | `dovecot-mysql`, `dovecot-pigeonhole` |
 | **Service** | `dovecot` |
 | **Config** | `/usr/local/etc/dovecot/` |
 | **Port 143** | IMAP (STARTTLS) |
 | **Port 993** | IMAPS (implicit SSL) |
 | **Port 110** | POP3 (STARTTLS) |
 | **Port 995** | POP3S (implicit SSL) |
-| **LMTP Socket** | `/var/run/dovecot/lmtp` |
+| **LMTP Port** | 24 (localhost only) |
 | **Mailboxes** | `/var/vmail/{domain}/{user}` |
 
 ### Anti-Spam: Rspamd
@@ -101,11 +104,11 @@ MySQL lookup tables:
 | **Package** | `rspamd` |
 | **Service** | `rspamd` |
 | **Config** | `/usr/local/etc/rspamd/` |
-| **Port 11332** | Milter (for OpenSMTPD filter) |
+| **Port 11332** | Milter (for Postfix) |
 | **Port 11333** | Normal worker |
 | **Port 11334** | Web UI/Controller |
 
-Integration with OpenSMTPD via `filter-rspamd`.
+Integration with Postfix via milter protocol.
 
 ### Antivirus: ClamAV
 
@@ -136,6 +139,15 @@ Used by Rspamd for caching.
 | **Port** | 3306 |
 | **Database** | `mailserver` (configurable) |
 
+### Webmail: Roundcube
+
+| Property | Value |
+|----------|-------|
+| **Package** | `roundcube-php84` |
+| **Web Server** | nginx + php-fpm |
+| **Port** | 8443 (configurable) |
+| **Database** | `roundcubemail` |
+
 ---
 
 ## System Requirements
@@ -143,8 +155,35 @@ Used by Rspamd for caching.
 - **OS**: FreeBSD 15.0 or later
 - **RAM**: 2GB minimum, 4GB recommended
 - **Disk**: 20GB minimum
-- **Java**: JDK 17+ (for panel)
+- **Java**: JDK 24 (for panel)
 - **Root access**: Required for installation
+
+---
+
+## Dependencies
+
+### Java Dependencies (pom.xml)
+
+| Dependency | Version | Purpose |
+|------------|---------|---------|
+| `mysql-connector-j` | 9.1.0 | MySQL database connection |
+| `lanterna` | 3.1.2 | Terminal GUI |
+| `sqlite-jdbc` | 3.47.1.0 | SQLite for panel config |
+| `slf4j-nop` | 2.0.16 | Logging |
+| `json` | 20241224 | JSON parsing |
+| `jbcrypt` | 0.4 | BCrypt password hashing |
+| `webauthn-server-core` | 2.5.0 | WebAuthn/Passkey support |
+| `yubico-util` | 2.5.0 | Yubico utilities |
+
+### FreeBSD Packages (installed automatically)
+
+```
+postfix-mysql dovecot-mysql dovecot-pigeonhole
+rspamd redis clamav
+mysql80-server mysql80-client
+nginx php84 php84-extensions roundcube-php84
+openssl
+```
 
 ---
 
@@ -152,12 +191,12 @@ Used by Rspamd for caching.
 
 ```
 /usr/local/etc/
-├── mail/
-│   ├── smtpd.conf              # OpenSMTPD main config
-│   ├── mysql-domains.cf        # Domain lookup
-│   ├── mysql-users.cf          # User lookup
-│   ├── mysql-aliases.cf        # Alias lookup
-│   └── mysql-credentials.cf    # Auth credentials
+├── postfix/
+│   ├── main.cf                 # Postfix main config
+│   ├── master.cf               # Postfix master config
+│   ├── mysql-virtual-domains.cf
+│   ├── mysql-virtual-mailboxes.cf
+│   └── mysql-virtual-aliases.cf
 ├── dovecot/
 │   ├── dovecot.conf            # Main config
 │   ├── dovecot-sql.conf        # SQL auth config
@@ -166,6 +205,8 @@ Used by Rspamd for caching.
 │   ├── rspamd.conf             # Main config
 │   ├── local.d/                # Local overrides
 │   └── override.d/             # Override configs
+├── nginx/
+│   └── nginx.conf              # Roundcube web server
 └── ssl/
     └── mail/
         ├── fullchain.pem       # SSL certificate + chain
@@ -176,17 +217,22 @@ Used by Rspamd for caching.
 │   └── {domain}/
 │       └── {user}/
 │           └── Maildir/
+├── spool/postfix/
+│   └── private/
+│       └── auth                # Dovecot SASL socket
 ├── run/
 │   ├── dovecot/
 │   │   └── lmtp                # LMTP socket
 │   ├── clamav/
 │   │   └── clamd.sock          # ClamAV socket
 │   └── rspamd/
-│       └── rspamd.pid
+├── db/mailpanel/
+│   ├── dovecot_master.key      # Dovecot master password
+│   └── roundcube_sso.key       # SSO encryption key
 └── log/
+    ├── maillog
     ├── dovecot.log
-    ├── rspamd/
-    └── maillog
+    └── rspamd/
 
 ./database/                     # Panel SQLite database
     └── mailpanel.db
@@ -200,39 +246,40 @@ Used by Rspamd for caching.
 
 ## Configuration Files
 
-### OpenSMTPD (`/usr/local/etc/mail/smtpd.conf`)
+### Postfix (`/usr/local/etc/postfix/main.cf`)
 
 ```conf
-# OpenSMTPD - FreeBSD Mail Panel
+# Postfix - FreeBSD Mail Panel
 
-# PKI (SSL/TLS)
-pki mail.example.com cert "/usr/local/etc/ssl/mail/fullchain.pem"
-pki mail.example.com key "/usr/local/etc/ssl/mail/privkey.pem"
+# Basic settings
+myhostname = mail.example.com
+mydomain = mail.example.com
+myorigin = $mydomain
+mydestination = localhost
+mynetworks = 127.0.0.0/8 [::1]/128
 
-# MySQL Tables
-table domains mysql:/usr/local/etc/mail/mysql-domains.cf
-table users mysql:/usr/local/etc/mail/mysql-users.cf
-table aliases mysql:/usr/local/etc/mail/mysql-aliases.cf
-table credentials mysql:/usr/local/etc/mail/mysql-credentials.cf
+# Virtual mailbox settings
+virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
+virtual_mailbox_maps = mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf
+virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf
+virtual_transport = lmtp:inet:127.0.0.1:24
 
-# Filters
-filter rspamd proc-exec "filter-rspamd"
+# TLS settings
+smtpd_tls_cert_file = /usr/local/etc/ssl/mail/fullchain.pem
+smtpd_tls_key_file = /usr/local/etc/ssl/mail/privkey.pem
+smtpd_tls_security_level = may
+smtpd_tls_auth_only = yes
 
-# Listen directives
-listen on lo0
-listen on egress port 25 tls pki mail.example.com filter "rspamd"
-listen on egress port 587 tls-require pki mail.example.com auth <credentials> filter "rspamd"
-listen on egress port 465 smtps pki mail.example.com auth <credentials> filter "rspamd"
+# SASL authentication via Dovecot
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
 
-# Actions
-action "local_mail" mbox alias <aliases>
-action "virtual_mail" lmtp "/var/run/dovecot/lmtp" virtual <users>
-action "relay_out" relay
-
-# Matching rules
-match from any for domain <domains> action "virtual_mail"
-match from local for local action "local_mail"
-match auth from any for any action "relay_out"
+# Milter (Rspamd)
+smtpd_milters = inet:127.0.0.1:11332
+non_smtpd_milters = inet:127.0.0.1:11332
+milter_protocol = 6
+milter_default_action = accept
 ```
 
 ### Dovecot SQL Auth (`/usr/local/etc/dovecot/dovecot-sql.conf`)
@@ -241,7 +288,7 @@ match auth from any for any action "relay_out"
 driver = mysql
 connect = host=127.0.0.1 dbname=mailserver user=mailpanel password=YOUR_PASSWORD
 default_pass_scheme = BLF-CRYPT
-password_query = SELECT email as user, password FROM virtual_users WHERE email='%u' AND active=1
+password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' AND active=1
 ```
 
 ---
@@ -253,7 +300,6 @@ password_query = SELECT email as user, password FROM virtual_users WHERE email='
 File: `./database/mailpanel.db`
 
 ```sql
--- Panel configuration table
 CREATE TABLE config (
     id INTEGER PRIMARY KEY,
     mail_panel_host TEXT,           -- Web panel host (0.0.0.0)
@@ -268,11 +314,15 @@ CREATE TABLE config (
     mysql_password TEXT,            -- MySQL password
     mysql_database TEXT,            -- MySQL database name
     mail_hostname TEXT,             -- Mail server hostname
-    opensmtpd_installed INTEGER,    -- OpenSMTPD status (NOT postfix!)
+    postfix_installed INTEGER,      -- Postfix status
     dovecot_installed INTEGER,      -- Dovecot status
     rspamd_installed INTEGER,       -- Rspamd status
     clamav_installed INTEGER,       -- ClamAV status
-    roundcube_installed INTEGER     -- Roundcube status
+    roundcube_installed INTEGER,    -- Roundcube status
+    roundcube_domain TEXT,          -- Roundcube domain
+    roundcube_port TEXT,            -- Roundcube port
+    roundcube_ssl_cert TEXT,        -- Roundcube SSL cert path
+    roundcube_ssl_key TEXT          -- Roundcube SSL key path
 );
 ```
 
@@ -281,57 +331,145 @@ CREATE TABLE config (
 Database: `mailserver` (configurable)
 
 ```sql
--- Virtual domains
-CREATE TABLE virtual_domains (
+-- Domains
+CREATE TABLE domains (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,  -- e.g., "example.com"
-    active TINYINT(1) DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    domain VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dkim_selector VARCHAR(50) DEFAULT 'mail',
+    dkim_private_key TEXT,
+    dkim_public_key TEXT
 );
 
--- Virtual users (mailboxes)
-CREATE TABLE virtual_users (
+-- Mailboxes
+CREATE TABLE mailboxes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     domain_id INT NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,  -- e.g., "user@example.com"
+    email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,       -- BLF-CRYPT hash
-    quota BIGINT DEFAULT 0,
-    active TINYINT(1) DEFAULT 1,
+    name VARCHAR(255),
+    quota_mb INT DEFAULT 1024,
+    active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE
+    last_login TIMESTAMP NULL,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
 );
 
--- Virtual aliases
-CREATE TABLE virtual_aliases (
+-- Aliases
+CREATE TABLE aliases (
     id INT AUTO_INCREMENT PRIMARY KEY,
     domain_id INT NOT NULL,
-    source VARCHAR(255) NOT NULL,        -- e.g., "info@example.com"
-    destination VARCHAR(255) NOT NULL,   -- e.g., "user@example.com"
-    active TINYINT(1) DEFAULT 1,
+    source VARCHAR(255) NOT NULL,
+    destination VARCHAR(255) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_alias (source, destination)
 );
 
 -- Panel administrators
-CREATE TABLE panel_admins (
+CREATE TABLE panel_admin (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,       -- BCrypt hash
-    email VARCHAR(255),
-    role VARCHAR(50) DEFAULT 'admin',
-    totp_secret VARCHAR(255),             -- 2FA secret
-    totp_enabled TINYINT(1) DEFAULT 0,
-    active TINYINT(1) DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,  -- BCrypt hash
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL,
+    active BOOLEAN DEFAULT TRUE,
+    totp_secret VARCHAR(64) NULL,
+    totp_enabled BOOLEAN DEFAULT FALSE,
+    backup_codes TEXT NULL,
+    role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin'
 );
 
--- Settings
-CREATE TABLE settings (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    setting_key VARCHAR(255) NOT NULL UNIQUE,
-    setting_value TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+-- Panel settings
+CREATE TABLE panel_settings (
+    setting_key VARCHAR(64) PRIMARY KEY,
+    setting_value TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Rate limits
+CREATE TABLE rate_limits (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    target_type ENUM('global', 'domain', 'mailbox') NOT NULL,
+    target_id INT NULL,
+    max_per_hour INT DEFAULT 100,
+    max_per_day INT DEFAULT 1000,
+    max_recipients INT DEFAULT 50,
+    enabled BOOLEAN DEFAULT TRUE
+);
+
+-- Auto-responders
+CREATE TABLE auto_responders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    mailbox_id INT NOT NULL UNIQUE,
+    enabled BOOLEAN DEFAULT FALSE,
+    subject VARCHAR(255) NOT NULL DEFAULT 'Out of Office',
+    body TEXT NOT NULL,
+    start_date DATE NULL,
+    end_date DATE NULL,
+    interval_hours INT DEFAULT 24,
+    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+);
+
+-- Forwarding rules
+CREATE TABLE forwarding_rules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    mailbox_id INT NOT NULL,
+    destination VARCHAR(255) NOT NULL,
+    keep_copy BOOLEAN DEFAULT TRUE,
+    enabled BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+);
+
+-- Sieve filters
+CREATE TABLE sieve_filters (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    mailbox_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    priority INT DEFAULT 0,
+    enabled BOOLEAN DEFAULT TRUE,
+    conditions JSON NOT NULL,
+    actions JSON NOT NULL,
+    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+);
+
+-- Roundcube SSO tokens
+CREATE TABLE roundcube_tokens (
+    token VARCHAR(64) PRIMARY KEY,
+    mailbox_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+);
+
+-- Email statistics
+CREATE TABLE email_statistics (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    stat_date DATE NOT NULL,
+    mailbox_id INT NULL,
+    domain_id INT NULL,
+    sent_count INT DEFAULT 0,
+    received_count INT DEFAULT 0,
+    spam_count INT DEFAULT 0,
+    virus_count INT DEFAULT 0,
+    bounced_count INT DEFAULT 0,
+    bytes_sent BIGINT DEFAULT 0,
+    bytes_received BIGINT DEFAULT 0
+);
+
+-- Audit log
+CREATE TABLE audit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    action VARCHAR(100) NOT NULL,
+    username VARCHAR(255),
+    ip_address VARCHAR(45) NOT NULL,
+    details TEXT,
+    user_agent VARCHAR(512),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -341,43 +479,51 @@ CREATE TABLE settings (
 
 | Service | Port | Protocol | Description |
 |---------|------|----------|-------------|
-| OpenSMTPD | 25 | TCP | SMTP (incoming mail) |
-| OpenSMTPD | 587 | TCP | Submission (STARTTLS) |
-| OpenSMTPD | 465 | TCP | SMTPS (implicit SSL) |
+| Postfix | 25 | TCP | SMTP (incoming mail) |
+| Postfix | 587 | TCP | Submission (STARTTLS) |
+| Postfix | 465 | TCP | SMTPS (implicit SSL) |
 | Dovecot | 143 | TCP | IMAP (STARTTLS) |
 | Dovecot | 993 | TCP | IMAPS (implicit SSL) |
 | Dovecot | 110 | TCP | POP3 (STARTTLS) |
 | Dovecot | 995 | TCP | POP3S (implicit SSL) |
+| Dovecot | 24 | TCP | LMTP (localhost only) |
 | Rspamd | 11332 | TCP | Milter interface |
 | Rspamd | 11333 | TCP | Normal worker |
 | Rspamd | 11334 | TCP | Web UI/Controller |
 | MySQL | 3306 | TCP | Database |
 | Redis | 6379 | TCP | Cache |
+| Roundcube | 8443 | TCP | Webmail (HTTPS) |
 | **Web Panel** | **2096** | TCP | HTTPS admin panel |
 
 ---
 
 ## Service Commands
 
-### OpenSMTPD (SMTP)
+### Postfix (SMTP)
 
 ```bash
 # Start/Stop/Restart
-service smtpd start
-service smtpd stop
-service smtpd restart
+service postfix start
+service postfix stop
+service postfix restart
 
 # Reload configuration (no downtime)
-service smtpd reload
+service postfix reload
 
 # Check configuration syntax
-smtpd -n
+postfix check
 
 # View mail queue
-smtpctl show queue
+postqueue -p
+
+# Flush mail queue
+postqueue -f
+
+# Delete all queued mail
+postsuper -d ALL
 
 # Enable at boot
-sysrc smtpd_enable="YES"
+sysrc postfix_enable="YES"
 ```
 
 ### Dovecot (IMAP/POP3)
@@ -449,6 +595,21 @@ service mysql-server restart
 sysrc mysql_enable="YES"
 ```
 
+### Nginx + PHP-FPM (Roundcube)
+
+```bash
+service nginx start
+service nginx stop
+service nginx restart
+
+service php_fpm start
+service php_fpm stop
+service php_fpm restart
+
+sysrc nginx_enable="YES"
+sysrc php_fpm_enable="YES"
+```
+
 ---
 
 ## Installation
@@ -456,45 +617,57 @@ sysrc mysql_enable="YES"
 ### 1. Build the Panel
 
 ```bash
-# Requires Java 17+ and Maven
+# Requires Java 24 and Maven
 mvn clean package
 ```
 
 ### 2. Run the Panel
 
 ```bash
-java -jar target/freebsd-mail-panel-1.0.jar
+# Use the provided run script
+./run.sh
+
+# Or run directly with native access enabled
+java --enable-native-access=ALL-UNNAMED -jar target/freebsd-mail-panel-1.0.jar
 ```
 
 ### 3. Terminal Menu
 
 ```
-╔═══════════════════════════════════════════════════════════╗
-║            FreeBSD Mail Panel - Select an option           ║
-╠═══════════════════════════════════════════════════════════╣
-║  1) Set TimeZone and CloudFlare DNS                        ║
-║  2) Edit Panel Configuration                               ║
-║  3) Install/Reinstall Mail Server                          ║
-║  >>> Start Mail Panel WebServer <<<                        ║
-║  Exit                                                      ║
-╚═══════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════╗
+║            FreeBSD Mail Panel v1.0 - Select an option         ║
+╠═══════════════════════════════════════════════════════════════╣
+║  1) Set TimeZone and CloudFlare DNS                           ║
+║  2) Edit Panel Configuration                                  ║
+║  3) Edit Roundcube Configuration                              ║
+║  4) Install/Reinstall Mail Server                             ║
+║  >>> Start Mail Panel WebServer <<<                           ║
+║  Exit                                                         ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
-### 4. Install Mail Server (Option 3)
+### 4. Configure Roundcube First (Option 3)
+
+Before installing the mail server, configure Roundcube:
+- Domain name
+- Port (default: 8443)
+- SSL certificate paths (optional, will use panel's SSL if not set)
+
+### 5. Install Mail Server (Option 4)
 
 This will:
 1. Stop existing services
 2. Remove old configurations
-3. Install packages (OpenSMTPD, Dovecot, Rspamd, ClamAV, Redis)
+3. Install packages (Postfix, Dovecot, Rspamd, ClamAV, Redis, Roundcube)
 4. Configure MySQL database
 5. Create virtual mail user (vmail:5000)
 6. Generate self-signed SSL certificate
 7. Configure all services
 8. Start all services
 
-### 5. Start Web Panel
+### 6. Start Web Panel
 
-Opens HTTPS panel on port 2096.
+Select "Start Mail Panel WebServer" to start the HTTPS panel on port 2096.
 
 ---
 
@@ -514,13 +687,18 @@ https://your-server:2096/
 
 ### Features
 
-- Domain management
-- Mailbox management
+- Domain management (add, edit, delete)
+- Mailbox management (create, modify, quota)
 - Alias management
+- DKIM key generation (RSA 2048-bit)
+- DNS record generator (SPF, DKIM, DMARC)
 - Service status monitoring
+- Mail queue management
 - SSL certificate management
-- DKIM key generation
-- DNS record generator
+- Roundcube SSO integration
+- Audit logging
+- 2FA (TOTP) support
+- WebAuthn/Passkey support
 
 ---
 
@@ -536,7 +714,7 @@ https://your-server:2096/
 
 ### Self-Signed (Default)
 
-Generated automatically during installation. **Replace with real certificate!**
+Generated automatically during installation. **Replace with a real certificate for production!**
 
 ### Let's Encrypt
 
@@ -552,7 +730,7 @@ cp /usr/local/etc/letsencrypt/live/mail.example.com/fullchain.pem /usr/local/etc
 cp /usr/local/etc/letsencrypt/live/mail.example.com/privkey.pem /usr/local/etc/ssl/mail/
 
 # Restart services
-service smtpd reload
+service postfix reload
 service dovecot reload
 ```
 
@@ -581,19 +759,42 @@ The panel supports Cloudflare proxy with:
 | MX | @ | mail.example.com | - |
 | TXT | @ | v=spf1 mx ~all | - |
 | TXT | _dmarc | v=DMARC1; p=none | - |
-| TXT | default._domainkey | (DKIM key) | - |
+| TXT | mail._domainkey | (DKIM key from panel) | - |
 
 **Important**: Mail records (A for mail, MX) should NOT be proxied through Cloudflare.
 
 ---
 
+## Security Features
+
+### Authentication
+- **Panel admin passwords**: BCrypt hashing
+- **Mailbox passwords**: BLF-CRYPT (Blowfish)
+- **2FA**: TOTP (Google Authenticator compatible)
+- **WebAuthn**: Passkey/Security key support
+
+### Protection
+- CSRF protection on all forms
+- Session management with secure cookies
+- IP binding on Roundcube SSO tokens
+- AES-256-GCM for SSO token encryption
+- Fail2ban integration ready
+- Rate limiting support
+
+### Audit
+- All admin actions logged
+- IP address tracking
+- User agent logging
+
+---
+
 ## Troubleshooting
 
-### OpenSMTPD won't start
+### Postfix won't start
 
 ```bash
 # Check configuration
-smtpd -n
+postfix check
 
 # Check logs
 tail -f /var/log/maillog
@@ -611,7 +812,7 @@ tail -f /var/log/maillog
 cat /usr/local/etc/dovecot/dovecot-sql.conf
 
 # Test MySQL connection
-mysql -u mailpanel -p mailserver -e "SELECT * FROM virtual_users;"
+mysql -u mailpanel -p mailserver -e "SELECT * FROM mailboxes;"
 
 # Check logs
 tail -f /var/log/dovecot.log
@@ -633,11 +834,11 @@ tail -f /var/log/rspamd/rspamd.log
 ### Mail not delivered
 
 ```bash
-# Check queue
-smtpctl show queue
+# Check Postfix queue
+postqueue -p
 
-# Check LMTP socket
-ls -la /var/run/dovecot/lmtp
+# Check LMTP connection
+telnet 127.0.0.1 24
 
 # Check mailbox permissions
 ls -la /var/vmail/
@@ -652,50 +853,69 @@ ls -la /var/vmail/
 
 ---
 
-## Important Notes
+## Architecture
 
-### OpenSMTPD vs Postfix
+```
+FreeBSD Mail Panel (Java 24)
+├── Main.java                 # Entry point, terminal GUI
+├── webserver/
+│   ├── SSLMailServer.java    # HTTPS server
+│   ├── WebSessions.java      # Session management
+│   └── SecurityUtils.java    # Security utilities
+├── database/
+│   └── MailDatabase.java     # MySQL for mail data
+├── sqli/
+│   ├── dataBaseManager.java  # SQLite manager
+│   └── database.java         # SQLite connection
+├── security/
+│   ├── TotpManager.java      # 2FA TOTP
+│   ├── PasskeyManager.java   # WebAuthn support
+│   ├── DkimManager.java      # DKIM key generation
+│   ├── DnsRecordsGenerator.java
+│   ├── AcmeManager.java      # Let's Encrypt
+│   └── Fail2banManager.java
+├── integration/
+│   ├── RoundcubeSsoManager.java  # SSO with Roundcube
+│   ├── RspamdManager.java        # Rspamd API
+│   └── SieveGenerator.java       # Mail filters
+├── monitoring/
+│   ├── MailQueueManager.java # Postfix queue
+│   └── LogManager.java       # Log parsing
+├── gui/
+│   ├── Chooser.java          # Main menu
+│   ├── ModifyData.java       # Config editor
+│   ├── RoundcubeConfig.java  # Roundcube setup
+│   └── Welcome.java          # Info dialogs
+├── scripts/
+│   ├── FullMailServerScript.java  # Complete installation
+│   ├── PostfixScript.java         # SMTP setup
+│   ├── DovecotScript.java         # IMAP/POP3 setup
+│   ├── RspamdScript.java          # Anti-spam setup
+│   ├── ClamAVScript.java          # Antivirus setup
+│   ├── RoundcubeScript.java       # Webmail setup
+│   ├── RedisScript.java           # Cache setup
+│   ├── MySQLMailScript.java       # Database setup
+│   ├── LetsEncryptScript.java     # SSL certificates
+│   └── SetTimeOnSystemScript.java # Timezone/DNS
+└── content/
+    └── MailPanelContent.java # HTML/CSS/JS generator
+```
 
-> **This project uses OpenSMTPD, NOT Postfix!**
->
-> OpenSMTPD is the native FreeBSD mail transfer agent. All service commands use `smtpd`:
-> ```bash
-> service smtpd start
-> service smtpd stop
-> service smtpd reload
-> ```
+---
 
-### User and Group
+## Password Hashing
+
+- **Mailbox passwords**: BLF-CRYPT (Blowfish) - for Dovecot compatibility
+- **Panel admin passwords**: BCrypt
+
+---
+
+## User and Group
 
 Virtual mail is handled by:
 - **User**: vmail (UID 5000)
 - **Group**: vmail (GID 5000)
 - **Home**: /var/vmail
-
-### Password Hashing
-
-- **Mailbox passwords**: BLF-CRYPT (Blowfish)
-- **Panel admin passwords**: BCrypt
-
----
-
-## Architecture
-
-```
-FreeBSD Mail Panel (Java)
-├── Main.java                 # Entry point, terminal GUI
-├── SSLMailServer.java        # HTTPS server + REST API
-├── dataBaseManager.java      # SQLite for panel state
-├── MailDatabase.java         # MySQL for mail data
-├── MailPanelContent.java     # HTML/CSS/JS generator
-└── Scripts/
-    ├── FullMailServerScript  # Complete installation
-    ├── OpenSMTPDScript       # SMTP installation
-    ├── DovecotScript         # IMAP/POP3 installation
-    ├── RspamdScript          # Anti-spam installation
-    ├── ClamAVScript          # Antivirus installation
-    └── LetsEncryptScript     # SSL certificate
-```
 
 ---
 
