@@ -1222,6 +1222,42 @@ public class MailPanelContent {
                 </div>
             </div>
 
+            <!-- SSL CERTIFICATE MISMATCH WARNING -->
+            <div class="alert alert-danger mt-3" id="sslMismatchWarning" style="display:none;">
+                <h5><i class="fas fa-shield-alt me-2"></i>Certificato SSL Non Allineato</h5>
+                <p class="mb-1">
+                    Il certificato SSL attuale e' emesso per <strong><code id="sslCnDisplay">-</code></strong>,
+                    ma l'hostname del mail server e' <strong><code id="sslExpectedDisplay">-</code></strong>.
+                </p>
+                <p class="mb-1">I client email (Thunderbird, Outlook, ecc.) mostreranno errori di sicurezza finche' il certificato non viene aggiornato.</p>
+                <hr>
+                <p class="mb-0">
+                    <i class="fas fa-arrow-right me-2"></i>Vai nella sezione <a href="/ssl"><strong>SSL</strong></a> e genera un nuovo certificato per <code id="sslNewHostDisplay">-</code>.
+                </p>
+            </div>
+
+            <!-- DNS VERIFICATION STATUS -->
+            <div class="card mt-3 mb-4" id="dnsVerificationCard" style="display:none;">
+                <div class="card-header" id="dnsVerificationHeader">
+                    <i class="fas fa-stethoscope me-2"></i>Verifica DNS in Tempo Reale
+                </div>
+                <div class="card-body">
+                    <div id="dnsVerificationLoading" class="text-center py-2">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Verifica record DNS in corso...
+                    </div>
+                    <div id="dnsVerificationResults" style="display:none;">
+                        <table class="table table-sm mb-2">
+                            <thead><tr><th>Record</th><th>Nome</th><th>Valore Attuale</th><th>Valore Atteso</th><th>Stato</th></tr></thead>
+                            <tbody id="dnsVerificationBody"></tbody>
+                        </table>
+                        <div id="dnsVerificationSummary"></div>
+                        <button class="btn btn-outline-primary btn-sm mt-2" onclick="runDnsVerification()">
+                            <i class="fas fa-sync me-1"></i>Ricontrolla
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <h3><i class="fas fa-chart-line me-2"></i>Panoramica</h3>
             <div class="row">
                 <div class="col-md-4 mb-3">
@@ -1358,7 +1394,191 @@ public class MailPanelContent {
                 } else {
                     dnsWarning.style.display = 'none';
                 }
+
+                // SSL Certificate Mismatch Warning
+                const sslWarning = document.getElementById('sslMismatchWarning');
+                if (data.ssl_match === false && mailHostname) {
+                    const sslCn = data.ssl_cn || 'self-signed/sconosciuto';
+                    document.getElementById('sslCnDisplay').textContent = sslCn;
+                    document.getElementById('sslExpectedDisplay').textContent = mailHostname;
+                    document.getElementById('sslNewHostDisplay').textContent = mailHostname;
+                    sslWarning.style.display = 'block';
+                } else {
+                    sslWarning.style.display = 'none';
+                }
+
+                // Auto-run DNS verification if hostname is configured
+                if (mailHostname) {
+                    runDnsVerification();
+                }
             });
+        }
+
+        function runDnsVerification() {
+            const card = document.getElementById('dnsVerificationCard');
+            const loading = document.getElementById('dnsVerificationLoading');
+            const results = document.getElementById('dnsVerificationResults');
+            card.style.display = 'block';
+            loading.style.display = 'block';
+            results.style.display = 'none';
+
+            fetch('/api/hostname', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'check_dns', csrf_token: '{{CSRF_TOKEN}}' })
+            })
+            .then(r => r.json())
+            .then(data => {
+                loading.style.display = 'none';
+                results.style.display = 'block';
+
+                if (!data.success) {
+                    document.getElementById('dnsVerificationBody').innerHTML =
+                        '<tr><td colspan="5" class="text-danger">Errore: ' + (data.error || 'sconosciuto') + '</td></tr>';
+                    return;
+                }
+
+                // Render results table
+                const tbody = document.getElementById('dnsVerificationBody');
+                tbody.innerHTML = data.checks.map(c => {
+                    const icon = c.passed
+                        ? '<i class="fas fa-check-circle text-success"></i>'
+                        : '<i class="fas fa-times-circle text-danger"></i>';
+                    return '<tr>' +
+                        '<td><code>' + c.type + '</code></td>' +
+                        '<td><small>' + c.name + '</small></td>' +
+                        '<td><small><code>' + c.current + '</code></small></td>' +
+                        '<td><small><code>' + c.expected + '</code></small></td>' +
+                        '<td class="text-center">' + icon + '</td></tr>';
+                }).join('');
+
+                // Summary and card header color
+                const header = document.getElementById('dnsVerificationHeader');
+                const summary = document.getElementById('dnsVerificationSummary');
+                const hostname = data.hostname || '';
+                const domain = hostname.indexOf('.') > 0 ? hostname.substring(hostname.indexOf('.') + 1) : hostname;
+                const subdomain = hostname.indexOf('.') > 0 ? hostname.substring(0, hostname.indexOf('.')) : hostname;
+
+                if (data.all_passed) {
+                    header.className = 'card-header bg-success text-white';
+                    header.innerHTML = '<i class="fas fa-check-circle me-2"></i>DNS Configurato Correttamente';
+                    summary.innerHTML = '<div class="alert alert-success mb-0 py-2">' +
+                        '<i class="fas fa-check-circle me-2"></i>Tutti i record DNS essenziali sono configurati correttamente.<br>' +
+                        '<small class="mt-1 d-block"><i class="fas fa-arrow-right me-1"></i>Per i record completi (SPF, DKIM, DMARC, autoconfig, SRV, MTA-STS) vai nella sezione ' +
+                        '<a href="/dns" class="fw-bold">DNS</a>.</small></div>';
+                } else {
+                    header.className = 'card-header bg-danger text-white';
+                    header.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>DNS Da Configurare';
+                    const failed = data.checks.filter(c => !c.passed);
+                    let advice = '';
+
+                    failed.forEach(c => {
+                        if (c.type === 'A') {
+                            advice += '<div class="card border-danger mb-2"><div class="card-body py-2 px-3">' +
+                                '<h6 class="text-danger mb-2"><i class="fas fa-times-circle me-1"></i>Record A mancante o errato</h6>' +
+                                '<p class="mb-1"><strong>Cosa fare:</strong> Vai nel pannello del tuo provider DNS (es. Cloudflare) e crea/modifica un record A:</p>' +
+                                '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
+                                '<tr><td width="100"><strong>Type</strong></td><td><code>A</code></td></tr>' +
+                                '<tr><td><strong>Name</strong></td><td><code>' + subdomain + '</code></td></tr>' +
+                                '<tr><td><strong>IPv4</strong></td><td><code>' + c.expected + '</code></td></tr>' +
+                                '<tr><td><strong>Proxy</strong></td><td><span class="text-danger fw-bold">DNS only (nuvola GRIGIA)</span></td></tr>' +
+                                '<tr><td><strong>TTL</strong></td><td>Auto</td></tr>' +
+                                '</table>' +
+                                '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Cloudflare: Dashboard &rarr; <code>' + domain + '</code> &rarr; DNS &rarr; Aggiungi record</small>' +
+                                '</div></div>';
+                        } else if (c.type === 'MX') {
+                            advice += '<div class="card border-danger mb-2"><div class="card-body py-2 px-3">' +
+                                '<h6 class="text-danger mb-2"><i class="fas fa-times-circle me-1"></i>Record MX mancante o errato</h6>' +
+                                '<p class="mb-1"><strong>Cosa fare:</strong> Crea/modifica un record MX sul dominio:</p>' +
+                                '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
+                                '<tr><td width="100"><strong>Type</strong></td><td><code>MX</code></td></tr>' +
+                                '<tr><td><strong>Name</strong></td><td><code>@</code> (oppure <code>' + c.name + '</code>)</td></tr>' +
+                                '<tr><td><strong>Server</strong></td><td><code>' + hostname + '</code></td></tr>' +
+                                '<tr><td><strong>Priorita</strong></td><td><code>10</code></td></tr>' +
+                                '<tr><td><strong>TTL</strong></td><td>Auto</td></tr>' +
+                                '</table>' +
+                                '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Cloudflare: Dashboard &rarr; <code>' + c.name + '</code> &rarr; DNS &rarr; Aggiungi record MX</small>' +
+                                '</div></div>';
+                        } else if (c.type === 'PTR') {
+                            advice += '<div class="card border-warning mb-2"><div class="card-body py-2 px-3">' +
+                                '<h6 class="text-warning mb-2"><i class="fas fa-exclamation-triangle me-1"></i>Record PTR (Reverse DNS) non configurato</h6>' +
+                                '<p class="mb-1"><strong>Cosa fare:</strong> Il PTR si configura dal <strong>pannello del provider hosting</strong>, NON da Cloudflare.</p>' +
+                                '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
+                                '<tr><td width="100"><strong>IP</strong></td><td><code>' + c.name + '</code></td></tr>' +
+                                '<tr><td><strong>PTR</strong></td><td><code>' + hostname + '</code></td></tr>' +
+                                '</table>' +
+                                '<p class="mb-0"><strong>Come fare in base al provider:</strong></p>' +
+                                '<ul class="mb-0 small">' +
+                                '<li><strong>Hetzner:</strong> Cloud Console &rarr; Server &rarr; Networking &rarr; Reverse DNS &rarr; Modifica</li>' +
+                                '<li><strong>OVH:</strong> Manager &rarr; Server &rarr; IP &rarr; Icona ingranaggio &rarr; Modifica reverse</li>' +
+                                '<li><strong>DigitalOcean:</strong> Rinomina il Droplet con il FQDN (<code>' + hostname + '</code>)</li>' +
+                                '<li><strong>Vultr:</strong> Products &rarr; Server &rarr; Settings &rarr; IPv4 &rarr; Reverse DNS</li>' +
+                                '<li><strong>Contabo:</strong> Customer Control Panel &rarr; Reverse DNS Management</li>' +
+                                '</ul>' +
+                                '</div></div>';
+                        }
+                    });
+
+                    advice += '<div class="mt-2">' +
+                        '<a href="/dns" class="btn btn-primary btn-sm"><i class="fas fa-list me-1"></i>Vedi tutti i record DNS da configurare (SPF, DKIM, DMARC, ...)</a>' +
+                        '</div>';
+
+                    summary.innerHTML = advice;
+                }
+
+                // Also check Roundcube domain DNS
+                checkRoundcubeDomainDns();
+            })
+            .catch(() => {
+                loading.style.display = 'none';
+                results.style.display = 'block';
+                document.getElementById('dnsVerificationBody').innerHTML =
+                    '<tr><td colspan="5" class="text-muted">Verifica non disponibile</td></tr>';
+            });
+        }
+
+        function checkRoundcubeDomainDns() {
+            fetch('/api/roundcube-domain')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success || !data.domain || data.domain === 'Non configurato' || data.domain === '') return;
+                    const tbody = document.getElementById('dnsVerificationBody');
+                    const icon = data.dns_ok
+                        ? '<i class="fas fa-check-circle text-success"></i>'
+                        : '<i class="fas fa-times-circle text-danger"></i>';
+                    tbody.innerHTML += '<tr>' +
+                        '<td><code>A</code> <small class="text-muted">(Webmail)</small></td>' +
+                        '<td><small>' + data.domain + '</small></td>' +
+                        '<td><small><code>' + (data.dns_result || 'Non trovato') + '</code></small></td>' +
+                        '<td><small><code>' + (data.server_ip || 'IP server') + '</code></small></td>' +
+                        '<td class="text-center">' + icon + '</td></tr>';
+
+                    if (!data.dns_ok) {
+                        const summary = document.getElementById('dnsVerificationSummary');
+                        const rcSub = data.domain.indexOf('.') > 0 ? data.domain.substring(0, data.domain.indexOf('.')) : data.domain;
+                        const rcBaseDomain = data.domain.indexOf('.') > 0 ? data.domain.substring(data.domain.indexOf('.') + 1) : data.domain;
+                        summary.innerHTML += '<div class="card border-danger mb-2 mt-2"><div class="card-body py-2 px-3">' +
+                            '<h6 class="text-danger mb-2"><i class="fas fa-envelope-open-text me-1"></i>Record A per Roundcube (Webmail) mancante</h6>' +
+                            '<p class="mb-1"><strong>Cosa fare:</strong> Crea un record A per il dominio della webmail:</p>' +
+                            '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
+                            '<tr><td width="100"><strong>Type</strong></td><td><code>A</code></td></tr>' +
+                            '<tr><td><strong>Name</strong></td><td><code>' + rcSub + '</code></td></tr>' +
+                            '<tr><td><strong>IPv4</strong></td><td><code>' + (data.server_ip || 'IP_SERVER') + '</code></td></tr>' +
+                            '<tr><td><strong>Proxy</strong></td><td><span class="text-danger fw-bold">DNS only (nuvola GRIGIA)</span></td></tr>' +
+                            '<tr><td><strong>TTL</strong></td><td>Auto</td></tr>' +
+                            '</table>' +
+                            '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Cloudflare: Dashboard &rarr; <code>' + rcBaseDomain + '</code> &rarr; DNS &rarr; Aggiungi record</small>' +
+                            '</div></div>';
+
+                        // Update header to danger if not already
+                        const header = document.getElementById('dnsVerificationHeader');
+                        if (!header.className.includes('bg-danger')) {
+                            header.className = 'card-header bg-danger text-white';
+                            header.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>DNS Da Configurare';
+                        }
+                    }
+                })
+                .catch(() => {});
         }
 
         checkStatus();
@@ -2733,6 +2953,14 @@ public class MailPanelContent {
             <h2><i class="fas fa-lock me-2"></i>Certificati SSL/TLS Mail Server</h2>
             <p class="text-muted">Gestisci il certificato SSL per Postfix e Dovecot (<strong>{{MAIL_HOSTNAME}}</strong>)</p>
 
+            <!-- SSL Hostname Mismatch Warning -->
+            <div id="sslHostnameMismatch" class="alert alert-danger d-none">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Certificato Non Valido per l'Hostname Attuale</h5>
+                <p class="mb-1">Il certificato e' emesso per <strong><code id="sslMismatchCn">-</code></strong>,
+                    ma l'hostname del mail server e' <strong><code id="sslMismatchExpected">-</code></strong>.</p>
+                <p class="mb-0"><i class="fas fa-arrow-down me-1"></i>Genera un nuovo certificato per <strong id="sslMismatchTarget">-</strong> usando una delle opzioni sotto.</p>
+            </div>
+
             <!-- Self-Signed Warning -->
             <div id="selfSignedWarning" class="alert alert-danger d-none">
                 <h5><i class="fas fa-exclamation-triangle me-2"></i>Attenzione: Certificato Self-Signed</h5>
@@ -3015,6 +3243,27 @@ public class MailPanelContent {
                         <div class="alert alert-secondary">
                             <i class="fas fa-info-circle me-2"></i>Nessun certificato configurato. Seleziona un'opzione sotto.
                         </div>`;
+                }
+                // Check hostname mismatch
+                const mismatchDiv = document.getElementById('sslHostnameMismatch');
+                const currentMailHostname = '{{MAIL_HOSTNAME}}';
+                const certCn = data.common_name || '';
+                if (currentMailHostname && certCn && currentMailHostname !== 'Non configurato') {
+                    // Check CN and SANs
+                    let matches = certCn.toLowerCase() === currentMailHostname.toLowerCase();
+                    if (!matches && data.san) {
+                        matches = data.san.some(s => s.toLowerCase() === currentMailHostname.toLowerCase());
+                    }
+                    if (!matches) {
+                        document.getElementById('sslMismatchCn').textContent = certCn || 'self-signed';
+                        document.getElementById('sslMismatchExpected').textContent = currentMailHostname;
+                        document.getElementById('sslMismatchTarget').textContent = currentMailHostname;
+                        mismatchDiv.classList.remove('d-none');
+                    } else {
+                        mismatchDiv.classList.add('d-none');
+                    }
+                } else {
+                    mismatchDiv.classList.add('d-none');
                 }
             }).catch(err => {
                 document.getElementById('certInfo').innerHTML =
@@ -3571,14 +3820,37 @@ public class MailPanelContent {
                 </div>
 
                 <div class="col-md-6">
-                    <!-- Mail Hostname (Read-only) -->
+                    <!-- Mail Hostname -->
                     <div class="card mb-4">
                         <div class="card-header"><i class="fas fa-server me-2"></i>Mail Hostname</div>
                         <div class="card-body">
-                            <div class="form-control bg-light" id="mailHostnameDisplay">
-                                {{MAIL_HOSTNAME}}
+                            <div class="d-flex align-items-center mb-2">
+                                <div class="form-control bg-light flex-grow-1" id="mailHostnameDisplay">
+                                    {{MAIL_HOSTNAME}}
+                                </div>
+                                <button class="btn btn-outline-primary btn-sm ms-2" onclick="openChangeHostname()" title="Cambia hostname">
+                                    <i class="fas fa-edit"></i>
+                                </button>
                             </div>
-                            <small class="text-muted"><i class="fas fa-lock me-1"></i>Configurato durante l'installazione dal terminale</small>
+                            <div id="hostnameConsistency" class="mb-2" style="display:none;"></div>
+                            <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Hostname del mail server (SMTP/IMAP/POP3)</small>
+                        </div>
+                    </div>
+
+                    <!-- Roundcube Domain -->
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="fas fa-envelope-open-text me-2"></i>Dominio Roundcube (Webmail)</div>
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <div class="form-control bg-light flex-grow-1" id="rcDomainDisplay">
+                                    {{ROUNDCUBE_DOMAIN}}
+                                </div>
+                                <button class="btn btn-outline-primary btn-sm ms-2" onclick="openChangeRcDomain()" title="Cambia dominio Roundcube">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                            <div id="rcDomainDns" class="mb-2" style="display:none;"></div>
+                            <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Dominio usato per accedere alla webmail Roundcube (es: webmail.esempio.it)</small>
                         </div>
                     </div>
 
@@ -3594,6 +3866,145 @@ public class MailPanelContent {
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Hostname Modal -->
+    <div class="modal fade" id="changeHostnameModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Cambia Mail Hostname</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Step 1: Input -->
+                    <div id="hostnameStep1">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Attenzione:</strong> Cambiare l'hostname del mail server influisce su SMTP, IMAP, POP3, certificati SSL e record DNS.
+                            Il pannello aggiornera' automaticamente tutto cio' che puo', e ti guidera' per le azioni manuali.
+                        </div>
+
+                        <div id="hostnameCurrentState" class="mb-3">
+                            <h6><i class="fas fa-info-circle me-2"></i>Stato Attuale</h6>
+                            <table class="table table-sm table-bordered">
+                                <tr><td><strong>SQLite</strong></td><td id="hsCurSqlite">-</td><td id="hsCurSqliteIcon"></td></tr>
+                                <tr><td><strong>MySQL</strong></td><td id="hsCurMysql">-</td><td id="hsCurMysqlIcon"></td></tr>
+                                <tr><td><strong>Postfix (main.cf)</strong></td><td id="hsCurPostfix">-</td><td id="hsCurPostfixIcon"></td></tr>
+                                <tr><td><strong>Certificato SSL</strong></td><td id="hsCurSsl">-</td><td id="hsCurSslIcon"></td></tr>
+                            </table>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Nuovo Hostname</strong></label>
+                            <input type="text" class="form-control" id="newHostnameInput" placeholder="mail.esempio.it">
+                            <small class="text-muted">FQDN del server mail (es: mail.miodominio.com)</small>
+                        </div>
+
+                        <button class="btn btn-primary w-100" onclick="executeHostnameChange()">
+                            <i class="fas fa-play me-1"></i>Esegui Cambio Hostname
+                        </button>
+                    </div>
+
+                    <!-- Step 2: Progress -->
+                    <div id="hostnameStep2" style="display:none;">
+                        <div class="text-center mb-3">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2">Cambio hostname in corso...</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Results -->
+                    <div id="hostnameStep3" style="display:none;">
+                        <h6><i class="fas fa-clipboard-check me-2"></i>Operazioni Automatiche Completate</h6>
+                        <div id="hostnameAutoSteps" class="mb-3"></div>
+
+                        <hr>
+                        <h6><i class="fas fa-hand-point-right me-2"></i>Azioni Manuali Necessarie</h6>
+                        <p class="text-muted">Completa queste azioni per finalizzare il cambio:</p>
+                        <div id="hostnameManualActions" class="mb-3"></div>
+
+                        <hr>
+                        <h6><i class="fas fa-stethoscope me-2"></i>Verifica DNS</h6>
+                        <p class="text-muted">Dopo aver aggiornato i DNS, clicca per verificare la propagazione:</p>
+                        <button class="btn btn-info w-100 mb-2" onclick="checkHostnameDns()">
+                            <i class="fas fa-search me-1"></i>Verifica Record DNS
+                        </button>
+                        <div id="hostnameDnsChecks" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Roundcube Domain Modal -->
+    <div class="modal fade" id="changeRcDomainModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-envelope-open-text me-2"></i>Cambia Dominio Roundcube</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Step 1: Input -->
+                    <div id="rcDomainStep1">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Il dominio Roundcube e' l'indirizzo web con cui gli utenti accedono alla webmail
+                            (es: <code>webmail.esempio.it</code>). E' separato dall'hostname del mail server (SMTP/IMAP).
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Dominio Attuale</strong></label>
+                            <div class="form-control bg-light" id="rcDomainCurrent">-</div>
+                        </div>
+                        <div class="mb-3" id="rcDomainDnsStatus" style="display:none;"></div>
+
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Nuovo Dominio</strong></label>
+                            <input type="text" class="form-control" id="newRcDomainInput" placeholder="webmail.esempio.it">
+                            <small class="text-muted">FQDN per la webmail (es: webmail.miodominio.com, mail.miodominio.com)</small>
+                        </div>
+
+                        <button class="btn btn-primary w-100" onclick="executeRcDomainChange()">
+                            <i class="fas fa-play me-1"></i>Cambia Dominio Roundcube
+                        </button>
+                    </div>
+
+                    <!-- Step 2: Progress -->
+                    <div id="rcDomainStep2" style="display:none;">
+                        <div class="text-center mb-3">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2">Aggiornamento in corso...</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Results -->
+                    <div id="rcDomainStep3" style="display:none;">
+                        <h6><i class="fas fa-clipboard-check me-2"></i>Operazioni Automatiche Completate</h6>
+                        <div id="rcDomainAutoSteps" class="mb-3"></div>
+
+                        <hr>
+                        <h6><i class="fas fa-hand-point-right me-2"></i>Azioni Manuali Necessarie</h6>
+                        <div id="rcDomainManualActions" class="mb-3"></div>
+
+                        <hr>
+                        <h6><i class="fas fa-stethoscope me-2"></i>Verifica DNS</h6>
+                        <p class="text-muted">Dopo aver configurato il DNS, verifica la propagazione:</p>
+                        <button class="btn btn-info w-100 mb-2" onclick="checkRcDomainDns()">
+                            <i class="fas fa-search me-1"></i>Verifica DNS Roundcube
+                        </button>
+                        <div id="rcDomainDnsChecks" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
                 </div>
             </div>
         </div>
@@ -4124,9 +4535,369 @@ public class MailPanelContent {
             return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');
         }
 
+        // ========== HOSTNAME CHANGE FUNCTIONS ==========
+
+        let hostnameChangeData = null;
+
+        function checkHostnameConsistency() {
+            fetch('/api/hostname')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) return;
+                    const div = document.getElementById('hostnameConsistency');
+                    if (!data.consistent && data.sqlite_hostname) {
+                        div.style.display = 'block';
+                        div.innerHTML = '<div class="alert alert-warning alert-sm py-1 px-2 mb-0">' +
+                            '<i class="fas fa-exclamation-triangle me-1"></i>' +
+                            '<small>Hostname non allineato tra i componenti. Clicca <i class="fas fa-edit"></i> per risolvere.</small></div>';
+                    } else {
+                        div.style.display = 'none';
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function openChangeHostname() {
+            // Reset to step 1
+            document.getElementById('hostnameStep1').style.display = 'block';
+            document.getElementById('hostnameStep2').style.display = 'none';
+            document.getElementById('hostnameStep3').style.display = 'none';
+
+            // Load current state
+            fetch('/api/hostname')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) return;
+
+                    const setCell = (id, val) => {
+                        const el = document.getElementById(id);
+                        el.textContent = val || 'Non configurato';
+                    };
+                    const setIcon = (id, val, ref) => {
+                        const el = document.getElementById(id);
+                        if (!val || !ref) {
+                            el.innerHTML = '<i class="fas fa-minus text-muted"></i>';
+                        } else if (val === ref) {
+                            el.innerHTML = '<i class="fas fa-check-circle text-success"></i>';
+                        } else {
+                            el.innerHTML = '<i class="fas fa-times-circle text-danger"></i>';
+                        }
+                    };
+
+                    const ref = data.sqlite_hostname || data.mysql_hostname || '';
+                    setCell('hsCurSqlite', data.sqlite_hostname);
+                    setCell('hsCurMysql', data.mysql_hostname);
+                    setCell('hsCurPostfix', data.postfix_hostname);
+                    setCell('hsCurSsl', data.ssl_cn || data.ssl_hostname || 'N/D');
+
+                    setIcon('hsCurSqliteIcon', data.sqlite_hostname, ref);
+                    setIcon('hsCurMysqlIcon', data.mysql_hostname, ref);
+                    setIcon('hsCurPostfixIcon', data.postfix_hostname, ref || data.postfix_hostname);
+                    // SSL: compare with ref
+                    const sslVal = data.ssl_cn || data.ssl_hostname || '';
+                    if (sslVal && ref && sslVal === ref) {
+                        document.getElementById('hsCurSslIcon').innerHTML = '<i class="fas fa-check-circle text-success"></i>';
+                    } else if (sslVal) {
+                        document.getElementById('hsCurSslIcon').innerHTML = '<i class="fas fa-exclamation-circle text-warning"></i>';
+                    } else {
+                        document.getElementById('hsCurSslIcon').innerHTML = '<i class="fas fa-minus text-muted"></i>';
+                    }
+
+                    // Pre-fill with current hostname
+                    document.getElementById('newHostnameInput').value = ref;
+                });
+
+            new bootstrap.Modal(document.getElementById('changeHostnameModal')).show();
+        }
+
+        function executeHostnameChange() {
+            const newHostname = document.getElementById('newHostnameInput').value.trim().toLowerCase();
+            if (!newHostname || !newHostname.includes('.')) {
+                alert('Inserisci un hostname valido (es: mail.esempio.it)');
+                return;
+            }
+
+            const currentHostname = document.getElementById('mailHostnameDisplay').textContent.trim();
+            if (newHostname === currentHostname) {
+                if (!confirm('L\\'hostname e\\' lo stesso. Vuoi comunque riallineare tutti i componenti?')) return;
+            } else {
+                if (!confirm('Cambiare l\\'hostname da "' + currentHostname + '" a "' + newHostname + '"?\\n\\nQuesta operazione aggiornera\\' SQLite, MySQL, Postfix e ricarichera\\' i servizi.')) return;
+            }
+
+            // Show progress
+            document.getElementById('hostnameStep1').style.display = 'none';
+            document.getElementById('hostnameStep2').style.display = 'block';
+            document.getElementById('hostnameStep3').style.display = 'none';
+
+            fetch('/api/hostname', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'change',
+                    hostname: newHostname,
+                    csrf_token: csrfToken
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                hostnameChangeData = data;
+
+                // Show results
+                document.getElementById('hostnameStep2').style.display = 'none';
+                document.getElementById('hostnameStep3').style.display = 'block';
+
+                // Render auto steps
+                const stepsDiv = document.getElementById('hostnameAutoSteps');
+                if (data.steps) {
+                    stepsDiv.innerHTML = data.steps.map(s => {
+                        const icon = s.success
+                            ? '<i class="fas fa-check-circle text-success me-2"></i>'
+                            : '<i class="fas fa-times-circle text-danger me-2"></i>';
+                        return '<div class="d-flex align-items-start mb-2">' + icon +
+                            '<div><strong>' + escapeHtml(s.step) + '</strong><br><small class="text-muted">' +
+                            escapeHtml(s.detail) + '</small></div></div>';
+                    }).join('');
+                }
+
+                // Render manual actions
+                const actionsDiv = document.getElementById('hostnameManualActions');
+                if (data.manual_actions) {
+                    actionsDiv.innerHTML = data.manual_actions.map((a, i) => {
+                        let icon = '<i class="fas fa-globe text-primary me-2"></i>';
+                        if (a.type === 'ssl') icon = '<i class="fas fa-lock text-warning me-2"></i>';
+                        if (a.type === 'verify') icon = '<i class="fas fa-check-double text-info me-2"></i>';
+                        if (a.type === 'roundcube') icon = '<i class="fas fa-envelope-open-text text-info me-2"></i>';
+                        return '<div class="d-flex align-items-start mb-2 p-2 bg-light rounded">' +
+                            '<div class="me-2"><strong>' + (i + 1) + '.</strong></div>' + icon +
+                            '<div><strong>' + escapeHtml(a.action) + '</strong><br><small>' +
+                            escapeHtml(a.detail) + '</small></div></div>';
+                    }).join('');
+                }
+
+                // Update display on the settings page
+                if (data.success && data.new_hostname) {
+                    document.getElementById('mailHostnameDisplay').textContent = data.new_hostname;
+                }
+            })
+            .catch(err => {
+                document.getElementById('hostnameStep2').style.display = 'none';
+                document.getElementById('hostnameStep1').style.display = 'block';
+                alert('Errore: ' + err.message);
+            });
+        }
+
+        function checkHostnameDns() {
+            const hostname = hostnameChangeData ? hostnameChangeData.new_hostname : document.getElementById('mailHostnameDisplay').textContent.trim();
+            const checksDiv = document.getElementById('hostnameDnsChecks');
+            checksDiv.style.display = 'block';
+            checksDiv.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Verifica in corso...</div>';
+
+            fetch('/api/hostname', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'check_dns',
+                    hostname: hostname,
+                    csrf_token: csrfToken
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    checksDiv.innerHTML = '<div class="alert alert-danger">' + (data.error || 'Errore') + '</div>';
+                    return;
+                }
+
+                let html = '<table class="table table-sm table-bordered mt-2">';
+                html += '<thead><tr><th>Tipo</th><th>Nome</th><th>Attuale</th><th>Atteso</th><th>Stato</th></tr></thead><tbody>';
+                data.checks.forEach(c => {
+                    const icon = c.passed
+                        ? '<i class="fas fa-check-circle text-success"></i>'
+                        : '<i class="fas fa-times-circle text-danger"></i>';
+                    html += '<tr><td><code>' + c.type + '</code></td><td>' + escapeHtml(c.name) +
+                        '</td><td><small>' + escapeHtml(c.current) + '</small></td><td><small>' +
+                        escapeHtml(c.expected) + '</small></td><td class="text-center">' + icon + '</td></tr>';
+                });
+                html += '</tbody></table>';
+
+                if (data.all_passed) {
+                    html += '<div class="alert alert-success mt-2"><i class="fas fa-check-circle me-2"></i>Tutti i record DNS sono correttamente configurati!</div>';
+                } else {
+                    html += '<div class="alert alert-warning mt-2"><i class="fas fa-exclamation-triangle me-2"></i>Alcuni record DNS devono ancora essere aggiornati. Riprova dopo aver fatto le modifiche.</div>';
+                }
+
+                checksDiv.innerHTML = html;
+            })
+            .catch(err => {
+                checksDiv.innerHTML = '<div class="alert alert-danger">Errore: ' + err.message + '</div>';
+            });
+        }
+
+        // ===== Roundcube Domain Functions =====
+        let rcDomainChangeData = null;
+
+        function checkRcDomainDnsStatus() {
+            fetch('/api/roundcube-domain')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) return;
+                    const el = document.getElementById('rcDomainDns');
+                    if (data.domain && data.domain !== 'Non configurato') {
+                        el.style.display = 'block';
+                        if (data.dns_ok) {
+                            el.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>DNS OK - ' + escapeHtml(data.domain) + ' -> ' + escapeHtml(data.dns_result) + '</span>';
+                        } else {
+                            el.innerHTML = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>DNS NON configurato per ' + escapeHtml(data.domain) + ' (atteso: ' + escapeHtml(data.server_ip || '?') + ', attuale: ' + escapeHtml(data.dns_result) + ')</span>';
+                        }
+                    }
+                });
+        }
+
+        function openChangeRcDomain() {
+            // Reset modal state
+            document.getElementById('rcDomainStep1').style.display = 'block';
+            document.getElementById('rcDomainStep2').style.display = 'none';
+            document.getElementById('rcDomainStep3').style.display = 'none';
+            rcDomainChangeData = null;
+
+            // Load current state
+            fetch('/api/roundcube-domain')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) return;
+                    document.getElementById('rcDomainCurrent').textContent = data.domain || 'Non configurato';
+                    document.getElementById('newRcDomainInput').value = data.domain || '';
+
+                    const dnsEl = document.getElementById('rcDomainDnsStatus');
+                    if (data.domain) {
+                        dnsEl.style.display = 'block';
+                        if (data.dns_ok) {
+                            dnsEl.innerHTML = '<div class="alert alert-success py-2 mb-0"><i class="fas fa-check-circle me-1"></i>DNS OK: <code>' + escapeHtml(data.domain) + '</code> -> <code>' + escapeHtml(data.dns_result) + '</code></div>';
+                        } else {
+                            dnsEl.innerHTML = '<div class="alert alert-warning py-2 mb-0"><i class="fas fa-exclamation-triangle me-1"></i>DNS non punta all\\'IP del server. Atteso: <code>' + escapeHtml(data.server_ip || '?') + '</code>, attuale: <code>' + escapeHtml(data.dns_result) + '</code></div>';
+                        }
+                    }
+                });
+
+            new bootstrap.Modal(document.getElementById('changeRcDomainModal')).show();
+        }
+
+        function executeRcDomainChange() {
+            const newDomain = document.getElementById('newRcDomainInput').value.trim().toLowerCase();
+            if (!newDomain || !newDomain.includes('.')) {
+                alert('Inserisci un dominio valido (es: webmail.esempio.it)');
+                return;
+            }
+
+            const currentDomain = document.getElementById('rcDomainCurrent').textContent.trim();
+            if (newDomain === currentDomain) {
+                if (!confirm('Il dominio e\\' lo stesso. Vuoi comunque riallineare la configurazione?')) return;
+            } else {
+                if (!confirm('Cambiare il dominio Roundcube da "' + currentDomain + '" a "' + newDomain + '"?\\n\\nVerra\\' aggiornato SQLite, Nginx e l\\'SSO manager.')) return;
+            }
+
+            // Show progress
+            document.getElementById('rcDomainStep1').style.display = 'none';
+            document.getElementById('rcDomainStep2').style.display = 'block';
+            document.getElementById('rcDomainStep3').style.display = 'none';
+
+            fetch('/api/roundcube-domain', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'change',
+                    domain: newDomain,
+                    csrf_token: csrfToken
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                rcDomainChangeData = data;
+
+                document.getElementById('rcDomainStep2').style.display = 'none';
+                document.getElementById('rcDomainStep3').style.display = 'block';
+
+                // Render auto steps
+                const stepsDiv = document.getElementById('rcDomainAutoSteps');
+                if (data.steps) {
+                    stepsDiv.innerHTML = data.steps.map(s => {
+                        const icon = s.success
+                            ? '<i class="fas fa-check-circle text-success me-2"></i>'
+                            : '<i class="fas fa-times-circle text-danger me-2"></i>';
+                        return '<div class="d-flex align-items-start mb-2">' + icon +
+                            '<div><strong>' + escapeHtml(s.step) + '</strong><br><small class="text-muted">' +
+                            escapeHtml(s.detail) + '</small></div></div>';
+                    }).join('');
+                }
+
+                // Render manual actions
+                const actionsDiv = document.getElementById('rcDomainManualActions');
+                if (data.manual_actions) {
+                    actionsDiv.innerHTML = data.manual_actions.map((a, i) => {
+                        let icon = '<i class="fas fa-globe text-primary me-2"></i>';
+                        if (a.type === 'ssl') icon = '<i class="fas fa-lock text-warning me-2"></i>';
+                        return '<div class="d-flex align-items-start mb-2 p-2 bg-light rounded">' +
+                            '<div class="me-2"><strong>' + (i + 1) + '.</strong></div>' + icon +
+                            '<div><strong>' + escapeHtml(a.action) + '</strong><br><small>' +
+                            escapeHtml(a.detail) + '</small></div></div>';
+                    }).join('');
+                }
+
+                // Update display
+                if (data.success && data.new_domain) {
+                    document.getElementById('rcDomainDisplay').textContent = data.new_domain;
+                    checkRcDomainDnsStatus();
+                }
+            })
+            .catch(err => {
+                document.getElementById('rcDomainStep2').style.display = 'none';
+                document.getElementById('rcDomainStep1').style.display = 'block';
+                alert('Errore: ' + err.message);
+            });
+        }
+
+        function checkRcDomainDns() {
+            const domain = rcDomainChangeData ? rcDomainChangeData.new_domain : document.getElementById('rcDomainDisplay').textContent.trim();
+            const checksDiv = document.getElementById('rcDomainDnsChecks');
+            checksDiv.style.display = 'block';
+            checksDiv.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Verifica in corso...</div>';
+
+            fetch('/api/roundcube-domain', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'check_dns',
+                    domain: domain,
+                    csrf_token: csrfToken
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    checksDiv.innerHTML = '<div class="alert alert-danger">' + (data.error || 'Errore') + '</div>';
+                    return;
+                }
+
+                let html = '';
+                if (data.a_ok) {
+                    html += '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Record A per <code>' + escapeHtml(data.domain) + '</code> punta correttamente a <code>' + escapeHtml(data.server_ip) + '</code></div>';
+                } else {
+                    html += '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Record A per <code>' + escapeHtml(data.domain) + '</code> NON punta all\\'IP del server.<br>';
+                    html += '<strong>Attuale:</strong> <code>' + escapeHtml(data.a_record) + '</code> | <strong>Atteso:</strong> <code>' + escapeHtml(data.server_ip || '?') + '</code><br>';
+                    html += '<small class="text-muted">Configura un record A nel tuo pannello DNS (es. Cloudflare): <strong>Tipo</strong> A, <strong>Nome</strong> ' + escapeHtml(data.domain.split('.')[0]) + ', <strong>IPv4</strong> ' + escapeHtml(data.server_ip || 'IP_SERVER') + '</small></div>';
+                }
+                checksDiv.innerHTML = html;
+            })
+            .catch(err => {
+                checksDiv.innerHTML = '<div class="alert alert-danger">Errore: ' + err.message + '</div>';
+            });
+        }
+
         // Load on page load
         load2FAStatus();
         loadPasskeys();
+        checkHostnameConsistency();
+        checkRcDomainDnsStatus();
 
         let csrfToken = document.getElementById('csrf_token').value;
 """ + getLogoutScript() + """

@@ -200,6 +200,12 @@ public class SSLMailServer {
         // API endpoints - Email statistics
         server.createContext("/api/statistics", this::handleApiStatistics);
         server.createContext("/api/theme", this::handleApiTheme);
+
+        // API endpoint - Hostname change
+        server.createContext("/api/hostname", this::handleApiHostname);
+
+        // API endpoint - Roundcube domain change
+        server.createContext("/api/roundcube-domain", this::handleApiRoundcubeDomain);
     }
 
     private void initializeManagers() {
@@ -749,6 +755,9 @@ public class SSLMailServer {
             // Replace mail hostname (read-only, configured during installation)
             String mailHostname = Main.dbManager != null ? Main.dbManager.getMailHostname() : "Non configurato";
             html = html.replace("{{MAIL_HOSTNAME}}", mailHostname != null && !mailHostname.isEmpty() ? mailHostname : "Non configurato");
+            // Replace Roundcube domain
+            String rcDomain = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : "";
+            html = html.replace("{{ROUNDCUBE_DOMAIN}}", rcDomain != null && !rcDomain.isEmpty() ? rcDomain : "Non configurato");
             sendHtml(exchange, html);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error in handleProtectedPage", e);
@@ -1054,6 +1063,31 @@ public class SSLMailServer {
             // Get server IP
             String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
             status.put("server_ip", serverIp);
+
+            // SSL certificate mismatch check
+            if (acmeManager != null && !mailHostname.isEmpty()) {
+                AcmeManager.CertificateInfo certInfo = acmeManager.getCertificateInfo();
+                if (certInfo != null && certInfo.installed) {
+                    String certCn = certInfo.commonName != null ? certInfo.commonName : "";
+                    boolean sslMatch = certCn.equalsIgnoreCase(mailHostname);
+                    // Also check SAN (Subject Alternative Names)
+                    if (!sslMatch && certInfo.subjectAltNames != null) {
+                        for (String san : certInfo.subjectAltNames) {
+                            if (san.equalsIgnoreCase(mailHostname)) {
+                                sslMatch = true;
+                                break;
+                            }
+                        }
+                    }
+                    status.put("ssl_cn", certCn);
+                    status.put("ssl_match", sslMatch);
+                    status.put("ssl_self_signed", acmeManager.isSelfSigned());
+                } else {
+                    status.put("ssl_cn", "");
+                    status.put("ssl_match", false);
+                    status.put("ssl_self_signed", true);
+                }
+            }
         }
 
         sendJsonResponse(exchange, status);
@@ -2229,6 +2263,10 @@ public class SSLMailServer {
                     String hostname = req.optString("hostname", "");
                     if (!hostname.isEmpty()) {
                         Main.mailDatabase.setSetting("mail_hostname", hostname);
+                        // Keep SQLite in sync
+                        if (Main.dbManager != null) {
+                            Main.dbManager.setMailHostname(hostname);
+                        }
                         response.put("success", true);
                     } else {
                         response.put("success", false);
@@ -4483,6 +4521,651 @@ public class SSLMailServer {
         }
 
         sendJsonResponse(exchange, response);
+    }
+
+    // ============== HOSTNAME CHANGE API ==============
+
+    /**
+     * API endpoint for changing the mail server hostname.
+     *
+     * GET  /api/hostname           - Returns current hostname state and consistency checks
+     * POST /api/hostname           - Performs the hostname change with full orchestration
+     *
+     * The change process:
+     *   1. Validate the new hostname format
+     *   2. Read the old hostname from both SQLite and MySQL
+     *   3. Update SQLite config.mail_hostname
+     *   4. Update MySQL panel_settings.mail_hostname
+     *   5. Update Postfix main.cf (myhostname, mydomain)
+     *   6. Clean stale SSL/DNS settings in MySQL
+     *   7. Reload Postfix, Dovecot, Nginx
+     *   8. Return a checklist of what was done and what the user must do manually (DNS, SSL cert)
+     */
+    private void handleApiHostname(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+
+        String method = exchange.getRequestMethod();
+        JSONObject response = new JSONObject();
+
+        try {
+            if ("GET".equals(method)) {
+                // Return current hostname state and consistency info
+                String sqliteHostname = Main.dbManager != null ? Main.dbManager.getMailHostname() : "";
+                if (sqliteHostname == null) sqliteHostname = "";
+
+                String mysqlHostname = "";
+                if (Main.mailDatabase != null && Main.mysqlAvailable) {
+                    mysqlHostname = Main.mailDatabase.getSetting("mail_hostname", "");
+                }
+
+                // Read Postfix myhostname from main.cf
+                String postfixHostname = readPostfixHostname();
+
+                // Read current SSL certificate CN
+                String sslHostname = "";
+                if (Main.mailDatabase != null && Main.mysqlAvailable) {
+                    sslHostname = Main.mailDatabase.getSetting("ssl_hostname", "");
+                }
+
+                // Detect server IP
+                String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
+
+                // Consistency check
+                boolean allConsistent = !sqliteHostname.isEmpty()
+                        && sqliteHostname.equals(mysqlHostname)
+                        && (postfixHostname.isEmpty() || sqliteHostname.equals(postfixHostname));
+
+                response.put("success", true);
+                response.put("sqlite_hostname", sqliteHostname);
+                response.put("mysql_hostname", mysqlHostname);
+                response.put("postfix_hostname", postfixHostname);
+                response.put("ssl_hostname", sslHostname);
+                response.put("server_ip", serverIp);
+                response.put("consistent", allConsistent);
+
+                // Current SSL cert info
+                if (acmeManager != null) {
+                    AcmeManager.CertificateInfo certInfo = acmeManager.getCertificateInfo();
+                    if (certInfo != null && certInfo.installed) {
+                        response.put("ssl_cn", certInfo.commonName);
+                        response.put("ssl_self_signed", acmeManager.isSelfSigned());
+                        response.put("ssl_days_until_expiry", certInfo.daysUntilExpiry);
+                    }
+                }
+
+            } else if ("POST".equals(method)) {
+                String body = readRequestBodyWithLimit(exchange);
+                if (body == null) {
+                    sendJsonError(exchange, 413, "Richiesta troppo grande");
+                    return;
+                }
+                JSONObject req = new JSONObject(body);
+
+                // Validate CSRF token
+                if (!validateCsrfForRequest(exchange, req)) {
+                    sendCsrfError(exchange);
+                    return;
+                }
+
+                String action = req.optString("action", "");
+
+                if ("change".equals(action)) {
+                    // Full hostname change orchestration
+                    String newHostname = req.optString("hostname", "").trim().toLowerCase();
+
+                    // Validate hostname format
+                    if (newHostname.isEmpty() || !newHostname.contains(".") || newHostname.length() > 253) {
+                        response.put("success", false);
+                        response.put("error", "Hostname non valido. Deve essere un FQDN (es: mail.esempio.it)");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                    // Must match domain pattern (allow subdomain.domain.tld)
+                    if (!newHostname.matches("^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")) {
+                        response.put("success", false);
+                        response.put("error", "Hostname contiene caratteri non validi");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    // Get old hostname
+                    String oldHostname = Main.dbManager != null ? Main.dbManager.getMailHostname() : "";
+                    if (oldHostname == null) oldHostname = "";
+
+                    JSONArray steps = new JSONArray();
+
+                    // Step 1: Update SQLite
+                    boolean sqliteOk = false;
+                    if (Main.dbManager != null) {
+                        sqliteOk = Main.dbManager.setMailHostname(newHostname);
+                    }
+                    steps.put(new JSONObject()
+                            .put("step", "SQLite config.mail_hostname")
+                            .put("success", sqliteOk)
+                            .put("detail", sqliteOk ? oldHostname + " -> " + newHostname : "Errore aggiornamento SQLite"));
+
+                    // Step 2: Update MySQL
+                    boolean mysqlOk = false;
+                    if (Main.mailDatabase != null && Main.mysqlAvailable) {
+                        try {
+                            Main.mailDatabase.setSetting("mail_hostname", newHostname);
+                            mysqlOk = true;
+                        } catch (Exception e) {
+                            // setSetting does not throw, but handle just in case
+                        }
+                    }
+                    steps.put(new JSONObject()
+                            .put("step", "MySQL panel_settings.mail_hostname")
+                            .put("success", mysqlOk)
+                            .put("detail", mysqlOk ? oldHostname + " -> " + newHostname : "Errore aggiornamento MySQL"));
+
+                    // Step 3: Update Postfix main.cf
+                    boolean postfixOk = updatePostfixHostname(newHostname);
+                    steps.put(new JSONObject()
+                            .put("step", "Postfix main.cf (myhostname)")
+                            .put("success", postfixOk)
+                            .put("detail", postfixOk ? "myhostname aggiornato a " + newHostname : "File non trovato o errore scrittura"));
+
+                    // Step 4: Clean stale MySQL settings
+                    boolean cleanOk = false;
+                    if (Main.mailDatabase != null && Main.mysqlAvailable) {
+                        try {
+                            Main.mailDatabase.deleteSetting("ssl_hostname");
+                            Main.mailDatabase.deleteSetting("ssl_domain");
+                            Main.mailDatabase.deleteSetting("dns_challenge_hostname");
+                            cleanOk = true;
+                        } catch (Exception e) {
+                            // best effort
+                        }
+                    }
+                    steps.put(new JSONObject()
+                            .put("step", "Pulizia metadati SSL/DNS obsoleti")
+                            .put("success", cleanOk)
+                            .put("detail", cleanOk ? "ssl_hostname, ssl_domain, dns_challenge_hostname rimossi" : "Errore pulizia"));
+
+                    // Step 5: Reload services
+                    boolean postfixReload = executeServiceCommand("postfix", "reload");
+                    steps.put(new JSONObject()
+                            .put("step", "Reload Postfix")
+                            .put("success", postfixReload)
+                            .put("detail", postfixReload ? "Postfix ricaricato" : "Postfix non in esecuzione o errore reload"));
+
+                    boolean dovecotReload = executeServiceCommand("dovecot", "reload");
+                    steps.put(new JSONObject()
+                            .put("step", "Reload Dovecot")
+                            .put("success", dovecotReload)
+                            .put("detail", dovecotReload ? "Dovecot ricaricato" : "Dovecot non in esecuzione o errore reload"));
+
+                    boolean nginxReload = executeServiceCommand("nginx", "reload");
+                    steps.put(new JSONObject()
+                            .put("step", "Reload Nginx")
+                            .put("success", nginxReload)
+                            .put("detail", nginxReload ? "Nginx ricaricato" : "Nginx non in esecuzione o errore reload"));
+
+                    // Determine overall success (core steps must succeed)
+                    boolean overallSuccess = sqliteOk && mysqlOk;
+
+                    // Build manual actions needed
+                    String domain = newHostname.contains(".") ? newHostname.substring(newHostname.indexOf('.') + 1) : newHostname;
+                    JSONArray manualActions = new JSONArray();
+
+                    manualActions.put(new JSONObject()
+                            .put("action", "Aggiorna record DNS A")
+                            .put("detail", "Record A per '" + newHostname + "' deve puntare all'IP del server")
+                            .put("type", "dns"));
+                    manualActions.put(new JSONObject()
+                            .put("action", "Aggiorna record DNS MX")
+                            .put("detail", "Record MX per '" + domain + "' deve puntare a '" + newHostname + "'")
+                            .put("type", "dns"));
+                    manualActions.put(new JSONObject()
+                            .put("action", "Aggiorna record PTR (Reverse DNS)")
+                            .put("detail", "Contatta il provider hosting per aggiornare il PTR all'IP del server con '" + newHostname + "'")
+                            .put("type", "dns"));
+                    manualActions.put(new JSONObject()
+                            .put("action", "Aggiorna CNAME autoconfig/autodiscover")
+                            .put("detail", "autoconfig." + domain + " e autodiscover." + domain + " devono puntare a '" + newHostname + "'")
+                            .put("type", "dns"));
+                    manualActions.put(new JSONObject()
+                            .put("action", "Emetti nuovo certificato SSL")
+                            .put("detail", "Vai nella sezione SSL del pannello e genera un nuovo certificato per '" + newHostname + "'. Il vecchio certificato"
+                                    + (!oldHostname.isEmpty() ? " (per '" + oldHostname + "')" : "") + " non sara' valido per il nuovo hostname.")
+                            .put("type", "ssl"));
+                    manualActions.put(new JSONObject()
+                            .put("action", "Verifica record DNS")
+                            .put("detail", "Dopo aver aggiornato i DNS, vai nella sezione DNS del pannello e clicca 'Verifica' per controllare che tutto sia corretto")
+                            .put("type", "verify"));
+
+                    // Roundcube domain reminder
+                    String rcDomain = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : "";
+                    if (rcDomain != null && !rcDomain.isEmpty()) {
+                        manualActions.put(new JSONObject()
+                                .put("action", "Verifica dominio Roundcube (Webmail)")
+                                .put("detail", "Il dominio Roundcube attuale e' '" + rcDomain + "'. "
+                                        + "Se vuoi aggiornarlo, vai nelle Impostazioni e modifica il Dominio Roundcube. "
+                                        + "Ricorda di aggiornare anche il record DNS A per il nuovo dominio.")
+                                .put("type", "roundcube"));
+                    }
+
+                    response.put("success", overallSuccess);
+                    response.put("steps", steps);
+                    response.put("manual_actions", manualActions);
+                    response.put("old_hostname", oldHostname);
+                    response.put("new_hostname", newHostname);
+
+                    // Audit log
+                    logAudit("HOSTNAME_CHANGED", getClientIp(exchange),
+                            "Hostname changed: " + oldHostname + " -> " + newHostname);
+
+                } else if ("check_dns".equals(action)) {
+                    // Quick DNS consistency check for the current hostname
+                    String hostname = req.optString("hostname", "");
+                    if (hostname.isEmpty()) {
+                        hostname = Main.dbManager != null ? Main.dbManager.getMailHostname() : "";
+                    }
+                    if (hostname == null || hostname.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "Nessun hostname configurato");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    JSONArray checks = new JSONArray();
+
+                    // Check A record
+                    String aResult = digRecord(hostname, "A");
+                    String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
+                    boolean aOk = !aResult.isEmpty() && aResult.contains(serverIp) && !serverIp.isEmpty();
+                    checks.put(new JSONObject()
+                            .put("type", "A").put("name", hostname)
+                            .put("passed", aOk)
+                            .put("current", aResult.isEmpty() ? "Non trovato" : aResult)
+                            .put("expected", serverIp.isEmpty() ? "IP del server" : serverIp));
+
+                    // Check MX record
+                    String domain = hostname.contains(".") ? hostname.substring(hostname.indexOf('.') + 1) : hostname;
+                    String mxResult = digRecord(domain, "MX");
+                    boolean mxOk = !mxResult.isEmpty() && mxResult.toLowerCase().contains(hostname.toLowerCase());
+                    checks.put(new JSONObject()
+                            .put("type", "MX").put("name", domain)
+                            .put("passed", mxOk)
+                            .put("current", mxResult.isEmpty() ? "Non trovato" : mxResult)
+                            .put("expected", "10 " + hostname + "."));
+
+                    // Check PTR record
+                    String ptrResult = "";
+                    if (!serverIp.isEmpty()) {
+                        ptrResult = digPtrRecord(serverIp);
+                    }
+                    boolean ptrOk = !ptrResult.isEmpty() && ptrResult.toLowerCase().contains(hostname.toLowerCase());
+                    checks.put(new JSONObject()
+                            .put("type", "PTR").put("name", serverIp.isEmpty() ? "IP server" : serverIp)
+                            .put("passed", ptrOk)
+                            .put("current", ptrResult.isEmpty() ? "Non trovato" : ptrResult)
+                            .put("expected", hostname + "."));
+
+                    response.put("success", true);
+                    response.put("hostname", hostname);
+                    response.put("checks", checks);
+                    response.put("all_passed", aOk && mxOk && ptrOk);
+
+                } else {
+                    response.put("success", false);
+                    response.put("error", "Azione non valida. Usa 'change' o 'check_dns'.");
+                }
+
+            } else {
+                sendJsonError(exchange, 405, "Method not allowed");
+                return;
+            }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * Handle Roundcube domain GET (read) and POST (change)
+     */
+    private void handleApiRoundcubeDomain(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+
+        String method = exchange.getRequestMethod();
+        JSONObject response = new JSONObject();
+
+        try {
+            if ("GET".equals(method)) {
+                // Return current Roundcube domain + DNS check
+                String rcDomain = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : "";
+                if (rcDomain == null) rcDomain = "";
+                String rcPort = Main.dbManager != null ? Main.dbManager.getRoundcubePort() : "8443";
+                if (rcPort == null) rcPort = "8443";
+
+                String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
+
+                // Check DNS for Roundcube domain
+                boolean dnsOk = false;
+                String dnsResult = "";
+                if (!rcDomain.isEmpty()) {
+                    dnsResult = digRecord(rcDomain, "A");
+                    dnsOk = !dnsResult.isEmpty() && !serverIp.isEmpty() && dnsResult.contains(serverIp);
+                }
+
+                response.put("success", true);
+                response.put("domain", rcDomain);
+                response.put("port", rcPort);
+                response.put("server_ip", serverIp);
+                response.put("dns_result", dnsResult.isEmpty() ? "Non trovato" : dnsResult);
+                response.put("dns_ok", dnsOk);
+
+            } else if ("POST".equals(method)) {
+                String body = readRequestBodyWithLimit(exchange);
+                if (body == null) {
+                    sendJsonError(exchange, 413, "Richiesta troppo grande");
+                    return;
+                }
+                JSONObject req = new JSONObject(body);
+
+                // Validate CSRF token
+                if (!validateCsrfForRequest(exchange, req)) {
+                    sendCsrfError(exchange);
+                    return;
+                }
+
+                String action = req.optString("action", "");
+
+                if ("change".equals(action)) {
+                    String newDomain = req.optString("domain", "").trim().toLowerCase();
+
+                    // Validate domain format
+                    if (newDomain.isEmpty() || !newDomain.contains(".") || newDomain.length() > 253) {
+                        response.put("success", false);
+                        response.put("error", "Dominio non valido. Deve essere un FQDN (es: webmail.esempio.it)");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                    if (!newDomain.matches("^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")) {
+                        response.put("success", false);
+                        response.put("error", "Dominio contiene caratteri non validi");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    // Get old domain
+                    String oldDomain = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : "";
+                    if (oldDomain == null) oldDomain = "";
+
+                    JSONArray steps = new JSONArray();
+
+                    // Step 1: Update SQLite roundcube_domain
+                    boolean sqliteOk = false;
+                    if (Main.dbManager != null) {
+                        // Preserve existing port and SSL settings
+                        String currentPort = Main.dbManager.getRoundcubePort();
+                        String currentCert = Main.dbManager.getRoundcubeSslCert();
+                        String currentKey = Main.dbManager.getRoundcubeSslKey();
+                        String currentChain = Main.dbManager.getRoundcubeSslChain();
+                        sqliteOk = Main.dbManager.updateRoundcubeConfig(
+                            newDomain,
+                            currentPort != null ? currentPort : "8443",
+                            currentCert != null ? currentCert : "",
+                            currentKey != null ? currentKey : "",
+                            currentChain != null ? currentChain : ""
+                        );
+                    }
+                    steps.put(new JSONObject()
+                            .put("step", "SQLite config.roundcube_domain")
+                            .put("success", sqliteOk)
+                            .put("detail", sqliteOk ? oldDomain + " -> " + newDomain : "Errore aggiornamento SQLite"));
+
+                    // Step 2: Update Nginx server_name in roundcube.conf
+                    boolean nginxOk = updateNginxRoundcubeDomain(newDomain);
+                    steps.put(new JSONObject()
+                            .put("step", "Nginx roundcube.conf (server_name)")
+                            .put("success", nginxOk)
+                            .put("detail", nginxOk ? "server_name aggiornato a " + newDomain : "File non trovato o errore scrittura"));
+
+                    // Step 3: Reload Nginx
+                    boolean nginxReload = executeServiceCommand("nginx", "reload");
+                    steps.put(new JSONObject()
+                            .put("step", "Reload Nginx")
+                            .put("success", nginxReload)
+                            .put("detail", nginxReload ? "Nginx ricaricato" : "Nginx non in esecuzione o errore reload"));
+
+                    // Step 4: Refresh SSO manager URL
+                    boolean ssoOk = false;
+                    if (ssoManager != null) {
+                        try {
+                            String rcPort = Main.dbManager != null ? Main.dbManager.getRoundcubePort() : "8443";
+                            String newUrl = "https://" + newDomain;
+                            if (rcPort != null && !rcPort.isEmpty() && !rcPort.equals("443")) {
+                                newUrl += ":" + rcPort;
+                            }
+                            ssoManager.setRoundcubeUrl(newUrl);
+                            ssoOk = true;
+                        } catch (Exception e) {
+                            // best effort
+                        }
+                    }
+                    steps.put(new JSONObject()
+                            .put("step", "SSO Manager URL aggiornato")
+                            .put("success", ssoOk)
+                            .put("detail", ssoOk ? "URL SSO aggiornato per " + newDomain : "Errore aggiornamento SSO"));
+
+                    boolean overallSuccess = sqliteOk;
+
+                    // Manual actions
+                    JSONArray manualActions = new JSONArray();
+                    manualActions.put(new JSONObject()
+                            .put("action", "Configura record DNS A")
+                            .put("detail", "Il record A per '" + newDomain + "' deve puntare all'IP del server")
+                            .put("type", "dns"));
+                    manualActions.put(new JSONObject()
+                            .put("action", "Verifica certificato SSL")
+                            .put("detail", "Assicurati che il certificato SSL copra anche '" + newDomain + "'. "
+                                    + "Se Roundcube usa un certificato separato, rigeneralo per il nuovo dominio.")
+                            .put("type", "ssl"));
+
+                    response.put("success", overallSuccess);
+                    response.put("steps", steps);
+                    response.put("manual_actions", manualActions);
+                    response.put("old_domain", oldDomain);
+                    response.put("new_domain", newDomain);
+
+                    // Audit log
+                    logAudit("ROUNDCUBE_DOMAIN_CHANGED", getClientIp(exchange),
+                            "Roundcube domain changed: " + oldDomain + " -> " + newDomain);
+
+                } else if ("check_dns".equals(action)) {
+                    String domain = req.optString("domain", "");
+                    if (domain.isEmpty() && Main.dbManager != null) {
+                        domain = Main.dbManager.getRoundcubeDomain();
+                    }
+                    if (domain == null || domain.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "Nessun dominio Roundcube configurato");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
+                    String aResult = digRecord(domain, "A");
+                    boolean aOk = !aResult.isEmpty() && !serverIp.isEmpty() && aResult.contains(serverIp);
+
+                    response.put("success", true);
+                    response.put("domain", domain);
+                    response.put("server_ip", serverIp);
+                    response.put("a_record", aResult.isEmpty() ? "Non trovato" : aResult);
+                    response.put("a_ok", aOk);
+
+                } else {
+                    response.put("success", false);
+                    response.put("error", "Azione non valida. Usa 'change' o 'check_dns'.");
+                }
+
+            } else {
+                sendJsonError(exchange, 405, "Method not allowed");
+                return;
+            }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * Update server_name in Nginx roundcube.conf
+     */
+    private boolean updateNginxRoundcubeDomain(String newDomain) {
+        try {
+            Path nginxConf = Path.of("/usr/local/etc/nginx/sites-enabled/roundcube.conf");
+            if (!Files.exists(nginxConf)) {
+                // Try alternative path
+                nginxConf = Path.of("/usr/local/etc/nginx/roundcube.conf");
+                if (!Files.exists(nginxConf)) return false;
+            }
+            List<String> lines = Files.readAllLines(nginxConf);
+            boolean found = false;
+            for (int i = 0; i < lines.size(); i++) {
+                String trimmed = lines.get(i).trim();
+                if (trimmed.startsWith("server_name ")) {
+                    // Replace with the new domain
+                    String indent = lines.get(i).substring(0, lines.get(i).indexOf(trimmed));
+                    lines.set(i, indent + "server_name " + newDomain + ";");
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                Files.write(nginxConf, lines);
+                return true;
+            }
+        } catch (Exception e) {
+            LOGGER.warning("Could not update Nginx roundcube domain: " + e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Read the current 'myhostname' value from Postfix main.cf
+     */
+    private String readPostfixHostname() {
+        try {
+            Path mainCf = Path.of("/usr/local/etc/postfix/main.cf");
+            if (!Files.exists(mainCf)) return "";
+            List<String> lines = Files.readAllLines(mainCf);
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.startsWith("myhostname") && trimmed.contains("=")) {
+                    String value = trimmed.substring(trimmed.indexOf('=') + 1).trim();
+                    // Remove possible inline comments
+                    if (value.contains("#")) {
+                        value = value.substring(0, value.indexOf('#')).trim();
+                    }
+                    return value;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warning("Could not read Postfix hostname: " + e.getMessage());
+        }
+        return "";
+    }
+
+    /**
+     * Update 'myhostname' and 'mydomain' in Postfix main.cf
+     */
+    private boolean updatePostfixHostname(String newHostname) {
+        try {
+            Path mainCf = Path.of("/usr/local/etc/postfix/main.cf");
+            if (!Files.exists(mainCf)) return false;
+
+            List<String> lines = Files.readAllLines(mainCf);
+            List<String> updated = new ArrayList<>();
+            boolean foundMyhostname = false;
+            boolean foundMydomain = false;
+
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.startsWith("myhostname") && trimmed.contains("=")) {
+                    updated.add("myhostname = " + newHostname);
+                    foundMyhostname = true;
+                } else if (trimmed.startsWith("mydomain") && trimmed.contains("=") && !trimmed.startsWith("mydestination")) {
+                    updated.add("mydomain = " + newHostname);
+                    foundMydomain = true;
+                } else {
+                    updated.add(line);
+                }
+            }
+
+            // If not found, append them
+            if (!foundMyhostname) {
+                updated.add("myhostname = " + newHostname);
+            }
+            if (!foundMydomain) {
+                updated.add("mydomain = " + newHostname);
+            }
+
+            Files.write(mainCf, updated);
+            return true;
+        } catch (Exception e) {
+            LOGGER.warning("Could not update Postfix hostname: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Run dig to resolve a DNS record
+     */
+    private String digRecord(String name, String type) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("dig", "+short", name, type);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            StringBuilder output = new StringBuilder();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append(" ");
+                }
+            }
+            p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            return output.toString().trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * Run dig -x to resolve a PTR record
+     */
+    private String digPtrRecord(String ip) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("dig", "+short", "-x", ip);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            StringBuilder output = new StringBuilder();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append(" ");
+                }
+            }
+            p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            return output.toString().trim();
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private int getSessionAdminId(HttpExchange exchange) {

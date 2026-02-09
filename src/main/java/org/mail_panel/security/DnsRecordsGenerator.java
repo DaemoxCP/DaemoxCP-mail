@@ -718,7 +718,9 @@ public class DnsRecordsGenerator {
             if (autoconfigCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
                 autoconfigCheck.message = "OK: autoconfig → " + mailHostname;
             } else {
-                autoconfigCheck.message = "OK: autoconfig configurato";
+                // Record exists but points to wrong hostname
+                autoconfigCheck.passed = false;
+                autoconfigCheck.message = "Punta a " + autoconfigCheck.currentValue.trim() + " invece di " + mailHostname;
             }
         } else {
             // Not critical, just informational
@@ -737,7 +739,9 @@ public class DnsRecordsGenerator {
             if (autodiscoverCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
                 autodiscoverCheck.message = "OK: autodiscover → " + mailHostname;
             } else {
-                autodiscoverCheck.message = "OK: autodiscover configurato";
+                // Record exists but points to wrong hostname
+                autodiscoverCheck.passed = false;
+                autodiscoverCheck.message = "Punta a " + autodiscoverCheck.currentValue.trim() + " invece di " + mailHostname;
             }
         } else {
             // Not critical, just informational
@@ -763,6 +767,39 @@ public class DnsRecordsGenerator {
         result.checks.add(mtaStsCheck);
         // Don't fail overall for optional records
         // if (!mtaStsCheck.passed) result.allPassed = false;
+
+        // 9. Check SRV records for IMAP and SMTP submission
+        DnsCheck srvImapCheck = verifyRecord("_imaps._tcp." + domain, "SRV");
+        srvImapCheck.recordType = "SRV (_imaps)";
+        srvImapCheck.expectedValue = "0 1 993 " + mailHostname + ".";
+        if (srvImapCheck.passed && srvImapCheck.currentValue != null) {
+            if (srvImapCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
+                srvImapCheck.message = "OK: _imaps._tcp → " + mailHostname + ":993";
+            } else {
+                srvImapCheck.passed = false;
+                srvImapCheck.message = "Punta a " + srvImapCheck.currentValue.trim() + " invece di " + mailHostname;
+            }
+        } else {
+            srvImapCheck.passed = false;
+            srvImapCheck.message = "Non configurato (opzionale)";
+        }
+        result.checks.add(srvImapCheck);
+
+        DnsCheck srvSmtpCheck = verifyRecord("_submission._tcp." + domain, "SRV");
+        srvSmtpCheck.recordType = "SRV (_submission)";
+        srvSmtpCheck.expectedValue = "0 1 587 " + mailHostname + ".";
+        if (srvSmtpCheck.passed && srvSmtpCheck.currentValue != null) {
+            if (srvSmtpCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
+                srvSmtpCheck.message = "OK: _submission._tcp → " + mailHostname + ":587";
+            } else {
+                srvSmtpCheck.passed = false;
+                srvSmtpCheck.message = "Punta a " + srvSmtpCheck.currentValue.trim() + " invece di " + mailHostname;
+            }
+        } else {
+            srvSmtpCheck.passed = false;
+            srvSmtpCheck.message = "Non configurato (opzionale)";
+        }
+        result.checks.add(srvSmtpCheck);
 
         // Calculate score - only count required records (A, MX, SPF, DKIM, DMARC)
         int requiredCount = 5;
