@@ -1543,14 +1543,22 @@ public class MailPanelContent {
                 .then(data => {
                     if (!data.success || !data.domain || data.domain === 'Non configurato' || data.domain === '') return;
                     const tbody = document.getElementById('dnsVerificationBody');
-                    const icon = data.dns_ok
-                        ? '<i class="fas fa-check-circle text-success"></i>'
-                        : '<i class="fas fa-times-circle text-danger"></i>';
+                    let icon, expectedCol;
+                    if (data.dns_ok && data.dns_proxied) {
+                        icon = '<i class="fas fa-cloud text-info" title="Proxy/CDN"></i>';
+                        expectedCol = escapeHtml(data.server_ip || 'IP server') + ' <small class="text-muted">(proxy OK)</small>';
+                    } else if (data.dns_ok) {
+                        icon = '<i class="fas fa-check-circle text-success"></i>';
+                        expectedCol = escapeHtml(data.server_ip || 'IP server');
+                    } else {
+                        icon = '<i class="fas fa-times-circle text-danger"></i>';
+                        expectedCol = escapeHtml(data.server_ip || 'IP server');
+                    }
                     tbody.innerHTML += '<tr>' +
                         '<td><code>A</code> <small class="text-muted">(Webmail)</small></td>' +
-                        '<td><small>' + data.domain + '</small></td>' +
-                        '<td><small><code>' + (data.dns_result || 'Non trovato') + '</code></small></td>' +
-                        '<td><small><code>' + (data.server_ip || 'IP server') + '</code></small></td>' +
+                        '<td><small>' + escapeHtml(data.domain) + '</small></td>' +
+                        '<td><small><code>' + escapeHtml(data.dns_result || 'Non trovato') + '</code></small></td>' +
+                        '<td><small><code>' + expectedCol + '</code></small></td>' +
                         '<td class="text-center">' + icon + '</td></tr>';
 
                     if (!data.dns_ok) {
@@ -1563,8 +1571,8 @@ public class MailPanelContent {
                             '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
                             '<tr><td width="100"><strong>Type</strong></td><td><code>A</code></td></tr>' +
                             '<tr><td><strong>Name</strong></td><td><code>' + rcSub + '</code></td></tr>' +
-                            '<tr><td><strong>IPv4</strong></td><td><code>' + (data.server_ip || 'IP_SERVER') + '</code></td></tr>' +
-                            '<tr><td><strong>Proxy</strong></td><td><span class="text-danger fw-bold">DNS only (nuvola GRIGIA)</span></td></tr>' +
+                            '<tr><td><strong>IPv4</strong></td><td><code>' + escapeHtml(data.server_ip || 'IP_SERVER') + '</code></td></tr>' +
+                            '<tr><td><strong>Proxy</strong></td><td>Nuvola arancione o grigia (entrambe OK per webmail)</td></tr>' +
                             '<tr><td><strong>TTL</strong></td><td>Auto</td></tr>' +
                             '</table>' +
                             '<small class="text-muted"><i class="fas fa-info-circle me-1"></i>Cloudflare: Dashboard &rarr; <code>' + rcBaseDomain + '</code> &rarr; DNS &rarr; Aggiungi record</small>' +
@@ -3972,8 +3980,28 @@ public class MailPanelContent {
                             <small class="text-muted">FQDN per la webmail (es: webmail.miodominio.com, mail.miodominio.com)</small>
                         </div>
 
-                        <button class="btn btn-primary w-100" onclick="executeRcDomainChange()">
+                        <button class="btn btn-primary w-100 mb-3" onclick="executeRcDomainChange()">
                             <i class="fas fa-play me-1"></i>Cambia Dominio Roundcube
+                        </button>
+
+                        <hr>
+                        <h6><i class="fas fa-lock me-2"></i>Certificato SSL Roundcube</h6>
+                        <p class="text-muted small">Incolla il contenuto dei certificati PEM. Lascia vuoto per usare i certificati del mail server.</p>
+                        <small class="text-muted mb-2 d-block" id="rcSslPathInfo"></small>
+                        <div class="mb-2">
+                            <label class="form-label small"><strong>Certificato (fullchain.pem)</strong></label>
+                            <textarea class="form-control form-control-sm font-monospace" id="rcSslCertInput" rows="4" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small"><strong>Chiave Privata (privkey.pem)</strong></label>
+                            <textarea class="form-control form-control-sm font-monospace" id="rcSslKeyInput" rows="4" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small"><strong>CA Chain (opzionale)</strong></label>
+                            <textarea class="form-control form-control-sm font-monospace" id="rcSslChainInput" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                        </div>
+                        <button class="btn btn-warning w-100" onclick="executeRcSslChange()">
+                            <i class="fas fa-lock me-1"></i>Salva Certificato SSL
                         </button>
                     </div>
 
@@ -4744,10 +4772,12 @@ public class MailPanelContent {
                     const el = document.getElementById('rcDomainDns');
                     if (data.domain && data.domain !== 'Non configurato') {
                         el.style.display = 'block';
-                        if (data.dns_ok) {
+                        if (data.dns_ok && data.dns_proxied) {
+                            el.innerHTML = '<span class="badge bg-info"><i class="fas fa-cloud me-1"></i>DNS OK (Proxy/CDN) - ' + escapeHtml(data.domain) + ' -> ' + escapeHtml(data.dns_result) + '</span>';
+                        } else if (data.dns_ok) {
                             el.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>DNS OK - ' + escapeHtml(data.domain) + ' -> ' + escapeHtml(data.dns_result) + '</span>';
                         } else {
-                            el.innerHTML = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>DNS NON configurato per ' + escapeHtml(data.domain) + ' (atteso: ' + escapeHtml(data.server_ip || '?') + ', attuale: ' + escapeHtml(data.dns_result) + ')</span>';
+                            el.innerHTML = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>DNS NON configurato per ' + escapeHtml(data.domain) + '</span>';
                         }
                     }
                 });
@@ -4771,12 +4801,21 @@ public class MailPanelContent {
                     const dnsEl = document.getElementById('rcDomainDnsStatus');
                     if (data.domain) {
                         dnsEl.style.display = 'block';
-                        if (data.dns_ok) {
+                        if (data.dns_ok && data.dns_proxied) {
+                            dnsEl.innerHTML = '<div class="alert alert-info py-2 mb-0"><i class="fas fa-cloud me-1"></i>DNS OK (Proxy/CDN): <code>' + escapeHtml(data.domain) + '</code> -> <code>' + escapeHtml(data.dns_result) + '</code></div>';
+                        } else if (data.dns_ok) {
                             dnsEl.innerHTML = '<div class="alert alert-success py-2 mb-0"><i class="fas fa-check-circle me-1"></i>DNS OK: <code>' + escapeHtml(data.domain) + '</code> -> <code>' + escapeHtml(data.dns_result) + '</code></div>';
                         } else {
-                            dnsEl.innerHTML = '<div class="alert alert-warning py-2 mb-0"><i class="fas fa-exclamation-triangle me-1"></i>DNS non punta all\\'IP del server. Atteso: <code>' + escapeHtml(data.server_ip || '?') + '</code>, attuale: <code>' + escapeHtml(data.dns_result) + '</code></div>';
+                            dnsEl.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-times-circle me-1"></i>DNS non configurato per <code>' + escapeHtml(data.domain) + '</code></div>';
                         }
                     }
+
+                    // Populate SSL fields with file contents
+                    document.getElementById('rcSslCertInput').value = data.ssl_cert_content || '';
+                    document.getElementById('rcSslKeyInput').value = data.ssl_key_content || '';
+                    document.getElementById('rcSslChainInput').value = data.ssl_chain_content || '';
+                    const sslPath = data.nginx_ssl_cert || '';
+                    document.getElementById('rcSslPathInfo').textContent = sslPath ? 'File attuali: ' + sslPath + ', ' + (data.nginx_ssl_key || '') : '';
                 });
 
             new bootstrap.Modal(document.getElementById('changeRcDomainModal')).show();
@@ -4879,17 +4918,84 @@ public class MailPanelContent {
                 }
 
                 let html = '';
-                if (data.a_ok) {
+                if (data.a_ok && data.a_proxied) {
+                    html += '<div class="alert alert-info"><i class="fas fa-cloud me-2"></i>Record A per <code>' + escapeHtml(data.domain) + '</code> configurato tramite proxy/CDN (Cloudflare). Questo e\\' normale per la webmail.</div>';
+                } else if (data.a_ok) {
                     html += '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Record A per <code>' + escapeHtml(data.domain) + '</code> punta correttamente a <code>' + escapeHtml(data.server_ip) + '</code></div>';
                 } else {
-                    html += '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Record A per <code>' + escapeHtml(data.domain) + '</code> NON punta all\\'IP del server.<br>';
-                    html += '<strong>Attuale:</strong> <code>' + escapeHtml(data.a_record) + '</code> | <strong>Atteso:</strong> <code>' + escapeHtml(data.server_ip || '?') + '</code><br>';
+                    html += '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Record A per <code>' + escapeHtml(data.domain) + '</code> non risolve a nessun IP.<br>';
                     html += '<small class="text-muted">Configura un record A nel tuo pannello DNS (es. Cloudflare): <strong>Tipo</strong> A, <strong>Nome</strong> ' + escapeHtml(data.domain.split('.')[0]) + ', <strong>IPv4</strong> ' + escapeHtml(data.server_ip || 'IP_SERVER') + '</small></div>';
                 }
                 checksDiv.innerHTML = html;
             })
             .catch(err => {
                 checksDiv.innerHTML = '<div class="alert alert-danger">Errore: ' + err.message + '</div>';
+            });
+        }
+
+        function executeRcSslChange() {
+            const sslCert = document.getElementById('rcSslCertInput').value.trim();
+            const sslKey = document.getElementById('rcSslKeyInput').value.trim();
+            const sslChain = document.getElementById('rcSslChainInput').value.trim();
+
+            if (!sslCert && !sslKey) {
+                if (!confirm('Certificato e chiave vuoti: verranno usati i certificati del mail server. Continuare?')) return;
+            }
+            if ((sslCert && !sslKey) || (!sslCert && sslKey)) {
+                alert('Devi specificare sia il certificato che la chiave, oppure lasciare entrambi vuoti.');
+                return;
+            }
+            if (sslCert && !sslCert.includes('BEGIN')) {
+                alert('Il certificato deve essere in formato PEM (inizia con -----BEGIN CERTIFICATE-----)');
+                return;
+            }
+            if (sslKey && !sslKey.includes('BEGIN')) {
+                alert('La chiave deve essere in formato PEM (inizia con -----BEGIN PRIVATE KEY----- o -----BEGIN RSA PRIVATE KEY-----)');
+                return;
+            }
+
+            // Show progress
+            document.getElementById('rcDomainStep1').style.display = 'none';
+            document.getElementById('rcDomainStep2').style.display = 'block';
+            document.getElementById('rcDomainStep3').style.display = 'none';
+
+            fetch('/api/roundcube-domain', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update_ssl',
+                    ssl_cert: sslCert,
+                    ssl_key: sslKey,
+                    ssl_chain: sslChain,
+                    csrf_token: csrfToken
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('rcDomainStep2').style.display = 'none';
+                document.getElementById('rcDomainStep3').style.display = 'block';
+
+                const stepsDiv = document.getElementById('rcDomainAutoSteps');
+                if (data.steps) {
+                    stepsDiv.innerHTML = data.steps.map(s => {
+                        const icon = s.success
+                            ? '<i class="fas fa-check-circle text-success me-2"></i>'
+                            : '<i class="fas fa-times-circle text-danger me-2"></i>';
+                        return '<div class="d-flex align-items-start mb-2">' + icon +
+                            '<div><strong>' + escapeHtml(s.step) + '</strong><br><small class="text-muted">' +
+                            escapeHtml(s.detail) + '</small></div></div>';
+                    }).join('');
+                }
+
+                document.getElementById('rcDomainManualActions').innerHTML =
+                    data.success
+                        ? '<div class="alert alert-success py-2"><i class="fas fa-check-circle me-1"></i>Certificato SSL aggiornato. Verifica che Roundcube funzioni correttamente.</div>'
+                        : '<div class="alert alert-danger py-2"><i class="fas fa-times-circle me-1"></i>Errore: ' + escapeHtml(data.error || 'Controlla i log') + '</div>';
+            })
+            .catch(err => {
+                document.getElementById('rcDomainStep2').style.display = 'none';
+                document.getElementById('rcDomainStep1').style.display = 'block';
+                alert('Errore: ' + err.message);
             });
         }
 

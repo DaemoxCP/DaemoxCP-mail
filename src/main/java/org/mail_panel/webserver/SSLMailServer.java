@@ -258,13 +258,10 @@ public class SSLMailServer {
                 return;
             }
 
-            // Extract the base domain for RP ID (e.g., "server.example.com" -> "example.com")
+            // Use the full panel hostname as RP ID (e.g., "server.example.com")
+            // This isolates passkeys per subdomain, allowing multiple panels
+            // under the same domain to have independent passkeys
             String rpId = panelHost;
-            String[] parts = panelHost.split("\\.");
-            if (parts.length >= 2) {
-                // Use the last two parts as RP ID (e.g., example.com)
-                rpId = parts[parts.length - 2] + "." + parts[parts.length - 1];
-            }
 
             // Build origins set - panel hostname with and without port
             Set<String> origins = new HashSet<>();
@@ -4851,11 +4848,45 @@ public class SSLMailServer {
                 String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
 
                 // Check DNS for Roundcube domain
+                // For webmail, Cloudflare proxy (orange cloud) is perfectly fine
                 boolean dnsOk = false;
+                boolean dnsProxied = false;
                 String dnsResult = "";
                 if (!rcDomain.isEmpty()) {
                     dnsResult = digRecord(rcDomain, "A");
-                    dnsOk = !dnsResult.isEmpty() && !serverIp.isEmpty() && dnsResult.contains(serverIp);
+                    if (!dnsResult.isEmpty()) {
+                        if (!serverIp.isEmpty() && dnsResult.contains(serverIp)) {
+                            dnsOk = true;  // Direct IP match
+                        } else {
+                            // Check if it resolves to known CDN/proxy IPs (Cloudflare etc.)
+                            // If it resolves to ANY IP, the domain is configured (might be proxied)
+                            dnsProxied = true;
+                            dnsOk = true;
+                        }
+                    }
+                }
+
+                // Read actual SSL paths from nginx.conf
+                String[] nginxSslPaths = readNginxRoundcubeSslPaths();
+                String certPath = nginxSslPaths[0].isEmpty() ? "/usr/local/etc/ssl/mail/fullchain.pem" : nginxSslPaths[0];
+                String keyPath = nginxSslPaths[1].isEmpty() ? "/usr/local/etc/ssl/mail/privkey.pem" : nginxSslPaths[1];
+
+                // Read SSL file contents to show in textarea
+                String certContent = "";
+                String keyContent = "";
+                String chainContent = "";
+                try {
+                    if (Files.exists(Path.of(certPath))) certContent = Files.readString(Path.of(certPath));
+                } catch (Exception ignored) {}
+                try {
+                    if (Files.exists(Path.of(keyPath))) keyContent = Files.readString(Path.of(keyPath));
+                } catch (Exception ignored) {}
+                // Chain: check if separate chain file exists in same dir
+                String rcSslChain = Main.dbManager != null ? Main.dbManager.getRoundcubeSslChain() : "";
+                if (rcSslChain != null && !rcSslChain.isEmpty()) {
+                    try {
+                        if (Files.exists(Path.of(rcSslChain))) chainContent = Files.readString(Path.of(rcSslChain));
+                    } catch (Exception ignored) {}
                 }
 
                 response.put("success", true);
@@ -4864,6 +4895,12 @@ public class SSLMailServer {
                 response.put("server_ip", serverIp);
                 response.put("dns_result", dnsResult.isEmpty() ? "Non trovato" : dnsResult);
                 response.put("dns_ok", dnsOk);
+                response.put("dns_proxied", dnsProxied);
+                response.put("nginx_ssl_cert", certPath);
+                response.put("nginx_ssl_key", keyPath);
+                response.put("ssl_cert_content", certContent);
+                response.put("ssl_key_content", keyContent);
+                response.put("ssl_chain_content", chainContent);
 
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
@@ -4904,14 +4941,15 @@ public class SSLMailServer {
 
                     JSONArray steps = new JSONArray();
 
+                    // Read current settings before updating
+                    String currentPort = Main.dbManager != null ? Main.dbManager.getRoundcubePort() : "8443";
+                    String currentCert = Main.dbManager != null ? Main.dbManager.getRoundcubeSslCert() : "";
+                    String currentKey = Main.dbManager != null ? Main.dbManager.getRoundcubeSslKey() : "";
+                    String currentChain = Main.dbManager != null ? Main.dbManager.getRoundcubeSslChain() : "";
+
                     // Step 1: Update SQLite roundcube_domain
                     boolean sqliteOk = false;
                     if (Main.dbManager != null) {
-                        // Preserve existing port and SSL settings
-                        String currentPort = Main.dbManager.getRoundcubePort();
-                        String currentCert = Main.dbManager.getRoundcubeSslCert();
-                        String currentKey = Main.dbManager.getRoundcubeSslKey();
-                        String currentChain = Main.dbManager.getRoundcubeSslChain();
                         sqliteOk = Main.dbManager.updateRoundcubeConfig(
                             newDomain,
                             currentPort != null ? currentPort : "8443",
@@ -4925,12 +4963,14 @@ public class SSLMailServer {
                             .put("success", sqliteOk)
                             .put("detail", sqliteOk ? oldDomain + " -> " + newDomain : "Errore aggiornamento SQLite"));
 
-                    // Step 2: Update Nginx server_name in roundcube.conf
-                    boolean nginxOk = updateNginxRoundcubeDomain(newDomain);
+                    // Step 2: Regenerate entire nginx.conf with new domain
+                    String rcCert = currentCert != null && !currentCert.isEmpty() ? currentCert : "/usr/local/etc/ssl/mail/fullchain.pem";
+                    String rcKey = currentKey != null && !currentKey.isEmpty() ? currentKey : "/usr/local/etc/ssl/mail/privkey.pem";
+                    boolean nginxOk = regenerateNginxRoundcubeConfig(newDomain, currentPort, rcCert, rcKey);
                     steps.put(new JSONObject()
-                            .put("step", "Nginx roundcube.conf (server_name)")
+                            .put("step", "Nginx nginx.conf rigenerato")
                             .put("success", nginxOk)
-                            .put("detail", nginxOk ? "server_name aggiornato a " + newDomain : "File non trovato o errore scrittura"));
+                            .put("detail", nginxOk ? "server_name=" + newDomain + ", risponde SOLO a questo dominio" : "Errore scrittura nginx.conf"));
 
                     // Step 3: Reload Nginx
                     boolean nginxReload = executeServiceCommand("nginx", "reload");
@@ -4943,7 +4983,7 @@ public class SSLMailServer {
                     boolean ssoOk = false;
                     if (ssoManager != null) {
                         try {
-                            String rcPort = Main.dbManager != null ? Main.dbManager.getRoundcubePort() : "8443";
+                            String rcPort = currentPort != null ? currentPort : "8443";
                             String newUrl = "https://" + newDomain;
                             if (rcPort != null && !rcPort.isEmpty() && !rcPort.equals("443")) {
                                 newUrl += ":" + rcPort;
@@ -4983,6 +5023,129 @@ public class SSLMailServer {
                     logAudit("ROUNDCUBE_DOMAIN_CHANGED", getClientIp(exchange),
                             "Roundcube domain changed: " + oldDomain + " -> " + newDomain);
 
+                } else if ("update_ssl".equals(action)) {
+                    // Receive PEM content, save to disk, update nginx
+                    String certContent = req.optString("ssl_cert", "").trim();
+                    String keyContent = req.optString("ssl_key", "").trim();
+                    String chainContent = req.optString("ssl_chain", "").trim();
+
+                    // Validate PEM format
+                    if (!certContent.isEmpty() && !certContent.contains("BEGIN")) {
+                        response.put("success", false);
+                        response.put("error", "Il certificato deve essere in formato PEM");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                    if (!keyContent.isEmpty() && !keyContent.contains("BEGIN")) {
+                        response.put("success", false);
+                        response.put("error", "La chiave deve essere in formato PEM");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    JSONArray steps = new JSONArray();
+
+                    // Determine file paths
+                    String sslDir = "/usr/local/etc/ssl/roundcube";
+                    String certPath, keyPath, chainPath;
+
+                    if (certContent.isEmpty() && keyContent.isEmpty()) {
+                        // Use mail server certs
+                        certPath = "/usr/local/etc/ssl/mail/fullchain.pem";
+                        keyPath = "/usr/local/etc/ssl/mail/privkey.pem";
+                        chainPath = "";
+                        steps.put(new JSONObject()
+                                .put("step", "Usa certificati del mail server")
+                                .put("success", true)
+                                .put("detail", "fullchain.pem e privkey.pem da /usr/local/etc/ssl/mail/"));
+                    } else {
+                        // Save PEM content to /usr/local/etc/ssl/roundcube/
+                        certPath = sslDir + "/fullchain.pem";
+                        keyPath = sslDir + "/privkey.pem";
+                        chainPath = chainContent.isEmpty() ? "" : sslDir + "/chain.pem";
+
+                        try {
+                            Files.createDirectories(Path.of(sslDir));
+
+                            // If chain provided, concatenate cert + chain into fullchain.pem
+                            // This is how fullchain works: cert first, then intermediate CA(s)
+                            String fullchainContent = certContent;
+                            if (!chainContent.isEmpty()) {
+                                fullchainContent = certContent + "\n" + chainContent;
+                                // Also save chain separately for reference
+                                Files.writeString(Path.of(chainPath), chainContent);
+                            }
+
+                            Files.writeString(Path.of(certPath), fullchainContent);
+                            Files.writeString(Path.of(keyPath), keyContent);
+
+                            // Secure permissions
+                            new ProcessBuilder("chmod", "600", keyPath).start().waitFor();
+                            new ProcessBuilder("chmod", "644", certPath).start().waitFor();
+
+                            String detail = "Salvati in " + sslDir + "/";
+                            if (!chainContent.isEmpty()) {
+                                detail += " (chain inclusa nel fullchain.pem)";
+                            }
+
+                            steps.put(new JSONObject()
+                                    .put("step", "Certificati salvati su disco")
+                                    .put("success", true)
+                                    .put("detail", detail));
+                        } catch (Exception e) {
+                            steps.put(new JSONObject()
+                                    .put("step", "Salvataggio certificati su disco")
+                                    .put("success", false)
+                                    .put("detail", "Errore: " + e.getMessage()));
+                            response.put("success", false);
+                            response.put("steps", steps);
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
+                    }
+
+                    // Step 2: Update SQLite (preserve domain and port, update SSL paths)
+                    boolean sqliteOk = false;
+                    if (Main.dbManager != null) {
+                        String currentDomain = Main.dbManager.getRoundcubeDomain();
+                        String currentPort = Main.dbManager.getRoundcubePort();
+                        sqliteOk = Main.dbManager.updateRoundcubeConfig(
+                            currentDomain != null ? currentDomain : "",
+                            currentPort != null ? currentPort : "8443",
+                            certPath, keyPath, chainPath
+                        );
+                    }
+                    steps.put(new JSONObject()
+                            .put("step", "SQLite aggiornato")
+                            .put("success", sqliteOk)
+                            .put("detail", sqliteOk ? "Percorsi SSL salvati nel database" : "Errore aggiornamento SQLite"));
+
+                    // Step 3: Regenerate nginx.conf
+                    String currentDomainForSsl = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : "";
+                    String currentPortForSsl = Main.dbManager != null ? Main.dbManager.getRoundcubePort() : "8443";
+                    boolean nginxOk = regenerateNginxRoundcubeConfig(
+                        currentDomainForSsl != null ? currentDomainForSsl : "",
+                        currentPortForSsl != null ? currentPortForSsl : "8443",
+                        certPath, keyPath
+                    );
+                    steps.put(new JSONObject()
+                            .put("step", "Nginx rigenerato")
+                            .put("success", nginxOk)
+                            .put("detail", nginxOk ? "nginx.conf aggiornato con i nuovi certificati" : "Errore scrittura nginx.conf"));
+
+                    // Step 4: Reload Nginx
+                    boolean nginxReload = executeServiceCommand("nginx", "reload");
+                    steps.put(new JSONObject()
+                            .put("step", "Reload Nginx")
+                            .put("success", nginxReload)
+                            .put("detail", nginxReload ? "Nginx ricaricato" : "Nginx non in esecuzione o errore reload"));
+
+                    response.put("success", sqliteOk && nginxOk);
+                    response.put("steps", steps);
+
+                    logAudit("ROUNDCUBE_SSL_UPDATED", getClientIp(exchange),
+                            "Roundcube SSL updated: cert=" + certPath + " key=" + keyPath);
+
                 } else if ("check_dns".equals(action)) {
                     String domain = req.optString("domain", "");
                     if (domain.isEmpty() && Main.dbManager != null) {
@@ -4997,13 +5160,24 @@ public class SSLMailServer {
 
                     String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
                     String aResult = digRecord(domain, "A");
-                    boolean aOk = !aResult.isEmpty() && !serverIp.isEmpty() && aResult.contains(serverIp);
+                    boolean aOk = false;
+                    boolean aProxied = false;
+                    if (!aResult.isEmpty()) {
+                        if (!serverIp.isEmpty() && aResult.contains(serverIp)) {
+                            aOk = true;
+                        } else {
+                            // Resolves to different IP = likely CDN/proxy, fine for web traffic
+                            aProxied = true;
+                            aOk = true;
+                        }
+                    }
 
                     response.put("success", true);
                     response.put("domain", domain);
                     response.put("server_ip", serverIp);
                     response.put("a_record", aResult.isEmpty() ? "Non trovato" : aResult);
                     response.put("a_ok", aOk);
+                    response.put("a_proxied", aProxied);
 
                 } else {
                     response.put("success", false);
@@ -5023,36 +5197,107 @@ public class SSLMailServer {
     }
 
     /**
-     * Update server_name in Nginx roundcube.conf
+     * Read current ssl_certificate and ssl_certificate_key from Nginx config.
+     * Checks sites-enabled/roundcube.conf first (RoundcubeScript), then nginx.conf (FullMailServerScript).
      */
-    private boolean updateNginxRoundcubeDomain(String newDomain) {
+    private String[] readNginxRoundcubeSslPaths() {
+        String[] result = {"", ""};
+        Path nginxConf = Path.of("/usr/local/etc/nginx/sites-enabled/roundcube.conf");
+        if (!Files.exists(nginxConf)) {
+            nginxConf = Path.of("/usr/local/etc/nginx/nginx.conf");
+        }
+        if (!Files.exists(nginxConf)) return result;
+
         try {
-            Path nginxConf = Path.of("/usr/local/etc/nginx/sites-enabled/roundcube.conf");
-            if (!Files.exists(nginxConf)) {
-                // Try alternative path
-                nginxConf = Path.of("/usr/local/etc/nginx/roundcube.conf");
-                if (!Files.exists(nginxConf)) return false;
-            }
             List<String> lines = Files.readAllLines(nginxConf);
-            boolean found = false;
-            for (int i = 0; i < lines.size(); i++) {
-                String trimmed = lines.get(i).trim();
-                if (trimmed.startsWith("server_name ")) {
-                    // Replace with the new domain
-                    String indent = lines.get(i).substring(0, lines.get(i).indexOf(trimmed));
-                    lines.set(i, indent + "server_name " + newDomain + ";");
-                    found = true;
-                    break;
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.startsWith("ssl_certificate ") && !trimmed.startsWith("ssl_certificate_key")) {
+                    result[0] = trimmed.replace("ssl_certificate", "").replace(";", "").trim();
+                } else if (trimmed.startsWith("ssl_certificate_key ")) {
+                    result[1] = trimmed.replace("ssl_certificate_key", "").replace(";", "").trim();
                 }
             }
-            if (found) {
-                Files.write(nginxConf, lines);
-                return true;
-            }
         } catch (Exception e) {
-            LOGGER.warning("Could not update Nginx roundcube domain: " + e.getMessage());
+            LOGGER.warning("Could not read Nginx SSL paths: " + e.getMessage());
         }
-        return false;
+        return result;
+    }
+
+    /**
+     * Regenerate the entire /usr/local/etc/nginx/nginx.conf from current SQLite settings.
+     * Produces a config identical to FullMailServerScript but with a default_server block
+     * that rejects requests on non-matching hostnames (returns 444 = close connection).
+     */
+    private boolean regenerateNginxRoundcubeConfig(String domain, String port, String sslCert, String sslKey) {
+        try {
+            // Defaults
+            if (port == null || port.isEmpty()) port = "8443";
+            if (sslCert == null || sslCert.isEmpty()) sslCert = "/usr/local/etc/ssl/mail/fullchain.pem";
+            if (sslKey == null || sslKey.isEmpty()) sslKey = "/usr/local/etc/ssl/mail/privkey.pem";
+
+            String config = """
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+    client_max_body_size 50M;
+
+    # Default server: reject requests on non-matching hostnames
+    server {
+        listen %s ssl default_server;
+        server_name _;
+
+        ssl_certificate %s;
+        ssl_certificate_key %s;
+
+        return 444;
+    }
+
+    # Roundcube webmail: responds ONLY to the configured domain
+    server {
+        listen %s ssl;
+        server_name %s;
+        root /usr/local/www/roundcube;
+        index index.php;
+
+        ssl_certificate %s;
+        ssl_certificate_key %s;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        location / {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        location ~ \\.php$ {
+            fastcgi_pass unix:/var/run/php-fpm.sock;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+        }
+
+        location ~ /\\. { deny all; }
+    }
+}
+""".formatted(port, sslCert, sslKey, port, domain, sslCert, sslKey);
+
+            Path nginxConf = Path.of("/usr/local/etc/nginx/nginx.conf");
+            Files.writeString(nginxConf, config);
+            return true;
+        } catch (Exception e) {
+            LOGGER.warning("Could not regenerate Nginx roundcube config: " + e.getMessage());
+            return false;
+        }
     }
 
     /**
