@@ -42,6 +42,7 @@ public class MailPanelContent {
             writeFile(adminDir + "/logs.html", getLogsHtml());
             writeFile(adminDir + "/queue.html", getQueueHtml());
             writeFile(adminDir + "/security.html", getSecurityHtml());
+            writeFile(adminDir + "/paths.html", getPathsHtml());
             writeFile(adminDir + "/install.html", getInstallHtml());
             writeFile(adminDir + "/settings.html", getSettingsHtml());
             writeFile(adminDir + "/statistics.html", getStatisticsHtml());
@@ -76,6 +77,8 @@ public class MailPanelContent {
                 <li class="nav-item"><a class="nav-link" href="/aliases" data-page="aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
                 <li class="nav-item"><a class="nav-link" href="/dns" data-page="dns"><i class="fas fa-server me-1"></i>DNS</a></li>
                 <li class="nav-item"><a class="nav-link" href="/ssl" data-page="ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
+                <li class="nav-item"><a class="nav-link" href="/security" data-page="security"><i class="fas fa-shield-alt me-1"></i>Sicurezza</a></li>
+                <li class="nav-item"><a class="nav-link" href="/paths" data-page="paths"><i class="fas fa-folder-tree me-1"></i>Path</a></li>
                 <li class="nav-item"><a class="nav-link" href="/logs" data-page="logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
                 <li class="nav-item"><a class="nav-link" href="/settings" data-page="settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
             </ul>
@@ -264,6 +267,10 @@ public class MailPanelContent {
 " href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("ssl") ? " active" : "") + """
 " href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("security") ? " active" : "") + """
+" href="/security"><i class="fas fa-shield-alt me-1"></i>Sicurezza</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("paths") ? " active" : "") + """
+" href="/paths"><i class="fas fa-folder-tree me-1"></i>Path</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("logs") ? " active" : "") + """
 " href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("settings") ? " active" : "") + """
@@ -571,7 +578,7 @@ public class MailPanelContent {
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-user"></i></span>
                             <input type="text" class="form-control" id="username" placeholder="Inserisci il tuo username"
-                                   pattern="^[a-zA-Z0-9_-]{3,50}$" minlength="3" maxlength="50" autocomplete="username">
+                                   pattern="^[a-zA-Z0-9_\\-]{3,50}$" minlength="3" maxlength="50" autocomplete="username">
                         </div>
                         <div class="validation-error" id="usernameError">Username non valido.</div>
                     </div>
@@ -2705,6 +2712,17 @@ public class MailPanelContent {
         [data-theme="dark"] .card-header.bg-dark { background-color: #1a1d21 !important; }
         [data-theme="dark"] .bg-white { background-color: var(--bg-input) !important; color: var(--text-primary) !important; }
         [data-theme="dark"] .border { border-color: var(--border-color) !important; }
+        /* ===== Explanation panels (details > div.bg-white) ===== */
+        [data-theme="dark"] details .bg-white,
+        [data-theme="dark"] details > div { background-color: var(--bg-input) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
+        [data-theme="dark"] details strong { color: var(--text-primary); }
+        [data-theme="dark"] details .table,
+        [data-theme="dark"] details .table > :not(caption) > * > * { background-color: transparent !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
+        [data-theme="dark"] details .table-sm td, [data-theme="dark"] details .table-sm th { color: var(--text-primary) !important; }
+        [data-theme="dark"] details code { background-color: var(--table-stripe) !important; color: #f8f9fa !important; padding: 1px 4px; border-radius: 3px; }
+        [data-theme="dark"] details summary { color: var(--text-primary); }
+        /* Globale: tabelle dentro alert/info che non riceverebbero override */
+        [data-theme="dark"] .alert .table, [data-theme="dark"] .alert .table > :not(caption) > * > * { background-color: transparent !important; color: var(--text-primary) !important; }
         """;
         return getHead("DNS", extraStyles) + getNavbar("dns") + """
     <div class="content container mt-4">
@@ -2961,6 +2979,80 @@ public class MailPanelContent {
             <h2><i class="fas fa-lock me-2"></i>Certificati SSL/TLS Mail Server</h2>
             <p class="text-muted">Gestisci il certificato SSL per Postfix e Dovecot (<strong>{{MAIL_HOSTNAME}}</strong>)</p>
 
+            <!-- Guida Let's Encrypt -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#leGuide" aria-expanded="false">
+                    <i class="fas fa-book me-2"></i><strong>Guida Let's Encrypt</strong>
+                    <small class="ms-2 text-white-50">— clicca per espandere/comprimere</small>
+                    <i class="fas fa-chevron-down float-end mt-1"></i>
+                </div>
+                <div id="leGuide" class="collapse">
+                    <div class="card-body">
+                        <h5><i class="fas fa-clock me-2"></i>Validità e rinnovo</h5>
+                        <ul>
+                            <li>I certificati Let's Encrypt durano <strong>90 giorni</strong>.</li>
+                            <li>Il rinnovo è <strong>tecnicamente possibile in qualsiasi momento</strong>, ma esistono dei <em>rate limit</em>.</li>
+                            <li>La <strong>soglia ufficiale raccomandata</strong> da Let's Encrypt e da <code>acme.sh</code> è di <strong>30 giorni prima della scadenza</strong>.</li>
+                        </ul>
+
+                        <h5 class="mt-3"><i class="fas fa-tachometer-alt me-2"></i>Rate limit principali</h5>
+                        <ul>
+                            <li><strong>5 certificati duplicati</strong> a settimana per lo stesso set di hostname.</li>
+                            <li><strong>50 certificati</strong> a settimana per dominio registrato.</li>
+                            <li><strong>5 validazioni fallite</strong> all'ora per account/hostname.</li>
+                            <li><strong>300 nuovi ordini</strong> ogni 3 ore per account.</li>
+                        </ul>
+                        <p class="text-muted small">Se rinnovi troppo spesso o sbagli ripetutamente la verifica, vieni temporaneamente bloccato.</p>
+
+                        <h5 class="mt-3"><i class="fas fa-sliders-h me-2"></i>Quale soglia mettere nel campo "Soglia rinnovo"?</h5>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle mb-2">
+                                <thead class="table-light">
+                                    <tr><th style="width:120px">Giorni</th><th>Quando usarla</th><th>Note</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="table-success"><td><strong>30</strong> ✅</td><td><strong>Default consigliato</strong></td><td>Raccomandato da Let's Encrypt e da acme.sh</td></tr>
+                                    <tr><td>14–29</td><td>Aggressivo</td><td>OK ma meno margine se il rinnovo fallisce alla prima</td></tr>
+                                    <tr class="table-danger"><td>&lt; 14</td><td>Rischioso</td><td>Se DNS non si propaga o c'è un outage, rimani senza certificato</td></tr>
+                                    <tr><td>31–60</td><td>Conservativo</td><td>Funziona ma sprechi giorni di validità del cert precedente</td></tr>
+                                    <tr class="table-danger"><td>&gt; 60</td><td>Sconsigliato</td><td>Rischio di sbattere contro il rate limit (5/settimana)</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="mb-0"><strong>Range pratico utile: 14–60 giorni. Sweet spot: 30.</strong></p>
+
+                        <h5 class="mt-3"><i class="fas fa-route me-2"></i>HTTP-01 vs DNS-01</h5>
+                        <ul>
+                            <li><strong>HTTP-01</strong>: il più semplice. Richiede che la <strong>porta 80</strong> sia raggiungibile da internet sul mail server.</li>
+                            <li><strong>DNS-01</strong>: funziona anche dietro firewall. Richiede di aggiungere un record TXT al DNS (tipo Cloudflare).</li>
+                            <li>Per il <strong>mail server</strong>, DNS-01 è spesso più affidabile perché i mail server raramente espongono la porta 80.</li>
+                        </ul>
+
+                        <h5 class="mt-3"><i class="fas fa-redo me-2"></i>Rinnovo automatico</h5>
+                        <ul>
+                            <li>Il pannello fa un check ogni 24 ore, mentre è in esecuzione.</li>
+                            <li>Quando i giorni residui scendono sotto la soglia, lancia automaticamente <code>acme.sh --renew</code> e ridepoia il certificato su Postfix, Dovecot e Nginx.</li>
+                            <li>Se il pannello è spento per giorni, il check non avviene — assicurati che il servizio sia avviato.</li>
+                            <li>Il risultato dell'ultimo controllo è visibile nella card "Rinnovo Automatico" qui sopra.</li>
+                        </ul>
+
+                        <h5 class="mt-3"><i class="fas fa-bug me-2"></i>"Certificato già esistente" — cosa significa?</h5>
+                        <p class="mb-1">Quando provi a generare un nuovo certificato e <code>acme.sh</code> trova già un cert valido per quell'hostname, blocca l'operazione per evitare di sprecare un rinnovo.</p>
+                        <p class="mb-0">Hai due opzioni:</p>
+                        <ul>
+                            <li><strong>Deploy Certificato Esistente</strong> → riusa quello attuale (consigliato).</li>
+                            <li><strong>Rigenera Challenge</strong> → forza un nuovo cert (usa solo se quello esistente è corrotto).</li>
+                        </ul>
+
+                        <h5 class="mt-3"><i class="fas fa-link me-2"></i>Riferimenti</h5>
+                        <ul class="mb-0">
+                            <li><a href="https://letsencrypt.org/docs/rate-limits/" target="_blank" rel="noopener">Rate limits ufficiali Let's Encrypt</a></li>
+                            <li><a href="https://github.com/acmesh-official/acme.sh/wiki" target="_blank" rel="noopener">Wiki acme.sh</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <!-- SSL Hostname Mismatch Warning -->
             <div id="sslHostnameMismatch" class="alert alert-danger d-none">
                 <h5><i class="fas fa-exclamation-triangle me-2"></i>Certificato Non Valido per l'Hostname Attuale</h5>
@@ -2987,6 +3079,45 @@ public class MailPanelContent {
                 </div>
             </div>
 
+            <!-- Auto-Renewal Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-sync-alt me-2"></i>Rinnovo Automatico</span>
+                    <span id="autoRenewBadge" class="badge bg-secondary">-</span>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="autoRenewEnabled" onchange="saveAutoRenewSettings()">
+                                <label class="form-check-label" for="autoRenewEnabled">
+                                    <strong>Abilita rinnovo automatico</strong>
+                                </label>
+                                <div class="text-muted small">Il pannello controlla ogni 24h e rinnova prima della scadenza</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Soglia rinnovo (giorni prima della scadenza)</label>
+                                <input type="number" class="form-control" id="autoRenewThreshold" value="30" min="1" max="89" onchange="saveAutoRenewSettings()">
+                                <div class="text-muted small">Default: 30 giorni</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr><td><strong>Ultimo controllo:</strong></td><td id="autoRenewLastCheck" class="text-muted">Mai</td></tr>
+                                    <tr><td><strong>Esito:</strong></td><td id="autoRenewLastResult" class="text-muted">-</td></tr>
+                                    <tr><td><strong>Ultimo rinnovo:</strong></td><td id="autoRenewLastRenewal" class="text-muted">Mai</td></tr>
+                                    <tr><td><strong>Prossimo controllo:</strong></td><td id="autoRenewNextCheck" class="text-muted">-</td></tr>
+                                </tbody>
+                            </table>
+                            <button class="btn btn-outline-info btn-sm" onclick="triggerManualCheck()">
+                                <i class="fas fa-play me-1"></i>Verifica e rinnova ora
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- SSL Configuration Options -->
             <h4 class="mb-3"><i class="fas fa-cogs me-2"></i>Configura Certificato SSL</h4>
 
@@ -2995,10 +3126,10 @@ public class MailPanelContent {
                 <div class="col-md-4 mb-3">
                     <div class="card option-card h-100" onclick="selectOption(1)">
                         <div class="card-body text-center">
-                            <i class="fas fa-bolt fa-3x text-success mb-3"></i>
+                            <i class="fas fa-bolt fa-3x text-warning mb-3"></i>
                             <h5>Let's Encrypt (HTTP-01)</h5>
                             <p class="text-muted small">Automatico - richiede porta 80 accessibile da internet</p>
-                            <span class="badge bg-success">Consigliato</span>
+                            <span class="badge bg-danger">Non consigliato</span>
                         </div>
                     </div>
                 </div>
@@ -3007,10 +3138,10 @@ public class MailPanelContent {
                 <div class="col-md-4 mb-3">
                     <div class="card option-card h-100" onclick="selectOption(2)">
                         <div class="card-body text-center">
-                            <i class="fas fa-globe fa-3x text-primary mb-3"></i>
+                            <i class="fas fa-globe fa-3x text-success mb-3"></i>
                             <h5>Let's Encrypt (DNS-01)</h5>
                             <p class="text-muted small">Via record DNS TXT - funziona anche dietro firewall</p>
-                            <span class="badge bg-primary">Universale</span>
+                            <span class="badge bg-success">Consigliato</span>
                         </div>
                     </div>
                 </div>
@@ -3148,10 +3279,108 @@ public class MailPanelContent {
                     <i class="fas fa-upload me-2"></i>Carica Certificato Manuale
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Incolla il contenuto del certificato (fullchain.pem) e della chiave privata (privkey.pem).
+
+                    <!-- Guida certificato manuale -->
+                    <div class="card mb-4 border-info">
+                        <div class="card-header bg-info text-white" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#manualGuide" aria-expanded="true">
+                            <i class="fas fa-book me-2"></i><strong>Guida: come usare un certificato comprato da una CA</strong>
+                            <i class="fas fa-chevron-down float-end mt-1"></i>
+                        </div>
+                        <div id="manualGuide" class="collapse show">
+                            <div class="card-body">
+
+                                <h5><i class="fas fa-question-circle me-2"></i>Perché serve il "fullchain"?</h5>
+                                <p>
+                                    Il pannello chiede di incollare un <strong>fullchain</strong>, cioè il <strong>tuo certificato server seguito dai certificati intermedi della CA</strong>.<br>
+                                    Se metti solo il tuo certificato (file <code>.crt</code> da solo), i client di posta (Outlook, Thunderbird, smartphone) potrebbero mostrare l'avviso <em>"catena di certificati incompleta"</em> o rifiutare la connessione, perché non riescono a verificare la firma risalendo fino alla root CA.
+                                </p>
+
+                                <h5 class="mt-3"><i class="fas fa-folder-open me-2"></i>Cosa ti dà la CA quando compri un certificato</h5>
+                                <p>Quando acquisti un cert (Sectigo, DigiCert, GoDaddy, GlobalSign, ecc.) di solito ricevi <strong>3 file separati</strong>:</p>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered align-middle">
+                                        <thead class="table-light">
+                                            <tr><th>File tipico</th><th>Cos'è</th><th>Esempio nome</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr><td><strong>Certificato server</strong></td><td>Il tuo certificato (leaf cert)</td><td><code>tuodominio.crt</code>, <code>cert.pem</code></td></tr>
+                                            <tr><td><strong>Bundle intermediati</strong></td><td>I certificati delle CA intermedie</td><td><code>ca-bundle.crt</code>, <code>intermediate.crt</code>, <code>chain.pem</code></td></tr>
+                                            <tr><td><strong>Chiave privata</strong></td><td>Quella che hai generato con la CSR (NON inviarla mai a nessuno)</td><td><code>tuodominio.key</code>, <code>privkey.pem</code></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <h5 class="mt-3"><i class="fas fa-tools me-2"></i>Come costruire il fullchain — passo passo</h5>
+
+                                <p class="mb-2"><strong>Metodo 1: da terminale (Linux / Mac)</strong></p>
+                                <pre class="bg-dark text-light p-3 mb-3" style="font-size:0.85rem;">cat tuodominio.crt ca-bundle.crt > fullchain.pem</pre>
+                                <p class="text-muted small mb-3">L'ordine conta: <strong>prima</strong> il tuo cert, <strong>poi</strong> gli intermediati. Mai il contrario.</p>
+
+                                <p class="mb-2"><strong>Metodo 2: a mano con un editor di testo</strong></p>
+                                <ol>
+                                    <li>Apri il file del tuo certificato (<code>.crt</code>) con un editor di testo (Notepad, TextEdit, VSCode).</li>
+                                    <li>Seleziona e copia <strong>tutto</strong> il contenuto, incluse le righe <code>-----BEGIN CERTIFICATE-----</code> e <code>-----END CERTIFICATE-----</code>.</li>
+                                    <li>Apri un nuovo documento vuoto.</li>
+                                    <li>Incolla il contenuto del tuo cert.</li>
+                                    <li>Vai a capo (riga vuota dopo <code>-----END CERTIFICATE-----</code> non è obbligatoria ma non rovina nulla).</li>
+                                    <li>Apri il <strong>ca-bundle</strong> (intermediati), copia tutto e incolla <strong>sotto</strong> il primo blocco.</li>
+                                    <li>Salva il documento come <code>fullchain.pem</code>.</li>
+                                </ol>
+
+                                <h5 class="mt-3"><i class="fas fa-eye me-2"></i>Come deve apparire il fullchain finito</h5>
+<pre class="bg-dark text-light p-3" style="font-size:0.85rem;">-----BEGIN CERTIFICATE-----
+MIIE...   ← (1) il TUO certificato (leaf)
+... base64 ...
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIE...   ← (2) intermediate CA
+... base64 ...
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIE...   ← (3) opzionale: root CA (di solito non serve)
+... base64 ...
+-----END CERTIFICATE-----</pre>
+                                <p class="small">Devi avere <strong>almeno 2 blocchi</strong> <code>BEGIN CERTIFICATE...END CERTIFICATE</code> uno dopo l'altro. Se ne hai uno solo, ti manca la catena.</p>
+
+                                <h5 class="mt-3"><i class="fas fa-clipboard me-2"></i>Cosa incollare nei due campi qui sotto</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered align-middle mb-2">
+                                        <thead class="table-light"><tr><th style="width:35%">Campo</th><th>Contenuto</th></tr></thead>
+                                        <tbody>
+                                            <tr><td><strong>Certificato (fullchain.pem)</strong></td><td>Tutto il contenuto di <code>fullchain.pem</code>: TUO cert + intermediati concatenati</td></tr>
+                                            <tr><td><strong>Chiave Privata (privkey.pem)</strong></td><td>Tutto il contenuto del file <code>.key</code> ricevuto dalla CA (o quello che hai generato con la CSR)</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <h5 class="mt-3"><i class="fas fa-check-double me-2"></i>Verifica veloce prima di salvare</h5>
+                                <ul class="mb-0">
+                                    <li>Il fullchain deve <strong>iniziare</strong> con <code>-----BEGIN CERTIFICATE-----</code> (il tuo cert).</li>
+                                    <li>Deve <strong>finire</strong> con <code>-----END CERTIFICATE-----</code> (l'ultimo intermediato).</li>
+                                    <li>La chiave deve iniziare con <code>-----BEGIN PRIVATE KEY-----</code> (o <code>RSA PRIVATE KEY</code> / <code>EC PRIVATE KEY</code>).</li>
+                                    <li>Cert e chiave devono essere <strong>una coppia matematica</strong>: se rigeneri la chiave, devi rifare anche il cert con una nuova CSR.</li>
+                                </ul>
+
+                                <h5 class="mt-3"><i class="fas fa-exclamation-triangle text-warning me-2"></i>Errori comuni</h5>
+                                <ul class="mb-0">
+                                    <li><strong>"Chain incomplete" sui client</strong> → hai incollato solo il tuo <code>.crt</code> senza concatenare gli intermediati.</li>
+                                    <li><strong>"Certificate doesn't match private key"</strong> → la chiave non corrisponde al cert (forse hai mescolato file di certificati diversi).</li>
+                                    <li><strong>"Unable to load private key"</strong> → la chiave è criptata con password. Decriptala prima:<br>
+                                        <code>openssl rsa -in privkey-encrypted.key -out privkey.pem</code></li>
+                                    <li><strong>Cert formato Windows (.pfx / .p12)</strong> → vanno convertiti prima:<br>
+                                        <code>openssl pkcs12 -in cert.pfx -nocerts -nodes -out privkey.pem</code><br>
+                                        <code>openssl pkcs12 -in cert.pfx -nokeys -clcerts -out cert.crt</code><br>
+                                        <code>openssl pkcs12 -in cert.pfx -nokeys -cacerts -out ca-bundle.crt</code></li>
+                                </ul>
+
+                                <h5 class="mt-3"><i class="fas fa-balance-scale me-2"></i>Vale la pena pagare un certificato?</h5>
+                                <p class="mb-0">
+                                    Per un mail server, <strong>Let's Encrypt</strong> (gratis, automatico, rinnovo automatico dal pannello) è praticamente sempre la scelta migliore. I certificati a pagamento hanno senso solo se hai requisiti specifici (EV, garanzie assicurative, validità multi-anno, supporto telefonico CA). Tecnicamente la sicurezza è la stessa.
+                                </p>
+                            </div>
+                        </div>
                     </div>
+
                     <form id="manualCertForm">
                         <div class="mb-3">
                             <label class="form-label">Certificato (fullchain.pem)</label>
@@ -3476,6 +3705,77 @@ public class MailPanelContent {
         });
 
         loadSslStatus();
+        loadAutoRenewSettings();
+
+        // ===== Auto-Renewal =====
+        function loadAutoRenewSettings() {
+            fetch('/api/ssl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_auto_renewal_settings', csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                if (!data.success) return;
+                const enabled = !!data.enabled;
+                document.getElementById('autoRenewEnabled').checked = enabled;
+                document.getElementById('autoRenewThreshold').value = data.threshold_days || 30;
+                const badge = document.getElementById('autoRenewBadge');
+                if (enabled) {
+                    badge.className = 'badge bg-success';
+                    badge.innerHTML = '<i class="fas fa-check me-1"></i>Attivo';
+                } else {
+                    badge.className = 'badge bg-secondary';
+                    badge.innerHTML = '<i class="fas fa-pause me-1"></i>Disattivato';
+                }
+                document.getElementById('autoRenewLastCheck').textContent = data.last_check_human || 'Mai';
+                document.getElementById('autoRenewLastResult').innerHTML = data.last_result_html || '-';
+                document.getElementById('autoRenewLastRenewal').textContent = data.last_renewal_human || 'Mai';
+                document.getElementById('autoRenewNextCheck').textContent = data.next_check_human || '-';
+            }).catch(e => console.error('loadAutoRenewSettings error:', e));
+        }
+
+        function saveAutoRenewSettings() {
+            const enabled = document.getElementById('autoRenewEnabled').checked;
+            const threshold = parseInt(document.getElementById('autoRenewThreshold').value, 10) || 30;
+            fetch('/api/ssl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'set_auto_renewal_settings',
+                    enabled: enabled,
+                    threshold_days: threshold,
+                    csrf_token: document.getElementById('csrf_token').value
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.success) loadAutoRenewSettings();
+                else alert('Errore: ' + (data.message || data.error || 'Errore sconosciuto'));
+            });
+        }
+
+        function triggerManualCheck() {
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Verifica in corso...';
+            fetch('/api/ssl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'trigger_manual_check', csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                if (data.success) {
+                    alert(data.message || 'Verifica completata');
+                    loadAutoRenewSettings();
+                    loadSslStatus();
+                } else {
+                    alert('Errore: ' + (data.message || data.error || 'Errore'));
+                }
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                alert('Errore: ' + e.message);
+            });
+        }
 
         let csrfToken = document.getElementById('csrf_token').value;
 """ + getLogoutScript() + """
@@ -3506,25 +3806,13 @@ public class MailPanelContent {
     <div class="content container mt-4">
         <!-- Statistics -->
         <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card stat-card"><div class="card-body text-center">
-                    <div class="stat-number" id="statReceived">-</div>
-                    <div>Email Ricevute</div>
-                </div></div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card"><div class="card-body text-center">
-                    <div class="stat-number" id="statSent">-</div>
-                    <div>Email Inviate</div>
-                </div></div>
-            </div>
-            <div class="col-md-3">
+            <div class="col-md-6">
                 <div class="card stat-card"><div class="card-body text-center">
                     <div class="stat-number" id="statSpam">-</div>
                     <div>Spam Bloccato</div>
                 </div></div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-6">
                 <div class="card stat-card"><div class="card-body text-center">
                     <div class="stat-number" id="statUsers">-</div>
                     <div>Utenti Attivi</div>
@@ -3566,22 +3854,28 @@ public class MailPanelContent {
         // Load stats
         fetch('/api/stats').then(r => r.json()).then(data => {
             if (data.success) {
-                document.getElementById('statReceived').textContent = data.smtp.received;
-                document.getElementById('statSent').textContent = data.smtp.sent;
                 document.getElementById('statSpam').textContent = data.security.spam_detected;
                 document.getElementById('statUsers').textContent = data.imap.active_users;
             }
         });
 
-        // Load available logs
+        // Load available logs — mostra SOLO quelli effettivamente presenti
         fetch('/api/logs').then(r => r.json()).then(data => {
             const select = document.getElementById('logSelect');
             select.innerHTML = '';
-            (data.logs || []).forEach(log => {
+            const available = (data.logs || []).filter(log => log.exists);
+            if (available.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'Nessun log disponibile';
+                opt.disabled = true;
+                select.appendChild(opt);
+                return;
+            }
+            available.forEach(log => {
                 const opt = document.createElement('option');
                 opt.value = log.id;
-                opt.textContent = log.description + (log.exists ? '' : ' (non esiste)');
-                opt.disabled = !log.exists;
+                opt.textContent = log.description;
                 select.appendChild(opt);
             });
         });
@@ -5319,9 +5613,15 @@ public class MailPanelContent {
         .ban-event { font-size: 0.85rem; padding: 8px; border-left: 3px solid; margin-bottom: 5px; }
         .ban-event.ban { border-color: #dc3545; background: #fff5f5; }
         .ban-event.unban { border-color: #28a745; background: #f5fff5; }
-        .ip-badge { font-family: monospace; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
+        .ip-badge { font-family: monospace; background: #f8f9fa; color: #212529; padding: 2px 6px; border-radius: 3px; }
+        [data-theme="dark"] .ip-badge { background: var(--table-stripe); color: var(--text-primary); border: 1px solid var(--border-color); }
+        /* Form helper text — leggibile sia in light che dark */
+        .form-text, .form-text.small { color: #6c757d; }
+        [data-theme="dark"] .form-text, [data-theme="dark"] .form-text.small { color: #adb5bd !important; }
+        [data-theme="dark"] small.text-muted, [data-theme="dark"] .text-muted small, [data-theme="dark"] .small.text-muted { color: #adb5bd !important; }
         """;
         return getHead("Sicurezza", extraStyles) + getNavbar("") + """
+    <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -5331,6 +5631,57 @@ public class MailPanelContent {
                     <button class="btn btn-outline-primary btn-sm" onclick="loadStatus()">
                         <i class="fas fa-sync"></i> Aggiorna
                     </button>
+                </div>
+            </div>
+
+            <!-- Setup Wizard / Health Check -->
+            <div class="card mb-4 border-primary">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-stethoscope me-2"></i><strong>Stato Fail2ban</strong> <small class="ms-2" id="fhcOverallStatus"></small></span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-warning d-none" id="btnFixAll" onclick="runFhcFixAll()">
+                            <i class="fas fa-magic me-1"></i>Risolvi tutto
+                        </button>
+                        <button class="btn btn-sm btn-light" onclick="loadFail2banHealth()">
+                            <i class="fas fa-sync me-1"></i>Ricontrolla
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="fhcContainer">
+                    <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>
+                </div>
+                <div class="card-body border-top d-none" id="fhcFixAllReport">
+                    <h6 class="mb-2"><i class="fas fa-list-check me-1"></i>Report risoluzione</h6>
+                    <div id="fhcFixAllSteps"></div>
+                </div>
+            </div>
+
+            <!-- ClamAV Health Check -->
+            <div class="card mb-4 border-success">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="fas fa-virus-slash me-2"></i><strong>Stato ClamAV (antivirus)</strong> <small class="ms-2" id="cavOverallStatus"></small></span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-info text-white" id="btnCavTestEicar" onclick="runCavTestEicar()" title="Test end-to-end: il pannello scrive un file EICAR temporaneo e verifica che clamdscan lo rilevi">
+                            <i class="fas fa-flask me-1"></i>Test EICAR
+                        </button>
+                        <button class="btn btn-sm btn-warning d-none" id="btnCavFixAll" onclick="runCavFixAll()">
+                            <i class="fas fa-magic me-1"></i>Risolvi tutto
+                        </button>
+                        <button class="btn btn-sm btn-light" onclick="loadClamavHealth()">
+                            <i class="fas fa-sync me-1"></i>Ricontrolla
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="cavContainer">
+                    <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>
+                </div>
+                <div class="card-body border-top d-none" id="cavEicarResult">
+                    <h6 class="mb-2"><i class="fas fa-flask me-1"></i>Risultato Test EICAR</h6>
+                    <div id="cavEicarBody"></div>
+                </div>
+                <div class="card-body border-top d-none" id="cavFixAllReport">
+                    <h6 class="mb-2"><i class="fas fa-list-check me-1"></i>Report risoluzione</h6>
+                    <div id="cavFixAllSteps"></div>
                 </div>
             </div>
 
@@ -5366,11 +5717,14 @@ public class MailPanelContent {
                 <!-- Jails -->
                 <div class="col-md-6">
                     <div class="card mb-4">
-                        <div class="card-header d-flex justify-content-between">
-                            <span><i class="fas fa-lock me-2"></i>Jail Attive</span>
-                            <button class="btn btn-sm btn-success" onclick="installMailJails()">
-                                <i class="fas fa-plus"></i> Installa Jail Mail
-                            </button>
+                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span><i class="fas fa-lock me-2"></i>Jail Attive <span class="badge bg-secondary ms-1" id="jailsCount">-</span></span>
+                            <div class="d-flex align-items-center gap-2">
+                                <small class="text-muted d-none d-md-inline"><i class="fas fa-info-circle me-1"></i>Per aggiungere usa "Risolvi tutto"</small>
+                                <button class="btn btn-outline-primary btn-sm" id="btnRefreshJails" onclick="refreshJails(true)" title="Aggiorna lista jail">
+                                    <i class="fas fa-sync" id="iconRefreshJails"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body" id="jailsContainer">
                             <p class="text-muted">Caricamento...</p>
@@ -5394,6 +5748,49 @@ public class MailPanelContent {
                             </div>
                         </div>
                     </div>
+
+                    <!-- Jail Configuration -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-cog me-2"></i>Configurazione Jail</span>
+                            <select class="form-select form-select-sm w-auto" id="cfgJailSelect" onchange="loadJailConfig()">
+                                <option value="mail-panel-auth">mail-panel-auth</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Max tentativi</label>
+                                    <input type="number" class="form-control form-control-sm" id="cfgMaxRetry" min="1" max="100" value="5">
+                                    <div class="form-text small">Falliti consecutivi prima del ban</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Finestra (secondi)</label>
+                                    <input type="number" class="form-control form-control-sm" id="cfgFindTime" min="30" max="86400" value="600">
+                                    <div class="form-text small">Periodo in cui contare i tentativi</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Durata ban (secondi)</label>
+                                    <input type="number" class="form-control form-control-sm" id="cfgBanTime" min="60" max="31536000" value="3600">
+                                    <div class="form-text small">3600 = 1h, 86400 = 24h, -1 sconsigliato</div>
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2 mt-3">
+                                <button class="btn btn-primary btn-sm" onclick="saveJailConfig()">
+                                    <i class="fas fa-save me-1"></i>Salva e ricarica fail2ban
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="loadJailConfig()">
+                                    <i class="fas fa-sync me-1"></i>Ricarica da file
+                                </button>
+                                <span id="cfgJailStatus" class="ms-2 small"></span>
+                            </div>
+                            <div class="alert alert-info py-1 px-2 mt-3 mb-0 small">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Le modifiche vengono scritte in <code>/usr/local/etc/fail2ban/jail.local</code> e applicate subito con <code>fail2ban-client reload</code>.
+                                Sopravvivono ai restart di fail2ban e del pannello.
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Recent Bans & Banned IPs -->
@@ -5405,7 +5802,7 @@ public class MailPanelContent {
                         </div>
                     </div>
 
-                    <div class="card">
+                    <div class="card mb-4">
                         <div class="card-header"><i class="fas fa-list me-2"></i>IP Bannati</div>
                         <div class="card-body">
                             <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
@@ -5421,6 +5818,53 @@ public class MailPanelContent {
                                         <tr><td colspan="3" class="text-muted">Caricamento...</td></tr>
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Permaban list (via pf, independent from Fail2ban) -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-ban me-2 text-danger"></i>Permaban (pf)</span>
+                            <span class="badge bg-danger" id="permabanCount">0</span>
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-muted mb-2">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Ban permanenti via pf, sopravvivono al riavvio di Fail2ban, pannello e server.
+                                <br>File: <code>/var/db/mail-panel/permaban.list</code>
+                            </p>
+                            <div class="row g-2 mb-3">
+                                <div class="col-8">
+                                    <input type="text" id="permabanIpInput" class="form-control form-control-sm" placeholder="IP (es. 1.2.3.4)">
+                                </div>
+                                <div class="col-4">
+                                    <button class="btn btn-danger btn-sm w-100" onclick="permabanAddManual()">
+                                        <i class="fas fa-plus me-1"></i>Aggiungi
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                                <table class="table table-sm mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>IP</th>
+                                            <th>Runtime</th>
+                                            <th>Azioni</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="permabanBody">
+                                        <tr><td colspan="3" class="text-muted">Caricamento...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="mt-2">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="permabanReload()" title="Ricarica la tabella pf dal file (utile se i due sono divergenti)">
+                                    <i class="fas fa-sync me-1"></i>Ricarica pf da file
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="permabanList()" title="Aggiorna lista">
+                                    <i class="fas fa-redo me-1"></i>Aggiorna
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -5476,9 +5920,17 @@ public class MailPanelContent {
                     badge.textContent = data.running ? 'Attivo' : 'Fermato';
 
                     // Update stats
+                    const jailCount = data.jails?.length || data.active_jails?.length || 0;
                     document.getElementById('totalBanned').textContent = data.total_banned || 0;
-                    document.getElementById('totalJails').textContent = data.active_jails?.length || 0;
+                    document.getElementById('totalJails').textContent = jailCount;
                     document.getElementById('totalBannedAll').textContent = data.total_banned_total || 0;
+
+                    // Counter sulla card "Jail Attive"
+                    const cnt = document.getElementById('jailsCount');
+                    if (cnt) {
+                        cnt.textContent = jailCount;
+                        cnt.className = 'badge ms-1 ' + (jailCount > 0 ? 'bg-success' : 'bg-warning text-dark');
+                    }
 
                     // Update jails
                     const jailsHtml = (data.jails || []).map(jail => `
@@ -5493,7 +5945,7 @@ public class MailPanelContent {
                                 </small>
                             </div>
                         </div>
-                    `).join('') || '<p class="text-muted">Nessuna jail attiva</p>';
+                    `).join('') || '<p class="text-muted mb-0">Nessuna jail attiva</p>';
                     document.getElementById('jailsContainer').innerHTML = jailsHtml;
 
                     // Populate jail select
@@ -5530,14 +5982,17 @@ public class MailPanelContent {
                         <tr>
                             <td>
                                 <span class="ip-badge">${ban.ip}</span>
-                                <button class="btn btn-link btn-sm p-0 ms-1" onclick="showIpInfo('${ban.ip}')">
+                                <button class="btn btn-link btn-sm p-0 ms-1" onclick="showIpInfo('${ban.ip}')" title="Info IP">
                                     <i class="fas fa-info-circle"></i>
                                 </button>
                             </td>
                             <td><small>${ban.jail}</small></td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-success" onclick="unbanIp('${ban.ip}', '${ban.jail}')">
+                            <td class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-success" onclick="unbanIp('${ban.ip}', '${ban.jail}')" title="Sbanna">
                                     <i class="fas fa-unlock"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="permabanAdd('${ban.ip}')" title="Ban permanente (via pf, sopravvive a tutto)">
+                                    <i class="fas fa-ban"></i>
                                 </button>
                             </td>
                         </tr>
@@ -5579,18 +6034,58 @@ public class MailPanelContent {
         }
 
         function showIpInfo(ip) {
-            document.getElementById('ipInfo').innerHTML = '<p>Caricamento...</p>';
+            document.getElementById('ipInfo').innerHTML = '<p><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>';
             new bootstrap.Modal(document.getElementById('ipModal')).show();
 
-            fetch('/api/fail2ban?action=ip_info&ip=' + ip)
+            fetch('/api/fail2ban?action=ip_info&ip=' + encodeURIComponent(ip))
                 .then(r => r.json())
                 .then(data => {
-                    let html = `<p><strong>IP:</strong> ${data.ip}</p>`;
-                    if (data.country) html += `<p><strong>Paese:</strong> ${data.country}</p>`;
-                    if (data.organization) html += `<p><strong>Organizzazione:</strong> ${data.organization}</p>`;
-                    if (data.net_range) html += `<p><strong>Network:</strong> ${data.net_range}</p>`;
+                    let html = '<table class="table table-sm mb-2"><tbody>';
+                    html += `<tr><td style="width:35%"><strong>IP</strong></td><td><code>${escapeHtml(data.ip || ip)}</code></td></tr>`;
+
+                    // Posizione geografica (GeoIP)
+                    let country = '';
+                    if (data.country_name && data.country) country = `${escapeHtml(data.country_name)} (${escapeHtml(data.country)})`;
+                    else if (data.country) country = escapeHtml(data.country);
+                    if (country) html += `<tr><td><strong>Paese</strong></td><td>${country}</td></tr>`;
+                    if (data.region) html += `<tr><td><strong>Regione</strong></td><td>${escapeHtml(data.region)}</td></tr>`;
+                    if (data.city) html += `<tr><td><strong>Città</strong></td><td>${escapeHtml(data.city)}</td></tr>`;
+
+                    // Rete / Provider
+                    if (data.isp) html += `<tr><td><strong>ISP</strong></td><td>${escapeHtml(data.isp)}</td></tr>`;
+                    if (data.asn) html += `<tr><td><strong>ASN</strong></td><td><code>${escapeHtml(data.asn)}</code></td></tr>`;
+                    if (data.organization) html += `<tr><td><strong>Organizzazione</strong></td><td>${escapeHtml(data.organization)}</td></tr>`;
+                    if (data.net_range) html += `<tr><td><strong>Network range</strong></td><td><code>${escapeHtml(data.net_range)}</code></td></tr>`;
+
+                    html += '</tbody></table>';
+
+                    // Mappa (se abbiamo coordinate)
+                    if (data.latitude != null && data.longitude != null) {
+                        const lat = data.latitude;
+                        const lon = data.longitude;
+                        const mapsUrl = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=8/${lat}/${lon}`;
+                        html += `<div class="mb-2"><small class="text-muted">Coord: <code>${lat}, ${lon}</code></small> `;
+                        html += `<a href="${mapsUrl}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm ms-2"><i class="fas fa-map-marker-alt me-1"></i>Apri su mappa</a></div>`;
+                    }
+
+                    if (data.geo_source) {
+                        html += `<div class="text-muted small"><i class="fas fa-info-circle me-1"></i>Fonte: ${escapeHtml(data.geo_source)}</div>`;
+                    }
+                    if (!data.success) {
+                        html += `<div class="alert alert-warning mt-2 mb-0 py-2"><i class="fas fa-exclamation-triangle me-1"></i>Whois non disponibile per questo IP — i dati provengono solo da GeoIP (se presenti).</div>`;
+                    }
+
                     document.getElementById('ipInfo').innerHTML = html;
+                })
+                .catch(e => {
+                    document.getElementById('ipInfo').innerHTML = '<div class="alert alert-danger">Errore: ' + e.message + '</div>';
                 });
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
         }
 
         function serviceAction(action) {
@@ -5617,10 +6112,556 @@ public class MailPanelContent {
             });
         }
 
+        // ===== Jail Configuration =====
+        function loadJailConfig() {
+            const jail = document.getElementById('cfgJailSelect').value;
+            const status = document.getElementById('cfgJailStatus');
+            status.textContent = 'Caricamento...';
+            status.className = 'ms-2 small text-muted';
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_jail_config', jail: jail })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    document.getElementById('cfgMaxRetry').value = data.max_retry;
+                    document.getElementById('cfgFindTime').value = data.find_time;
+                    document.getElementById('cfgBanTime').value = data.ban_time;
+                    status.textContent = 'Letto da jail.local';
+                    status.className = 'ms-2 small text-success';
+                } else {
+                    status.textContent = 'Errore: ' + (data.message || 'sconosciuto');
+                    status.className = 'ms-2 small text-danger';
+                }
+            }).catch(e => {
+                status.textContent = 'Errore: ' + e.message;
+                status.className = 'ms-2 small text-danger';
+            });
+        }
+
+        function saveJailConfig() {
+            const jail = document.getElementById('cfgJailSelect').value;
+            const maxRetry = parseInt(document.getElementById('cfgMaxRetry').value, 10);
+            const findTime = parseInt(document.getElementById('cfgFindTime').value, 10);
+            const banTime = parseInt(document.getElementById('cfgBanTime').value, 10);
+            const status = document.getElementById('cfgJailStatus');
+            if (!Number.isFinite(maxRetry) || !Number.isFinite(findTime) || !Number.isFinite(banTime)) {
+                status.textContent = 'Inserisci valori numerici';
+                status.className = 'ms-2 small text-danger';
+                return;
+            }
+            status.textContent = 'Salvataggio...';
+            status.className = 'ms-2 small text-muted';
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update_jail_config',
+                    jail: jail,
+                    max_retry: maxRetry,
+                    find_time: findTime,
+                    ban_time: banTime
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    status.textContent = data.message || 'Salvato';
+                    status.className = 'ms-2 small text-success';
+                    loadStatus();
+                } else {
+                    status.textContent = 'Errore: ' + (data.message || data.error || 'sconosciuto');
+                    status.className = 'ms-2 small text-danger';
+                }
+            }).catch(e => {
+                status.textContent = 'Errore: ' + e.message;
+                status.className = 'ms-2 small text-danger';
+            });
+        }
+
+        // ===== Fail2ban Health Check / Setup Wizard =====
+        let fhcCsrfToken = null;
+
+        function ensureFhcCsrfToken() {
+            // riusa csrf token globale se esiste, altrimenti chiama un endpoint dedicato
+            // (qui assumiamo esista document.getElementById('csrf_token'))
+            try {
+                const el = document.getElementById('csrf_token');
+                if (el && el.value) return el.value;
+            } catch (e) {}
+            return fhcCsrfToken || '';
+        }
+
+        function loadFail2banHealth() {
+            const c = document.getElementById('fhcContainer');
+            const overall = document.getElementById('fhcOverallStatus');
+            const btnFixAll = document.getElementById('btnFixAll');
+            c.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>';
+            fetch('/api/fail2ban_health', { method: 'GET' })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        c.innerHTML = '<div class="alert alert-danger mb-0">Errore: ' + (data.error || 'sconosciuto') + '</div>';
+                        return;
+                    }
+                    if (data.all_ok) {
+                        overall.innerHTML = '<span class="badge bg-success">Tutto OK</span>';
+                        if (btnFixAll) btnFixAll.classList.add('d-none');
+                    } else {
+                        overall.innerHTML = '<span class="badge bg-warning text-dark">Azione richiesta</span>';
+                        if (btnFixAll) btnFixAll.classList.remove('d-none');
+                    }
+                    let html = '<div class="list-group list-group-flush">';
+                    (data.checks || []).forEach((chk, idx) => {
+                        const icon = chk.ok
+                            ? '<i class="fas fa-check-circle text-success"></i>'
+                            : '<i class="fas fa-times-circle text-danger"></i>';
+                        html += '<div class="list-group-item">';
+                        html += '<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">';
+                        html += '<div class="flex-grow-1">';
+                        html += '<div><strong>' + icon + ' ' + escapeHtml(chk.label) + '</strong></div>';
+                        html += '<div class="small text-muted">' + escapeHtml(chk.status || '') + '</div>';
+                        if (!chk.ok && chk.impact) {
+                            html += '<div class="small text-danger mt-1"><i class="fas fa-exclamation-triangle me-1"></i>Se non lo risolvi: ' + escapeHtml(chk.impact) + '</div>';
+                        }
+                        if (!chk.ok && chk.fix_description) {
+                            html += '<div class="small text-info mt-1"><i class="fas fa-magic me-1"></i>' + escapeHtml(chk.fix_description) + '</div>';
+                        }
+                        html += '</div>';
+                        if (!chk.ok && chk.fix_action) {
+                            html += '<button class="btn btn-warning btn-sm" onclick="runFhcFix(\\'' + chk.fix_action + '\\', this)">';
+                            html += '<i class="fas fa-wrench me-1"></i>Risolvi';
+                            html += '</button>';
+                        }
+                        html += '</div>';
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                    if (data.all_ok) {
+                        html += '<div class="alert alert-success mb-0 mt-3 py-2"><i class="fas fa-shield-alt me-2"></i>Configurazione completa e operativa. Nessuna azione necessaria.</div>';
+                    }
+                    c.innerHTML = html;
+                })
+                .catch(e => {
+                    c.innerHTML = '<div class="alert alert-danger mb-0">Errore rete: ' + e.message + '</div>';
+                });
+        }
+
+        function runFhcFixAll() {
+            const confirmMsg = '🪄 RISOLVI TUTTO — esegue in ordine corretto:\\n\\n' +
+                '1. Installa Fail2ban (se manca)\\n' +
+                '2. Abilita Fail2ban al boot\\n' +
+                '3. Configura jail mail-panel-auth\\n' +
+                '4. Configura jail Postfix/Dovecot/Roundcube/Rspamd\\n' +
+                '5. Crea /etc/pf.conf minimo (se manca)\\n' +
+                '6. Aggiunge anchor f2b a pf.conf\\n' +
+                '7. Abilita pf al boot\\n' +
+                '8. Avvia pf (con syntax check pre-flight)\\n' +
+                '9. Avvia Fail2ban\\n\\n' +
+                '⚠️ Tocca anche pf (firewall): se hai una pf.conf custom strana c\\'è rischio teorico di lockout, ma il pannello fa backup automatico e syntax check prima di applicare.\\n\\n' +
+                'Avere accesso fisico/console al server è raccomandato.\\n\\n' +
+                'Procedo?';
+            if (!confirm(confirmMsg)) return;
+
+            const btn = document.getElementById('btnFixAll');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>In corso...';
+
+            fetch('/api/fail2ban_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'fix_all', csrf_token: ensureFhcCsrfToken() })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+
+                // Render report passo-passo
+                const report = document.getElementById('fhcFixAllReport');
+                const stepsEl = document.getElementById('fhcFixAllSteps');
+                let html = '';
+                (data.steps || []).forEach(s => {
+                    let icon, badge;
+                    if (s.status === 'skipped') {
+                        icon = '<i class="fas fa-forward text-secondary"></i>';
+                        badge = '<span class="badge bg-secondary">SKIP</span>';
+                    } else if (s.success) {
+                        icon = '<i class="fas fa-check-circle text-success"></i>';
+                        badge = '<span class="badge bg-success">OK</span>';
+                    } else {
+                        icon = '<i class="fas fa-times-circle text-danger"></i>';
+                        badge = '<span class="badge bg-danger">FAIL</span>';
+                    }
+                    html += '<div class="d-flex align-items-start gap-2 mb-2">' + icon +
+                        '<div class="flex-grow-1"><div>' + badge + ' <strong>' + escapeHtml(s.label) + '</strong></div>';
+                    if (s.message) html += '<div class="small text-muted">' + escapeHtml(s.message) + '</div>';
+                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>Output</summary><pre class="mb-0 mt-1" style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtml(s.output) + '</pre></details>';
+                    html += '</div></div>';
+                });
+                stepsEl.innerHTML = html;
+                report.classList.remove('d-none');
+
+                // Riricarica lo stato
+                loadFail2banHealth();
+                loadStatus();
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        function runFhcFix(action, btn) {
+            // Warning rafforzato per le azioni pf (rischio lockout SSH)
+            const pfActions = { 'start_pf': true, 'enable_pf_at_boot': true, 'add_pf_anchor': true };
+            let confirmMsg = 'Applicare la correzione automatica?\\n\\nIl pannello eseguirà le operazioni necessarie sul sistema.';
+            if (pfActions[action]) {
+                confirmMsg = 'ATTENZIONE — operazione su pf (firewall di sistema)\\n\\n' +
+                    'Stai per modificare/avviare il firewall del server.\\n\\n' +
+                    'RISCHIO: una configurazione pf errata può chiudere completamente l\\'accesso al server, INCLUSO SSH e questo pannello.\\n\\n' +
+                    'Il pannello fa controlli di sintassi e backup automatico, ma il rischio NON è zero.\\n\\n' +
+                    'Prima di confermare, verifica di avere accesso fisico/console al server (KVM, IPMI, console seriale) per recuperare in caso di problemi.\\n\\n' +
+                    'Vuoi procedere?';
+            }
+            if (!confirm(confirmMsg)) return;
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>In corso...';
+            fetch('/api/fail2ban_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: action,
+                    csrf_token: ensureFhcCsrfToken()
+                })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                if (data.success) {
+                    // ricarica la diagnosi
+                    loadFail2banHealth();
+                    loadStatus();
+                } else {
+                    alert('Errore: ' + (data.message || data.error || 'sconosciuto') +
+                        (data.output ? '\\n\\nOutput:\\n' + data.output : ''));
+                    loadFail2banHealth();
+                }
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        // Helper escapeHtml (se non già definita altrove nella pagina)
+        if (typeof escapeHtml !== 'function') {
+            window.escapeHtml = function(text) {
+                const div = document.createElement('div');
+                div.textContent = text == null ? '' : String(text);
+                return div.innerHTML;
+            };
+        }
+
+        // ===== End Health Check =====
+
+        // ===== ClamAV Health Check =====
+        function loadClamavHealth() {
+            const c = document.getElementById('cavContainer');
+            const overall = document.getElementById('cavOverallStatus');
+            const btnFixAll = document.getElementById('btnCavFixAll');
+            c.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>';
+            fetch('/api/clamav_health', { method: 'GET' })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        c.innerHTML = '<div class="alert alert-danger mb-0">Errore: ' + (data.error || 'sconosciuto') + '</div>';
+                        return;
+                    }
+                    if (data.all_ok) {
+                        overall.innerHTML = '<span class="badge bg-success">Tutto OK</span>';
+                        if (btnFixAll) btnFixAll.classList.add('d-none');
+                    } else {
+                        overall.innerHTML = '<span class="badge bg-warning text-dark">Azione richiesta</span>';
+                        if (btnFixAll) btnFixAll.classList.remove('d-none');
+                    }
+                    let html = '<div class="list-group list-group-flush">';
+                    (data.checks || []).forEach(chk => {
+                        const icon = chk.ok ? '<i class="fas fa-check-circle text-success"></i>' : '<i class="fas fa-times-circle text-danger"></i>';
+                        html += '<div class="list-group-item">';
+                        html += '<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">';
+                        html += '<div class="flex-grow-1">';
+                        html += '<div><strong>' + icon + ' ' + escapeHtmlCav(chk.label) + '</strong></div>';
+                        html += '<div class="small text-muted">' + escapeHtmlCav(chk.status || '') + '</div>';
+                        if (!chk.ok && chk.impact) html += '<div class="small text-danger mt-1"><i class="fas fa-exclamation-triangle me-1"></i>Se non lo risolvi: ' + escapeHtmlCav(chk.impact) + '</div>';
+                        if (!chk.ok && chk.fix_description) html += '<div class="small text-info mt-1"><i class="fas fa-magic me-1"></i>' + escapeHtmlCav(chk.fix_description) + '</div>';
+                        html += '</div>';
+                        if (!chk.ok && chk.fix_action) {
+                            html += '<button class="btn btn-warning btn-sm" onclick="runCavFix(\\'' + chk.fix_action + '\\', this)">';
+                            html += '<i class="fas fa-wrench me-1"></i>Risolvi';
+                            html += '</button>';
+                        }
+                        html += '</div></div>';
+                    });
+                    html += '</div>';
+                    if (data.all_ok) html += '<div class="alert alert-success mb-0 mt-3 py-2"><i class="fas fa-virus-slash me-2"></i>ClamAV operativo, Rspamd lo chiama, tutte le mail vengono scansionate.</div>';
+                    c.innerHTML = html;
+                })
+                .catch(e => {
+                    c.innerHTML = '<div class="alert alert-danger mb-0">Errore rete: ' + e.message + '</div>';
+                });
+        }
+
+        function runCavFix(action, btn) {
+            if (!confirm('Applicare la correzione automatica?')) return;
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>In corso (alcune operazioni richiedono minuti)...';
+            fetch('/api/clamav_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action, csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                if (data.success) loadClamavHealth();
+                else alert('Errore: ' + (data.message || data.error || 'sconosciuto') + (data.output ? '\\n\\n' + data.output : ''));
+                loadClamavHealth();
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        function runCavFixAll() {
+            if (!confirm('Risolvi tutto ClamAV — esegue in ordine:\\n' +
+                '1. Installa ClamAV (se manca)\\n' +
+                '2. Abilita freshclam e clamd al boot\\n' +
+                '3. Scarica database virus (può richiedere 2-5 min)\\n' +
+                '4. Avvia freshclam e clamd\\n' +
+                '5. Configura Rspamd per usare ClamAV\\n\\n' +
+                'Procedo?')) return;
+
+            const btn = document.getElementById('btnCavFixAll');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>In corso (può richiedere fino a 10 min)...';
+
+            fetch('/api/clamav_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'fix_all', csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                const report = document.getElementById('cavFixAllReport');
+                const stepsEl = document.getElementById('cavFixAllSteps');
+                let html = '';
+                (data.steps || []).forEach(s => {
+                    let icon, badge;
+                    if (s.status === 'skipped') { icon = '<i class="fas fa-forward text-secondary"></i>'; badge = '<span class="badge bg-secondary">SKIP</span>'; }
+                    else if (s.success) { icon = '<i class="fas fa-check-circle text-success"></i>'; badge = '<span class="badge bg-success">OK</span>'; }
+                    else { icon = '<i class="fas fa-times-circle text-danger"></i>'; badge = '<span class="badge bg-danger">FAIL</span>'; }
+                    html += '<div class="d-flex align-items-start gap-2 mb-2">' + icon +
+                        '<div class="flex-grow-1"><div>' + badge + ' <strong>' + escapeHtmlCav(s.label) + '</strong></div>';
+                    if (s.message) html += '<div class="small text-muted">' + escapeHtmlCav(s.message) + '</div>';
+                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>Output</summary><pre class="mb-0 mt-1" style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtmlCav(s.output) + '</pre></details>';
+                    html += '</div></div>';
+                });
+                stepsEl.innerHTML = html;
+                report.classList.remove('d-none');
+                loadClamavHealth();
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        function runCavTestEicar() {
+            const btn = document.getElementById('btnCavTestEicar');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Test in corso...';
+            fetch('/api/clamav_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'test_eicar', csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                const resultEl = document.getElementById('cavEicarResult');
+                const bodyEl = document.getElementById('cavEicarBody');
+                let alertClass, icon;
+                if (data.success && data.detected) {
+                    alertClass = 'alert-success';
+                    icon = '<i class="fas fa-shield-virus me-2"></i>';
+                } else if (data.detected === false) {
+                    alertClass = 'alert-warning';
+                    icon = '<i class="fas fa-exclamation-triangle me-2"></i>';
+                } else {
+                    alertClass = 'alert-danger';
+                    icon = '<i class="fas fa-times-circle me-2"></i>';
+                }
+                let html = '<div class="alert ' + alertClass + ' mb-2">' + icon + escapeHtmlCav(data.message || 'Risultato sconosciuto') + '</div>';
+                if (data.scan_output) {
+                    html += '<details class="small"><summary>Output clamdscan</summary>';
+                    html += '<pre class="mb-0 mt-1" style="font-size:0.8rem;max-height:200px;overflow:auto">' + escapeHtmlCav(data.scan_output) + '</pre>';
+                    html += '</details>';
+                }
+                html += '<div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>EICAR è un file di test standard riconosciuto da tutti gli antivirus, completamente innocuo. Se ClamAV NON lo rileva, c\\'è un problema con scan/database.</div>';
+                bodyEl.innerHTML = html;
+                resultEl.classList.remove('d-none');
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        function escapeHtmlCav(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
+        // ===== Refresh Jail Attive (spinner visivo + feedback) =====
+        function refreshJails(userTriggered) {
+            const icon = document.getElementById('iconRefreshJails');
+            const btn = document.getElementById('btnRefreshJails');
+            if (icon) icon.classList.add('fa-spin');
+            if (btn) btn.disabled = true;
+            // Mostra "Aggiornamento..." nel container
+            const container = document.getElementById('jailsContainer');
+            if (container && userTriggered) {
+                container.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Aggiornamento in corso...</p>';
+            }
+            // Carica + delay artificiale per feedback visivo
+            const promise = fetch('/api/fail2ban?action=status').then(r => r.json());
+            const minDelay = new Promise(r => setTimeout(r, 400));
+            Promise.all([promise, minDelay]).then(([data]) => {
+                // Riusa la logica di loadStatus chiamandola
+                loadStatus();
+            }).catch(e => {
+                if (container) container.innerHTML = '<p class="text-danger mb-0">Errore: ' + e.message + '</p>';
+            }).finally(() => {
+                if (icon) icon.classList.remove('fa-spin');
+                if (btn) btn.disabled = false;
+            });
+        }
+
+        // ===== Permaban =====
+        function permabanAdd(ip) {
+            if (!confirm('Aggiungere ' + ip + ' al ban PERMANENTE?\\n\\n' +
+                'L\\'IP verrà bloccato da pf indipendentemente da Fail2ban e\\n' +
+                'sopravviverà a tutti i riavvii. Per sbannare dovrai rimuoverlo dalla lista permaban.')) return;
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'permaban_add', ip: ip })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    permabanList();
+                    loadStatus();
+                } else {
+                    alert('Errore: ' + (data.message || 'sconosciuto'));
+                }
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function permabanAddManual() {
+            const input = document.getElementById('permabanIpInput');
+            const ip = input.value.trim();
+            if (!ip) { alert('Inserisci un IP'); return; }
+            if (!confirm('Aggiungere ' + ip + ' al ban PERMANENTE via pf?')) return;
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'permaban_add', ip: ip })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    input.value = '';
+                    permabanList();
+                } else {
+                    alert('Errore: ' + (data.message || 'sconosciuto'));
+                }
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function permabanRemove(ip) {
+            if (!confirm('Rimuovere ' + ip + ' dal permaban?\\n\\nL\\'IP NON sarà più bloccato da pf.')) return;
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'permaban_remove', ip: ip })
+            }).then(r => r.json()).then(data => {
+                if (data.success) permabanList();
+                else alert('Errore: ' + (data.message || 'sconosciuto'));
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function permabanReload() {
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'permaban_reload' })
+            }).then(r => r.json()).then(data => {
+                alert(data.message || (data.success ? 'OK' : 'Errore'));
+                permabanList();
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function permabanList() {
+            fetch('/api/fail2ban?action=permaban_list')
+                .then(r => r.json())
+                .then(data => {
+                    const tbody = document.getElementById('permabanBody');
+                    const counter = document.getElementById('permabanCount');
+                    if (!data.success) {
+                        tbody.innerHTML = '<tr><td colspan="3" class="text-muted">Errore: ' + (data.error || 'sconosciuto') + '</td></tr>';
+                        return;
+                    }
+                    counter.textContent = data.count || 0;
+                    const list = data.permabans || [];
+                    if (list.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="3" class="text-muted">Nessun IP in permaban</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = list.map(item => `
+                        <tr>
+                            <td><span class="ip-badge">${escapeHtmlPermaban(item.ip)}</span></td>
+                            <td>${item.in_runtime ? '<span class="badge bg-success">attivo</span>' : '<span class="badge bg-warning text-dark">non runtime</span>'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-success" onclick="permabanRemove('${item.ip}')" title="Rimuovi dal permaban">
+                                    <i class="fas fa-unlock"></i>
+                                </button>
+                                <button class="btn btn-link btn-sm p-0 ms-1" onclick="showIpInfo('${item.ip}')" title="Info IP">
+                                    <i class="fas fa-info-circle"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                })
+                .catch(e => {
+                    document.getElementById('permabanBody').innerHTML =
+                        '<tr><td colspan="3" class="text-danger">Errore rete: ' + e.message + '</td></tr>';
+                });
+        }
+
+        // Helper per permaban (escapeHtml potrebbe non essere definita prima)
+        function escapeHtmlPermaban(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
         // Load on page load
         loadStatus();
+        loadJailConfig();
+        loadFail2banHealth();
+        loadClamavHealth();
+        permabanList();
         // Auto-refresh every minute
         setInterval(loadStatus, 60000);
+        setInterval(permabanList, 60000);
 """ + getLogoutScript() + """
     </script>
 </body>
@@ -6047,7 +7088,7 @@ public class MailPanelContent {
                         <div class="mb-3">
                             <label class="form-label">Username</label>
                             <input type="text" class="form-control" id="newUsername" required
-                                   pattern="^[a-zA-Z0-9_-]{3,50}$" minlength="3" maxlength="50">
+                                   pattern="^[a-zA-Z0-9_\\-]{3,50}$" minlength="3" maxlength="50">
                             <small class="text-muted">3-50 caratteri, solo lettere, numeri, _ e -</small>
                         </div>
                         <div class="mb-3">
@@ -6584,6 +7625,159 @@ public class MailPanelContent {
 
         // Load on page load
         loadRateLimits();
+""" + getLogoutScript() + """
+    </script>
+</body>
+</html>
+""";
+    }
+
+    // ============== PATHS.HTML — Diagnostic page con tutti i path usati dal pannello ==============
+    public static String getPathsHtml() {
+        String extraStyles = """
+        .path-entry { display: flex; flex-direction: column; padding: 12px; border-left: 4px solid #6c757d; background: #f8f9fa; border-radius: 4px; margin-bottom: 8px; }
+        .path-entry.exists { border-color: #28a745; }
+        .path-entry.missing { border-color: #dc3545; }
+        .path-entry.directory { border-color: #17a2b8; }
+        .path-label { font-weight: 600; }
+        .path-code { font-family: monospace; word-break: break-all; padding: 4px 8px; background: rgba(0,0,0,0.05); border-radius: 3px; user-select: all; }
+        .path-meta { font-size: 0.8rem; color: #6c757d; }
+        .path-desc { font-size: 0.85rem; }
+        [data-theme="dark"] .path-entry { background: var(--table-stripe); color: var(--text-primary); }
+        [data-theme="dark"] .path-code { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+        [data-theme="dark"] .path-meta { color: var(--text-muted); }
+        .copy-btn { cursor: pointer; padding: 2px 8px; font-size: 0.75rem; border: 1px solid #ced4da; background: white; border-radius: 3px; }
+        .copy-btn:hover { background: #e9ecef; }
+        [data-theme="dark"] .copy-btn { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-color); }
+        [data-theme="dark"] .copy-btn:hover { background: var(--table-hover); }
+        .copy-btn.copied { background: #28a745; color: white; border-color: #28a745; }
+        """;
+        return getHead("Path di Sistema", extraStyles) + getNavbar("paths") + """
+    <div class="content container mt-4">
+        <div class="content-container">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2><i class="fas fa-folder-tree me-2"></i>Path di Sistema</h2>
+                <button class="btn btn-outline-primary btn-sm" onclick="loadPaths()">
+                    <i class="fas fa-sync me-1"></i>Aggiorna
+                </button>
+            </div>
+            <p class="text-muted mb-3">Tutti i file e directory che il pannello sta usando. Verde = esiste, rosso = mancante. Clicca un path per selezionarlo, o usa il pulsante Copia.</p>
+
+            <div class="d-flex gap-3 mb-3 align-items-center">
+                <input type="text" id="pathSearch" class="form-control form-control-sm" style="max-width:300px" placeholder="🔎 Filtra path o etichetta..." oninput="filterPaths()">
+                <span class="small text-muted" id="pathStats">-</span>
+            </div>
+
+            <div id="pathsContainer">
+                <p class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>
+            </div>
+        </div>
+    </div>
+""" + getFooter() + """
+    <script>
+        let allCategories = [];
+
+        function loadPaths() {
+            const c = document.getElementById('pathsContainer');
+            c.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>';
+            fetch('/api/system_paths')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        c.innerHTML = '<div class="alert alert-danger">Errore: ' + (data.error || 'sconosciuto') + '</div>';
+                        return;
+                    }
+                    allCategories = data.categories || [];
+                    renderPaths(allCategories);
+                })
+                .catch(e => {
+                    c.innerHTML = '<div class="alert alert-danger">Errore rete: ' + e.message + '</div>';
+                });
+        }
+
+        function renderPaths(categories) {
+            const c = document.getElementById('pathsContainer');
+            let totalEntries = 0, totalExists = 0;
+            let html = '';
+            categories.forEach(cat => {
+                if (!cat.entries || cat.entries.length === 0) return;
+                html += '<div class="card mb-3">';
+                html += '<div class="card-header bg-dark text-white"><strong>' + escapePathHtml(cat.name) + '</strong> <span class="badge bg-secondary ms-2">' + cat.entries.length + '</span></div>';
+                html += '<div class="card-body">';
+                cat.entries.forEach(entry => {
+                    totalEntries++;
+                    let cls = 'path-entry';
+                    if (entry.exists) {
+                        totalExists++;
+                        cls += entry.is_directory ? ' directory' : ' exists';
+                    } else cls += ' missing';
+                    html += '<div class="' + cls + '" data-search="' + escapePathHtml((entry.label + ' ' + entry.path + ' ' + (entry.description || '')).toLowerCase()) + '">';
+                    html += '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">';
+                    html += '<div class="flex-grow-1">';
+                    html += '<div class="path-label">';
+                    if (entry.exists) html += '<i class="fas fa-' + (entry.is_directory ? 'folder' : 'file') + ' text-' + (entry.is_directory ? 'info' : 'success') + ' me-1"></i>';
+                    else html += '<i class="fas fa-times-circle text-danger me-1"></i>';
+                    html += escapePathHtml(entry.label) + '</div>';
+                    if (entry.description) html += '<div class="path-desc text-muted">' + escapePathHtml(entry.description) + '</div>';
+                    html += '<div class="mt-1"><code class="path-code">' + escapePathHtml(entry.path) + '</code></div>';
+                    // Meta
+                    let meta = [];
+                    if (entry.exists) {
+                        if (entry.size !== undefined) meta.push(formatSize(entry.size));
+                        if (entry.perms) meta.push('perms: ' + entry.perms);
+                        if (entry.modified) meta.push('mtime: ' + entry.modified.substring(0, 19).replace('T', ' '));
+                        if (entry.readable === false) meta.push('<span class="text-warning">non leggibile</span>');
+                    } else {
+                        meta.push('<span class="text-danger">non esiste</span>');
+                    }
+                    if (meta.length > 0) html += '<div class="path-meta mt-1">' + meta.join(' • ') + '</div>';
+                    html += '</div>';
+                    html += '<button class="copy-btn" onclick="copyPath(this, \\'' + escapeForJs(entry.path) + '\\')"><i class="fas fa-copy"></i> Copia</button>';
+                    html += '</div>';
+                    html += '</div>';
+                });
+                html += '</div></div>';
+            });
+            c.innerHTML = html;
+            document.getElementById('pathStats').textContent =
+                totalExists + '/' + totalEntries + ' path esistenti';
+        }
+
+        function filterPaths() {
+            const q = document.getElementById('pathSearch').value.toLowerCase().trim();
+            document.querySelectorAll('.path-entry').forEach(el => {
+                const text = el.dataset.search || '';
+                el.style.display = (q === '' || text.indexOf(q) >= 0) ? '' : 'none';
+            });
+        }
+
+        function copyPath(btn, path) {
+            navigator.clipboard.writeText(path).then(() => {
+                const oldHtml = btn.innerHTML;
+                btn.classList.add('copied');
+                btn.innerHTML = '<i class="fas fa-check"></i> Copiato';
+                setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = oldHtml; }, 1500);
+            });
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+            if (bytes < 1024*1024*1024) return (bytes/1024/1024).toFixed(1) + ' MB';
+            return (bytes/1024/1024/1024).toFixed(1) + ' GB';
+        }
+
+        function escapePathHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
+        function escapeForJs(s) {
+            return String(s).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'");
+        }
+
+        loadPaths();
 """ + getLogoutScript() + """
     </script>
 </body>

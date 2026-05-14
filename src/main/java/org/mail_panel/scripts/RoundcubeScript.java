@@ -172,6 +172,11 @@ SQLEOF
 \\$config['enable_installer'] = false;
 \\$config['support_url'] = '';
 
+// Logging (richiesto da Fail2ban per la jail roundcube-auth)
+\\$config['log_driver'] = 'file';
+\\$config['log_dir'] = '/usr/local/www/roundcube/logs/';
+\\$config['log_logins'] = true;
+
 // Plugins (mailpanel_sso is installed separately by the panel)
 \\$config['plugins'] = [
     'archive',

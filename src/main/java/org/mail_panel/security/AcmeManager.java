@@ -36,8 +36,37 @@ public class AcmeManager {
     private static final String FULLCHAIN_FILE = SSL_DIR + "/fullchain.pem";
     private static final String CA_FILE = SSL_DIR + "/ca.pem";
 
-    // Renewal threshold (days before expiry to renew)
-    private static final int RENEWAL_THRESHOLD_DAYS = 30;
+    // Renewal threshold (days before expiry to renew) — default; può essere overridden da DB setting
+    private static final int RENEWAL_THRESHOLD_DAYS_DEFAULT = 30;
+
+    // DB settings keys
+    public static final String SETTING_AUTO_RENEW_ENABLED   = "acme_auto_renewal_enabled";
+    public static final String SETTING_AUTO_RENEW_THRESHOLD = "acme_renewal_threshold_days";
+    public static final String SETTING_AUTO_RENEW_LAST_CHECK    = "acme_auto_renewal_last_check";
+    public static final String SETTING_AUTO_RENEW_LAST_RESULT   = "acme_auto_renewal_last_result";
+    public static final String SETTING_AUTO_RENEW_LAST_RENEWAL  = "acme_auto_renewal_last_renewal";
+
+    public boolean isAutoRenewalEnabled() {
+        String v = database.getSetting(SETTING_AUTO_RENEW_ENABLED, "1");
+        return "1".equals(v) || "true".equalsIgnoreCase(v);
+    }
+
+    public int getRenewalThresholdDays() {
+        try { return Integer.parseInt(database.getSetting(SETTING_AUTO_RENEW_THRESHOLD, String.valueOf(RENEWAL_THRESHOLD_DAYS_DEFAULT))); }
+        catch (Exception e) { return RENEWAL_THRESHOLD_DAYS_DEFAULT; }
+    }
+
+    public void setAutoRenewalEnabled(boolean enabled) {
+        database.setSetting(SETTING_AUTO_RENEW_ENABLED, enabled ? "1" : "0");
+    }
+
+    public void setRenewalThresholdDays(int days) {
+        database.setSetting(SETTING_AUTO_RENEW_THRESHOLD, String.valueOf(Math.max(1, Math.min(89, days))));
+    }
+
+    public String getLastCheckTime()    { return database.getSetting(SETTING_AUTO_RENEW_LAST_CHECK, ""); }
+    public String getLastCheckResult()  { return database.getSetting(SETTING_AUTO_RENEW_LAST_RESULT, ""); }
+    public String getLastRenewalTime()  { return database.getSetting(SETTING_AUTO_RENEW_LAST_RENEWAL, ""); }
 
     private final MailDatabase database;
     private final ScheduledExecutorService scheduler;
@@ -151,6 +180,14 @@ public class AcmeManager {
             return new CertificateResult(false, "acme.sh non installato", null);
         }
 
+        // SECURITY: validate hostname/domain prima di metterli in shell command
+        if (!InputValidator.isValidHostname(mailHostname) || !InputValidator.isValidDomain(domain)) {
+            return new CertificateResult(false, "Hostname o dominio non valido", null);
+        }
+        if (webroot != null && !webroot.isEmpty() && (webroot.contains("..") || webroot.contains(";") || webroot.contains("|") || webroot.contains("&") || webroot.contains("`") || webroot.contains("$"))) {
+            return new CertificateResult(false, "Webroot path non valido", null);
+        }
+
         try {
             // Build domains list (mail hostname + autodiscover subdomains)
             List<String> domains = new ArrayList<>();
@@ -218,6 +255,10 @@ public class AcmeManager {
      * Deploy certificate to mail services
      */
     public DeployResult deployCertificate(String mailHostname) {
+        // SECURITY: validate hostname before Paths.get and shell usage
+        if (!InputValidator.isValidHostname(mailHostname)) {
+            return new DeployResult(false, "Hostname non valido", null);
+        }
         try {
             // Create SSL directory
             Files.createDirectories(Paths.get(SSL_DIR));
@@ -351,6 +392,11 @@ public class AcmeManager {
             return new CertificateResult(false, "acme.sh non installato", null);
         }
 
+        // SECURITY: validate hostname before shell concatenation
+        if (!InputValidator.isValidHostname(mailHostname)) {
+            return new CertificateResult(false, "Hostname non valido", null);
+        }
+
         try {
             String cmd = ACME_SH + " --renew -d " + mailHostname + " --force";
             String output = executeCommand(cmd);
@@ -372,33 +418,68 @@ public class AcmeManager {
     }
 
     /**
-     * Check and renew certificates that are about to expire
+     * Check and renew certificates that are about to expire.
+     * Salva sempre last_check, last_result e (se rinnovato) last_renewal.
+     * Se forceRun = false, viene saltato quando auto-renewal è disabilitato.
      */
-    public void checkAndRenewCertificates() {
+    public CertificateResult checkAndRenewCertificates(boolean forceRun) {
+        String now = LocalDateTime.now().toString();
         try {
+            if (!forceRun && !isAutoRenewalEnabled()) {
+                String msg = "Auto-renewal disabilitato — check saltato";
+                System.out.println("[ACME] " + msg);
+                database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
+                database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "SKIP|" + msg);
+                return new CertificateResult(true, msg, null);
+            }
+
             CertificateInfo info = getCertificateInfo();
             if (info == null || info.expiresAt == null) {
-                System.out.println("[ACME] No certificate installed or cannot read expiry date");
-                return;
+                String msg = "Nessun certificato installato o data di scadenza non leggibile";
+                System.out.println("[ACME] " + msg);
+                database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
+                database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "INFO|" + msg);
+                return new CertificateResult(false, msg, null);
             }
 
             long daysUntilExpiry = ChronoUnit.DAYS.between(LocalDateTime.now(), info.expiresAt);
+            int threshold = getRenewalThresholdDays();
 
             if (daysUntilExpiry <= 0) {
-                System.err.println("[ACME] WARNING: Certificate EXPIRED! Attempting renewal...");
+                System.err.println("[ACME] WARNING: Certificato SCADUTO! Provo a rinnovarlo...");
                 CertificateResult result = renewCertificate(info.commonName);
-                System.out.println("[ACME] Renewal result: " + result.message);
-            } else if (daysUntilExpiry <= RENEWAL_THRESHOLD_DAYS) {
-                System.out.println("[ACME] Certificate expires in " + daysUntilExpiry + " days (threshold: " + RENEWAL_THRESHOLD_DAYS + "), renewing...");
+                String resStr = (result.success ? "OK" : "FAIL") + "|Scaduto, rinnovo: " + result.message;
+                database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
+                database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, resStr);
+                if (result.success) database.setSetting(SETTING_AUTO_RENEW_LAST_RENEWAL, now);
+                return result;
+            } else if (daysUntilExpiry <= threshold) {
+                System.out.println("[ACME] Certificato scade in " + daysUntilExpiry + " giorni (soglia: " + threshold + "), rinnovo...");
                 CertificateResult result = renewCertificate(info.commonName);
-                System.out.println("[ACME] Renewal result: " + result.message);
+                String resStr = (result.success ? "OK" : "FAIL") + "|Rinnovo (" + daysUntilExpiry + "gg restanti): " + result.message;
+                database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
+                database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, resStr);
+                if (result.success) database.setSetting(SETTING_AUTO_RENEW_LAST_RENEWAL, now);
+                return result;
             } else {
-                System.out.println("[ACME] Certificate OK - expires in " + daysUntilExpiry + " days (" + info.commonName + ")");
+                String msg = "Certificato OK — scade tra " + daysUntilExpiry + " giorni (" + info.commonName + ")";
+                System.out.println("[ACME] " + msg);
+                database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
+                database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "OK|" + msg);
+                return new CertificateResult(true, msg, null);
             }
 
         } catch (Exception e) {
             System.err.println("[ACME] Certificate check failed: " + e.getMessage());
+            database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
+            database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "FAIL|Errore: " + e.getMessage());
+            return new CertificateResult(false, "Errore: " + e.getMessage(), null);
         }
+    }
+
+    /** Backward-compatible — chiama checkAndRenewCertificates(false) */
+    public void checkAndRenewCertificates() {
+        checkAndRenewCertificates(false);
     }
 
     /**
@@ -474,7 +555,7 @@ public class AcmeManager {
             if (info.expiresAt != null) {
                 info.daysUntilExpiry = (int) ChronoUnit.DAYS.between(LocalDateTime.now(), info.expiresAt);
                 info.expired = info.daysUntilExpiry < 0;
-                info.expiringSoon = info.daysUntilExpiry <= RENEWAL_THRESHOLD_DAYS && info.daysUntilExpiry >= 0;
+                info.expiringSoon = info.daysUntilExpiry <= getRenewalThresholdDays() && info.daysUntilExpiry >= 0;
             }
 
             // Get SANs (Subject Alternative Names)
@@ -541,6 +622,11 @@ public class AcmeManager {
             return new DnsChallengeResult(false, "acme.sh non installato", null, null);
         }
 
+        // SECURITY: validate hostname before shell concatenation and Paths.get
+        if (!InputValidator.isValidHostname(hostname)) {
+            return new DnsChallengeResult(false, "Hostname non valido", null, null);
+        }
+
         try {
             // Check if a valid certificate already exists
             Path certPathEcc = Paths.get(ACME_HOME, hostname + "_ecc", hostname + ".cer");
@@ -599,6 +685,11 @@ public class AcmeManager {
     public CertificateResult verifyDnsAndIssue(String hostname) {
         if (!isAcmeInstalled()) {
             return new CertificateResult(false, "acme.sh non installato", null);
+        }
+
+        // SECURITY: validate hostname before shell concatenation and Paths.get
+        if (!InputValidator.isValidHostname(hostname)) {
+            return new CertificateResult(false, "Hostname non valido", null);
         }
 
         try {
@@ -673,6 +764,10 @@ public class AcmeManager {
             }
             if (keyContent == null || keyContent.trim().isEmpty()) {
                 return new CertificateResult(false, "Contenuto chiave privata vuoto", null);
+            }
+            // SECURITY: validate hostname (usato per scrivere su disco e per nginx config)
+            if (hostname != null && !hostname.isEmpty() && !InputValidator.isValidHostname(hostname)) {
+                return new CertificateResult(false, "Hostname non valido", null);
             }
 
             // Ensure content has proper PEM format

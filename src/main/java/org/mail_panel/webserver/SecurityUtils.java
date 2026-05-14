@@ -39,7 +39,11 @@ public class SecurityUtils {
      * Validates CSRF token using constant-time comparison.
      */
     public static boolean validateCsrfToken(String expected, String actual) {
+        // SECURITY: rifiuta esplicitamente i token vuoti — altrimenti due stringhe
+        // vuote passerebbero il check (length matches, result = 0).
         if (expected == null || actual == null) return false;
+        if (expected.isEmpty() || actual.isEmpty()) return false;
+        if (expected.length() < 16) return false; // un CSRF reale è > 16 char
         if (expected.length() != actual.length()) return false;
         int result = 0;
         for (int i = 0; i < expected.length(); i++) {

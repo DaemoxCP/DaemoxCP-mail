@@ -129,6 +129,11 @@ public class Fail2banManager {
         jail.name = jailName;
 
         try {
+            // SECURITY: validate before shell concatenation
+            if (!isValidJailName(jailName)) {
+                jail.exists = false;
+                return jail;
+            }
             String output = executeCommand(FAIL2BAN_CLIENT + " status " + jailName);
 
             if (output.contains("does not exist") || output.contains("not found")) {
@@ -278,6 +283,13 @@ public class Fail2banManager {
                 return action;
             }
 
+            // SECURITY: validate jail name (concatenato in shell)
+            if (!isValidJailName(jail)) {
+                action.success = false;
+                action.message = "Invalid jail name";
+                return action;
+            }
+
             // Check jail exists
             JailStatus jailStatus = getJailStatus(jail);
             if (!jailStatus.exists) {
@@ -320,6 +332,17 @@ public class Fail2banManager {
         action.jail = jail;
 
         try {
+            // SECURITY: validate before shell concatenation
+            if (!isValidIp(ip)) {
+                action.success = false;
+                action.message = "Invalid IP address format";
+                return action;
+            }
+            if (!isValidJailName(jail)) {
+                action.success = false;
+                action.message = "Invalid jail name";
+                return action;
+            }
             String output = executeCommand(FAIL2BAN_CLIENT + " set " + jail + " unbanip " + ip);
 
             action.success = !output.toLowerCase().contains("error") &&
@@ -349,6 +372,12 @@ public class Fail2banManager {
         action.ip = ip;
 
         try {
+            // SECURITY: validate before shell concatenation
+            if (!isValidIp(ip)) {
+                action.success = false;
+                action.message = "Invalid IP address format";
+                return action;
+            }
             String output = executeCommand(FAIL2BAN_CLIENT + " unban " + ip);
 
             action.success = !output.toLowerCase().contains("error");
@@ -442,6 +471,10 @@ public class Fail2banManager {
             // Create jail.d directory if not exists
             Files.createDirectories(Paths.get(JAIL_D));
 
+            // Prereq: abilita logging in Roundcube e crea il file userlogins se manca,
+            // altrimenti Fail2ban si rifiuta di caricare la jail roundcube-auth.
+            ensureRoundcubeLoggingEnabled();
+
             // Create mail jails configuration
             String mailJailsConfig = generateMailJailsConfig();
             Path mailJailsPath = Paths.get(JAIL_D, "mail.local");
@@ -466,10 +499,136 @@ public class Fail2banManager {
     }
 
     /**
-     * Generate mail jails configuration
+     * Roundcube ha 'log_logins = false' di default — nessun login viene loggato,
+     * quindi /usr/local/www/roundcube/logs/userlogins non esiste e Fail2ban si
+     * rifiuta di caricare la jail "roundcube-auth".
+     *
+     * Questo metodo:
+     *  1. Aggiunge le direttive di logging mancanti a config.inc.php (idempotente)
+     *  2. Crea il file userlogins vuoto se non esiste, con perms www:www 640
+     *
+     * Best-effort: se Roundcube non è installato o il file di config non è scrivibile,
+     * il metodo non blocca l'install della jail (fail2ban segnalerà comunque l'errore).
+     */
+    /**
+     * Path comuni di Roundcube su FreeBSD. Il primo trovato vince.
+     */
+    private static final String[] ROUNDCUBE_CANDIDATE_PATHS = {
+        "/usr/local/www/roundcube",
+        "/usr/local/www/roundcubemail",
+        "/usr/local/share/roundcube",
+        "/usr/local/share/roundcubemail",
+        "/usr/local/www/apache24/data/roundcube",
+        "/usr/local/www/apache24/data/roundcubemail"
+    };
+
+    /**
+     * Auto-detect del path di installazione di Roundcube.
+     * Ritorna null se non viene trovato un'installazione plausibile.
+     */
+    public String detectRoundcubeInstallPath() {
+        for (String p : ROUNDCUBE_CANDIDATE_PATHS) {
+            Path candidate = Paths.get(p);
+            // Plausibile install: ha una directory config/ + un index.php (o similar)
+            if (Files.isDirectory(candidate)
+                && Files.exists(candidate.resolve("config"))
+                && (Files.exists(candidate.resolve("index.php"))
+                    || Files.exists(candidate.resolve("public_html/index.php")))) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Ritorna il path al file userlogins di Roundcube basato sull'auto-detect.
+     * Ritorna null se Roundcube non è stato trovato.
+     */
+    public String getRoundcubeUserloginsPath() {
+        String base = detectRoundcubeInstallPath();
+        if (base == null) return null;
+        return base + "/logs/userlogins";
+    }
+
+    public void ensureRoundcubeLoggingEnabled() {
+        try {
+            String installPath = detectRoundcubeInstallPath();
+            if (installPath == null) {
+                System.out.println("[Fail2banManager] Roundcube non trovato in nessuno dei path standard");
+                return;
+            }
+            Path configPath = Paths.get(installPath + "/config/config.inc.php");
+            if (!Files.exists(configPath)) {
+                System.out.println("[Fail2banManager] Roundcube config non trovata in " + configPath);
+                return;
+            }
+            String config = Files.readString(configPath, java.nio.charset.StandardCharsets.UTF_8);
+            StringBuilder additions = new StringBuilder();
+
+            // log_logins = true (richiesto per loggare i tentativi)
+            if (!config.matches("(?s).*\\$config\\[['\"]log_logins['\"]\\]\\s*=.*")) {
+                additions.append("\n$config['log_logins'] = true;\n");
+            }
+            // log_driver = file (assicurati che scriva su file, non su syslog)
+            if (!config.matches("(?s).*\\$config\\[['\"]log_driver['\"]\\]\\s*=.*")) {
+                additions.append("$config['log_driver'] = 'file';\n");
+            }
+            // log_dir esplicito basato sull'install detect-ato
+            if (!config.matches("(?s).*\\$config\\[['\"]log_dir['\"]\\]\\s*=.*")) {
+                additions.append("$config['log_dir'] = '" + installPath + "/logs/';\n");
+            }
+
+            if (additions.length() > 0) {
+                // Backup
+                Path bak = Paths.get(configPath.toString() + ".bak." + System.currentTimeMillis());
+                Files.copy(configPath, bak);
+                Files.writeString(configPath,
+                    config + (config.endsWith("\n") ? "" : "\n")
+                        + "\n// === Login logging abilitato dal mail panel per Fail2ban ===\n"
+                        + additions.toString(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+                System.out.println("[Fail2banManager] Roundcube config aggiornata (log_logins/log_driver/log_dir)");
+            }
+
+            // Crea il file userlogins vuoto se non esiste, perms www:www 640
+            Path logsDir = Paths.get(installPath + "/logs");
+            if (!Files.isDirectory(logsDir)) Files.createDirectories(logsDir);
+            Path userlogins = logsDir.resolve("userlogins");
+            if (!Files.exists(userlogins)) {
+                Files.createFile(userlogins);
+                System.out.println("[Fail2banManager] Creato " + userlogins);
+            }
+            try { executeCommand("chown www:www " + userlogins); } catch (Exception ignored) {}
+            try { executeCommand("chmod 640 " + userlogins); } catch (Exception ignored) {}
+
+            // Verifica post-operazione
+            if (!Files.exists(userlogins)) {
+                System.err.println("[Fail2banManager] ATTENZIONE: " + userlogins + " ancora inesistente dopo il setup!");
+            } else {
+                System.out.println("[Fail2banManager] " + userlogins + " esiste ed è pronto per Fail2ban");
+            }
+        } catch (Exception e) {
+            System.err.println("[Fail2banManager] ensureRoundcubeLoggingEnabled fallito: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Generate mail jails configuration.
+     * Il logpath di Roundcube viene determinato dall'install path effettivo
+     * (auto-detect). Se Roundcube non è trovato, la sezione roundcube-auth
+     * viene comunque scritta con un commento esplicativo.
      */
     private String generateMailJailsConfig() {
-        return """
+        String roundcubeLogpath = getRoundcubeUserloginsPath();
+        if (roundcubeLogpath == null) {
+            roundcubeLogpath = "/usr/local/www/roundcube/logs/userlogins";
+        }
+        return generateMailJailsConfigImpl(roundcubeLogpath);
+    }
+
+    private String generateMailJailsConfigImpl(String roundcubeLogpath) {
+        return ("" + """
             # Mail Panel - Fail2ban Mail Jails Configuration
             # Generated automatically - Do not edit manually
 
@@ -496,11 +655,14 @@ public class Fail2banManager {
             action = pf[name=postfix, port="smtp,465,submission"]
 
             # Roundcube webmail authentication failures
+            # NOTE: il log standard dei login Roundcube è 'userlogins' (no estensione)
+            # nel directory di installazione su FreeBSD
             [roundcube-auth]
             enabled = true
             port = http,https
             filter = roundcube-auth
-            logpath = /var/log/roundcube/errors.log
+            logpath = """ + roundcubeLogpath + """
+
             maxretry = 5
             findtime = 600
             bantime = 3600
@@ -526,7 +688,7 @@ public class Fail2banManager {
             findtime = 86400
             bantime = 604800
             action = pf[name=recidive]
-            """;
+            """);
     }
 
     /**
@@ -558,21 +720,23 @@ public class Fail2banManager {
             """;
         Files.writeString(Paths.get(FILTER_D, "rspamd.conf"), rspamdFilter);
 
-        // Roundcube auth filter (if not exists)
+        // Roundcube auth filter — formato del file 'userlogins' di Roundcube su FreeBSD:
+        //   [DD-Mon-YYYY HH:MM:SS +ZZZZ]: <token> Failed login for user@dom from 1.2.3.4 in session ...
+        //   [DD-Mon-YYYY HH:MM:SS +ZZZZ]: <token> Successful login for user@dom (ID: 1) from 1.2.3.4 ...
+        // SOVRASCRIVIAMO sempre il filter (anche se esiste con pattern obsoleto)
         Path rcFilter = Paths.get(FILTER_D, "roundcube-auth.conf");
-        if (!Files.exists(rcFilter)) {
-            String roundcubeFilter = """
-                # Mail Panel - Roundcube Authentication Filter
-                [Definition]
-                failregex = ^.*FAILED login for .* from <HOST>.*$
-                            ^.*FAILED login for \\S+ from \\S+ \\[<HOST>\\].*$
-                            ^.*Login failed for .* from <HOST>.*$
-                            ^.*Authentication failed for .* \\[client <HOST>\\].*$
+        String roundcubeFilter = """
+            # Mail Panel - Roundcube Authentication Filter
+            # Cattura tentativi falliti dal file logs/userlogins di Roundcube
+            [Definition]
+            failregex = ^\\[[^\\]]+\\]:\\s*<[^>]*>\\s+Failed login for .* from <HOST>.*$
+                        ^.*FAILED login for .* from <HOST>.*$
+                        ^.*Login failed for .* from <HOST>.*$
+                        ^.*Authentication failed for .* \\[client <HOST>\\].*$
 
-                ignoreregex =
-                """;
-            Files.writeString(rcFilter, roundcubeFilter);
-        }
+            ignoreregex =
+            """;
+        Files.writeString(rcFilter, roundcubeFilter);
 
         // Set permissions
         executeCommand("chmod 644 " + FILTER_D + "/*.conf");
@@ -586,36 +750,49 @@ public class Fail2banManager {
         config.name = jailName;
 
         try {
-            // Try to read from jail.d/mail.local or jail.local
-            String jailContent = "";
-            Path mailJailPath = Paths.get(JAIL_D, "mail.local");
-            Path jailLocalPath = Paths.get(JAIL_LOCAL);
+            // Cerca la sezione [jailName] in TUTTI i possibili file:
+            //   1. /usr/local/etc/fail2ban/jail.local                     (jail principale)
+            //   2. /usr/local/etc/fail2ban/jail.d/*.local                 (jail aggiuntive in jail.d)
+            //   3. /usr/local/etc/fail2ban/jail.d/*.conf                  (idem ma .conf)
+            // Si ferma al primo file dove trova [jailName].
+            java.util.List<Path> candidates = new java.util.ArrayList<>();
+            candidates.add(Paths.get(JAIL_LOCAL));
+            try {
+                Path jailDir = Paths.get(JAIL_D);
+                if (Files.isDirectory(jailDir)) {
+                    try (java.util.stream.Stream<Path> stream = Files.list(jailDir)) {
+                        stream.filter(p -> {
+                                String n = p.getFileName().toString();
+                                return n.endsWith(".local") || n.endsWith(".conf");
+                            })
+                            .forEach(candidates::add);
+                    }
+                }
+            } catch (Exception ignored) {}
 
-            if (Files.exists(mailJailPath)) {
-                jailContent = Files.readString(mailJailPath);
-            } else if (Files.exists(jailLocalPath)) {
-                jailContent = Files.readString(jailLocalPath);
-            }
-
-            // Parse jail section
             Pattern sectionPattern = Pattern.compile(
                 "\\[" + Pattern.quote(jailName) + "\\]([^\\[]+)",
                 Pattern.CASE_INSENSITIVE
             );
-            java.util.regex.Matcher matcher = sectionPattern.matcher(jailContent);
 
-            if (matcher.find()) {
-                String section = matcher.group(1);
-                config.found = true;
+            for (Path candidate : candidates) {
+                if (!Files.exists(candidate)) continue;
+                String jailContent = Files.readString(candidate);
+                java.util.regex.Matcher matcher = sectionPattern.matcher(jailContent);
+                if (matcher.find()) {
+                    String section = matcher.group(1);
+                    config.found = true;
 
-                // Parse values
-                config.enabled = parseConfigBool(section, "enabled");
-                config.port = parseConfigValue(section, "port");
-                config.filter = parseConfigValue(section, "filter");
-                config.logpath = parseConfigValue(section, "logpath");
-                config.maxRetry = parseConfigInt(section, "maxretry", DEFAULT_MAX_RETRY);
-                config.findTime = parseConfigInt(section, "findtime", DEFAULT_FIND_TIME);
-                config.banTime = parseConfigInt(section, "bantime", DEFAULT_BAN_TIME);
+                    // Parse values
+                    config.enabled = parseConfigBool(section, "enabled");
+                    config.port = parseConfigValue(section, "port");
+                    config.filter = parseConfigValue(section, "filter");
+                    config.logpath = parseConfigValue(section, "logpath");
+                    config.maxRetry = parseConfigInt(section, "maxretry", DEFAULT_MAX_RETRY);
+                    config.findTime = parseConfigInt(section, "findtime", DEFAULT_FIND_TIME);
+                    config.banTime = parseConfigInt(section, "bantime", DEFAULT_BAN_TIME);
+                    break;
+                }
             }
 
         } catch (Exception e) {
@@ -634,13 +811,25 @@ public class Fail2banManager {
         action.jail = jailName;
 
         try {
-            // Use fail2ban-client to set values
+            // SECURITY: validate jail name before shell concatenation
+            if (!isValidJailName(jailName)) {
+                action.success = false;
+                action.message = "Invalid jail name";
+                return action;
+            }
+            // 1. Runtime: applica subito via fail2ban-client (gli int sono safe)
             executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " maxretry " + maxRetry);
             executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " findtime " + findTime);
             executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " bantime " + banTime);
 
+            // 2. Persistenza: aggiorna anche jail.local così i valori sopravvivono
+            //    al restart di fail2ban
+            boolean persisted = persistJailConfig(jailName, maxRetry, findTime, banTime);
+
             action.success = true;
-            action.message = "Configuration updated for jail " + jailName;
+            action.message = persisted
+                ? "Configuration updated and persisted for jail " + jailName
+                : "Configuration applied at runtime (could not persist to jail.local)";
 
         } catch (Exception e) {
             action.success = false;
@@ -650,6 +839,93 @@ public class Fail2banManager {
         return action;
     }
 
+    /** Path standard di jail.local su FreeBSD pkg installation. */
+    private static final String JAIL_LOCAL_PATH = "/usr/local/etc/fail2ban/jail.local";
+
+    /**
+     * Aggiorna in jail.local i valori maxretry/findtime/bantime per la sezione
+     * [jailName]. Crea le righe se mancano. Lascia tutto il resto del file
+     * intatto (compresi commenti e altre sezioni).
+     *
+     * Ritorna true se il file è stato scritto con successo.
+     */
+    private boolean persistJailConfig(String jailName, int maxRetry, int findTime, int banTime) {
+        try {
+            // Cerca la sezione [jailName] in tutti i file di config possibili e modifica
+            // quello dove la trova. Se non la trova, ritorna false (caller deciderà).
+            java.util.List<java.nio.file.Path> candidates = new java.util.ArrayList<>();
+            candidates.add(java.nio.file.Paths.get(JAIL_LOCAL_PATH));
+            try {
+                java.nio.file.Path jailDir = java.nio.file.Paths.get(JAIL_D);
+                if (java.nio.file.Files.isDirectory(jailDir)) {
+                    try (java.util.stream.Stream<java.nio.file.Path> s = java.nio.file.Files.list(jailDir)) {
+                        s.filter(p -> {
+                            String n = p.getFileName().toString();
+                            return n.endsWith(".local") || n.endsWith(".conf");
+                        }).forEach(candidates::add);
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            String marker = "[" + jailName + "]";
+            for (java.nio.file.Path path : candidates) {
+                if (!java.nio.file.Files.exists(path)) continue;
+                String content = java.nio.file.Files.readString(path, java.nio.charset.StandardCharsets.UTF_8);
+                int sectionStart = content.indexOf(marker);
+                if (sectionStart < 0) continue;
+
+                int next = content.indexOf("\n[", sectionStart + marker.length());
+                int sectionEnd = (next < 0) ? content.length() : next + 1;
+
+                String section = content.substring(sectionStart, sectionEnd);
+                String updated = section;
+                updated = setOrAddKey(updated, "maxretry", String.valueOf(maxRetry));
+                updated = setOrAddKey(updated, "findtime", String.valueOf(findTime));
+                updated = setOrAddKey(updated, "bantime",  String.valueOf(banTime));
+
+                String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
+                java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
+
+                // Reload fail2ban per essere sicuri
+                try {
+                    ProcessBuilder pb = new ProcessBuilder(FAIL2BAN_CLIENT, "reload");
+                    pb.redirectErrorStream(true);
+                    Process p = pb.start();
+                    p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception ignored) {}
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            System.err.println("[Fail2banManager] persistJailConfig failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Sostituisce una riga "key = ..." nella sezione (regex-based, conserva
+     * indentazione). Se la chiave non esiste la aggiunge in fondo prima della
+     * prossima sezione.
+     */
+    private String setOrAddKey(String section, String key, String value) {
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+            "(?m)^(\\s*)" + java.util.regex.Pattern.quote(key) + "\\s*=.*$"
+        );
+        java.util.regex.Matcher m = p.matcher(section);
+        if (m.find()) {
+            String indent = m.group(1) == null ? "" : m.group(1);
+            return m.replaceFirst(java.util.regex.Matcher.quoteReplacement(indent + key + " = " + value));
+        } else {
+            // Append before trailing newline (se la sezione finisce con \n) o append diretto
+            if (section.endsWith("\n")) {
+                return section + key + " = " + value + "\n";
+            } else {
+                return section + "\n" + key + " = " + value + "\n";
+            }
+        }
+    }
+
+
     /**
      * Get IP info (whois lookup)
      */
@@ -658,8 +934,15 @@ public class Fail2banManager {
         info.ip = ip;
 
         try {
-            // Use whois if available
+            // SECURITY: validate before shell concatenation
+            if (!isValidIp(ip)) {
+                info.found = false;
+                return info;
+            }
+
+            // 1. Whois — fornisce dati di REGISTRAZIONE (organization, netRange, country di registrazione)
             String output = executeCommand("whois " + ip + " 2>/dev/null | head -50");
+            String whoisCountry = null;
 
             if (!output.isEmpty()) {
                 info.found = true;
@@ -669,7 +952,8 @@ public class Fail2banManager {
                 Pattern countryPattern = Pattern.compile("(?:country|Country):\\s*(.+)", Pattern.CASE_INSENSITIVE);
                 java.util.regex.Matcher countryMatcher = countryPattern.matcher(output);
                 if (countryMatcher.find()) {
-                    info.country = countryMatcher.group(1).trim();
+                    whoisCountry = countryMatcher.group(1).trim();
+                    info.country = whoisCountry;
                 }
 
                 Pattern orgPattern = Pattern.compile("(?:OrgName|org-name|Organization):\\s*(.+)", Pattern.CASE_INSENSITIVE);
@@ -685,6 +969,12 @@ public class Fail2banManager {
                 }
             }
 
+            // 2. GeoIP via ip-api.com — fornisce la posizione FISICA reale dell'IP
+            //    (whois ritorna il paese di REGISTRAZIONE che spesso è la sede legale,
+            //    non dove l'IP è effettivamente assegnato. Es. 80.94.95.242 è registrato
+            //    in UK ma fisicamente è in Romania).
+            enrichWithGeoIP(info, ip, whoisCountry);
+
         } catch (Exception e) {
             info.error = e.getMessage();
         }
@@ -692,9 +982,74 @@ public class Fail2banManager {
         return info;
     }
 
+    /**
+     * Arricchisce IpInfo con dati di geolocalizzazione da ipapi.co (HTTPS).
+     * Best-effort: se l'API è offline / rate-limited / il pannello non ha
+     * accesso a internet, info rimane com'è (whois only).
+     * Free tier: 1000 req/giorno, HTTPS, no auth richiesta.
+     *
+     * Endpoint: https://ipapi.co/<ip>/json/
+     * Campi rilevanti: country_code, country_name, region, city, org, asn, latitude, longitude
+     * Errore (es. IP privato): {"error": true, "reason": "...", "message": "..."}
+     */
+    private void enrichWithGeoIP(IpInfo info, String ip, String whoisCountry) {
+        try {
+            String urlStr = "https://ipapi.co/" + ip + "/json/";
+            java.net.URL url = new java.net.URI(urlStr).toURL();
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("User-Agent", "FreeBSD-Mail-Panel/1.0");
+            conn.setRequestProperty("Accept", "application/json");
+            int code = conn.getResponseCode();
+            // ipapi.co usa 200 anche per errori di lookup (campo "error: true" nel body),
+            // ma può tornare 429 per rate limit
+            java.io.InputStream is = (code >= 200 && code < 400) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) {
+                if (whoisCountry != null) info.geoSource = "whois (geoip http " + code + ")";
+                return;
+            }
+            String body;
+            try (java.io.InputStream stream = is) {
+                body = new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            org.json.JSONObject json = new org.json.JSONObject(body);
+
+            // Errore esplicito da ipapi.co (es. IP privato, rate limited)
+            if (json.optBoolean("error", false)) {
+                String reason = json.optString("reason", json.optString("message", "unknown"));
+                if (whoisCountry != null) info.geoSource = "whois (geoip: " + reason + ")";
+                return;
+            }
+
+            // GeoIP è più accurato per la posizione fisica: prevale su whois country
+            info.country = json.optString("country_code", info.country);
+            info.countryName = json.optString("country_name", null);
+            info.region = json.optString("region", null);
+            info.city = json.optString("city", null);
+            info.asn = json.optString("asn", null);
+            // ipapi.co non distingue ISP da org — usa "org" per entrambi
+            String org = json.optString("org", null);
+            if (org != null && !org.isEmpty()) {
+                if (info.isp == null) info.isp = org;
+                if (info.organization == null || info.organization.isEmpty()) {
+                    info.organization = org;
+                }
+            }
+            if (json.has("latitude") && !json.isNull("latitude")) info.latitude = json.getDouble("latitude");
+            if (json.has("longitude") && !json.isNull("longitude")) info.longitude = json.getDouble("longitude");
+            info.geoSource = (whoisCountry != null) ? "ipapi.co + whois" : "ipapi.co";
+        } catch (Exception e) {
+            // Non fatale — whois data resta disponibile
+            if (whoisCountry != null) info.geoSource = "whois (geoip non raggiungibile)";
+        }
+    }
+
     // Utility methods
 
     private boolean isValidIp(String ip) {
+        if (ip == null || ip.isEmpty()) return false;
         // IPv4
         if (ip.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$")) {
             return true;
@@ -704,6 +1059,13 @@ public class Fail2banManager {
             return true;
         }
         return false;
+    }
+
+    // Validazione difensiva del nome jail per prevenire command injection.
+    // Il nome jail viene concatenato in shell, quindi DEVE rispettare
+    // un pattern molto restrittivo.
+    private boolean isValidJailName(String jail) {
+        return jail != null && jail.matches("^[a-zA-Z0-9_-]{1,64}$");
     }
 
     private LocalDateTime parseDateTime(String dateStr) {
@@ -832,12 +1194,162 @@ public class Fail2banManager {
         public String error;
     }
 
+    // ============== PERMABAN (ban permanente via pf, independent from Fail2ban) ==============
+    //
+    // Architettura:
+    //   - File: /var/db/mail-panel/permaban.list (lista IP, uno per riga)
+    //   - Tabella pf: <permaban> persist file ".../permaban.list"
+    //   - Regola pf:  block in quick from <permaban>
+    //
+    // Vantaggi rispetto a fail2ban bantime=-1:
+    //   - Sopravvive a riavvii pannello, fail2ban, server
+    //   - Funziona anche se fail2ban è giù
+    //   - Granulare per singolo IP
+    //
+    public static final String PERMABAN_DIR  = "/var/db/mail-panel";
+    public static final String PERMABAN_FILE = PERMABAN_DIR + "/permaban.list";
+    public static final String PERMABAN_TABLE = "permaban";
+
+    /**
+     * Aggiunge un IP alla lista permaban.
+     * - Aggiunge al file (con dedup)
+     * - Aggiunge runtime alla tabella pf
+     * Ritorna true se l'IP è stato effettivamente aggiunto (false se già presente).
+     */
+    public synchronized boolean addPermaban(String ip) throws Exception {
+        if (!isValidIp(ip)) throw new IllegalArgumentException("IP non valido: " + ip);
+
+        ensurePermabanFile();
+        java.util.Set<String> current = readPermabanFile();
+        if (current.contains(ip)) return false; // già presente, no-op
+        current.add(ip);
+        writePermabanFile(current);
+
+        // Sync runtime con pfctl (se pf è attivo)
+        try {
+            ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "add", ip);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            // Anche se pfctl fallisce (es. tabella non ancora creata), il file è già scritto
+        } catch (Exception ignored) {}
+
+        return true;
+    }
+
+    /**
+     * Rimuove un IP dalla lista permaban.
+     * Ritorna true se rimosso, false se non era presente.
+     */
+    public synchronized boolean removePermaban(String ip) throws Exception {
+        if (!isValidIp(ip)) throw new IllegalArgumentException("IP non valido: " + ip);
+
+        java.util.Set<String> current = readPermabanFile();
+        if (!current.contains(ip)) return false;
+        current.remove(ip);
+        writePermabanFile(current);
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "delete", ip);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception ignored) {}
+
+        return true;
+    }
+
+    /** Ritorna la lista corrente di IP permabanned. */
+    public synchronized java.util.List<String> listPermabans() {
+        try {
+            return new java.util.ArrayList<>(readPermabanFile());
+        } catch (Exception e) {
+            return new java.util.ArrayList<>();
+        }
+    }
+
+    /** Ritorna gli IP attualmente caricati nella tabella pf <permaban> (runtime). */
+    public java.util.Set<String> listPermabanRuntime() {
+        java.util.Set<String> result = new java.util.HashSet<>();
+        try {
+            ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "show");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            for (String line : out.split("\n")) {
+                String trimmed = line.trim();
+                if (!trimmed.isEmpty() && isValidIp(trimmed)) result.add(trimmed);
+            }
+        } catch (Exception ignored) {}
+        return result;
+    }
+
+    /**
+     * Ricarica la tabella pf dal file (es. dopo restart pannello).
+     * Equivale a: pfctl -t permaban -T replace -f <file>
+     */
+    public boolean reloadPermabanFromFile() {
+        try {
+            ensurePermabanFile();
+            ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "replace", "-f", PERMABAN_FILE);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            return p.exitValue() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void ensurePermabanFile() throws java.io.IOException {
+        Path dir = Paths.get(PERMABAN_DIR);
+        if (!Files.isDirectory(dir)) Files.createDirectories(dir);
+        Path file = Paths.get(PERMABAN_FILE);
+        if (!Files.exists(file)) Files.createFile(file);
+    }
+
+    /** Legge il file ignorando righe vuote, commenti (#) e IP non validi. */
+    private java.util.Set<String> readPermabanFile() throws java.io.IOException {
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+        Path file = Paths.get(PERMABAN_FILE);
+        if (!Files.exists(file)) return set;
+        for (String line : Files.readAllLines(file, java.nio.charset.StandardCharsets.UTF_8)) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+            if (isValidIp(trimmed)) set.add(trimmed);
+        }
+        return set;
+    }
+
+    private void writePermabanFile(java.util.Set<String> ips) throws java.io.IOException {
+        ensurePermabanFile();
+        StringBuilder content = new StringBuilder();
+        content.append("# Permaban list — gestito dal mail panel\n");
+        content.append("# IP qui dentro vengono caricati nella tabella pf <permaban>\n");
+        content.append("# e bloccati con regola: block in quick from <permaban>\n\n");
+        for (String ip : ips) content.append(ip).append("\n");
+        Files.writeString(Paths.get(PERMABAN_FILE), content.toString(), java.nio.charset.StandardCharsets.UTF_8);
+        try {
+            Files.setPosixFilePermissions(Paths.get(PERMABAN_FILE),
+                java.nio.file.attribute.PosixFilePermissions.fromString("rw-r-----"));
+        } catch (Exception ignored) {}
+    }
+
     public static class IpInfo {
         public String ip;
         public boolean found;
-        public String country;
-        public String organization;
-        public String netRange;
+        public String country;         // codice (es. "RO") — da geoIP se disponibile, altrimenti whois
+        public String countryName;     // nome completo (es. "Romania")
+        public String region;          // regione/stato (es. "Bucharest")
+        public String city;            // città
+        public String organization;    // org registrazione (da whois)
+        public String isp;             // ISP (da geoIP)
+        public String asn;             // ASN (es. "AS12345")
+        public String netRange;        // range di IP (da whois)
+        public Double latitude;
+        public Double longitude;
+        public String geoSource;       // "ip-api.com" oppure "whois" oppure "both"
         public String rawWhois;
         public String error;
     }
