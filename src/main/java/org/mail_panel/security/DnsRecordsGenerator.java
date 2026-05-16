@@ -752,7 +752,14 @@ public class DnsRecordsGenerator {
         // Don't fail overall for optional records
         // if (!autodiscoverCheck.passed) result.allPassed = false;
 
-        // 8. Check MTA-STS (optional but recommended)
+        // 8. Check PTR / Reverse DNS + FCrDNS (Forward-Confirmed reverse DNS)
+        //    CRITICO per la deliverability — Gmail e Outlook RIFIUTANO o spammano
+        //    le mail provenienti da IP senza PTR o con FCrDNS rotto.
+        DnsCheck ptrCheck = checkPtrAndFcrdns(serverIp, mailHostname);
+        result.checks.add(ptrCheck);
+        if (!ptrCheck.passed) result.allPassed = false;
+
+        // 9. Check MTA-STS (optional but recommended)
         // Note: MTA-STS ID is just a version timestamp, doesn't need to match exactly
         DnsCheck mtaStsCheck = verifyTxtRecord("_mta-sts." + domain, "v=STSv1");
         mtaStsCheck.recordType = "MTA-STS";
@@ -815,6 +822,111 @@ public class DnsRecordsGenerator {
     /**
      * Verify a specific DNS record using dig
      */
+    /**
+     * Check PTR (reverse DNS) + FCrDNS (Forward-Confirmed reverse DNS).
+     *
+     * Cosa verifica:
+     *  1. L'IP del server ha un record PTR pubblico?
+     *  2. Il PTR punta esattamente al mail hostname configurato?
+     *  3. FCrDNS: risolvendo il PTR ottenuto, si torna allo stesso IP?
+     *     (es. PTR di 1.2.3.4 = mail.dom.tld; A di mail.dom.tld = 1.2.3.4)
+     *
+     * Senza questi:
+     *  - Gmail mette tutte le tue mail in spam (o le rifiuta)
+     *  - Outlook applica score di reputation molto basso
+     *  - Alcuni provider rifiutano direttamente la consegna SMTP
+     *
+     * Per fixare il PTR: solo il provider hosting può farlo (richiede ticket o
+     * pannello cloud, NON è gestibile da DNS classico).
+     */
+    private DnsCheck checkPtrAndFcrdns(String serverIp, String mailHostname) {
+        DnsCheck check = new DnsCheck();
+        check.recordType = "PTR";
+        check.recordName = serverIp;
+        check.expectedValue = mailHostname;
+
+        if (serverIp == null || serverIp.isEmpty()) {
+            check.passed = false;
+            check.message = "IP server non rilevato";
+            return check;
+        }
+
+        try {
+            // 1. Reverse lookup: dig -x <IP>
+            ProcessBuilder revPb = new ProcessBuilder("dig", "+short", "-x", serverIp);
+            revPb.redirectErrorStream(true);
+            Process revP = revPb.start();
+            String revOut;
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(revP.getInputStream()))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line).append("\n");
+                revOut = sb.toString().trim();
+            }
+            revP.waitFor();
+
+            if (revOut.isEmpty()) {
+                check.passed = false;
+                check.currentValue = null;
+                check.message = "Nessun record PTR per " + serverIp +
+                    " — Gmail/Outlook spammano le tue mail. Va configurato dal provider hosting.";
+                return check;
+            }
+
+            // Prendi il primo PTR (potrebbero esserci multipli, anomalia)
+            String ptr = revOut.split("\n")[0].trim();
+            // Rimuovi trailing dot tipico delle risposte DNS
+            if (ptr.endsWith(".")) ptr = ptr.substring(0, ptr.length() - 1);
+            check.currentValue = ptr;
+
+            // 2. PTR matches mail hostname?
+            boolean ptrMatches = ptr.equalsIgnoreCase(mailHostname);
+            if (!ptrMatches) {
+                check.passed = false;
+                check.message = "PTR è '" + ptr + "' ma il mail hostname è '" + mailHostname
+                    + "'. Gmail richiede match esatto. Chiedi al provider di aggiornarlo.";
+                return check;
+            }
+
+            // 3. FCrDNS — risolvi il PTR e verifica che torni allo stesso IP
+            ProcessBuilder fwdPb = new ProcessBuilder("dig", "+short", "A", ptr);
+            fwdPb.redirectErrorStream(true);
+            Process fwdP = fwdPb.start();
+            String fwdOut;
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(fwdP.getInputStream()))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line).append("\n");
+                fwdOut = sb.toString().trim();
+            }
+            fwdP.waitFor();
+
+            boolean fcrdnsOk = false;
+            if (!fwdOut.isEmpty()) {
+                for (String ipLine : fwdOut.split("\n")) {
+                    if (ipLine.trim().equals(serverIp)) { fcrdnsOk = true; break; }
+                }
+            }
+
+            if (!fcrdnsOk) {
+                check.passed = false;
+                check.message = "FCrDNS NON valido: PTR " + ptr + " punta a " + serverIp
+                    + " ma " + ptr + " risolve a '" + fwdOut.replace("\n", ", ") + "'. "
+                    + "Il forward A record deve combaciare col PTR.";
+                return check;
+            }
+
+            check.passed = true;
+            check.message = "OK: PTR " + ptr + " ↔ " + serverIp + " (FCrDNS valido)";
+            return check;
+
+        } catch (Exception e) {
+            check.passed = false;
+            check.message = "Errore verifica PTR: " + e.getMessage();
+            return check;
+        }
+    }
+
     private DnsCheck verifyRecord(String name, String type) {
         DnsCheck check = new DnsCheck();
         check.recordType = type;

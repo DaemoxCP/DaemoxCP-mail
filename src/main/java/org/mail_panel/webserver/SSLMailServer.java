@@ -13,6 +13,7 @@ import org.mail_panel.monitoring.MailQueueManager;
 import org.mail_panel.scripts.*;
 import org.mail_panel.security.AcmeManager;
 import org.mail_panel.security.DkimManager;
+import org.mail_panel.security.DkimRotationScheduler;
 import org.mail_panel.security.DnsRecordsGenerator;
 import org.mail_panel.security.Fail2banManager;
 import org.mail_panel.security.PasskeyManager;
@@ -44,6 +45,8 @@ public class SSLMailServer {
 
     // Managers for advanced features
     private DkimManager dkimManager;
+    private DkimRotationScheduler dkimRotationScheduler;
+    private org.mail_panel.security.CloudflareManager cloudflareManager;
     private RspamdManager rspamdManager;
     private SieveGenerator sieveGenerator;
     private DnsRecordsGenerator dnsGenerator;
@@ -143,6 +146,8 @@ public class SSLMailServer {
         // API endpoints - DKIM & DNS
         server.createContext("/api/dkim", this::handleApiDkim);
         server.createContext("/api/dns", this::handleApiDns);
+        server.createContext("/api/cloudflare", this::handleApiCloudflare);
+        server.createContext("/api/timezone-diag", this::handleApiTimezoneDiag);
 
         // API endpoints - SSL/Let's Encrypt
         server.createContext("/api/ssl", this::handleApiSsl);
@@ -163,6 +168,8 @@ public class SSLMailServer {
         server.createContext("/api/fail2ban_health", this::handleApiFail2banHealth);
         server.createContext("/api/system_paths", this::handleApiSystemPaths);
         server.createContext("/api/clamav_health", this::handleApiClamavHealth);
+        server.createContext("/api/blacklist_check", this::handleApiBlacklistCheck);
+        server.createContext("/api/unbound_health", this::handleApiUnboundHealth);
         server.createContext("/paths", this::handleProtectedPage);
 
         // New feature pages
@@ -215,6 +222,8 @@ public class SSLMailServer {
     private void initializeManagers() {
         if (Main.mailDatabase != null && Main.mysqlAvailable) {
             this.dkimManager = new DkimManager(Main.mailDatabase);
+            this.cloudflareManager = new org.mail_panel.security.CloudflareManager(Main.mailDatabase);
+            this.dkimManager.setCloudflareManager(this.cloudflareManager);
             this.dnsGenerator = new DnsRecordsGenerator(Main.mailDatabase);
             this.acmeManager = new AcmeManager(Main.mailDatabase);
             this.logManager = new LogManager();
@@ -234,6 +243,10 @@ public class SSLMailServer {
             // Start auto-renewal for certificates
             acmeManager.startAutoRenewal();
 
+            // Start DKIM rotation scheduler (polls DNS propagation hourly)
+            this.dkimRotationScheduler = new DkimRotationScheduler(Main.mailDatabase, dkimManager);
+            this.dkimRotationScheduler.start();
+
             // Auto-install/update Roundcube SSO plugin if Roundcube is installed
             autoInstallSsoPlugin();
         }
@@ -247,8 +260,20 @@ public class SSLMailServer {
             // Ensure receive_enabled column exists in mailboxes (for upgrades)
             Main.mailDatabase.ensureMailboxReceiveEnabledColumn();
 
+            // Ensure password vault columns exist (cifratura password mailbox per recovery dal pannello)
+            Main.mailDatabase.ensureMailboxPasswordVaultColumns();
+
             // Ensure theme column exists in panel_admin (for upgrades)
             Main.mailDatabase.ensureThemeColumn();
+
+            // Ensure DKIM rotation columns exist in domains (for upgrades)
+            Main.mailDatabase.ensureDkimRotationColumns();
+
+            // Ensure Cloudflare accounts schema (migra il token legacy se presente)
+            Main.mailDatabase.ensureCloudflareAccountsSchema();
+
+            // Ensure DKIM rotation history table
+            Main.mailDatabase.ensureDkimRotationHistoryTable();
 
             // Get the panel hostname from SQLite config
             String panelHost = "";
@@ -1250,6 +1275,14 @@ public class SSLMailServer {
                             mbox.put("active", m.active);
                             mbox.put("receive_enabled", m.receiveEnabled);
                             mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : "Mai");
+                            // Flag: la casella ha una password archiviata nel vault?
+                            // Usato dalla UI per mostrare/nascondere l'icona "rivela password".
+                            try {
+                                mbox.put("has_encrypted_password",
+                                    Main.mailDatabase.mailboxHasEncryptedPassword(m.id));
+                            } catch (Exception ignore) {
+                                mbox.put("has_encrypted_password", false);
+                            }
                             response.put("success", true);
                             response.put("mailbox", mbox);
                         } else {
@@ -1292,6 +1325,184 @@ public class SSLMailServer {
                         return;
                     }
 
+                    // Sub-routing per action specifiche (no email/password richieste)
+                    String action = req.optString("action", "");
+
+                    if ("bulk_rotate_passwords".equals(action)) {
+                        // Genera + aggiorna in massa le password di N caselle.
+                        // Le password in chiaro tornano UNA SOLA volta nella response
+                        // (perché poi vengono cifrate nel vault con la chiave master attuale).
+                        //
+                        // INPUT:
+                        //   mailbox_ids: array di INT (oppure "all" come stringa per "tutte")
+                        //   length:      lunghezza password (default 20)
+                        //
+                        // OUTPUT:
+                        //   results: array di {id, email, password, success, error?}
+                        //   summary: {total, succeeded, failed}
+                        org.json.JSONArray idsArr;
+                        Object ids = req.opt("mailbox_ids");
+                        java.util.List<Integer> idList = new java.util.ArrayList<>();
+                        if ("all".equals(ids)) {
+                            for (MailDatabase.Mailbox m : Main.mailDatabase.getAllMailboxes()) idList.add(m.id);
+                        } else if (ids instanceof org.json.JSONArray) {
+                            idsArr = (org.json.JSONArray) ids;
+                            for (int i = 0; i < idsArr.length(); i++) idList.add(idsArr.getInt(i));
+                        }
+                        if (idList.isEmpty()) {
+                            response.put("success", false);
+                            response.put("error", "Nessuna casella specificata (passa mailbox_ids: array o \"all\")");
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
+                        int length = req.optInt("length", 20);
+                        // Opzioni avanzate (stesso schema di generate_password)
+                        String type = req.optString("type", "easy_to_read");
+                        boolean inclLo = req.optBoolean("include_lowercase", true);
+                        boolean inclUp = req.optBoolean("include_uppercase", true);
+                        boolean inclNu = req.optBoolean("include_numbers", true);
+                        boolean inclSy = req.optBoolean("include_symbols", true);
+                        org.mail_panel.security.PasswordVault vault = org.mail_panel.security.PasswordVault.getInstance();
+                        org.json.JSONArray results = new org.json.JSONArray();
+                        int succeeded = 0, failed = 0;
+                        for (int mid : idList) {
+                            org.json.JSONObject r = new org.json.JSONObject();
+                            r.put("id", mid);
+                            try {
+                                MailDatabase.Mailbox mb = Main.mailDatabase.getMailbox(mid);
+                                if (mb == null) {
+                                    r.put("success", false);
+                                    r.put("error", "non trovata");
+                                    results.put(r);
+                                    failed++;
+                                    continue;
+                                }
+                                r.put("email", mb.email);
+                                String pw = vault.generatePassword(length, type, inclLo, inclUp, inclNu, inclSy);
+                                boolean ok = Main.mailDatabase.updateMailboxPassword(mid, pw);
+                                if (ok) {
+                                    r.put("success", true);
+                                    r.put("password", pw);
+                                    succeeded++;
+                                    logAudit("MAILBOX_PASSWORD_BULK_ROTATED", getClientIp(exchange),
+                                        "mailbox_id=" + mid + " email=" + mb.email);
+                                } else {
+                                    r.put("success", false);
+                                    r.put("error", "update fallito");
+                                    failed++;
+                                }
+                            } catch (Exception ex) {
+                                r.put("success", false);
+                                r.put("error", ex.getMessage());
+                                failed++;
+                            }
+                            results.put(r);
+                        }
+                        try { regenerateMailConfigs(); } catch (Exception ignore) {}
+                        response.put("success", true);
+                        response.put("results", results);
+                        org.json.JSONObject summary = new org.json.JSONObject();
+                        summary.put("total", idList.size());
+                        summary.put("succeeded", succeeded);
+                        summary.put("failed", failed);
+                        response.put("summary", summary);
+                        response.put("warning",
+                            "Le password in chiaro sono mostrate UNA SOLA volta — copia e inoltra agli utenti subito. " +
+                            "Poi resteranno solo nel vault cifrato (se la chiave master è valida).");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    if ("generate_password".equals(action)) {
+                        // Genera una password sicura random — non la salva, solo la ritorna alla UI.
+                        // Accetta opzioni avanzate (type, include lower/upper/numbers/symbols).
+                        int len = req.optInt("length", 20);
+                        String type = req.optString("type", "easy_to_read"); // easy_to_say / easy_to_read / all_chars
+                        boolean lo = req.optBoolean("include_lowercase", true);
+                        boolean up = req.optBoolean("include_uppercase", true);
+                        boolean nu = req.optBoolean("include_numbers", true);
+                        boolean sy = req.optBoolean("include_symbols", true);
+                        String pw = org.mail_panel.security.PasswordVault.getInstance()
+                            .generatePassword(len, type, lo, up, nu, sy);
+                        response.put("success", true);
+                        response.put("password", pw);
+                        response.put("length", pw.length());
+                        response.put("type", type);
+                        // Stima entropia approssimata (per UI: "strong/very strong/weak")
+                        int poolSize = 0;
+                        if ("easy_to_say".equals(type)) {
+                            if (lo) poolSize += 26;
+                            if (up) poolSize += 26;
+                        } else if ("all_chars".equals(type)) {
+                            if (lo) poolSize += 26;
+                            if (up) poolSize += 26;
+                            if (nu) poolSize += 10;
+                            if (sy) poolSize += 30; // approx
+                        } else { // easy_to_read
+                            if (lo) poolSize += 24; // no l, o
+                            if (up) poolSize += 24; // no I, O
+                            if (nu) poolSize += 8;  // no 0, 1
+                            if (sy) poolSize += 18; // safe set
+                        }
+                        double entropy = org.mail_panel.security.PasswordVault.estimateEntropy(pw.length(), poolSize);
+                        response.put("entropy_bits", Math.round(entropy * 10.0) / 10.0);
+                        String strengthLabel;
+                        if (entropy < 50) strengthLabel = "Debole";
+                        else if (entropy < 75) strengthLabel = "Discreta";
+                        else if (entropy < 100) strengthLabel = "Forte";
+                        else strengthLabel = "Molto forte";
+                        response.put("strength_label", strengthLabel);
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    if ("reveal_password".equals(action)) {
+                        // Decifra la password archiviata per la casella specificata.
+                        // Audit log: tracciamo SEMPRE chi e quando rivela una password.
+                        int mid = req.optInt("id", 0);
+                        if (mid <= 0) {
+                            response.put("success", false);
+                            response.put("error", "ID casella mancante");
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
+                        MailDatabase.Mailbox mbox = Main.mailDatabase.getMailbox(mid);
+                        if (mbox == null) {
+                            response.put("success", false);
+                            response.put("error", "Casella non trovata");
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
+                        String encrypted = Main.mailDatabase.getMailboxPasswordEncrypted(mid);
+                        if (encrypted == null || encrypted.isEmpty()) {
+                            response.put("success", false);
+                            response.put("error", "Nessuna password archiviata per questa casella. " +
+                                "Il vault delle password si popola solo a partire dalla prossima modifica/creazione. " +
+                                "Genera una nuova password per attivare la feature.");
+                            logAudit("MAILBOX_PASSWORD_REVEAL_NOT_AVAILABLE",
+                                getClientIp(exchange), "mailbox_id=" + mid + " email=" + mbox.email);
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
+                        try {
+                            String plain = org.mail_panel.security.PasswordVault.getInstance().decrypt(encrypted);
+                            response.put("success", true);
+                            response.put("password", plain);
+                            logAudit("MAILBOX_PASSWORD_REVEALED",
+                                getClientIp(exchange), "mailbox_id=" + mid + " email=" + mbox.email);
+                        } catch (Exception e) {
+                            response.put("success", false);
+                            response.put("error", "Errore decifratura: " + e.getMessage()
+                                + ". Probabile chiave master cambiata o blob corrotto.");
+                            logAudit("MAILBOX_PASSWORD_REVEAL_FAILED",
+                                getClientIp(exchange), "mailbox_id=" + mid + " email=" + mbox.email
+                                + " error=" + e.getMessage());
+                        }
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    // Default: creazione casella (codice esistente)
                     String email = req.optString("email", "").toLowerCase().trim();
                     String password = req.optString("password", "");
                     String name = req.optString("name", "");
@@ -2106,6 +2317,26 @@ public class SSLMailServer {
 
     // ============== DKIM API ==============
 
+    /**
+     * Serializza un {@link java.sql.Timestamp} in ISO 8601 UTC ("2026-05-15T21:00:00Z").
+     * Costruito dall'epoch milliseconds, bypassando completamente la timezone del JVM.
+     */
+    private static String tsIso(java.sql.Timestamp ts) {
+        return ts == null ? null : java.time.Instant.ofEpochMilli(ts.getTime()).toString();
+    }
+
+    /**
+     * Helper per scrivere un timestamp in JSON con DUE campi:
+     *   key       → ISO 8601 UTC ("2026-05-15T21:00:00Z")
+     *   key + "_ms" → epoch milliseconds (long, unambiguo)
+     * Il browser preferisce _ms se presente, altrimenti il fallback ISO.
+     */
+    private static void putTs(org.json.JSONObject obj, String key, java.sql.Timestamp ts) {
+        if (ts == null) return;
+        obj.put(key, tsIso(ts));
+        obj.put(key + "_ms", ts.getTime());
+    }
+
     private void handleApiDkim(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
             sendJsonError(exchange, 401, "Unauthorized");
@@ -2164,6 +2395,16 @@ public class SSLMailServer {
                     if (domain == null) {
                         response.put("success", false);
                         response.put("error", "Dominio non trovato");
+                    } else if (domain.hasDkim) {
+                        // SAFETY: 'generate' è solo per il SETUP INIZIALE. Se DKIM è già configurato,
+                        // sovrascrivere la chiave senza rotazione causerebbe DKIM-fail su mail in transito.
+                        // L'utente DEVE usare 'rotate_start' per cambiare la chiave su un dominio già attivo.
+                        response.put("success", false);
+                        response.put("error",
+                            "DKIM è già configurato per questo dominio (selector: " + domain.dkimSelector + "). " +
+                            "Per generare una nuova chiave, usa il workflow di rotazione (\"Avvia rotazione chiave\"): " +
+                            "rispetta il grace period di 7 giorni evitando DKIM-fail su mail in transito. " +
+                            "L'azione 'generate' è riservata al setup iniziale.");
                     } else {
                         DkimManager.DkimResult result = dkimManager.generateDkimKeys(domainId, domain.domain, selector);
                         response.put("success", result.success);
@@ -2189,6 +2430,263 @@ public class SSLMailServer {
                     int domainId = req.optInt("domain_id", 0);
                     boolean deleted = dkimManager.deleteDkim(domainId);
                     response.put("success", deleted);
+
+                } else if ("rotate_start".equals(action)) {
+                    // FASE 1: genera nuova chiave pending, restituisce record DNS da pubblicare.
+                    // Se "auto"=true e Cloudflare configurato, il record viene creato via API.
+                    int domainId = req.optInt("domain_id", 0);
+                    boolean auto = req.optBoolean("auto", false);
+                    DkimManager.RotationStartResult r = dkimManager.startRotation(domainId, auto);
+                    response.put("success", r.success);
+                    if (r.success) {
+                        response.put("pending_selector", r.pendingSelector);
+                        response.put("dns_record_name", r.dnsRecordName);
+                        response.put("dns_record_value", r.dnsRecordValue);
+                        // r.error qui è usato come "warning" non bloccante (es. CF non trovata)
+                        if (r.error != null && !r.error.isEmpty()) {
+                            response.put("warning", r.error);
+                            response.put("message", "Chiave generata (con avviso): " + r.error);
+                        } else if (auto && cloudflareManager != null && cloudflareManager.hasAccountForDomain(domainId)) {
+                            response.put("message", "Chiave generata e record DNS pubblicato via Cloudflare. Pronto per l'attivazione.");
+                        } else {
+                            response.put("message", "Nuova chiave generata. Aggiungi il record DNS, poi avvia la verifica.");
+                        }
+                    } else {
+                        response.put("error", r.error);
+                    }
+
+                } else if ("rotate_check".equals(action)) {
+                    // FASE 2: verifica propagazione DNS della chiave pending
+                    int domainId = req.optInt("domain_id", 0);
+                    DkimManager.PropagationCheckResult r = dkimManager.checkPropagation(domainId);
+                    response.put("success", r.success);
+                    response.put("propagated", r.propagated);
+                    response.put("message", r.message);
+                    if (r.rawDigOutput != null && !r.rawDigOutput.isEmpty()) {
+                        response.put("raw_output", r.rawDigOutput);
+                    }
+
+                } else if ("rotate_activate".equals(action)) {
+                    // FASE 3: pending → active, active → previous, reload Rspamd
+                    int domainId = req.optInt("domain_id", 0);
+                    boolean force = req.optBoolean("force", false);
+                    DkimManager.RotationActionResult r = dkimManager.activatePending(domainId, force);
+                    response.put("success", r.success);
+                    response.put("message", r.message);
+
+                } else if ("rotate_complete".equals(action)) {
+                    // FASE 4: rimuove la previous key (fine grace period)
+                    int domainId = req.optInt("domain_id", 0);
+                    DkimManager.RotationActionResult r = dkimManager.completeRotation(domainId);
+                    response.put("success", r.success);
+                    response.put("message", r.message);
+
+                } else if ("rotate_cancel".equals(action)) {
+                    // Annulla rotazione pre-attivazione
+                    int domainId = req.optInt("domain_id", 0);
+                    DkimManager.RotationActionResult r = dkimManager.cancelRotation(domainId);
+                    response.put("success", r.success);
+                    response.put("message", r.message);
+
+                } else if ("rotate_status".equals(action)) {
+                    // Stato corrente della rotazione (per la UI)
+                    int domainId = req.optInt("domain_id", 0);
+                    DkimManager.RotationInfo info = dkimManager.getRotationInfo(domainId);
+                    if (info == null) {
+                        response.put("success", false);
+                        response.put("error", "Dominio non trovato");
+                    } else {
+                        response.put("success", true);
+                        response.put("domain", info.domain);
+                        response.put("has_dkim", info.hasDkim);
+                        // Schedule corrente (per il banner "prossima rotazione")
+                        DkimManager.ScheduleResult sched = dkimManager.getRotationSchedule(domainId);
+                        if (sched != null && sched.success) {
+                            response.put("schedule_interval_days", sched.intervalDays);
+                            putTs(response, "schedule_last_rotation_at", sched.lastRotationAt);
+                            putTs(response, "schedule_next_rotation_at", sched.nextRotationAt);
+                        }
+                        // Account Cloudflare assegnato a questo dominio (se c'è)
+                        if (cloudflareManager != null) {
+                            MailDatabase.CloudflareAccount acct = cloudflareManager.getAccountForDomain(domainId);
+                            response.put("cloudflare_configured", acct != null);
+                            if (acct != null) {
+                                response.put("cloudflare_account_label", acct.label);
+                                if (acct.email != null && !acct.email.isEmpty())
+                                    response.put("cloudflare_account_email", acct.email);
+                            }
+                        } else {
+                            response.put("cloudflare_configured", false);
+                        }
+                        response.put("current_selector", info.currentSelector);
+                        response.put("rotation_state", info.rotationState == null ? "" : info.rotationState);
+                        putTs(response, "started_at", info.startedAt);
+                        if (info.activatedAt != null) {
+                            putTs(response, "activated_at", info.activatedAt);
+                            response.put("grace_period_days", org.mail_panel.security.DkimRotationScheduler.GRACE_PERIOD_DAYS);
+                            response.put("grace_period_over",
+                                org.mail_panel.security.DkimRotationScheduler.isGracePeriodOver(info.activatedAt));
+                        }
+                        if (info.pendingSelector != null) {
+                            response.put("pending_selector", info.pendingSelector);
+                            response.put("pending_dns_name", info.pendingDnsName);
+                            response.put("pending_dns_value", info.pendingDnsValue);
+                        }
+                        if (info.previousSelector != null) {
+                            response.put("previous_selector", info.previousSelector);
+                            response.put("previous_dns_name", info.previousDnsName);
+                        }
+                    }
+
+                } else if ("orphans_scan".equals(action)) {
+                    // Scansiona Cloudflare per trovare TUTTI i record _domainkey del dominio,
+                    // distinguendo tra current/pending/previous (attivi) e orphan (da pulire).
+                    int domainId = req.optInt("domain_id", 0);
+                    DkimManager.OrphanScanResult r = dkimManager.scanDkimRecords(domainId);
+                    response.put("success", r.success);
+                    if (!r.success) {
+                        response.put("error", r.message);
+                    } else {
+                        response.put("domain", r.domain);
+                        if (r.cloudflareAccountLabel != null) response.put("cloudflare_account_label", r.cloudflareAccountLabel);
+                        if (r.currentSelector != null)  response.put("current_selector",  r.currentSelector);
+                        if (r.pendingSelector != null)  response.put("pending_selector",  r.pendingSelector);
+                        if (r.previousSelector != null) response.put("previous_selector", r.previousSelector);
+                        JSONArray arr = new JSONArray();
+                        for (DkimManager.DkimRecordEntry e : r.records) {
+                            JSONObject o = new JSONObject();
+                            o.put("record_id", e.recordId);
+                            o.put("name", e.name);
+                            o.put("selector", e.selector);
+                            o.put("content_preview", e.contentPreview);
+                            if (e.comment != null) o.put("comment", e.comment);
+                            o.put("is_current",  e.isCurrent);
+                            o.put("is_pending",  e.isPending);
+                            o.put("is_previous", e.isPrevious);
+                            o.put("is_orphan",   e.isOrphan);
+                            o.put("in_grace_period", e.inGracePeriod);
+                            putTs(o, "deactivated_at",       e.deactivatedAt);
+                            putTs(o, "grace_period_ends_at", e.gracePeriodEndsAt);
+                            arr.put(o);
+                        }
+                        response.put("records", arr);
+                        response.put("grace_period_days", org.mail_panel.security.DkimRotationScheduler.GRACE_PERIOD_DAYS);
+                    }
+
+                } else if ("orphans_delete".equals(action)) {
+                    // Cancella un singolo record (per record_id) via Cloudflare API.
+                    int domainId = req.optInt("domain_id", 0);
+                    String recordId = req.optString("record_id", "");
+                    if (domainId <= 0 || recordId.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "domain_id e record_id richiesti");
+                    } else {
+                        DkimManager.RotationActionResult r = dkimManager.deleteDkimRecordById(domainId, recordId);
+                        response.put("success", r.success);
+                        response.put("message", r.message);
+                    }
+
+                } else if ("last_rotation_reset".equals(action)) {
+                    // Sovrascrive dkim_last_rotation_at con NOW (Java JVM clock).
+                    // Usare per pulire valori "fossili" memorizzati con tz sbagliata.
+                    int domainId = req.optInt("domain_id", 0);
+                    if (domainId <= 0) {
+                        response.put("success", false);
+                        response.put("error", "domain_id richiesto");
+                    } else {
+                        Main.mailDatabase.markDkimRotationActivated(domainId);
+                        response.put("success", true);
+                        response.put("message", "Timestamp 'ultima rotazione' reimpostato a ora.");
+                    }
+
+                } else if ("last_rotation_clear".equals(action)) {
+                    // Resetta a NULL — l'UI mostrerà "Mai effettuata"
+                    int domainId = req.optInt("domain_id", 0);
+                    if (domainId <= 0) {
+                        response.put("success", false);
+                        response.put("error", "domain_id richiesto");
+                    } else {
+                        Main.mailDatabase.clearDkimLastRotation(domainId);
+                        response.put("success", true);
+                        response.put("message", "Timestamp 'ultima rotazione' cancellato (NULL).");
+                    }
+
+                } else if ("schedule_get".equals(action)) {
+                    int domainId = req.optInt("domain_id", 0);
+                    DkimManager.ScheduleResult s = dkimManager.getRotationSchedule(domainId);
+                    response.put("success", s.success);
+                    if (!s.success) {
+                        response.put("error", s.message);
+                    } else {
+                        response.put("interval_days", s.intervalDays);
+                        putTs(response, "last_rotation_at", s.lastRotationAt);
+                        putTs(response, "next_rotation_at", s.nextRotationAt);
+                        // Clock del server in epoch ms (per diagnosi disallineamenti vs browser)
+                        response.put("server_now_ms", System.currentTimeMillis());
+                        response.put("auto_activate_after_hours", org.mail_panel.security.DkimRotationScheduler.AUTO_ACTIVATE_AFTER_HOURS);
+                        response.put("grace_period_days", org.mail_panel.security.DkimRotationScheduler.GRACE_PERIOD_DAYS);
+                        // Preset consigliati (per la UI)
+                        JSONArray presets = new JSONArray();
+                        presets.put(new JSONObject().put("days", 0).put("label", "Disattivato"));
+                        presets.put(new JSONObject().put("days", DkimManager.PRESET_AGGRESSIVE).put("label", "Mensile (massima sicurezza)"));
+                        presets.put(new JSONObject().put("days", DkimManager.PRESET_RECOMMENDED).put("label", "Trimestrale — consigliato"));
+                        presets.put(new JSONObject().put("days", DkimManager.PRESET_BALANCED).put("label", "Semestrale (equilibrato)"));
+                        presets.put(new JSONObject().put("days", DkimManager.PRESET_MINIMAL).put("label", "Annuale (minimo)"));
+                        response.put("presets", presets);
+                    }
+
+                } else if ("schedule_set".equals(action)) {
+                    int domainId = req.optInt("domain_id", 0);
+                    int days = req.optInt("interval_days", 0);
+                    DkimManager.ScheduleResult s = dkimManager.setRotationSchedule(domainId, days);
+                    response.put("success", s.success);
+                    response.put("message", s.success
+                        ? (days == 0 ? "Rotazione programmata disattivata."
+                                     : "Rotazione programmata ogni " + days + " giorni.")
+                        : s.message);
+                    response.put("interval_days", s.intervalDays);
+                    putTs(response, "last_rotation_at", s.lastRotationAt);
+                    putTs(response, "next_rotation_at", s.nextRotationAt);
+
+                } else if ("rotate_history".equals(action)) {
+                    int domainId = req.optInt("domain_id", 0);
+                    int limit = req.optInt("limit", 50);
+                    if (domainId <= 0) {
+                        response.put("success", false);
+                        response.put("error", "domain_id richiesto");
+                    } else {
+                        java.util.List<MailDatabase.DkimRotationEvent> events =
+                            Main.mailDatabase.getDkimRotationHistory(domainId, limit);
+                        JSONArray arr = new JSONArray();
+                        for (MailDatabase.DkimRotationEvent ev : events) {
+                            JSONObject o = new JSONObject();
+                            o.put("id", ev.id);
+                            o.put("event_type", ev.eventType);
+                            if (ev.selector != null) o.put("selector", ev.selector);
+                            if (ev.mode != null) o.put("mode", ev.mode);
+                            if (ev.triggeredBy != null) o.put("triggered_by", ev.triggeredBy);
+                            if (ev.cloudflareAccountLabel != null) o.put("cloudflare_account_label", ev.cloudflareAccountLabel);
+                            o.put("success", ev.success);
+                            if (ev.message != null) o.put("message", ev.message);
+                            putTs(o, "occurred_at", ev.occurredAt);
+                            arr.put(o);
+                        }
+                        response.put("success", true);
+                        response.put("events", arr);
+                    }
+
+                } else if ("verify_active_dns".equals(action)) {
+                    int domainId = req.optInt("domain_id", 0);
+                    DkimManager.ActiveKeyVerifyResult vr = dkimManager.verifyActiveKeyInDns(domainId);
+                    response.put("success", vr.success);
+                    response.put("match", vr.match);
+                    if (vr.domain != null) response.put("domain", vr.domain);
+                    if (vr.selector != null) response.put("selector", vr.selector);
+                    if (vr.dnsRecordName != null) response.put("dns_record_name", vr.dnsRecordName);
+                    if (vr.message != null) response.put("message", vr.message);
+                    if (vr.expectedPublicKey != null) response.put("expected_public_key", vr.expectedPublicKey);
+                    if (vr.actualPublicKey != null) response.put("actual_public_key", vr.actualPublicKey);
+                    if (vr.rawDigOutput != null && !vr.rawDigOutput.isEmpty()) response.put("raw_output", vr.rawDigOutput);
 
                 } else {
                     response.put("success", false);
@@ -2330,6 +2828,296 @@ public class SSLMailServer {
         }
 
         sendJsonResponse(exchange, response);
+    }
+
+    // ============== Cloudflare API integration ==============
+
+    /**
+     * Endpoint /api/cloudflare — multi-account.
+     *
+     * GET                                 -> lista account + assegnazione domini
+     * POST { action: "test", token }      -> verifica token (no save)
+     * POST { action: "add", label, email, token } -> aggiunge account (verifica e salva)
+     * POST { action: "update", account_id, label, email, token? } -> aggiorna account
+     * POST { action: "delete", account_id } -> elimina account (disassocia i domini)
+     * POST { action: "assign", domain_id, account_id } -> lega un dominio a un account (account_id=0 = manuale)
+     */
+    private void handleApiCloudflare(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+        if (cloudflareManager == null) {
+            sendJsonError(exchange, 503, "Cloudflare manager not initialized");
+            return;
+        }
+        String method = exchange.getRequestMethod();
+        org.json.JSONObject response = new org.json.JSONObject();
+
+        try {
+            if ("GET".equals(method)) {
+                org.json.JSONArray accounts = new org.json.JSONArray();
+                for (MailDatabase.CloudflareAccount a : cloudflareManager.listAccounts()) {
+                    org.json.JSONObject obj = new org.json.JSONObject();
+                    obj.put("id", a.id);
+                    obj.put("label", a.label == null ? "" : a.label);
+                    obj.put("email", a.email == null ? "" : a.email);
+                    obj.put("token_masked", org.mail_panel.security.CloudflareManager.maskToken(a.apiToken));
+                    if (a.verifiedAt != null) obj.put("verified_at", a.verifiedAt.toString());
+                    if (a.createdAt != null)  obj.put("created_at", a.createdAt.toString());
+                    accounts.put(obj);
+                }
+                response.put("success", true);
+                response.put("accounts", accounts);
+
+                // Lista domini con assegnazione corrente
+                org.json.JSONArray domains = new org.json.JSONArray();
+                for (MailDatabase.Domain d : Main.mailDatabase.getDomains()) {
+                    org.json.JSONObject obj = new org.json.JSONObject();
+                    obj.put("id", d.id);
+                    obj.put("domain", d.domain);
+                    obj.put("cloudflare_account_id", d.cloudflareAccountId);
+                    domains.put(obj);
+                }
+                response.put("domains", domains);
+
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            if (!"POST".equals(method)) {
+                sendJsonError(exchange, 405, "Method not allowed");
+                return;
+            }
+
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) {
+                sendJsonError(exchange, 413, "Richiesta troppo grande");
+                return;
+            }
+            org.json.JSONObject req = new org.json.JSONObject(body);
+            String action = req.optString("action", "");
+
+            if ("test".equals(action)) {
+                String token = req.optString("token", "").trim();
+                if (token.isEmpty()) {
+                    response.put("success", false);
+                    response.put("error", "Token non fornito");
+                } else {
+                    org.mail_panel.security.CloudflareManager.TokenCheck tc = cloudflareManager.verifyToken(token);
+                    response.put("success", tc.valid);
+                    response.put("message", tc.message);
+                    if (tc.status != null) response.put("status", tc.status);
+                }
+
+            } else if ("add".equals(action)) {
+                String label = req.optString("label", "").trim();
+                String email = req.optString("email", "").trim();
+                String token = req.optString("token", "").trim();
+                org.mail_panel.security.CloudflareManager.AddAccountResult r =
+                    cloudflareManager.addAccount(label, email, token);
+                response.put("success", r.success);
+                response.put("message", r.message);
+                if (r.success) response.put("account_id", r.accountId);
+
+            } else if ("update".equals(action)) {
+                int id = req.optInt("account_id", 0);
+                String label = req.optString("label", null);
+                String email = req.optString("email", null);
+                String token = req.has("token") ? req.optString("token", "").trim() : null;
+                org.mail_panel.security.CloudflareManager.AddAccountResult r =
+                    cloudflareManager.updateAccount(id, label, email, token);
+                response.put("success", r.success);
+                response.put("message", r.message);
+
+            } else if ("delete".equals(action)) {
+                int id = req.optInt("account_id", 0);
+                if (id <= 0) {
+                    response.put("success", false);
+                    response.put("error", "account_id richiesto");
+                } else {
+                    boolean ok = cloudflareManager.deleteAccount(id);
+                    response.put("success", ok);
+                    response.put("message", ok ? "Account rimosso. Domini assegnati: torno a modalità manuale." : "Account non trovato");
+                }
+
+            } else if ("assign".equals(action)) {
+                int domainId = req.optInt("domain_id", 0);
+                int accountId = req.optInt("account_id", 0); // 0 = manuale
+                if (domainId <= 0) {
+                    response.put("success", false);
+                    response.put("error", "domain_id richiesto");
+                } else {
+                    boolean ok = cloudflareManager.assignDomain(domainId, accountId);
+                    response.put("success", ok);
+                    response.put("message", ok
+                        ? (accountId > 0 ? "Dominio assegnato all'account." : "Dominio impostato su modalità manuale.")
+                        : "Operazione fallita");
+                }
+
+            } else {
+                response.put("success", false);
+                response.put("error", "Azione non valida");
+            }
+
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+
+        sendJsonResponse(exchange, response);
+    }
+
+    // ============== Timezone diagnostics & fix ==============
+
+    /**
+     * Endpoint /api/timezone-diag — strumento diagnostico per allineare timezone.
+     *
+     * GET → restituisce stato attuale:
+     *   - server OS time (epoch ms) e tz JVM
+     *   - MySQL @@global.time_zone, @@session.time_zone, NOW(), UTC_TIMESTAMP()
+     *   - "alignment": OK se mysql NOW() ≈ jvm now (delta < 60s), MISMATCH altrimenti
+     *
+     * POST { action: "sync_to_system" } → imposta MySQL global+session time_zone
+     *   all'offset corrente del JVM (es. "+02:00"). Richiede privilegio SUPER su MySQL.
+     *
+     * POST { action: "set", value: "+02:00" | "SYSTEM" | "Europe/Rome" } → manuale.
+     */
+    private void handleApiTimezoneDiag(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+        String method = exchange.getRequestMethod();
+        org.json.JSONObject response = new org.json.JSONObject();
+
+        try {
+            if ("GET".equals(method)) {
+                fillTimezoneDiagnostics(response);
+                sendJsonResponse(exchange, response);
+                return;
+            }
+            if (!"POST".equals(method)) {
+                sendJsonError(exchange, 405, "Method not allowed");
+                return;
+            }
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+            org.json.JSONObject req = new org.json.JSONObject(body);
+            String action = req.optString("action", "");
+
+            if ("sync_to_system".equals(action) || "set".equals(action)) {
+                String desired;
+                if ("set".equals(action)) {
+                    desired = req.optString("value", "").trim();
+                    if (desired.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "Valore richiesto (es. '+02:00', 'SYSTEM', 'Europe/Rome')");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                } else {
+                    // Calcola l'offset attuale del JVM rispetto a UTC in formato "+HH:MM"
+                    java.time.ZoneOffset off = java.time.ZonedDateTime.now().getOffset();
+                    int sec = off.getTotalSeconds();
+                    String sign = sec >= 0 ? "+" : "-";
+                    int abs = Math.abs(sec);
+                    desired = String.format("%s%02d:%02d", sign, abs / 3600, (abs % 3600) / 60);
+                }
+
+                StringBuilder log = new StringBuilder();
+                boolean ok = true;
+                String errMsg = null;
+                try (java.sql.Statement stmt = Main.mailDatabase.getConnection().createStatement()) {
+                    // Prova global (richiede SUPER), poi session
+                    try {
+                        stmt.executeUpdate("SET GLOBAL time_zone = '" + desired.replace("'", "") + "'");
+                        log.append("✓ Global time_zone impostata a '").append(desired).append("'\n");
+                    } catch (Exception ex) {
+                        log.append("✗ Impossibile impostare GLOBAL time_zone (manca privilegio SUPER?): ").append(ex.getMessage()).append("\n");
+                        // Continua comunque a impostare session per la connessione corrente
+                    }
+                    try {
+                        stmt.executeUpdate("SET SESSION time_zone = '" + desired.replace("'", "") + "'");
+                        log.append("✓ Session time_zone impostata a '").append(desired).append("'\n");
+                    } catch (Exception ex) {
+                        log.append("✗ Errore session: ").append(ex.getMessage()).append("\n");
+                        ok = false;
+                        errMsg = ex.getMessage();
+                    }
+                } catch (Exception e) {
+                    ok = false;
+                    errMsg = e.getMessage();
+                }
+
+                response.put("success", ok);
+                if (errMsg != null) response.put("error", errMsg);
+                response.put("log", log.toString());
+                response.put("desired_value", desired);
+                fillTimezoneDiagnostics(response);
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            response.put("success", false);
+            response.put("error", "Azione non valida");
+            sendJsonResponse(exchange, response);
+        } catch (Exception e) {
+            sendJsonError(exchange, 500, "Errore: " + e.getMessage());
+        }
+    }
+
+    /** Riempie response con i campi di diagnostica timezone. */
+    private void fillTimezoneDiagnostics(org.json.JSONObject response) {
+        response.put("success", true);
+
+        // 1) JVM / OS Java
+        long jvmNowMs = System.currentTimeMillis();
+        response.put("jvm_now_ms", jvmNowMs);
+        response.put("jvm_now_iso", java.time.Instant.ofEpochMilli(jvmNowMs).toString());
+        response.put("jvm_default_zone", java.util.TimeZone.getDefault().getID());
+        java.time.ZoneOffset off = java.time.ZonedDateTime.now().getOffset();
+        response.put("jvm_offset", off.getId().equals("Z") ? "+00:00" : off.getId());
+
+        // 2) OS clock via comando "date" (FreeBSD/Linux): più affidabile in caso di JVM
+        //    settata a tz diversa dall'OS
+        try {
+            Process p = new ProcessBuilder("date", "+%s|%z|%Z").redirectErrorStream(true).start();
+            try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+                String line = r.readLine();
+                if (line != null) {
+                    String[] parts = line.trim().split("\\|");
+                    if (parts.length >= 1) response.put("os_now_ms", Long.parseLong(parts[0]) * 1000L);
+                    if (parts.length >= 2) response.put("os_offset", parts[1]);
+                    if (parts.length >= 3) response.put("os_tz", parts[2]);
+                }
+            }
+            p.waitFor();
+        } catch (Exception ignore) {}
+
+        // 3) MySQL: @@global.time_zone, @@session.time_zone, NOW(), UTC_TIMESTAMP()
+        try (java.sql.Statement stmt = Main.mailDatabase.getConnection().createStatement();
+             java.sql.ResultSet rs = stmt.executeQuery(
+                 "SELECT @@global.time_zone, @@session.time_zone, " +
+                 "NOW(), UTC_TIMESTAMP(), @@system_time_zone, " +
+                 "UNIX_TIMESTAMP() AS unix_ts")) {
+            if (rs.next()) {
+                response.put("mysql_global_tz", rs.getString(1));
+                response.put("mysql_session_tz", rs.getString(2));
+                response.put("mysql_now", rs.getString(3));
+                response.put("mysql_utc_now", rs.getString(4));
+                response.put("mysql_system_tz", rs.getString(5));
+                long unixTs = rs.getLong(6);
+                response.put("mysql_now_ms", unixTs * 1000L);
+
+                // Skew = mysql_now_ms - jvm_now_ms
+                long skewMs = (unixTs * 1000L) - jvmNowMs;
+                response.put("skew_mysql_vs_jvm_ms", skewMs);
+                response.put("alignment", Math.abs(skewMs) < 60_000 ? "OK" : "MISMATCH");
+            }
+        } catch (Exception e) {
+            response.put("mysql_error", e.getMessage());
+        }
     }
 
     // ============== SSL/Let's Encrypt API ==============
@@ -3517,6 +4305,913 @@ public class SSLMailServer {
     // ============== FAIL2BAN HEALTH CHECK ==============
 
     /** Endpoint per diagnosi e setup automatico di Fail2ban. */
+    // ============== UNBOUND HEALTH CHECK (Resolver DNS locale) ==============
+    private void handleApiUnboundHealth(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        String method = exchange.getRequestMethod();
+        JSONObject response = new JSONObject();
+        try {
+            if ("GET".equals(method)) {
+                response = buildUnboundHealthReport();
+            } else if ("POST".equals(method)) {
+                String body = readRequestBodyWithLimit(exchange);
+                if (body == null) { sendJsonError(exchange, 413, "Body troppo grande"); return; }
+                JSONObject req = new JSONObject(body);
+                if (!validateCsrfForRequest(exchange, req)) { sendCsrfError(exchange); return; }
+                String action = req.optString("action", "");
+                String clientIp = getClientIp(exchange);
+                switch (action) {
+                    case "install_unbound" -> {
+                        JSONObject r = installUnbound();
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "UNBOUND_INSTALLED" : "UNBOUND_INSTALL_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "configure_unbound" -> {
+                        JSONObject r = writeUnboundConfig();
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "UNBOUND_CONFIGURED" : "UNBOUND_CONFIGURE_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "enable_unbound_at_boot" -> {
+                        JSONObject r = sysrcSet("unbound_enable", "YES");
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "UNBOUND_ENABLED_AT_BOOT" : "UNBOUND_ENABLE_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "start_unbound" -> {
+                        JSONObject r = serviceCommand("unbound", "start", 30);
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "UNBOUND_STARTED" : "UNBOUND_START_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "enable_local_unbound_at_boot" -> {
+                        JSONObject r = sysrcSet("local_unbound_enable", "YES");
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "LOCAL_UNBOUND_ENABLED_AT_BOOT" : "LOCAL_UNBOUND_ENABLE_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "start_local_unbound" -> {
+                        JSONObject r = serviceCommand("local_unbound", "start", 30);
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "LOCAL_UNBOUND_STARTED" : "LOCAL_UNBOUND_START_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "switch_resolv_conf" -> {
+                        JSONObject r = switchResolvConfToUnbound();
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "RESOLV_CONF_SWITCHED" : "RESOLV_CONF_SWITCH_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "test_query" -> {
+                        JSONObject r = testUnboundQuery();
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "UNBOUND_TEST_OK" : "UNBOUND_TEST_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "fix_all" -> {
+                        JSONObject r = runUnboundFixAll();
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "UNBOUND_FIX_ALL_OK" : "UNBOUND_FIX_ALL_PARTIAL",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "disable_forwarder" -> {
+                        JSONObject r = disableUnboundForwarder();
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "UNBOUND_FORWARDER_DISABLED" : "UNBOUND_FORWARDER_DISABLE_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    case "rollback_resolv_conf" -> {
+                        JSONObject r = rollbackResolvConf();
+                        response = r;
+                        logAudit(r.optBoolean("success") ? "RESOLV_CONF_ROLLBACK_OK" : "RESOLV_CONF_ROLLBACK_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
+                    default -> {
+                        response.put("success", false);
+                        response.put("error", "Azione non valida: " + action);
+                    }
+                }
+            } else {
+                sendJsonError(exchange, 405, "Method not allowed");
+                return;
+            }
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    private static final String UNBOUND_CONF_PATH = "/usr/local/etc/unbound/unbound.conf";
+
+    private static final String UNBOUND_CONF_CONTENT = ""
+        + "# /usr/local/etc/unbound/unbound.conf\n"
+        + "# Generato dal mail panel — Resolver DNS LOCALE per il server\n"
+        + "# Ascolta SOLO su 127.0.0.1, non raggiungibile da internet\n"
+        + "\n"
+        + "server:\n"
+        + "    # Bind solo loopback (sicurezza: invisibile da fuori)\n"
+        + "    interface: 127.0.0.1\n"
+        + "    interface: ::1\n"
+        + "    port: 53\n"
+        + "    do-ip4: yes\n"
+        + "    do-ip6: yes\n"
+        + "    do-udp: yes\n"
+        + "    do-tcp: yes\n"
+        + "\n"
+        + "    # Solo localhost può fare query\n"
+        + "    access-control: 127.0.0.0/8 allow\n"
+        + "    access-control: ::1 allow\n"
+        + "    access-control: 0.0.0.0/0 refuse\n"
+        + "    access-control: ::/0 refuse\n"
+        + "\n"
+        + "    # Privacy e sicurezza\n"
+        + "    hide-identity: yes\n"
+        + "    hide-version: yes\n"
+        + "    harden-glue: yes\n"
+        + "    harden-dnssec-stripped: yes\n"
+        + "    use-caps-for-id: yes\n"
+        + "\n"
+        + "    # Performance\n"
+        + "    num-threads: 2\n"
+        + "    cache-min-ttl: 300\n"
+        + "    cache-max-ttl: 86400\n"
+        + "    prefetch: yes\n"
+        + "    prefetch-key: yes\n"
+        + "\n"
+        + "    # Logging\n"
+        + "    use-syslog: yes\n"
+        + "    verbosity: 1\n"
+        + "\n"
+        + "    # Permetti private addresses nelle risposte (necessario per alcuni DNSBL)\n"
+        + "    private-address: 192.168.0.0/16\n"
+        + "    private-address: 10.0.0.0/8\n"
+        + "    private-address: 172.16.0.0/12\n"
+        + "    private-address: 169.254.0.0/16\n"
+        + "    private-address: fd00::/8\n"
+        + "    private-address: fe80::/10\n";
+
+    private JSONObject buildUnboundHealthReport() {
+        JSONObject r = new JSONObject();
+        JSONArray checks = new JSONArray();
+
+        // 1. Resolver locale disponibile (unbound pkg OPPURE local_unbound base system)
+        //    Su FreeBSD c'è 'local_unbound' nel base system: stesso effetto, già installato di default.
+        boolean pkgInstalled;
+        try {
+            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "unbound");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            pkgInstalled = p.exitValue() == 0;
+        } catch (Exception e) { pkgInstalled = false; }
+
+        boolean baseUnboundAvailable = java.nio.file.Files.exists(java.nio.file.Paths.get("/usr/sbin/local-unbound"));
+        boolean baseUnboundRunning = isServiceRunning("local_unbound");
+        boolean installed = pkgInstalled || baseUnboundAvailable;
+
+        String installedStatus;
+        if (pkgInstalled && baseUnboundRunning) installedStatus = "Pacchetto 'unbound' installato + 'local_unbound' base attivo";
+        else if (pkgInstalled) installedStatus = "Pacchetto unbound (pkg) presente";
+        else if (baseUnboundRunning) installedStatus = "local_unbound (base system FreeBSD) attivo — non serve pacchetto pkg";
+        else if (baseUnboundAvailable) installedStatus = "local_unbound (base system) disponibile ma fermo";
+        else installedStatus = "Nessun resolver locale disponibile";
+
+        checks.put(makeCheck("unbound-installed", "Resolver locale disponibile", installed,
+            installedStatus,
+            installed ? null : "Senza un resolver locale non puoi fare check DNSBL affidabili (Spamhaus rifiuta query da DNS pubblici).",
+            installed ? null : "install_unbound",
+            "Installa pacchetto unbound (alternativa: usa local_unbound del base system)"));
+
+        // 2. Config file: solo se usi il pacchetto pkg, non serve per local_unbound (config in /var/unbound/)
+        boolean confPresent = java.nio.file.Files.exists(java.nio.file.Paths.get(UNBOUND_CONF_PATH));
+        boolean baseConfPresent = java.nio.file.Files.exists(java.nio.file.Paths.get("/var/unbound/unbound.conf"));
+        boolean confValid = false;
+        if (confPresent) {
+            try {
+                String c = java.nio.file.Files.readString(java.nio.file.Paths.get(UNBOUND_CONF_PATH));
+                confValid = c.contains("interface: 127.0.0.1") && c.contains("access-control");
+            } catch (Exception ignored) {}
+        }
+        // Se local_unbound è già attivo, considera la config "OK" anche senza il file pkg
+        boolean configOk = confValid || baseConfPresent || baseUnboundRunning;
+        String configStatus;
+        if (confValid) configStatus = UNBOUND_CONF_PATH + " (pkg unbound)";
+        else if (baseConfPresent) configStatus = "/var/unbound/unbound.conf (local_unbound base system)";
+        else if (baseUnboundRunning) configStatus = "local_unbound attivo (config auto-gestita)";
+        else if (confPresent) configStatus = "Config pkg esiste ma non è valida";
+        else configStatus = "Nessuna config trovata";
+        checks.put(makeCheck("unbound-config", "Config resolver presente",
+            configOk,
+            configStatus,
+            configOk ? null : "Senza config, il resolver non parte.",
+            (configOk || !installed || baseUnboundAvailable) ? null : "configure_unbound",
+            "Scrive config minimal+sicura su " + UNBOUND_CONF_PATH));
+
+        // 3. Abilitato al boot — verifica sia unbound_enable che local_unbound_enable
+        boolean unboundEnabledBoot = isSysrcYes("unbound_enable");
+        boolean localUnboundEnabledBoot = isSysrcYes("local_unbound_enable");
+        boolean enabledBoot = unboundEnabledBoot || localUnboundEnabledBoot;
+        String bootStatus;
+        if (unboundEnabledBoot && localUnboundEnabledBoot) bootStatus = "unbound_enable + local_unbound_enable=YES";
+        else if (unboundEnabledBoot) bootStatus = "unbound_enable=YES (pkg)";
+        else if (localUnboundEnabledBoot) bootStatus = "local_unbound_enable=YES (base system)";
+        else bootStatus = "Nessun resolver locale abilitato al boot";
+        // Fix appropriato: se base system esiste, abilita quello, altrimenti pkg
+        String bootFixAction = enabledBoot ? null : (baseUnboundAvailable && !pkgInstalled ? "enable_local_unbound_at_boot" : "enable_unbound_at_boot");
+        String bootFixDesc = baseUnboundAvailable && !pkgInstalled
+            ? "sysrc local_unbound_enable=YES (usa il resolver del base system)"
+            : "sysrc unbound_enable=YES";
+        checks.put(makeCheck("unbound-enabled-boot", "Resolver locale abilitato al boot",
+            enabledBoot,
+            bootStatus,
+            enabledBoot ? null : "Dopo un reboot, il server non avrà resolver locale e tornerai ai problemi con DNSBL.",
+            (enabledBoot || !installed) ? null : bootFixAction,
+            bootFixDesc));
+
+        // 4. In esecuzione (pkg unbound OPPURE local_unbound)
+        boolean pkgRunning = isServiceRunning("unbound");
+        boolean running = pkgRunning || baseUnboundRunning;
+        String runningStatus;
+        if (pkgRunning && baseUnboundRunning) runningStatus = "Entrambi attivi (pkg + base)";
+        else if (pkgRunning) runningStatus = "unbound (pkg) in esecuzione";
+        else if (baseUnboundRunning) runningStatus = "local_unbound (base system) in esecuzione";
+        else runningStatus = "Nessun resolver in esecuzione";
+        String runningFixAction = running ? null : (baseUnboundAvailable && !pkgInstalled ? "start_local_unbound" : "start_unbound");
+        String runningFixDesc = baseUnboundAvailable && !pkgInstalled
+            ? "service local_unbound start"
+            : "service unbound start";
+        checks.put(makeCheck("unbound-running", "Resolver locale attivo",
+            running,
+            runningStatus,
+            running ? null : "Nessuna query DNS verrà servita localmente.",
+            (running || !installed) ? null : runningFixAction,
+            runningFixDesc));
+
+        // 5. Ascolta su 127.0.0.1:53
+        boolean listening53 = isPortListeningOnLocalhost(53);
+        checks.put(makeCheck("unbound-listening", "Ascolta su 127.0.0.1:53",
+            listening53,
+            listening53 ? "Port 53 (DNS) attivo su loopback" : "Niente in ascolto su 127.0.0.1:53",
+            listening53 ? null : "Il resolver gira ma non risponde sulla porta giusta.",
+            null, null));
+
+        // 6. /etc/resolv.conf punta a 127.0.0.1
+        boolean resolvOk = false;
+        try {
+            String resolv = java.nio.file.Files.readString(java.nio.file.Paths.get("/etc/resolv.conf"));
+            // Prima riga nameserver utile deve essere 127.0.0.1
+            for (String line : resolv.split("\n")) {
+                String t = line.trim();
+                if (t.startsWith("#")) continue;
+                if (t.startsWith("nameserver")) {
+                    String ns = t.replaceFirst("nameserver\\s+", "").trim();
+                    if (ns.equals("127.0.0.1") || ns.equals("::1")) resolvOk = true;
+                    break;
+                }
+            }
+        } catch (Exception ignored) {}
+        checks.put(makeCheck("resolv-conf", "/etc/resolv.conf usa unbound (127.0.0.1)",
+            resolvOk,
+            resolvOk ? "Sistema usa unbound come primary resolver" : "Sistema NON usa unbound — query passano ancora per DNS esterni",
+            resolvOk ? null : "Se non lo cambi, tutte le query continuano ad andare via 1.1.1.1 e i check DNSBL falliscono.",
+            (resolvOk || !running || !listening53) ? null : "switch_resolv_conf",
+            "Backup /etc/resolv.conf + scrive 'nameserver 127.0.0.1' + fallback. Pre-flight test prima di applicare."));
+
+        // 7. Query di test funziona
+        boolean queryOk = testUnboundQuerySimple();
+        checks.put(makeCheck("unbound-query-works", "Query di test risolve correttamente",
+            queryOk,
+            queryOk ? "dig @127.0.0.1 freebsd.org → risolto"
+                    : (listening53 ? "Query test fallita — unbound non risolve" : "Skip: unbound non in ascolto"),
+            queryOk ? null : "Anche se attivo, unbound non sta riuscendo a risolvere domini reali (problema upstream?).",
+            null, null));
+
+        // 8. Modalità RICORSIVA (no forwarder) — fondamentale per Spamhaus/SURBL
+        //    Se local_unbound usa forward-zone verso 1.1.1.1, Spamhaus vede ancora le query
+        //    arrivare da resolver pubblico → 127.255.255.254 (blocked).
+        boolean isForwarding = isUnboundUsingForwarder();
+        boolean dnsblWorking = testDnsblQuery();
+        checks.put(makeCheck("unbound-recursive", "Resolution ricorsiva diretta (no forwarder)",
+            !isForwarding && dnsblWorking,
+            !isForwarding
+                ? (dnsblWorking ? "Risolve ricorsivamente dai root server — Spamhaus funziona"
+                                : "Config OK ma query DNSBL non risponde, verifica connettività")
+                : "local_unbound usa FORWARDER (es. 1.1.1.1) — Spamhaus blocca queste query",
+            (!isForwarding && dnsblWorking) ? null
+                : "Spamhaus/SURBL non rispondono perché local_unbound gira le query a Cloudflare/Google che sono resolver pubblici bloccati.",
+            (!isForwarding || !running) ? null : "disable_forwarder",
+            "Svuota /var/unbound/forward.conf (backup automatico) e ricarica local_unbound. Il resolver passa a modalità ricorsiva diretta."));
+
+        boolean allOk = installed && configOk && enabledBoot && running && listening53 && resolvOk && queryOk
+            && !isForwarding && dnsblWorking;
+        r.put("success", true);
+        r.put("all_ok", allOk);
+        r.put("can_fix_all", !allOk);
+        r.put("checks", checks);
+        return r;
+    }
+
+    private boolean isPortListeningOnLocalhost(int port) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("/usr/bin/sockstat", "-l", "-4", "-6");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()));
+            String line;
+            // FreeBSD sockstat usa "IP.PORT" (con punto), Linux usa "IP:PORT"
+            String[] patterns = {
+                "127.0.0.1:" + port, "127.0.0.1." + port,
+                "*:" + port, "*." + port,
+                "::1:" + port, "::1." + port
+            };
+            while ((line = reader.readLine()) != null) {
+                // Cerchiamo che termini con il pattern o sia seguito da spazio (parte del campo address)
+                for (String pat : patterns) {
+                    if (line.contains(pat + " ") || line.endsWith(pat) || line.contains(pat + "\t")) {
+                        p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS);
+                        return true;
+                    }
+                }
+            }
+            p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS);
+            return false;
+        } catch (Exception e) { return false; }
+    }
+
+    /**
+     * Verifica se local_unbound è configurato come FORWARDER (forward-zone definito).
+     * Se sì, le query DNSBL passano per i forwarder pubblici e Spamhaus le blocca.
+     */
+    private boolean isUnboundUsingForwarder() {
+        try {
+            // Cerca forward-zone in tutti i possibili file di config di local_unbound
+            String[] confFiles = {
+                "/var/unbound/forward.conf",
+                "/var/unbound/unbound.conf",
+                "/usr/local/etc/unbound/unbound.conf",
+                "/usr/local/etc/unbound/forward.conf"
+            };
+            for (String path : confFiles) {
+                java.nio.file.Path p = java.nio.file.Paths.get(path);
+                if (!java.nio.file.Files.exists(p)) continue;
+                String content = java.nio.file.Files.readString(p);
+                // Cerca direttiva 'forward-zone:' non commentata
+                for (String line : content.split("\n")) {
+                    String t = line.trim();
+                    if (t.startsWith("#")) continue;
+                    if (t.startsWith("forward-zone:")) return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return false; // Default: assume NOT forwarding se non riusciamo a leggere
+        }
+    }
+
+    /**
+     * Esegue una query DNSBL di test contro Spamhaus.
+     * 2.0.0.127.zen.spamhaus.org è un IP "sempre listato" usato per test.
+     * Se la risposta è 127.0.0.X (escluso 127.255.X) → il resolver funziona bene per DNSBL.
+     * Se è 127.255.255.254 → Spamhaus ci blocca (forwarder/public resolver).
+     * Se è vuoto → query fallita.
+     */
+    private boolean testDnsblQuery() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1",
+                "A", "2.0.0.127.zen.spamhaus.org");
+            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+            Process p = pb.start();
+            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            boolean done = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!done) { p.destroyForcibly(); return false; }
+            if (p.exitValue() != 0) return false;
+            for (String line : out.split("\n")) {
+                String t = line.trim();
+                if (t.isEmpty()) continue;
+                // 127.0.0.X (escluso 127.255.255.X) = LISTED davvero = query funziona
+                if (t.matches("^127\\.0\\.0\\.\\d{1,3}$")) return true;
+                // 127.255.255.X = blocco di Spamhaus = NON funziona
+                if (t.startsWith("127.255.255.")) return false;
+            }
+            return false;
+        } catch (Exception e) { return false; }
+    }
+
+    private boolean testUnboundQuerySimple() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1", "A", "freebsd.org");
+            // NIENTE redirectErrorStream: stderr di dig (es. "communications error") va separato
+            // così non lo confondiamo con una risposta valida.
+            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+            Process p = pb.start();
+            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            boolean done = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!done) { p.destroyForcibly(); return false; }
+            // dig +short stampa SOLO il valore (es. "1.2.3.4") in stdout se ha successo,
+            // niente se non c'è risposta. Errori vanno in stderr (scartati sopra).
+            // Inoltre: dig exit code != 0 quando fallisce.
+            if (p.exitValue() != 0) return false;
+            // Verifica che la PRIMA riga utile sia un IPv4 valido (non un messaggio strano)
+            for (String line : out.split("\n")) {
+                String t = line.trim();
+                if (t.isEmpty()) continue;
+                // Deve essere un IPv4 puro (eventualmente CNAME → IP nelle righe successive)
+                if (t.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$")) return true;
+                // Se la prima riga utile è un CNAME, controlla la successiva
+                if (t.endsWith(".") && t.matches("^[a-zA-Z0-9.-]+\\.$")) continue;
+                // Altrimenti è qualcosa di strano, fallisci
+                return false;
+            }
+            return false;
+        } catch (Exception e) { return false; }
+    }
+
+    private JSONObject installUnbound() {
+        JSONObject r = new JSONObject();
+        try {
+            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "unbound");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            boolean done = p.waitFor(180, java.util.concurrent.TimeUnit.SECONDS);
+            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", "Timeout installazione (>3min)"); return r; }
+            r.put("success", p.exitValue() == 0);
+            r.put("message", p.exitValue() == 0 ? "unbound installato" : "pkg install exit=" + p.exitValue());
+            r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
+        } catch (Exception e) {
+            r.put("success", false);
+            r.put("message", "Errore: " + e.getMessage());
+        }
+        return r;
+    }
+
+    private JSONObject writeUnboundConfig() {
+        JSONObject r = new JSONObject();
+        try {
+            java.nio.file.Path confPath = java.nio.file.Paths.get(UNBOUND_CONF_PATH);
+            java.nio.file.Path parent = confPath.getParent();
+            if (parent != null && !java.nio.file.Files.exists(parent)) {
+                java.nio.file.Files.createDirectories(parent);
+            }
+            // Backup se esiste
+            if (java.nio.file.Files.exists(confPath)) {
+                java.nio.file.Files.copy(confPath, java.nio.file.Paths.get(UNBOUND_CONF_PATH + ".bak." + System.currentTimeMillis()));
+            }
+            java.nio.file.Files.writeString(confPath, UNBOUND_CONF_CONTENT, java.nio.charset.StandardCharsets.UTF_8);
+            try { java.nio.file.Files.setPosixFilePermissions(confPath,
+                java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--")); } catch (Exception ignored) {}
+
+            // Test sintassi con unbound-checkconf se disponibile
+            try {
+                ProcessBuilder pb = new ProcessBuilder("/usr/local/sbin/unbound-checkconf", UNBOUND_CONF_PATH);
+                pb.redirectErrorStream(true);
+                Process p = pb.start();
+                String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+                if (p.exitValue() != 0) {
+                    r.put("success", false);
+                    r.put("message", "unbound-checkconf ha rilevato errori: " + out);
+                    return r;
+                }
+            } catch (Exception ignored) {}
+
+            r.put("success", true);
+            r.put("message", "Config scritta: " + UNBOUND_CONF_PATH);
+        } catch (Exception e) {
+            r.put("success", false);
+            r.put("message", "Errore: " + e.getMessage());
+        }
+        return r;
+    }
+
+    /**
+     * Sostituisce /etc/resolv.conf in modo SAFE:
+     *  - backup automatico con timestamp
+     *  - pre-flight test: prima verifica che dig @127.0.0.1 risolva, SOLO se OK procede
+     *  - scrive 127.0.0.1 come primary + 1.1.1.1 come fallback
+     *  - post-flight test: dopo scrittura ri-verifica che il sistema risolva ancora
+     *  - rollback automatico se post-flight fail
+     */
+    private JSONObject switchResolvConfToUnbound() {
+        JSONObject r = new JSONObject();
+        java.nio.file.Path resolvPath = java.nio.file.Paths.get("/etc/resolv.conf");
+        try {
+            // 1. Pre-flight: unbound deve rispondere
+            if (!testUnboundQuerySimple()) {
+                r.put("success", false);
+                r.put("message", "PRE-FLIGHT FAIL: dig @127.0.0.1 non risolve. NON modifico resolv.conf — rischio lockout.");
+                return r;
+            }
+            // 2. Backup
+            String bakPath = "/etc/resolv.conf.bak." + System.currentTimeMillis();
+            if (java.nio.file.Files.exists(resolvPath)) {
+                java.nio.file.Files.copy(resolvPath, java.nio.file.Paths.get(bakPath));
+            }
+            // 3. Scrivi nuovo
+            String content = ""
+                + "# Configurato dal mail panel\n"
+                + "# Resolver primario: unbound locale\n"
+                + "# Fallback: DNS pubblici se unbound non risponde\n"
+                + "nameserver 127.0.0.1\n"
+                + "nameserver 1.1.1.1\n"
+                + "nameserver 9.9.9.9\n"
+                + "options timeout:2 attempts:3\n";
+            java.nio.file.Files.writeString(resolvPath, content, java.nio.charset.StandardCharsets.UTF_8);
+
+            // 4. Post-flight test (risolvi con il sistema, non più @127.0.0.1)
+            try {
+                ProcessBuilder pb = new ProcessBuilder("dig", "+short", "+time=3", "+tries=2", "A", "freebsd.org");
+                pb.redirectErrorStream(true);
+                Process p = pb.start();
+                String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+                p.waitFor(8, java.util.concurrent.TimeUnit.SECONDS);
+                boolean ok = out.matches("(?s).*\\b\\d+\\.\\d+\\.\\d+\\.\\d+\\b.*");
+                if (!ok) {
+                    // Rollback
+                    java.nio.file.Files.copy(java.nio.file.Paths.get(bakPath), resolvPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    r.put("success", false);
+                    r.put("message", "POST-FLIGHT FAIL: la risoluzione DNS non funziona dopo lo switch. Rollback eseguito, /etc/resolv.conf ripristinato.");
+                    return r;
+                }
+            } catch (Exception e) {
+                // Rollback su exception
+                try { java.nio.file.Files.copy(java.nio.file.Paths.get(bakPath), resolvPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING); } catch (Exception ignored) {}
+                r.put("success", false);
+                r.put("message", "Errore post-flight: " + e.getMessage() + " — rollback tentato");
+                return r;
+            }
+
+            r.put("success", true);
+            r.put("message", "/etc/resolv.conf aggiornato. Backup: " + bakPath);
+        } catch (Exception e) {
+            r.put("success", false);
+            r.put("message", "Errore: " + e.getMessage());
+        }
+        return r;
+    }
+
+    /**
+     * Trasforma local_unbound da forwarder a resolver ricorsivo:
+     *  1. Backup di /var/unbound/forward.conf (e /var/unbound/unbound.conf se contiene forward-zone)
+     *  2. Svuota forward.conf
+     *  3. Reload local_unbound
+     *
+     * Dopo questa operazione, local_unbound chiede direttamente ai root server
+     * invece di girare le query a forwarder esterni (1.1.1.1, ecc). Spamhaus vede
+     * la query arrivare dal tuo IP server → risponde correttamente.
+     */
+    private JSONObject disableUnboundForwarder() {
+        JSONObject r = new JSONObject();
+        try {
+            int touched = 0;
+            String[] paths = { "/var/unbound/forward.conf", "/var/unbound/unbound.conf" };
+            for (String path : paths) {
+                java.nio.file.Path p = java.nio.file.Paths.get(path);
+                if (!java.nio.file.Files.exists(p)) continue;
+                String content = java.nio.file.Files.readString(p);
+                // Rileva se c'è effettivamente forward-zone (anche commentati: skippiamo solo i veri)
+                boolean hasForwardZone = false;
+                StringBuilder cleaned = new StringBuilder();
+                boolean inForwardZone = false;
+                for (String line : content.split("\n", -1)) {
+                    String t = line.trim();
+                    if (!inForwardZone) {
+                        if (!t.startsWith("#") && t.startsWith("forward-zone:")) {
+                            hasForwardZone = true;
+                            inForwardZone = true;
+                            cleaned.append("# Disabilitato dal mail panel (forwarder bloccava Spamhaus)\n");
+                            cleaned.append("# ").append(line).append("\n");
+                        } else {
+                            cleaned.append(line).append("\n");
+                        }
+                    } else {
+                        // Siamo dentro un blocco forward-zone — commentiamo tutto fino al prossimo blocco
+                        if (t.isEmpty() || (!t.startsWith("forward-") && !t.startsWith("name:") && !t.startsWith("#"))) {
+                            // Fine del blocco
+                            inForwardZone = false;
+                            cleaned.append(line).append("\n");
+                        } else {
+                            cleaned.append("# ").append(line).append("\n");
+                        }
+                    }
+                }
+                if (hasForwardZone) {
+                    // Backup
+                    java.nio.file.Files.copy(p, java.nio.file.Paths.get(path + ".bak." + System.currentTimeMillis()));
+                    // Rimuovi terminal newline doppi
+                    String result = cleaned.toString();
+                    java.nio.file.Files.writeString(p, result, java.nio.charset.StandardCharsets.UTF_8);
+                    touched++;
+                }
+            }
+            if (touched == 0) {
+                r.put("success", true);
+                r.put("message", "Nessun forward-zone trovato nei config — già in modalità ricorsiva.");
+                return r;
+            }
+            // Reload local_unbound
+            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "local_unbound", "reload");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
+            // Aspetta un attimo e ritesta
+            try { Thread.sleep(1500); } catch (Exception ignored) {}
+            boolean stillForwarding = isUnboundUsingForwarder();
+            boolean dnsblWorks = testDnsblQuery();
+            r.put("success", !stillForwarding);
+            r.put("message", "Commentati forward-zone in " + touched + " file. Reload eseguito. "
+                + (dnsblWorks ? "Test Spamhaus: OK ✓" : "Test Spamhaus: ancora non OK (attendi qualche secondo e ricontrolla)"));
+            r.put("output", out);
+        } catch (Exception e) {
+            r.put("success", false);
+            r.put("message", "Errore: " + e.getMessage());
+        }
+        return r;
+    }
+
+    /** Ripristina l'ultimo backup di /etc/resolv.conf creato dal pannello. */
+    private JSONObject rollbackResolvConf() {
+        JSONObject r = new JSONObject();
+        try {
+            java.nio.file.Path etc = java.nio.file.Paths.get("/etc");
+            String latest = null;
+            long latestMtime = 0;
+            try (java.util.stream.Stream<java.nio.file.Path> s = java.nio.file.Files.list(etc)) {
+                for (java.nio.file.Path p : s.toArray(java.nio.file.Path[]::new)) {
+                    if (p.getFileName().toString().startsWith("resolv.conf.bak.")) {
+                        long m = java.nio.file.Files.getLastModifiedTime(p).toMillis();
+                        if (m > latestMtime) { latestMtime = m; latest = p.toString(); }
+                    }
+                }
+            }
+            if (latest == null) {
+                r.put("success", false);
+                r.put("message", "Nessun backup trovato in /etc/resolv.conf.bak.*");
+                return r;
+            }
+            java.nio.file.Files.copy(java.nio.file.Paths.get(latest), java.nio.file.Paths.get("/etc/resolv.conf"),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            r.put("success", true);
+            r.put("message", "Ripristinato da " + latest);
+        } catch (Exception e) {
+            r.put("success", false);
+            r.put("message", "Errore: " + e.getMessage());
+        }
+        return r;
+    }
+
+    private JSONObject testUnboundQuery() {
+        JSONObject r = new JSONObject();
+        try {
+            // Test 1: query semplice
+            boolean basic = testUnboundQuerySimple();
+            // Test 2: query DNSBL Spamhaus con un IP standard (1.0.0.127.zen.spamhaus.org sempre TRUE)
+            //         "127.0.0.2" reverse = "2.0.0.127.zen.spamhaus.org" → sempre listed (test address)
+            String dnsblOut = "";
+            boolean dnsblOk = false;
+            try {
+                ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "A", "2.0.0.127.zen.spamhaus.org");
+                pb.redirectErrorStream(true);
+                Process p = pb.start();
+                dnsblOut = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+                p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                // Se la risposta inizia con 127.0.0.* (escluso 127.255.*) → query Spamhaus funziona
+                if (!dnsblOut.isEmpty()) {
+                    String first = dnsblOut.split("\n")[0].trim();
+                    dnsblOk = first.startsWith("127.0.0.") || first.startsWith("127.0.0.2");
+                }
+            } catch (Exception ignored) {}
+
+            r.put("success", basic);
+            StringBuilder msg = new StringBuilder();
+            msg.append("Test query base (freebsd.org): ").append(basic ? "OK" : "FAIL").append("\n");
+            msg.append("Test Spamhaus (2.0.0.127.zen.spamhaus.org → atteso 127.0.0.X): ");
+            if (dnsblOk) msg.append("OK ✓ — Spamhaus risponde, le query DNSBL funzionano via unbound!");
+            else if (dnsblOut.startsWith("127.255.255.")) msg.append("ANCORA BLOCCATO (resolver pubblico?). Verifica resolv.conf");
+            else msg.append("nessuna risposta: ").append(dnsblOut.isEmpty() ? "(vuota)" : dnsblOut);
+            r.put("message", msg.toString());
+            r.put("basic_ok", basic);
+            r.put("dnsbl_ok", dnsblOk);
+        } catch (Exception e) {
+            r.put("success", false);
+            r.put("message", "Errore: " + e.getMessage());
+        }
+        return r;
+    }
+
+    private JSONObject runUnboundFixAll() {
+        JSONObject r = new JSONObject();
+        JSONArray steps = new JSONArray();
+        boolean anyFailed = false;
+
+        // Strategia: preferisci local_unbound (base system, già installato)
+        //            se non è disponibile, usa pkg unbound
+        boolean baseAvailable = java.nio.file.Files.exists(java.nio.file.Paths.get("/usr/sbin/local-unbound"));
+        boolean pkgInstalled;
+        try {
+            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "unbound");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            pkgInstalled = p.exitValue() == 0;
+        } catch (Exception e) { pkgInstalled = false; }
+
+        // Se local_unbound è disponibile, lo usiamo (zero install, già nel base)
+        String svcName;
+        String sysrcKey;
+        if (baseAvailable) {
+            svcName = "local_unbound";
+            sysrcKey = "local_unbound_enable";
+            steps.put(buildSkipStep("install_unbound", "local_unbound (base system FreeBSD) disponibile — niente da installare"));
+        } else if (pkgInstalled) {
+            svcName = "unbound";
+            sysrcKey = "unbound_enable";
+            steps.put(buildSkipStep("install_unbound", "Pacchetto unbound già installato"));
+        } else {
+            // Niente di disponibile: installa pkg
+            JSONObject res = installUnbound();
+            steps.put(buildStep("install_unbound", "Installa pacchetto unbound (no base system trovato)", res));
+            if (!res.optBoolean("success")) {
+                anyFailed = true;
+                r.put("success", false); r.put("steps", steps); r.put("message", "Installazione fallita");
+                return r;
+            }
+            svcName = "unbound";
+            sysrcKey = "unbound_enable";
+        }
+
+        // 2. Config — solo per pkg unbound (local_unbound ha config in /var/unbound gestita dal base)
+        if ("unbound".equals(svcName)) {
+            boolean confValid = false;
+            if (java.nio.file.Files.exists(java.nio.file.Paths.get(UNBOUND_CONF_PATH))) {
+                try {
+                    String c = java.nio.file.Files.readString(java.nio.file.Paths.get(UNBOUND_CONF_PATH));
+                    confValid = c.contains("interface: 127.0.0.1") && c.contains("access-control");
+                } catch (Exception ignored) {}
+            }
+            if (!confValid) {
+                JSONObject res = writeUnboundConfig();
+                steps.put(buildStep("configure_unbound", "Scrive config (loopback, restrittiva)", res));
+                if (!res.optBoolean("success")) anyFailed = true;
+            } else {
+                steps.put(buildSkipStep("configure_unbound", "Config pkg unbound già valida"));
+            }
+        } else {
+            steps.put(buildSkipStep("configure_unbound", "local_unbound usa /var/unbound/unbound.conf (config auto-gestita dal base system)"));
+        }
+
+        // 3. Enable at boot
+        if (!isSysrcYes(sysrcKey)) {
+            JSONObject res = sysrcSet(sysrcKey, "YES");
+            steps.put(buildStep("enable_at_boot", "Abilita " + svcName + " al boot (" + sysrcKey + "=YES)", res));
+            if (!res.optBoolean("success")) anyFailed = true;
+        } else {
+            steps.put(buildSkipStep("enable_at_boot", svcName + " già abilitato al boot"));
+        }
+
+        // 4. Start
+        if (!isServiceRunning(svcName)) {
+            JSONObject res = serviceCommand(svcName, "start", 30);
+            steps.put(buildStep("start_resolver", "Avvia " + svcName, res));
+            if (!res.optBoolean("success")) anyFailed = true;
+        } else {
+            steps.put(buildSkipStep("start_resolver", svcName + " già in esecuzione"));
+        }
+
+        // 5. Aspetta un attimo che unbound sia pronto
+        try { Thread.sleep(1500); } catch (Exception ignored) {}
+
+        // 6. Switch /etc/resolv.conf (con safety)
+        // Verifica preventiva
+        boolean unboundReady = testUnboundQuerySimple();
+        if (!unboundReady) {
+            steps.put(buildErrorStep("switch_resolv_conf", "unbound non risponde a dig @127.0.0.1 — NON modifico resolv.conf per non rischiare lockout"));
+            anyFailed = true;
+        } else {
+            boolean resolvOk = false;
+            try {
+                String resolv = java.nio.file.Files.readString(java.nio.file.Paths.get("/etc/resolv.conf"));
+                for (String line : resolv.split("\n")) {
+                    String t = line.trim();
+                    if (t.startsWith("#")) continue;
+                    if (t.startsWith("nameserver")) {
+                        String ns = t.replaceFirst("nameserver\\s+", "").trim();
+                        if (ns.equals("127.0.0.1") || ns.equals("::1")) resolvOk = true;
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {}
+            if (!resolvOk) {
+                JSONObject res = switchResolvConfToUnbound();
+                steps.put(buildStep("switch_resolv_conf", "Switcha /etc/resolv.conf su 127.0.0.1 (con pre/post-flight + auto-rollback)", res));
+                if (!res.optBoolean("success")) anyFailed = true;
+            } else {
+                steps.put(buildSkipStep("switch_resolv_conf", "/etc/resolv.conf già configurato su unbound"));
+            }
+        }
+
+        // 7. Disabilita forwarder (forward-zone in unbound.conf) — necessario per DNSBL
+        if (isUnboundUsingForwarder()) {
+            JSONObject res = disableUnboundForwarder();
+            steps.put(buildStep("disable_forwarder", "Disabilita forwarder (modalità ricorsiva diretta per Spamhaus/SURBL)", res));
+            if (!res.optBoolean("success")) anyFailed = true;
+        } else {
+            steps.put(buildSkipStep("disable_forwarder", "Modalità ricorsiva già attiva"));
+        }
+
+        r.put("success", !anyFailed);
+        r.put("steps", steps);
+        r.put("message", anyFailed ? "Alcuni passaggi falliti — verifica dettagli" : "unbound operativo, sistema usa resolver locale, check DNSBL ora affidabili");
+        return r;
+    }
+
+    // ============== BLACKLIST CHECK (DNSBL + RHSBL) ==============
+    private void handleApiBlacklistCheck(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, "Method not allowed"); return;
+        }
+        JSONObject response = new JSONObject();
+        try {
+            String query = exchange.getRequestURI().getQuery();
+            String ip = extractParamFromQuery(query, "ip");
+            String domain = extractParamFromQuery(query, "domain");
+
+            org.mail_panel.security.BlacklistChecker checker = new org.mail_panel.security.BlacklistChecker();
+            JSONArray reports = new JSONArray();
+
+            // Se non specificato, usa IP del server + tutti i domini del DB
+            if ((ip == null || ip.isEmpty()) && (domain == null || domain.isEmpty())) {
+                String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : null;
+                if (serverIp != null && !serverIp.isEmpty()) {
+                    reports.put(reportToJson(checker.checkIp(serverIp)));
+                }
+                // Domini configurati nel pannello
+                try {
+                    java.util.List<MailDatabase.Domain> domains = Main.mailDatabase.getDomains();
+                    for (MailDatabase.Domain d : domains) {
+                        if (d.domain != null && !d.domain.isEmpty()) {
+                            reports.put(reportToJson(checker.checkDomain(d.domain)));
+                        }
+                    }
+                } catch (Exception ignored) {}
+            } else {
+                if (ip != null && !ip.isEmpty()) {
+                    if (!org.mail_panel.security.InputValidator.isValidIp(ip)) {
+                        response.put("success", false);
+                        response.put("error", "IP non valido");
+                        sendJsonResponse(exchange, response); return;
+                    }
+                    reports.put(reportToJson(checker.checkIp(ip)));
+                }
+                if (domain != null && !domain.isEmpty()) {
+                    if (!org.mail_panel.security.InputValidator.isValidDomain(domain)) {
+                        response.put("success", false);
+                        response.put("error", "Dominio non valido");
+                        sendJsonResponse(exchange, response); return;
+                    }
+                    reports.put(reportToJson(checker.checkDomain(domain)));
+                }
+            }
+
+            response.put("success", true);
+            response.put("reports", reports);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    private JSONObject reportToJson(org.mail_panel.security.BlacklistChecker.BlacklistReport rep) {
+        JSONObject jo = new JSONObject();
+        jo.put("target", rep.target);
+        jo.put("type", rep.type);
+        jo.put("listed_count", rep.listedCount);
+        jo.put("clean_count", rep.cleanCount);
+        jo.put("error_count", rep.errorCount);
+        jo.put("web_only_count", rep.webOnlyCount);
+        jo.put("elapsed_ms", rep.elapsedMs);
+        JSONArray arr = new JSONArray();
+        for (org.mail_panel.security.BlacklistChecker.CheckResult cr : rep.results) {
+            JSONObject e = new JSONObject();
+            e.put("blacklist", cr.blacklistName);
+            e.put("zone", cr.blacklistZone);
+            e.put("lookup_url", cr.lookupUrl);
+            e.put("listed", cr.listed);
+            e.put("error", cr.error);
+            e.put("web_only", cr.webOnly);
+            if (cr.responseCode != null) e.put("response_code", cr.responseCode);
+            e.put("message", cr.message);
+            arr.put(e);
+        }
+        jo.put("results", arr);
+        return jo;
+    }
+
     // ============== CLAMAV HEALTH CHECK ==============
     private void handleApiClamavHealth(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
@@ -3640,17 +5335,20 @@ public class SSLMailServer {
             (clamdEnabledBoot || !installed) ? null : "enable_clamd_at_boot",
             "sysrc clamav_clamd_enable=YES"));
 
-        // 4. Database virus presenti
+        // 4. Database virus presenti (cerca .cvd, .cld, .cud — tutti i formati ClamAV)
         boolean dbPresent = false;
         long dbAgeDays = -1;
         try {
             java.nio.file.Path dbDir = java.nio.file.Paths.get("/var/db/clamav");
             if (java.nio.file.Files.isDirectory(dbDir)) {
-                try (java.util.stream.Stream<java.nio.file.Path> s = java.nio.file.Files.list(dbDir)) {
+                try (java.util.stream.Stream<java.nio.file.Path> s = java.nio.file.Files.walk(dbDir, 2)) {
                     java.util.List<java.nio.file.Path> dbFiles = s
                         .filter(p -> {
-                            String n = p.getFileName().toString();
-                            return n.endsWith(".cvd") || n.endsWith(".cld");
+                            String n = p.getFileName().toString().toLowerCase();
+                            // Formati signature di ClamAV: .cvd (compressed), .cld (downloaded),
+                            // .cud (compressed updates), .hdb, .ndb, .ldb, .fp
+                            return (n.endsWith(".cvd") || n.endsWith(".cld") || n.endsWith(".cud"))
+                                && (n.startsWith("main") || n.startsWith("daily") || n.startsWith("bytecode"));
                         }).collect(java.util.stream.Collectors.toList());
                     if (!dbFiles.isEmpty()) {
                         dbPresent = true;
@@ -3662,6 +5360,23 @@ public class SSLMailServer {
                 }
             }
         } catch (Exception ignored) {}
+        // Fallback: se clamd risponde a clamdscan, il DB c'è anche se non ne riconosciamo i file
+        if (!dbPresent) {
+            try {
+                ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/clamdscan", "--version");
+                pb.redirectErrorStream(true);
+                Process p = pb.start();
+                String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                // clamdscan --version ritorna info su clamd inclusa la versione del database
+                // es: "ClamAV 1.5.1/27582/Wed May 14 ..."
+                if (out.contains("/") && out.matches("(?s).*\\d+/.*")) {
+                    dbPresent = true;
+                    // età stimata 0 perché clamd risponde correttamente
+                    if (dbAgeDays < 0) dbAgeDays = 0;
+                }
+            } catch (Exception ignored) {}
+        }
         String dbStatus = dbPresent
             ? "Database trovati (più recente: " + dbAgeDays + " giorni fa)"
             : "Nessun database .cvd/.cld in /var/db/clamav";
@@ -5859,6 +7574,208 @@ public class SSLMailServer {
                         response.put("error", "Password corrente non valida");
                         logAudit("ADMIN_PASSWORD_CHANGE_FAILED", getClientIp(exchange), "admin_id=" + currentAdminId + " reason=invalid_current_password");
                     }
+                    sendJsonResponse(exchange, response);
+                    return;
+                }
+
+                if ("vault_backup_key".equals(action)) {
+                    // Esporta la master key in base64 per backup.
+                    // Richiede la password admin per conferma identità.
+                    String currentPassword = req.optString("current_password", "");
+                    if (currentPassword.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "Password attuale richiesta per esportare la master key");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                    if (!Main.mailDatabase.verifyAdminPassword(currentAdminId, currentPassword)) {
+                        response.put("success", false);
+                        response.put("error", "Password attuale non valida");
+                        logAudit("VAULT_KEY_EXPORT_FAILED", getClientIp(exchange),
+                            "admin_id=" + currentAdminId + " reason=invalid_password");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                    try {
+                        org.mail_panel.security.PasswordVault vault =
+                            org.mail_panel.security.PasswordVault.getInstance();
+                        String b64 = vault.exportKeyBase64();
+                        response.put("success", true);
+                        response.put("key_base64", b64);
+                        response.put("key_file_path", org.mail_panel.security.PasswordVault.getKeyFilePath());
+                        response.put("message",
+                            "Master key esportata. Salvala in un posto SICURO " +
+                            "(password manager, vault hardware, ecc.) — con questo file chiunque " +
+                            "può decifrare tutte le password mailbox archiviate.");
+                        logAudit("VAULT_KEY_EXPORTED", getClientIp(exchange), "admin_id=" + currentAdminId);
+                    } catch (Exception e) {
+                        response.put("success", false);
+                        response.put("error", "Errore export: " + e.getMessage());
+                    }
+                    sendJsonResponse(exchange, response);
+                    return;
+                }
+
+                if ("vault_rotate_key".equals(action)) {
+                    // Rotazione master key: genera nuova chiave, ri-cifra TUTTI i blob esistenti
+                    // con la nuova, salva la nuova chiave su disco (backup della vecchia).
+                    // Operazione sensibile: richiede password admin.
+                    String currentPassword = req.optString("current_password", "");
+                    if (currentPassword.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "Password attuale richiesta per ruotare la master key");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                    if (!Main.mailDatabase.verifyAdminPassword(currentAdminId, currentPassword)) {
+                        response.put("success", false);
+                        response.put("error", "Password attuale non valida");
+                        logAudit("VAULT_KEY_ROTATION_FAILED", getClientIp(exchange),
+                            "admin_id=" + currentAdminId + " reason=invalid_password");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                    try {
+                        org.mail_panel.security.PasswordVault vault =
+                            org.mail_panel.security.PasswordVault.getInstance();
+                        byte[] oldKey = java.util.Base64.getDecoder().decode(vault.exportKeyBase64());
+                        byte[] newKey = vault.generateNewKeyBytes();
+
+                        // Re-encrypt tutti i blob: leggi col vecchio, scrivi col nuovo
+                        java.util.List<Object[]> rows = Main.mailDatabase.listMailboxesWithEncryptedPasswordAndBlob();
+                        int total = rows.size();
+                        int reencrypted = 0;
+                        int failed = 0;
+                        for (Object[] row : rows) {
+                            int mid = (int) row[0];
+                            String blob = (String) row[1];
+                            try {
+                                String plain = vault.decryptWithKey(blob, oldKey);
+                                String newBlob = vault.encryptWithKey(plain, newKey);
+                                Main.mailDatabase.setMailboxEncryptedPasswordOnly(mid, newBlob);
+                                reencrypted++;
+                            } catch (Exception e) {
+                                failed++;
+                                System.err.println("[VaultRotate] mailbox_id=" + mid + " re-encrypt failed: " + e.getMessage());
+                            }
+                        }
+
+                        if (failed > 0 && reencrypted == 0) {
+                            // Tutti falliti: probabilmente la vecchia chiave è già non valida.
+                            // NON salviamo la nuova chiave (lasciamo lo stato com'è).
+                            response.put("success", false);
+                            response.put("error",
+                                "Tutti i " + total + " blob hanno fallito il re-encrypt. " +
+                                "La chiave master attuale non riesce a decifrarli — probabilmente è già rotta. " +
+                                "Per recovery: usa 'Cambia password massivo' nella pagina Caselle invece di rotare la chiave.");
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
+
+                        // Salva la nuova chiave (anche se qualche blob ha fallito: meglio andare avanti)
+                        vault.persistNewKey(newKey);
+
+                        org.json.JSONObject summary = new org.json.JSONObject();
+                        summary.put("total", total);
+                        summary.put("reencrypted", reencrypted);
+                        summary.put("failed", failed);
+                        response.put("success", true);
+                        response.put("summary", summary);
+                        response.put("message",
+                            "Master key rotata. Re-cifrati " + reencrypted + "/" + total + " blob. " +
+                            (failed > 0
+                                ? failed + " blob NON re-cifrati (forse cifrati con una chiave ancora più vecchia): " +
+                                  "per quelle caselle usa 'Cambia password massivo'. "
+                                : "") +
+                            "La vecchia chiave è stata salvata come backup in " +
+                            org.mail_panel.security.PasswordVault.getKeyFilePath() + ".bak.<timestamp>.");
+                        logAudit("VAULT_KEY_ROTATED", getClientIp(exchange),
+                            "admin_id=" + currentAdminId + " total=" + total +
+                            " reencrypted=" + reencrypted + " failed=" + failed);
+                    } catch (Exception e) {
+                        response.put("success", false);
+                        response.put("error", "Errore rotazione: " + e.getMessage());
+                    }
+                    sendJsonResponse(exchange, response);
+                    return;
+                }
+
+                if ("change_username".equals(action)) {
+                    String currentPassword = req.optString("current_password", "");
+                    String newUsername = req.optString("new_username", "").trim();
+
+                    // Sanity check inputs
+                    if (currentPassword.isEmpty() || newUsername.isEmpty()) {
+                        response.put("success", false);
+                        response.put("error", "Password corrente e nuovo username richiesti");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+                    if (!SecurityUtils.isValidUsername(newUsername)) {
+                        response.put("success", false);
+                        response.put("error", "Username non valido: deve essere 3-50 caratteri, solo lettere/numeri/underscore/trattino/punto");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    // Verifica la password corrente (security: prova di identità)
+                    if (!Main.mailDatabase.verifyAdminPassword(currentAdminId, currentPassword)) {
+                        response.put("success", false);
+                        response.put("error", "Password corrente non valida");
+                        logAudit("ADMIN_USERNAME_CHANGE_FAILED", getClientIp(exchange),
+                            "admin_id=" + currentAdminId + " reason=invalid_password");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    // Recupera username corrente (per audit log e verifica no-op)
+                    String currentUsername = null;
+                    for (MailDatabase.AdminUser au : Main.mailDatabase.getAdminUsers()) {
+                        if (au.id == currentAdminId) { currentUsername = au.username; break; }
+                    }
+
+                    // No-op check: stesso username
+                    if (currentUsername != null && currentUsername.equalsIgnoreCase(newUsername)) {
+                        response.put("success", false);
+                        response.put("error", "Il nuovo username è uguale a quello attuale");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    // Verifica unicità (case-insensitive)
+                    if (Main.mailDatabase.adminUsernameExists(newUsername)) {
+                        response.put("success", false);
+                        response.put("error", "Username già in uso da un altro admin");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    // Esegui UPDATE
+                    if (!Main.mailDatabase.updateAdminUsername(currentAdminId, newUsername)) {
+                        response.put("success", false);
+                        response.put("error", "Errore durante il salvataggio del nuovo username");
+                        sendJsonResponse(exchange, response);
+                        return;
+                    }
+
+                    // Aggiorna in-memory la sessione corrente (e tutte le altre dell'admin), così
+                    // non serve un re-login e il pannello continua a riconoscere correttamente l'utente.
+                    try {
+                        String sessionCode = extractSessionCode(exchange.getRequestHeaders().getFirst("Cookie"));
+                        if (sessionCode != null) {
+                            Main.sessions.setSessionAdmin(sessionCode, currentAdminId, newUsername);
+                        }
+                        // Aggiorna anche eventuali altre sessioni attive dello stesso admin
+                        for (org.mail_panel.webserver.Session s : Main.sessions.sessions) {
+                            if (s.adminId == currentAdminId) s.username = newUsername;
+                        }
+                    } catch (Exception ignore) {}
+
+                    response.put("success", true);
+                    response.put("message", "Username cambiato con successo da '" + (currentUsername == null ? "?" : currentUsername) + "' a '" + newUsername + "'. La sessione corrente resta valida — non serve effettuare di nuovo il login.");
+                    response.put("new_username", newUsername);
+                    logAudit("ADMIN_USERNAME_CHANGED", getClientIp(exchange),
+                        "admin_id=" + currentAdminId + " old=" + currentUsername + " new=" + newUsername);
                     sendJsonResponse(exchange, response);
                     return;
                 }

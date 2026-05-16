@@ -1760,6 +1760,464 @@ public class MailPanelContent {
     }
 
     // ============== MAILBOXES.HTML ==============
+    /**
+     * Modal "Generatore Password" — UI riusabile per generare password con opzioni dettagliate.
+     * Quando l'utente clicca "Usa questa password", invoca il callback registrato in
+     * window.__pwGenCallback (impostato da chi apre il modal).
+     */
+    private static String getPasswordGeneratorModal() {
+        return """
+    <div class="modal fade" id="passwordGeneratorModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-magic me-2"></i>Generatore Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Tipo -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Tipo</label>
+                        <div class="border rounded p-2">
+                            <div class="form-check">
+                                <input class="form-check-input pwgen-type" type="radio" name="pwgenType" id="pwgenTypeSay" value="easy_to_say">
+                                <label class="form-check-label" for="pwgenTypeSay">
+                                    <strong>Facile da dettare</strong> <small class="text-muted">— solo lettere (no numeri/simboli)</small>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input pwgen-type" type="radio" name="pwgenType" id="pwgenTypeRead" value="easy_to_read" checked>
+                                <label class="form-check-label" for="pwgenTypeRead">
+                                    <strong>Facile da leggere/copiare</strong> <small class="text-muted">— niente caratteri ambigui (0/O, 1/l/I) né simboli problematici</small>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input pwgen-type" type="radio" name="pwgenType" id="pwgenTypeAll" value="all_chars">
+                                <label class="form-check-label" for="pwgenTypeAll">
+                                    <strong>Tutti i caratteri</strong> <small class="text-muted">— massima entropia (anche simboli come ?/=/&)</small>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lunghezza -->
+                    <div class="row g-3 mb-3 align-items-center">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold mb-1">Lunghezza</label>
+                            <div class="input-group">
+                                <button class="btn btn-outline-secondary" type="button" onclick="pwgenLengthDelta(-1)"><i class="fas fa-minus"></i></button>
+                                <input type="number" class="form-control text-center" id="pwgenLength" value="20" min="8" max="128">
+                                <button class="btn btn-outline-secondary" type="button" onclick="pwgenLengthDelta(1)"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="range" class="form-range mt-3" id="pwgenLengthRange" min="8" max="64" value="20" oninput="document.getElementById('pwgenLength').value = this.value">
+                        </div>
+                    </div>
+
+                    <!-- Include -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Includi</label>
+                        <div class="border rounded p-2 d-flex flex-wrap gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="pwgenIncludeLower" checked>
+                                <label class="form-check-label" for="pwgenIncludeLower">Minuscole</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="pwgenIncludeUpper" checked>
+                                <label class="form-check-label" for="pwgenIncludeUpper">Maiuscole</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="pwgenIncludeNumbers" checked>
+                                <label class="form-check-label" for="pwgenIncludeNumbers">Numeri</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="pwgenIncludeSymbols" checked>
+                                <label class="form-check-label" for="pwgenIncludeSymbols">Simboli</label>
+                            </div>
+                        </div>
+                        <small class="text-muted" id="pwgenIncludeNote"></small>
+                    </div>
+
+                    <!-- Preview -->
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Password generata</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace fs-5" id="pwgenPreview" readonly placeholder="Clicca Genera per ottenere una password">
+                            <button class="btn btn-outline-secondary" type="button" onclick="pwgenCopy()" title="Copia"><i class="fas fa-copy"></i></button>
+                        </div>
+                        <div class="mt-2 small">
+                            <span id="pwgenStrengthBadge" class="badge bg-secondary">—</span>
+                            <span class="text-muted ms-2" id="pwgenEntropyText">Entropia: — bit</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-info" onclick="pwgenGenerate()"><i class="fas fa-sync-alt me-1"></i>Genera</button>
+                    <button type="button" class="btn btn-success" id="pwgenUseBtn" onclick="pwgenUse()" disabled><i class="fas fa-check me-1"></i>Usa questa password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+""";
+    }
+
+    /**
+     * Modal "Cambia password massivo" della pagina /mailboxes.
+     * Estratto come metodo per non gonfiare il text block constante della pagina.
+     */
+    private static String getBulkRotateMailboxesModal() {
+        return """
+    <!-- Bulk rotate passwords modal -->
+    <div class="modal fade" id="bulkRotateModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title"><i class="fas fa-sync-alt me-2"></i>Cambio password massivo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Genera nuove password sicure per le caselle selezionate. Le password in chiaro vengono mostrate <strong>una sola volta</strong> — copiale subito e inoltrale agli utenti. Verranno comunque archiviate nel vault del pannello (cifrate AES-256-GCM) e potrai rivederle dal "Modifica Casella".
+                    </div>
+
+                    <div id="bulkRotateStep1" class="">
+                        <!-- Opzioni generatore -->
+                        <div class="border rounded p-2 mb-3" style="background:rgba(13,110,253,0.04)">
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold mb-1">Tipo password</label>
+                                    <select class="form-select form-select-sm" id="bulkRotateType" onchange="bulkRotateOnTypeChange()">
+                                        <option value="easy_to_say">Facile da dettare (solo lettere)</option>
+                                        <option value="easy_to_read" selected>Facile da leggere/copiare (no ambigui, simboli safe)</option>
+                                        <option value="all_chars">Tutti i caratteri (max entropia, anche ?/=/&amp;)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold mb-1">Lunghezza</label>
+                                    <input type="number" min="8" max="128" class="form-control form-control-sm" id="bulkRotateLength" value="20">
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end">
+                                    <span class="text-muted small" id="bulkRotateSelectedCount">0 selezionate</span>
+                                </div>
+                            </div>
+                            <div class="mt-2 d-flex flex-wrap gap-3 align-items-center">
+                                <span class="small fw-bold text-muted">Includi:</span>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="bulkRotateInclLower" checked>
+                                    <label class="form-check-label small" for="bulkRotateInclLower">Minuscole</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="bulkRotateInclUpper" checked>
+                                    <label class="form-check-label small" for="bulkRotateInclUpper">Maiuscole</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="bulkRotateInclNumbers" checked>
+                                    <label class="form-check-label small" for="bulkRotateInclNumbers">Numeri</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="bulkRotateInclSymbols" checked>
+                                    <label class="form-check-label small" for="bulkRotateInclSymbols">Simboli</label>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm ms-auto" type="button" onclick="bulkRotatePreviewSample()" title="Genera un esempio (NON applica)">
+                                    <i class="fas fa-eye me-1"></i>Anteprima
+                                </button>
+                            </div>
+                            <div class="mt-2 small text-muted" id="bulkRotatePreviewBox"></div>
+                        </div>
+
+                        <div class="d-flex gap-2 mb-2 flex-wrap">
+                            <button class="btn btn-outline-secondary btn-sm" onclick="bulkRotateSelectAll()"><i class="fas fa-check-square me-1"></i>Seleziona tutte</button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="bulkRotateSelectNone()"><i class="fas fa-square me-1"></i>Deseleziona tutte</button>
+                        </div>
+                        <div class="table-responsive" style="max-height:50vh">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th style="width:40px"><input type="checkbox" class="form-check-input" id="bulkRotateChkAll" onchange="bulkRotateToggleAll(this)"></th>
+                                        <th>Email</th>
+                                        <th>Nome</th>
+                                        <th>Stato vault</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bulkRotateMboxList">
+                                    <tr><td colspan="4" class="text-center text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="bulkRotateStep2" class="d-none">
+                        <div class="alert alert-success" id="bulkRotateSummary"></div>
+                        <div class="d-flex gap-2 mb-2">
+                            <button class="btn btn-sm btn-outline-primary" onclick="bulkRotateCopyAll()"><i class="fas fa-copy me-1"></i>Copia tutto (CSV)</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="bulkRotateShowHide()" id="bulkRotateToggleVis"><i class="fas fa-eye me-1"></i>Mostra/nascondi password</button>
+                        </div>
+                        <div class="table-responsive" style="max-height:60vh">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light sticky-top"><tr><th>Email</th><th>Nuova password</th><th>Stato</th></tr></thead>
+                                <tbody id="bulkRotateResultsList"></tbody>
+                            </table>
+                        </div>
+                        <div class="alert alert-warning small mt-3 mb-0">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            <strong>Importante:</strong> chiudi questo modal SOLO dopo aver copiato/salvato le password. Anche se restano nel vault, è la singola occasione in cui le vedi assieme così.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-warning" id="bulkRotateRunBtn" onclick="bulkRotateRun()"><i class="fas fa-bolt me-1"></i>Genera e applica nuove password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+""";
+    }
+
+    /**
+     * Funzioni JS per il "Cambio password massivo" delle caselle.
+     * Estratte come metodo separato per ridurre la dimensione del text block constante.
+     */
+    private static String getBulkRotateMailboxesJs() {
+        return """
+        // ===== Bulk rotate passwords =====
+        // Helper locale di escaping HTML (non possiamo dipendere da escapeHtmlBl
+        // che è definito solo nella pagina /dns).
+        if (typeof escapeHtmlBl === 'undefined') {
+            window.escapeHtmlBl = function(s) {
+                const d = document.createElement('div');
+                d.textContent = s == null ? '' : String(s);
+                return d.innerHTML;
+            };
+        }
+
+        let bulkRotateResults = [];
+        let bulkRotatePasswordsVisible = false;
+
+        function openBulkRotateModal() {
+            // Reset stato
+            document.getElementById('bulkRotateStep1').classList.remove('d-none');
+            document.getElementById('bulkRotateStep2').classList.add('d-none');
+            document.getElementById('bulkRotateRunBtn').classList.remove('d-none');
+            document.getElementById('bulkRotateChkAll').checked = false;
+            updateBulkRotateCount();
+            // Carica lista caselle
+            const tbody = document.getElementById('bulkRotateMboxList');
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</td></tr>';
+            fetch('/api/mailboxes').then(r => r.json()).then(data => {
+                const list = (data.mailboxes || []).sort((a, b) => a.email.localeCompare(b.email));
+                if (list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Nessuna casella configurata.</td></tr>';
+                    return;
+                }
+                let html = '';
+                list.forEach(m => {
+                    html += '<tr>';
+                    html += '<td><input type="checkbox" class="form-check-input bulk-rotate-chk" value="' + m.id + '" onchange="updateBulkRotateCount()"></td>';
+                    html += '<td><code>' + escapeHtmlBl(m.email) + '</code></td>';
+                    html += '<td>' + escapeHtmlBl(m.name || '') + '</td>';
+                    // Stato vault: NON disponibile su /api/mailboxes lista, mostriamo placeholder
+                    html += '<td><small class="text-muted">—</small></td>';
+                    html += '</tr>';
+                });
+                tbody.innerHTML = html;
+            }).catch(e => {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-danger">Errore caricamento: ' + e.message + '</td></tr>';
+            });
+            new bootstrap.Modal(document.getElementById('bulkRotateModal')).show();
+        }
+
+        function bulkRotateToggleAll(chk) {
+            document.querySelectorAll('.bulk-rotate-chk').forEach(c => c.checked = chk.checked);
+            updateBulkRotateCount();
+        }
+        function bulkRotateSelectAll() {
+            document.querySelectorAll('.bulk-rotate-chk').forEach(c => c.checked = true);
+            document.getElementById('bulkRotateChkAll').checked = true;
+            updateBulkRotateCount();
+        }
+        function bulkRotateSelectNone() {
+            document.querySelectorAll('.bulk-rotate-chk').forEach(c => c.checked = false);
+            document.getElementById('bulkRotateChkAll').checked = false;
+            updateBulkRotateCount();
+        }
+        function updateBulkRotateCount() {
+            const n = document.querySelectorAll('.bulk-rotate-chk:checked').length;
+            document.getElementById('bulkRotateSelectedCount').textContent = n + ' selezionate';
+            document.getElementById('bulkRotateRunBtn').disabled = (n === 0);
+        }
+
+        function bulkRotateGetGeneratorOpts() {
+            return {
+                length: parseInt(document.getElementById('bulkRotateLength').value) || 20,
+                type: document.getElementById('bulkRotateType').value,
+                include_lowercase: document.getElementById('bulkRotateInclLower').checked,
+                include_uppercase: document.getElementById('bulkRotateInclUpper').checked,
+                include_numbers:   document.getElementById('bulkRotateInclNumbers').checked,
+                include_symbols:   document.getElementById('bulkRotateInclSymbols').checked
+            };
+        }
+
+        function bulkRotateOnTypeChange() {
+            // Easy to say → disabilita numeri/simboli (per definizione)
+            const type = document.getElementById('bulkRotateType').value;
+            const nums = document.getElementById('bulkRotateInclNumbers');
+            const syms = document.getElementById('bulkRotateInclSymbols');
+            if (type === 'easy_to_say') {
+                nums.disabled = true; nums.checked = false;
+                syms.disabled = true; syms.checked = false;
+            } else {
+                nums.disabled = false;
+                syms.disabled = false;
+            }
+        }
+
+        function bulkRotatePreviewSample() {
+            const opts = bulkRotateGetGeneratorOpts();
+            if (!opts.include_lowercase && !opts.include_uppercase && !opts.include_numbers && !opts.include_symbols) {
+                alert('Seleziona almeno una categoria di caratteri (Minuscole/Maiuscole/Numeri/Simboli).');
+                return;
+            }
+            const box = document.getElementById('bulkRotatePreviewBox');
+            box.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generazione anteprima...';
+            fetch('/api/mailboxes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({ action: 'generate_password', csrf_token: csrfToken }, opts))
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    box.innerHTML = '<span class="text-danger">Errore: ' + (data.error || '') + '</span>';
+                    return;
+                }
+                const ent = data.entropy_bits || 0;
+                const label = data.strength_label || '—';
+                let badgeClass = 'bg-secondary';
+                if (label === 'Molto forte' || label === 'Forte') badgeClass = 'bg-success';
+                else if (label === 'Discreta') badgeClass = 'bg-warning text-dark';
+                else if (label === 'Debole') badgeClass = 'bg-danger';
+                box.innerHTML = '<strong>Esempio:</strong> <code class="font-monospace">' + escapeHtmlBl(data.password) +
+                    '</code>  <span class="badge ' + badgeClass + ' ms-1">' + escapeHtmlBl(label) + '</span>' +
+                    ' <span class="text-muted">(' + ent + ' bit)</span>';
+            })
+            .catch(e => { box.innerHTML = '<span class="text-danger">Errore rete: ' + e.message + '</span>'; });
+        }
+
+        function bulkRotateRun() {
+            const ids = Array.from(document.querySelectorAll('.bulk-rotate-chk:checked')).map(c => parseInt(c.value));
+            if (ids.length === 0) { alert('Seleziona almeno una casella.'); return; }
+            const opts = bulkRotateGetGeneratorOpts();
+            if (!opts.include_lowercase && !opts.include_uppercase && !opts.include_numbers && !opts.include_symbols) {
+                alert('Seleziona almeno una categoria di caratteri (Minuscole/Maiuscole/Numeri/Simboli).');
+                return;
+            }
+            if (!confirm('Generare ' + ids.length + ' nuove password (tipo: ' + opts.type + ', lunghezza ' + opts.length + ') e applicarle?\\n\\nLe password attuali smetteranno di funzionare immediatamente.\\nLe nuove verranno mostrate UNA SOLA volta in questa schermata.\\n\\nProcedere?')) return;
+
+            const btn = document.getElementById('bulkRotateRunBtn');
+            const origBtn = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generazione in corso...';
+
+            fetch('/api/mailboxes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({
+                    action: 'bulk_rotate_passwords',
+                    mailbox_ids: ids,
+                    csrf_token: csrfToken
+                }, opts))
+            })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = origBtn;
+                if (!data.success) {
+                    alert('Errore: ' + (data.error || 'sconosciuto'));
+                    return;
+                }
+                bulkRotateResults = data.results || [];
+                bulkRotatePasswordsVisible = true;
+
+                // Vista risultati
+                document.getElementById('bulkRotateStep1').classList.add('d-none');
+                document.getElementById('bulkRotateStep2').classList.remove('d-none');
+                document.getElementById('bulkRotateRunBtn').classList.add('d-none');
+
+                const summary = data.summary || {};
+                document.getElementById('bulkRotateSummary').innerHTML =
+                    '<strong>Completato:</strong> ' + (summary.succeeded || 0) + ' caselle aggiornate, ' +
+                    (summary.failed || 0) + ' fallite su ' + (summary.total || 0) + ' totali.';
+
+                bulkRotateRenderResults();
+            })
+            .catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = origBtn;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        function bulkRotateRenderResults() {
+            const tbody = document.getElementById('bulkRotateResultsList');
+            let html = '';
+            bulkRotateResults.forEach(r => {
+                html += '<tr>';
+                html += '<td><code>' + escapeHtmlBl(r.email || ('id ' + r.id)) + '</code></td>';
+                if (r.success && r.password) {
+                    const display = bulkRotatePasswordsVisible ? r.password : ('•').repeat(r.password.length);
+                    html += '<td><div class="input-group input-group-sm">';
+                    html += '<input type="text" class="form-control font-monospace" value="' + escapeHtmlBl(display) + '" readonly>';
+                    html += '<button class="btn btn-outline-secondary" type="button" onclick="bulkRotateCopyOne(\\'' + escapeHtmlBl((r.password || '').replace(/\\\\/g, "\\\\\\\\").replace(/'/g, "\\\\'")) + '\\')" title="Copia"><i class="fas fa-copy"></i></button>';
+                    html += '</div></td>';
+                    html += '<td><span class="badge bg-success">OK</span></td>';
+                } else {
+                    html += '<td><span class="text-danger">—</span></td>';
+                    html += '<td><span class="badge bg-danger" title="' + escapeHtmlBl(r.error || '') + '">Errore</span></td>';
+                }
+                html += '</tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        function bulkRotateShowHide() {
+            bulkRotatePasswordsVisible = !bulkRotatePasswordsVisible;
+            bulkRotateRenderResults();
+            document.getElementById('bulkRotateToggleVis').innerHTML = bulkRotatePasswordsVisible
+                ? '<i class="fas fa-eye-slash me-1"></i>Nascondi password'
+                : '<i class="fas fa-eye me-1"></i>Mostra password';
+        }
+
+        function bulkRotateCopyOne(pw) {
+            navigator.clipboard.writeText(pw).catch(() => {});
+        }
+
+        function bulkRotateCopyAll() {
+            // Output CSV semplice: email,password
+            const lines = ['email,password'];
+            bulkRotateResults.forEach(r => {
+                if (r.success && r.password) {
+                    // Quote-escape per CSV
+                    const email = '"' + (r.email || '').replace(/"/g, '""') + '"';
+                    const pw = '"' + r.password.replace(/"/g, '""') + '"';
+                    lines.push(email + ',' + pw);
+                }
+            });
+            const csv = lines.join('\\n');
+            navigator.clipboard.writeText(csv).then(() => {
+                alert('Copiato ' + (lines.length - 1) + ' coppie email,password negli appunti (formato CSV).');
+            }).catch(() => {
+                // Fallback: prompt
+                window.prompt('Copia il testo CSV qui sotto:', csv);
+            });
+        }
+
+""";
+    }
+
     public static String getMailboxesHtml() {
         String extraStyles = """
         .btn-webmail { background-color: #3498db; border-color: #3498db; }
@@ -1771,9 +2229,14 @@ public class MailPanelContent {
         return getHead("Caselle Email", extraStyles) + getNavbar("mailboxes") + """
     <div class="content container mt-4">
         <div class="content-container">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <h2><i class="fas fa-inbox me-2"></i>Caselle Email</h2>
-                <button class="btn btn-mail" data-bs-toggle="modal" data-bs-target="#addMailboxModal"><i class="fas fa-plus me-1"></i>Aggiungi Casella</button>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-outline-warning" onclick="openBulkRotateModal()" title="Genera nuove password sicure per caselle selezionate (o tutte) — utile per rotazione periodica o recovery dopo perdita master.key">
+                        <i class="fas fa-sync-alt me-1"></i>Cambia password massivo
+                    </button>
+                    <button class="btn btn-mail" data-bs-toggle="modal" data-bs-target="#addMailboxModal"><i class="fas fa-plus me-1"></i>Aggiungi Casella</button>
+                </div>
             </div>
 
             <div class="table-responsive">
@@ -1861,7 +2324,32 @@ public class MailPanelContent {
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Nuova Password <small class="text-muted">(lascia vuoto per non cambiare)</small></label>
-                        <input type="password" class="form-control" id="editMbPass" placeholder="Nuova password...">
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="editMbPass" placeholder="Nuova password..." autocomplete="new-password">
+                            <button class="btn btn-outline-secondary" type="button" id="editMbPassToggleBtn" onclick="toggleEditMbPassVisibility()" title="Mostra/nascondi password nel campo"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-outline-primary" type="button" onclick="generateEditMbPass()" title="Genera nuova password sicura"><i class="fas fa-magic me-1"></i>Genera</button>
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyEditMbPass()" title="Copia password negli appunti"><i class="fas fa-copy"></i></button>
+                        </div>
+                        <small class="text-muted">Quando salvi, la password viene cifrata (AES-256-GCM) nel vault del pannello — potrai rivederla in seguito.</small>
+
+                        <!-- Riquadro per password archiviata: rivelabile con click -->
+                        <div class="mt-2" id="editMbVaultBox" style="display:none">
+                            <div class="border rounded p-2 small" style="background:rgba(13,110,253,0.05)">
+                                <i class="fas fa-shield-alt text-primary me-1"></i>
+                                <strong>Password archiviata disponibile</strong> (cifrata nel vault).
+                                <button type="button" class="btn btn-sm btn-link p-0 ms-2" onclick="revealMailboxStoredPassword()">
+                                    <i class="fas fa-eye me-1"></i>Rivela
+                                </button>
+                                <div class="mt-1 d-none" id="editMbRevealedBox">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control font-monospace" id="editMbRevealedValue" readonly>
+                                        <button class="btn btn-outline-secondary" type="button" onclick="copyRevealedPassword()" title="Copia"><i class="fas fa-copy"></i></button>
+                                        <button class="btn btn-outline-danger" type="button" onclick="hideRevealedPassword()" title="Nascondi"><i class="fas fa-eye-slash"></i></button>
+                                    </div>
+                                    <div class="small text-muted mt-1"><i class="fas fa-exclamation-triangle me-1"></i>Operazione registrata nell'audit log per sicurezza.</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Quota</label>
@@ -1904,6 +2392,7 @@ public class MailPanelContent {
         </div>
     </div>
 
+""" + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + """
     <!-- Mail Client Config Modal -->
     <div class="modal fade" id="mailConfigModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -2278,6 +2767,20 @@ public class MailPanelContent {
                     document.getElementById('editMbQuota').value = m.quota_mb;
                     document.getElementById('editMbActive').checked = m.active;
                     document.getElementById('editMbReceive').checked = m.receive_enabled;
+                    // Reset stato del campo password (sempre nascosto all'apertura)
+                    document.getElementById('editMbPass').type = 'password';
+                    document.getElementById('editMbPassToggleBtn').innerHTML = '<i class="fas fa-eye"></i>';
+                    // Reset stato del riquadro vault
+                    const vaultBox = document.getElementById('editMbVaultBox');
+                    const revealedBox = document.getElementById('editMbRevealedBox');
+                    revealedBox.classList.add('d-none');
+                    document.getElementById('editMbRevealedValue').value = '';
+                    // Mostra il riquadro "Password archiviata" SOLO se ce n'è una nel vault
+                    if (m.has_encrypted_password) {
+                        vaultBox.style.display = '';
+                    } else {
+                        vaultBox.style.display = 'none';
+                    }
                     new bootstrap.Modal(document.getElementById('editMailboxModal')).show();
                 } else {
                     alert('Errore: impossibile caricare i dati della mailbox');
@@ -2285,6 +2788,193 @@ public class MailPanelContent {
             });
         }
 
+        // ===== Password vault helpers =====
+        function toggleEditMbPassVisibility() {
+            const input = document.getElementById('editMbPass');
+            const btn = document.getElementById('editMbPassToggleBtn');
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+            } else {
+                input.type = 'password';
+                btn.innerHTML = '<i class="fas fa-eye"></i>';
+            }
+        }
+
+        function generateEditMbPass() {
+            // Apri il modal Generatore Password e registra un callback che riempie il campo della casella
+            window.__pwGenCallback = function(pw) {
+                const input = document.getElementById('editMbPass');
+                input.value = pw;
+                input.type = 'text';
+                document.getElementById('editMbPassToggleBtn').innerHTML = '<i class="fas fa-eye-slash"></i>';
+                input.focus();
+                input.select();
+            };
+            openPasswordGeneratorModal();
+        }
+
+        // ===== Password Generator (modal riusabile) =====
+        function openPasswordGeneratorModal() {
+            // Reset preview
+            document.getElementById('pwgenPreview').value = '';
+            document.getElementById('pwgenStrengthBadge').textContent = '—';
+            document.getElementById('pwgenStrengthBadge').className = 'badge bg-secondary';
+            document.getElementById('pwgenEntropyText').textContent = 'Entropia: — bit';
+            document.getElementById('pwgenUseBtn').disabled = true;
+            // Aggiorna nota Include in base al type selezionato
+            pwgenUpdateIncludeNote();
+            new bootstrap.Modal(document.getElementById('passwordGeneratorModal')).show();
+            // Genera subito una password con i default così l'utente vede un esempio
+            setTimeout(pwgenGenerate, 100);
+        }
+
+        function pwgenLengthDelta(delta) {
+            const input = document.getElementById('pwgenLength');
+            let v = parseInt(input.value) + delta;
+            if (v < 8) v = 8;
+            if (v > 128) v = 128;
+            input.value = v;
+            const range = document.getElementById('pwgenLengthRange');
+            if (v <= 64) range.value = v;
+        }
+
+        function pwgenUpdateIncludeNote() {
+            const type = document.querySelector('input.pwgen-type:checked').value;
+            const numbersChk = document.getElementById('pwgenIncludeNumbers');
+            const symbolsChk = document.getElementById('pwgenIncludeSymbols');
+            const note = document.getElementById('pwgenIncludeNote');
+            if (type === 'easy_to_say') {
+                numbersChk.disabled = true; symbolsChk.disabled = true;
+                numbersChk.checked = false; symbolsChk.checked = false;
+                note.textContent = 'Tipo "facile da dettare": numeri e simboli sono disattivati per definizione.';
+            } else {
+                numbersChk.disabled = false; symbolsChk.disabled = false;
+                note.textContent = '';
+            }
+        }
+
+        // Listener per radio type
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.classList && e.target.classList.contains('pwgen-type')) {
+                pwgenUpdateIncludeNote();
+            }
+        });
+
+        function pwgenGenerate() {
+            const length = parseInt(document.getElementById('pwgenLength').value) || 20;
+            const type = document.querySelector('input.pwgen-type:checked').value;
+            const lo = document.getElementById('pwgenIncludeLower').checked;
+            const up = document.getElementById('pwgenIncludeUpper').checked;
+            const nu = document.getElementById('pwgenIncludeNumbers').checked;
+            const sy = document.getElementById('pwgenIncludeSymbols').checked;
+
+            if (!lo && !up && !nu && !sy) {
+                alert('Seleziona almeno una categoria di caratteri.');
+                return;
+            }
+
+            fetch('/api/mailboxes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'generate_password',
+                    length: length,
+                    type: type,
+                    include_lowercase: lo,
+                    include_uppercase: up,
+                    include_numbers: nu,
+                    include_symbols: sy,
+                    csrf_token: csrfToken
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Errore: ' + (data.error || ''));
+                    return;
+                }
+                document.getElementById('pwgenPreview').value = data.password;
+                const ent = data.entropy_bits || 0;
+                const label = data.strength_label || '—';
+                document.getElementById('pwgenEntropyText').textContent = 'Entropia: ' + ent + ' bit';
+                const badge = document.getElementById('pwgenStrengthBadge');
+                badge.textContent = label;
+                if (label === 'Molto forte')      badge.className = 'badge bg-success';
+                else if (label === 'Forte')       badge.className = 'badge bg-success';
+                else if (label === 'Discreta')    badge.className = 'badge bg-warning text-dark';
+                else                              badge.className = 'badge bg-danger';
+                document.getElementById('pwgenUseBtn').disabled = false;
+            })
+            .catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function pwgenCopy() {
+            const v = document.getElementById('pwgenPreview').value;
+            if (!v) return;
+            navigator.clipboard.writeText(v).catch(() => {});
+        }
+
+        function pwgenUse() {
+            const v = document.getElementById('pwgenPreview').value;
+            if (!v) return;
+            const cb = window.__pwGenCallback;
+            // Chiudi il modal e invoca la callback
+            const modalEl = document.getElementById('passwordGeneratorModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            if (typeof cb === 'function') cb(v);
+            window.__pwGenCallback = null;
+        }
+
+        function copyEditMbPass() {
+            const input = document.getElementById('editMbPass');
+            if (!input.value) { alert('Il campo è vuoto. Genera o digita una password prima.'); return; }
+            navigator.clipboard.writeText(input.value).then(() => {
+                // Feedback breve sull'icona
+                // (non uso alert per non interrompere il flusso)
+            }).catch(() => {
+                input.select(); document.execCommand('copy');
+            });
+        }
+
+        function revealMailboxStoredPassword() {
+            const id = parseInt(document.getElementById('editMbId').value);
+            if (!id) return;
+            if (!confirm('Rivelare la password archiviata di questa casella?\\n\\nL\\'operazione viene registrata nell\\'audit log con il tuo username, IP e timestamp.')) return;
+            fetch('/api/mailboxes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'reveal_password', id: id, csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const revealedBox = document.getElementById('editMbRevealedBox');
+                    revealedBox.classList.remove('d-none');
+                    document.getElementById('editMbRevealedValue').value = data.password || '';
+                } else {
+                    alert(data.error || 'Errore rivelazione password');
+                }
+            })
+            .catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function copyRevealedPassword() {
+            const input = document.getElementById('editMbRevealedValue');
+            if (!input.value) return;
+            navigator.clipboard.writeText(input.value).catch(() => {
+                input.select(); document.execCommand('copy');
+            });
+        }
+
+        function hideRevealedPassword() {
+            const revealedBox = document.getElementById('editMbRevealedBox');
+            revealedBox.classList.add('d-none');
+            document.getElementById('editMbRevealedValue').value = '';
+        }
+
+""" + getBulkRotateMailboxesJs() + """
         function saveMailbox() {
             const id = parseInt(document.getElementById('editMbId').value);
             const data = {
@@ -2692,178 +3382,381 @@ public class MailPanelContent {
     }
 
     // ============== DNS.HTML - Full DNS Records Page ==============
-    public static String getDnsHtml() {
-        String extraStyles = """
-        .dns-record { background: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 15px; border-left: 4px solid #e94560; }
-        .dns-record.required { border-left-color: #dc3545; }
-        .dns-record.optional { border-left-color: #6c757d; }
-        .record-type { font-weight: bold; font-size: 0.9rem; color: #e94560; }
-        .record-name { font-family: monospace; background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        .record-value { font-family: monospace; font-size: 0.85rem; word-break: break-all; background: #fff; padding: 8px; border: 1px solid #dee2e6; border-radius: 4px; margin-top: 8px; }
-        .copy-btn { cursor: pointer; }
-        .copy-btn:hover { color: #e94560; }
-        .score-badge { font-size: 1.5rem; }
-        .check-passed { color: #198754; }
-        .check-failed { color: #dc3545; }
-        /* Dark mode overrides */
-        [data-theme="dark"] .dns-record { background: var(--table-stripe); color: var(--text-primary); }
-        [data-theme="dark"] .record-name { background: var(--bg-input); color: var(--text-primary); }
-        [data-theme="dark"] .record-value { background: var(--bg-input); border-color: var(--border-color); color: var(--text-primary); }
-        [data-theme="dark"] .card-header.bg-dark { background-color: #1a1d21 !important; }
-        [data-theme="dark"] .bg-white { background-color: var(--bg-input) !important; color: var(--text-primary) !important; }
-        [data-theme="dark"] .border { border-color: var(--border-color) !important; }
-        /* ===== Explanation panels (details > div.bg-white) ===== */
-        [data-theme="dark"] details .bg-white,
-        [data-theme="dark"] details > div { background-color: var(--bg-input) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
-        [data-theme="dark"] details strong { color: var(--text-primary); }
-        [data-theme="dark"] details .table,
-        [data-theme="dark"] details .table > :not(caption) > * > * { background-color: transparent !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
-        [data-theme="dark"] details .table-sm td, [data-theme="dark"] details .table-sm th { color: var(--text-primary) !important; }
-        [data-theme="dark"] details code { background-color: var(--table-stripe) !important; color: #f8f9fa !important; padding: 1px 4px; border-radius: 3px; }
-        [data-theme="dark"] details summary { color: var(--text-primary); }
-        /* Globale: tabelle dentro alert/info che non riceverebbero override */
-        [data-theme="dark"] .alert .table, [data-theme="dark"] .alert .table > :not(caption) > * > * { background-color: transparent !important; color: var(--text-primary) !important; }
-        """;
-        return getHead("DNS", extraStyles) + getNavbar("dns") + """
-    <div class="content container mt-4">
-        <div class="content-container">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2><i class="fas fa-server me-2"></i>Configurazione DNS</h2>
-                <div>
-                    <select class="form-select d-inline-block w-auto me-2" id="domainSelect">
-                        <option value="">Seleziona dominio...</option>
-                    </select>
-                    <button class="btn btn-mail" onclick="loadDnsRecords()"><i class="fas fa-sync me-1"></i>Genera</button>
-                    <button class="btn btn-success" onclick="verifyDns()"><i class="fas fa-check me-1"></i>Verifica</button>
-                </div>
-            </div>
+    /**
+     * Seconda metà del blocco JS della pagina /dns,
+     * estratta per stare sotto il limite di 65535 byte del constant pool Java.
+     */
+    private static String getDnsJsPart2() {
+        return """
+        // ===== DKIM rotation =====
+        function loadDkimRotationStatus(domainId) {
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'rotate_status', domain_id: parseInt(domainId) })
+            }).then(r => r.json()).then(data => {
+                const panel = document.getElementById('dkimRotationPanel');
+                const stepper = document.getElementById('dkimRotationStepper');
+                const body = document.getElementById('dkimRotationBody');
+                const badge = document.getElementById('dkimRotationBadge');
+                const rotateBtn = document.getElementById('rotateDkimBtn');
+                const cfInfo = document.getElementById('dkimDomainCfInfo');
+                const state = data.rotation_state || '';
 
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i>
-                <strong>Come funziona:</strong> Seleziona un dominio, genera i record DNS e copiali nel tuo pannello DNS (Cloudflare, Route53, etc.).
-                Poi clicca "Verifica" per controllare che siano configurati correttamente.
-            </div>
-
-            <!-- Verification Results -->
-            <div id="verificationResults" class="d-none mb-4">
-                <div class="card">
-                    <div class="card-header bg-dark text-white">
-                        <i class="fas fa-clipboard-check me-2"></i>Risultati Verifica DNS
-                    </div>
-                    <div class="card-body" id="verificationBody">
-                    </div>
-                </div>
-            </div>
-
-            <!-- DNS Records -->
-            <div id="dnsRecordsContainer">
-                <p class="text-muted">Seleziona un dominio per visualizzare i record DNS necessari.</p>
-            </div>
-
-            <!-- DKIM Section -->
-            <div class="card mt-4">
-                <div class="card-header bg-primary text-white">
-                    <i class="fas fa-key me-2"></i>DKIM - Firma Digitale Email
-                </div>
-                <div class="card-body">
-                    <p>DKIM firma digitalmente le email in uscita, permettendo ai destinatari di verificare l'autenticita'.</p>
-                    <div id="dkimStatus">Seleziona un dominio per vedere lo stato DKIM.</div>
-                    <button class="btn btn-warning mt-2" id="generateDkimBtn" onclick="generateDkim()" disabled>
-                        <i class="fas fa-key me-1"></i>Genera Chiavi DKIM
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-""" + getFooter() + """
-    <script>
-        let currentDomainId = null;
-
-        // Load domains
-        fetch('/api/domains').then(r => r.json()).then(data => {
-            const select = document.getElementById('domainSelect');
-            (data.domains || []).forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d.domain;
-                opt.dataset.id = d.id;
-                opt.textContent = d.domain;
-                select.appendChild(opt);
-            });
-        });
-
-        function loadDnsRecords() {
-            const domain = document.getElementById('domainSelect').value;
-            if (!domain) { alert('Seleziona un dominio'); return; }
-
-            currentDomainId = document.getElementById('domainSelect').selectedOptions[0].dataset.id;
-            document.getElementById('generateDkimBtn').disabled = false;
-
-            fetch('/api/dns?domain=' + domain).then(r => r.json()).then(data => {
-                if (!data.success) { alert('Errore: ' + data.error); return; }
-
-                // Extract mail hostname parent domain
-                const mailHostname = data.mail_hostname;
-                const mailHostnameParts = mailHostname.split('.');
-                const mailServerParentDomain = mailHostnameParts.slice(1).join('.');
-
-                let html = '<div class="alert alert-info mb-4">';
-                html += '<h5><i class="fas fa-info-circle me-2"></i>Riepilogo Zone DNS</h5>';
-                html += '<p class="mb-2">Dovrai configurare record in <strong>2 zone DNS diverse</strong>:</p>';
-                html += '<ul class="mb-0">';
-                html += '<li><strong>' + mailServerParentDomain + '</strong> → per il record A del server mail</li>';
-                html += '<li><strong>' + domain + '</strong> → per MX, SPF, DKIM, DMARC e altri record</li>';
-                html += '</ul>';
-                html += '</div>';
-
-                html += '<div class="mb-3"><strong>Server IP:</strong> <code>' + data.server_ip + '</code> | <strong>Mail Hostname:</strong> <code>' + data.mail_hostname + '</code></div>';
-
-                // Group records by zone
-                let currentZone = '';
-                data.records.forEach(r => {
-                    // Add zone header if changed
-                    if (r.dnsZone && r.dnsZone !== currentZone) {
-                        currentZone = r.dnsZone;
-                        html += '<div class="mt-4 mb-3 p-2 bg-primary text-white rounded"><strong><i class="fas fa-globe me-2"></i>Zona DNS: ' + currentZone + '</strong></div>';
+                // Aggiorna il flag e l'info CF visibile sopra ai bottoni
+                cloudflareConfigured = !!data.cloudflare_configured;
+                if (cfInfo) {
+                    if (data.cloudflare_configured) {
+                        const lbl = data.cloudflare_account_label || '?';
+                        const em = data.cloudflare_account_email ? ' (' + escapeHtmlBl(data.cloudflare_account_email) + ')' : '';
+                        cfInfo.innerHTML = '<div class="alert alert-info py-2 mb-0 small"><i class="fas fa-cloud me-1"></i><strong>Rotazione automatica via Cloudflare</strong> — account collegato: <strong>' + escapeHtmlBl(lbl) + '</strong>' + em + '. Il record DNS verrà creato e cancellato dal pannello.</div>';
+                    } else if (data.has_dkim) {
+                        cfInfo.innerHTML = '<div class="alert alert-secondary py-2 mb-0 small"><i class="fas fa-edit me-1"></i><strong>Rotazione manuale</strong> — questo dominio non è legato a nessun account Cloudflare. Per renderla automatica, scorri sopra e assegnalo a un account nella sezione "Assegnazione domini → account".</div>';
+                    } else {
+                        cfInfo.innerHTML = '';
                     }
+                }
 
-                    const reqClass = r.required ? 'required' : 'optional';
-                    const badge = r.required ? '<span class="badge bg-danger">Richiesto</span>' : '<span class="badge bg-secondary">Opzionale</span>';
-                    html += '<div class="dns-record ' + reqClass + '">';
-                    html += '<div class="d-flex justify-content-between align-items-start">';
-                    html += '<div><span class="record-type">' + r.type + '</span> ' + badge;
-                    if (r.dnsZone) {
-                        html += ' <small class="text-muted">su ' + r.dnsZone + '</small>';
-                    }
-                    html += '</div>';
-                    html += '<i class="fas fa-copy copy-btn" onclick="copyToClipboard(this.parentElement.parentElement)" title="Copia"></i>';
-                    html += '</div>';
-                    html += '<div class="mt-2"><strong>Nome:</strong> <code>' + r.name + '</code></div>';
-                    html += '<div class="mt-1"><strong>Valore:</strong> <code style="word-break:break-all">' + r.value + '</code></div>';
-                    html += '<small class="text-muted">' + r.description + '</small>';
-                    if (r.explanation) {
-                        html += '<details class="mt-2"><summary><i class="fas fa-cog me-1"></i>Istruzioni dettagliate Cloudflare</summary><div class="mt-2 p-3 bg-white border rounded" style="font-size:0.9rem">' + r.explanation + '</div></details>';
-                    }
-                    html += '</div>';
+                if (!data.success || !state) {
+                    panel.classList.add('d-none');
+                    badge.innerHTML = '';
+                    if (rotateBtn && data.has_dkim) rotateBtn.disabled = false;
+                    return;
+                }
+
+                // Rotazione in corso: nascondi il bottone "Avvia rotazione"
+                if (rotateBtn) rotateBtn.disabled = true;
+                panel.classList.remove('d-none');
+
+                // Badge sull'header
+                if (state === 'pending_dns')      badge.innerHTML = '<span class="badge bg-warning text-dark">In attesa DNS</span>';
+                else if (state === 'propagated')  badge.innerHTML = '<span class="badge bg-info text-dark">DNS propagato — pronto da attivare</span>';
+                else if (state === 'active_grace') badge.innerHTML = '<span class="badge bg-success">Nuova chiave attiva — grace period</span>';
+
+                // Stepper
+                const stepDef = [
+                    { key: 'pending_dns',   label: '1. Pubblica DNS' },
+                    { key: 'propagated',    label: '2. Verifica propagazione' },
+                    { key: 'active_grace',  label: '3. Attiva firma' },
+                    { key: 'completed',     label: '4. Rimuovi vecchia chiave' }
+                ];
+                let stepperHtml = '<div class="d-flex justify-content-between flex-wrap gap-2">';
+                let activeIdx = 0;
+                if (state === 'pending_dns')      activeIdx = 0;
+                else if (state === 'propagated')  activeIdx = 1;
+                else if (state === 'active_grace') activeIdx = 2;
+                stepDef.forEach((s, i) => {
+                    let cls = 'badge bg-secondary';
+                    if (i < activeIdx) cls = 'badge bg-success';
+                    else if (i === activeIdx) cls = 'badge bg-primary';
+                    stepperHtml += '<span class="' + cls + '" style="padding:8px 12px;font-size:0.85rem">' + s.label + '</span>';
                 });
+                stepperHtml += '</div>';
+                stepper.innerHTML = stepperHtml;
 
-                document.getElementById('dnsRecordsContainer').innerHTML = html;
+                // Body per ogni stato
+                let html = '';
 
-                // Load DKIM status
-                loadDkimStatus(currentDomainId);
+                if (state === 'pending_dns' || state === 'propagated') {
+                    html += '<div class="alert alert-warning">';
+                    html += '<strong><i class="fas fa-edit me-1"></i>Aggiungi questo record TXT al tuo DNS:</strong>';
+                    html += '<div class="mt-2"><strong>Nome:</strong> <code>' + escapeHtmlBl(data.pending_dns_name || '') + '</code></div>';
+                    html += '<div class="mt-1"><strong>Tipo:</strong> <code>TXT</code></div>';
+                    html += '<div class="mt-1"><strong>Valore:</strong> <code style="word-break:break-all">' + escapeHtmlBl(data.pending_dns_value || '') + '</code> ';
+                    html += '<button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyDkimRotateValue(this)" data-val="' + escapeHtmlBl(data.pending_dns_value || '') + '"><i class="fas fa-copy"></i></button></div>';
+                    html += '<div class="mt-2 small text-muted">Il selector della NUOVA chiave è <code>' + escapeHtmlBl(data.pending_selector || '') + '</code>. La vecchia chiave (<code>' + escapeHtmlBl(data.current_selector || '') + '</code>) continua a firmare finché non attivi.</div>';
+                    html += '</div>';
+
+                    if (state === 'pending_dns') {
+                        html += '<div class="d-flex gap-2 flex-wrap">';
+                        html += '<button class="btn btn-primary" onclick="rotateDkimCheck()"><i class="fas fa-search me-1"></i>Verifica propagazione DNS</button>';
+                        html += '<button class="btn btn-outline-danger" onclick="rotateDkimCancel()"><i class="fas fa-times me-1"></i>Annulla rotazione</button>';
+                        html += '</div>';
+                        html += '<div class="small text-muted mt-2">Tip: dopo aver aggiunto il record TXT al DNS, attendi 1-5 minuti e poi premi "Verifica". Lo stato passerà automaticamente al passo successivo.</div>';
+                    } else {
+                        // propagated
+                        html += '<div class="alert alert-info"><i class="fas fa-check-circle me-1"></i>Il record DNS è stato pubblicato correttamente. Ora puoi attivare la nuova chiave: da quel momento le mail in uscita verranno firmate con il nuovo selector.</div>';
+                        html += '<div class="d-flex gap-2 flex-wrap">';
+                        html += '<button class="btn btn-success" onclick="rotateDkimActivate(false)"><i class="fas fa-bolt me-1"></i>Attiva nuova chiave</button>';
+                        html += '<button class="btn btn-outline-primary" onclick="rotateDkimCheck()"><i class="fas fa-sync me-1"></i>Ricontrolla DNS</button>';
+                        html += '<button class="btn btn-outline-danger" onclick="rotateDkimCancel()"><i class="fas fa-times me-1"></i>Annulla rotazione</button>';
+                        html += '</div>';
+                    }
+                } else if (state === 'active_grace') {
+                    const graceDays = data.grace_period_days || 7;
+                    const isOver = !!data.grace_period_over;
+                    html += '<div class="alert ' + (isOver ? 'alert-success' : 'alert-info') + '">';
+                    html += '<strong><i class="fas fa-check-circle me-1"></i>Nuova chiave attiva.</strong> Le email vengono ora firmate con il selector <code>' + escapeHtmlBl(data.current_selector || '') + '</code>.';
+                    if (data.previous_selector) {
+                        html += '<div class="mt-2 small">La vecchia chiave <code>' + escapeHtmlBl(data.previous_selector) + '</code> deve restare nel DNS per ' + graceDays + ' giorni, così le mail già spedite continuano a validarsi presso i destinatari.</div>';
+                    }
+                    if (data.activated_at) {
+                        html += '<div class="mt-1 small text-muted">Attivata: ' + escapeHtmlBl(data.activated_at) + '</div>';
+                    }
+                    html += '</div>';
+
+                    // Calcola la data prevista di completamento (activated_at + grace_days)
+                    let expectedCompletionStr = '';
+                    const actMs = (typeof pickTs === 'function')
+                        ? (pickTs(data, 'activated_at') ? pickTs(data, 'activated_at').getTime() : null)
+                        : null;
+                    if (actMs) {
+                        const completionDate = new Date(actMs + graceDays * 24 * 60 * 60 * 1000);
+                        expectedCompletionStr = (typeof formatItalianDate === 'function')
+                            ? formatItalianDate(completionDate)
+                            : completionDate.toLocaleString('it-IT');
+                    }
+
+                    if (isOver) {
+                        if (data.cloudflare_configured) {
+                            html += '<div class="alert alert-success"><i class="fas fa-robot me-1"></i><strong>Grace period terminato.</strong> Lo scheduler completerà automaticamente la rotazione al prossimo tick (entro 1 ora) — rimuoverà la vecchia chiave dal DB e cancellerà il record TXT via Cloudflare. Puoi anche cliccare qui sotto per farlo subito.</div>';
+                        } else {
+                            html += '<div class="alert alert-warning"><i class="fas fa-clock me-1"></i><strong>Grace period terminato.</strong> Clicca "Completa rotazione" — poi dovrai rimuovere manualmente il record TXT dal tuo DNS provider (questo dominio non ha un account Cloudflare assegnato per l\\'auto-cancellazione).</div>';
+                        }
+                        html += '<button class="btn btn-success" onclick="rotateDkimComplete()"><i class="fas fa-flag-checkered me-1"></i>Completa rotazione</button>';
+                    } else {
+                        // PRIMA del grace period: il bottone "Completa" è SEMPRE disabilitato.
+                        // Nessuna possibilità di forzare: il server side rifiuterebbe comunque la chiamata
+                        // (vedi DkimManager.completeRotation), quindi non offriamo nemmeno il bottone.
+                        if (data.cloudflare_configured) {
+                            html += '<div class="alert alert-info"><i class="fas fa-robot me-1"></i><strong>Completamento automatico previsto:</strong> ' + (expectedCompletionStr ? '<strong>' + expectedCompletionStr + '</strong>' : 'tra ' + graceDays + ' giorni dall\\'attivazione') + '.<br>Finché il pannello resta acceso, lo scheduler attiverà il completamento entro 1 ora dal termine del grace period: rimuoverà la vecchia chiave dal DB e cancellerà il record TXT in Cloudflare automaticamente.</div>';
+                        } else {
+                            html += '<div class="alert alert-light"><i class="fas fa-hourglass-half me-1"></i>Attendi la fine del grace period (' + graceDays + ' giorni' + (expectedCompletionStr ? ', circa il <strong>' + expectedCompletionStr + '</strong>' : '') + ') prima di rimuovere la vecchia chiave dal DNS.<br><small class="text-muted">Questo dominio è in modalità manuale (nessun account Cloudflare). Lo scheduler non potrà auto-completare: al termine del grace period dovrai cliccare "Completa" e poi cancellare il vecchio record TXT dal tuo DNS provider.</small></div>';
+                        }
+                        html += '<button class="btn btn-success" disabled title="Non puoi completare la rotazione prima del grace period — rimuovere la vecchia chiave troppo presto causerebbe DKIM-fail su mail in transito. Il pulsante si abiliterà automaticamente.">';
+                        html += '<i class="fas fa-lock me-1"></i>Completa rotazione (bloccato fino al ' + (expectedCompletionStr || 'termine grace') + ')';
+                        html += '</button>';
+                    }
+                }
+
+                body.innerHTML = html;
+            }).catch(e => {
+                console.error('rotate_status error', e);
             });
         }
 
-        function loadDkimStatus(domainId) {
-            fetch('/api/dkim?id=' + domainId).then(r => r.json()).then(data => {
-                const status = document.getElementById('dkimStatus');
-                if (data.configured) {
-                    status.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>DKIM Configurato!</strong><br>' +
-                        'Selector: ' + data.selector + '<br>' +
-                        'Record DNS: <code>' + data.dns_record_name + '</code></div>';
-                } else {
-                    status.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>DKIM non configurato per questo dominio.</div>';
-                }
+        function copyDkimRotateValue(btn) {
+            const v = btn.getAttribute('data-val') || '';
+            navigator.clipboard.writeText(v).then(() => {
+                const old = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> copiato';
+                setTimeout(() => btn.innerHTML = old, 1500);
             });
+        }
+
+        // Esegue la POST /api/dkim rotate_start con il flag auto scelto dall'utente.
+        function rotateDkimStartExec(useAuto) {
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'rotate_start', domain_id: parseInt(currentDomainId), auto: useAuto })
+            }).then(r => r.json()).then(data => {
+                if (!data.success) { alert('Errore: ' + (data.error || 'sconosciuto')); return; }
+                if (data.warning) {
+                    alert('⚠ ' + data.warning);
+                } else if (data.message && useAuto) {
+                    alert('✓ ' + data.message);
+                }
+                loadDkimRotationStatus(currentDomainId);
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function rotateDkimStart() {
+            if (!currentDomainId) { alert('Seleziona un dominio'); return; }
+            // Identifica l'account CF collegato (se c'è)
+            const domInfo = cfDomainsCf.find(d => d.id === parseInt(currentDomainId));
+            const linkedAccount = domInfo && domInfo.cloudflare_account_id
+                ? cfAccounts.find(a => a.id === domInfo.cloudflare_account_id)
+                : null;
+            const acctLabel = linkedAccount
+                ? linkedAccount.label + (linkedAccount.email ? ' (' + linkedAccount.email + ')' : '')
+                : '';
+
+            // Se NON c'è CF assegnato → solo manuale
+            if (!cloudflareConfigured) {
+                if (!confirm('Avviare la rotazione DKIM (modalità manuale)?\\n\\nQuesto dominio non è legato a nessun account Cloudflare, quindi dovrai aggiungere TU il record TXT al DNS.\\n\\n• Verrà generata una nuova chiave.\\n• La vecchia chiave continuerà a firmare finché non attivi quella nuova.\\n• Dopo l\\'attivazione, la vecchia chiave resta nel DNS per 7 giorni (grace period).')) return;
+                rotateDkimStartExec(false);
+                return;
+            }
+
+            // CF disponibile → mostra modal di scelta tra Cloudflare e DNS manuale
+            const modalEl = document.getElementById('rotateModeChooserModal');
+            document.getElementById('rotateModeAccountLabel').textContent = acctLabel || '(nessuno)';
+            // Bootstrap modal (Bootstrap 5)
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        // Callback invocato dai bottoni dentro al modal di scelta
+        function rotateDkimStartChooseCloudflare() {
+            const modalEl = document.getElementById('rotateModeChooserModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            rotateDkimStartExec(true);
+        }
+
+        function rotateDkimStartChooseManual() {
+            const modalEl = document.getElementById('rotateModeChooserModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            if (!confirm('Confermi la modalità MANUALE?\\n\\nIl pannello genera la chiave ma NON tocca il DNS via Cloudflare. Dovrai copiare il record TXT dalla schermata che apparirà e aggiungerlo TU al DNS provider.')) return;
+            rotateDkimStartExec(false);
+        }
+
+        function rotateDkimCheck() {
+            if (!currentDomainId) return;
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'rotate_check', domain_id: parseInt(currentDomainId) })
+            }).then(r => r.json()).then(data => {
+                if (!data.success) { alert('Errore: ' + (data.message || 'sconosciuto')); return; }
+                if (data.propagated) {
+                    alert('✓ Record DNS propagato. Ora puoi attivare la nuova chiave.');
+                } else {
+                    alert('⚠ ' + (data.message || 'Non ancora propagato — riprova tra qualche minuto.'));
+                }
+                loadDkimRotationStatus(currentDomainId);
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function rotateDkimActivate(force) {
+            if (!currentDomainId) return;
+            const msg = force
+                ? 'Forzare l\\'attivazione anche se il DNS non sembra propagato?\\n\\nATTENZIONE: se il record non è ancora visibile ai destinatari, le mail firmate con la nuova chiave falliranno DKIM finché non si propaga.'
+                : 'Attivare la nuova chiave DKIM?\\n\\n• Le nuove email saranno firmate con il nuovo selector.\\n• La vecchia chiave resterà nel DNS per il grace period (7 giorni).\\n• Verrà ricaricato Rspamd.';
+            if (!confirm(msg)) return;
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'rotate_activate', domain_id: parseInt(currentDomainId), force: !!force })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || ''));
+                if (data.success) {
+                    loadDkimStatus(currentDomainId);
+                    loadDnsRecords();
+                }
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function rotateDkimComplete() {
+            if (!currentDomainId) return;
+            if (!confirm('Completare la rotazione e rimuovere la vecchia chiave dal pannello?\\n\\nDopo questa operazione potrai rimuovere il vecchio record TXT dal tuo DNS.')) return;
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'rotate_complete', domain_id: parseInt(currentDomainId) })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || ''));
+                if (data.success) {
+                    loadDkimStatus(currentDomainId);
+                    loadDnsRecords();
+                }
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function rotateDkimCancel() {
+            if (!currentDomainId) return;
+            if (!confirm('Annullare la rotazione in corso?\\n\\nLa chiave pending verrà eliminata. Potrai rimuovere il record TXT dal DNS.')) return;
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'rotate_cancel', domain_id: parseInt(currentDomainId) })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || ''));
+                loadDkimRotationStatus(currentDomainId);
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        // ===== Blacklist Check =====
+        function runBlacklistCheck() {
+            const btn = document.getElementById('btnBlCheck');
+            const container = document.getElementById('blContainer');
+            const overall = document.getElementById('blOverallStatus');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Verifica in corso (5-10s)...';
+            container.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Sto interrogando 15+ blacklist DNS-based, attendi...</p>';
+            fetch('/api/blacklist_check').then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                if (!data.success) {
+                    container.innerHTML = '<div class="alert alert-danger mb-0">Errore: ' + (data.error || 'sconosciuto') + '</div>';
+                    return;
+                }
+                let totalListed = 0;
+                let totalChecks = 0;
+                let html = '';
+                (data.reports || []).forEach(report => {
+                    totalListed += report.listed_count;
+                    totalChecks += (report.listed_count + report.clean_count + report.error_count + (report.web_only_count || 0));
+
+                    const labelType = report.type === 'IP' ? 'IP server' : 'Dominio';
+                    let headerClass, badge;
+                    if (report.listed_count > 0) {
+                        headerClass = 'bg-danger text-white';
+                        badge = '<span class="badge bg-light text-danger ms-2">⚠ ' + report.listed_count + ' listed</span>';
+                    } else if (report.error_count > report.clean_count / 2) {
+                        headerClass = 'bg-warning text-dark';
+                        badge = '<span class="badge bg-secondary ms-2">' + report.error_count + ' err</span>';
+                    } else {
+                        headerClass = 'bg-success text-white';
+                        let txt = '✓ ' + report.clean_count + ' clean';
+                        if (report.web_only_count) txt += ' + ' + report.web_only_count + ' web';
+                        badge = '<span class="badge bg-light text-success ms-2">' + txt + '</span>';
+                    }
+
+                    html += '<div class="card mb-3">';
+                    html += '<div class="card-header ' + headerClass + ' d-flex justify-content-between align-items-center">';
+                    html += '<div><strong>' + labelType + ':</strong> <code class="ms-1" style="background:rgba(255,255,255,0.2);padding:2px 6px;border-radius:3px;color:inherit">' + escapeHtmlBl(report.target) + '</code>' + badge + '</div>';
+                    html += '<small class="opacity-75">' + report.elapsed_ms + 'ms</small>';
+                    html += '</div>';
+                    html += '<div class="card-body p-2"><div class="table-responsive"><table class="table table-sm mb-0">';
+                    html += '<thead><tr><th>Blacklist</th><th>Stato</th><th>Dettagli</th><th>Lookup</th></tr></thead><tbody>';
+                    (report.results || []).forEach(res => {
+                        let stateBadge;
+                        if (res.listed) {
+                            stateBadge = '<span class="badge bg-danger"><i class="fas fa-ban me-1"></i>LISTED</span>';
+                        } else if (res.web_only) {
+                            stateBadge = '<span class="badge bg-info text-dark"><i class="fas fa-external-link-alt me-1"></i>Verifica web</span>';
+                        } else if (res.error) {
+                            stateBadge = '<span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i>Errore</span>';
+                        } else {
+                            stateBadge = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Pulito</span>';
+                        }
+                        html += '<tr>';
+                        html += '<td><strong>' + escapeHtmlBl(res.blacklist) + '</strong><br><small class="text-muted">' + escapeHtmlBl(res.zone) + '</small></td>';
+                        html += '<td>' + stateBadge + '</td>';
+                        html += '<td><small>' + escapeHtmlBl(res.message || '') + '</small></td>';
+                        html += '<td>' + (res.lookup_url ? '<a href="' + res.lookup_url + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" title="Apri pagina lookup/delisting"><i class="fas fa-external-link-alt"></i></a>' : '') + '</td>';
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table></div></div>';
+                    html += '</div>';
+                });
+
+                // Overall status badge
+                if (totalListed === 0) {
+                    overall.innerHTML = '<span class="badge bg-success">Tutto pulito (' + totalChecks + ' check)</span>';
+                } else {
+                    overall.innerHTML = '<span class="badge bg-danger">' + totalListed + ' blacklist(s) ti hanno listato</span>';
+                }
+
+                if (html === '') {
+                    html = '<p class="text-muted">Nessun report disponibile.</p>';
+                }
+                container.innerHTML = html;
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                container.innerHTML = '<div class="alert alert-danger mb-0">Errore rete: ' + e.message + '</div>';
+            });
+        }
+
+        function escapeHtmlBl(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
         }
 
         function generateDkim() {
@@ -2939,7 +3832,1801 @@ public class MailPanelContent {
         }
 
         let csrfToken = document.getElementById('csrf_token').value;
-""" + getLogoutScript() + """
+""";
+    }
+
+    /**
+     * Terzo blocco JS della pagina /dns (verifica DKIM in DNS + storico rotazioni + schedule helpers),
+     * estratto per stare sotto il limite del constant pool Java.
+     */
+    private static String getDnsJsPart3() {
+        return """
+        // ===== Verifica chiave attiva in DNS =====
+        function verifyActiveDkim() {
+            if (!currentDomainId) return;
+            const out = document.getElementById('dkimVerifyResult');
+            out.innerHTML = '<div class="alert alert-info py-2 mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Interrogazione DNS pubblici in corso (1.1.1.1, 8.8.8.8)...</div>';
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'verify_active_dns', domain_id: parseInt(currentDomainId) })
+            }).then(r => r.json()).then(data => {
+                if (!data.success) {
+                    out.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-times-circle me-1"></i>' + escapeHtmlBl(data.message || data.error || 'errore') + '</div>';
+                    return;
+                }
+                let html = '';
+                if (data.match) {
+                    html += '<div class="alert alert-success py-2 mb-2"><i class="fas fa-check-circle me-1"></i><strong>OK</strong> — ' + escapeHtmlBl(data.message || '') + '</div>';
+                } else {
+                    html += '<div class="alert alert-danger py-2 mb-2"><i class="fas fa-exclamation-triangle me-1"></i><strong>NON CORRISPONDE</strong> — ' + escapeHtmlBl(data.message || '') + '</div>';
+                }
+                html += '<table class="table table-sm mb-0 small"><tbody>';
+                html += '<tr><th style="width:180px">Record interrogato</th><td><code>' + escapeHtmlBl(data.dns_record_name || '') + '</code></td></tr>';
+                html += '<tr><th>Selector attivo</th><td><code>' + escapeHtmlBl(data.selector || '') + '</code></td></tr>';
+                if (data.expected_public_key) {
+                    const exp = data.expected_public_key;
+                    const trunc = exp.length > 60 ? exp.substring(0, 60) + '…' : exp;
+                    html += '<tr><th>Chiave attesa (DB)</th><td><code style="word-break:break-all">' + escapeHtmlBl(trunc) + '</code> <small class="text-muted">(' + exp.length + ' char)</small></td></tr>';
+                }
+                if (data.actual_public_key) {
+                    const act = data.actual_public_key;
+                    const trunc = act.length > 60 ? act.substring(0, 60) + '…' : act;
+                    html += '<tr><th>Chiave trovata (DNS)</th><td><code style="word-break:break-all">' + escapeHtmlBl(trunc) + '</code> <small class="text-muted">(' + act.length + ' char)</small></td></tr>';
+                }
+                html += '</tbody></table>';
+                if (data.raw_output) {
+                    html += '<details class="mt-2"><summary class="small text-muted">Output dig completo</summary><pre class="small mt-2" style="white-space:pre-wrap;word-break:break-all">' + escapeHtmlBl(data.raw_output) + '</pre></details>';
+                }
+                out.innerHTML = html;
+                // Lo storico ora include un evento "key_verified": ricaricalo
+                loadDkimHistory(currentDomainId);
+            }).catch(e => {
+                out.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore rete: ' + e.message + '</div>';
+            });
+        }
+
+        // ===== Cleanup record DKIM orfani =====
+        function scanDkimOrphans() {
+            if (!currentDomainId) { alert('Seleziona un dominio'); return; }
+            const btn = document.getElementById('scanDkimOrphansBtn');
+            const out = document.getElementById('dkimOrphansResult');
+            const originalBtn = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Scansione in corso...';
+            out.innerHTML = '';
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'orphans_scan', domain_id: parseInt(currentDomainId) })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = originalBtn;
+                if (!data.success) {
+                    out.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-times-circle me-1"></i>' + escapeHtmlBl(data.error || 'errore sconosciuto') + '</div>';
+                    return;
+                }
+                const records = data.records || [];
+                if (records.length === 0) {
+                    out.innerHTML = '<div class="alert alert-info py-2 mb-0"><i class="fas fa-info-circle me-1"></i>Nessun record TXT <code>*._domainkey.' + escapeHtmlBl(data.domain) + '</code> trovato in Cloudflare (account: ' + escapeHtmlBl(data.cloudflare_account_label || '?') + ').</div>';
+                    return;
+                }
+                const orphanCount      = records.filter(r => r.is_orphan).length;
+                const removableCount   = records.filter(r => r.is_orphan && !r.in_grace_period).length;
+                const graceProtCount   = records.filter(r => r.is_orphan && r.in_grace_period).length;
+                const activeCount = records.length - orphanCount;
+                const graceDays = data.grace_period_days || 7;
+                let html = '<div class="alert ' + (removableCount > 0 ? 'alert-warning' : 'alert-success') + ' py-2 mb-2"><i class="fas fa-info-circle me-1"></i>Trovati <strong>' + records.length + '</strong> record DKIM totali (' + activeCount + ' attivi, ' + graceProtCount + ' in grace, <strong>' + removableCount + ' rimovibili</strong>) nell\\'account <strong>' + escapeHtmlBl(data.cloudflare_account_label || '?') + '</strong>.</div>';
+                html += '<div class="table-responsive"><table class="table table-sm align-middle mb-0">';
+                html += '<thead class="table-light"><tr><th>Selector</th><th>Stato</th><th>Contenuto (anteprima)</th><th class="text-end">Azione</th></tr></thead><tbody>';
+                records.forEach(r => {
+                    html += '<tr>';
+                    html += '<td><code>' + escapeHtmlBl(r.selector || '') + '</code><br><small class="text-muted">' + escapeHtmlBl(r.name || '') + '</small></td>';
+                    let badge;
+                    let stateExtra = '';
+                    if (r.is_current)       badge = '<span class="badge bg-success">Attivo</span>';
+                    else if (r.is_pending)  badge = '<span class="badge bg-warning text-dark">Pending</span>';
+                    else if (r.is_previous) badge = '<span class="badge bg-info text-dark">Grace period</span>';
+                    else if (r.in_grace_period) {
+                        badge = '<span class="badge bg-info text-dark">In grace ' + graceDays + 'gg</span>';
+                        // Mostra data fine grace period
+                        const endsTs = (typeof pickTs === 'function') ? pickTs(r, 'grace_period_ends_at') : null;
+                        if (endsTs) {
+                            const endsStr = (typeof formatItalianDate === 'function') ? formatItalianDate(endsTs) : endsTs.toLocaleString('it-IT');
+                            stateExtra = '<br><small class="text-muted">rimovibile dal ' + escapeHtmlBl(endsStr) + '</small>';
+                        }
+                    } else {
+                        badge = '<span class="badge bg-danger">Orfano</span>';
+                    }
+                    html += '<td>' + badge + stateExtra + '</td>';
+                    html += '<td><code class="small" style="word-break:break-all">' + escapeHtmlBl(r.content_preview || '') + '</code></td>';
+                    if (r.is_orphan && !r.in_grace_period) {
+                        // ORFANO rimovibile (grace period scaduto o mai stato attivo)
+                        html += '<td class="text-end"><button class="btn btn-sm btn-outline-danger" onclick="deleteDkimOrphan(\\'' + escapeHtmlBl(r.record_id).replace(/'/g, "\\\\'") + '\\', \\'' + escapeHtmlBl(r.selector).replace(/'/g, "\\\\'") + '\\')"><i class="fas fa-trash me-1"></i>Cancella</button></td>';
+                    } else if (r.is_orphan && r.in_grace_period) {
+                        // ORFANO ma in grace period esteso: NON rimovibile
+                        html += '<td class="text-end"><span class="text-muted small" title="Selector disattivato di recente — bloccato dalla cancellazione fino al termine del grace period per evitare DKIM-fail su mail in transito"><i class="fas fa-shield-alt me-1"></i>protetto da grace period</span></td>';
+                    } else {
+                        // Attivo / Pending / Previous: protetto
+                        html += '<td class="text-end"><span class="text-muted small"><i class="fas fa-lock me-1"></i>protetto</span></td>';
+                    }
+                    html += '</tr>';
+                });
+                html += '</tbody></table></div>';
+                out.innerHTML = html;
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = originalBtn;
+                out.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore rete: ' + e.message + '</div>';
+            });
+        }
+
+        function deleteDkimOrphan(recordId, selector) {
+            if (!currentDomainId) return;
+            if (!confirm('Cancellare il record DKIM orfano con selector "' + selector + '"?\\n\\nIl record sarà rimosso da Cloudflare. Operazione irreversibile.')) return;
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'orphans_delete', domain_id: parseInt(currentDomainId), record_id: recordId })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                if (data.success) {
+                    // Re-scansiona per aggiornare la lista
+                    scanDkimOrphans();
+                    // Aggiorna anche lo storico (è stato loggato un evento orphan_record_deleted)
+                    if (typeof loadDkimHistory === 'function') loadDkimHistory(currentDomainId);
+                }
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        // ===== Storico rotazioni DKIM =====
+        function loadDkimHistory(domainId) {
+            const body = document.getElementById('dkimHistoryBody');
+            body.innerHTML = '<p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento storico...</p>';
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'rotate_history', domain_id: parseInt(domainId), limit: 100 })
+            }).then(r => r.json()).then(data => {
+                if (!data.success) {
+                    body.innerHTML = '<div class="text-muted small">Storico non disponibile: ' + escapeHtmlBl(data.error || '') + '</div>';
+                    return;
+                }
+                const events = data.events || [];
+                if (events.length === 0) {
+                    body.innerHTML = '<div class="text-muted small">Nessuna rotazione registrata per questo dominio.</div>';
+                    return;
+                }
+                // Label leggibili e colori per evento
+                const labels = {
+                    rotation_started:   { txt: 'Rotazione avviata',          badge: 'bg-primary' },
+                    dns_published:      { txt: 'Record DNS creato (auto)',   badge: 'bg-info text-dark' },
+                    dns_propagated:     { txt: 'DNS propagato e verificato', badge: 'bg-info text-dark' },
+                    key_activated:      { txt: 'Chiave attivata',            badge: 'bg-success' },
+                    rotation_completed: { txt: 'Rotazione completata',       badge: 'bg-success' },
+                    rotation_cancelled: { txt: 'Rotazione annullata',        badge: 'bg-secondary' },
+                    key_verified:       { txt: 'Verifica chiave in DNS',     badge: 'bg-secondary' },
+                    orphan_record_deleted: { txt: 'Record orfano rimosso',   badge: 'bg-warning text-dark' },
+                    schedule_changed:   { txt: 'Schedule modificato',        badge: 'bg-secondary' }
+                };
+                // Etichette + colori per la "Modalità DNS" (come viene gestito il record in DNS)
+                const modeLabels = {
+                    automatic: { txt: 'Cloudflare',  badge: 'bg-info text-dark',         title: 'Il record DNS è gestito automaticamente via API Cloudflare.' },
+                    manual:    { txt: 'DNS manuale', badge: 'bg-light text-dark border', title: 'Il record DNS deve essere aggiunto/rimosso manualmente dall\\'utente nel proprio provider DNS.' },
+                    forced:    { txt: 'Forzata',     badge: 'bg-warning text-dark',      title: 'Attivazione forzata: la chiave è stata attivata senza attendere la conferma di propagazione DNS.' }
+                };
+                // Etichette per "Origine" (chi ha avviato l'operazione)
+                const triggerLabels = {
+                    user:      { txt: 'Utente',     icon: 'user',  badge: 'bg-primary',   title: 'Operazione avviata cliccando un bottone nel pannello.' },
+                    scheduler: { txt: 'Scheduler',  icon: 'robot', badge: 'bg-dark',      title: 'Operazione avviata automaticamente dal timer di rotazione programmata.' }
+                };
+                let html = '<div class="table-responsive"><table class="table table-sm align-middle mb-0">';
+                html += '<thead class="table-light"><tr>';
+                html += '<th>Data/ora</th>';
+                html += '<th>Evento</th>';
+                html += '<th>Selector</th>';
+                html += '<th title="Chi ha avviato questa operazione: Utente (clic in UI) o Scheduler (timer automatico). Vuoto per eventi conseguenza (es. propagazione DNS rilevata)." style="cursor:help">Origine <i class="fas fa-info-circle text-muted small"></i></th>';
+                html += '<th title="Come è gestito il record DNS per questa rotazione: Cloudflare (via API), DNS manuale (utente lo modifica), Forzata (attivata senza propagazione). Vuoto per eventi non-rotazione." style="cursor:help">Modalità DNS <i class="fas fa-info-circle text-muted small"></i></th>';
+                html += '<th>Account CF</th>';
+                html += '<th>Esito</th>';
+                html += '<th>Note</th>';
+                html += '</tr></thead><tbody>';
+                events.forEach(ev => {
+                    const lbl = labels[ev.event_type] || { txt: ev.event_type, badge: 'bg-secondary' };
+                    const mode = ev.mode ? modeLabels[ev.mode] : null;
+                    const trig = ev.triggered_by ? triggerLabels[ev.triggered_by] : null;
+                    html += '<tr>';
+                    // Timestamp formattato in locale (preferisce occurred_at_ms se presente)
+                    const tsDate = (typeof pickTs === 'function') ? pickTs(ev, 'occurred_at')
+                        : (typeof parseTs === 'function' ? parseTs(ev.occurred_at) : null);
+                    const tsDisplay = tsDate
+                        ? (typeof formatItalianDate === 'function' ? formatItalianDate(tsDate) : tsDate.toLocaleString('it-IT'))
+                        : (ev.occurred_at || '');
+                    html += '<td><small class="text-nowrap">' + escapeHtmlBl(tsDisplay) + '</small></td>';
+                    html += '<td><span class="badge ' + lbl.badge + '">' + escapeHtmlBl(lbl.txt) + '</span></td>';
+                    html += '<td>' + (ev.selector ? '<code>' + escapeHtmlBl(ev.selector) + '</code>' : '<span class="text-muted">—</span>') + '</td>';
+                    // Colonna Origine
+                    if (trig) {
+                        html += '<td><span class="badge ' + trig.badge + '" title="' + escapeHtmlBl(trig.title) + '" style="cursor:help"><i class="fas fa-' + trig.icon + ' me-1"></i>' + escapeHtmlBl(trig.txt) + '</span></td>';
+                    } else if (ev.triggered_by) {
+                        html += '<td><span class="badge bg-secondary">' + escapeHtmlBl(ev.triggered_by) + '</span></td>';
+                    } else {
+                        html += '<td><span class="text-muted" title="Evento conseguenza (es. propagazione DNS rilevata), oppure evento registrato prima dell\\'introduzione del tracciamento Origine." style="cursor:help">—</span></td>';
+                    }
+                    // Colonna Modalità DNS
+                    if (mode) {
+                        html += '<td><span class="badge ' + mode.badge + '" title="' + escapeHtmlBl(mode.title) + '" style="cursor:help">' + escapeHtmlBl(mode.txt) + '</span></td>';
+                    } else if (ev.mode) {
+                        html += '<td><span class="badge bg-light text-dark border">' + escapeHtmlBl(ev.mode) + '</span></td>';
+                    } else {
+                        html += '<td><span class="text-muted" title="Non applicabile a questo tipo di evento" style="cursor:help">—</span></td>';
+                    }
+                    html += '<td>' + (ev.cloudflare_account_label ? escapeHtmlBl(ev.cloudflare_account_label) : '<span class="text-muted">—</span>') + '</td>';
+                    html += '<td>' + (ev.success
+                        ? '<span class="badge bg-success"><i class="fas fa-check"></i></span>'
+                        : '<span class="badge bg-danger"><i class="fas fa-times"></i></span>') + '</td>';
+                    html += '<td><small>' + escapeHtmlBl(ev.message || '') + '</small></td>';
+                    html += '</tr>';
+                });
+                html += '</tbody></table></div>';
+
+                // Legenda compatta sotto la tabella
+                html += '<div class="small text-muted mt-2">';
+                html += '<div class="mb-1"><i class="fas fa-info-circle me-1"></i><strong>Origine:</strong> ';
+                html += '<span class="badge bg-primary"><i class="fas fa-user me-1"></i>Utente</span> = avviato cliccando un bottone · ';
+                html += '<span class="badge bg-dark"><i class="fas fa-robot me-1"></i>Scheduler</span> = avviato automaticamente dal timer · ';
+                html += '<span class="text-muted">—</span> = evento conseguenza, o registrato prima del tracciamento Origine';
+                html += '</div>';
+                html += '<div><i class="fas fa-info-circle me-1"></i><strong>Modalità DNS:</strong> ';
+                html += '<span class="badge bg-info text-dark">Cloudflare</span> = via API · ';
+                html += '<span class="badge bg-light text-dark border">DNS manuale</span> = utente gestisce il DNS · ';
+                html += '<span class="badge bg-warning text-dark">Forzata</span> = attivata senza attendere propagazione · ';
+                html += '<span class="text-muted">—</span> = non applicabile';
+                html += '</div></div>';
+
+                body.innerHTML = html;
+            }).catch(e => {
+                body.innerHTML = '<div class="text-danger small">Errore rete: ' + e.message + '</div>';
+            });
+        }
+
+""";
+    }
+
+    /**
+     * Blocco JS della diagnostica timezone DKIM (estratto per ridurre la dimensione
+     * del text block constante).
+     */
+    private static String getDnsJsTzDiag() {
+        return """
+        // ===== Diagnostica timezone =====
+        function toggleTzDiag() {
+            const body = document.getElementById('tzDiagBody');
+            const isOpen = !body.classList.contains('d-none');
+            if (isOpen) {
+                body.classList.add('d-none');
+            } else {
+                body.classList.remove('d-none');
+                loadTzDiag();
+            }
+        }
+
+        function loadTzDiag() {
+            const badge = document.getElementById('tzDiagStatusBadge');
+            const table = document.getElementById('tzDiagTable');
+            const logEl = document.getElementById('tzDiagLog');
+            if (logEl) logEl.innerHTML = '';
+            badge.innerHTML = '<span class="badge bg-light text-dark"><i class="fas fa-spinner fa-spin me-1"></i>controllo...</span>';
+            table.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</div>';
+
+            fetch('/api/timezone-diag').then(r => r.json()).then(data => {
+                renderTzDiag(data);
+            }).catch(e => {
+                badge.innerHTML = '<span class="badge bg-danger">Errore</span>';
+                table.innerHTML = '<div class="alert alert-danger small mb-0">Errore: ' + e.message + '</div>';
+            });
+        }
+
+        function renderTzDiag(data) {
+            const badge = document.getElementById('tzDiagStatusBadge');
+            const table = document.getElementById('tzDiagTable');
+
+            // Badge nell'header
+            const alignment = data.alignment || 'UNKNOWN';
+            if (alignment === 'OK') {
+                badge.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Allineato</span>';
+            } else if (alignment === 'MISMATCH') {
+                const skewMin = Math.round((data.skew_mysql_vs_jvm_ms || 0) / 60000);
+                badge.innerHTML = '<span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>Disallineato (' + skewMin + ' min)</span>';
+            } else {
+                badge.innerHTML = '<span class="badge bg-secondary">?</span>';
+            }
+
+            // Tabella
+            let html = '<table class="table table-sm align-middle mb-0">';
+            html += '<thead class="table-light"><tr><th>Sorgente</th><th>Timestamp</th><th>Fuso/Offset</th></tr></thead><tbody>';
+
+            // OS
+            const osMs = data.os_now_ms;
+            const osDate = osMs ? new Date(osMs) : null;
+            html += '<tr><td><strong>OS del server</strong><br><small class="text-muted">comando <code>date</code></small></td>';
+            html += '<td>' + (osDate ? '<code>' + osDate.toISOString() + '</code><br><small>locale: ' + osDate.toLocaleString('it-IT') + '</small>' : '<em>non disponibile</em>') + '</td>';
+            html += '<td>' + (data.os_offset ? '<code>' + escapeHtmlCf(data.os_offset) + '</code>' : '') + ' ' + (data.os_tz ? '<small class="text-muted">' + escapeHtmlCf(data.os_tz) + '</small>' : '') + '</td>';
+            html += '</tr>';
+
+            // JVM
+            const jvmMs = data.jvm_now_ms;
+            const jvmDate = jvmMs ? new Date(jvmMs) : null;
+            html += '<tr><td><strong>JVM Java</strong><br><small class="text-muted">Instant.now()</small></td>';
+            html += '<td>' + (jvmDate ? '<code>' + jvmDate.toISOString() + '</code>' : '') + '</td>';
+            html += '<td><code>' + escapeHtmlCf(data.jvm_default_zone || '?') + '</code> <small class="text-muted">(' + escapeHtmlCf(data.jvm_offset || '?') + ')</small></td>';
+            html += '</tr>';
+
+            // MySQL
+            const mysqlMs = data.mysql_now_ms;
+            const mysqlDate = mysqlMs ? new Date(mysqlMs) : null;
+            html += '<tr><td><strong>MySQL</strong><br><small class="text-muted">NOW() via UNIX_TIMESTAMP</small></td>';
+            html += '<td>' + (mysqlDate ? '<code>' + mysqlDate.toISOString() + '</code><br><small>NOW(): ' + escapeHtmlCf(data.mysql_now || '') + '</small><br><small>UTC: ' + escapeHtmlCf(data.mysql_utc_now || '') + '</small>' : '<em class="text-danger">' + escapeHtmlCf(data.mysql_error || 'non disponibile') + '</em>') + '</td>';
+            html += '<td>session: <code>' + escapeHtmlCf(data.mysql_session_tz || '?') + '</code><br>global: <code>' + escapeHtmlCf(data.mysql_global_tz || '?') + '</code><br>system: <code>' + escapeHtmlCf(data.mysql_system_tz || '?') + '</code></td>';
+            html += '</tr>';
+
+            // Browser (cliente)
+            const browserNow = new Date();
+            html += '<tr><td><strong>Browser (tu)</strong><br><small class="text-muted">Date.now()</small></td>';
+            html += '<td><code>' + browserNow.toISOString() + '</code><br><small>locale: ' + browserNow.toLocaleString('it-IT') + '</small></td>';
+            html += '<td>' + escapeHtmlCf(Intl.DateTimeFormat().resolvedOptions().timeZone || '?') + '</td>';
+            html += '</tr>';
+
+            html += '</tbody></table>';
+
+            // Verdetto
+            if (alignment === 'MISMATCH') {
+                const skewMs = data.skew_mysql_vs_jvm_ms || 0;
+                const skewMin = Math.round(skewMs / 60000);
+                const sign = skewMs > 0 ? 'avanti' : 'indietro';
+                html += '<div class="alert alert-warning mt-3 mb-0"><i class="fas fa-exclamation-triangle me-2"></i><strong>MySQL è ' + Math.abs(skewMin) + ' minuti ' + sign + ' rispetto al JVM</strong> — questo causa timestamp DKIM sbagliati. Clicca "Sincronizza MySQL al fuso del sistema" per correggere.</div>';
+            } else if (alignment === 'OK') {
+                html += '<div class="alert alert-success mt-3 mb-0"><i class="fas fa-check-circle me-2"></i><strong>Tutti allineati</strong> — i timestamp DKIM saranno corretti.</div>';
+            }
+
+            table.innerHTML = html;
+        }
+
+        function tzSyncToSystem() {
+            if (!confirm('Sincronizzare MySQL al fuso orario del sistema (JVM)?\\n\\nQuesto esegue:\\n  SET GLOBAL time_zone = "<offset>"\\n  SET SESSION time_zone = "<offset>"\\n\\nServe il privilegio SUPER su MySQL. Se manca, verrà aggiornata solo la session corrente.')) return;
+            tzPerformAction({ action: 'sync_to_system' });
+        }
+
+        function tzSetManual() {
+            const v = document.getElementById('tzManualValue').value.trim();
+            if (!v) { alert('Inserisci un valore (es. "+02:00", "SYSTEM", "Europe/Rome")'); return; }
+            tzPerformAction({ action: 'set', value: v });
+        }
+
+        function tzPerformAction(payload) {
+            const logEl = document.getElementById('tzDiagLog');
+            logEl.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Esecuzione in corso...</div>';
+            fetch('/api/timezone-diag', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(data => {
+                let html = '';
+                if (data.log) {
+                    html += '<pre class="bg-light p-2 rounded small mb-2" style="white-space:pre-wrap">' + escapeHtmlCf(data.log) + '</pre>';
+                }
+                if (data.success) {
+                    html = '<div class="alert alert-success py-2 mb-2"><i class="fas fa-check-circle me-1"></i>Operazione eseguita. Valore impostato: <code>' + escapeHtmlCf(data.desired_value || '') + '</code></div>' + html;
+                } else {
+                    html = '<div class="alert alert-danger py-2 mb-2"><i class="fas fa-times-circle me-1"></i>Errore: ' + escapeHtmlCf(data.error || 'sconosciuto') + '</div>' + html;
+                }
+                logEl.innerHTML = html;
+                // Aggiorna i dati visualizzati
+                renderTzDiag(data);
+            }).catch(e => {
+                logEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore rete: ' + e.message + '</div>';
+            });
+        }
+
+        // Carica subito lo stato della diagnostica (anche se il body è collassato,
+        // il badge nell'header deve mostrare OK/Disallineato)
+        loadTzDiag();
+
+""";
+    }
+
+    /**
+     * Markup HTML del modal di scelta della modalità di rotazione DKIM (Cloudflare vs Manuale).
+     * Estratto come metodo per ridurre la dimensione del text block constante.
+     */
+    private static String getDnsRotateModeChooserModal() {
+        return """
+            <!-- Modal di scelta modalità rotazione (Cloudflare API vs DNS manuale) -->
+            <div class="modal fade" id="rotateModeChooserModal" tabindex="-1" aria-labelledby="rotateModeChooserModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="rotateModeChooserModalLabel"><i class="fas fa-sync-alt me-2"></i>Avvia rotazione DKIM</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3">Come vuoi gestire il record DNS della nuova chiave?</p>
+
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-success text-start" onclick="rotateDkimStartChooseCloudflare()">
+                                    <div class="d-flex align-items-start">
+                                        <i class="fas fa-cloud fa-2x me-3 mt-1"></i>
+                                        <div>
+                                            <strong>Automatica via Cloudflare</strong><br>
+                                            <small>Il pannello crea e cancellerà il record TXT chiamando le API Cloudflare dell'account collegato: <strong id="rotateModeAccountLabel">—</strong>.</small>
+                                            <div class="small mt-1 text-muted">→ Nessun intervento manuale richiesto. Schedule + auto-complete attivi.</div>
+                                        </div>
+                                    </div>
+                                </button>
+
+                                <button type="button" class="btn btn-outline-secondary text-start" onclick="rotateDkimStartChooseManual()">
+                                    <div class="d-flex align-items-start">
+                                        <i class="fas fa-edit fa-2x me-3 mt-1"></i>
+                                        <div>
+                                            <strong>Manuale (modifico il DNS io)</strong><br>
+                                            <small>Il pannello genera la chiave ma NON usa l'API Cloudflare. Dovrai copiare il record TXT mostrato e aggiungerlo tu nel pannello DNS del tuo provider.</small>
+                                            <div class="small mt-1 text-muted">→ Utile per test, audit, o se non vuoi che il pannello tocchi DNS automaticamente in questa specifica rotazione.</div>
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <div class="alert alert-light mt-3 small mb-0">
+                                <i class="fas fa-info-circle me-1"></i>In entrambi i casi: nuova chiave (selector unico) generata, vecchia chiave continua a firmare finché non attivi, dopo attivazione la vecchia resta nel DNS per 7 giorni (grace period).
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-link" data-bs-dismiss="modal">Annulla</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+""";
+    }
+
+    /**
+     * Markup HTML della card "Cambia Username" (estratta per ridurre la dimensione del
+     * text block constante della pagina admin settings).
+     */
+    private static String getChangeUsernameCard() {
+        return """
+                    <!-- Change Username -->
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="fas fa-user-edit me-2"></i>Cambia Username</div>
+                        <div class="card-body">
+                            <div class="alert alert-info py-2 mb-3 small">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Cambiando lo username, da subito il login va fatto col nuovo nome. Tutte le passkey, sessioni attive (compresa questa) e 2FA continuano a funzionare — non serve rifare login. Lo storico audit log mantiene il vecchio username sugli eventi passati per tracciabilità.
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Nuovo Username</label>
+                                <input type="text" class="form-control" id="newUsername" placeholder="es. pietro.damico" autocomplete="off">
+                                <small class="text-muted">3-50 caratteri, solo lettere/numeri/underscore/trattino/punto</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Password Attuale <small class="text-muted">(per conferma identità)</small></label>
+                                <input type="password" class="form-control" id="currentPasswordForUsername" autocomplete="current-password">
+                            </div>
+                            <button class="btn btn-primary" onclick="changeUsername()">
+                                <i class="fas fa-save me-1"></i>Cambia Username
+                            </button>
+                        </div>
+                    </div>
+
+""";
+    }
+
+    /**
+     * Markup HTML della card "Master key del vault" (gestione backup + rotazione).
+     */
+    private static String getVaultManagementCard() {
+        return """
+                    <!-- Master key vault management -->
+                    <div class="card mb-4 border-warning">
+                        <div class="card-header bg-warning text-dark"><i class="fas fa-shield-alt me-2"></i>Vault password caselle — Master key</div>
+                        <div class="card-body">
+                            <div class="alert alert-info py-2 mb-3 small">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Le password delle caselle email vengono cifrate (AES-256-GCM) con una chiave master tenuta in <code>/usr/local/etc/mail-panel/master.key</code> (perms 600 root-only).
+                                Da qui puoi <strong>fare un backup</strong> della chiave (consigliato: salvala nel tuo password manager) e <strong>ruotarla periodicamente</strong> per maggior sicurezza.
+                            </div>
+
+                            <h6 class="mt-3"><i class="fas fa-download me-1"></i>Backup master key</h6>
+                            <p class="small text-muted mb-2">Esporta la chiave master in formato base64. Con questo file puoi recuperare il vault anche dopo una reinstallazione completa del server.</p>
+                            <div class="row g-2 align-items-end mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1">Password admin attuale (conferma identità)</label>
+                                    <input type="password" class="form-control form-control-sm" id="vaultBackupPassword" autocomplete="current-password">
+                                </div>
+                                <div class="col-md-6">
+                                    <button class="btn btn-outline-primary btn-sm" onclick="vaultBackupKey()">
+                                        <i class="fas fa-download me-1"></i>Esporta master key
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="vaultBackupResult" class="mt-2"></div>
+
+                            <hr class="my-4">
+
+                            <h6 class="mt-3 text-warning"><i class="fas fa-sync-alt me-1"></i>Rotazione master key</h6>
+                            <div class="alert alert-warning py-2 small mb-2">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                <strong>Operazione critica.</strong> Genera una nuova chiave master, ri-cifra tutti i blob esistenti delle password mailbox, salva la nuova chiave su disco (con backup automatico della vecchia in <code>master.key.bak.&lt;timestamp&gt;</code>). Le password mail in chiaro restano invariate (i client mail continuano a funzionare). Esegui dopo: cambio admin, sospetto compromissione, audit periodico (raccomandato ogni 6-12 mesi).
+                            </div>
+                            <div class="row g-2 align-items-end mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1">Password admin attuale</label>
+                                    <input type="password" class="form-control form-control-sm" id="vaultRotatePassword" autocomplete="current-password">
+                                </div>
+                                <div class="col-md-6">
+                                    <button class="btn btn-warning btn-sm" onclick="vaultRotateKey()">
+                                        <i class="fas fa-sync-alt me-1"></i>Ruota master key
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="vaultRotateResult" class="mt-2"></div>
+                        </div>
+                    </div>
+
+""";
+    }
+
+    /**
+     * Funzioni JS per cambio password e cambio username (settings page).
+     * Estratte come metodo separato per ridurre la dimensione del text block.
+     */
+    private static String getSettingsAuthJs() {
+        return """
+        function changePassword() {
+            const current = document.getElementById('currentPassword').value;
+            const newPass = document.getElementById('newPassword').value;
+            const confirm = document.getElementById('confirmNewPassword').value;
+
+            if (!current || !newPass) {
+                alert('Compila tutti i campi');
+                return;
+            }
+            if (newPass.length < 8) {
+                alert('La nuova password deve essere di almeno 8 caratteri');
+                return;
+            }
+            if (newPass !== confirm) {
+                alert('Le password non corrispondono');
+                return;
+            }
+
+            fetch('/api/admins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'change_password', current_password: current, new_password: newPass })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Password cambiata con successo');
+                    document.getElementById('currentPassword').value = '';
+                    document.getElementById('newPassword').value = '';
+                    document.getElementById('confirmNewPassword').value = '';
+                } else {
+                    alert(data.error || 'Errore nel cambio password');
+                }
+            });
+        }
+
+        function changeUsername() {
+            const newUsername = document.getElementById('newUsername').value.trim();
+            const current = document.getElementById('currentPasswordForUsername').value;
+
+            if (!newUsername || !current) {
+                alert('Compila entrambi i campi (nuovo username e password attuale).');
+                return;
+            }
+            // Pre-check formato lato client (il server riverificherà)
+            if (!/^[a-zA-Z0-9._-]{3,50}$/.test(newUsername)) {
+                alert('Username non valido: 3-50 caratteri, solo lettere/numeri/underscore/trattino/punto.');
+                return;
+            }
+            if (!confirm('Cambiare il tuo username in "' + newUsername + '"?\\n\\nDa subito dovrai usare questo username per fare login. La sessione corrente resta valida (non sarai sloggato). Le passkey, 2FA e password restano invariate.')) {
+                return;
+            }
+
+            fetch('/api/admins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'change_username', new_username: newUsername, current_password: current })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert((data.message || 'Username cambiato con successo'));
+                    document.getElementById('newUsername').value = '';
+                    document.getElementById('currentPasswordForUsername').value = '';
+                } else {
+                    alert(data.error || 'Errore nel cambio username');
+                }
+            })
+            .catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        // ===== Vault management =====
+        function vaultBackupKey() {
+            const pw = document.getElementById('vaultBackupPassword').value;
+            const out = document.getElementById('vaultBackupResult');
+            if (!pw) { alert('Password admin richiesta.'); return; }
+            out.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Verifica password ed esportazione in corso...</div>';
+            fetch('/api/admins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'vault_backup_key', current_password: pw })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('vaultBackupPassword').value = '';
+                if (!data.success) {
+                    out.innerHTML = '<div class="alert alert-danger py-2 small mb-0"><i class="fas fa-times-circle me-1"></i>' + (data.error || 'errore') + '</div>';
+                    return;
+                }
+                const keyB64 = data.key_base64 || '';
+                const keyPath = data.key_file_path || '';
+                let html = '<div class="alert alert-success py-2 mb-2 small">';
+                html += '<i class="fas fa-check-circle me-1"></i><strong>Master key esportata.</strong> Salvala in un posto sicuro (password manager).';
+                html += '</div>';
+                html += '<div class="input-group input-group-sm mb-2">';
+                html += '<span class="input-group-text">key (base64)</span>';
+                html += '<input type="text" class="form-control font-monospace" id="vaultBackupKeyValue" value="" readonly>';
+                html += '<button class="btn btn-outline-secondary" type="button" onclick="vaultCopyBackupKey()"><i class="fas fa-copy me-1"></i>Copia</button>';
+                html += '<button class="btn btn-outline-primary" type="button" onclick="vaultDownloadBackupKey()"><i class="fas fa-download me-1"></i>Scarica .txt</button>';
+                html += '</div>';
+                html += '<div class="small text-muted">File sul server: <code>' + keyPath + '</code></div>';
+                out.innerHTML = html;
+                // Inietta il valore tramite property (non innerHTML) per evitare XSS / encoding glitch
+                document.getElementById('vaultBackupKeyValue').value = keyB64;
+                document.getElementById('vaultBackupKeyValue').dataset.raw = keyB64;
+            })
+            .catch(e => {
+                out.innerHTML = '<div class="alert alert-danger py-2 small mb-0">Errore rete: ' + e.message + '</div>';
+            });
+        }
+
+        function vaultCopyBackupKey() {
+            const v = document.getElementById('vaultBackupKeyValue').value;
+            if (!v) return;
+            navigator.clipboard.writeText(v).then(() => {
+                alert('Master key copiata negli appunti. Incollala SUBITO nel tuo password manager.');
+            }).catch(() => {});
+        }
+
+        function vaultDownloadBackupKey() {
+            const el = document.getElementById('vaultBackupKeyValue');
+            const v = el ? (el.dataset.raw || el.value) : '';
+            if (!v) return;
+            const blob = new Blob([v + '\\n'], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mail-panel-master-key-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function vaultRotateKey() {
+            const pw = document.getElementById('vaultRotatePassword').value;
+            const out = document.getElementById('vaultRotateResult');
+            if (!pw) { alert('Password admin richiesta.'); return; }
+            if (!confirm('Ruotare la master key del vault?\\n\\n• Genera una nuova chiave AES-256.\\n• Ri-cifra TUTTI i blob password mailbox esistenti.\\n• Salva la nuova chiave (la vecchia resta come backup file .bak.<timestamp>).\\n• Le password mail in chiaro NON cambiano (i client mail continuano a funzionare).\\n\\nProcedere?')) return;
+
+            out.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Rotazione in corso (può richiedere alcuni secondi se hai molte caselle)...</div>';
+            fetch('/api/admins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'vault_rotate_key', current_password: pw })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('vaultRotatePassword').value = '';
+                if (!data.success) {
+                    out.innerHTML = '<div class="alert alert-danger py-2 small mb-0"><i class="fas fa-times-circle me-1"></i>' + (data.error || 'errore') + '</div>';
+                    return;
+                }
+                const s = data.summary || {};
+                let html = '<div class="alert ' + ((s.failed || 0) > 0 ? 'alert-warning' : 'alert-success') + ' py-2 mb-0 small">';
+                html += '<i class="fas fa-check-circle me-1"></i><strong>Rotazione completata.</strong><br>';
+                html += 'Re-cifrati <strong>' + (s.reencrypted || 0) + '/' + (s.total || 0) + '</strong> blob password mailbox';
+                if ((s.failed || 0) > 0) {
+                    html += ', <strong>' + s.failed + ' falliti</strong> (usa "Cambia password massivo" nella pagina Caselle per quelli).';
+                } else {
+                    html += '.';
+                }
+                html += '<br><small class="text-muted">' + (data.message || '') + '</small>';
+                html += '</div>';
+                out.innerHTML = html;
+            })
+            .catch(e => {
+                out.innerHTML = '<div class="alert alert-danger py-2 small mb-0">Errore rete: ' + e.message + '</div>';
+            });
+        }
+
+""";
+    }
+
+    public static String getDnsHtml() {
+        String extraStyles = """
+        .dns-record { background: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 15px; border-left: 4px solid #e94560; }
+        .dns-record.required { border-left-color: #dc3545; }
+        .dns-record.optional { border-left-color: #6c757d; }
+        .record-type { font-weight: bold; font-size: 0.9rem; color: #e94560; }
+        .record-name { font-family: monospace; background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        .record-value { font-family: monospace; font-size: 0.85rem; word-break: break-all; background: #fff; padding: 8px; border: 1px solid #dee2e6; border-radius: 4px; margin-top: 8px; }
+        .copy-btn { cursor: pointer; }
+        .copy-btn:hover { color: #e94560; }
+        .score-badge { font-size: 1.5rem; }
+        .check-passed { color: #198754; }
+        .check-failed { color: #dc3545; }
+        /* Dark mode overrides */
+        [data-theme="dark"] .dns-record { background: var(--table-stripe); color: var(--text-primary); }
+        [data-theme="dark"] .record-name { background: var(--bg-input); color: var(--text-primary); }
+        [data-theme="dark"] .record-value { background: var(--bg-input); border-color: var(--border-color); color: var(--text-primary); }
+        [data-theme="dark"] .card-header.bg-dark { background-color: #1a1d21 !important; }
+        [data-theme="dark"] .bg-white { background-color: var(--bg-input) !important; color: var(--text-primary) !important; }
+        [data-theme="dark"] .border { border-color: var(--border-color) !important; }
+        /* ===== Explanation panels (details > div.bg-white) ===== */
+        [data-theme="dark"] details .bg-white,
+        [data-theme="dark"] details > div { background-color: var(--bg-input) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
+        [data-theme="dark"] details strong { color: var(--text-primary); }
+        [data-theme="dark"] details .table,
+        [data-theme="dark"] details .table > :not(caption) > * > * { background-color: transparent !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
+        [data-theme="dark"] details .table-sm td, [data-theme="dark"] details .table-sm th { color: var(--text-primary) !important; }
+        [data-theme="dark"] details code { background-color: var(--table-stripe) !important; color: #f8f9fa !important; padding: 1px 4px; border-radius: 3px; }
+        [data-theme="dark"] details summary { color: var(--text-primary); }
+        /* Globale: tabelle dentro alert/info che non riceverebbero override */
+        [data-theme="dark"] .alert .table, [data-theme="dark"] .alert .table > :not(caption) > * > * { background-color: transparent !important; color: var(--text-primary) !important; }
+        """;
+        return getHead("DNS", extraStyles) + getNavbar("dns") + """
+    <div class="content container mt-4">
+        <div class="content-container">
+            <h2 class="mb-3"><i class="fas fa-server me-2"></i>Configurazione DNS</h2>
+
+            <!-- BANNER: dominio corrente sempre visibile, con switcher -->
+            <div class="card text-white mb-3" style="background:linear-gradient(135deg,#0d6efd 0%,#6610f2 100%)">
+                <div class="card-body py-3">
+                    <div class="row align-items-center g-3">
+                        <div class="col-md-7">
+                            <div class="small text-uppercase opacity-75 mb-1" style="letter-spacing:1px">Stai gestendo</div>
+                            <h3 class="mb-0">
+                                <i class="fas fa-globe me-2"></i>
+                                <span id="currentDomainBanner" style="font-family:monospace">Nessun dominio selezionato</span>
+                            </h3>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="small opacity-75 mb-1" for="domainSelect"><i class="fas fa-exchange-alt me-1"></i>Cambia dominio</label>
+                            <select class="form-select" id="domainSelect">
+                                <option value="">Seleziona dominio...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Azioni globali (visibili sempre, ma operano solo se un dominio è selezionato) -->
+            <div class="mb-3 d-flex gap-2 flex-wrap">
+                <button class="btn btn-outline-primary" id="reloadDnsBtn" onclick="loadDnsRecords()" disabled>
+                    <i class="fas fa-sync me-1"></i>Ricarica record DNS
+                </button>
+                <button class="btn btn-success" id="verifyDnsBtn" onclick="verifyDns()" disabled>
+                    <i class="fas fa-check me-1"></i>Verifica configurazione DNS
+                </button>
+            </div>
+
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Come funziona:</strong> seleziona un dominio nel banner sopra. Record DNS, DKIM, schedule e storico vengono caricati automaticamente. Copia i record nel tuo provider DNS (Cloudflare, Route53, etc.) e clicca "Verifica" per controllare che siano configurati correttamente.
+            </div>
+
+            <!-- Verification Results -->
+            <div id="verificationResults" class="d-none mb-4">
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <i class="fas fa-clipboard-check me-2"></i>Risultati Verifica DNS
+                    </div>
+                    <div class="card-body" id="verificationBody">
+                    </div>
+                </div>
+            </div>
+
+            <!-- DNS Records -->
+            <div id="dnsRecordsContainer">
+                <p class="text-muted">Seleziona un dominio per visualizzare i record DNS necessari.</p>
+            </div>
+
+            <!-- Diagnostica orario server (timezone) -->
+            <div class="card mt-4 border-info">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center" style="cursor:pointer" onclick="toggleTzDiag()">
+                    <span><i class="fas fa-clock me-2"></i>Diagnostica orario server (timezone)</span>
+                    <span id="tzDiagStatusBadge"><span class="badge bg-light text-dark"><i class="fas fa-spinner fa-spin me-1"></i>controllo...</span></span>
+                </div>
+                <div class="card-body d-none" id="tzDiagBody">
+                    <p class="small text-muted mb-2">Se i timestamp delle rotazioni risultano sbagliati, il problema è quasi sempre il fuso orario di MySQL non allineato col sistema operativo. Da qui puoi vedere lo stato e correggerlo.</p>
+                    <div id="tzDiagTable">
+                        <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</div>
+                    </div>
+                    <div class="mt-3 d-flex gap-2 flex-wrap">
+                        <button class="btn btn-success btn-sm" onclick="tzSyncToSystem()"><i class="fas fa-magic me-1"></i>Sincronizza MySQL al fuso del sistema</button>
+                        <div class="input-group input-group-sm" style="width:auto">
+                            <input type="text" class="form-control form-control-sm" id="tzManualValue" placeholder='es. "+02:00" o "Europe/Rome"' style="width:200px">
+                            <button class="btn btn-outline-secondary btn-sm" onclick="tzSetManual()"><i class="fas fa-cog me-1"></i>Imposta manualmente</button>
+                        </div>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="loadTzDiag()"><i class="fas fa-sync me-1"></i>Ricontrolla</button>
+                    </div>
+                    <div id="tzDiagLog" class="mt-2 small"></div>
+                </div>
+            </div>
+
+            <!-- Cloudflare integration Section -->
+            <div class="card mt-4">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-cloud me-2"></i>Account Cloudflare (per la rotazione DKIM automatica)</span>
+                    <small id="cfAccountsCountBadge"></small>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">Aggiungi qui i tuoi account Cloudflare. Ogni dominio può essere legato a un account diverso (utile se hai domini su Cloudflare differenti). I record DKIM verranno gestiti automaticamente con il token corretto.</p>
+
+                    <details class="mb-3">
+                        <summary>Come creare il token Cloudflare (clicca per i dettagli)</summary>
+                        <div class="mt-2 p-3 bg-white border rounded small">
+                            <ol class="mb-2">
+                                <li>Accedi all'account Cloudflare desiderato e apri <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">My Profile → API Tokens</a>, clicca <strong>Create Token</strong>.</li>
+                                <li>Usa il template <strong>"Edit zone DNS"</strong>.</li>
+                                <li>Permessi minimi: <code>Zone:Read</code> + <code>DNS:Edit</code>.</li>
+                                <li>Zone Resources: <strong>Include → Specific zone → &lt;tuo dominio&gt;</strong> (più sicuro che "All zones").</li>
+                                <li>Crea il token, copialo (lo vedrai una sola volta) e incollalo qui sotto.</li>
+                            </ol>
+                            <div class="text-muted">I token sono salvati in DB locale e possono essere revocati in qualsiasi momento dal pannello Cloudflare.</div>
+                        </div>
+                    </details>
+
+                    <!-- LISTA ACCOUNT -->
+                    <h6 class="mt-3 mb-2"><i class="fas fa-users me-1"></i>Account configurati</h6>
+                    <div id="cfAccountsList" class="mb-3">
+                        <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</div>
+                    </div>
+
+                    <!-- AGGIUNGI ACCOUNT -->
+                    <h6 class="mt-4 mb-2"><i class="fas fa-plus-circle me-1"></i>Aggiungi un nuovo account</h6>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Etichetta <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="cfNewLabel" placeholder="es. Account personale">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Email account <small class="text-muted">(per riconoscerlo)</small></label>
+                            <input type="email" class="form-control" id="cfNewEmail" placeholder="tu@example.com">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Token API <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="cfNewToken" placeholder="Incolla il token Cloudflare" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="cfTestNewToken()"><i class="fas fa-vial me-1"></i>Verifica token</button>
+                        <button class="btn btn-primary btn-sm" type="button" onclick="cfAddAccount()"><i class="fas fa-save me-1"></i>Salva account</button>
+                    </div>
+
+                    <!-- ASSEGNAZIONE PER-DOMINIO -->
+                    <h6 class="mt-4 mb-2"><i class="fas fa-link me-1"></i>Assegnazione domini → account</h6>
+                    <div id="cfDomainAssignments" class="mb-2">
+                        <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DKIM Section -->
+            <div class="card mt-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-key me-2"></i>DKIM - Firma Digitale Email</span>
+                    <small id="dkimRotationBadge"></small>
+                </div>
+                <div class="card-body">
+                    <p>DKIM firma digitalmente le email in uscita, permettendo ai destinatari di verificare l'autenticita'.</p>
+                    <div id="dkimStatus">Seleziona un dominio per vedere lo stato DKIM.</div>
+
+                    <!-- Info account CF per dominio selezionato -->
+                    <div id="dkimDomainCfInfo" class="mt-2"></div>
+
+                    <!-- Last/Next rotation: sempre visibile quando DKIM è configurato -->
+                    <div id="dkimRotationTimeline" class="mt-2 d-none">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div class="border rounded p-2 h-100" style="background:rgba(25,135,84,0.08)">
+                                    <div class="small text-muted mb-1"><i class="fas fa-history me-1"></i>Ultima rotazione</div>
+                                    <div id="dkimLastRotationText"><span class="text-muted">—</span></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded p-2 h-100" style="background:rgba(13,110,253,0.08)">
+                                    <div class="small text-muted mb-1"><i class="fas fa-calendar-day me-1"></i>Prossima rotazione</div>
+                                    <div id="dkimNextRotationText"><span class="text-muted">—</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rotazione programmata -->
+                    <div id="dkimSchedulePanel" class="mt-3 d-none">
+                        <div class="border rounded p-3" style="background:rgba(13,110,253,0.05)">
+                            <h6 class="mb-2"><i class="fas fa-calendar-alt me-1"></i>Rotazione programmata</h6>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-5">
+                                    <label class="form-label small mb-1">Frequenza</label>
+                                    <select class="form-select form-select-sm" id="dkimSchedulePreset" onchange="onSchedulePresetChange()">
+                                        <!-- popolato dinamicamente dai preset del server -->
+                                    </select>
+                                </div>
+                                <div class="col-md-3" id="dkimScheduleCustomWrap" style="display:none">
+                                    <label class="form-label small mb-1">Giorni custom</label>
+                                    <input type="number" min="1" max="3650" class="form-control form-control-sm" id="dkimScheduleCustomDays" placeholder="es. 45">
+                                </div>
+                                <div class="col-md-4 text-md-end">
+                                    <button class="btn btn-sm btn-primary" onclick="saveDkimSchedule()"><i class="fas fa-save me-1"></i>Salva schedule</button>
+                                </div>
+                            </div>
+                            <div class="mt-2 small" id="dkimScheduleInfo"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 d-flex gap-2 flex-wrap">
+                        <button class="btn btn-warning" id="generateDkimBtn" onclick="generateDkim()" disabled>
+                            <i class="fas fa-key me-1"></i>Genera Chiavi DKIM
+                        </button>
+                        <button class="btn btn-outline-primary" id="rotateDkimBtn" onclick="rotateDkimStart()" disabled>
+                            <i class="fas fa-sync-alt me-1"></i>Avvia rotazione chiave
+                        </button>
+                        <button class="btn btn-outline-success" id="verifyActiveDkimBtn" onclick="verifyActiveDkim()" disabled>
+                            <i class="fas fa-search me-1"></i>Verifica chiave attiva in DNS
+                        </button>
+                    </div>
+
+                    <!-- Risultato verifica chiave attiva -->
+                    <div id="dkimVerifyResult" class="mt-3"></div>
+
+                    <!-- Pannello rotazione: visibile solo se in corso -->
+                    <div id="dkimRotationPanel" class="mt-4 d-none">
+                        <hr>
+                        <h5><i class="fas fa-route me-2"></i>Rotazione chiave DKIM in corso</h5>
+                        <div id="dkimRotationStepper" class="my-3"></div>
+                        <div id="dkimRotationBody"></div>
+                    </div>
+
+                    <!-- Vecchi record DKIM (orphan cleanup) -->
+                    <details class="mt-4">
+                        <summary class="text-primary" style="cursor:pointer"><i class="fas fa-broom me-1"></i>Vecchi record DKIM in DNS (clicca per scansionare Cloudflare)</summary>
+                        <div class="mt-3">
+                            <p class="small text-muted mb-2">Trova tutti i record TXT <code>*._domainkey.&lt;dominio&gt;</code> presenti in Cloudflare e ti permette di rimuovere quelli orfani (rotazioni vecchie non pulite). I record attivi (current/pending/previous) sono protetti.</p>
+                            <button class="btn btn-sm btn-outline-primary" onclick="scanDkimOrphans()" id="scanDkimOrphansBtn"><i class="fas fa-search me-1"></i>Scansiona record DKIM in Cloudflare</button>
+                            <div id="dkimOrphansResult" class="mt-3"></div>
+                        </div>
+                    </details>
+
+                    <!-- Storico rotazioni -->
+                    <details class="mt-4" id="dkimHistoryDetails">
+                        <summary class="text-primary" style="cursor:pointer"><i class="fas fa-history me-1"></i>Storico rotazioni DKIM (clicca per espandere)</summary>
+                        <div id="dkimHistoryBody" class="mt-3">
+                            <p class="text-muted small mb-0">Seleziona un dominio per vedere lo storico.</p>
+                        </div>
+                    </details>
+                </div>
+            </div>
+
+""" + getDnsRotateModeChooserModal() + """
+            <!-- Blacklist Check -->
+            <div class="card mt-4 border-danger">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="fas fa-ban me-2"></i><strong>Check Blacklist (DNSBL/RHSBL)</strong> <small class="ms-2" id="blOverallStatus"></small></span>
+                    <button class="btn btn-sm btn-light" id="btnBlCheck" onclick="runBlacklistCheck()">
+                        <i class="fas fa-search me-1"></i>Verifica IP + domini
+                    </button>
+                </div>
+                <div class="card-body" id="blContainer">
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Verifica se l'IP del server e i tuoi domini sono in blacklist pubbliche (Spamhaus, SpamCop, Barracuda, ecc.).
+                        Se ci finisci, le mail rimbalzano o vanno in spam ovunque.
+                    </p>
+                    <p class="text-muted small mb-0">Click su "Verifica" — esegue 15+ check in parallelo (~3-5 secondi).</p>
+                </div>
+            </div>
+        </div>
+    </div>
+""" + getFooter() + """
+    <script>
+        let currentDomainId = null;
+        let cloudflareConfigured = false;
+
+        // Load domains
+        fetch('/api/domains').then(r => r.json()).then(data => {
+            const select = document.getElementById('domainSelect');
+            (data.domains || []).forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.domain;
+                opt.dataset.id = d.id;
+                opt.textContent = d.domain;
+                select.appendChild(opt);
+            });
+            // Pre-seleziona se presente ?domain=... nel querystring (es. link da /domains)
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const preselect = params.get('domain');
+                if (preselect) {
+                    // Trova l'option con quel value (case-insensitive)
+                    const target = Array.from(select.options).find(o => o.value.toLowerCase() === preselect.toLowerCase());
+                    if (target) {
+                        select.value = target.value;
+                        // Triggera l'evento change come se l'utente avesse cliccato
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }
+            } catch (e) {
+                console.warn('Auto-select dominio fallito:', e);
+            }
+        });
+
+        // Helper: aggiorna il banner del dominio corrente
+        function setCurrentDomainBanner(name) {
+            const el = document.getElementById('currentDomainBanner');
+            if (!el) return;
+            if (name) {
+                el.textContent = name;
+                el.style.opacity = '1';
+            } else {
+                el.textContent = 'Nessun dominio selezionato';
+                el.style.opacity = '0.6';
+            }
+        }
+
+        // Cambio dominio: carica TUTTO automaticamente (DNS records + DKIM + storico + schedule),
+        // così non serve cliccare "Ricarica" per cambiare contesto.
+        document.getElementById('domainSelect').addEventListener('change', function() {
+            const opt = this.selectedOptions[0];
+            const reloadBtn = document.getElementById('reloadDnsBtn');
+            const verifyBtn = document.getElementById('verifyDnsBtn');
+
+            if (!opt || !opt.dataset || !opt.dataset.id) {
+                // Deselezionato: pulisci tutto
+                currentDomainId = null;
+                setCurrentDomainBanner(null);
+                if (reloadBtn) reloadBtn.disabled = true;
+                if (verifyBtn) verifyBtn.disabled = true;
+                const tl = document.getElementById('dkimRotationTimeline'); if (tl) tl.classList.add('d-none');
+                const st = document.getElementById('dkimStatus');           if (st) st.innerHTML = 'Seleziona un dominio per vedere lo stato DKIM.';
+                const sp = document.getElementById('dkimSchedulePanel');    if (sp) sp.classList.add('d-none');
+                const rp = document.getElementById('dkimRotationPanel');    if (rp) rp.classList.add('d-none');
+                const ci = document.getElementById('dkimDomainCfInfo');     if (ci) ci.innerHTML = '';
+                const hb = document.getElementById('dkimHistoryBody');      if (hb) hb.innerHTML = '<p class="text-muted small mb-0">Seleziona un dominio per vedere lo storico.</p>';
+                const rc = document.getElementById('dnsRecordsContainer');  if (rc) rc.innerHTML = '<p class="text-muted">Seleziona un dominio per visualizzare i record DNS necessari.</p>';
+                const vr = document.getElementById('verificationResults');  if (vr) vr.classList.add('d-none');
+                document.getElementById('generateDkimBtn').disabled = true;
+                document.getElementById('rotateDkimBtn').disabled = true;
+                document.getElementById('verifyActiveDkimBtn').disabled = true;
+                return;
+            }
+
+            currentDomainId = opt.dataset.id;
+            setCurrentDomainBanner(opt.value);
+            if (reloadBtn) reloadBtn.disabled = false;
+            if (verifyBtn) verifyBtn.disabled = false;
+            document.getElementById('generateDkimBtn').disabled = false;
+
+            // Carica AUTOMATICAMENTE tutto: record DNS + stato DKIM (status, timeline, history, schedule)
+            loadDnsRecords();
+        });
+
+""" + getDnsJsTzDiag() + """
+        // ===== Cloudflare multi-account integration =====
+        // Cache locale per usare i dati in giro (rotateDkim, dkim card info)
+        let cfAccounts = [];     // [{id,label,email,token_masked,...}]
+        let cfDomainsCf = [];    // [{id,domain,cloudflare_account_id}]
+
+        function escapeHtmlCf(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
+        function refreshCloudflare() {
+            const badge = document.getElementById('cfAccountsCountBadge');
+            const list = document.getElementById('cfAccountsList');
+            const assign = document.getElementById('cfDomainAssignments');
+            badge.innerHTML = '<span class="badge bg-light text-dark"><i class="fas fa-spinner fa-spin me-1"></i>caricamento</span>';
+
+            fetch('/api/cloudflare').then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            }).then(data => {
+                cfAccounts = data.accounts || [];
+                cfDomainsCf = data.domains || [];
+
+                badge.innerHTML = cfAccounts.length === 0
+                    ? '<span class="badge bg-secondary">0 account</span>'
+                    : '<span class="badge bg-success">' + cfAccounts.length + ' account configurat' + (cfAccounts.length === 1 ? 'o' : 'i') + '</span>';
+
+                // Lista account
+                if (cfAccounts.length === 0) {
+                    list.innerHTML = '<div class="alert alert-secondary py-2 mb-0 small"><i class="fas fa-info-circle me-1"></i>Nessun account configurato. Aggiungine uno qui sotto per abilitare la rotazione DKIM automatica.</div>';
+                } else {
+                    let html = '<div class="table-responsive"><table class="table table-sm align-middle mb-0">';
+                    html += '<thead class="table-light"><tr><th>Etichetta</th><th>Email account</th><th>Token</th><th>Domini collegati</th><th class="text-end">Azioni</th></tr></thead><tbody>';
+                    cfAccounts.forEach(a => {
+                        const linkedDomains = cfDomainsCf.filter(d => d.cloudflare_account_id === a.id).map(d => d.domain);
+                        const safeLabel = escapeHtmlCf(a.label).replace(/'/g, "\\\\'");
+                        // Riga di visualizzazione
+                        html += '<tr id="cfRowView-' + a.id + '">';
+                        html += '<td><strong>' + escapeHtmlCf(a.label) + '</strong></td>';
+                        html += '<td>' + (a.email ? escapeHtmlCf(a.email) : '<span class="text-muted">—</span>') + '</td>';
+                        html += '<td><code>' + escapeHtmlCf(a.token_masked) + '</code></td>';
+                        html += '<td>' + (linkedDomains.length === 0
+                            ? '<span class="text-muted small">nessuno</span>'
+                            : linkedDomains.map(d => '<span class="badge bg-info text-dark me-1">' + escapeHtmlCf(d) + '</span>').join('')) + '</td>';
+                        html += '<td class="text-end text-nowrap">';
+                        html += '<button class="btn btn-sm btn-outline-primary me-1" title="Modifica" onclick="cfEditOpen(' + a.id + ')"><i class="fas fa-pen"></i></button>';
+                        html += '<button class="btn btn-sm btn-outline-danger" title="Rimuovi" onclick="cfDeleteAccount(' + a.id + ', \\'' + safeLabel + '\\')"><i class="fas fa-trash"></i></button>';
+                        html += '</td>';
+                        html += '</tr>';
+                        // Riga di edit (nascosta finché non clicchi la matita)
+                        html += '<tr id="cfRowEdit-' + a.id + '" class="d-none table-warning"><td colspan="5">';
+                        html += '<div class="row g-2 align-items-end">';
+                        html += '  <div class="col-md-3"><label class="form-label small mb-1">Etichetta</label><input type="text" class="form-control form-control-sm" id="cfEditLabel-' + a.id + '" value="' + escapeHtmlCf(a.label) + '"></div>';
+                        html += '  <div class="col-md-3"><label class="form-label small mb-1">Email account</label><input type="email" class="form-control form-control-sm" id="cfEditEmail-' + a.id + '" value="' + escapeHtmlCf(a.email || '') + '" placeholder="opzionale"></div>';
+                        html += '  <div class="col-md-4"><label class="form-label small mb-1">Nuovo token <small class="text-muted">(lascia vuoto per non cambiarlo)</small></label><input type="password" class="form-control form-control-sm" id="cfEditToken-' + a.id + '" placeholder="Incolla un nuovo token solo se vuoi sostituirlo" autocomplete="off"></div>';
+                        html += '  <div class="col-md-2 text-end">';
+                        html += '    <button class="btn btn-sm btn-primary me-1" onclick="cfEditSave(' + a.id + ')"><i class="fas fa-save"></i> Salva</button>';
+                        html += '    <button class="btn btn-sm btn-secondary" onclick="cfEditClose(' + a.id + ')"><i class="fas fa-times"></i></button>';
+                        html += '  </div>';
+                        html += '</div>';
+                        html += '</td></tr>';
+                    });
+                    html += '</tbody></table></div>';
+                    list.innerHTML = html;
+                }
+
+                // Tabella assegnazione domini -> account
+                if (cfDomainsCf.length === 0) {
+                    assign.innerHTML = '<div class="text-muted small">Aggiungi prima un dominio nella sezione Domini per gestirne l\\'assegnazione qui.</div>';
+                } else {
+                    let html = '<div class="table-responsive"><table class="table table-sm align-middle mb-0">';
+                    html += '<thead class="table-light"><tr><th>Dominio</th><th>Modalità rotazione DKIM</th></tr></thead><tbody>';
+                    cfDomainsCf.forEach(d => {
+                        html += '<tr>';
+                        html += '<td><code>' + escapeHtmlCf(d.domain) + '</code></td>';
+                        html += '<td><select class="form-select form-select-sm" onchange="cfAssignDomain(' + d.id + ', this.value)">';
+                        const cur = d.cloudflare_account_id || 0;
+                        html += '<option value="0"' + (cur === 0 ? ' selected' : '') + '>Manuale (devo aggiungere il record TXT a mano)</option>';
+                        cfAccounts.forEach(a => {
+                            const lbl = a.label + (a.email ? ' — ' + a.email : '');
+                            html += '<option value="' + a.id + '"' + (cur === a.id ? ' selected' : '') + '>Cloudflare: ' + escapeHtmlCf(lbl) + '</option>';
+                        });
+                        html += '</select></td>';
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table></div>';
+                    assign.innerHTML = html;
+                }
+
+                // Aggiorna eventuale stato visibile della rotazione (se l'utente ha già selezionato un dominio)
+                if (currentDomainId) loadDkimRotationStatus(currentDomainId);
+            }).catch(e => {
+                console.error('cf', e);
+                badge.innerHTML = '<span class="badge bg-danger">Errore</span>';
+                list.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Impossibile leggere gli account (' + e.message + '). Ricarica la pagina.</div>';
+                assign.innerHTML = '';
+            });
+        }
+        refreshCloudflare();
+
+        function cfTestNewToken() {
+            const tok = document.getElementById('cfNewToken').value.trim();
+            if (!tok) { alert('Incolla prima il token'); return; }
+            fetch('/api/cloudflare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'test', token: tok })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function cfAddAccount() {
+            const label = document.getElementById('cfNewLabel').value.trim();
+            const email = document.getElementById('cfNewEmail').value.trim();
+            const token = document.getElementById('cfNewToken').value.trim();
+            if (!label) { alert('Etichetta obbligatoria'); return; }
+            if (!token) { alert('Token obbligatorio'); return; }
+            fetch('/api/cloudflare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'add', label: label, email: email, token: token })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                if (data.success) {
+                    document.getElementById('cfNewLabel').value = '';
+                    document.getElementById('cfNewEmail').value = '';
+                    document.getElementById('cfNewToken').value = '';
+                    refreshCloudflare();
+                }
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function cfEditOpen(id) {
+            // Chiudi eventuali altre righe di edit aperte
+            cfAccounts.forEach(a => {
+                if (a.id !== id) cfEditClose(a.id);
+            });
+            const view = document.getElementById('cfRowView-' + id);
+            const edit = document.getElementById('cfRowEdit-' + id);
+            if (view) view.classList.add('d-none');
+            if (edit) edit.classList.remove('d-none');
+        }
+
+        function cfEditClose(id) {
+            const view = document.getElementById('cfRowView-' + id);
+            const edit = document.getElementById('cfRowEdit-' + id);
+            if (view) view.classList.remove('d-none');
+            if (edit) edit.classList.add('d-none');
+            // Pulisci il campo token così non resta in memoria nel DOM
+            const tok = document.getElementById('cfEditToken-' + id);
+            if (tok) tok.value = '';
+        }
+
+        function cfEditSave(id) {
+            const label = document.getElementById('cfEditLabel-' + id).value.trim();
+            const email = document.getElementById('cfEditEmail-' + id).value.trim();
+            const token = document.getElementById('cfEditToken-' + id).value.trim();
+            if (!label) { alert('Etichetta obbligatoria'); return; }
+            const payload = { action: 'update', account_id: id, label: label, email: email };
+            // Includi il token SOLO se l'utente l'ha effettivamente compilato
+            if (token) payload.token = token;
+            fetch('/api/cloudflare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                if (data.success) {
+                    cfEditClose(id);
+                    refreshCloudflare();
+                }
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function cfDeleteAccount(id, label) {
+            if (!confirm('Rimuovere l\\'account "' + label + '"?\\n\\nI domini collegati torneranno in modalità manuale.')) return;
+            fetch('/api/cloudflare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete', account_id: id })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                if (data.success) refreshCloudflare();
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function cfAssignDomain(domainId, accountId) {
+            fetch('/api/cloudflare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'assign', domain_id: domainId, account_id: parseInt(accountId) })
+            }).then(r => r.json()).then(data => {
+                if (!data.success) alert('✗ ' + (data.message || data.error || ''));
+                refreshCloudflare();
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function loadDnsRecords() {
+            const domain = document.getElementById('domainSelect').value;
+            if (!domain) { alert('Seleziona un dominio'); return; }
+
+            currentDomainId = document.getElementById('domainSelect').selectedOptions[0].dataset.id;
+            document.getElementById('generateDkimBtn').disabled = false;
+
+            fetch('/api/dns?domain=' + domain).then(r => r.json()).then(data => {
+                if (!data.success) { alert('Errore: ' + data.error); return; }
+
+                // Extract mail hostname parent domain
+                const mailHostname = data.mail_hostname;
+                const mailHostnameParts = mailHostname.split('.');
+                const mailServerParentDomain = mailHostnameParts.slice(1).join('.');
+
+                let html = '<div class="alert alert-info mb-4">';
+                html += '<h5><i class="fas fa-info-circle me-2"></i>Riepilogo Zone DNS</h5>';
+                html += '<p class="mb-2">Dovrai configurare record in <strong>2 zone DNS diverse</strong>:</p>';
+                html += '<ul class="mb-0">';
+                html += '<li><strong>' + mailServerParentDomain + '</strong> → per il record A del server mail</li>';
+                html += '<li><strong>' + domain + '</strong> → per MX, SPF, DKIM, DMARC e altri record</li>';
+                html += '</ul>';
+                html += '</div>';
+
+                html += '<div class="mb-3"><strong>Server IP:</strong> <code>' + data.server_ip + '</code> | <strong>Mail Hostname:</strong> <code>' + data.mail_hostname + '</code></div>';
+
+                // Group records by zone
+                let currentZone = '';
+                data.records.forEach(r => {
+                    // Add zone header if changed
+                    if (r.dnsZone && r.dnsZone !== currentZone) {
+                        currentZone = r.dnsZone;
+                        html += '<div class="mt-4 mb-3 p-2 bg-primary text-white rounded"><strong><i class="fas fa-globe me-2"></i>Zona DNS: ' + currentZone + '</strong></div>';
+                    }
+
+                    const reqClass = r.required ? 'required' : 'optional';
+                    const badge = r.required ? '<span class="badge bg-danger">Richiesto</span>' : '<span class="badge bg-secondary">Opzionale</span>';
+                    // ID univoco basato su name+type per il matching con la verifica
+                    const recordKey = (r.name + '|' + r.type).replace(/[^a-zA-Z0-9_|.\\-]/g, '_');
+                    html += '<div class="dns-record ' + reqClass + '" data-record-key="' + recordKey + '" data-record-name="' + r.name + '" data-record-type="' + r.type + '" data-record-zone="' + (r.dnsZone || '') + '">';
+                    html += '<div class="d-flex justify-content-between align-items-start">';
+                    html += '<div><span class="record-type">' + r.type + '</span> ' + badge;
+                    // Status badge — placeholder finché non parte la verifica automatica
+                    html += ' <span class="record-status-badge" data-status-key="' + recordKey + '"><span class="badge bg-light text-dark border"><i class="fas fa-spinner fa-spin me-1"></i>Verifica in corso...</span></span>';
+                    if (r.dnsZone) {
+                        html += ' <small class="text-muted">su ' + r.dnsZone + '</small>';
+                    }
+                    html += '</div>';
+                    html += '<i class="fas fa-copy copy-btn" onclick="copyToClipboard(this.parentElement.parentElement)" title="Copia"></i>';
+                    html += '</div>';
+                    html += '<div class="mt-2"><strong>Nome:</strong> <code>' + r.name + '</code></div>';
+                    html += '<div class="mt-1"><strong>Valore:</strong> <code style="word-break:break-all">' + r.value + '</code></div>';
+                    html += '<small class="text-muted">' + r.description + '</small>';
+                    // Area dettagli verifica (popolata dopo verifyDnsAuto)
+                    html += '<div class="record-verify-detail mt-2" data-detail-key="' + recordKey + '"></div>';
+                    if (r.explanation) {
+                        html += '<details class="mt-2"><summary><i class="fas fa-cog me-1"></i>Istruzioni dettagliate Cloudflare</summary><div class="mt-2 p-3 bg-white border rounded" style="font-size:0.9rem">' + r.explanation + '</div></details>';
+                    }
+                    html += '</div>';
+                });
+
+                document.getElementById('dnsRecordsContainer').innerHTML = html;
+
+                // Load DKIM status (parallelo alla verifica DNS)
+                loadDkimStatus(currentDomainId);
+                // Verifica automatica e silenziosa di tutti i record DNS
+                verifyDnsAuto();
+            });
+        }
+
+        /**
+         * Verifica DNS in background: per ogni record, mostra un badge inline
+         * "Configurato ✓" / "Da configurare ⚠" / "Verifica web" etc., così l'utente
+         * sa al volo cosa serve fare senza dover scendere al pannello "Verifica" in fondo.
+         */
+        /**
+         * Calcola l'FQDN di un record dato il suo nome relativo (può essere "@", una
+         * sottoparte, o già un FQDN) e la zona DNS di appartenenza.
+         * Necessario perché i record generati usano nomi relativi ("@", "mail._domainkey"),
+         * mentre i check del verifier usano FQDN ("domain-a.test", "mail._domainkey.domain-a.test").
+         */
+        function recordFqdn(name, zone) {
+            if (!name || name === '@' || name === '') return zone || '';
+            // Se è già FQDN (contiene la zona alla fine) lasciamo invariato
+            if (zone && name.toLowerCase().endsWith('.' + zone.toLowerCase())) return name;
+            if (zone && name.toLowerCase() === zone.toLowerCase()) return name;
+            // Altrimenti concatena con la zona
+            return zone ? (name + '.' + zone) : name;
+        }
+
+        function verifyDnsAuto() {
+            const domain = document.getElementById('domainSelect').value;
+            if (!domain) return;
+            fetch('/api/dns', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'verify', domain: domain })
+            }).then(r => r.json()).then(data => {
+                if (!data.success) {
+                    document.querySelectorAll('.record-status-badge').forEach(el => {
+                        el.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i>Verifica non disponibile</span>';
+                    });
+                    return;
+                }
+                // Mappa fqdn → check (i check del verifier usano sempre FQDN come name)
+                const checkByFqdn = new Map();
+                (data.checks || []).forEach(c => {
+                    if (c.name) checkByFqdn.set(c.name.toLowerCase(), c);
+                });
+
+                let okCount = 0, koCount = 0, unkCount = 0;
+                document.querySelectorAll('.dns-record').forEach(card => {
+                    const rname = card.getAttribute('data-record-name');
+                    const rtype = card.getAttribute('data-record-type');
+                    const rzone = card.getAttribute('data-record-zone') || '';
+                    const key = card.getAttribute('data-record-key');
+                    const badgeWrap = card.querySelector('[data-status-key="' + key + '"]');
+                    const detailWrap = card.querySelector('[data-detail-key="' + key + '"]');
+                    if (!badgeWrap) return;
+
+                    // Costruisci l'FQDN corrispondente al record per matchare il check
+                    const fqdn = recordFqdn(rname, rzone).toLowerCase();
+                    let check = checkByFqdn.get(fqdn);
+                    // Fallback: prova anche col rname diretto (per i record che hanno già FQDN)
+                    if (!check && rname) check = checkByFqdn.get(rname.toLowerCase());
+                    if (!check) {
+                        // Nessun check per questo record (es. SRV autodiscover, MTA-STS policy, alcuni TXT secondari)
+                        badgeWrap.innerHTML = '<span class="badge bg-light text-dark border"><i class="fas fa-minus-circle me-1"></i>Non verificato</span>';
+                        if (detailWrap) detailWrap.innerHTML = '';
+                        unkCount++;
+                        return;
+                    }
+
+                    if (check.passed) {
+                        badgeWrap.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Configurato correttamente</span>';
+                        if (detailWrap) {
+                            detailWrap.innerHTML = '<div class="alert alert-success py-1 px-2 mb-0 small mt-2"><i class="fas fa-check me-1"></i><strong>Nessuna azione richiesta</strong> — il record DNS risulta già configurato correttamente. ' + (check.message ? escapeHtmlBl(check.message) : '') + '</div>';
+                        }
+                        // Stile leggero: bordo verde
+                        card.style.borderLeft = '4px solid #198754';
+                        okCount++;
+                    } else {
+                        badgeWrap.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Da configurare</span>';
+                        if (detailWrap) {
+                            let html = '<div class="alert alert-warning py-2 px-2 mb-0 small mt-2"><i class="fas fa-exclamation-triangle me-1"></i><strong>Azione richiesta:</strong> ' + escapeHtmlBl(check.message || 'record mancante o errato') + '.';
+                            if (check.current_value) {
+                                const shortCur = check.current_value.length > 100 ? check.current_value.substring(0, 100) + '…' : check.current_value;
+                                html += '<div class="mt-1"><span class="text-muted">Trovato in DNS:</span> <code class="small">' + escapeHtmlBl(shortCur) + '</code></div>';
+                            }
+                            html += '</div>';
+                            detailWrap.innerHTML = html;
+                        }
+                        card.style.borderLeft = '4px solid #ffc107';
+                        koCount++;
+                    }
+                });
+
+                // Banner riassuntivo in cima al contenitore
+                const container = document.getElementById('dnsRecordsContainer');
+                if (container && (okCount + koCount + unkCount) > 0) {
+                    const summary = document.createElement('div');
+                    let cls, icon, msg;
+                    if (koCount === 0 && okCount > 0) {
+                        cls = 'alert-success'; icon = 'check-circle';
+                        msg = '<strong>Tutto a posto!</strong> ' + okCount + ' record DNS verificati e configurati correttamente.';
+                    } else if (koCount > 0) {
+                        cls = 'alert-warning'; icon = 'exclamation-triangle';
+                        msg = '<strong>' + koCount + ' record DNS da configurare</strong> e ' + okCount + ' già a posto. Controlla i badge gialli qui sotto.';
+                    } else {
+                        cls = 'alert-info'; icon = 'info-circle';
+                        msg = 'Verifica completata. ' + unkCount + ' record non sono soggetti a verifica automatica.';
+                    }
+                    summary.className = 'alert ' + cls + ' mb-3';
+                    summary.innerHTML = '<i class="fas fa-' + icon + ' me-2"></i>' + msg + ' <span class="ms-2 small text-muted">(' + okCount + ' OK · ' + koCount + ' da fare · ' + unkCount + ' non verificati)</span>';
+                    // Inserisci prima del primo .dns-record (o all'inizio se non c'è)
+                    const firstRecord = container.querySelector('.dns-record');
+                    if (firstRecord) container.insertBefore(summary, firstRecord);
+                    else container.insertBefore(summary, container.firstChild);
+                }
+            }).catch(e => {
+                console.error('verifyDnsAuto error', e);
+                document.querySelectorAll('.record-status-badge').forEach(el => {
+                    el.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-times me-1"></i>Verifica fallita</span>';
+                });
+            });
+        }
+
+        function loadDkimStatus(domainId) {
+            fetch('/api/dkim?id=' + domainId).then(r => r.json()).then(data => {
+                const status = document.getElementById('dkimStatus');
+                const rotateBtn = document.getElementById('rotateDkimBtn');
+                const verifyBtn = document.getElementById('verifyActiveDkimBtn');
+                const generateBtn = document.getElementById('generateDkimBtn');
+                if (data.configured) {
+                    status.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>DKIM Configurato!</strong><br>' +
+                        'Selector: <code>' + data.selector + '</code><br>' +
+                        'Record DNS: <code>' + data.dns_record_name + '</code></div>';
+                    if (rotateBtn) rotateBtn.disabled = false;
+                    if (verifyBtn) verifyBtn.disabled = false;
+                    // DKIM già configurato: il bottone "Genera Chiavi DKIM" deve essere NASCOSTO/disabilitato
+                    // perché sovrascriverebbe la chiave attiva senza il workflow di rotazione (no grace period).
+                    // Per cambiare chiave su un dominio già configurato, USARE "Avvia rotazione chiave".
+                    if (generateBtn) {
+                        generateBtn.style.display = 'none';
+                        generateBtn.disabled = true;
+                    }
+                } else {
+                    status.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>DKIM non configurato per questo dominio.<br><small class="text-muted">Clicca "Genera Chiavi DKIM" per il setup iniziale.</small></div>';
+                    if (rotateBtn) rotateBtn.disabled = true;
+                    if (verifyBtn) verifyBtn.disabled = true;
+                    // DKIM mai configurato: SOLO ora il "Genera Chiavi DKIM" ha senso (setup iniziale)
+                    if (generateBtn) {
+                        generateBtn.style.display = '';
+                        generateBtn.disabled = false;
+                    }
+                    // Nascondi anche i box timeline se non c'è DKIM
+                    const tl = document.getElementById('dkimRotationTimeline');
+                    if (tl) tl.classList.add('d-none');
+                }
+                const vr = document.getElementById('dkimVerifyResult'); if (vr) vr.innerHTML = '';
+                loadDkimRotationStatus(domainId);
+                loadDkimHistory(domainId);
+                loadDkimSchedule(domainId);
+            });
+        }
+
+        // ===== Rotazione programmata =====
+        let dkimSchedulePresets = [];
+
+        // Parsing tollerante per timestamp del server.
+        // Numero (epoch ms) → unambiguo, preferito quando disponibile.
+        // ISO 8601 con Z o offset → parsato come UTC.
+        // Fallback legacy "yyyy-MM-dd HH:mm:ss" senza TZ → assunto ora locale.
+        function parseTs(s) {
+            if (s == null || s === '') return null;
+            // Numero o stringa numerica = epoch milliseconds
+            if (typeof s === 'number') {
+                const d = new Date(s);
+                return isNaN(d.getTime()) ? null : d;
+            }
+            const v = String(s);
+            if (/^\\d{10,}$/.test(v)) {
+                const d = new Date(parseInt(v));
+                return isNaN(d.getTime()) ? null : d;
+            }
+            if (/T.*([Zz]|[+\\-]\\d{2}:?\\d{2})$/.test(v)) {
+                const d = new Date(v);
+                return isNaN(d.getTime()) ? null : d;
+            }
+            const norm = v.replace(' ', 'T').replace(/\\.\\d+$/, '');
+            const d = new Date(norm);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        // Wrapper: preferisce data._ms (epoch) se presente, altrimenti data[key].
+        // Uso: pickTs(data, 'last_rotation_at') → cerca data.last_rotation_at_ms, poi data.last_rotation_at.
+        function pickTs(obj, key) {
+            if (!obj) return null;
+            const ms = obj[key + '_ms'];
+            if (ms != null && ms !== '') return parseTs(ms);
+            return parseTs(obj[key]);
+        }
+
+        // Formatta tempo relativo: "3 ore fa", "tra 27 giorni", ecc.
+        function formatRelativeTime(date) {
+            if (!date) return '';
+            const ms = date.getTime() - Date.now();
+            const past = ms < 0;
+            const abs = Math.abs(ms);
+            const sec = Math.floor(abs / 1000);
+            const min = Math.floor(sec / 60);
+            const hr  = Math.floor(min / 60);
+            const day = Math.floor(hr / 24);
+            const mon = Math.floor(day / 30);
+            const yr  = Math.floor(day / 365);
+            let val, unit;
+            if (yr > 0)        { val = yr;  unit = (yr === 1 ? 'anno' : 'anni'); }
+            else if (mon > 0)  { val = mon; unit = (mon === 1 ? 'mese' : 'mesi'); }
+            else if (day > 0)  { val = day; unit = (day === 1 ? 'giorno' : 'giorni'); }
+            else if (hr  > 0)  { val = hr;  unit = (hr === 1 ? 'ora' : 'ore'); }
+            else if (min > 0)  { val = min; unit = (min === 1 ? 'minuto' : 'minuti'); }
+            else               { val = sec; unit = (sec === 1 ? 'secondo' : 'secondi'); }
+            if (sec < 5 && !past) return 'tra pochi secondi';
+            if (sec < 5 && past)  return 'pochi secondi fa';
+            return past ? (val + ' ' + unit + ' fa') : ('tra ' + val + ' ' + unit);
+        }
+
+        // Formatta data assoluta in italiano: "15 mag 2026 16:08"
+        function formatItalianDate(date) {
+            if (!date) return '';
+            const months = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mm = months[date.getMonth()];
+            const yyyy = date.getFullYear();
+            const hh = String(date.getHours()).padStart(2, '0');
+            const mi = String(date.getMinutes()).padStart(2, '0');
+            return dd + ' ' + mm + ' ' + yyyy + ' ' + hh + ':' + mi;
+        }
+
+        // Aggiorna i due box prominenti "Ultima/Prossima rotazione"
+        function renderRotationTimeline(data, hasDkim) {
+            const wrap = document.getElementById('dkimRotationTimeline');
+            const lastEl = document.getElementById('dkimLastRotationText');
+            const nextEl = document.getElementById('dkimNextRotationText');
+            if (!hasDkim) {
+                wrap.classList.add('d-none');
+                return;
+            }
+            wrap.classList.remove('d-none');
+
+            // DIAGNOSTICA: confronta clock server vs browser. Skew > 5 min = problema reale.
+            if (data.server_now_ms) {
+                const skewMs = data.server_now_ms - Date.now();
+                if (Math.abs(skewMs) > 5 * 60 * 1000) {
+                    const skewMin = Math.round(skewMs / 60000);
+                    const sign = skewMin > 0 ? 'avanti' : 'indietro';
+                    console.warn('[DKIM] Server clock skew: ' + skewMin + ' min ' + sign + ' rispetto al browser');
+                }
+            }
+
+            // Ultima rotazione: il "now" di riferimento è il SERVER (server_now_ms se disponibile),
+            // non il browser. Questo evita che skew di clock tra server e browser facciano
+            // sembrare la rotazione "nel futuro".
+            const referenceNowMs = data.server_now_ms || Date.now();
+            const lastTs = pickTs(data, 'last_rotation_at');
+            if (lastTs) {
+                const deltaMs = lastTs.getTime() - referenceNowMs;
+                let relText;
+                let showFixButtons = false;
+                if (deltaMs > 0 && deltaMs < 60 * 1000) {
+                    relText = 'appena adesso';
+                } else if (deltaMs > 0) {
+                    const minAhead = Math.round(deltaMs / 60000);
+                    relText = '<span class="text-warning" title="Il timestamp risulta ' + minAhead + ' minuti nel futuro rispetto al clock del server. È un valore fossile salvato prima del fix timezone — usa i bottoni per correggerlo.">incongruenza dati ⚠ (+' + minAhead + ' min)</span>';
+                    showFixButtons = true;
+                } else {
+                    const fakeDate = new Date(lastTs.getTime() - (Date.now() - referenceNowMs));
+                    relText = formatRelativeTime(fakeDate);
+                }
+                let html = '<strong>' + formatItalianDate(lastTs) + '</strong>' +
+                    '<div class="small text-muted">' + relText + '</div>';
+                if (showFixButtons) {
+                    html += '<div class="mt-2 d-flex gap-1 flex-wrap">';
+                    html += '<button class="btn btn-sm btn-outline-warning" onclick="resetLastRotationTimestamp()" title="Imposta il timestamp \\'ultima rotazione\\' a ora"><i class="fas fa-sync-alt me-1"></i>Reset a ora</button>';
+                    html += '<button class="btn btn-sm btn-outline-secondary" onclick="clearLastRotationTimestamp()" title="Cancella il timestamp (mostra \\'Mai effettuata\\')"><i class="fas fa-eraser me-1"></i>Cancella</button>';
+                    html += '</div>';
+                }
+                lastEl.innerHTML = html;
+            } else {
+                lastEl.innerHTML = '<span class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Mai effettuata</span>' +
+                    '<div class="small text-muted">Nessuna rotazione registrata per questo dominio</div>';
+            }
+
+            // Prossima rotazione (calcolata se schedule attivo)
+            const nextTs = pickTs(data, 'next_rotation_at');
+            const interval = data.interval_days || 0;
+            if (interval === 0) {
+                nextEl.innerHTML = '<span class="text-muted"><i class="fas fa-pause-circle me-1"></i>Non programmata</span>' +
+                    '<div class="small text-muted">La rotazione automatica è disattivata. Avviala manualmente quando vuoi.</div>';
+            } else if (nextTs) {
+                const isOverdue = nextTs.getTime() <= Date.now();
+                const badge = isOverdue
+                    ? '<span class="badge bg-danger ms-1">in ritardo</span>'
+                    : '';
+                nextEl.innerHTML = '<strong>' + formatItalianDate(nextTs) + '</strong> ' + badge +
+                    '<div class="small text-muted">' + formatRelativeTime(nextTs) + ' (ogni ' + interval + ' giorni)</div>';
+            } else {
+                nextEl.innerHTML = '<strong>Al prossimo check</strong> <span class="badge bg-warning text-dark ms-1">subito</span>' +
+                    '<div class="small text-muted">Schedule attivo ogni ' + interval + ' giorni, ma nessuna rotazione ancora registrata.</div>';
+            }
+        }
+
+        function loadDkimSchedule(domainId) {
+            const panel = document.getElementById('dkimSchedulePanel');
+            const info = document.getElementById('dkimScheduleInfo');
+            panel.classList.remove('d-none');
+            info.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Caricamento...';
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'schedule_get', domain_id: parseInt(domainId) })
+            }).then(r => r.json()).then(data => {
+                if (!data.success) {
+                    info.innerHTML = '<span class="text-danger">' + escapeHtmlBl(data.error || 'errore') + '</span>';
+                    return;
+                }
+                // Aggiorna i due box prominenti
+                renderRotationTimeline(data, true);
+                dkimSchedulePresets = data.presets || [];
+                const cur = data.interval_days || 0;
+                // Popola la dropdown con i preset + l'opzione "Custom"
+                const sel = document.getElementById('dkimSchedulePreset');
+                let optionsHtml = '';
+                let matched = false;
+                dkimSchedulePresets.forEach(p => {
+                    const isSel = (p.days === cur);
+                    if (isSel) matched = true;
+                    optionsHtml += '<option value="' + p.days + '"' + (isSel ? ' selected' : '') + '>' + escapeHtmlBl(p.label) + (p.days > 0 ? ' (' + p.days + ' giorni)' : '') + '</option>';
+                });
+                // Custom: se cur > 0 ma non corrisponde a nessun preset, selezioniamo custom
+                optionsHtml += '<option value="custom"' + (!matched && cur > 0 ? ' selected' : '') + '>Custom (giorni specifici)</option>';
+                sel.innerHTML = optionsHtml;
+                // Mostra/nascondi campo custom
+                if (!matched && cur > 0) {
+                    document.getElementById('dkimScheduleCustomWrap').style.display = '';
+                    document.getElementById('dkimScheduleCustomDays').value = cur;
+                } else {
+                    document.getElementById('dkimScheduleCustomWrap').style.display = 'none';
+                    document.getElementById('dkimScheduleCustomDays').value = '';
+                }
+                // Riepilogo testuale
+                let html = '';
+                if (cur === 0) {
+                    html = '<span class="text-muted"><i class="fas fa-info-circle me-1"></i>Rotazione automatica programmata: <strong>disattivata</strong>. Devi avviare la rotazione manualmente quando vuoi.</span>';
+                } else {
+                    html = '<i class="fas fa-clock text-primary me-1"></i>Rotazione automatica ogni <strong>' + cur + ' giorni</strong>. ';
+                    if (data.last_rotation_at) {
+                        html += 'Ultima rotazione: <strong>' + escapeHtmlBl(data.last_rotation_at) + '</strong>. ';
+                    } else {
+                        html += '<span class="text-warning">Nessuna rotazione ancora effettuata.</span> ';
+                    }
+                    if (data.next_rotation_at) {
+                        html += 'Prossima rotazione prevista: <strong>' + escapeHtmlBl(data.next_rotation_at) + '</strong>.';
+                    }
+                    if (!cloudflareConfigured) {
+                        html += '<br><span class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i><strong>Attenzione:</strong> per attivare lo schedule in automatico è necessario un account Cloudflare assegnato a questo dominio. Senza CF, lo schedule resta inattivo.</span>';
+                    } else {
+                        html += '<br><small class="text-muted">Lo scheduler creerà la nuova chiave, pubblicherà il record TXT, attenderà ' + (data.auto_activate_after_hours || 24) + 'h di propagazione, attiverà la firma, poi dopo ' + (data.grace_period_days || 7) + ' giorni di grace period rimuoverà la vecchia chiave. Tutto automatico.</small>';
+                    }
+                }
+                info.innerHTML = html;
+            }).catch(e => {
+                info.innerHTML = '<span class="text-danger">Errore rete: ' + e.message + '</span>';
+            });
+        }
+
+        function onSchedulePresetChange() {
+            const sel = document.getElementById('dkimSchedulePreset');
+            const wrap = document.getElementById('dkimScheduleCustomWrap');
+            if (sel.value === 'custom') {
+                wrap.style.display = '';
+            } else {
+                wrap.style.display = 'none';
+            }
+        }
+
+        function resetLastRotationTimestamp() {
+            if (!currentDomainId) return;
+            if (!confirm('Resettare il timestamp \\'ultima rotazione\\' a ora?\\n\\nUsa questa funzione se il valore mostrato è un fossile dovuto a timezone MySQL sbagliata (prima del fix). Il nuovo timestamp userà il clock corrente del JVM Java.')) return;
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'last_rotation_reset', domain_id: parseInt(currentDomainId) })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                if (data.success) loadDkimSchedule(currentDomainId);
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function clearLastRotationTimestamp() {
+            if (!currentDomainId) return;
+            if (!confirm('Cancellare il timestamp \\'ultima rotazione\\'?\\n\\nIl campo verrà impostato a NULL e l\\'UI mostrerà \\'Mai effettuata\\'. La prossima rotazione lo ripopolerà con il valore corretto.')) return;
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'last_rotation_clear', domain_id: parseInt(currentDomainId) })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                if (data.success) loadDkimSchedule(currentDomainId);
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function saveDkimSchedule() {
+            if (!currentDomainId) { alert('Seleziona un dominio'); return; }
+            const sel = document.getElementById('dkimSchedulePreset');
+            let days;
+            if (sel.value === 'custom') {
+                const v = parseInt(document.getElementById('dkimScheduleCustomDays').value);
+                if (isNaN(v) || v < 1 || v > 3650) {
+                    alert('Inserisci un numero di giorni tra 1 e 3650');
+                    return;
+                }
+                days = v;
+            } else {
+                days = parseInt(sel.value);
+            }
+            fetch('/api/dkim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'schedule_set', domain_id: parseInt(currentDomainId), interval_days: days })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                if (data.success) {
+                    loadDkimSchedule(currentDomainId);
+                    loadDkimHistory(currentDomainId);
+                }
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+""" + getDnsJsPart3() + getDnsJsPart2() + getLogoutScript() + """
     </script>
 </body>
 </html>
@@ -4100,6 +6787,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         </div>
                     </div>
 
+""" + getChangeUsernameCard() + getVaultManagementCard() + """
                     <!-- Passkeys Section -->
                     <div class="card mb-4">
                         <div class="card-header">
@@ -4604,42 +7292,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             a.click();
         }
 
-        function changePassword() {
-            const current = document.getElementById('currentPassword').value;
-            const newPass = document.getElementById('newPassword').value;
-            const confirm = document.getElementById('confirmNewPassword').value;
-
-            if (!current || !newPass) {
-                alert('Compila tutti i campi');
-                return;
-            }
-            if (newPass.length < 8) {
-                alert('La nuova password deve essere di almeno 8 caratteri');
-                return;
-            }
-            if (newPass !== confirm) {
-                alert('Le password non corrispondono');
-                return;
-            }
-
-            fetch('/api/admins', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'change_password', current_password: current, new_password: newPass })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Password cambiata con successo');
-                    document.getElementById('currentPassword').value = '';
-                    document.getElementById('newPassword').value = '';
-                    document.getElementById('confirmNewPassword').value = '';
-                } else {
-                    alert(data.error || 'Errore nel cambio password');
-                }
-            });
-        }
-
+""" + getSettingsAuthJs() + """
         // ========== PASSKEY FUNCTIONS ==========
 
         function loadPasskeys() {
@@ -5620,7 +8273,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         [data-theme="dark"] .form-text, [data-theme="dark"] .form-text.small { color: #adb5bd !important; }
         [data-theme="dark"] small.text-muted, [data-theme="dark"] .text-muted small, [data-theme="dark"] .small.text-muted { color: #adb5bd !important; }
         """;
-        return getHead("Sicurezza", extraStyles) + getNavbar("") + """
+        // NOTA: Java fa constant folding sui text block adiacenti — questo crea
+        // un UNICO string literal nel constant pool. Limite: 65535 byte UTF-8.
+        // Spezziamo in variabili locali per non superare il limite:
+        String htmlPart1 = """
     <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
     <div class="content container mt-4">
         <div class="content-container">
@@ -5656,6 +8312,37 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
+            <!-- Unbound (resolver DNS locale) Health Check -->
+            <div class="card mb-4 border-info">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="fas fa-network-wired me-2"></i><strong>Resolver DNS locale (unbound)</strong> <small class="ms-2" id="ubOverallStatus"></small></span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-light" id="btnUbTestQuery" onclick="runUbTestQuery()" title="Esegue dig di test verso unbound + verifica Spamhaus">
+                            <i class="fas fa-vial me-1"></i>Test query
+                        </button>
+                        <button class="btn btn-sm btn-warning d-none" id="btnUbFixAll" onclick="runUbFixAll()">
+                            <i class="fas fa-magic me-1"></i>Risolvi tutto
+                        </button>
+                        <button class="btn btn-sm btn-light" onclick="loadUnboundHealth()">
+                            <i class="fas fa-sync me-1"></i>Ricontrolla
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="ubContainer">
+                    <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>
+                </div>
+                <div class="card-body border-top d-none" id="ubTestResult">
+                    <h6 class="mb-2"><i class="fas fa-vial me-1"></i>Risultato Test Query</h6>
+                    <pre id="ubTestBody" class="small mb-0" style="white-space:pre-wrap"></pre>
+                </div>
+                <div class="card-body border-top d-none" id="ubFixAllReport">
+                    <h6 class="mb-2"><i class="fas fa-list-check me-1"></i>Report risoluzione</h6>
+                    <div id="ubFixAllSteps"></div>
+                </div>
+            </div>
+
+""";
+        String htmlPart2 = """
             <!-- ClamAV Health Check -->
             <div class="card mb-4 border-success">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -6361,6 +9048,155 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         // ===== End Health Check =====
+""";
+        String jsPart2 = """
+
+        // ===== Unbound (Resolver DNS locale) Health Check =====
+        function loadUnboundHealth() {
+            const c = document.getElementById('ubContainer');
+            const overall = document.getElementById('ubOverallStatus');
+            const btnFixAll = document.getElementById('btnUbFixAll');
+            c.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>';
+            fetch('/api/unbound_health', { method: 'GET' }).then(r => r.json()).then(data => {
+                if (!data.success) {
+                    c.innerHTML = '<div class="alert alert-danger mb-0">Errore: ' + (data.error || 'sconosciuto') + '</div>';
+                    return;
+                }
+                if (data.all_ok) {
+                    overall.innerHTML = '<span class="badge bg-success">Tutto OK</span>';
+                    if (btnFixAll) btnFixAll.classList.add('d-none');
+                } else {
+                    overall.innerHTML = '<span class="badge bg-warning text-dark">Azione richiesta</span>';
+                    if (btnFixAll) btnFixAll.classList.remove('d-none');
+                }
+                let html = '<div class="list-group list-group-flush">';
+                (data.checks || []).forEach(chk => {
+                    const icon = chk.ok ? '<i class="fas fa-check-circle text-success"></i>' : '<i class="fas fa-times-circle text-danger"></i>';
+                    html += '<div class="list-group-item">';
+                    html += '<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">';
+                    html += '<div class="flex-grow-1">';
+                    html += '<div><strong>' + icon + ' ' + escapeHtmlUb(chk.label) + '</strong></div>';
+                    html += '<div class="small text-muted">' + escapeHtmlUb(chk.status || '') + '</div>';
+                    if (!chk.ok && chk.impact) html += '<div class="small text-danger mt-1"><i class="fas fa-exclamation-triangle me-1"></i>Se non lo risolvi: ' + escapeHtmlUb(chk.impact) + '</div>';
+                    if (!chk.ok && chk.fix_description) html += '<div class="small text-info mt-1"><i class="fas fa-magic me-1"></i>' + escapeHtmlUb(chk.fix_description) + '</div>';
+                    html += '</div>';
+                    if (!chk.ok && chk.fix_action) {
+                        html += '<button class="btn btn-warning btn-sm" onclick="runUbFix(\\'' + chk.fix_action + '\\', this)">';
+                        html += '<i class="fas fa-wrench me-1"></i>Risolvi';
+                        html += '</button>';
+                    }
+                    html += '</div></div>';
+                });
+                html += '</div>';
+                if (data.all_ok) html += '<div class="alert alert-success mb-0 mt-3 py-2"><i class="fas fa-shield-alt me-2"></i>Resolver locale operativo. Le query DNSBL (Spamhaus, ecc.) ora vengono risolte correttamente.</div>';
+                c.innerHTML = html;
+            }).catch(e => {
+                c.innerHTML = '<div class="alert alert-danger mb-0">Errore rete: ' + e.message + '</div>';
+            });
+        }
+
+        function runUbFix(action, btn) {
+            const warning = (action === 'switch_resolv_conf')
+                ? '\\n\\n⚠️ Questo passo modifica /etc/resolv.conf. Il pannello fa pre-flight test e rollback automatico se qualcosa va storto, ma è raccomandato avere accesso console al server come backup.'
+                : '';
+            if (!confirm('Applicare la correzione?' + warning)) return;
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>In corso...';
+            fetch('/api/unbound_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action, csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                if (data.success) loadUnboundHealth();
+                else alert('Errore: ' + (data.message || data.error || 'sconosciuto') + (data.output ? '\\n\\n' + data.output : ''));
+                loadUnboundHealth();
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        function runUbFixAll() {
+            const msg = '🪄 Risolvi tutto unbound — esegue in ordine:\\n' +
+                '1. Installa unbound (se manca)\\n' +
+                '2. Scrive config sicura (solo loopback)\\n' +
+                '3. Abilita al boot\\n' +
+                '4. Avvia il servizio\\n' +
+                '5. Switcha /etc/resolv.conf su 127.0.0.1\\n\\n' +
+                'Step 5 ha PRE-FLIGHT test + AUTO-ROLLBACK in caso di problemi.\\n' +
+                'Però è sempre raccomandato avere accesso console al server.\\n\\n' +
+                'Procedo?';
+            if (!confirm(msg)) return;
+
+            const btn = document.getElementById('btnUbFixAll');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>In corso (può richiedere 1-2 min)...';
+
+            fetch('/api/unbound_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'fix_all', csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                const report = document.getElementById('ubFixAllReport');
+                const stepsEl = document.getElementById('ubFixAllSteps');
+                let html = '';
+                (data.steps || []).forEach(s => {
+                    let icon, badge;
+                    if (s.status === 'skipped') { icon = '<i class="fas fa-forward text-secondary"></i>'; badge = '<span class="badge bg-secondary">SKIP</span>'; }
+                    else if (s.success) { icon = '<i class="fas fa-check-circle text-success"></i>'; badge = '<span class="badge bg-success">OK</span>'; }
+                    else { icon = '<i class="fas fa-times-circle text-danger"></i>'; badge = '<span class="badge bg-danger">FAIL</span>'; }
+                    html += '<div class="d-flex align-items-start gap-2 mb-2">' + icon +
+                        '<div class="flex-grow-1"><div>' + badge + ' <strong>' + escapeHtmlUb(s.label) + '</strong></div>';
+                    if (s.message) html += '<div class="small text-muted">' + escapeHtmlUb(s.message) + '</div>';
+                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>Output</summary><pre class="mb-0 mt-1" style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtmlUb(s.output) + '</pre></details>';
+                    html += '</div></div>';
+                });
+                stepsEl.innerHTML = html;
+                report.classList.remove('d-none');
+                loadUnboundHealth();
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        function runUbTestQuery() {
+            const btn = document.getElementById('btnUbTestQuery');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Test...';
+            fetch('/api/unbound_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'test_query', csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                const resultEl = document.getElementById('ubTestResult');
+                const bodyEl = document.getElementById('ubTestBody');
+                bodyEl.textContent = data.message || JSON.stringify(data);
+                bodyEl.className = 'small mb-0' + (data.success ? ' text-success' : ' text-warning');
+                resultEl.classList.remove('d-none');
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Errore rete: ' + e.message);
+            });
+        }
+
+        function escapeHtmlUb(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
 
         // ===== ClamAV Health Check =====
         function loadClamavHealth() {
@@ -6658,6 +9494,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         loadJailConfig();
         loadFail2banHealth();
         loadClamavHealth();
+        loadUnboundHealth();
         permabanList();
         // Auto-refresh every minute
         setInterval(loadStatus, 60000);
@@ -6667,6 +9504,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 </body>
 </html>
 """;
+        return getHead("Sicurezza", extraStyles) + getNavbar("") + htmlPart1 + htmlPart2 + jsPart2;
     }
 
     // ============== STATISTICS.HTML ==============

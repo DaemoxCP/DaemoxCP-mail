@@ -276,7 +276,61 @@ public class MailDatabase {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 dkim_selector VARCHAR(50) DEFAULT 'mail',
                 dkim_private_key TEXT,
-                dkim_public_key TEXT
+                dkim_public_key TEXT,
+                -- DKIM rotation (selector "pending" mentre la chiave attuale resta in dkim_*)
+                dkim_pending_selector VARCHAR(50) NULL,
+                dkim_pending_private_key TEXT NULL,
+                dkim_pending_public_key TEXT NULL,
+                dkim_rotation_state VARCHAR(32) NULL,           -- 'pending_dns', 'propagated', 'active_grace', 'completed'
+                dkim_rotation_started_at TIMESTAMP NULL,
+                dkim_rotation_activated_at TIMESTAMP NULL,
+                -- Vecchia chiave conservata durante il grace period (per validare mail in transito)
+                dkim_previous_selector VARCHAR(50) NULL,
+                dkim_previous_private_key TEXT NULL,
+                dkim_previous_public_key TEXT NULL,
+                -- Cloudflare automation (zona DNS e id dei record TXT creati via API)
+                dkim_dns_zone_id VARCHAR(64) NULL,
+                dkim_pending_dns_record_id VARCHAR(64) NULL,
+                dkim_previous_dns_record_id VARCHAR(64) NULL,
+                -- Account Cloudflare assegnato (NULL = nessuno, rotazione manuale)
+                cloudflare_account_id INT NULL,
+                -- Rotazione programmata: ogni quanti giorni rigenerare la chiave (0 = off)
+                dkim_rotation_interval_days INT NOT NULL DEFAULT 0,
+                -- Timestamp ultima rotazione completata con successo (set al key_activated)
+                dkim_last_rotation_at TIMESTAMP NULL,
+                -- Modalità della rotazione corrente ("automatic"/"manual"), ereditata da tutti gli eventi della catena
+                dkim_rotation_mode VARCHAR(16) NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """;
+
+        // Cloudflare accounts table (un account = un token + label informativa)
+        String createCfAccounts = """
+            CREATE TABLE IF NOT EXISTS cloudflare_accounts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                label VARCHAR(100) NOT NULL,
+                email VARCHAR(255) NULL,
+                api_token TEXT NOT NULL,
+                verified_at TIMESTAMP NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """;
+
+        // DKIM rotation history (audit log: ogni evento del workflow viene registrato)
+        String createDkimHistory = """
+            CREATE TABLE IF NOT EXISTS dkim_rotation_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                domain_id INT NOT NULL,
+                domain VARCHAR(255) NOT NULL,
+                event_type VARCHAR(32) NOT NULL,
+                selector VARCHAR(50) NULL,
+                mode VARCHAR(16) NULL,
+                triggered_by VARCHAR(16) NULL,
+                cloudflare_account_id INT NULL,
+                cloudflare_account_label VARCHAR(100) NULL,
+                success BOOLEAN DEFAULT TRUE,
+                message TEXT NULL,
+                occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_domain_time (domain_id, occurred_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """;
 
@@ -289,6 +343,8 @@ public class MailDatabase {
                 domain_id INT NOT NULL,
                 email VARCHAR(255) NOT NULL UNIQUE,
                 password VARCHAR(255) NOT NULL,
+                password_encrypted TEXT NULL,
+                password_encrypted_at TIMESTAMP NULL,
                 name VARCHAR(255),
                 quota_mb INT DEFAULT 1024,
                 active BOOLEAN DEFAULT TRUE,
@@ -454,6 +510,8 @@ public class MailDatabase {
             stmt.execute(createPanelAdmin);
             stmt.execute(createSettings);
             stmt.execute(createComponents);
+            stmt.execute(createCfAccounts);
+            stmt.execute(createDkimHistory);
             stmt.execute(createDomains);
             stmt.execute(createMailboxes);
             stmt.execute(createAliases);
@@ -581,6 +639,39 @@ public class MailDatabase {
         }
     }
 
+    /** Verifica se uno username è già in uso (case-insensitive per sicurezza). */
+    public boolean adminUsernameExists(String username) {
+        String sql = "SELECT 1 FROM panel_admin WHERE LOWER(username) = LOWER(?) LIMIT 1";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, username);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to check username existence: " + e.getMessage());
+            // Conservative: in caso di errore restituiamo true per bloccare l'update
+            return true;
+        }
+    }
+
+    /**
+     * Aggiorna lo username di un admin (per ID).
+     * Lo username è UNIQUE in tabella, quindi va verificata la unicità prima della chiamata
+     * (altrimenti la UPDATE fallisce con SQLException duplicate key).
+     * Ritorna true se l'update è andato a buon fine, false altrimenti.
+     */
+    public boolean updateAdminUsername(int adminId, String newUsername) {
+        String sql = "UPDATE panel_admin SET username = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, newUsername);
+            stmt.setInt(2, adminId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Failed to update username: " + e.getMessage());
+            return false;
+        }
+    }
+
     /**
      * Check if any admin exists
      */
@@ -632,6 +723,272 @@ public class MailDatabase {
             System.err.println("Error setting theme: " + e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Ensure DKIM rotation columns exist in domains table (for database migration).
+     * Aggiunge in modo idempotente i campi dkim_pending_*, dkim_previous_*,
+     * dkim_rotation_state, dkim_rotation_started_at, dkim_rotation_activated_at.
+     */
+    public void ensureDkimRotationColumns() {
+        String[][] cols = {
+            {"dkim_pending_selector",       "VARCHAR(50) NULL"},
+            {"dkim_pending_private_key",    "TEXT NULL"},
+            {"dkim_pending_public_key",     "TEXT NULL"},
+            {"dkim_rotation_state",         "VARCHAR(32) NULL"},
+            {"dkim_rotation_started_at",    "TIMESTAMP NULL"},
+            {"dkim_rotation_activated_at",  "TIMESTAMP NULL"},
+            {"dkim_previous_selector",      "VARCHAR(50) NULL"},
+            {"dkim_previous_private_key",   "TEXT NULL"},
+            {"dkim_previous_public_key",    "TEXT NULL"},
+            // Cloudflare automation: zone + ID dei record TXT, per cancellarli
+            {"dkim_dns_zone_id",            "VARCHAR(64) NULL"},
+            {"dkim_pending_dns_record_id", "VARCHAR(64) NULL"},
+            {"dkim_previous_dns_record_id","VARCHAR(64) NULL"},
+            // Rotazione programmata
+            {"dkim_rotation_interval_days","INT NOT NULL DEFAULT 0"},
+            {"dkim_last_rotation_at",      "TIMESTAMP NULL"},
+            // Modalità rotazione (ereditata da tutti gli eventi della catena)
+            {"dkim_rotation_mode",         "VARCHAR(16) NULL"}
+        };
+        try (Statement stmt = getConnection().createStatement()) {
+            for (String[] col : cols) {
+                String name = col[0];
+                String type = col[1];
+                ResultSet rs = stmt.executeQuery(
+                    "SELECT COUNT(*) FROM information_schema.columns " +
+                    "WHERE table_schema = DATABASE() AND table_name = 'domains' AND column_name = '" + name + "'"
+                );
+                if (rs.next() && rs.getInt(1) == 0) {
+                    stmt.executeUpdate("ALTER TABLE domains ADD COLUMN " + name + " " + type);
+                    System.out.println("Added " + name + " column to domains table");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error ensuring DKIM rotation columns: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Ensure cloudflare_accounts table + domains.cloudflare_account_id column exist.
+     * Migra anche il token legacy (panel_settings.cloudflare_api_token) creando un
+     * account "Account principale" e legandolo a tutti i domini esistenti.
+     */
+    public void ensureCloudflareAccountsSchema() {
+        try (Statement stmt = getConnection().createStatement()) {
+            // 1) tabella cloudflare_accounts
+            stmt.execute("CREATE TABLE IF NOT EXISTS cloudflare_accounts (" +
+                "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                "label VARCHAR(100) NOT NULL, " +
+                "email VARCHAR(255) NULL, " +
+                "api_token TEXT NOT NULL, " +
+                "verified_at TIMESTAMP NULL, " +
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // 2) colonna domains.cloudflare_account_id
+            ResultSet rs = stmt.executeQuery(
+                "SELECT COUNT(*) FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'domains' AND column_name = 'cloudflare_account_id'"
+            );
+            if (rs.next() && rs.getInt(1) == 0) {
+                stmt.executeUpdate("ALTER TABLE domains ADD COLUMN cloudflare_account_id INT NULL");
+                System.out.println("Added cloudflare_account_id column to domains table");
+            }
+
+            // 3) migrazione token legacy
+            String legacyToken = getSetting("cloudflare_api_token", "");
+            String legacyEnabled = getSetting("cloudflare_enabled", "0");
+            if (!legacyToken.isEmpty() && "1".equals(legacyEnabled)) {
+                // Verifica che non ci siano già account: se la tabella è vuota, importa
+                ResultSet cnt = stmt.executeQuery("SELECT COUNT(*) FROM cloudflare_accounts");
+                if (cnt.next() && cnt.getInt(1) == 0) {
+                    try (PreparedStatement ins = getConnection().prepareStatement(
+                        "INSERT INTO cloudflare_accounts (label, email, api_token, verified_at) VALUES (?, NULL, ?, CURRENT_TIMESTAMP)",
+                        Statement.RETURN_GENERATED_KEYS)) {
+                        ins.setString(1, "Account principale");
+                        ins.setString(2, legacyToken);
+                        ins.executeUpdate();
+                        ResultSet gk = ins.getGeneratedKeys();
+                        if (gk.next()) {
+                            int newId = gk.getInt(1);
+                            // Lega tutti i domini esistenti a questo account (preserva il comportamento)
+                            try (PreparedStatement upd = getConnection().prepareStatement(
+                                "UPDATE domains SET cloudflare_account_id = ? WHERE cloudflare_account_id IS NULL")) {
+                                upd.setInt(1, newId);
+                                int affected = upd.executeUpdate();
+                                System.out.println("Migrated legacy Cloudflare token to account '" + newId
+                                    + "', assigned to " + affected + " domain(s)");
+                            }
+                        }
+                    }
+                    // Cancella il settings legacy così non viene più riusato
+                    deleteSetting("cloudflare_api_token");
+                    deleteSetting("cloudflare_enabled");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error ensuring cloudflare accounts schema: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Ensure dkim_rotation_history table exists (idempotente).
+     */
+    public void ensureDkimRotationHistoryTable() {
+        try (Statement stmt = getConnection().createStatement()) {
+            stmt.execute("CREATE TABLE IF NOT EXISTS dkim_rotation_history (" +
+                "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                "domain_id INT NOT NULL, " +
+                "domain VARCHAR(255) NOT NULL, " +
+                "event_type VARCHAR(32) NOT NULL, " +
+                "selector VARCHAR(50) NULL, " +
+                "previous_selector VARCHAR(50) NULL, " +
+                "mode VARCHAR(16) NULL, " +
+                "triggered_by VARCHAR(16) NULL, " +
+                "cloudflare_account_id INT NULL, " +
+                "cloudflare_account_label VARCHAR(100) NULL, " +
+                "success BOOLEAN DEFAULT TRUE, " +
+                "message TEXT NULL, " +
+                "occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+                "INDEX idx_domain_time (domain_id, occurred_at), " +
+                "INDEX idx_prev_selector (domain_id, previous_selector)" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            // Migrazione: aggiungi triggered_by se la tabella esiste già senza quel campo
+            ResultSet rs = stmt.executeQuery(
+                "SELECT COUNT(*) FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'dkim_rotation_history' AND column_name = 'triggered_by'"
+            );
+            if (rs.next() && rs.getInt(1) == 0) {
+                stmt.executeUpdate("ALTER TABLE dkim_rotation_history ADD COLUMN triggered_by VARCHAR(16) NULL AFTER mode");
+                System.out.println("Added triggered_by column to dkim_rotation_history table");
+            }
+            // Migrazione: aggiungi previous_selector se la tabella esiste già senza quel campo
+            ResultSet rs2 = stmt.executeQuery(
+                "SELECT COUNT(*) FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'dkim_rotation_history' AND column_name = 'previous_selector'"
+            );
+            if (rs2.next() && rs2.getInt(1) == 0) {
+                stmt.executeUpdate("ALTER TABLE dkim_rotation_history ADD COLUMN previous_selector VARCHAR(50) NULL AFTER selector");
+                stmt.executeUpdate("ALTER TABLE dkim_rotation_history ADD INDEX idx_prev_selector (domain_id, previous_selector)");
+                System.out.println("Added previous_selector column + index to dkim_rotation_history table");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error ensuring dkim_rotation_history table: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Registra un evento del workflow di rotazione DKIM.
+     * @param triggeredBy "user" se avviato cliccando un bottone, "scheduler" se dal timer automatico,
+     *                    null per eventi non avviati esplicitamente (verifiche, propagazione, ecc.)
+     */
+    public void logDkimRotationEvent(int domainId, String domain, String eventType,
+                                      String selector, String mode, String triggeredBy,
+                                      Integer cloudflareAccountId, String cloudflareAccountLabel,
+                                      boolean success, String message) {
+        logDkimRotationEvent(domainId, domain, eventType, selector, null, mode, triggeredBy,
+                             cloudflareAccountId, cloudflareAccountLabel, success, message);
+    }
+
+    public void logDkimRotationEvent(int domainId, String domain, String eventType,
+                                      String selector, String previousSelector,
+                                      String mode, String triggeredBy,
+                                      Integer cloudflareAccountId, String cloudflareAccountLabel,
+                                      boolean success, String message) {
+        String sql = "INSERT INTO dkim_rotation_history " +
+                     "(domain_id, domain, event_type, selector, previous_selector, mode, triggered_by, cloudflare_account_id, " +
+                     "cloudflare_account_label, success, message, occurred_at) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, domainId);
+            stmt.setString(2, domain == null ? "" : domain);
+            stmt.setString(3, eventType);
+            if (selector == null) stmt.setNull(4, Types.VARCHAR); else stmt.setString(4, selector);
+            if (previousSelector == null) stmt.setNull(5, Types.VARCHAR); else stmt.setString(5, previousSelector);
+            if (mode == null) stmt.setNull(6, Types.VARCHAR); else stmt.setString(6, mode);
+            if (triggeredBy == null) stmt.setNull(7, Types.VARCHAR); else stmt.setString(7, triggeredBy);
+            if (cloudflareAccountId == null) stmt.setNull(8, Types.INTEGER); else stmt.setInt(8, cloudflareAccountId);
+            if (cloudflareAccountLabel == null) stmt.setNull(9, Types.VARCHAR); else stmt.setString(9, cloudflareAccountLabel);
+            stmt.setBoolean(10, success);
+            if (message == null) stmt.setNull(11, Types.LONGVARCHAR); else stmt.setString(11, message);
+            stmt.setTimestamp(12, java.sql.Timestamp.from(java.time.Instant.now()));
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Failed to log DKIM rotation event: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Trova il timestamp più recente di disattivazione di un selector per un dominio.
+     * Un selector è considerato "disattivato" al momento di un evento key_activated dove
+     * compare come previous_selector (cioè quando una nuova chiave l'ha sostituito).
+     *
+     * Ritorna null se il selector non è mai stato registrato come disattivato (probabilmente
+     * non era mai stato il selector attivo nel pannello).
+     */
+    public Timestamp findSelectorDeactivationTime(int domainId, String selector) throws SQLException {
+        String sql = "SELECT occurred_at FROM dkim_rotation_history " +
+                     "WHERE domain_id = ? AND event_type = 'key_activated' AND previous_selector = ? " +
+                     "ORDER BY occurred_at DESC, id DESC LIMIT 1";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, domainId);
+            stmt.setString(2, selector);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) return rs.getTimestamp("occurred_at");
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Storico eventi di rotazione DKIM per un dominio, dal più recente.
+     */
+    public List<DkimRotationEvent> getDkimRotationHistory(int domainId, int limit) throws SQLException {
+        List<DkimRotationEvent> result = new ArrayList<>();
+        String sql = "SELECT * FROM dkim_rotation_history WHERE domain_id = ? " +
+                     "ORDER BY occurred_at DESC, id DESC LIMIT ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, domainId);
+            stmt.setInt(2, Math.max(1, Math.min(500, limit)));
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    DkimRotationEvent e = new DkimRotationEvent();
+                    e.id = rs.getInt("id");
+                    e.domainId = rs.getInt("domain_id");
+                    e.domain = rs.getString("domain");
+                    e.eventType = rs.getString("event_type");
+                    e.selector = rs.getString("selector");
+                    try { e.previousSelector = rs.getString("previous_selector"); } catch (SQLException ignore) {}
+                    e.mode = rs.getString("mode");
+                    try { e.triggeredBy = rs.getString("triggered_by"); } catch (SQLException ignore) {}
+                    int cfId = rs.getInt("cloudflare_account_id");
+                    e.cloudflareAccountId = rs.wasNull() ? 0 : cfId;
+                    e.cloudflareAccountLabel = rs.getString("cloudflare_account_label");
+                    e.success = rs.getBoolean("success");
+                    e.message = rs.getString("message");
+                    e.occurredAt = rs.getTimestamp("occurred_at");
+                    result.add(e);
+                }
+            }
+        }
+        return result;
+    }
+
+    public static class DkimRotationEvent {
+        public int id;
+        public int domainId;
+        public String domain;
+        public String eventType;
+        public String selector;
+        public String previousSelector;  // valorizzato per key_activated (vecchio selector che è stato rimpiazzato)
+        public String mode;
+        public String triggeredBy;   // "user" / "scheduler" / null
+        public int cloudflareAccountId;
+        public String cloudflareAccountLabel;
+        public boolean success;
+        public String message;
+        public Timestamp occurredAt;
     }
 
     /**
@@ -967,6 +1324,121 @@ public class MailDatabase {
         }
     }
 
+    // ========== CLOUDFLARE ACCOUNTS MANAGEMENT ==========
+
+    public int addCloudflareAccount(String label, String email, String apiToken) throws SQLException {
+        String sql = "INSERT INTO cloudflare_accounts (label, email, api_token, verified_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            stmt.setString(1, label);
+            if (email == null || email.isEmpty()) stmt.setNull(2, Types.VARCHAR); else stmt.setString(2, email);
+            stmt.setString(3, apiToken);
+            stmt.executeUpdate();
+            try (ResultSet rs = stmt.getGeneratedKeys()) {
+                if (rs.next()) return rs.getInt(1);
+            }
+        }
+        return -1;
+    }
+
+    public boolean updateCloudflareAccount(int id, String label, String email) throws SQLException {
+        String sql = "UPDATE cloudflare_accounts SET label = ?, email = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, label);
+            if (email == null || email.isEmpty()) stmt.setNull(2, Types.VARCHAR); else stmt.setString(2, email);
+            stmt.setInt(3, id);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    public boolean updateCloudflareAccountToken(int id, String newToken) throws SQLException {
+        String sql = "UPDATE cloudflare_accounts SET api_token = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, newToken);
+            stmt.setInt(2, id);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    public boolean deleteCloudflareAccount(int id) throws SQLException {
+        // Prima disassocia i domini, poi cancella l'account
+        try (PreparedStatement upd = getConnection().prepareStatement(
+            "UPDATE domains SET cloudflare_account_id = NULL WHERE cloudflare_account_id = ?")) {
+            upd.setInt(1, id);
+            upd.executeUpdate();
+        }
+        try (PreparedStatement stmt = getConnection().prepareStatement(
+            "DELETE FROM cloudflare_accounts WHERE id = ?")) {
+            stmt.setInt(1, id);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    public CloudflareAccount getCloudflareAccount(int id) throws SQLException {
+        String sql = "SELECT * FROM cloudflare_accounts WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, id);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) return mapCloudflareAccount(rs);
+            }
+        }
+        return null;
+    }
+
+    public List<CloudflareAccount> listCloudflareAccounts() throws SQLException {
+        List<CloudflareAccount> result = new ArrayList<>();
+        try (PreparedStatement stmt = getConnection().prepareStatement(
+            "SELECT * FROM cloudflare_accounts ORDER BY id ASC");
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) result.add(mapCloudflareAccount(rs));
+        }
+        return result;
+    }
+
+    /** Ritorna l'account CF assegnato a un dominio, o null. */
+    public CloudflareAccount getCloudflareAccountForDomain(int domainId) throws SQLException {
+        String sql = "SELECT c.* FROM cloudflare_accounts c " +
+                     "INNER JOIN domains d ON d.cloudflare_account_id = c.id " +
+                     "WHERE d.id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, domainId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) return mapCloudflareAccount(rs);
+            }
+        }
+        return null;
+    }
+
+    /** Assegna (o disassegna passando 0/-1) un account a un dominio. */
+    public boolean assignCloudflareAccountToDomain(int domainId, int accountId) throws SQLException {
+        String sql = "UPDATE domains SET cloudflare_account_id = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            if (accountId <= 0) stmt.setNull(1, Types.INTEGER);
+            else                stmt.setInt(1, accountId);
+            stmt.setInt(2, domainId);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    private CloudflareAccount mapCloudflareAccount(ResultSet rs) throws SQLException {
+        CloudflareAccount a = new CloudflareAccount();
+        a.id = rs.getInt("id");
+        a.label = rs.getString("label");
+        a.email = rs.getString("email");
+        a.apiToken = rs.getString("api_token");
+        a.verifiedAt = rs.getTimestamp("verified_at");
+        a.createdAt = rs.getTimestamp("created_at");
+        return a;
+    }
+
+    public static class CloudflareAccount {
+        public int id;
+        public String label;
+        public String email;
+        public String apiToken;
+        public Timestamp verifiedAt;
+        public Timestamp createdAt;
+    }
+
     // ========== COMPONENT MANAGEMENT ==========
 
     public boolean isComponentInstalled(String componentName) {
@@ -1131,6 +1603,28 @@ public class MailDatabase {
         d.dkimPrivateKey = rs.getString("dkim_private_key");
         d.dkimPublicKey = rs.getString("dkim_public_key");
         d.hasDkim = d.dkimPrivateKey != null && !d.dkimPrivateKey.isEmpty();
+        // Pending rotation
+        d.dkimPendingSelector = rs.getString("dkim_pending_selector");
+        d.dkimPendingPrivateKey = rs.getString("dkim_pending_private_key");
+        d.dkimPendingPublicKey = rs.getString("dkim_pending_public_key");
+        d.dkimRotationState = rs.getString("dkim_rotation_state");
+        d.dkimRotationStartedAt = rs.getTimestamp("dkim_rotation_started_at");
+        d.dkimRotationActivatedAt = rs.getTimestamp("dkim_rotation_activated_at");
+        // Previous key (grace period)
+        d.dkimPreviousSelector = rs.getString("dkim_previous_selector");
+        d.dkimPreviousPrivateKey = rs.getString("dkim_previous_private_key");
+        d.dkimPreviousPublicKey = rs.getString("dkim_previous_public_key");
+        // Cloudflare automation (può non esistere su DB legacy se ensureDkimRotationColumns non è ancora girato)
+        try { d.dkimDnsZoneId            = rs.getString("dkim_dns_zone_id"); } catch (SQLException ignore) {}
+        try { d.dkimPendingDnsRecordId   = rs.getString("dkim_pending_dns_record_id"); } catch (SQLException ignore) {}
+        try { d.dkimPreviousDnsRecordId  = rs.getString("dkim_previous_dns_record_id"); } catch (SQLException ignore) {}
+        try {
+            int cfId = rs.getInt("cloudflare_account_id");
+            d.cloudflareAccountId = rs.wasNull() ? 0 : cfId;
+        } catch (SQLException ignore) {}
+        try { d.dkimRotationIntervalDays = rs.getInt("dkim_rotation_interval_days"); } catch (SQLException ignore) {}
+        try { d.dkimLastRotationAt       = rs.getTimestamp("dkim_last_rotation_at"); } catch (SQLException ignore) {}
+        try { d.dkimRotationMode         = rs.getString("dkim_rotation_mode"); } catch (SQLException ignore) {}
         return d;
     }
 
@@ -1145,6 +1639,206 @@ public class MailDatabase {
         }
     }
 
+    // ========== DKIM ROTATION ==========
+
+    /**
+     * Salva una chiave DKIM "pending" (nuovo selector + chiavi) e imposta lo stato di rotazione.
+     * Lo stato iniziale è solitamente "pending_dns" (utente deve aggiungere il TXT in DNS).
+     */
+    public void setDkimPending(int domainId, String pendingSelector, String pendingPrivateKey,
+                                String pendingPublicKey, String state) throws SQLException {
+        setDkimPending(domainId, pendingSelector, pendingPrivateKey, pendingPublicKey, state, null);
+    }
+
+    public void setDkimPending(int domainId, String pendingSelector, String pendingPrivateKey,
+                                String pendingPublicKey, String state, String rotationMode) throws SQLException {
+        String sql = "UPDATE domains SET dkim_pending_selector = ?, dkim_pending_private_key = ?, " +
+                     "dkim_pending_public_key = ?, dkim_rotation_state = ?, dkim_rotation_mode = ?, " +
+                     "dkim_rotation_started_at = ?, dkim_rotation_activated_at = NULL " +
+                     "WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, pendingSelector);
+            stmt.setString(2, pendingPrivateKey);
+            stmt.setString(3, pendingPublicKey);
+            stmt.setString(4, state);
+            if (rotationMode == null) stmt.setNull(5, Types.VARCHAR); else stmt.setString(5, rotationMode);
+            stmt.setTimestamp(6, java.sql.Timestamp.from(java.time.Instant.now()));
+            stmt.setInt(7, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Aggiorna solo lo stato della rotazione (es. da "pending_dns" a "propagated").
+     */
+    public void setDkimRotationState(int domainId, String state) throws SQLException {
+        String sql = "UPDATE domains SET dkim_rotation_state = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, state);
+            stmt.setInt(2, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Promuove la chiave "pending" a "attiva":
+     *  - attuale (dkim_*) → previous (dkim_previous_*)
+     *  - pending (dkim_pending_*) → attuale (dkim_*)
+     *  - pending campi puliti
+     *  - stato → "active_grace"
+     *  - dkim_rotation_activated_at = NOW
+     */
+    public void promotePendingToActive(int domainId) throws SQLException {
+        String sql = "UPDATE domains SET " +
+                     "dkim_previous_selector = dkim_selector, " +
+                     "dkim_previous_private_key = dkim_private_key, " +
+                     "dkim_previous_public_key = dkim_public_key, " +
+                     "dkim_previous_dns_record_id = NULL, " + // record DNS della "vecchia" chiave attuale di solito NON è stato creato via CF
+                     "dkim_selector = dkim_pending_selector, " +
+                     "dkim_private_key = dkim_pending_private_key, " +
+                     "dkim_public_key = dkim_pending_public_key, " +
+                     "dkim_pending_selector = NULL, " +
+                     "dkim_pending_private_key = NULL, " +
+                     "dkim_pending_public_key = NULL, " +
+                     // pending_dns_record_id ora rappresenta il record DEL NUOVO selector attivo,
+                     // lo conserviamo come "current dns record id" muovendolo... ma non abbiamo un
+                     // campo "current": lo lasciamo in pending_dns_record_id azzerandolo (la chiave
+                     // attiva è già pubblicata in DNS, non ci serve più l'id finché non si rifa
+                     // un'altra rotazione).
+                     "dkim_pending_dns_record_id = NULL, " +
+                     "dkim_rotation_state = 'active_grace', " +
+                     "dkim_rotation_activated_at = ? " +
+                     "WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setTimestamp(1, java.sql.Timestamp.from(java.time.Instant.now()));
+            stmt.setInt(2, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Salva i metadati Cloudflare del record TXT pending (zone + record id),
+     * così possiamo cancellarlo via API se la rotazione viene annullata o completata.
+     */
+    public void setDkimPendingCloudflareIds(int domainId, String zoneId, String recordId) throws SQLException {
+        String sql = "UPDATE domains SET dkim_dns_zone_id = ?, dkim_pending_dns_record_id = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, zoneId);
+            stmt.setString(2, recordId);
+            stmt.setInt(3, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Annulla una rotazione in corso (cancella la pending key senza promuoverla).
+     */
+    public void clearDkimPending(int domainId) throws SQLException {
+        String sql = "UPDATE domains SET dkim_pending_selector = NULL, dkim_pending_private_key = NULL, " +
+                     "dkim_pending_public_key = NULL, dkim_rotation_state = NULL, dkim_rotation_mode = NULL, " +
+                     "dkim_rotation_started_at = NULL, dkim_rotation_activated_at = NULL " +
+                     "WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Completa la rotazione: rimuove la previous key e azzera lo stato di rotazione.
+     * Dopo questa chiamata l'utente può rimuovere il vecchio record _domainkey TXT dal DNS.
+     */
+    public void clearDkimPrevious(int domainId) throws SQLException {
+        String sql = "UPDATE domains SET dkim_previous_selector = NULL, dkim_previous_private_key = NULL, " +
+                     "dkim_previous_public_key = NULL, dkim_rotation_state = NULL, dkim_rotation_mode = NULL, " +
+                     "dkim_rotation_started_at = NULL, dkim_rotation_activated_at = NULL " +
+                     "WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Imposta l'intervallo di rotazione programmata (in giorni). 0 = disattivato.
+     */
+    public void setDkimRotationInterval(int domainId, int days) throws SQLException {
+        String sql = "UPDATE domains SET dkim_rotation_interval_days = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, Math.max(0, days));
+            stmt.setInt(2, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Aggiorna il timestamp dell'ultima rotazione (chiamato all'attivazione della chiave).
+     * Usa Java Instant.now() (UTC, JVM clock) anziché MySQL CURRENT_TIMESTAMP per evitare
+     * ambiguità di timezone tra MySQL session, JDBC e JVM.
+     */
+    public void markDkimRotationActivated(int domainId) throws SQLException {
+        String sql = "UPDATE domains SET dkim_last_rotation_at = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setTimestamp(1, java.sql.Timestamp.from(java.time.Instant.now()));
+            stmt.setInt(2, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Forza il timestamp dell'ultima rotazione a una data specifica (epoch ms).
+     * Utile per correggere valori "fossili" memorizzati prima del fix timezone.
+     */
+    public void setDkimLastRotationAtMs(int domainId, long epochMs) throws SQLException {
+        String sql = "UPDATE domains SET dkim_last_rotation_at = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setTimestamp(1, java.sql.Timestamp.from(java.time.Instant.ofEpochMilli(epochMs)));
+            stmt.setInt(2, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Cancella il timestamp dell'ultima rotazione (NULL).
+     * L'UI lo mostrerà come "Mai effettuata".
+     */
+    public void clearDkimLastRotation(int domainId) throws SQLException {
+        String sql = "UPDATE domains SET dkim_last_rotation_at = NULL WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, domainId);
+            stmt.executeUpdate();
+        }
+    }
+
+    /**
+     * Domini con rotazione programmata attiva (intervallo > 0).
+     */
+    public List<Domain> getDomainsWithRotationSchedule() throws SQLException {
+        List<Domain> result = new ArrayList<>();
+        String sql = "SELECT * FROM domains WHERE dkim_rotation_interval_days > 0";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) result.add(mapDomain(rs));
+        }
+        return result;
+    }
+
+    /**
+     * Ritorna tutti i domini con una rotazione DKIM in corso
+     * (stato non null), per i task di background.
+     */
+    public List<Domain> getDomainsInRotation() throws SQLException {
+        List<Domain> result = new ArrayList<>();
+        String sql = "SELECT * FROM domains WHERE dkim_rotation_state IS NOT NULL";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                result.add(mapDomain(rs));
+            }
+        }
+        return result;
+    }
+
     // ========== MAILBOX MANAGEMENT ==========
 
     public int addMailbox(int domainId, String email, String password, String name, int quotaMb) throws SQLException {
@@ -1153,23 +1847,37 @@ public class MailDatabase {
 
     public int addMailbox(int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
         // Hash password with bcrypt (compatible with Dovecot)
-        // Dovecot uses default_pass_scheme = BLF-CRYPT, so no prefix needed
-        // Postfix authenticates via Dovecot SASL
         String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
 
-        String sql = "INSERT INTO mailboxes (domain_id, email, password, name, quota_mb, receive_enabled) VALUES (?, ?, ?, ?, ?, ?)";
+        // Cifra anche la password con AES-256-GCM (per recovery dal pannello).
+        // Best-effort: se il vault non è disponibile, salviamo NULL (l'hash bcrypt resta come prima).
+        String encryptedPassword = null;
+        try {
+            encryptedPassword = org.mail_panel.security.PasswordVault.getInstance().encrypt(password);
+        } catch (Exception e) {
+            System.err.println("[PasswordVault] Encrypt failed in addMailbox: " + e.getMessage());
+        }
+
+        String sql = "INSERT INTO mailboxes (domain_id, email, password, password_encrypted, password_encrypted_at, name, quota_mb, receive_enabled) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, domainId);
             stmt.setString(2, email.toLowerCase());
             stmt.setString(3, hashedPassword);
-            stmt.setString(4, name);
-            stmt.setInt(5, quotaMb);
-            stmt.setBoolean(6, receiveEnabled);
+            if (encryptedPassword == null) {
+                stmt.setNull(4, Types.LONGVARCHAR);
+                stmt.setNull(5, Types.TIMESTAMP);
+            } else {
+                stmt.setString(4, encryptedPassword);
+                stmt.setTimestamp(5, java.sql.Timestamp.from(java.time.Instant.now()));
+            }
+            stmt.setString(6, name);
+            stmt.setInt(7, quotaMb);
+            stmt.setBoolean(8, receiveEnabled);
             stmt.executeUpdate();
             ResultSet rs = stmt.getGeneratedKeys();
             if (rs.next()) {
                 int newId = rs.getInt(1);
-                // Postfix uses MySQL directly - no file sync needed
                 return newId;
             }
         }
@@ -1188,12 +1896,102 @@ public class MailDatabase {
     public boolean updateMailboxPassword(int mailboxId, String newPassword) throws SQLException {
         // Bcrypt hash (compatible with Dovecot)
         String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
-        String sql = "UPDATE mailboxes SET password = ? WHERE id = ?";
+
+        // Cifra anche con AES per il vault del pannello (best-effort)
+        String encryptedPassword = null;
+        try {
+            encryptedPassword = org.mail_panel.security.PasswordVault.getInstance().encrypt(newPassword);
+        } catch (Exception e) {
+            System.err.println("[PasswordVault] Encrypt failed in updateMailboxPassword: " + e.getMessage());
+        }
+
+        String sql = "UPDATE mailboxes SET password = ?, password_encrypted = ?, password_encrypted_at = ? WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, hashedPassword);
-            stmt.setInt(2, mailboxId);
+            if (encryptedPassword == null) {
+                stmt.setNull(2, Types.LONGVARCHAR);
+                stmt.setNull(3, Types.TIMESTAMP);
+            } else {
+                stmt.setString(2, encryptedPassword);
+                stmt.setTimestamp(3, java.sql.Timestamp.from(java.time.Instant.now()));
+            }
+            stmt.setInt(4, mailboxId);
             return stmt.executeUpdate() > 0;
-            // Postfix uses MySQL directly - no file sync needed
+        }
+    }
+
+    /**
+     * Recupera la password cifrata di una casella (per la feature "rivela password").
+     * Ritorna null se non c'è una password cifrata (caselle vecchie pre-vault, o vault non
+     * funzionante al momento del set).
+     */
+    public String getMailboxPasswordEncrypted(int mailboxId) throws SQLException {
+        String sql = "SELECT password_encrypted FROM mailboxes WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, mailboxId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) return rs.getString("password_encrypted");
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Ritorna true se la casella ha una password cifrata archiviata.
+     * Usato dalla UI per decidere se mostrare l'icona "rivela".
+     */
+    public boolean mailboxHasEncryptedPassword(int mailboxId) throws SQLException {
+        String sql = "SELECT 1 FROM mailboxes WHERE id = ? AND password_encrypted IS NOT NULL AND password_encrypted <> ''";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, mailboxId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    /**
+     * Lista tutte le caselle che hanno una password cifrata archiviata, restituendo
+     * solo id + blob cifrato. Usato per la rotazione della master key.
+     */
+    public java.util.List<int[]> listMailboxesWithEncryptedPassword() throws SQLException {
+        // Wrapper semplice: ritorniamo coppie (id, ?) ma serviranno anche i blob.
+        // Usa la variante più completa qui sotto.
+        java.util.List<int[]> ids = new java.util.ArrayList<>();
+        String sql = "SELECT id FROM mailboxes WHERE password_encrypted IS NOT NULL AND password_encrypted <> ''";
+        try (Statement stmt = getConnection().createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) ids.add(new int[]{rs.getInt(1)});
+        }
+        return ids;
+    }
+
+    /**
+     * Variante con blob cifrato: ritorna (id, encrypted_blob) per ogni casella con vault.
+     */
+    public java.util.List<Object[]> listMailboxesWithEncryptedPasswordAndBlob() throws SQLException {
+        java.util.List<Object[]> rows = new java.util.ArrayList<>();
+        String sql = "SELECT id, password_encrypted FROM mailboxes WHERE password_encrypted IS NOT NULL AND password_encrypted <> ''";
+        try (Statement stmt = getConnection().createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                rows.add(new Object[]{rs.getInt(1), rs.getString(2)});
+            }
+        }
+        return rows;
+    }
+
+    /**
+     * Aggiorna SOLO il blob cifrato di una casella (usato durante la rotazione master key,
+     * dove non rigeneriamo bcrypt — la password resta logicamente la stessa).
+     */
+    public void setMailboxEncryptedPasswordOnly(int mailboxId, String newEncryptedBlob) throws SQLException {
+        String sql = "UPDATE mailboxes SET password_encrypted = ?, password_encrypted_at = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, newEncryptedBlob);
+            stmt.setTimestamp(2, java.sql.Timestamp.from(java.time.Instant.now()));
+            stmt.setInt(3, mailboxId);
+            stmt.executeUpdate();
         }
     }
 
@@ -1245,6 +2043,32 @@ public class MailDatabase {
             stmt.setBoolean(4, receiveEnabled);
             stmt.setInt(5, mailboxId);
             return stmt.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Ensure mailbox password vault columns exist (idempotente).
+     * Aggiunge password_encrypted (TEXT) + password_encrypted_at (TIMESTAMP).
+     * Le nuove password create/aggiornate dalla UI verranno cifrate e archiviate qui.
+     */
+    public void ensureMailboxPasswordVaultColumns() {
+        String[][] cols = {
+            {"password_encrypted",     "TEXT NULL"},
+            {"password_encrypted_at",  "TIMESTAMP NULL"}
+        };
+        try (Statement stmt = getConnection().createStatement()) {
+            for (String[] col : cols) {
+                ResultSet rs = stmt.executeQuery(
+                    "SELECT COUNT(*) FROM information_schema.columns " +
+                    "WHERE table_schema = DATABASE() AND table_name = 'mailboxes' AND column_name = '" + col[0] + "'"
+                );
+                if (rs.next() && rs.getInt(1) == 0) {
+                    stmt.executeUpdate("ALTER TABLE mailboxes ADD COLUMN " + col[0] + " " + col[1]);
+                    System.out.println("Added " + col[0] + " column to mailboxes table");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error ensuring mailbox password vault columns: " + e.getMessage());
         }
     }
 
@@ -1614,6 +2438,29 @@ public class MailDatabase {
         public String dkimPrivateKey;
         public String dkimPublicKey;
         public boolean hasDkim;
+        // DKIM rotation - pending key (in attesa di propagazione DNS)
+        public String dkimPendingSelector;
+        public String dkimPendingPrivateKey;
+        public String dkimPendingPublicKey;
+        // Stato rotazione: null (nessuna), "pending_dns", "propagated", "active_grace"
+        public String dkimRotationState;
+        public Timestamp dkimRotationStartedAt;
+        public Timestamp dkimRotationActivatedAt;
+        // Vecchia chiave conservata durante il grace period
+        public String dkimPreviousSelector;
+        public String dkimPreviousPrivateKey;
+        public String dkimPreviousPublicKey;
+        // Cloudflare automation
+        public String dkimDnsZoneId;
+        public String dkimPendingDnsRecordId;
+        public String dkimPreviousDnsRecordId;
+        // Account Cloudflare assegnato (0 = nessuno / manuale)
+        public int cloudflareAccountId;
+        // Rotazione programmata (0 = disattivata)
+        public int dkimRotationIntervalDays;
+        public Timestamp dkimLastRotationAt;
+        // Modalità rotazione corrente (ereditata da eventi della catena)
+        public String dkimRotationMode;
     }
 
     public static class Mailbox {
