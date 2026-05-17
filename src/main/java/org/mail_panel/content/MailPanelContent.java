@@ -1761,6 +1761,172 @@ public class MailPanelContent {
 
     // ============== MAILBOXES.HTML ==============
     /**
+     * Modal "Configurazione Client Email" — credenziali + server IMAP/SMTP/POP3,
+     * con bottoni copia per ogni campo e reveal della password se nel vault.
+     */
+    private static String getMailConfigModal() {
+        return """
+    <!-- Mail Client Config Modal -->
+    <div class="modal fade" id="mailConfigModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-mobile-alt me-2"></i>Configurazione Client Email</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+
+                    <!-- Box credenziali con copia-incolla ovunque -->
+                    <div class="card mb-3 border-primary">
+                        <div class="card-header bg-primary text-white"><i class="fas fa-key me-2"></i>Credenziali</div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold mb-1">Username (email completa)</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control font-monospace" id="cfgEmailField" readonly>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyInputValue('cfgEmailField')" title="Copia"><i class="fas fa-copy"></i></button>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold mb-1">Password</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="password" class="form-control font-monospace" id="cfgPasswordField" value="" placeholder="Non disponibile (vault vuoto per questa casella)" readonly>
+                                    <button class="btn btn-outline-secondary" type="button" id="cfgPasswordToggleBtn" onclick="toggleCfgPasswordVisibility()" title="Mostra/nascondi" disabled><i class="fas fa-eye"></i></button>
+                                    <button class="btn btn-outline-secondary" type="button" id="cfgPasswordCopyBtn" onclick="copyInputValue('cfgPasswordField')" title="Copia" disabled><i class="fas fa-copy"></i></button>
+                                    <button class="btn btn-warning" type="button" id="cfgPasswordRevealBtn" onclick="revealCfgPassword()" title="Recupera dal vault"><i class="fas fa-unlock me-1"></i>Rivela</button>
+                                </div>
+                                <small class="text-muted" id="cfgPasswordHint">Clicca "Rivela" per recuperare la password dal vault del pannello. L'operazione viene registrata nell'audit log.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <ul class="nav nav-tabs mb-3" id="configTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#configGeneral">Generale</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configOutlook">Outlook</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configApple">iPhone/Mac</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configAndroid">Android</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <!-- ===== Tab GENERALE ===== -->
+                        <div class="tab-pane fade show active" id="configGeneral">
+                            <h6 class="mb-2 text-success"><i class="fas fa-inbox me-1"></i>Posta in Arrivo — IMAP (consigliato)</h6>
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-8"><label class="form-label small mb-1">Server</label>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgImapServer" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgImapServer')"><i class="fas fa-copy"></i></button></div>
+                                </div>
+                                <div class="col-md-2"><label class="form-label small mb-1">Porta</label>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="993" id="cfgImapPort" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgImapPort')"><i class="fas fa-copy"></i></button></div>
+                                </div>
+                                <div class="col-md-2"><label class="form-label small mb-1">Sicurezza</label>
+                                    <input type="text" class="form-control form-control-sm" value="SSL/TLS" readonly>
+                                </div>
+                            </div>
+
+                            <h6 class="mb-2 text-secondary"><i class="fas fa-inbox me-1"></i>Posta in Arrivo — POP3 (alternativa)</h6>
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-8"><label class="form-label small mb-1">Server</label>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgPop3Server" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgPop3Server')"><i class="fas fa-copy"></i></button></div>
+                                </div>
+                                <div class="col-md-2"><label class="form-label small mb-1">Porta</label>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="995" id="cfgPop3Port" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgPop3Port')"><i class="fas fa-copy"></i></button></div>
+                                </div>
+                                <div class="col-md-2"><label class="form-label small mb-1">Sicurezza</label>
+                                    <input type="text" class="form-control form-control-sm" value="SSL/TLS" readonly>
+                                </div>
+                            </div>
+
+                            <h6 class="mb-2 text-primary"><i class="fas fa-paper-plane me-1"></i>Posta in Uscita — SMTP</h6>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-8"><label class="form-label small mb-1">Server</label>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgSmtpServer" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgSmtpServer')"><i class="fas fa-copy"></i></button></div>
+                                </div>
+                                <div class="col-md-2"><label class="form-label small mb-1">Porta</label>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="587" id="cfgSmtpPort" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgSmtpPort')"><i class="fas fa-copy"></i></button></div>
+                                </div>
+                                <div class="col-md-2"><label class="form-label small mb-1">Sicurezza</label>
+                                    <input type="text" class="form-control form-control-sm" value="STARTTLS" readonly>
+                                </div>
+                            </div>
+                            <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Autenticazione: <strong>Password normale</strong>.</small>
+                        </div>
+
+                        <!-- ===== Tab OUTLOOK ===== -->
+                        <div class="tab-pane fade" id="configOutlook">
+                            <h6><i class="fab fa-microsoft me-2"></i>Microsoft Outlook</h6>
+                            <ol class="mt-3 small">
+                                <li class="mb-2">Apri Outlook → <strong>File → Aggiungi Account</strong>, inserisci l'email e seleziona <strong>IMAP</strong></li>
+                                <li class="mb-3">Inserisci questi dati (clicca 📋 per copiare):
+                                    <table class="table table-sm table-bordered mt-2 mb-0">
+                                        <tr><td class="fw-bold" style="width:30%">Server IMAP</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgOutlookImap" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgOutlookImap')"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Porta IMAP / Sicurezza</td><td><code>993 / SSL-TLS</code></td></tr>
+                                        <tr><td class="fw-bold">Server SMTP</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgOutlookSmtp" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgOutlookSmtp')"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Porta SMTP / Sicurezza</td><td><code>587 / STARTTLS</code></td></tr>
+                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" onclick="copySharedField(this)"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Password</td><td><small class="text-muted">vedi sezione Credenziali in alto</small></td></tr>
+                                    </table>
+                                </li>
+                                <li>Conferma e attendi la verifica della connessione</li>
+                            </ol>
+                        </div>
+
+                        <!-- ===== Tab APPLE ===== -->
+                        <div class="tab-pane fade" id="configApple">
+                            <h6><i class="fab fa-apple me-2"></i>iPhone / iPad / Mac</h6>
+                            <ol class="mt-3 small">
+                                <li class="mb-2"><strong>Impostazioni → Mail → Account → Aggiungi Account → Altro → Aggiungi account Mail</strong></li>
+                                <li class="mb-2">Inserisci Nome, Email e Password, poi seleziona <strong>IMAP</strong></li>
+                                <li class="mb-3">Imposta i seguenti dati (clicca 📋 per copiare):
+                                    <table class="table table-sm table-bordered mt-2 mb-0">
+                                        <tr><td class="fw-bold" style="width:35%">Server posta in arrivo (IMAP)</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAppleImap" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgAppleImap')"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Server posta in uscita (SMTP)</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAppleSmtp" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgAppleSmtp')"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" onclick="copySharedField(this)"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Password</td><td><small class="text-muted">vedi sezione Credenziali in alto</small></td></tr>
+                                    </table>
+                                </li>
+                                <li>Salva e attendi la verifica dell'account</li>
+                            </ol>
+                        </div>
+
+                        <!-- ===== Tab ANDROID ===== -->
+                        <div class="tab-pane fade" id="configAndroid">
+                            <h6><i class="fab fa-android me-2"></i>Android (Gmail App)</h6>
+                            <ol class="mt-3 small">
+                                <li class="mb-2">Apri Gmail → <strong>Impostazioni → Aggiungi account → Altro</strong></li>
+                                <li class="mb-2">Inserisci l'email e seleziona <strong>Personale (IMAP)</strong></li>
+                                <li class="mb-3">Imposta i seguenti dati (clicca 📋 per copiare):
+                                    <table class="table table-sm table-bordered mt-2 mb-0">
+                                        <tr><td class="fw-bold" style="width:35%">Server in arrivo</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAndroidImap" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgAndroidImap')"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Porta in arrivo / Sicurezza</td><td><code>993 / SSL</code></td></tr>
+                                        <tr><td class="fw-bold">Server in uscita</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAndroidSmtp" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgAndroidSmtp')"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Porta in uscita / Sicurezza</td><td><code>587 / STARTTLS</code></td></tr>
+                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" onclick="copySharedField(this)"><i class="fas fa-copy"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Password</td><td><small class="text-muted">vedi sezione Credenziali in alto</small></td></tr>
+                                    </table>
+                                </li>
+                                <li>Completa la configurazione</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+""";
+    }
+
+    /**
      * Modal "Generatore Password" — UI riusabile per generare password con opzioni dettagliate.
      * Quando l'utente clicca "Usa questa password", invoca il callback registrato in
      * window.__pwGenCallback (impostato da chi apre il modal).
@@ -2394,106 +2560,7 @@ public class MailPanelContent {
 
 """ + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + """
     <!-- Mail Client Config Modal -->
-    <div class="modal fade" id="mailConfigModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-mobile-alt me-2"></i>Configurazione Client Email</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-primary">
-                        <i class="fas fa-envelope me-2"></i>
-                        <strong id="configEmail"></strong>
-                    </div>
-
-                    <ul class="nav nav-tabs mb-3" id="configTabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#configGeneral">Generale</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configOutlook">Outlook</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configApple">iPhone/Mac</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configAndroid">Android</button>
-                        </li>
-                    </ul>
-
-                    <div class="tab-content">
-                        <div class="tab-pane fade show active" id="configGeneral">
-                            <table class="table table-bordered">
-                                <thead><tr><th>Impostazione</th><th>IMAP (Consigliato)</th><th>POP3</th></tr></thead>
-                                <tbody>
-                                    <tr><td><strong>Server Posta in Arrivo</strong></td><td id="cfgImapServer"></td><td id="cfgPop3Server"></td></tr>
-                                    <tr><td><strong>Porta</strong></td><td id="cfgImapPort"></td><td id="cfgPop3Port"></td></tr>
-                                    <tr><td><strong>Sicurezza</strong></td><td>SSL/TLS</td><td>SSL/TLS</td></tr>
-                                </tbody>
-                            </table>
-                            <table class="table table-bordered mt-3">
-                                <thead><tr><th>Impostazione</th><th>SMTP (Posta in Uscita)</th></tr></thead>
-                                <tbody>
-                                    <tr><td><strong>Server</strong></td><td id="cfgSmtpServer"></td></tr>
-                                    <tr><td><strong>Porta</strong></td><td id="cfgSmtpPort"></td></tr>
-                                    <tr><td><strong>Sicurezza</strong></td><td>STARTTLS</td></tr>
-                                    <tr><td><strong>Autenticazione</strong></td><td>Password normale</td></tr>
-                                </tbody>
-                            </table>
-                            <div class="alert alert-warning mt-3">
-                                <i class="fas fa-user me-2"></i><strong>Username:</strong> L'indirizzo email completo<br>
-                                <i class="fas fa-key me-2"></i><strong>Password:</strong> La password dell'account email
-                            </div>
-                        </div>
-                        <div class="tab-pane fade" id="configOutlook">
-                            <h6><i class="fab fa-microsoft me-2"></i>Microsoft Outlook</h6>
-                            <ol class="mt-3">
-                                <li>Apri Outlook e vai su <strong>File > Aggiungi Account</strong></li>
-                                <li>Inserisci l'indirizzo email e clicca <strong>Connetti</strong></li>
-                                <li>Seleziona <strong>IMAP</strong></li>
-                                <li>Inserisci i seguenti dati:<br>
-                                    <code>Server IMAP: <span id="cfgOutlookImap"></span></code><br>
-                                    <code>Porta: 993, SSL/TLS</code><br>
-                                    <code>Server SMTP: <span id="cfgOutlookSmtp"></span></code><br>
-                                    <code>Porta: 587, STARTTLS</code>
-                                </li>
-                                <li>Inserisci la password e completa la configurazione</li>
-                            </ol>
-                        </div>
-                        <div class="tab-pane fade" id="configApple">
-                            <h6><i class="fab fa-apple me-2"></i>iPhone / iPad / Mac</h6>
-                            <ol class="mt-3">
-                                <li>Vai in <strong>Impostazioni > Mail > Account > Aggiungi Account</strong></li>
-                                <li>Seleziona <strong>Altro > Aggiungi account Mail</strong></li>
-                                <li>Inserisci nome, email e password</li>
-                                <li>Seleziona <strong>IMAP</strong></li>
-                                <li>Server posta in arrivo: <code id="cfgAppleImap"></code></li>
-                                <li>Server posta in uscita: <code id="cfgAppleSmtp"></code></li>
-                                <li>Salva e attendi la verifica</li>
-                            </ol>
-                        </div>
-                        <div class="tab-pane fade" id="configAndroid">
-                            <h6><i class="fab fa-android me-2"></i>Android (Gmail App)</h6>
-                            <ol class="mt-3">
-                                <li>Apri l'app Gmail e vai su <strong>Impostazioni > Aggiungi account</strong></li>
-                                <li>Seleziona <strong>Altro</strong></li>
-                                <li>Inserisci l'indirizzo email</li>
-                                <li>Seleziona <strong>Personale (IMAP)</strong></li>
-                                <li>Inserisci la password</li>
-                                <li>Server in arrivo: <code id="cfgAndroidImap"></code>, Porta: 993, SSL</li>
-                                <li>Server in uscita: <code id="cfgAndroidSmtp"></code>, Porta: 587, STARTTLS</li>
-                                <li>Completa la configurazione</li>
-                            </ol>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
-                </div>
-            </div>
-        </div>
-    </div>
+""" + getMailConfigModal() + """
 
     <!-- Auto-Responder Modal -->
     <div class="modal fade" id="autoResponderModal" tabindex="-1">
@@ -2691,7 +2758,7 @@ public class MailPanelContent {
                                 <button class="btn btn-sm btn-primary" onclick="editMailbox(${m.id})" title="Modifica">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-sm btn-info" onclick="showMailConfig('${m.email}')" title="Configurazione Client">
+                                <button class="btn btn-sm btn-info" onclick="showMailConfig('${m.email}', ${m.id})" title="Configurazione Client">
                                     <i class="fas fa-mobile-alt"></i>
                                 </button>
                                 <button class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown">
@@ -3004,35 +3071,140 @@ public class MailPanelContent {
             });
         }
 
-        function showMailConfig(email) {
-            document.getElementById('configEmail').textContent = email;
+        // Stato corrente del modal mailConfig (email + id casella selezionata)
+        let __cfgCurrentEmail = '';
+        let __cfgCurrentMailboxId = 0;
 
+        function showMailConfig(email, mailboxId) {
+            __cfgCurrentEmail = email || '';
+            __cfgCurrentMailboxId = mailboxId || 0;
+
+            // Email completa nel campo Credenziali principale
+            const emailField = document.getElementById('cfgEmailField');
+            if (emailField) emailField.value = email;
+            // Email replicata in tutti i tab (Outlook/Apple/Android)
+            document.querySelectorAll('.cfg-shared-email').forEach(el => { el.value = email; });
+
+            // Reset campo password
+            const pwField = document.getElementById('cfgPasswordField');
+            const pwToggle = document.getElementById('cfgPasswordToggleBtn');
+            const pwCopy = document.getElementById('cfgPasswordCopyBtn');
+            const pwReveal = document.getElementById('cfgPasswordRevealBtn');
+            const pwHint = document.getElementById('cfgPasswordHint');
+            if (pwField) {
+                pwField.value = '';
+                pwField.type = 'password';
+            }
+            if (pwToggle) { pwToggle.innerHTML = '<i class="fas fa-eye"></i>'; pwToggle.disabled = true; }
+            if (pwCopy) pwCopy.disabled = true;
+            if (pwReveal) {
+                pwReveal.disabled = false;
+                pwReveal.innerHTML = '<i class="fas fa-unlock me-1"></i>Rivela';
+            }
+            if (pwHint) pwHint.innerHTML = 'Clicca "Rivela" per recuperare la password dal vault del pannello. L\\'operazione viene registrata nell\\'audit log.';
+
+            // Carica server config
             fetch('/api/mailconfig').then(r => r.json()).then(data => {
                 if (data.success) {
                     const server = data.server;
-
-                    // General tab
-                    document.getElementById('cfgImapServer').textContent = server;
-                    document.getElementById('cfgPop3Server').textContent = server;
-                    document.getElementById('cfgImapPort').textContent = '993 (SSL)';
-                    document.getElementById('cfgPop3Port').textContent = '995 (SSL)';
-                    document.getElementById('cfgSmtpServer').textContent = server;
-                    document.getElementById('cfgSmtpPort').textContent = '587 (STARTTLS)';
-
-                    // Outlook tab
-                    document.getElementById('cfgOutlookImap').textContent = server;
-                    document.getElementById('cfgOutlookSmtp').textContent = server;
-
-                    // Apple tab
-                    document.getElementById('cfgAppleImap').textContent = server;
-                    document.getElementById('cfgAppleSmtp').textContent = server;
-
-                    // Android tab
-                    document.getElementById('cfgAndroidImap').textContent = server;
-                    document.getElementById('cfgAndroidSmtp').textContent = server;
+                    // Generale
+                    setValIfExists('cfgImapServer', server);
+                    setValIfExists('cfgPop3Server', server);
+                    setValIfExists('cfgSmtpServer', server);
+                    // Outlook
+                    setValIfExists('cfgOutlookImap', server);
+                    setValIfExists('cfgOutlookSmtp', server);
+                    // Apple
+                    setValIfExists('cfgAppleImap', server);
+                    setValIfExists('cfgAppleSmtp', server);
+                    // Android
+                    setValIfExists('cfgAndroidImap', server);
+                    setValIfExists('cfgAndroidSmtp', server);
                 }
-
                 new bootstrap.Modal(document.getElementById('mailConfigModal')).show();
+            });
+        }
+
+        function setValIfExists(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.value = val;
+        }
+
+        // Helper generico: copia il value di un input negli appunti
+        function copyInputValue(id) {
+            const el = document.getElementById(id);
+            if (!el || !el.value) return;
+            const wasPassword = (el.type === 'password');
+            // Se è password (mascherato), abbiamo bisogno di rivelarlo brevemente per copiare
+            if (wasPassword) el.type = 'text';
+            navigator.clipboard.writeText(el.value).catch(() => {
+                try { el.select(); document.execCommand('copy'); } catch (e) {}
+            });
+            if (wasPassword) el.type = 'password';
+        }
+
+        // Helper per i campi "cfg-shared-email" replicati nei tab (Outlook/Apple/Android)
+        function copySharedField(btn) {
+            const input = btn.parentElement.querySelector('input');
+            if (!input || !input.value) return;
+            navigator.clipboard.writeText(input.value).catch(() => {
+                try { input.select(); document.execCommand('copy'); } catch (e) {}
+            });
+        }
+
+        function toggleCfgPasswordVisibility() {
+            const input = document.getElementById('cfgPasswordField');
+            const btn = document.getElementById('cfgPasswordToggleBtn');
+            if (!input || !btn) return;
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+            } else {
+                input.type = 'password';
+                btn.innerHTML = '<i class="fas fa-eye"></i>';
+            }
+        }
+
+        function revealCfgPassword() {
+            if (!__cfgCurrentMailboxId) {
+                alert('Casella non identificata — chiudi e riapri la finestra.');
+                return;
+            }
+            const btn = document.getElementById('cfgPasswordRevealBtn');
+            const pwField = document.getElementById('cfgPasswordField');
+            const pwToggle = document.getElementById('cfgPasswordToggleBtn');
+            const pwCopy = document.getElementById('cfgPasswordCopyBtn');
+            const pwHint = document.getElementById('cfgPasswordHint');
+            if (!confirm('Rivelare la password della casella ' + __cfgCurrentEmail + '?\\n\\nL\\'operazione viene registrata nell\\'audit log.')) return;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+            fetch('/api/mailboxes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'reveal_password', id: __cfgCurrentMailboxId, csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    pwField.value = data.password || '';
+                    pwField.type = 'text';
+                    if (pwToggle) {
+                        pwToggle.disabled = false;
+                        pwToggle.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                    }
+                    if (pwCopy) pwCopy.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-check me-1"></i>Rivelata';
+                    if (pwHint) pwHint.innerHTML = '<span class="text-success">✓ Password recuperata dal vault. Clicca 📋 per copiarla o 👁 per nasconderla.</span>';
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-unlock me-1"></i>Rivela';
+                    if (pwHint) pwHint.innerHTML = '<span class="text-danger">' + (data.error || 'Errore') + '</span>';
+                }
+            })
+            .catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-unlock me-1"></i>Rivela';
+                if (pwHint) pwHint.innerHTML = '<span class="text-danger">Errore rete: ' + e.message + '</span>';
             });
         }
 
