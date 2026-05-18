@@ -12,7 +12,7 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.13.0</version>
         <configuration>
-          <release>24</release>
+          <release>25</release>
         </configuration>
       </plugin>
       <plugin>
@@ -28,6 +28,9 @@
               <transformers>
                 <transformer>
                   <mainClass>org.mail_panel.Main</mainClass>
+                  <manifestEntries>
+                    <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+                  </manifestEntries>
                 </transformer>
                 <transformer>
                   <resource>META-INF/services/java.sql.Driver</resource>
@@ -41,7 +44,7 @@
   </build>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.target>24</maven.compiler.target>
-    <maven.compiler.source>24</maven.compiler.source>
+    <maven.compiler.target>25</maven.compiler.target>
+    <maven.compiler.source>25</maven.compiler.source>
   </properties>
 </project>

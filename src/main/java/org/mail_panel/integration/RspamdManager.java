@@ -407,6 +407,7 @@ public class RspamdManager {
      */
     public boolean reloadConfig() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", "rspamd", "reload");
             Process p = pb.start();
             return p.waitFor() == 0;

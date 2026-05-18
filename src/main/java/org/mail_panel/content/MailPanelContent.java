@@ -42,6 +42,7 @@ public class MailPanelContent {
             writeFile(adminDir + "/logs.html", getLogsHtml());
             writeFile(adminDir + "/queue.html", getQueueHtml());
             writeFile(adminDir + "/security.html", getSecurityHtml());
+            writeFile(adminDir + "/firewall.html", getFirewallHtml());
             writeFile(adminDir + "/paths.html", getPathsHtml());
             writeFile(adminDir + "/install.html", getInstallHtml());
             writeFile(adminDir + "/settings.html", getSettingsHtml());
@@ -78,6 +79,7 @@ public class MailPanelContent {
                 <li class="nav-item"><a class="nav-link" href="/dns" data-page="dns"><i class="fas fa-server me-1"></i>DNS</a></li>
                 <li class="nav-item"><a class="nav-link" href="/ssl" data-page="ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
                 <li class="nav-item"><a class="nav-link" href="/security" data-page="security"><i class="fas fa-shield-alt me-1"></i>Sicurezza</a></li>
+                <li class="nav-item"><a class="nav-link" href="/firewall" data-page="firewall"><i class="fas fa-fire me-1"></i>Firewall</a></li>
                 <li class="nav-item"><a class="nav-link" href="/paths" data-page="paths"><i class="fas fa-folder-tree me-1"></i>Path</a></li>
                 <li class="nav-item"><a class="nav-link" href="/logs" data-page="logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
                 <li class="nav-item"><a class="nav-link" href="/settings" data-page="settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
@@ -269,6 +271,8 @@ public class MailPanelContent {
 " href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("security") ? " active" : "") + """
 " href="/security"><i class="fas fa-shield-alt me-1"></i>Sicurezza</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("firewall") ? " active" : "") + """
+" href="/firewall"><i class="fas fa-fire me-1"></i>Firewall</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("paths") ? " active" : "") + """
 " href="/paths"><i class="fas fa-folder-tree me-1"></i>Path</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("logs") ? " active" : "") + """
@@ -4497,6 +4501,566 @@ public class MailPanelContent {
     /**
      * Markup HTML della card "Master key del vault" (gestione backup + rotazione).
      */
+    private static String getClamavHealthCard() {
+        return """
+            <!-- ClamAV Health Check -->
+            <div class="card mb-4 border-success">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="fas fa-virus-slash me-2"></i><strong>Stato ClamAV (antivirus)</strong> <small class="ms-2" id="cavOverallStatus"></small></span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-info text-white" id="btnCavTestEicar" onclick="runCavTestEicar()" title="Test end-to-end: il pannello scrive un file EICAR temporaneo e verifica che clamdscan lo rilevi">
+                            <i class="fas fa-flask me-1"></i>Test EICAR
+                        </button>
+                        <button class="btn btn-sm btn-warning d-none" id="btnCavFixAll" onclick="runCavFixAll()">
+                            <i class="fas fa-magic me-1"></i>Risolvi tutto
+                        </button>
+                        <button class="btn btn-sm btn-light" onclick="loadClamavHealth()">
+                            <i class="fas fa-sync me-1"></i>Ricontrolla
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="cavContainer">
+                    <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>
+                </div>
+                <div class="card-body border-top d-none" id="cavEicarResult">
+                    <h6 class="mb-2"><i class="fas fa-flask me-1"></i>Risultato Test EICAR</h6>
+                    <div id="cavEicarBody"></div>
+                </div>
+                <div class="card-body border-top d-none" id="cavFixAllReport">
+                    <h6 class="mb-2"><i class="fas fa-list-check me-1"></i>Report risoluzione</h6>
+                    <div id="cavFixAllSteps"></div>
+                </div>
+            </div>
+""";
+    }
+
+    private static String getJailConfigurationJs() {
+        return """
+        // ===== Jail Configuration =====
+        // Helper per i pulsanti preset: setta il valore dell'input
+        function setCfg(id, value) {
+            const el = document.getElementById(id);
+            if (el) { el.value = value; el.dispatchEvent(new Event('input')); }
+        }
+
+        // Popola la select con tutte le jail attualmente attive (chiamato all'avvio)
+        function populateJailSelect(onDone) {
+            const sel = document.getElementById('cfgJailSelect');
+            const prev = sel.value;
+            fetch('/api/fail2ban?action=live_state_all').then(r => r.json()).then(data => {
+                if (!data || !Array.isArray(data.jails)) { if (onDone) onDone(); return; }
+                const names = data.jails.map(j => j.name).filter(Boolean);
+                if (names.length === 0) { if (onDone) onDone(); return; }
+                // Conserva la selezione precedente se ancora valida
+                sel.innerHTML = names.map(n => '<option value="' + n + '">' + n + '</option>').join('');
+                if (names.indexOf(prev) >= 0) sel.value = prev;
+                if (onDone) onDone();
+            }).catch(() => { if (onDone) onDone(); });
+        }
+
+        // Opzioni filtro disponibili, raggruppate per "famiglia" di jail.
+        // Per ogni jail mostriamo SOLO le opzioni della sua famiglia (es. dovecot
+        // non vede i preset postfix). Una opzione "custom" e' sempre disponibile.
+        const FILTER_PRESETS = {
+            postfix: [
+                { value: 'postfix-sasl',
+                  label: 'Sicuro (default)',
+                  badge: 'CONSIGLIATO SE NON HAI SCANNER',
+                  catches: 'Solo SASL authentication failed (i veri tentativi di login con password sbagliata).',
+                  misses: 'Scanner SMTP e bot che provano AUTH e disconnettono senza errore SASL esplicito.' },
+                { value: 'postfix[mode=more]',
+                  label: 'Intermedio',
+                  badge: '',
+                  catches: 'SASL fail + improper command pipelining + reject base.',
+                  misses: 'Probe che fanno solo connect/disconnect con auth=0/N.' },
+                { value: 'postfix[mode=aggressive]',
+                  label: 'Aggressivo',
+                  badge: '★ CONSIGLIATO ANTI-BOT',
+                  catches: 'Tutto sopra + disconnect con auth=0/N + scanner SMTP che probano e disconnettono. Cattura i bot tipo "low-and-slow".',
+                  misses: 'Quasi nulla. Rischio falsi positivi: minimo (i tuoi client legittimi fanno Login OK, non disconnect-without-auth).' },
+                { value: 'postfix[mode=ddos]',
+                  label: 'DDoS',
+                  badge: 'PER ATTACCHI VOLUMINOSI',
+                  catches: 'Connessioni massive da stesso IP in pochi secondi.',
+                  misses: 'Attacchi distribuiti da molti IP diversi.' }
+            ],
+            dovecot: [
+                { value: 'dovecot',
+                  label: 'Sicuro (default)',
+                  badge: 'CONSIGLIATO SE NON HAI SCANNER',
+                  catches: 'Solo i login IMAP/POP3 falliti con password sbagliata.',
+                  misses: 'Scanner che probano TLS senza fare login.' },
+                { value: 'dovecot[mode=aggressive]',
+                  label: 'Aggressivo',
+                  badge: '★ CONSIGLIATO ANTI-BOT',
+                  catches: 'Login falliti + TLS handshake fail + cipher errors + scanner.',
+                  misses: 'Quasi nulla. Rischio falsi positivi: minimo.' }
+            ],
+            rspamd: [
+                { value: 'rspamd',
+                  label: 'Standard',
+                  badge: '',
+                  catches: 'Email con score Rspamd elevato (>10).',
+                  misses: 'Email borderline (score 5-10).' }
+            ],
+            other: [
+                { value: '__custom__',
+                  label: 'Personalizzato',
+                  badge: '',
+                  catches: 'Usa un filtro con nome custom (es. mail-panel-auth, roundcube-auth).',
+                  misses: '' }
+            ]
+        };
+
+        // Determina la famiglia di una jail dal suo nome.
+        function jailFamily(jailName) {
+            const n = (jailName || '').toLowerCase();
+            if (n.includes('postfix')) return 'postfix';
+            if (n.includes('dovecot')) return 'dovecot';
+            if (n.includes('rspamd')) return 'rspamd';
+            return 'other';
+        }
+
+        function renderFilterOptions(jail, currentFilter) {
+            const family = jailFamily(jail);
+            const container = document.getElementById('cfgFilterOptions');
+            const customWrap = document.getElementById('cfgFilterCustom');
+            const customInput = document.getElementById('cfgFilter');
+            const currentEl = document.getElementById('cfgFilterCurrent');
+            if (!container) return;
+
+            const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+            currentEl.textContent = currentFilter || '(non impostato)';
+
+            // Jail senza preset (mail-panel-auth, roundcube-auth, ...):
+            // niente card, solo un input semplice prefillato col valore corrente.
+            if (family === 'other') {
+                container.innerHTML =
+                    '<div class="alert alert-info py-2 px-3 mb-0 small">'
+                    + '<i class="fas fa-info-circle me-1"></i>'
+                    + 'La jail <code>' + esc(jail) + '</code> usa un filtro custom dedicato. '
+                    + 'Modifica il nome qui sotto solo se sai cosa stai facendo (es. switch a un filtro alternativo).'
+                    + '</div>';
+                customWrap.classList.remove('d-none');
+                if (customInput) customInput.value = currentFilter || '';
+                window.__cfgSelectedFilter = '__custom__';
+                return;
+            }
+
+            // Per famiglie note (postfix/dovecot/rspamd): card cliccabili + "Personalizzato"
+            const presets = (FILTER_PRESETS[family] || []).concat(FILTER_PRESETS.other);
+
+            // Capisci quale preset corrisponde al filtro corrente; se nessuno, e' custom
+            let activeValue = currentFilter;
+            const knownValues = presets.map(p => p.value);
+            if (currentFilter && !knownValues.includes(currentFilter)) {
+                activeValue = '__custom__';
+                customWrap.classList.remove('d-none');
+                if (customInput) customInput.value = currentFilter;
+            } else {
+                customWrap.classList.add('d-none');
+                if (customInput) customInput.value = '';
+            }
+
+            container.innerHTML = presets.map(p => {
+                const isActive = (p.value === activeValue);
+                const badgeHtml = p.badge
+                    ? '<span class="badge bg-success ms-2" style="font-size:.65rem">' + esc(p.badge) + '</span>'
+                    : '';
+                const inUseBadge = isActive
+                    ? '<span class="badge bg-primary ms-2" style="font-size:.65rem"><i class="fas fa-check me-1"></i>in uso adesso</span>'
+                    : '';
+                // Colori che funzionano su tema chiaro E scuro:
+                //  - bordo: blu solido se attivo, grigio semi-trasparente se inattivo
+                //  - sfondo: tinta blu trasparente se attivo, niente sfondo se inattivo
+                //    (cosi' il colore del container parent rimane visibile)
+                const borderColor = isActive ? '#0d6efd' : 'rgba(128,128,128,0.35)';
+                const bg = isActive ? 'rgba(13,110,253,0.15)' : 'transparent';
+                return '<div class="filter-option" data-value="' + esc(p.value) + '" '
+                     + 'style="cursor:pointer; padding:10px; border:2px solid ' + borderColor + '; border-radius:6px; background:' + bg + '" '
+                     + 'onclick="selectFilterOption(\\'' + esc(p.value) + '\\')">'
+                     + '<div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">'
+                     + '  <div><strong>' + esc(p.label) + '</strong> <code class="small text-muted ms-2">' + esc(p.value === '__custom__' ? 'altro filtro...' : p.value) + '</code>' + badgeHtml + inUseBadge + '</div>'
+                     + '</div>'
+                     + (p.catches ? '<div class="small text-success mb-0"><i class="fas fa-check-circle me-1"></i><b>Cattura:</b> ' + esc(p.catches) + '</div>' : '')
+                     + (p.misses ? '<div class="small text-muted mb-0"><i class="fas fa-times-circle me-1"></i><b>Si perde:</b> ' + esc(p.misses) + '</div>' : '')
+                     + '</div>';
+            }).join('');
+        }
+
+        // Click su una card → seleziona quel filtro
+        function selectFilterOption(value) {
+            const customWrap = document.getElementById('cfgFilterCustom');
+            const customInput = document.getElementById('cfgFilter');
+            if (value === '__custom__') {
+                customWrap.classList.remove('d-none');
+                if (customInput) customInput.focus();
+            } else {
+                customWrap.classList.add('d-none');
+                if (customInput) customInput.value = value;
+            }
+            // Riapplica gli stili attivi senza ricaricare dal server
+            const cards = document.querySelectorAll('.filter-option');
+            cards.forEach(c => {
+                const active = c.getAttribute('data-value') === value;
+                c.style.borderColor = active ? '#0d6efd' : 'rgba(128,128,128,0.35)';
+                c.style.background = active ? 'rgba(13,110,253,0.15)' : 'transparent';
+            });
+            // Memorizza la selezione (per il save successivo)
+            window.__cfgSelectedFilter = value;
+        }
+
+        function loadJailConfig() {
+            const jail = document.getElementById('cfgJailSelect').value;
+            const status = document.getElementById('cfgJailStatus');
+            status.textContent = 'Caricamento...';
+            status.className = 'ms-2 small text-muted';
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_jail_config', jail: jail })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    document.getElementById('cfgMaxRetry').value = data.max_retry;
+                    document.getElementById('cfgFindTime').value = data.find_time;
+                    document.getElementById('cfgBanTime').value = data.ban_time;
+                    // Filtro + ignoreip
+                    renderFilterOptions(jail, data.filter || '');
+                    window.__cfgSelectedFilter = data.filter || '';
+                    renderIgnoreIpList(jail, data.ignoreip || []);
+                    status.textContent = 'Letto da jail.local';
+                    status.className = 'ms-2 small text-success';
+                } else {
+                    status.textContent = 'Errore: ' + (data.message || 'sconosciuto');
+                    status.className = 'ms-2 small text-danger';
+                    renderIgnoreIpList(jail, []);
+                    renderFilterOptions(jail, '');
+                }
+            }).catch(e => {
+                status.textContent = 'Errore: ' + e.message;
+                status.className = 'ms-2 small text-danger';
+            });
+        }
+
+        function renderIgnoreIpList(jail, ips) {
+            const el = document.getElementById('cfgIgnoreIpList');
+            if (!el) return;
+            const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+            if (!ips || ips.length === 0) {
+                el.innerHTML = '<span class="text-muted small"><i class="fas fa-info-circle me-1"></i>Nessun IP in whitelist per <code>' + esc(jail) + '</code>.</span>';
+                return;
+            }
+            el.innerHTML = ips.map(ip =>
+                '<span class="badge bg-light text-dark border me-1 mb-1" style="font-size:.8rem">' +
+                '<code>' + esc(ip) + '</code>' +
+                ' <button class="btn btn-link btn-sm p-0 ms-1" style="font-size:.75rem;color:#dc3545" onclick="removeIgnoreIp(\\'' + esc(ip) + '\\')" title="Rimuovi dalla whitelist"><i class="fas fa-times"></i></button>' +
+                '</span>'
+            ).join('');
+        }
+
+        function saveJailFilter() {
+            const jail = document.getElementById('cfgJailSelect').value;
+            const status = document.getElementById('cfgJailStatus');
+            // Il filtro selezionato e' sia il preset cliccato che il testo custom.
+            // Se l'utente ha cliccato "Personalizzato", prende il valore dell'input.
+            let filter = window.__cfgSelectedFilter || '';
+            const customInput = document.getElementById('cfgFilter');
+            if (filter === '__custom__') {
+                filter = customInput ? customInput.value.trim() : '';
+            }
+            if (!filter || filter === '__custom__') {
+                status.textContent = 'Seleziona un filtro dalla lista (o scrivi un filtro personalizzato)';
+                status.className = 'ms-2 small text-danger';
+                return;
+            }
+            if (!confirm('Cambiare il filtro di "' + jail + '" in:\\n\\n  ' + filter + '\\n\\nViene creato un backup del file di config prima della modifica, e fail2ban viene ricaricato.')) return;
+            status.textContent = 'Salvataggio filtro...';
+            status.className = 'ms-2 small text-muted';
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'set_jail_filter', jail: jail, filter: filter })
+            }).then(r => r.json()).then(data => {
+                status.textContent = (data.success ? 'OK: ' : 'Errore: ') + (data.message || '');
+                status.className = 'ms-2 small ' + (data.success ? 'text-success' : 'text-danger');
+                if (data.success) {
+                    setTimeout(() => loadJailConfig(), 500);
+                    if (typeof loadJailLiveState === 'function') setTimeout(loadJailLiveState, 1000);
+                }
+            }).catch(e => {
+                status.textContent = 'Errore rete: ' + e.message;
+                status.className = 'ms-2 small text-danger';
+            });
+        }
+
+        function addIgnoreIp() {
+            const jail = document.getElementById('cfgJailSelect').value;
+            const ip = document.getElementById('cfgIgnoreIpInput').value.trim();
+            const status = document.getElementById('cfgJailStatus');
+            if (!ip) { status.textContent = 'Inserisci un IP/CIDR'; status.className = 'ms-2 small text-danger'; return; }
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'add_jail_ignoreip', jail: jail, ip: ip })
+            }).then(r => r.json()).then(data => {
+                status.textContent = (data.success ? 'OK: ' : 'Errore: ') + (data.message || '');
+                status.className = 'ms-2 small ' + (data.success ? 'text-success' : 'text-danger');
+                if (data.success) {
+                    document.getElementById('cfgIgnoreIpInput').value = '';
+                    loadJailConfig();
+                }
+            }).catch(e => {
+                status.textContent = 'Errore rete: ' + e.message;
+                status.className = 'ms-2 small text-danger';
+            });
+        }
+
+        function removeIgnoreIp(ip) {
+            const jail = document.getElementById('cfgJailSelect').value;
+            const status = document.getElementById('cfgJailStatus');
+            if (!confirm('Rimuovere ' + ip + ' dalla whitelist di "' + jail + '"?')) return;
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'remove_jail_ignoreip', jail: jail, ip: ip })
+            }).then(r => r.json()).then(data => {
+                status.textContent = (data.success ? 'OK: ' : 'Errore: ') + (data.message || '');
+                status.className = 'ms-2 small ' + (data.success ? 'text-success' : 'text-danger');
+                if (data.success) loadJailConfig();
+            }).catch(e => {
+                status.textContent = 'Errore rete: ' + e.message;
+                status.className = 'ms-2 small text-danger';
+            });
+        }
+
+        function saveJailConfig() {
+            const jail = document.getElementById('cfgJailSelect').value;
+            const maxRetry = parseInt(document.getElementById('cfgMaxRetry').value, 10);
+            const findTime = parseInt(document.getElementById('cfgFindTime').value, 10);
+            const banTime = parseInt(document.getElementById('cfgBanTime').value, 10);
+            const status = document.getElementById('cfgJailStatus');
+            if (!Number.isFinite(maxRetry) || !Number.isFinite(findTime) || !Number.isFinite(banTime)) {
+                status.textContent = 'Inserisci valori numerici';
+                status.className = 'ms-2 small text-danger';
+                return;
+            }
+            status.textContent = 'Salvataggio...';
+            status.className = 'ms-2 small text-muted';
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update_jail_config',
+                    jail: jail,
+                    max_retry: maxRetry,
+                    find_time: findTime,
+                    ban_time: banTime
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    status.textContent = data.message || 'Salvato';
+                    status.className = 'ms-2 small text-success';
+                    loadStatus();
+                } else {
+                    status.textContent = 'Errore: ' + (data.message || data.error || 'sconosciuto');
+                    status.className = 'ms-2 small text-danger';
+                }
+            }).catch(e => {
+                status.textContent = 'Errore: ' + e.message;
+                status.className = 'ms-2 small text-danger';
+            });
+        }
+
+        function saveJailConfigAllJails() {
+            const maxRetry = parseInt(document.getElementById('cfgMaxRetry').value, 10);
+            const findTime = parseInt(document.getElementById('cfgFindTime').value, 10);
+            const banTime = parseInt(document.getElementById('cfgBanTime').value, 10);
+            const status = document.getElementById('cfgJailStatus');
+            if (!Number.isFinite(maxRetry) || !Number.isFinite(findTime) || !Number.isFinite(banTime)) {
+                status.textContent = 'Inserisci valori numerici';
+                status.className = 'ms-2 small text-danger';
+                return;
+            }
+            if (!confirm('Applicare maxretry=' + maxRetry + ', findtime=' + findTime + 's, bantime=' + banTime + 's a TUTTE le jail attive (dovecot, postfix-auth, mail-panel-auth, ecc.)?\\n\\nQuesta operazione sovrascrive i valori esistenti in ciascuna jail.')) return;
+            status.textContent = 'Applicazione in corso a tutte le jail...';
+            status.className = 'ms-2 small text-muted';
+            fetch('/api/fail2ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update_all_jails_config',
+                    max_retry: maxRetry,
+                    find_time: findTime,
+                    ban_time: banTime
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    status.textContent = 'OK: applicato a ' + (data.success_count || 0) + ' jail';
+                    status.className = 'ms-2 small text-success';
+                } else {
+                    let msg = data.message || data.error || 'errore';
+                    if (Array.isArray(data.results)) {
+                        const failed = data.results.filter(r => !r.success).map(r => r.jail + ': ' + r.message).join('\\n');
+                        if (failed) msg += '\\n' + failed;
+                    }
+                    status.textContent = 'Errore: ' + msg;
+                    status.className = 'ms-2 small text-danger';
+                }
+                loadStatus();
+                if (typeof loadJailLiveState === 'function') loadJailLiveState();
+            }).catch(e => {
+                status.textContent = 'Errore: ' + e.message;
+                status.className = 'ms-2 small text-danger';
+            });
+        }
+""";
+    }
+
+    private static String getJailConfigurationCard() {
+        return """
+                    <!-- Jail Configuration -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-cog me-2"></i>Configurazione Jail</span>
+                            <select class="form-select form-select-sm w-auto" id="cfgJailSelect" onchange="loadJailConfig()">
+                                <option value="mail-panel-auth">mail-panel-auth</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Max tentativi</label>
+                                    <input type="number" class="form-control form-control-sm" id="cfgMaxRetry" min="1" max="100" value="5">
+                                    <div class="mt-1 d-flex gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgMaxRetry',2)">2 <span class="text-success">★</span></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgMaxRetry',3)">3</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgMaxRetry',5)">5</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgMaxRetry',10)">10</button>
+                                    </div>
+                                    <div class="form-text small mt-1">Falliti consecutivi prima del ban. <b>Consigliato: 2</b> (anti brute-force aggressivo).</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Finestra (secondi)</label>
+                                    <input type="number" class="form-control form-control-sm" id="cfgFindTime" min="30" max="86400" value="600">
+                                    <div class="mt-1 d-flex gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',300)">5 min</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',1200)">20 min</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',1800)">30 min</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',3600)">1 h <span class="text-success">★</span></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',10800)">3 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',21600)">6 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',86400)">24 h</button>
+                                    </div>
+                                    <div class="form-text small mt-1">Finestra in cui contare i tentativi. <b>Consigliato: 1 h</b> (copre low-and-slow).</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Durata ban (secondi)</label>
+                                    <input type="number" class="form-control form-control-sm" id="cfgBanTime" min="60" max="31536000" value="3600">
+                                    <div class="mt-1 d-flex gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',600)">10 min</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',3600)">1 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',21600)">6 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',86400)">24 h <span class="text-success">★</span></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',604800)">1 sett.</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',2592000)">30 giorni</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',-1)">permanente</button>
+                                    </div>
+                                    <div class="form-text small mt-1">Durata del ban. <b>Consigliato: 24 h</b> (gli IP "puliti" si autosbloccano, i recidivi rientrano e si fanno ribannare → la jail <code>recidive</code> li banna piu' a lungo).</div>
+                                </div>
+                            </div>
+                            <div class="alert alert-success py-2 px-2 mt-2 mb-0 small">
+                                <i class="fas fa-shield-alt me-1"></i>
+                                <b>Preset consigliato anti brute-force mail (con <code>recidive</code> attivo):</b>
+                                <button type="button" class="btn btn-success btn-sm py-0 px-2 ms-2" style="font-size:.75rem" onclick="setCfg('cfgMaxRetry',2);setCfg('cfgFindTime',3600);setCfg('cfgBanTime',86400)">
+                                    <i class="fas fa-magic me-1"></i>Aggressivo (2 / 1h / 24h)
+                                </button>
+                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-2 ms-1" style="font-size:.75rem" onclick="setCfg('cfgMaxRetry',3);setCfg('cfgFindTime',1800);setCfg('cfgBanTime',21600)">
+                                    Bilanciato (3 / 30m / 6h)
+                                </button>
+                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-2 ms-1" style="font-size:.75rem" onclick="setCfg('cfgMaxRetry',5);setCfg('cfgFindTime',600);setCfg('cfgBanTime',3600)">
+                                    Permissivo / Default (5 / 10m / 1h)
+                                </button>
+                                <div class="text-muted mt-1" style="font-size:.75rem">I preset compilano i 3 campi ma NON salvano: poi clicca "Salva" o "Applica a TUTTE le jail attive".</div>
+                            </div>
+                            <div class="d-flex gap-2 mt-3 flex-wrap">
+                                <button class="btn btn-primary btn-sm" onclick="saveJailConfig()">
+                                    <i class="fas fa-save me-1"></i>Salva (solo questa jail)
+                                </button>
+                                <button class="btn btn-warning btn-sm" onclick="saveJailConfigAllJails()">
+                                    <i class="fas fa-clone me-1"></i>Applica a TUTTE le jail attive
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="loadJailConfig()">
+                                    <i class="fas fa-sync me-1"></i>Ricarica da file
+                                </button>
+                                <span id="cfgJailStatus" class="ms-2 small"></span>
+                            </div>
+                            <div class="alert alert-warning py-2 px-2 mt-3 mb-0 small">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                <b>Attenzione:</b> ogni jail (dovecot, postfix-auth, mail-panel-auth, rspamd, ...) ha la <b>propria</b>
+                                <code>maxretry</code>/<code>findtime</code>/<code>bantime</code>. Salvando "solo questa jail" modifichi
+                                <b>esclusivamente</b> quella selezionata in alto. Per propagare gli stessi valori a tutte le jail
+                                attive usa <b>"Applica a TUTTE le jail attive"</b>.
+                            </div>
+                            <div class="alert alert-info py-1 px-2 mt-2 mb-0 small">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Le modifiche vengono scritte in <code>/usr/local/etc/fail2ban/jail.local</code> e applicate subito con <code>fail2ban-client reload</code>.
+                                Sopravvivono ai restart di fail2ban e del pannello.
+                            </div>
+
+                            <!-- ============ FILTRO ============ -->
+                            <hr class="my-3">
+                            <h6 class="mb-2"><i class="fas fa-filter me-2"></i>Che cosa Fail2ban riconosce come "attacco"</h6>
+                            <p class="small text-muted mb-2">
+                                Il filtro decide <b>quali righe del log mail vengono contate come tentativo fallito</b>.
+                                Filtri diversi catturano pattern diversi: il filtro <i>sicuro</i> riconosce solo i login falliti classici,
+                                il filtro <i>aggressivo</i> riconosce anche scanner e probe di bot. Cambiare filtro fa
+                                <b>backup automatico</b> della configurazione.
+                            </p>
+
+                            <div class="small mb-2">
+                                <span class="text-muted">Filtro attivo adesso:</span>
+                                <code id="cfgFilterCurrent" class="ms-1">—</code>
+                            </div>
+
+                            <div id="cfgFilterOptions" class="d-grid gap-2 mb-2">
+                                <!-- Le opzioni vengono renderizzate da JS in base alla jail selezionata -->
+                            </div>
+
+                            <div id="cfgFilterCustom" class="d-none mb-2 mt-2">
+                                <label class="form-label small mb-1">Nome del filtro</label>
+                                <input type="text" class="form-control form-control-sm" id="cfgFilter" placeholder="es: postfix[mode=aggressive]">
+                                <div class="form-text small">Formato: <code>nome-filtro</code> oppure <code>nome-filtro[opzione=valore]</code>. Il file deve esistere in <code>/usr/local/etc/fail2ban/filter.d/</code>.</div>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary btn-sm" onclick="saveJailFilter()">
+                                    <i class="fas fa-save me-1"></i>Salva filtro selezionato
+                                </button>
+                            </div>
+
+                            <!-- ============ IGNOREIP (WHITELIST) ============ -->
+                            <hr class="my-3">
+                            <h6 class="mb-2"><i class="fas fa-shield-alt me-2"></i>IP in whitelist (ignoreip) di questa jail</h6>
+                            <p class="small text-muted mb-2">
+                                Questi IP/CIDR <strong>non verranno MAI bannati</strong> da questa jail, anche se fanno tentativi falliti.
+                                Usalo per il tuo IP fisso (ufficio/VPN) per evitare di auto-bannarti.
+                            </p>
+                            <div id="cfgIgnoreIpList" class="mb-2"><span class="text-muted small">Caricamento...</span></div>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-9">
+                                    <input type="text" class="form-control form-control-sm" id="cfgIgnoreIpInput" placeholder="es: 192.168.1.10 oppure 192.168.0.0/24">
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-success btn-sm w-100" onclick="addIgnoreIp()">
+                                        <i class="fas fa-plus me-1"></i>Aggiungi a whitelist
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+""";
+    }
+
     private static String getVaultManagementCard() {
         return """
                     <!-- Master key vault management -->
@@ -6653,13 +7217,32 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         .log-warning { color: #cca700; }
         .log-info { color: #3794ff; }
         .log-viewer { background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 0.85rem; padding: 15px; border-radius: 8px; max-height: 500px; overflow-y: auto; }
-        .log-entry { padding: 2px 0; border-bottom: 1px solid #333; }
+        /* Force-reset di line-through ovunque venga (Bootstrap, html del log, etc) */
+        .log-entry, .log-entry *, .log-viewer, .log-viewer * {
+            text-decoration: none !important;
+            text-decoration-line: none !important;
+            text-decoration-style: none !important;
+        }
+        /* Padding verticale + separatore tenue per evitare overlap visivo con il testo */
+        .log-entry {
+            padding: 6px 4px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            word-break: break-word;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        .log-entry:last-child { border-bottom: none; }
         .log-entry:hover { background: #2d2d2d; }
         .log-ERROR { color: #f44336; }
         .log-WARNING { color: #ff9800; }
         .log-INFO { color: #4caf50; }
         .log-DEBUG { color: #9e9e9e; }
         .stat-number { font-size: 2rem; font-weight: bold; color: #e94560; }
+        .log-preset-btn { font-size: 0.78rem; padding: 2px 8px; }
+        .log-preset-btn.active { font-weight: 600; box-shadow: 0 0 0 2px rgba(0,123,255,.35); }
+        .log-preset-group { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
+        .log-preset-cat { font-size:.7rem; font-weight:600; text-transform:uppercase; color:#6c757d; min-width:90px; }
+        #filterActiveDesc { font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; background: #eef5ff; border-left: 3px solid #0d6efd; }
         """;
         return getHead("Logs", extraStyles) + getNavbar("logs") + """
     <div class="content container mt-4">
@@ -6680,14 +7263,89 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         </div>
 
         <div class="content-container">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2><i class="fas fa-file-alt me-2"></i>Log Server</h2>
-                <div>
-                    <select class="form-select d-inline-block w-auto" id="logSelect">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="mb-0"><i class="fas fa-file-alt me-2"></i>Log Server</h2>
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select form-select-sm w-auto" id="logSelect">
                         <option value="">Caricamento...</option>
                     </select>
-                    <input type="text" class="form-control d-inline-block w-auto ms-2" id="logFilter" placeholder="Filtra...">
-                    <button class="btn btn-mail ms-2" onclick="loadLogs()"><i class="fas fa-sync"></i></button>
+                    <input type="text" class="form-control form-control-sm w-auto" id="logFilter" placeholder="Filtra (regex)..." onkeyup="if(event.key==='Enter')loadLogs()">
+                    <button class="btn btn-sm btn-mail" onclick="loadLogs()" title="Ricarica con il filtro corrente"><i class="fas fa-sync"></i></button>
+                </div>
+            </div>
+
+            <!-- Filtri preset -->
+            <div class="card mb-3 border-info">
+                <div class="card-header bg-info text-white py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-filter me-2"></i><strong>Filtri rapidi</strong> <small class="text-white-50 ms-2">click per applicare — passaci sopra per vedere la regex</small></span>
+                    <button class="btn btn-sm btn-light" onclick="applyPreset('all', this)" title="Mostra TUTTE le righe del log senza filtro"><i class="fas fa-eye me-1"></i>Mostra tutto</button>
+                </div>
+                <div class="card-body py-2">
+                    <div class="log-preset-group mb-2">
+                        <span class="log-preset-cat text-danger"><i class="fas fa-shield-alt me-1"></i>Sicurezza</span>
+                        <button class="btn btn-outline-danger log-preset-btn" data-preset="brute-smtp" onclick="applyPreset('brute-smtp', this)"
+                            title="REGEX: SASL.*authentication failed&#10;Cattura: tentativi di login SMTP falliti (Postfix SASL). Sono i veri brute-force di posta in uscita.">
+                            <i class="fas fa-user-secret me-1"></i>Brute-force SMTP (SASL)
+                        </button>
+                        <button class="btn btn-outline-danger log-preset-btn" data-preset="brute-imap" onclick="applyPreset('brute-imap', this)"
+                            title="REGEX: dovecot.*(auth failed|Disconnected.*auth)&#10;Cattura: tentativi di login IMAP/POP falliti (Dovecot). Sono i veri brute-force di posta in entrata/webmail.">
+                            <i class="fas fa-inbox me-1"></i>Brute-force IMAP/POP
+                        </button>
+                        <button class="btn btn-outline-danger log-preset-btn" data-preset="brute-panel" onclick="applyPreset('brute-panel', this)"
+                            title="REGEX: mail-panel-auth|AUTH_FAILED&#10;Cattura: tentativi di login falliti al pannello stesso.">
+                            <i class="fas fa-lock me-1"></i>Brute-force pannello
+                        </button>
+                        <button class="btn btn-outline-danger log-preset-btn" data-preset="banned" onclick="applyPreset('banned', this)"
+                            title="REGEX: fail2ban.*(Ban |Found )&#10;Cattura: eventi di Fail2ban (rilevamento e ban di IP).">
+                            <i class="fas fa-gavel me-1"></i>Ban Fail2ban
+                        </button>
+                    </div>
+                    <div class="log-preset-group mb-2">
+                        <span class="log-preset-cat text-warning"><i class="fas fa-broom me-1"></i>Rumore</span>
+                        <button class="btn btn-outline-warning log-preset-btn" data-preset="scanners" onclick="applyPreset('scanners', this)"
+                            title="REGEX: SSL_accept error|TLS library problem|lost connection after (STARTTLS|EHLO)|http request&#10;Cattura: scanner internet (Censys, Shodan, BinaryEdge, ecc.) che probano le porte mail con richieste mal formate. NON sono attacchi — sono noise di internet.">
+                            <i class="fas fa-satellite-dish me-1"></i>Scanner internet
+                        </button>
+                        <button class="btn btn-outline-warning log-preset-btn" data-preset="known-scanners" onclick="applyPreset('known-scanners', this)"
+                            title="REGEX: censys-scanner|shodan|driftnet|internet-?measurement|securitytrails|binaryedge|shadowserver|stretchoid&#10;Cattura: hostname/DNS di scanner notoriamente innocui. Usalo per riconoscere il rumore.">
+                            <i class="fas fa-robot me-1"></i>Bot/scanner noti
+                        </button>
+                        <button class="btn btn-outline-warning log-preset-btn" data-preset="anvil" onclick="applyPreset('anvil', this)"
+                            title="REGEX: postfix/anvil|max connection&#10;Cattura: statistiche periodiche di anvil (rate limiter postfix). Puramente informative.">
+                            <i class="fas fa-chart-line me-1"></i>Statistiche anvil
+                        </button>
+                    </div>
+                    <div class="log-preset-group mb-2">
+                        <span class="log-preset-cat text-success"><i class="fas fa-envelope me-1"></i>Posta</span>
+                        <button class="btn btn-outline-success log-preset-btn" data-preset="mail-sent" onclick="applyPreset('mail-sent', this)"
+                            title="REGEX: status=sent|relay=&#10;Cattura: email consegnate con successo (sent/relayed).">
+                            <i class="fas fa-paper-plane me-1"></i>Email consegnate
+                        </button>
+                        <button class="btn btn-outline-success log-preset-btn" data-preset="mail-bounce" onclick="applyPreset('mail-bounce', this)"
+                            title="REGEX: status=(bounced|deferred|rejected)|NOQUEUE.*reject&#10;Cattura: email rifiutate, bounce, deferred. Da controllare se un utente lamenta che non arrivano mail.">
+                            <i class="fas fa-undo me-1"></i>Bounce / rifiutate
+                        </button>
+                        <button class="btn btn-outline-success log-preset-btn" data-preset="spam" onclick="applyPreset('spam', this)"
+                            title="REGEX: rspamd|spam|virus|clamav&#10;Cattura: eventi anti-spam (Rspamd) e antivirus (ClamAV).">
+                            <i class="fas fa-bug me-1"></i>Spam / virus
+                        </button>
+                    </div>
+                    <div class="log-preset-group">
+                        <span class="log-preset-cat text-primary"><i class="fas fa-exclamation-circle me-1"></i>Diagnostica</span>
+                        <button class="btn btn-outline-primary log-preset-btn" data-preset="errors" onclick="applyPreset('errors', this)"
+                            title="REGEX: error|fatal|warning&#10;Cattura: TUTTI gli errori e warning di QUALSIASI servizio. Buon punto di partenza se qualcosa non va.">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Solo errori/warning
+                        </button>
+                        <button class="btn btn-outline-primary log-preset-btn" data-preset="connections" onclick="applyPreset('connections', this)"
+                            title="REGEX: connect from|disconnect from&#10;Cattura: tutte le connessioni in entrata (utili per vedere chi ti contatta).">
+                            <i class="fas fa-plug me-1"></i>Connessioni
+                        </button>
+                        <button class="btn btn-outline-primary log-preset-btn" data-preset="tls" onclick="applyPreset('tls', this)"
+                            title="REGEX: TLS|SSL|STARTTLS|cipher&#10;Cattura: tutto il negoziato TLS/SSL. Utile per debug certificati/handshake.">
+                            <i class="fas fa-lock me-1"></i>TLS/SSL
+                        </button>
+                    </div>
+                    <div id="filterActiveDesc" class="mt-2 d-none"></div>
                 </div>
             </div>
 
@@ -6739,6 +7397,58 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             });
         });
 
+        // ===== Filtri preset =====
+        const LOG_PRESETS = {
+            'all':           { regex: '',
+                               desc: 'Mostra TUTTE le righe del log senza filtro.' },
+            'brute-smtp':    { regex: 'SASL.*authentication failed',
+                               desc: '<b>Brute-force SMTP (SASL):</b> tentativi di login SMTP falliti su Postfix. Sono veri attacchi alla posta in uscita — se ne vedi parecchi dallo stesso IP, Fail2ban dovrebbe bannarlo (jail <code>postfix-auth</code>).' },
+            'brute-imap':    { regex: 'dovecot.*(auth failed|Disconnected.*auth)',
+                               desc: '<b>Brute-force IMAP/POP:</b> tentativi di login Dovecot falliti. Sono veri attacchi alla posta in entrata / webmail (jail <code>dovecot</code>).' },
+            'brute-panel':   { regex: 'mail-panel-auth|AUTH_FAILED',
+                               desc: '<b>Brute-force pannello:</b> tentativi di login falliti al pannello di amministrazione (jail <code>mail-panel-auth</code>).' },
+            'banned':        { regex: 'fail2ban.*(Ban |Found )',
+                               desc: '<b>Eventi Fail2ban:</b> rilevamenti (<code>Found</code>) e ban veri e propri (<code>Ban</code>). Utile per vedere chi è stato bannato e perchè.' },
+            'scanners':      { regex: 'SSL_accept error|TLS library problem|lost connection after (STARTTLS|EHLO)|http request',
+                               desc: '<b>Scanner internet:</b> probe di scanner pubblici (Censys, Shodan, BinaryEdge, …) che bussano alle porte mail con richieste mal formate. <b>NON sono attacchi</b>, è rumore di internet. Postfix risponde correttamente "no, parlo TLS" e amen.' },
+            'known-scanners':{ regex: 'censys-scanner|shodan|driftnet|internet-?measurement|securitytrails|binaryedge|shadowserver|stretchoid',
+                               desc: '<b>Bot/scanner noti:</b> filtra solo gli host con DNS riconoscibili come scanner di sicurezza pubblici. Innocui, utili da riconoscere per non confonderli con attacchi.' },
+            'anvil':         { regex: 'postfix/anvil|max connection',
+                               desc: '<b>Statistiche anvil:</b> report periodici del rate-limiter Postfix. Puramente informative, non azione richiesta.' },
+            'mail-sent':     { regex: 'status=sent|relay=',
+                               desc: '<b>Email consegnate:</b> mail recapitate con successo. Se cerchi una specifica email consegnata, combinala col filtro libero indicando il mittente/destinatario.' },
+            'mail-bounce':   { regex: 'status=(bounced|deferred|rejected)|NOQUEUE.*reject',
+                               desc: '<b>Bounce/rifiutate:</b> email che NON sono state consegnate (bounce permanenti, deferred, reject). <b>Primo posto dove guardare</b> se un utente lamenta che la sua mail non e\\' arrivata.' },
+            'spam':          { regex: 'rspamd|spam|virus|clamav',
+                               desc: '<b>Spam/virus:</b> eventi del motore anti-spam (Rspamd) e antivirus (ClamAV). Includono messaggi marcati come spam, score, virus rilevati.' },
+            'errors':        { regex: 'error|fatal|warning',
+                               desc: '<b>Errori/warning di tutti i servizi:</b> primo filtro da provare se qualcosa non funziona ma non sai dove guardare.' },
+            'connections':   { regex: 'connect from|disconnect from',
+                               desc: '<b>Connessioni:</b> tutte le aperture/chiusure di connessioni TCP verso il server mail. Utile per vedere chi ti contatta in tempo reale.' },
+            'tls':           { regex: 'TLS|SSL|STARTTLS|cipher',
+                               desc: '<b>TLS/SSL:</b> handshake e negoziato della cifratura. Buon punto per debug di certificati, ciphers, o problemi di compatibilita\\' con vecchi client.' }
+        };
+
+        function applyPreset(presetId, btn) {
+            const preset = LOG_PRESETS[presetId];
+            if (!preset) return;
+            document.getElementById('logFilter').value = preset.regex;
+            // Evidenzia il pulsante attivo
+            document.querySelectorAll('.log-preset-btn').forEach(b => b.classList.remove('active'));
+            if (btn && presetId !== 'all') btn.classList.add('active');
+            // Mostra descrizione del filtro
+            const descEl = document.getElementById('filterActiveDesc');
+            if (presetId === 'all') {
+                descEl.classList.add('d-none');
+                descEl.innerHTML = '';
+            } else {
+                descEl.classList.remove('d-none');
+                descEl.innerHTML = '<i class="fas fa-info-circle me-1"></i>' + preset.desc +
+                    ' &nbsp;<code class="ms-1" style="font-size:.7rem">' + preset.regex + '</code>';
+            }
+            loadLogs();
+        }
+
         function loadLogs() {
             const logId = document.getElementById('logSelect').value;
             const filter = document.getElementById('logFilter').value;
@@ -6754,11 +7464,20 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     return;
                 }
 
+                // ESCAPE HTML — i log mail contengono spesso "<user@example.com>" che il
+                // browser interpreta come tag HTML sconosciuto. Senza escape, tag come <s>
+                // o <del> nei log produrrebbero text-decoration line-through indesiderato.
+                const escLog = (s) => {
+                    if (s == null) return '';
+                    const d = document.createElement('div');
+                    d.textContent = String(s);
+                    return d.innerHTML;
+                };
                 viewer.innerHTML = data.entries.map(e => {
                     const levelClass = 'log-' + (e.level || 'INFO');
-                    const ts = e.timestamp || '';
-                    const proc = e.process ? '[' + e.process + '] ' : '';
-                    return '<div class="log-entry ' + levelClass + '">' + ts + ' ' + proc + e.message + '</div>';
+                    const ts = escLog(e.timestamp || '');
+                    const proc = e.process ? '[' + escLog(e.process) + '] ' : '';
+                    return '<div class="log-entry ' + levelClass + '">' + ts + ' ' + proc + escLog(e.message) + '</div>';
                 }).join('');
 
                 viewer.scrollTop = viewer.scrollHeight;
@@ -6780,8 +7499,15 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     return;
                 }
 
+                // Escape HTML anche qui (i log contengono spesso "<user@example.com>")
+                const escSearch = (s) => {
+                    if (s == null) return '';
+                    const d = document.createElement('div');
+                    d.textContent = String(s);
+                    return d.innerHTML;
+                };
                 results.innerHTML = '<div class="log-viewer" style="max-height:200px">' +
-                    data.results.map(r => '<div class="log-entry">' + r.raw + '</div>').join('') +
+                    data.results.map(r => '<div class="log-entry">' + escSearch(r.raw) + '</div>').join('') +
                     '</div>';
             });
         }
@@ -8466,9 +9192,15 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             <div class="card mb-4 border-primary">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-stethoscope me-2"></i><strong>Stato Fail2ban</strong> <small class="ms-2" id="fhcOverallStatus"></small></span>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
                         <button class="btn btn-sm btn-warning d-none" id="btnFixAll" onclick="runFhcFixAll()">
                             <i class="fas fa-magic me-1"></i>Risolvi tutto
+                        </button>
+                        <button class="btn btn-sm btn-outline-light" onclick="reloadFail2banFromPanel()" title="Esegue fail2ban-client reload: rilegge i file di config senza killare il daemon. Conserva i contatori.">
+                            <i class="fas fa-sync-alt me-1"></i>Reload config
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="restartFail2banFromPanel()" title="Esegue service fail2ban restart: killa il daemon e lo riavvia da zero. Usa questo se fail2ban e' in uno stato bislacco. Azzera i contatori e gli IP bannati attivi.">
+                            <i class="fas fa-power-off me-1"></i>Restart fail2ban
                         </button>
                         <button class="btn btn-sm btn-light" onclick="loadFail2banHealth()">
                             <i class="fas fa-sync me-1"></i>Ricontrolla
@@ -8481,6 +9213,47 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 <div class="card-body border-top d-none" id="fhcFixAllReport">
                     <h6 class="mb-2"><i class="fas fa-list-check me-1"></i>Report risoluzione</h6>
                     <div id="fhcFixAllSteps"></div>
+                </div>
+            </div>
+
+            <!-- Stato Live Jail Fail2ban (output di fail2ban-client get/status) -->
+            <div class="card mb-4 border-secondary">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-microscope me-2"></i><strong>Stato live jail (fail2ban-client get/status)</strong> <small class="ms-2 text-white-50">verifica che la config sia REALMENTE applicata</small></span>
+                    <button class="btn btn-sm btn-light" onclick="loadJailLiveState()">
+                        <i class="fas fa-sync me-1"></i>Aggiorna
+                    </button>
+                </div>
+                <div class="card-body p-2" id="jailLiveBody">
+                    <p class="text-muted small mb-0 p-2"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>
+                </div>
+            </div>
+
+            <!-- Postfix Aliases Health / Auto-fix -->
+            <div class="card mb-4 border-info">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-at me-2"></i><strong>Alias di sistema Postfix</strong> <small class="ms-2" id="paliasOverallBadge"></small></span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-warning d-none" id="paliasFixBtn" onclick="paliasFix()">
+                            <i class="fas fa-magic me-1"></i>Risolvi
+                        </button>
+                        <button class="btn btn-sm btn-light" onclick="paliasLoad()">
+                            <i class="fas fa-sync me-1"></i>Ricontrolla
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="paliasBody">
+                    <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>
+                </div>
+                <div class="card-body border-top">
+                    <h6 class="mb-2"><i class="fas fa-share me-1"></i>Forward delle mail di sistema (root)</h6>
+                    <p class="small text-muted mb-2">Le mail dirette a <code>root</code>, <code>postmaster</code>, <code>mailer-daemon</code> ecc. vengono inoltrate qui. Imposta una mail vera così ricevi alert di sistema (cron, security, ecc.). Lascia <code>root</code> per non inoltrare a nessuno.</p>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">root →</span>
+                        <input type="text" class="form-control" id="paliasRootForward" placeholder="es. owner@domain-a.test oppure root">
+                        <button class="btn btn-info" type="button" onclick="paliasSetRootForward()"><i class="fas fa-save me-1"></i>Salva forward</button>
+                    </div>
+                    <div id="paliasLog" class="mt-2 small"></div>
                 </div>
             </div>
 
@@ -8515,34 +9288,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
 """;
         String htmlPart2 = """
-            <!-- ClamAV Health Check -->
-            <div class="card mb-4 border-success">
-                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <span><i class="fas fa-virus-slash me-2"></i><strong>Stato ClamAV (antivirus)</strong> <small class="ms-2" id="cavOverallStatus"></small></span>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-info text-white" id="btnCavTestEicar" onclick="runCavTestEicar()" title="Test end-to-end: il pannello scrive un file EICAR temporaneo e verifica che clamdscan lo rilevi">
-                            <i class="fas fa-flask me-1"></i>Test EICAR
-                        </button>
-                        <button class="btn btn-sm btn-warning d-none" id="btnCavFixAll" onclick="runCavFixAll()">
-                            <i class="fas fa-magic me-1"></i>Risolvi tutto
-                        </button>
-                        <button class="btn btn-sm btn-light" onclick="loadClamavHealth()">
-                            <i class="fas fa-sync me-1"></i>Ricontrolla
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body" id="cavContainer">
-                    <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>
-                </div>
-                <div class="card-body border-top d-none" id="cavEicarResult">
-                    <h6 class="mb-2"><i class="fas fa-flask me-1"></i>Risultato Test EICAR</h6>
-                    <div id="cavEicarBody"></div>
-                </div>
-                <div class="card-body border-top d-none" id="cavFixAllReport">
-                    <h6 class="mb-2"><i class="fas fa-list-check me-1"></i>Report risoluzione</h6>
-                    <div id="cavFixAllSteps"></div>
-                </div>
-            </div>
+""" + getClamavHealthCard() + """
 
             <!-- Status Cards -->
             <div class="row mb-4">
@@ -8608,48 +9354,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         </div>
                     </div>
 
-                    <!-- Jail Configuration -->
-                    <div class="card mb-4">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span><i class="fas fa-cog me-2"></i>Configurazione Jail</span>
-                            <select class="form-select form-select-sm w-auto" id="cfgJailSelect" onchange="loadJailConfig()">
-                                <option value="mail-panel-auth">mail-panel-auth</option>
-                            </select>
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-2 align-items-end">
-                                <div class="col-md-4">
-                                    <label class="form-label small mb-1">Max tentativi</label>
-                                    <input type="number" class="form-control form-control-sm" id="cfgMaxRetry" min="1" max="100" value="5">
-                                    <div class="form-text small">Falliti consecutivi prima del ban</div>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small mb-1">Finestra (secondi)</label>
-                                    <input type="number" class="form-control form-control-sm" id="cfgFindTime" min="30" max="86400" value="600">
-                                    <div class="form-text small">Periodo in cui contare i tentativi</div>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small mb-1">Durata ban (secondi)</label>
-                                    <input type="number" class="form-control form-control-sm" id="cfgBanTime" min="60" max="31536000" value="3600">
-                                    <div class="form-text small">3600 = 1h, 86400 = 24h, -1 sconsigliato</div>
-                                </div>
-                            </div>
-                            <div class="d-flex gap-2 mt-3">
-                                <button class="btn btn-primary btn-sm" onclick="saveJailConfig()">
-                                    <i class="fas fa-save me-1"></i>Salva e ricarica fail2ban
-                                </button>
-                                <button class="btn btn-outline-secondary btn-sm" onclick="loadJailConfig()">
-                                    <i class="fas fa-sync me-1"></i>Ricarica da file
-                                </button>
-                                <span id="cfgJailStatus" class="ms-2 small"></span>
-                            </div>
-                            <div class="alert alert-info py-1 px-2 mt-3 mb-0 small">
-                                <i class="fas fa-info-circle me-1"></i>
-                                Le modifiche vengono scritte in <code>/usr/local/etc/fail2ban/jail.local</code> e applicate subito con <code>fail2ban-client reload</code>.
-                                Sopravvivono ai restart di fail2ban e del pannello.
-                            </div>
-                        </div>
-                    </div>
+""" + getJailConfigurationCard() + """
                 </div>
 
                 <!-- Recent Bans & Banned IPs -->
@@ -8971,70 +9676,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             });
         }
 
-        // ===== Jail Configuration =====
-        function loadJailConfig() {
-            const jail = document.getElementById('cfgJailSelect').value;
-            const status = document.getElementById('cfgJailStatus');
-            status.textContent = 'Caricamento...';
-            status.className = 'ms-2 small text-muted';
-            fetch('/api/fail2ban', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_jail_config', jail: jail })
-            }).then(r => r.json()).then(data => {
-                if (data.success) {
-                    document.getElementById('cfgMaxRetry').value = data.max_retry;
-                    document.getElementById('cfgFindTime').value = data.find_time;
-                    document.getElementById('cfgBanTime').value = data.ban_time;
-                    status.textContent = 'Letto da jail.local';
-                    status.className = 'ms-2 small text-success';
-                } else {
-                    status.textContent = 'Errore: ' + (data.message || 'sconosciuto');
-                    status.className = 'ms-2 small text-danger';
-                }
-            }).catch(e => {
-                status.textContent = 'Errore: ' + e.message;
-                status.className = 'ms-2 small text-danger';
-            });
-        }
-
-        function saveJailConfig() {
-            const jail = document.getElementById('cfgJailSelect').value;
-            const maxRetry = parseInt(document.getElementById('cfgMaxRetry').value, 10);
-            const findTime = parseInt(document.getElementById('cfgFindTime').value, 10);
-            const banTime = parseInt(document.getElementById('cfgBanTime').value, 10);
-            const status = document.getElementById('cfgJailStatus');
-            if (!Number.isFinite(maxRetry) || !Number.isFinite(findTime) || !Number.isFinite(banTime)) {
-                status.textContent = 'Inserisci valori numerici';
-                status.className = 'ms-2 small text-danger';
-                return;
-            }
-            status.textContent = 'Salvataggio...';
-            status.className = 'ms-2 small text-muted';
-            fetch('/api/fail2ban', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'update_jail_config',
-                    jail: jail,
-                    max_retry: maxRetry,
-                    find_time: findTime,
-                    ban_time: banTime
-                })
-            }).then(r => r.json()).then(data => {
-                if (data.success) {
-                    status.textContent = data.message || 'Salvato';
-                    status.className = 'ms-2 small text-success';
-                    loadStatus();
-                } else {
-                    status.textContent = 'Errore: ' + (data.message || data.error || 'sconosciuto');
-                    status.className = 'ms-2 small text-danger';
-                }
-            }).catch(e => {
-                status.textContent = 'Errore: ' + e.message;
-                status.className = 'ms-2 small text-danger';
-            });
-        }
+""" + getJailConfigurationJs() + """
 
         // ===== Fail2ban Health Check / Setup Wizard =====
         let fhcCsrfToken = null;
@@ -9047,6 +9689,244 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 if (el && el.value) return el.value;
             } catch (e) {}
             return fhcCsrfToken || '';
+        }
+
+        // ===== Postfix Aliases =====
+        function paliasEscape(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
+        // ===== Stato live jail Fail2ban =====
+        // Stampa per ogni jail attiva l'output di:
+        //   fail2ban-client get <jail> maxretry/findtime/bantime/logpath/filter/ignoreip
+        //   fail2ban-client status <jail>
+        // così l'utente vede SUBITO se la config è quella che ha impostato.
+        function loadJailLiveState() {
+            const body = document.getElementById('jailLiveBody');
+            body.innerHTML = '<p class="text-muted small mb-0 p-2"><i class="fas fa-spinner fa-spin me-1"></i>Esecuzione di fail2ban-client su tutte le jail attive...</p>';
+            fetch('/api/fail2ban?action=live_state_all').then(r => r.json()).then(data => {
+                if (!data.success) {
+                    body.innerHTML = '<div class="alert alert-danger m-2 mb-0">Errore: ' + paliasEscape(data.error || 'sconosciuto') + '</div>';
+                    return;
+                }
+                if (!data.installed) {
+                    body.innerHTML = '<div class="alert alert-warning m-2 mb-0">Fail2ban non risulta installato sul sistema.</div>';
+                    return;
+                }
+                if (!data.running) {
+                    body.innerHTML = '<div class="alert alert-warning m-2 mb-0">Fail2ban è installato ma NON in esecuzione. Avvialo con <code>service fail2ban start</code>.</div>';
+                    return;
+                }
+                const jails = data.jails || [];
+                if (jails.length === 0) {
+                    body.innerHTML = '<div class="alert alert-info m-2 mb-0">Nessuna jail attiva.</div>';
+                    return;
+                }
+                let html = '<div class="p-2">';
+                jails.forEach(j => {
+                    html += renderJailLiveCard(j);
+                });
+                html += '</div>';
+                body.innerHTML = html;
+            }).catch(e => {
+                body.innerHTML = '<div class="alert alert-danger m-2 mb-0">Errore rete: ' + paliasEscape(e.message) + '</div>';
+            });
+        }
+
+        function renderJailLiveCard(j) {
+            const name = j.name || '?';
+            // Tag colorato per "currently banned": 0 = grigio, >0 = giallo
+            const cbBadge = j.currently_banned > 0
+                ? '<span class="badge bg-warning text-dark ms-1">' + j.currently_banned + ' bannati ora</span>'
+                : '<span class="badge bg-light text-dark ms-1">0 bannati ora</span>';
+            const tbBadge = j.total_banned > 0
+                ? '<span class="badge bg-secondary ms-1">' + j.total_banned + ' tot</span>'
+                : '';
+
+            let html = '<div class="card mb-3"><div class="card-header py-1 px-2 d-flex justify-content-between align-items-center bg-light">';
+            html += '<div><strong><code>' + paliasEscape(name) + '</code></strong>' + cbBadge + tbBadge + '</div>';
+            html += '<button class="btn btn-sm btn-link p-0" onclick="this.parentElement.parentElement.parentElement.querySelector(\\'.jail-raw-' + paliasEscape(name) + '\\').classList.toggle(\\'d-none\\')"><i class="fas fa-terminal me-1"></i>raw</button>';
+            html += '</div>';
+            html += '<div class="card-body p-2 small">';
+            html += '<table class="table table-sm table-borderless mb-2"><tbody>';
+            html += renderJailGetRow('maxretry',  j.maxretry,  'numero di fallimenti che fa scattare il ban');
+            html += renderJailGetRow('findtime',  j.findtime,  'finestra (in secondi) dentro cui si contano i fallimenti', true);
+            html += renderJailGetRow('bantime',   j.bantime,   'durata del ban (in secondi, -1 = permanente)', true);
+            html += renderJailGetRow('logpath',   j.logpath,   'file di log monitorati');
+            html += renderJailGetRow('filter',    j.filter,    'filtro Fail2ban usato per matchare le righe');
+            html += renderJailGetRow('ignoreip',  j.ignoreip,  'IP/range mai bannati (whitelist)');
+            html += '</tbody></table>';
+
+            // Status counters parsati
+            html += '<div class="row g-2 mb-2">';
+            html += '<div class="col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">Currently failed</div><strong class="fs-5">' + j.currently_failed + '</strong></div></div>';
+            html += '<div class="col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">Total failed</div><strong class="fs-5">' + j.total_failed + '</strong></div></div>';
+            html += '<div class="col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">Currently banned</div><strong class="fs-5">' + j.currently_banned + '</strong></div></div>';
+            html += '<div class="col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">Total banned</div><strong class="fs-5">' + j.total_banned + '</strong></div></div>';
+            html += '</div>';
+
+            if (j.banned_ips_raw) {
+                html += '<div class="mb-2"><strong class="small">Banned IP list:</strong> <code class="small" style="word-break:break-all">' + paliasEscape(j.banned_ips_raw) + '</code></div>';
+            }
+
+            // Output RAW del comando "fail2ban-client status <jail>" — chiuso di default
+            html += '<div class="jail-raw-' + paliasEscape(name) + ' d-none">';
+            html += '<div class="small text-muted mb-1"><i class="fas fa-terminal me-1"></i>Output di <code>fail2ban-client status ' + paliasEscape(name) + '</code></div>';
+            html += '<pre class="bg-dark text-light p-2 small rounded mb-0" style="font-size:0.75rem;white-space:pre-wrap">' + paliasEscape(j.status_raw || '') + '</pre>';
+            html += '</div>';
+
+            html += '</div></div>';
+            return html;
+        }
+
+        function renderJailGetRow(key, value, descr, isSeconds) {
+            let display = paliasEscape(value || '');
+            // Se è in secondi, mostra anche la conversione umana
+            if (isSeconds && /^-?\\d+$/.test((value || '').trim())) {
+                const n = parseInt(value, 10);
+                if (n === -1) {
+                    display += ' <span class="text-muted">(permanente)</span>';
+                } else if (n > 0) {
+                    let human;
+                    if (n >= 86400) human = (n / 86400).toFixed(1).replace(/\\.0$/, '') + ' giorni';
+                    else if (n >= 3600) human = (n / 3600).toFixed(1).replace(/\\.0$/, '') + ' ore';
+                    else if (n >= 60) human = (n / 60).toFixed(1).replace(/\\.0$/, '') + ' min';
+                    else human = n + ' s';
+                    display += ' <span class="text-muted">(' + human + ')</span>';
+                }
+            }
+            return '<tr>' +
+                '<td style="width:130px;vertical-align:top"><code class="text-primary">' + key + '</code></td>' +
+                '<td><strong>' + display + '</strong>' + (descr ? '<br><small class="text-muted">' + descr + '</small>' : '') + '</td>' +
+                '</tr>';
+        }
+
+        function paliasLoad() {
+            const body = document.getElementById('paliasBody');
+            const badge = document.getElementById('paliasOverallBadge');
+            const fixBtn = document.getElementById('paliasFixBtn');
+            body.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>';
+            badge.innerHTML = '';
+            fixBtn.classList.add('d-none');
+
+            fetch('/api/postfix-aliases-health').then(r => r.json()).then(data => {
+                if (!data.success) {
+                    body.innerHTML = '<div class="alert alert-danger mb-0">Errore: ' + paliasEscape(data.error || 'sconosciuto') + '</div>';
+                    badge.innerHTML = '<span class="badge bg-danger">Errore</span>';
+                    return;
+                }
+                paliasRender(data);
+            }).catch(e => {
+                body.innerHTML = '<div class="alert alert-danger mb-0">Errore rete: ' + paliasEscape(e.message) + '</div>';
+            });
+        }
+
+        function paliasRender(data) {
+            const body = document.getElementById('paliasBody');
+            const badge = document.getElementById('paliasOverallBadge');
+            const fixBtn = document.getElementById('paliasFixBtn');
+            const overall = data.overall || 'UNKNOWN';
+
+            // Badge nell'header
+            if (overall === 'OK') {
+                badge.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>OK</span>';
+                fixBtn.classList.add('d-none');
+            } else if (overall === 'MISSING_SOURCE') {
+                badge.innerHTML = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>File aliases mancante</span>';
+                fixBtn.classList.remove('d-none');
+            } else if (overall === 'MISSING_DB') {
+                badge.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>aliases.db mancante</span>';
+                fixBtn.classList.remove('d-none');
+            } else if (overall === 'STALE_DB') {
+                badge.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>aliases.db obsoleto</span>';
+                fixBtn.classList.remove('d-none');
+            } else {
+                badge.innerHTML = '<span class="badge bg-secondary">?</span>';
+            }
+
+            // Tabella stato
+            let html = '';
+            if (overall !== 'OK') {
+                html += '<div class="alert alert-warning small"><i class="fas fa-exclamation-triangle me-1"></i>' + paliasEscape(data.summary || '') + ' Clicca <strong>Risolvi</strong> per riparare automaticamente.</div>';
+            } else {
+                html += '<div class="alert alert-success small mb-2"><i class="fas fa-check-circle me-1"></i>' + paliasEscape(data.summary || 'OK') + '</div>';
+            }
+            html += '<table class="table table-sm align-middle mb-0">';
+            html += '<tr><td class="fw-bold" style="width:30%">File sorgente</td><td><code>' + paliasEscape(data.alias_file || '?') + '</code> ' + (data.source_exists ? '<span class="badge bg-success">esiste</span>' : '<span class="badge bg-danger">mancante</span>') + '</td></tr>';
+            html += '<tr><td class="fw-bold">File compilato (.db)</td><td><code>' + paliasEscape(data.alias_db_file || '?') + '</code> ' + (data.db_exists ? '<span class="badge bg-success">esiste</span>' : '<span class="badge bg-danger">mancante</span>') + (data.db_stale_vs_source ? ' <span class="badge bg-warning text-dark">obsoleto</span>' : '') + '</td></tr>';
+            if (data.alias_database_raw) {
+                html += '<tr><td class="fw-bold">alias_database (postconf)</td><td><code>' + paliasEscape(data.alias_database_raw) + '</code></td></tr>';
+            }
+            if (data.alias_maps_raw) {
+                html += '<tr><td class="fw-bold">alias_maps (postconf)</td><td><code>' + paliasEscape(data.alias_maps_raw) + '</code></td></tr>';
+            }
+            if (data.root_forward) {
+                html += '<tr><td class="fw-bold">root inoltrato a</td><td><code>' + paliasEscape(data.root_forward) + '</code></td></tr>';
+            }
+            html += '</table>';
+            body.innerHTML = html;
+
+            // Pre-compila il campo "root forward" se disponibile
+            const fwInput = document.getElementById('paliasRootForward');
+            if (fwInput && data.root_forward) fwInput.value = data.root_forward;
+        }
+
+        function paliasFix() {
+            if (!confirm('Procedere con la riparazione automatica?\\n\\n• Se manca il file sorgente, viene creato con default sicuri.\\n• Il file .db viene ricompilato con postalias.\\n• Postfix viene ricaricato.\\n\\nOperazione non distruttiva (rispetta contenuto esistente).')) return;
+            const fixBtn = document.getElementById('paliasFixBtn');
+            const origBtn = fixBtn.innerHTML;
+            fixBtn.disabled = true;
+            fixBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Risoluzione...';
+            const logEl = document.getElementById('paliasLog');
+            logEl.innerHTML = '';
+            fetch('/api/postfix-aliases-health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'fix', csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                fixBtn.disabled = false;
+                fixBtn.innerHTML = origBtn;
+                let html = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-2"><i class="fas fa-' + (data.success ? 'check' : 'times') + '-circle me-1"></i>' + paliasEscape(data.message || '') + '</div>';
+                if (data.log) {
+                    html += '<pre class="bg-light p-2 rounded small mb-0" style="white-space:pre-wrap">' + paliasEscape(data.log) + '</pre>';
+                }
+                logEl.innerHTML = html;
+                paliasRender(data);
+            })
+            .catch(e => {
+                fixBtn.disabled = false;
+                fixBtn.innerHTML = origBtn;
+                logEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore rete: ' + paliasEscape(e.message) + '</div>';
+            });
+        }
+
+        function paliasSetRootForward() {
+            const v = document.getElementById('paliasRootForward').value.trim();
+            if (!v) { alert('Inserisci un indirizzo email o "root".'); return; }
+            if (!confirm('Impostare il forward delle mail di root su:\\n\\n  ' + v + '\\n\\nDopo il salvataggio, root, postmaster, mailer-daemon e gli alias di sistema invieranno qui le notifiche.')) return;
+            const logEl = document.getElementById('paliasLog');
+            logEl.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Salvataggio...</div>';
+            fetch('/api/postfix-aliases-health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'set_root_forward', forward_to: v, csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                let html = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-2"><i class="fas fa-' + (data.success ? 'check' : 'times') + '-circle me-1"></i>' + paliasEscape(data.message || '') + '</div>';
+                if (data.log) {
+                    html += '<pre class="bg-light p-2 rounded small mb-0" style="white-space:pre-wrap">' + paliasEscape(data.log) + '</pre>';
+                }
+                logEl.innerHTML = html;
+                paliasRender(data);
+            })
+            .catch(e => {
+                logEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore rete: ' + paliasEscape(e.message) + '</div>';
+            });
         }
 
         function loadFail2banHealth() {
@@ -9217,6 +10097,43 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 div.textContent = text == null ? '' : String(text);
                 return div.innerHTML;
             };
+        }
+
+        // Reload morbido (fail2ban-client reload): rilegge i file senza killare il daemon
+        function reloadFail2banFromPanel() {
+            if (!confirm('Eseguire RELOAD di fail2ban?\\n\\nRilegge i file di configurazione senza killare il daemon. Conserva i contatori e gli IP bannati attivi.')) return;
+            fetch('/api/fail2ban_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'reload_fail2ban', csrf_token: ensureFhcCsrfToken() })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✅ ' : '❌ ') + (data.message || 'fatto') +
+                    (data.output ? '\\n\\nOutput:\\n' + data.output : ''));
+                loadFail2banHealth();
+                if (typeof loadJailLiveState === 'function') loadJailLiveState();
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        // Restart pulito (service fail2ban restart): killa il daemon e lo riavvia
+        function restartFail2banFromPanel() {
+            if (!confirm('⚠️ RESTART di fail2ban (service fail2ban restart)\\n\\n' +
+                'Killa il daemon e lo riavvia da zero. Utile per uscire da stati confusi (es. dopo molti reload).\\n\\n' +
+                'COSA SUCCEDE:\\n' +
+                '• I contatori "Currently failed" e "Total failed" si AZZERANO\\n' +
+                '• Gli IP attualmente bannati a runtime si PERDONO (ma i permaban su pf restano!)\\n' +
+                '• La config in jail.local viene RILETTA da zero\\n' +
+                '• Pochi secondi di interruzione del monitoring\\n\\n' +
+                'Procedere?')) return;
+            fetch('/api/fail2ban_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'restart_service', csrf_token: ensureFhcCsrfToken() })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✅ ' : '❌ ') + (data.message || 'fatto') +
+                    (data.output ? '\\n\\nOutput:\\n' + data.output : ''));
+                loadFail2banHealth();
+                if (typeof loadJailLiveState === 'function') loadJailLiveState();
+            }).catch(e => alert('Errore rete: ' + e.message));
         }
 
         // ===== End Health Check =====
@@ -9663,8 +10580,11 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
         // Load on page load
         loadStatus();
-        loadJailConfig();
+        // Popola prima il selettore con tutte le jail attive, poi carica la config
+        populateJailSelect(() => loadJailConfig());
         loadFail2banHealth();
+        loadJailLiveState();
+        paliasLoad();
         loadClamavHealth();
         loadUnboundHealth();
         permabanList();
@@ -10639,6 +11559,1006 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
     </script>
 </body>
 </html>
+""";
+    }
+
+    // ============== FIREWALL.HTML — Geo-firewall pf con whitelist paesi + CIDR ==============
+    public static String getFirewallHtml() {
+        String extraStyles = """
+        .fw-mode-card {
+            cursor: pointer; padding: 12px; border: 2px solid rgba(128,128,128,0.35);
+            border-radius: 8px; transition: all .15s;
+            background: transparent;
+        }
+        .fw-mode-card:hover { border-color: rgba(13,110,253,0.6); }
+        .fw-mode-card.active {
+            border-color: #0d6efd;
+            background: rgba(13,110,253,0.15);
+        }
+        .fw-country-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 6px; max-height: 360px; overflow-y: auto;
+            padding: 8px; border: 1px solid rgba(128,128,128,0.3); border-radius: 6px;
+        }
+        .fw-country-item {
+            padding: 6px 10px; border-radius: 4px; cursor: pointer; user-select: none;
+            display: flex; align-items: center; gap: 6px; font-size: .9rem;
+            transition: background .1s, border-color .1s;
+            border: 1px solid transparent;
+        }
+        .fw-country-item:hover { background: rgba(128,128,128,0.12); }
+        .fw-country-item.selected {
+            background: rgba(13,110,253,0.15);
+            border-color: rgba(13,110,253,0.5);
+        }
+        .fw-country-item.selected .flag { filter: none; }
+        .fw-country-item.selected strong { color: var(--bs-primary, #0d6efd); }
+        .fw-country-item input[type=checkbox] { margin: 0; flex-shrink: 0; }
+        .fw-country-item .flag { font-size: 1.1rem; }
+        .fw-country-item .badge-cidr {
+            margin-left: auto; font-size: .7rem;
+            color: var(--bs-secondary-color, #6c757d);
+        }
+        /* Divider tra "comuni" e "alfabetico" dentro l'unico grid */
+        .fw-country-separator {
+            grid-column: 1 / -1;
+            padding: 4px 0 2px 0;
+            font-size: .75rem;
+            font-weight: 600;
+            color: var(--bs-secondary-color, #6c757d);
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            border-top: 1px solid rgba(128,128,128,0.25);
+            margin-top: 4px;
+        }
+        .fw-country-separator:first-child {
+            border-top: none;
+            margin-top: 0;
+        }
+        .fw-cidr-item {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; margin: 0 4px 4px 0;
+            border: 1px solid rgba(128,128,128,0.4); border-radius: 999px;
+            font-family: monospace; font-size: .85rem;
+        }
+        .fw-cidr-item .btn-remove {
+            border: none; background: transparent; color: #dc3545; padding: 0;
+            cursor: pointer; line-height: 1;
+        }
+        .fw-warning-banner {
+            background: rgba(255,193,7,0.15); border-left: 4px solid #ffc107;
+            padding: 10px 12px; border-radius: 4px;
+        }
+        """;
+        return getHead("Firewall", extraStyles) + getNavbar("firewall") + """
+    <div class="content container-fluid mt-4" style="max-width: 1200px">
+
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h2 class="mb-0"><i class="fas fa-fire me-2"></i>Firewall geo-localizzato (pf)</h2>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" onclick="loadFirewall()" title="Ricarica stato">
+                    <i class="fas fa-sync"></i>
+                </button>
+                <button class="btn btn-success" onclick="fwApply()" title="Rigenera anchor pf con backup + syntax check + carica nel kernel">
+                    <i class="fas fa-check-circle me-1"></i>Applica configurazione
+                </button>
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary text-white py-2">
+                <i class="fas fa-info-circle me-2"></i>Stato attuale del firewall
+            </div>
+            <div class="card-body py-2" id="fwStatusBody">
+                <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>
+            </div>
+        </div>
+
+        <!-- Mode selector -->
+        <div class="card mb-3">
+            <div class="card-header py-2"><i class="fas fa-cog me-2"></i>Modalità</div>
+            <div class="card-body">
+                <p class="small text-muted mb-3">Scegli COME il firewall deve filtrare le connessioni alle porte mail.
+                Le modifiche NON sono applicate fino a quando non clicchi <strong>"Applica configurazione"</strong> in alto.</p>
+                <div class="row g-2" id="fwModeContainer"></div>
+
+                <div class="mt-3" id="fwPort25Row" style="display:none">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="fwPort25Geo" onchange="fwSetPort25Geo(this.checked)">
+                        <label class="form-check-label small" for="fwPort25Geo">
+                            Applica la geo-whitelist anche a <strong>porta 25 (SMTP delivery)</strong>
+                            <i class="fas fa-exclamation-triangle text-warning ms-1"></i>
+                        </label>
+                    </div>
+                    <div class="alert alert-warning py-2 px-2 mt-2 mb-0 small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Cosa fa</strong>: di default la geo-whitelist protegge solo le porte di <strong>login</strong>
+                        (587, 465, 143, 993, 110, 995) — dove utenti malintenzionati provano a fare brute-force con password.
+                        La <strong>porta 25</strong> rimane invece aperta al mondo: è la porta che i mail server esteri
+                        (Gmail, Microsoft, server di amici/clienti) usano per <strong>consegnarti le email in entrata</strong>.<br><br>
+
+                        <strong>Se attivi questa opzione</strong>, la geo-whitelist viene estesa anche alla porta 25:
+                        i server mail dai paesi NON whitelistati non potranno più consegnarti email.<br><br>
+
+                        <strong>⚠ Quando attivarla</strong>: <span class="text-success">solo</span> se sei sicuro al 100% che nessuno
+                        ti scriverà mai da mail server in paesi fuori dalla tua whitelist (es. Cina, India, Vietnam,
+                        Brasile, ecc.). Anche un piccolo provider regionale estero potrebbe inviarti fatture o notifiche
+                        legittime.<br><br>
+
+                        <strong>🟢 Consiglio</strong>: <strong>lasciala spenta</strong>. I bot che attaccano la porta 25
+                        provano in genere ad usarti come open-relay, ma <strong>Postfix li respinge già correttamente</strong>
+                        con <code>Relay access denied</code>. Quel rumore nei log è innocuo. Attivando questa opzione
+                        guadagni quasi zero in sicurezza, ma rischi di perdere mail legittime in entrata.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Auto-sync GeoIP -->
+        <div class="card mb-3 border-info">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2 bg-info bg-opacity-10">
+                <span><i class="fas fa-cloud-download-alt me-2"></i>Aggiornamento automatico GeoIP <span id="fwAutoSyncStatus"></span></span>
+                <div>
+                    <button class="btn btn-warning btn-sm me-1" onclick="fwSyncAll()" title="Forza ora il download/aggiornamento per TUTTI i paesi selezionati">
+                        <i class="fas fa-sync me-1"></i>Sincronizza ora
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="fwAutoSyncSummary" class="small mb-2 text-muted">Caricamento...</div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <div class="form-check form-switch">
+                            <input type="checkbox" class="form-check-input" id="fwAutoSyncEnabled">
+                            <label class="form-check-label small" for="fwAutoSyncEnabled">
+                                <strong>Auto-sync attivo</strong>
+                                <div class="text-muted" style="font-size:.75rem">Scarica in automatico le liste in background</div>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Intervallo (giorni)</label>
+                        <select class="form-select form-select-sm" id="fwAutoSyncInterval">
+                            <option value="1">Ogni giorno</option>
+                            <option value="3">Ogni 3 giorni</option>
+                            <option value="7" selected>Ogni 7 giorni (consigliato)</option>
+                            <option value="14">Ogni 14 giorni</option>
+                            <option value="30">Ogni 30 giorni</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-primary btn-sm w-100" onclick="fwSaveAutoSync()">
+                            <i class="fas fa-save me-1"></i>Salva impostazioni auto-sync
+                        </button>
+                    </div>
+                </div>
+                <div class="alert alert-info py-2 px-2 mt-2 mb-0 small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <b>Come funziona:</b> il pannello controlla ogni ora se ci sono paesi più vecchi dell'intervallo configurato e li ri-scarica
+                    da <code>ipdeny.com</code>. <b>Massimo 5 paesi per controllo</b> per non saturare la banda. Il file viene aggiornato solo se serve.
+                    Per forzare adesso, usa <b>"Sincronizza ora"</b> in alto.
+                </div>
+            </div>
+        </div>
+
+        <!-- Countries (geo whitelist/blacklist) -->
+        <div class="card mb-3" id="fwCountriesCard">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span><i class="fas fa-globe me-2"></i>Paesi <span class="badge bg-secondary ms-1" id="fwCountriesCount">0</span></span>
+                <button class="btn btn-warning btn-sm" onclick="fwSyncAll()" title="Scarica/aggiorna i range IP da ipdeny.com per tutti i paesi selezionati">
+                    <i class="fas fa-cloud-download-alt me-1"></i>Sincronizza GeoIP
+                </button>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    Seleziona i paesi. I range IP vengono scaricati gratuitamente da <code>ipdeny.com</code>.
+                    Per ogni paese vedrai quanti CIDR sono attualmente scaricati.
+                </p>
+
+                <!-- Preset groups (UE, G7, NATO, ecc.) -->
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
+                        <strong class="small">Preset rapidi</strong>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Modalità preset">
+                            <input type="radio" class="btn-check" name="fwPresetMode" id="fwPresetModeReplace" value="replace" checked>
+                            <label class="btn btn-outline-primary" for="fwPresetModeReplace" title="Cliccando un preset, la selezione attuale viene CANCELLATA e sostituita con quella del preset">
+                                <i class="fas fa-exchange-alt me-1"></i>Sostituisci
+                            </label>
+                            <input type="radio" class="btn-check" name="fwPresetMode" id="fwPresetModeAdd" value="add">
+                            <label class="btn btn-outline-success" for="fwPresetModeAdd" title="Cliccando un preset, i suoi paesi vengono AGGIUNTI alla selezione attuale (senza rimuovere niente)">
+                                <i class="fas fa-plus me-1"></i>Aggiungi
+                            </label>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-1" id="fwPresetGroups"></div>
+                </div>
+
+                <!-- Bulk select / deselect -->
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                    <button id="fwToggleOnlySelected" class="btn btn-outline-info btn-sm" onclick="fwToggleOnlySelected()" title="Mostra solo i paesi attualmente selezionati (utile per rifinire un preset, es. togliere Turchia dopo aver applicato NATO)">
+                        <i class="fas fa-filter me-1"></i>Mostra solo selezionati
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="fwSelectAllVisible()" title="Seleziona tutti i paesi attualmente visibili (rispetta filtro di ricerca)">
+                        <i class="fas fa-check-double me-1"></i>Seleziona visibili
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="fwDeselectAllVisible()" title="Deseleziona tutti i paesi attualmente visibili">
+                        <i class="fas fa-times me-1"></i>Deseleziona visibili
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="fwClearAllCountries()" title="Rimuovi TUTTI i paesi selezionati">
+                        <i class="fas fa-trash me-1"></i>Svuota tutto
+                    </button>
+                </div>
+
+                <input type="text" class="form-control form-control-sm mb-2" id="fwCountrySearch"
+                       placeholder="Cerca paese (es. ita, ger, italy, oppure 'tr' per Turchia)..." oninput="fwFilterCountries()">
+                <div class="small mb-2"><strong id="fwGridLabel">Paesi disponibili</strong></div>
+                <div class="fw-country-grid" id="fwCountriesGrid" style="max-height: 500px"></div>
+                <div class="alert alert-info py-2 px-2 mt-2 mb-0 small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    I paesi in <span class="badge text-bg-primary" style="font-size:.7rem">blu</span> sono selezionati.
+                    Usa la ricerca per trovare un paese specifico, o i preset rapidi sopra per selezionare gruppi.
+                </div>
+
+                <!-- Editor testuale bidirezionale -->
+                <div class="mt-3 pt-3" style="border-top: 1px solid rgba(128,128,128,0.25)">
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                        <strong class="small"><i class="fas fa-code me-1"></i>Editor codici paesi</strong>
+                        <div class="d-flex gap-1 align-items-center flex-wrap">
+                            <label class="small mb-0">Formato:</label>
+                            <select class="form-select form-select-sm" id="fwCodeFormat" style="width:auto" onchange="renderFwCodeEditor()">
+                                <option value="cf_ne">Cloudflare (ne — blacklist)</option>
+                                <option value="cf_eq">Cloudflare (eq — whitelist)</option>
+                                <option value="csv" selected>Lista codici (separati da virgola)</option>
+                                <option value="json">JSON array</option>
+                                <option value="lines">Uno per riga</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="fwCopyCodeEditor()" title="Copia negli appunti">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="fwCodeEditor" class="form-control" rows="4"
+                              style="font-family: monospace; font-size: .85rem"
+                              placeholder="Scrivi qui i codici paese (es: IT, FR, DE) — la selezione si aggiorna automaticamente"
+                              oninput="fwScheduleCodeApply()"></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-1 flex-wrap gap-1">
+                        <div id="fwCodeEditorStatus" class="small">Pronto</div>
+                        <button class="btn btn-primary btn-sm" onclick="fwApplyCodeEditorNow()">
+                            <i class="fas fa-check me-1"></i>Applica adesso
+                        </button>
+                    </div>
+                    <div class="alert alert-info py-2 px-2 mt-2 mb-0 small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Aggiungi/rimuovi codici e la lista paesi si sincronizza automaticamente (dopo 800ms di pausa).
+                        Codici validi: 2 lettere maiuscole tipo <code>IT</code>, <code>FR</code>, <code>DE</code>.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CIDR Whitelist -->
+        <div class="card mb-3">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-check-circle text-success me-2"></i>Whitelist CIDR (sempre permesso)</span>
+                <span class="badge bg-success" id="fwWlCount">0</span>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    IP/range nella whitelist passano <strong>sempre</strong>, indipendentemente dalla geo.
+                    Usalo per il tuo IP fisso, ufficio, VPN.
+                </p>
+                <div id="fwWlList" class="mb-2"><span class="text-muted small">Nessun IP in whitelist</span></div>
+                <div class="row g-2">
+                    <div class="col-md-9"><input type="text" class="form-control form-control-sm" id="fwWlInput" placeholder="es: 198.51.100.25 o 192.168.0.0/24"></div>
+                    <div class="col-md-3"><button class="btn btn-success btn-sm w-100" onclick="fwAddCidr('wl')"><i class="fas fa-plus me-1"></i>Aggiungi</button></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CIDR Blacklist -->
+        <div class="card mb-3">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-ban text-danger me-2"></i>Blacklist CIDR (sempre bloccato)</span>
+                <span class="badge bg-danger" id="fwBlCount">0</span>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    IP/range nella blacklist vengono <strong>sempre droppati</strong> dal firewall, prima ancora che
+                    Postfix/Dovecot vedano il pacchetto. Usalo per botnet/abuser noti come <code>109.105.211.0/24</code>.
+                </p>
+                <div id="fwBlList" class="mb-2"><span class="text-muted small">Nessun IP in blacklist</span></div>
+                <div class="row g-2">
+                    <div class="col-md-9"><input type="text" class="form-control form-control-sm" id="fwBlInput" placeholder="es: 109.105.211.0/24"></div>
+                    <div class="col-md-3"><button class="btn btn-danger btn-sm w-100" onclick="fwAddCidr('bl')"><i class="fas fa-plus me-1"></i>Aggiungi</button></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Warning before apply -->
+        <div class="fw-warning-banner mb-3">
+            <strong><i class="fas fa-exclamation-triangle me-1"></i>Importante prima di applicare</strong><br>
+            <span class="small">
+                - <b>Aggiungi sempre il tuo IP fisso alla Whitelist CIDR</b> prima di attivare la geo-whitelist, per evitare di bloccarti da solo.<br>
+                - Il pannello fa backup automatico di <code>/etc/pf.conf</code> e dell'anchor prima di scrivere.<br>
+                - Lo step "Applica" fa <code>pfctl -nf</code> (syntax check) prima di caricare nel kernel. Se sintassi errata, lo stato precedente resta.<br>
+                - Per la geo-whitelist, <b>scarica prima i range</b> con "Sincronizza GeoIP" — senza i range, le tabelle pf sono vuote.
+            </span>
+        </div>
+
+""" + getFooter() + """
+    <script>
+""" + getFirewallJs() + """
+""" + getLogoutScript() + """
+    </script>
+</body>
+</html>
+""";
+    }
+
+    /** JS della pagina /firewall (estratto per non sforare il constant pool). */
+    private static String getFirewallJs() {
+        return """
+        let __fwCsrf = '';
+        let __fwState = null;     // ultimo stato ricevuto dal server
+        let __fwCatalog = [];     // lista paesi del catalogo
+
+        // CSRF token: riusa quello globale dell'app se presente
+        try {
+            const el = document.getElementById('csrf_token');
+            if (el && el.value) __fwCsrf = el.value;
+        } catch (e) {}
+
+        // Modalita' disponibili (label + descrizione)
+        const FW_MODES = [
+            { value: 'CIDR_ONLY',      label: 'Solo CIDR',
+              desc: 'Solo whitelist/blacklist CIDR manuali. Niente filtro per paese.' },
+            { value: 'GEO_WHITELIST',  label: 'Geo Whitelist (consigliato)',
+              recommended: true,
+              desc: 'Solo i paesi selezionati possono accedere alle porte AUTH (587/465/IMAP/POP). Tutto il resto bloccato.' },
+            { value: 'GEO_BLACKLIST',  label: 'Geo Blacklist',
+              desc: 'I paesi selezionati vengono bloccati su tutte le porte mail. Resto del mondo permesso.' },
+            { value: 'DISABLED',       label: 'Disabilitato',
+              desc: 'Firewall pannello disattivo. Nessuna regola caricata nell\\'anchor panel-fw.' }
+        ];
+
+        // ===== Status JSON loader =====
+        function loadFirewall() {
+            fetch('/api/firewall').then(r => r.json()).then(data => {
+                if (!data.success) {
+                    document.getElementById('fwStatusBody').innerHTML =
+                        '<div class="text-danger">Errore: ' + escapeHtml(data.error || 'sconosciuto') + '</div>';
+                    return;
+                }
+                __fwState = data;
+                __fwCatalog = data.country_catalog || [];
+                renderFwStatus();
+                renderFwModes();
+                renderFwAutoSync();
+                renderFwPresetGroups();
+                renderFwCountries();
+                renderFwCodeEditor();
+                renderFwCidrList('wl', data.whitelist_cidrs || []);
+                renderFwCidrList('bl', data.blacklist_cidrs || []);
+                // port25 toggle visibility
+                const showPort25 = (data.mode === 'GEO_WHITELIST');
+                document.getElementById('fwPort25Row').style.display = showPort25 ? '' : 'none';
+                document.getElementById('fwPort25Geo').checked = !!data.apply_geo_to_port25;
+            }).catch(e => {
+                document.getElementById('fwStatusBody').innerHTML =
+                    '<div class="text-danger">Errore rete: ' + escapeHtml(e.message) + '</div>';
+            });
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
+        function renderFwStatus() {
+            const s = __fwState;
+            const ts = s.table_sizes || {};
+            const enabledBadge = s.enabled
+                ? '<span class="badge bg-success">ATTIVO</span>'
+                : '<span class="badge bg-secondary">NON ATTIVO</span>';
+            const modeBadge = '<span class="badge bg-primary">' + escapeHtml(s.mode) + '</span>';
+            document.getElementById('fwStatusBody').innerHTML =
+                '<div class="d-flex flex-wrap gap-3 align-items-center">' +
+                '<div><strong>Stato:</strong> ' + enabledBadge + '</div>' +
+                '<div><strong>Modalità:</strong> ' + modeBadge + '</div>' +
+                '<div><strong>WL CIDR:</strong> ' + (ts.panel_wl_cidrs || 0) + ' regole runtime</div>' +
+                '<div><strong>BL CIDR:</strong> ' + (ts.panel_bl_cidrs || 0) + ' regole runtime</div>' +
+                '<div><strong>Geo WL:</strong> ' + (ts.panel_geo_wl || 0) + ' IP</div>' +
+                '<div><strong>Geo BL:</strong> ' + (ts.panel_geo_bl || 0) + ' IP</div>' +
+                '</div>';
+        }
+
+        function renderFwModes() {
+            const container = document.getElementById('fwModeContainer');
+            container.innerHTML = FW_MODES.map(m => {
+                const active = (m.value === __fwState.mode);
+                const recommended = m.recommended
+                    ? '<span class="badge bg-success ms-1" style="font-size:.65rem">★ CONSIGLIATO</span>' : '';
+                return '<div class="col-md-6">' +
+                    '<div class="fw-mode-card' + (active ? ' active' : '') + '" onclick="fwSetMode(\\'' + m.value + '\\')">' +
+                    '<div><strong>' + escapeHtml(m.label) + '</strong>' + recommended + '</div>' +
+                    '<div class="small text-muted mt-1">' + escapeHtml(m.desc) + '</div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        function fwSetMode(mode) {
+            fwPost({ action: 'set_mode', mode: mode }, (data) => loadFirewall());
+        }
+
+        function fwSetPort25Geo(value) {
+            fwPost({ action: 'set_port25_geo', value: value }, () => loadFirewall());
+        }
+
+        // ============================================================
+        // EDITOR CODICI PAESI — sincronizzazione bidirezionale con la
+        // selezione visiva. L'utente scrive/cancella codici nel textarea
+        // → dopo 800ms di pausa parsiamo i codici, calcoliamo diff con
+        // la selezione corrente, e applichiamo via bulk_add / bulk_remove.
+        // Viceversa, quando l'utente clicca un paese nella griglia, lo
+        // state si aggiorna e renderFwCodeEditor() rigenera il testo.
+        // ============================================================
+        let __fwCodeApplyTimer = null;
+        let __fwCodeEditorSelfUpdate = false; // flag per evitare loop
+
+        function fwExtractCodesFromText(text) {
+            if (!text) return [];
+            // Pattern: 2 lettere consecutive isolate (con word-boundary).
+            // Matcha codici paese da qualsiasi formato (CSV, JSON array, Cloudflare expression, una per riga).
+            // NB: \\b nel regex deve essere scritto \\\\b nel text block Java per arrivare come \\b al JS.
+            const re = /\\b([A-Za-z]{2})\\b/g;
+            const seen = new Set();
+            const out = [];
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                const cc = m[1].toLowerCase();
+                if (!seen.has(cc)) { seen.add(cc); out.push(cc); }
+            }
+            return out;
+        }
+
+        function renderFwCodeEditor() {
+            const ta = document.getElementById('fwCodeEditor');
+            if (!ta) return;
+            const selected = (__fwState && __fwState.geo_countries) ? __fwState.geo_countries.slice() : [];
+            // Ordina alfabeticamente per output stabile
+            selected.sort();
+            const upper = selected.map(c => c.toUpperCase());
+            const fmtEl = document.getElementById('fwCodeFormat');
+            const fmt = fmtEl ? fmtEl.value : 'csv';
+            let text;
+            if (upper.length === 0) {
+                text = '';
+            } else if (fmt === 'cf_ne') {
+                text = '(' + upper.map(c => 'ip.geoip.country ne "' + c + '"').join(' and ') + ')';
+            } else if (fmt === 'cf_eq') {
+                text = '(' + upper.map(c => 'ip.geoip.country eq "' + c + '"').join(' or ') + ')';
+            } else if (fmt === 'json') {
+                text = JSON.stringify(upper);
+            } else if (fmt === 'lines') {
+                text = upper.join('\\n');
+            } else { // csv
+                text = upper.join(', ');
+            }
+            // Aggiorna il textarea SENZA triggerare l'apply (siamo noi a scrivere, non l'utente)
+            __fwCodeEditorSelfUpdate = true;
+            ta.value = text;
+            __fwCodeEditorSelfUpdate = false;
+            // Status: mostra quanti codici sono nel testo
+            const statusEl = document.getElementById('fwCodeEditorStatus');
+            if (statusEl) {
+                statusEl.textContent = upper.length === 0
+                    ? 'Nessun paese selezionato'
+                    : (upper.length + ' paesi nel buffer');
+                statusEl.className = 'small mt-1 text-muted';
+            }
+        }
+
+        function fwScheduleCodeApply() {
+            if (__fwCodeEditorSelfUpdate) return; // siamo noi a scrivere, ignora
+            const statusEl = document.getElementById('fwCodeEditorStatus');
+            if (statusEl) {
+                statusEl.textContent = '⏳ Attendo la pausa di digitazione...';
+                statusEl.className = 'small mt-1 text-warning';
+            }
+            if (__fwCodeApplyTimer) clearTimeout(__fwCodeApplyTimer);
+            __fwCodeApplyTimer = setTimeout(fwApplyCodeEditor, 800);
+        }
+
+        /** Bypass del debounce: applica IMMEDIATAMENTE quello che c'e' nel textarea. */
+        function fwApplyCodeEditorNow() {
+            if (__fwCodeApplyTimer) { clearTimeout(__fwCodeApplyTimer); __fwCodeApplyTimer = null; }
+            fwApplyCodeEditor();
+        }
+
+        function fwApplyCodeEditor() {
+            const ta = document.getElementById('fwCodeEditor');
+            const statusEl = document.getElementById('fwCodeEditorStatus');
+            if (!ta) return;
+            const setStatus = (msg, cls) => {
+                if (statusEl) {
+                    statusEl.textContent = msg;
+                    statusEl.className = 'small ' + (cls || 'text-muted');
+                }
+            };
+            try {
+                const text = ta.value || '';
+                const codes = fwExtractCodesFromText(text);
+
+                if (!__fwCatalog || __fwCatalog.length === 0) {
+                    setStatus('⚠ Catalogo paesi non caricato — ricarica la pagina', 'text-warning');
+                    return;
+                }
+
+                const catalogSet = new Set(__fwCatalog.map(c => c.code));
+                const validCodes = codes.filter(c => catalogSet.has(c));
+                const invalidCodes = codes.filter(c => !catalogSet.has(c));
+
+                const current = new Set(__fwState && __fwState.geo_countries ? __fwState.geo_countries : []);
+                const target = new Set(validCodes);
+
+                const toAdd = validCodes.filter(c => !current.has(c));
+                const toRemove = [...current].filter(c => !target.has(c));
+
+                if (toAdd.length === 0 && toRemove.length === 0) {
+                    setStatus(invalidCodes.length > 0
+                        ? '✓ Sincronizzato (nessuna modifica). ⚠ Ignorati codici non validi: ' + invalidCodes.map(c => c.toUpperCase()).join(', ')
+                        : '✓ Sincronizzato — nessuna modifica',
+                        invalidCodes.length > 0 ? 'text-warning' : 'text-success');
+                    return;
+                }
+
+                setStatus('⏳ Applico: +' + toAdd.length + ' aggiunte, -' + toRemove.length + ' rimozioni...', 'text-info');
+
+                // POST helper con error handling esplicito
+                const post = (action, countries) => {
+                    if (!countries || countries.length === 0) return Promise.resolve({ success: true, skipped: true });
+                    return fetch('/api/firewall', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: action, countries: countries, csrf_token: __fwCsrf })
+                    }).then(r => {
+                        if (!r.ok) throw new Error('HTTP ' + r.status + ' (' + r.statusText + ')');
+                        return r.json();
+                    }).then(data => {
+                        if (data && data.success === false) {
+                            throw new Error(data.error || data.message || 'risposta server fallita');
+                        }
+                        return data;
+                    });
+                };
+
+                // Sequenziale: prima add, poi remove
+                post('bulk_add_countries', toAdd)
+                    .then(() => post('bulk_remove_countries', toRemove))
+                    .then(() => {
+                        setStatus('✓ Applicato (+' + toAdd.length + ' / -' + toRemove.length + ')'
+                            + (invalidCodes.length > 0 ? ' — ignorati: ' + invalidCodes.map(c => c.toUpperCase()).join(', ') : ''),
+                            'text-success');
+                        loadFirewall();
+                    })
+                    .catch(e => {
+                        setStatus('❌ Errore: ' + (e && e.message ? e.message : 'sconosciuto') + ' — riprova con "Applica adesso"', 'text-danger');
+                    });
+            } catch (e) {
+                setStatus('❌ Errore JS: ' + (e && e.message ? e.message : 'sconosciuto'), 'text-danger');
+            }
+        }
+
+        function fwCopyCodeEditor() {
+            const ta = document.getElementById('fwCodeEditor');
+            if (!ta) return;
+            ta.select();
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(ta.value);
+                } else {
+                    document.execCommand('copy');
+                }
+                const statusEl = document.getElementById('fwCodeEditorStatus');
+                if (statusEl) {
+                    statusEl.textContent = '✓ Copiato negli appunti';
+                    statusEl.className = 'small mt-1 text-success';
+                }
+            } catch (e) {}
+        }
+
+        // ===== Helper: freschezza GeoIP =====
+        function fmtAgo(seconds) {
+            if (!seconds || seconds < 0) return 'mai';
+            if (seconds < 60) return Math.floor(seconds) + 's fa';
+            if (seconds < 3600) return Math.floor(seconds/60) + ' min fa';
+            if (seconds < 86400) return Math.floor(seconds/3600) + ' h fa';
+            const d = Math.floor(seconds/86400);
+            return d + ' giorn' + (d === 1 ? 'o' : 'i') + ' fa';
+        }
+
+        function renderFreshnessBadge(freshness, cidrCount, agoSec) {
+            if (!freshness || freshness === 'NEVER') {
+                return '<span class="text-danger">⚠ mai sync</span>';
+            }
+            const ago = fmtAgo(agoSec);
+            if (freshness === 'FRESH') {
+                return '<span class="text-success">✓ ' + cidrCount + ' CIDR · ' + ago + '</span>';
+            }
+            if (freshness === 'AGING') {
+                return '<span class="text-warning">⏰ ' + cidrCount + ' CIDR · ' + ago + '</span>';
+            }
+            if (freshness === 'STALE') {
+                return '<span class="text-warning">⚠ vecchio · ' + ago + '</span>';
+            }
+            return '<span class="text-danger">⚠⚠ obsoleto · ' + ago + '</span>';
+        }
+
+        // ===== Auto-sync GeoIP =====
+        function renderFwAutoSync() {
+            const a = (__fwState && __fwState.auto_sync) || {};
+            const statusEl = document.getElementById('fwAutoSyncStatus');
+            const summaryEl = document.getElementById('fwAutoSyncSummary');
+            const enabledEl = document.getElementById('fwAutoSyncEnabled');
+            const intervalEl = document.getElementById('fwAutoSyncInterval');
+
+            if (enabledEl) enabledEl.checked = !!a.enabled;
+            if (intervalEl) intervalEl.value = String(a.interval_days || 7);
+
+            // Status badge in header
+            if (statusEl) {
+                statusEl.innerHTML = a.enabled
+                    ? '<span class="badge bg-success ms-2">ATTIVO ogni ' + (a.interval_days || 7) + ' giorni</span>'
+                    : '<span class="badge bg-secondary ms-2">INATTIVO</span>';
+            }
+
+            // Summary
+            if (summaryEl) {
+                const lines = [];
+                if (a.last_check_ms) {
+                    const checkAgo = fmtAgo((Date.now() - a.last_check_ms) / 1000);
+                    lines.push('<i class="fas fa-clock me-1 text-muted"></i>Ultimo controllo: <strong>' + checkAgo + '</strong>');
+                }
+                if (a.last_run_ms) {
+                    const runAgo = fmtAgo((Date.now() - a.last_run_ms) / 1000);
+                    lines.push('<i class="fas fa-cloud-download-alt me-1 text-muted"></i>Ultimo download eseguito: <strong>' + runAgo + '</strong>');
+                } else {
+                    lines.push('<i class="fas fa-cloud-download-alt me-1 text-muted"></i>Nessun download automatico ancora eseguito');
+                }
+                if (a.stale_countries_count > 0) {
+                    lines.push('<i class="fas fa-exclamation-triangle me-1 text-warning"></i><span class="text-warning"><strong>' + a.stale_countries_count + ' paesi</strong> da aggiornare</span>');
+                } else if (__fwState.geo_countries && __fwState.geo_countries.length > 0) {
+                    lines.push('<i class="fas fa-check-circle me-1 text-success"></i><span class="text-success">Tutti i paesi sono aggiornati</span>');
+                }
+                summaryEl.innerHTML = lines.join(' &nbsp;·&nbsp; ');
+            }
+        }
+
+        function fwSaveAutoSync() {
+            const enabled = document.getElementById('fwAutoSyncEnabled').checked;
+            const interval = parseInt(document.getElementById('fwAutoSyncInterval').value, 10) || 7;
+            fwPost({ action: 'set_auto_sync', enabled: enabled, interval_days: interval }, (data) => {
+                alert(data.message || 'Salvato');
+                loadFirewall();
+            });
+        }
+
+        // ===== Preset groups (UE, G7, NATO...) =====
+        function renderFwPresetGroups() {
+            const container = document.getElementById('fwPresetGroups');
+            if (!container) return;
+            const groups = __fwState.preset_groups || [];
+            const selected = new Set(__fwState.geo_countries || []);
+            container.innerHTML = groups.map(g => {
+                const codes = g.codes || [];
+                // Quanti paesi del gruppo sono attualmente selezionati
+                let matchCount = 0;
+                for (const c of codes) if (selected.has(c)) matchCount++;
+                // "fully contained" = tutti i paesi del preset sono presenti nella selezione
+                // (anche se ce ne sono altri extra)
+                const isFullyContained = (matchCount === codes.length && codes.length > 0);
+                // "exact match" = la selezione COINCIDE col preset (modalita' replace giusta)
+                const isExactMatch = isFullyContained && selected.size === codes.length;
+
+                let cls = 'btn-outline-primary';
+                let badge;
+                if (isExactMatch) {
+                    // Selezione = esattamente il preset
+                    cls = 'btn-primary';
+                    badge = '<i class="fas fa-check ms-1" title="Selezione esattamente uguale al preset"></i>';
+                } else if (isFullyContained) {
+                    // Tutto il preset e' nella selezione + altri extra
+                    cls = 'btn-success';
+                    badge = '<i class="fas fa-check-double ms-1" title="Tutti i paesi del preset sono già selezionati (con extra)"></i>';
+                } else if (matchCount > 0) {
+                    // Solo alcuni paesi del preset selezionati
+                    badge = '<span class="badge bg-light text-dark ms-1" style="font-size:.65rem">' + matchCount + '/' + codes.length + '</span>';
+                } else {
+                    // Nessun paese del preset selezionato
+                    badge = '<span class="badge bg-light text-dark ms-1" style="font-size:.65rem">' + codes.length + '</span>';
+                }
+                return '<button type="button" class="btn btn-sm ' + cls + '" '
+                     + 'onclick="fwApplyPresetGroup(\\'' + escapeHtml(g.id) + '\\')" '
+                     + 'title="' + escapeHtml(g.description || '') + '">'
+                     + (g.icon || '') + ' ' + escapeHtml(g.label) + badge
+                     + '</button>';
+            }).join('');
+        }
+
+        // Helper: rende leggibile una lista di codici paese (es. "🇮🇹 Italia (IT), 🇺🇸 Stati Uniti (US)")
+        function fwFormatCountryList(codes, maxShow) {
+            if (!codes || codes.length === 0) return '(nessuno)';
+            const catalogMap = new Map();
+            (__fwCatalog || []).forEach(c => catalogMap.set(c.code, c));
+            const formatted = codes.map(code => {
+                const meta = catalogMap.get(code);
+                if (meta) return meta.flag + ' ' + meta.name + ' (' + code.toUpperCase() + ')';
+                return code.toUpperCase();
+            });
+            if (maxShow && formatted.length > maxShow) {
+                const shown = formatted.slice(0, maxShow).join(', ');
+                return shown + ', ... e altri ' + (formatted.length - maxShow);
+            }
+            return formatted.join(', ');
+        }
+
+        function fwApplyPresetGroup(groupId) {
+            const grp = (__fwState.preset_groups || []).find(g => g.id === groupId);
+            if (!grp) return;
+            const modeEl = document.querySelector('input[name="fwPresetMode"]:checked');
+            const mode = modeEl ? modeEl.value : 'replace';
+
+            if (mode === 'add') {
+                // Modalita' AGGIUNGI
+                const existing = new Set(__fwState.geo_countries || []);
+                const toAdd = grp.codes.filter(c => !existing.has(c));
+                if (toAdd.length === 0) {
+                    alert('Tutti i paesi del preset "' + grp.label + '" sono già selezionati.');
+                    return;
+                }
+                const msg = 'Aggiungere ' + toAdd.length + ' nuov' + (toAdd.length === 1 ? 'o paese' : 'i paesi') + ' dal preset "' + grp.label + '"?\\n\\n' +
+                    'Paese da aggiungere:\\n' + fwFormatCountryList(toAdd, 20) + '\\n\\n' +
+                    'La selezione corrente di ' + existing.size + ' paesi viene MANTENUTA e ampliata a ' + (existing.size + toAdd.length) + ' paesi totali.';
+                if (!confirm(msg)) return;
+                fwPost({ action: 'bulk_add_countries', countries: toAdd }, () => loadFirewall());
+            } else {
+                // Modalita' SOSTITUISCI: dettagliamo chi viene aggiunto e chi rimosso
+                const existing = new Set(__fwState.geo_countries || []);
+                const targetSet = new Set(grp.codes);
+                const toAdd = grp.codes.filter(c => !existing.has(c));
+                const toRemove = [...existing].filter(c => !targetSet.has(c));
+
+                let msg = 'Sostituire la selezione corrente con il preset "' + grp.label + '"?\\n\\n';
+                msg += 'Nuova selezione: ' + grp.codes.length + ' paesi (preset "' + grp.label + '")\\n\\n';
+                if (toRemove.length > 0) {
+                    msg += '❌ Verranno RIMOSSI ' + toRemove.length + ' paesi:\\n' + fwFormatCountryList(toRemove, 15) + '\\n\\n';
+                }
+                if (toAdd.length > 0) {
+                    msg += '✅ Verranno AGGIUNTI ' + toAdd.length + ' paesi:\\n' + fwFormatCountryList(toAdd, 15) + '\\n\\n';
+                }
+                if (toAdd.length === 0 && toRemove.length === 0) {
+                    msg += '(Nessuna modifica — la selezione corrisponde già al preset)';
+                }
+                if (!confirm(msg)) return;
+                fwPost({ action: 'apply_preset_group', group_id: groupId }, () => loadFirewall());
+            }
+        }
+
+        // ===== Bulk select/deselect dei paesi VISIBILI (rispetta filtro) =====
+        function fwGetVisibleCountryCodes() {
+            const codes = [];
+            document.querySelectorAll('.fw-country-item').forEach(el => {
+                if (el.style.display !== 'none') {
+                    const cc = el.getAttribute('data-cc');
+                    if (cc) codes.push(cc);
+                }
+            });
+            return codes;
+        }
+
+        function fwSelectAllVisible() {
+            const codes = fwGetVisibleCountryCodes();
+            if (codes.length === 0) { alert('Nessun paese visibile'); return; }
+            const alreadySelected = new Set(__fwState.geo_countries || []);
+            const toAdd = codes.filter(c => !alreadySelected.has(c));
+            if (toAdd.length === 0) { alert('Tutti i paesi visibili sono gia\\' selezionati'); return; }
+            if (!confirm('Aggiungere ' + toAdd.length + ' paesi alla selezione?')) return;
+            fwPost({ action: 'bulk_add_countries', countries: toAdd }, () => loadFirewall());
+        }
+
+        function fwDeselectAllVisible() {
+            const codes = fwGetVisibleCountryCodes();
+            const selected = new Set(__fwState.geo_countries || []);
+            const toRemove = codes.filter(c => selected.has(c));
+            if (toRemove.length === 0) { alert('Nessun paese visibile e\\' selezionato'); return; }
+            if (!confirm('Deselezionare ' + toRemove.length + ' paesi visibili?')) return;
+            fwPost({ action: 'bulk_remove_countries', countries: toRemove }, () => loadFirewall());
+        }
+
+        function fwClearAllCountries() {
+            const n = (__fwState.geo_countries || []).length;
+            if (n === 0) { alert('Nessun paese selezionato'); return; }
+            if (!confirm('Rimuovere TUTTI i ' + n + ' paesi attualmente selezionati?')) return;
+            fwPost({ action: 'clear_countries' }, () => loadFirewall());
+        }
+
+        // ===== Countries: SINGOLA GRIGLIA =====
+        function renderFwCountries() {
+            const selected = new Set(__fwState.geo_countries || []);
+            const detailMap = {};
+            (__fwState.geo_detail || []).forEach(d => { detailMap[d.code] = d; });
+
+            const renderItem = (c) => {
+                const detail = detailMap[c.code];
+                const cidrCount = detail ? detail.cidr_count : 0;
+                const freshness = detail ? detail.freshness : null;
+                const agoSec = detail ? detail.ago_seconds : 0;
+                const isSelected = selected.has(c.code);
+                const cidrBadge = isSelected
+                    ? '<span class="badge-cidr">' + renderFreshnessBadge(freshness, cidrCount, agoSec) + '</span>'
+                    : '';
+                const isChecked = isSelected ? ' checked' : '';
+                const selClass = isSelected ? ' selected' : '';
+                const nameHtml = isSelected
+                    ? '<strong>' + escapeHtml(c.name) + '</strong>'
+                    : escapeHtml(c.name);
+                return '<label class="fw-country-item' + selClass + '" data-cc="' + c.code + '" data-name="' + escapeHtml(c.name.toLowerCase()) + '" data-common="' + (c.common ? '1' : '0') + '">' +
+                       '<input type="checkbox" onchange="fwToggleCountry(\\'' + c.code + '\\', this.checked)"' + isChecked + '>' +
+                       '<span class="flag">' + c.flag + '</span>' +
+                       '<span>' + nameHtml + '</span>' +
+                       '<span class="text-muted small">(' + c.code + ')</span>' +
+                       cidrBadge +
+                       '</label>';
+            };
+
+            // Lista UNICA in ordine alfabetico italiano
+            const all = __fwCatalog.slice().sort((a, b) => a.name.localeCompare(b.name, 'it'));
+            const grid = document.getElementById('fwCountriesGrid');
+            grid.innerHTML = all.map(renderItem).join('');
+
+            // Aggiorna il counter selezionati nella header
+            document.getElementById('fwCountriesCount').textContent = selected.size;
+            fwFilterCountries();
+        }
+
+        // Stato del toggle "solo selezionati"
+        let __fwOnlySelected = false;
+
+        function fwToggleOnlySelected() {
+            __fwOnlySelected = !__fwOnlySelected;
+            const btn = document.getElementById('fwToggleOnlySelected');
+            if (__fwOnlySelected) {
+                btn.classList.remove('btn-outline-info');
+                btn.classList.add('btn-info');
+                btn.innerHTML = '<i class="fas fa-filter me-1"></i>Mostra tutti';
+            } else {
+                btn.classList.add('btn-outline-info');
+                btn.classList.remove('btn-info');
+                btn.innerHTML = '<i class="fas fa-filter me-1"></i>Mostra solo selezionati';
+            }
+            fwFilterCountries();
+        }
+
+        function fwFilterCountries() {
+            const q = (document.getElementById('fwCountrySearch').value || '').toLowerCase().trim();
+            const selectedSet = new Set(__fwState && __fwState.geo_countries ? __fwState.geo_countries : []);
+
+            let visible = 0;
+            let total = 0;
+            document.querySelectorAll('.fw-country-item').forEach(el => {
+                const cc = el.getAttribute('data-cc') || '';
+                const name = el.getAttribute('data-name') || '';
+                let show = true;
+                if (q && !cc.includes(q) && !name.includes(q)) show = false;
+                if (show && __fwOnlySelected && !selectedSet.has(cc)) show = false;
+                el.style.display = show ? '' : 'none';
+                total++;
+                if (show) visible++;
+            });
+
+            // Counter selezionati nella header card
+            document.getElementById('fwCountriesCount').textContent = selectedSet.size;
+
+            // Label sopra la griglia: mostra "X paesi (Y visibili)" se filtro attivo
+            const labelEl = document.getElementById('fwGridLabel');
+            const filterActive = q.length > 0 || __fwOnlySelected;
+            if (labelEl && total > 0) {
+                labelEl.textContent = filterActive
+                    ? 'Paesi disponibili (' + visible + ' visibili su ' + total + ')'
+                    : 'Paesi disponibili (' + total + ')';
+            }
+        }
+
+        function fwToggleCountry(cc, checked) {
+            fwPost({ action: checked ? 'add_country' : 'remove_country', country: cc }, () => loadFirewall());
+        }
+
+        function fwSyncAll() {
+            const selectedCount = (__fwState && __fwState.geo_countries) ? __fwState.geo_countries.length : 0;
+            if (selectedCount === 0) {
+                alert('⚠ Nessun paese selezionato.\\n\\n' +
+                    'Il sync scarica i range IP SOLO dei paesi che hai selezionato qui sotto (per non occupare banda con dati inutili).\\n\\n' +
+                    'Procedi cosi\\':\\n' +
+                    '1. Seleziona uno o piu\\' paesi (clicca su un preset come "EU + EFTA" o spunta singoli paesi)\\n' +
+                    '2. Torna qui e clicca "Sincronizza ora"');
+                return;
+            }
+            if (!confirm('Scaricare i range IP per ' + selectedCount + ' paese' + (selectedCount === 1 ? '' : 'i') + ' selezionato' + (selectedCount === 1 ? '' : 'i') + ' da ipdeny.com?\\n\\nTempo stimato: ~' + Math.max(2, selectedCount * 2) + ' secondi.')) return;
+            fwPost({ action: 'sync_geo_all' }, (data) => {
+                let msg = data.message || '';
+                if (Array.isArray(data.results)) {
+                    msg += '\\n\\n' + data.results.map(r => (r.success ? '✓' : '✗') + ' ' + r.country + ': ' + (r.message || '')).join('\\n');
+                }
+                alert(msg);
+                loadFirewall();
+            });
+        }
+
+        // ===== CIDR (whitelist/blacklist) =====
+        function renderFwCidrList(kind, cidrs) {
+            const list = document.getElementById(kind === 'wl' ? 'fwWlList' : 'fwBlList');
+            const count = document.getElementById(kind === 'wl' ? 'fwWlCount' : 'fwBlCount');
+            count.textContent = cidrs.length;
+            if (cidrs.length === 0) {
+                list.innerHTML = '<span class="text-muted small">Nessun IP in ' + (kind === 'wl' ? 'whitelist' : 'blacklist') + '</span>';
+                return;
+            }
+            list.innerHTML = cidrs.map(c =>
+                '<span class="fw-cidr-item"><code>' + escapeHtml(c) + '</code>' +
+                '<button class="btn-remove" onclick="fwRemoveCidr(\\'' + kind + '\\', \\'' + escapeHtml(c) + '\\')" title="Rimuovi"><i class="fas fa-times"></i></button>' +
+                '</span>'
+            ).join('');
+        }
+
+        function fwAddCidr(kind) {
+            const input = document.getElementById(kind === 'wl' ? 'fwWlInput' : 'fwBlInput');
+            const cidr = (input.value || '').trim();
+            if (!cidr) { alert('Inserisci un IP/CIDR'); return; }
+            fwPost({ action: kind === 'wl' ? 'add_cidr_wl' : 'add_cidr_bl', cidr: cidr }, (data) => {
+                if (data.success) input.value = '';
+                else alert(data.message || 'Errore');
+                loadFirewall();
+            });
+        }
+
+        function fwRemoveCidr(kind, cidr) {
+            if (!confirm('Rimuovere ' + cidr + ' dalla ' + (kind === 'wl' ? 'whitelist' : 'blacklist') + '?')) return;
+            fwPost({ action: kind === 'wl' ? 'remove_cidr_wl' : 'remove_cidr_bl', cidr: cidr }, () => loadFirewall());
+        }
+
+        // ===== Apply =====
+        function fwApply() {
+            if (!confirm('Applicare la configurazione firewall?\\n\\n' +
+                'Verra\\' rigenerato l\\'anchor /etc/pf.anchors/panel-fw.conf,\\n' +
+                'fatto un syntax check con pfctl -nf,\\n' +
+                'creato un backup dell\\'anchor precedente,\\n' +
+                'e caricato nel kernel.\\n\\n' +
+                'Assicurati di aver aggiunto il TUO IP alla whitelist CIDR\\n' +
+                'se stai usando la modalita\\' Geo Whitelist.')) return;
+            fwPost({ action: 'apply' }, (data) => {
+                let msg = data.message || '';
+                if (data.backup_path) msg += '\\n\\nBackup: ' + data.backup_path;
+                alert((data.success ? '✓ ' : '✗ ') + msg);
+                loadFirewall();
+            });
+        }
+
+        // ===== HTTP helper =====
+        function fwPost(body, onSuccess) {
+            const payload = Object.assign({ csrf_token: __fwCsrf }, body);
+            fetch('/api/firewall', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(data => {
+                if (onSuccess) onSuccess(data);
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        // Init
+        loadFirewall();
 """;
     }
 

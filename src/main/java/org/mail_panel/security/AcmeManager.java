@@ -908,6 +908,7 @@ public class AcmeManager {
     // ============== Helper Methods ==============
 
     private String executeCommand(String command) throws Exception {
+        // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", command);
         pb.redirectErrorStream(true);
         Process process = pb.start();

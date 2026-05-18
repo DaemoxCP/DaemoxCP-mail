@@ -109,6 +109,7 @@ public final class Fail2banAutoSetup {
                     // Pre-flight syntax check con file temporaneo
                     Path tmp = Files.createTempFile("pf-permaban-", ".conf");
                     Files.writeString(tmp, newContent);
+                    // TODO: migrate to Shell.run when touched
                     ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", tmp.toString());
                     testPb.redirectErrorStream(true);
                     Process tp = testPb.start();
@@ -121,6 +122,7 @@ public final class Fail2banAutoSetup {
                         Files.move(tmp, pfConf, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                         // Ricarica live
                         try {
+                            // TODO: migrate to Shell.run when touched
                             ProcessBuilder loadPb = new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf");
                             loadPb.redirectErrorStream(true);
                             Process lp = loadPb.start();
@@ -133,6 +135,7 @@ public final class Fail2banAutoSetup {
 
             // 3. Ricarica la tabella runtime dal file (se pf è attivo)
             try {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", Fail2banManager.PERMABAN_TABLE,
                     "-T", "replace", "-f", Fail2banManager.PERMABAN_FILE);
                 pb.redirectErrorStream(true);
@@ -254,6 +257,7 @@ public final class Fail2banAutoSetup {
                 LOGGER.info("[Fail2banAutoSetup] " + FAIL2BAN_CLIENT + " non eseguibile — salto reload");
                 return;
             }
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(FAIL2BAN_CLIENT, "reload");
             pb.redirectErrorStream(true);
             Process p = pb.start();

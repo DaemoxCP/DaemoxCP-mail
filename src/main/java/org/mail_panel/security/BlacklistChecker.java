@@ -227,6 +227,7 @@ public class BlacklistChecker {
         r.lookupUrl = bl.lookupUrl;
         try {
             int totalTimeout = timeSeconds * tries + 3; // wall clock max
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short",
                 "+time=" + timeSeconds, "+tries=" + tries, "A", queryHost);
             // Merge stderr in stdout: dig stampa errori di rete su stderr con prefisso ';;'

@@ -208,11 +208,7 @@ public class Fail2banManager {
             for (JailStatus jail : status.jails) {
                 if (jail.bannedIps != null) {
                     for (String ip : jail.bannedIps) {
-                        BannedIp ban = new BannedIp();
-                        ban.ip = ip;
-                        ban.jail = jail.name;
-                        ban.active = true;
-                        banned.add(ban);
+                        banned.add(new BannedIp(ip, jail.name, true, null, null));
                     }
                 }
             }
@@ -247,12 +243,12 @@ public class Fail2banManager {
             for (String line : output.split("\n")) {
                 java.util.regex.Matcher matcher = pattern.matcher(line);
                 if (matcher.find()) {
-                    BanEvent event = new BanEvent();
-                    event.timestamp = parseDateTime(matcher.group(1));
-                    event.jail = matcher.group(2);
-                    event.action = matcher.group(3).toLowerCase();
-                    event.ip = matcher.group(4);
-                    events.add(event);
+                    events.add(new BanEvent(
+                        parseDateTime(matcher.group(1)),
+                        matcher.group(3).toLowerCase(),
+                        matcher.group(2),
+                        matcher.group(4)
+                    ));
                 }
             }
 
@@ -839,6 +835,38 @@ public class Fail2banManager {
         return action;
     }
 
+    /**
+     * Applica gli stessi maxRetry/findTime/banTime a TUTTE le jail attualmente
+     * attive (cosi' l'utente non deve impostarle una per una).
+     * Restituisce un report per-jail.
+     */
+    public BulkJailConfigResult updateAllJailsConfig(int maxRetry, int findTime, int banTime) {
+        BulkJailConfigResult res = new BulkJailConfigResult();
+        Fail2banStatus st = getStatus();
+        if (!st.installed) { res.error = "Fail2ban non installato"; return res; }
+        if (!st.running)   { res.error = "Fail2ban non in esecuzione"; return res; }
+        for (String jail : st.activeJails) {
+            BanAction a = updateJailConfig(jail, maxRetry, findTime, banTime);
+            res.results.add(new JailConfigOutcome(jail, a.success, a.message));
+            if (a.success) res.successCount++; else res.failCount++;
+        }
+        res.success = res.failCount == 0;
+        return res;
+    }
+
+    public static class BulkJailConfigResult {
+        public boolean success;
+        public String error;
+        public int successCount;
+        public int failCount;
+        public List<JailConfigOutcome> results = new ArrayList<>();
+    }
+    /**
+     * Esito della modifica di una singola jail nel ciclo updateAllJailsConfig.
+     * Record immutabile (Java 14+).
+     */
+    public record JailConfigOutcome(String jail, boolean success, String message) {}
+
     /** Path standard di jail.local su FreeBSD pkg installation. */
     private static final String JAIL_LOCAL_PATH = "/usr/local/etc/fail2ban/jail.local";
 
@@ -886,20 +914,316 @@ public class Fail2banManager {
                 String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
                 java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
 
-                // Reload fail2ban per essere sicuri
-                try {
-                    ProcessBuilder pb = new ProcessBuilder(FAIL2BAN_CLIENT, "reload");
-                    pb.redirectErrorStream(true);
-                    Process p = pb.start();
-                    p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
-                } catch (Exception ignored) {}
+                reloadFail2banQuiet();
                 return true;
             }
-            return false;
+
+            // Fallback: la sezione [jailName] non esiste in NESSUN file modificabile
+            // (succede per jail tipo dovecot/postfix-auth definite solo in /usr/local/etc/fail2ban/jail.conf,
+            // file del pacchetto che non andrebbe toccato).
+            // → Creiamo/appendiamo la sezione in jail.local: e' il pattern raccomandato da fail2ban per
+            //   overridare i default di jail.conf senza modificarlo.
+            java.nio.file.Path jailLocal = java.nio.file.Paths.get(JAIL_LOCAL_PATH);
+            StringBuilder appended = new StringBuilder();
+            if (java.nio.file.Files.exists(jailLocal)) {
+                String existing = java.nio.file.Files.readString(jailLocal, java.nio.charset.StandardCharsets.UTF_8);
+                appended.append(existing);
+                if (!existing.endsWith("\n")) appended.append("\n");
+                appended.append("\n");
+            } else {
+                // Crea anche le directory parent se necessario
+                try { java.nio.file.Files.createDirectories(jailLocal.getParent()); } catch (Exception ignored) {}
+                appended.append("# Generato dal pannello\n\n");
+            }
+            appended.append("[").append(jailName).append("]\n");
+            appended.append("enabled  = true\n");
+            appended.append("maxretry = ").append(maxRetry).append("\n");
+            appended.append("findtime = ").append(findTime).append("\n");
+            appended.append("bantime  = ").append(banTime).append("\n");
+            java.nio.file.Files.writeString(jailLocal, appended.toString(), java.nio.charset.StandardCharsets.UTF_8);
+            reloadFail2banQuiet();
+            return true;
         } catch (Exception e) {
             System.err.println("[Fail2banManager] persistJailConfig failed: " + e.getMessage());
             return false;
         }
+    }
+
+    /** Reload fail2ban ignorando errori (best-effort dopo una modifica di file). */
+    private void reloadFail2banQuiet() {
+        try {
+            // TODO: migrate to Shell.run when touched
+            ProcessBuilder pb = new ProcessBuilder(FAIL2BAN_CLIENT, "reload");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Cambia il valore di "filter = ..." in una jail (con backup automatico).
+     * Esempio: setJailFilter("postfix-auth", "postfix[mode=aggressive]").
+     *
+     * Cerca la sezione [jailName] in jail.local e jail.d/*.local|conf, fa il
+     * backup del file modificato, scrive il nuovo valore, ricarica fail2ban.
+     */
+    public BanAction setJailFilter(String jailName, String newFilter) {
+        BanAction r = new BanAction();
+        r.action = "set_filter";
+        r.jail = jailName;
+        if (!isValidJailName(jailName)) {
+            r.success = false;
+            r.message = "Nome jail non valido";
+            return r;
+        }
+        // Validation: il filter name deve essere alfanumerico, con dash/underscore,
+        // ed eventualmente "[mode=xxx]" come opzione. NIENTE shell metachars.
+        if (newFilter == null || newFilter.isBlank()
+                || !newFilter.matches("^[a-zA-Z0-9_\\-]+(?:\\[[a-zA-Z0-9_=,\\-\\s]*\\])?$")) {
+            r.success = false;
+            r.message = "Filter non valido (atteso: nome[opzione=valore])";
+            return r;
+        }
+        try {
+            // Cerca in tutti i file possibili
+            java.util.List<java.nio.file.Path> candidates = new java.util.ArrayList<>();
+            candidates.add(java.nio.file.Paths.get(JAIL_LOCAL_PATH));
+            try {
+                java.nio.file.Path jd = java.nio.file.Paths.get(JAIL_D);
+                if (java.nio.file.Files.isDirectory(jd)) {
+                    try (java.util.stream.Stream<java.nio.file.Path> s = java.nio.file.Files.list(jd)) {
+                        s.filter(p -> {
+                            String n = p.getFileName().toString();
+                            return n.endsWith(".local") || n.endsWith(".conf");
+                        }).forEach(candidates::add);
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            String marker = "[" + jailName + "]";
+            for (java.nio.file.Path path : candidates) {
+                if (!java.nio.file.Files.exists(path)) continue;
+                String content = java.nio.file.Files.readString(path, java.nio.charset.StandardCharsets.UTF_8);
+                int sectionStart = content.indexOf(marker);
+                if (sectionStart < 0) continue;
+                int next = content.indexOf("\n[", sectionStart + marker.length());
+                int sectionEnd = (next < 0) ? content.length() : next + 1;
+
+                String section = content.substring(sectionStart, sectionEnd);
+                String updated = setOrAddKey(section, "filter", newFilter);
+
+                // Backup prima di scrivere
+                java.nio.file.Files.copy(path,
+                    java.nio.file.Paths.get(path.toString() + ".bak." + System.currentTimeMillis()));
+
+                String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
+                java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
+
+                reloadFail2banQuiet();
+                r.success = true;
+                r.message = "Filter aggiornato a '" + newFilter + "' in " + path.getFileName()
+                          + " (backup creato). Fail2ban reload eseguito.";
+                return r;
+            }
+            r.success = false;
+            r.message = "Sezione [" + jailName + "] non trovata in jail.local o jail.d/";
+        } catch (Exception e) {
+            r.success = false;
+            r.message = "Errore: " + e.getMessage();
+        }
+        return r;
+    }
+
+    /**
+     * Lista degli IP attualmente nella whitelist (ignoreip) per una specifica jail,
+     * a runtime (tramite fail2ban-client get).
+     */
+    public java.util.List<String> getIgnoreIps(String jailName) {
+        java.util.List<String> ips = new java.util.ArrayList<>();
+        if (!isValidJailName(jailName)) return ips;
+        try {
+            String out = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " ignoreip");
+            if (out == null) return ips;
+            // L'output ha tipicamente una riga per IP, possibilmente con prefisso "|-" o "`-"
+            for (String line : out.split("\\r?\\n")) {
+                String t = line.trim().replaceAll("^[`|]-\\s*", "").replaceAll("^[|]\\s*", "");
+                if (t.isEmpty() || t.startsWith("|") || t.startsWith("`")) continue;
+                // Skip header lines like "No IP address/network is ignored"
+                if (t.toLowerCase().contains("no ip") || t.toLowerCase().contains("ignored:")) continue;
+                // Tieni solo cose che assomigliano a IP/CIDR
+                if (t.matches("^[0-9a-fA-F:.]+(/[0-9]+)?$")) ips.add(t);
+            }
+        } catch (Exception ignored) {}
+        return ips;
+    }
+
+    /**
+     * Aggiunge un IP/CIDR alla whitelist di una jail.
+     * Applicato a runtime (fail2ban-client) E in modo persistente (jail.local DEFAULT
+     * section, cosi' vale per tutte le jail al prossimo restart).
+     */
+    public BanAction addIgnoreIp(String jailName, String ip) {
+        BanAction r = new BanAction();
+        r.action = "add_ignoreip";
+        r.jail = jailName;
+        r.ip = ip;
+        if (!isValidJailName(jailName)) {
+            r.success = false;
+            r.message = "Nome jail non valido";
+            return r;
+        }
+        if (!isValidIpOrCidr(ip)) {
+            r.success = false;
+            r.message = "IP/CIDR non valido";
+            return r;
+        }
+        try {
+            // 1. Runtime
+            executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " addignoreip " + ip);
+            // 2. Persistenza: appende a ignoreip nella sezione [jailName] di jail.local
+            persistIgnoreIpAdd(jailName, ip);
+            r.success = true;
+            r.message = "IP " + ip + " aggiunto a ignoreip di " + jailName + " (runtime + persistente)";
+        } catch (Exception e) {
+            r.success = false;
+            r.message = "Errore: " + e.getMessage();
+        }
+        return r;
+    }
+
+    /**
+     * Rimuove un IP/CIDR dalla whitelist di una jail.
+     */
+    public BanAction removeIgnoreIp(String jailName, String ip) {
+        BanAction r = new BanAction();
+        r.action = "remove_ignoreip";
+        r.jail = jailName;
+        r.ip = ip;
+        if (!isValidJailName(jailName)) {
+            r.success = false;
+            r.message = "Nome jail non valido";
+            return r;
+        }
+        if (!isValidIpOrCidr(ip)) {
+            r.success = false;
+            r.message = "IP/CIDR non valido";
+            return r;
+        }
+        try {
+            executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " delignoreip " + ip);
+            persistIgnoreIpRemove(jailName, ip);
+            r.success = true;
+            r.message = "IP " + ip + " rimosso da ignoreip di " + jailName;
+        } catch (Exception e) {
+            r.success = false;
+            r.message = "Errore: " + e.getMessage();
+        }
+        return r;
+    }
+
+    /** Validazione IP/CIDR (v4 e v6 base, no shell metachars). */
+    private boolean isValidIpOrCidr(String s) {
+        if (s == null || s.isBlank()) return false;
+        // Solo caratteri ammessi per IPv4/IPv6/CIDR
+        return s.matches("^[0-9a-fA-F:.]+(/[0-9]{1,3})?$");
+    }
+
+    /** Aggiunge ip a ignoreip della sezione [jailName] in jail.local (idempotente). */
+    private void persistIgnoreIpAdd(String jailName, String ip) {
+        try {
+            java.nio.file.Path path = findJailConfigFile(jailName);
+            if (path == null) return;
+            String content = java.nio.file.Files.readString(path, java.nio.charset.StandardCharsets.UTF_8);
+            String marker = "[" + jailName + "]";
+            int sectionStart = content.indexOf(marker);
+            if (sectionStart < 0) return;
+            int next = content.indexOf("\n[", sectionStart + marker.length());
+            int sectionEnd = (next < 0) ? content.length() : next + 1;
+            String section = content.substring(sectionStart, sectionEnd);
+
+            // Trova riga ignoreip esistente
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(?m)^(\\s*)ignoreip\\s*=\\s*(.*)$");
+            java.util.regex.Matcher m = p.matcher(section);
+            String updated;
+            if (m.find()) {
+                String existing = m.group(2).trim();
+                if (existing.contains(ip)) return; // gia' presente
+                String indent = m.group(1);
+                String newVal = existing.isEmpty() ? ip : existing + " " + ip;
+                updated = m.replaceFirst(java.util.regex.Matcher.quoteReplacement(
+                    indent + "ignoreip = " + newVal));
+            } else {
+                // Aggiungi la chiave
+                updated = setOrAddKey(section, "ignoreip", ip);
+            }
+            // Backup
+            java.nio.file.Files.copy(path,
+                java.nio.file.Paths.get(path.toString() + ".bak." + System.currentTimeMillis()));
+            String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
+            java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {}
+    }
+
+    /** Rimuove ip da ignoreip della sezione [jailName] in jail.local. */
+    private void persistIgnoreIpRemove(String jailName, String ip) {
+        try {
+            java.nio.file.Path path = findJailConfigFile(jailName);
+            if (path == null) return;
+            String content = java.nio.file.Files.readString(path, java.nio.charset.StandardCharsets.UTF_8);
+            String marker = "[" + jailName + "]";
+            int sectionStart = content.indexOf(marker);
+            if (sectionStart < 0) return;
+            int next = content.indexOf("\n[", sectionStart + marker.length());
+            int sectionEnd = (next < 0) ? content.length() : next + 1;
+            String section = content.substring(sectionStart, sectionEnd);
+
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(?m)^(\\s*)ignoreip\\s*=\\s*(.*)$");
+            java.util.regex.Matcher m = p.matcher(section);
+            if (!m.find()) return;
+            String existing = m.group(2).trim();
+            String newVal = java.util.Arrays.stream(existing.split("\\s+"))
+                .filter(s -> !s.equals(ip))
+                .collect(java.util.stream.Collectors.joining(" "));
+            String indent = m.group(1);
+            String updated = m.replaceFirst(java.util.regex.Matcher.quoteReplacement(
+                newVal.isEmpty()
+                    ? "# ignoreip rimosso dal pannello (era: " + existing + ")"
+                    : indent + "ignoreip = " + newVal));
+            // Backup
+            java.nio.file.Files.copy(path,
+                java.nio.file.Paths.get(path.toString() + ".bak." + System.currentTimeMillis()));
+            String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
+            java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {}
+    }
+
+    /** Trova il file di config che contiene la sezione [jailName]. */
+    private java.nio.file.Path findJailConfigFile(String jailName) {
+        java.util.List<java.nio.file.Path> candidates = new java.util.ArrayList<>();
+        candidates.add(java.nio.file.Paths.get(JAIL_LOCAL_PATH));
+        try {
+            java.nio.file.Path jd = java.nio.file.Paths.get(JAIL_D);
+            if (java.nio.file.Files.isDirectory(jd)) {
+                try (java.util.stream.Stream<java.nio.file.Path> s = java.nio.file.Files.list(jd)) {
+                    s.filter(p -> {
+                        String n = p.getFileName().toString();
+                        return n.endsWith(".local") || n.endsWith(".conf");
+                    }).forEach(candidates::add);
+                }
+            }
+        } catch (Exception ignored) {}
+        String marker = "[" + jailName + "]";
+        for (java.nio.file.Path path : candidates) {
+            try {
+                if (java.nio.file.Files.exists(path)
+                        && java.nio.file.Files.readString(path).contains(marker)) {
+                    return path;
+                }
+            } catch (Exception ignored) {}
+        }
+        return null;
     }
 
     /**
@@ -1108,6 +1432,7 @@ public class Fail2banManager {
     }
 
     private String executeCommand(String command) throws Exception {
+        // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
         pb.redirectErrorStream(true);
         Process process = pb.start();
@@ -1124,7 +1449,175 @@ public class Fail2banManager {
         return output.toString().trim();
     }
 
+    /**
+     * Esegue per una specifica jail i comandi:
+     *   fail2ban-client get <jail> maxretry
+     *   fail2ban-client get <jail> findtime
+     *   fail2ban-client get <jail> bantime
+     *   fail2ban-client get <jail> logpath
+     *   fail2ban-client get <jail> ignoreip
+     *   fail2ban-client get <jail> filter
+     *   fail2ban-client status <jail>
+     *
+     * Restituisce un oggetto strutturato con l'output testuale di ogni comando
+     * + i valori parsati delle statistiche per la UI.
+     */
+    public JailLiveState getJailLiveState(String jailName) {
+        JailLiveState s = new JailLiveState();
+        s.name = jailName;
+        if (!isValidJailName(jailName)) {
+            s.error = "Nome jail non valido: " + jailName;
+            return s;
+        }
+        // PARALLELIZZAZIONE: ognuno dei 5 "fail2ban-client get" + lo "status" parte su
+        // un virtual thread separato. Tempo totale = tempo del comando piu' lento
+        // (~150ms) invece della somma (~900ms).
+        // Usiamo CompletableFuture + virtual threads (API stabile, no preview flags).
+        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            var maxretryF = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "maxretry"), executor);
+            var findtimeF = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "findtime"), executor);
+            var bantimeF  = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "bantime"),  executor);
+            var logpathF  = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "logpath"),  executor);
+            var ignoreipF = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "ignoreip"), executor);
+            // Nota: `fail2ban-client get <jail> filter` non e' supportato in tutte
+            // le versioni di fail2ban-client. Leggiamo da config (file I/O, veloce).
+            var filterF   = java.util.concurrent.CompletableFuture.supplyAsync(() -> readFilterNameFromConfig(jailName), executor);
+            // Status: testo multilinea, lo manteniamo intero per il parsing
+            var statusF   = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                try { return executeCommand(FAIL2BAN_CLIENT + " status " + jailName); }
+                catch (Exception e) { throw new RuntimeException(e); }
+            }, executor);
+
+            // Aspetta tutti — join() rilancia eventuali eccezioni
+            java.util.concurrent.CompletableFuture.allOf(
+                maxretryF, findtimeF, bantimeF, logpathF, ignoreipF, filterF, statusF
+            ).orTimeout(15, java.util.concurrent.TimeUnit.SECONDS).join();
+
+            s.maxretry  = maxretryF.join();
+            s.findtime  = findtimeF.join();
+            s.bantime   = bantimeF.join();
+            s.logpath   = logpathF.join();
+            s.ignoreip  = ignoreipF.join();
+            s.filter    = filterF.join();
+            s.statusRaw = statusF.join();
+            parseStatusFields(s);
+            s.success = true;
+        } catch (Exception e) {
+            s.error = e.getMessage();
+        }
+        return s;
+    }
+
+    private String runGetCommand(String jailName, String key) {
+        try {
+            String out = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " " + key);
+            if (out == null) return "";
+            String trimmed = out.trim();
+            // fail2ban-client get a volte ritorna prefissi tipo "`-" o "|-" per liste — li puliamo
+            // Esempio: get <jail> ignoreip può ritornare "127.0.0.1/8\n::1"
+            return trimmed;
+        } catch (Exception e) {
+            return "(errore: " + e.getMessage() + ")";
+        }
+    }
+
+    private void parseStatusFields(JailLiveState s) {
+        if (s.statusRaw == null) return;
+        for (String line : s.statusRaw.split("\\r?\\n")) {
+            String l = line.trim().replaceAll("[`|]-\\s+", "").replaceAll("[|]\\s+", "");
+            int colon = l.indexOf(':');
+            if (colon < 0) continue;
+            String key = l.substring(0, colon).trim().toLowerCase();
+            String val = l.substring(colon + 1).trim();
+            // Switch arrow syntax (Java 14+): nessun fall-through, nessun break.
+            switch (key) {
+                case "currently failed" -> s.currentlyFailed = parseIntSafe(val);
+                case "total failed"     -> s.totalFailed     = parseIntSafe(val);
+                case "currently banned" -> s.currentlyBanned = parseIntSafe(val);
+                case "total banned"     -> s.totalBanned     = parseIntSafe(val);
+                case "banned ip list"   -> s.bannedIpsRaw    = val;
+                case "file list"        -> s.fileListRaw     = val;
+                default -> { /* ignora chiavi sconosciute */ }
+            }
+        }
+    }
+
+    /**
+     * Cerca il valore di "filter = ..." nella sezione [jailName] dentro:
+     *   /usr/local/etc/fail2ban/jail.local
+     *   /usr/local/etc/fail2ban/jail.d/*.conf|local
+     * Restituisce il nome del filtro, "(default: jailName)" se la sezione esiste ma
+     * non specifica filter (fail2ban usa il nome della jail come default), oppure
+     * "(non trovato)" se la sezione manca del tutto.
+     */
+    private String readFilterNameFromConfig(String jailName) {
+        List<Path> candidates = new ArrayList<>();
+        candidates.add(Paths.get(JAIL_LOCAL));
+        try {
+            Path jd = Paths.get(JAIL_D);
+            if (Files.isDirectory(jd)) {
+                try (DirectoryStream<Path> ds = Files.newDirectoryStream(jd, "*.{conf,local}")) {
+                    for (Path p : ds) candidates.add(p);
+                }
+            }
+        } catch (Exception ignored) {}
+
+        boolean sectionFound = false;
+        for (Path file : candidates) {
+            try {
+                if (!Files.exists(file)) continue;
+                List<String> lines = Files.readAllLines(file);
+                boolean inSection = false;
+                for (String raw : lines) {
+                    String line = raw.trim();
+                    if (line.isEmpty() || line.startsWith("#") || line.startsWith(";")) continue;
+                    if (line.startsWith("[") && line.endsWith("]")) {
+                        String section = line.substring(1, line.length() - 1).trim();
+                        inSection = section.equals(jailName);
+                        if (inSection) sectionFound = true;
+                        continue;
+                    }
+                    if (inSection && line.toLowerCase().startsWith("filter")) {
+                        int eq = line.indexOf('=');
+                        if (eq > 0) {
+                            String val = line.substring(eq + 1).trim();
+                            if (!val.isEmpty()) return val;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return sectionFound ? "(default: " + jailName + ")" : "(non trovato nei file di config)";
+    }
+
+    private int parseIntSafe(String s) {
+        if (s == null) return 0;
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return 0; }
+    }
+
     // Data classes
+
+    public static class JailLiveState {
+        public String name;
+        public boolean success;
+        public String error;
+        // Output dei comandi "get"
+        public String maxretry;
+        public String findtime;
+        public String bantime;
+        public String logpath;
+        public String ignoreip;
+        public String filter;
+        // Output completo di "status"
+        public String statusRaw;
+        // Campi parsati da status (con default 0/null se non disponibili)
+        public int currentlyFailed;
+        public int totalFailed;
+        public int currentlyBanned;
+        public int totalBanned;
+        public String bannedIpsRaw;
+        public String fileListRaw;
+    }
 
     public static class Fail2banStatus {
         public boolean installed;
@@ -1150,20 +1643,18 @@ public class Fail2banManager {
         public String error;
     }
 
-    public static class BannedIp {
-        public String ip;
-        public String jail;
-        public boolean active;
-        public LocalDateTime bannedAt;
-        public LocalDateTime expiresAt;
-    }
+    /**
+     * IP attualmente bannato in una specifica jail.
+     * Record immutabile. bannedAt/expiresAt sono opzionali (possono essere null
+     * se fail2ban non li espone — la 'status' attuale non li include).
+     */
+    public record BannedIp(String ip, String jail, boolean active,
+                           LocalDateTime bannedAt, LocalDateTime expiresAt) {}
 
-    public static class BanEvent {
-        public LocalDateTime timestamp;
-        public String action; // "ban" or "unban"
-        public String jail;
-        public String ip;
-    }
+    /**
+     * Evento storico di ban/unban estratto dal log di fail2ban.
+     */
+    public record BanEvent(LocalDateTime timestamp, String action, String jail, String ip) {}
 
     public static class BanAction {
         public String action;
@@ -1227,6 +1718,7 @@ public class Fail2banManager {
 
         // Sync runtime con pfctl (se pf è attivo)
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "add", ip);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -1250,6 +1742,7 @@ public class Fail2banManager {
         writePermabanFile(current);
 
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "delete", ip);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -1272,6 +1765,7 @@ public class Fail2banManager {
     public java.util.Set<String> listPermabanRuntime() {
         java.util.Set<String> result = new java.util.HashSet<>();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "show");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -1292,6 +1786,7 @@ public class Fail2banManager {
     public boolean reloadPermabanFromFile() {
         try {
             ensurePermabanFile();
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "replace", "-f", PERMABAN_FILE);
             pb.redirectErrorStream(true);
             Process p = pb.start();

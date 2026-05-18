@@ -853,6 +853,7 @@ public class DnsRecordsGenerator {
 
         try {
             // 1. Reverse lookup: dig -x <IP>
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder revPb = new ProcessBuilder("dig", "+short", "-x", serverIp);
             revPb.redirectErrorStream(true);
             Process revP = revPb.start();
@@ -889,6 +890,7 @@ public class DnsRecordsGenerator {
             }
 
             // 3. FCrDNS — risolvi il PTR e verifica che torni allo stesso IP
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder fwdPb = new ProcessBuilder("dig", "+short", "A", ptr);
             fwdPb.redirectErrorStream(true);
             Process fwdP = fwdPb.start();
@@ -933,6 +935,7 @@ public class DnsRecordsGenerator {
         check.recordName = name;
 
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", type, name);
             pb.redirectErrorStream(true);
             Process process = pb.start();

@@ -311,6 +311,7 @@ public class SieveGenerator {
         }
 
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(sievecPath, scriptPath);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -356,6 +357,7 @@ public class SieveGenerator {
             Files.writeString(tempFile, script);
 
             // Run sievec to validate
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(sievecPath, "-d", tempFile.toString());
             pb.redirectErrorStream(true);
             Process p = pb.start();

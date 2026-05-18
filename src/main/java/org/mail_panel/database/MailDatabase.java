@@ -2106,6 +2106,7 @@ public class MailDatabase {
      */
     public boolean reloadPostfix() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", "service postfix reload 2>/dev/null || true");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -3289,11 +3290,13 @@ public class MailDatabase {
 
         try (PreparedStatement stmt = getConnection().prepareStatement(sql.toString())) {
             for (int i = 0; i < params.size(); i++) {
-                Object param = params.get(i);
-                if (param instanceof String) {
-                    stmt.setString(i + 1, (String) param);
-                } else if (param instanceof Integer) {
-                    stmt.setInt(i + 1, (Integer) param);
+                // Pattern matching for instanceof (Java 16+): niente cast esplicito,
+                // la variabile e' gia' tipata nello scope dell'if.
+                switch (params.get(i)) {
+                    case String s  -> stmt.setString(i + 1, s);
+                    case Integer n -> stmt.setInt(i + 1, n);
+                    case null      -> stmt.setNull(i + 1, java.sql.Types.NULL);
+                    default        -> stmt.setObject(i + 1, params.get(i));
                 }
             }
 

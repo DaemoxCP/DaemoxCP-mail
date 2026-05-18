@@ -88,9 +88,11 @@ public class LogManager {
             // Use tail command for efficiency
             ProcessBuilder pb;
             if (filter != null && !filter.isEmpty()) {
+                // TODO: migrate to Shell.run when touched
                 pb = new ProcessBuilder("/bin/sh", "-c",
                     String.format("tail -n %d '%s' | grep -i '%s'", lines * 2, logFile.path, filter.replace("'", "\\'")));
             } else {
+                // TODO: migrate to Shell.run when touched
                 pb = new ProcessBuilder("tail", "-n", String.valueOf(lines), logFile.path);
             }
 
@@ -131,6 +133,7 @@ public class LogManager {
 
         try {
             // Use grep for efficient searching
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c",
                 String.format("grep -E '%s' '%s' | tail -n %d",
                     pattern.replace("'", "'\\''"), logFile.path, maxResults));
@@ -176,6 +179,7 @@ public class LogManager {
             // Stop any existing stream for this log
             stopLogStream(logId);
 
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("tail", "-f", "-n", "0", logFile.path);
             Process process = pb.start();
             tailProcesses.put(logId, process);

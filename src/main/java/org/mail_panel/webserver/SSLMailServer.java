@@ -55,6 +55,7 @@ public class SSLMailServer {
     private MailQueueManager queueManager;
     private RoundcubeSsoManager ssoManager;
     private Fail2banManager fail2banManager;
+    private org.mail_panel.security.PfFirewallManager firewallManager;
     private PasskeyManager passkeyManager;
 
     // SSL certificate content (for constructor with PEM)
@@ -130,6 +131,7 @@ public class SSLMailServer {
         server.createContext("/ssl", this::handleProtectedPage);
         server.createContext("/queue", this::handleProtectedPage);
         server.createContext("/security", this::handleProtectedPage);
+        server.createContext("/firewall", this::handleProtectedPage);
         server.createContext("/logout", this::handleLogout);
         server.createContext("/api/logout", this::handleLogout);
 
@@ -148,6 +150,7 @@ public class SSLMailServer {
         server.createContext("/api/dns", this::handleApiDns);
         server.createContext("/api/cloudflare", this::handleApiCloudflare);
         server.createContext("/api/timezone-diag", this::handleApiTimezoneDiag);
+        server.createContext("/api/postfix-aliases-health", this::handleApiPostfixAliases);
 
         // API endpoints - SSL/Let's Encrypt
         server.createContext("/api/ssl", this::handleApiSsl);
@@ -170,6 +173,7 @@ public class SSLMailServer {
         server.createContext("/api/clamav_health", this::handleApiClamavHealth);
         server.createContext("/api/blacklist_check", this::handleApiBlacklistCheck);
         server.createContext("/api/unbound_health", this::handleApiUnboundHealth);
+        server.createContext("/api/firewall", this::handleApiFirewall);
         server.createContext("/paths", this::handleProtectedPage);
 
         // New feature pages
@@ -230,6 +234,7 @@ public class SSLMailServer {
             this.queueManager = new MailQueueManager();
             this.ssoManager = new RoundcubeSsoManager(Main.mailDatabase);
             this.fail2banManager = new Fail2banManager();
+            this.firewallManager = new org.mail_panel.security.PfFirewallManager();
             this.rspamdManager = new RspamdManager();
             this.sieveGenerator = new SieveGenerator();
 
@@ -239,6 +244,15 @@ public class SSLMailServer {
             // Auto-setup Fail2ban: log file + filter + jail + log rotation + reload
             // Idempotente, fail-safe: salta tutto se Fail2ban non è installato.
             org.mail_panel.security.Fail2banAutoSetup.run();
+
+            // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
+            // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".
+            // Idempotente: se è tutto OK non fa nulla.
+            try {
+                new org.mail_panel.security.PostfixAliasesManager().ensureAtBoot();
+            } catch (Throwable t) {
+                LOGGER.warning("PostfixAliases ensureAtBoot fallito: " + t.getMessage());
+            }
 
             // Start auto-renewal for certificates
             acmeManager.startAutoRenewal();
@@ -343,11 +357,17 @@ public class SSLMailServer {
     }
 
     public void start() {
-        // Use a thread pool to handle multiple concurrent requests
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+        // Virtual threads (Java 21+): ogni richiesta gira su un virtual thread
+        // leggerissimo invece che su un thread piattaforma da pool fisso a 10.
+        // Vantaggi:
+        //  - nessun limite pratico sul numero di richieste concorrenti
+        //  - quando una richiesta blocca su I/O (es. fail2ban-client, shell command,
+        //    query DB), il carrier thread va a servirne un'altra → niente starvation
+        //  - memoria: ~200 byte/virtual thread vs ~1MB/thread piattaforma
+        server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
         server.start();
         initializeManagers();
-        LOGGER.info("Mail Panel server started on port " + port);
+        LOGGER.info("Mail Panel server started on port " + port + " (virtual threads enabled)");
     }
 
     public void stop() {
@@ -619,6 +639,7 @@ public class SSLMailServer {
 
     private void generateSelfSignedCertificate(String keystorePath, String password) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(
                 "keytool", "-genkeypair",
                 "-alias", "mailpanel",
@@ -1340,13 +1361,13 @@ public class SSLMailServer {
                         // OUTPUT:
                         //   results: array di {id, email, password, success, error?}
                         //   summary: {total, succeeded, failed}
-                        org.json.JSONArray idsArr;
                         Object ids = req.opt("mailbox_ids");
                         java.util.List<Integer> idList = new java.util.ArrayList<>();
+                        // Pattern matching for instanceof (Java 16+): la variabile 'idsArr'
+                        // e' tipata e in scope solo nel branch dove serve.
                         if ("all".equals(ids)) {
                             for (MailDatabase.Mailbox m : Main.mailDatabase.getAllMailboxes()) idList.add(m.id);
-                        } else if (ids instanceof org.json.JSONArray) {
-                            idsArr = (org.json.JSONArray) ids;
+                        } else if (ids instanceof org.json.JSONArray idsArr) {
                             for (int i = 0; i < idsArr.length(); i++) idList.add(idsArr.getInt(i));
                         }
                         if (idList.isEmpty()) {
@@ -1982,6 +2003,7 @@ public class SSLMailServer {
 
     private boolean checkServiceRunning(String serviceName) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", serviceName, "status");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -2025,6 +2047,7 @@ public class SSLMailServer {
      */
     private boolean checkPackageInstalled(String packageName) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("pkg", "info", "-e", packageName);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -2050,6 +2073,7 @@ public class SSLMailServer {
             if (pattern == null || !pattern.matches("^[a-zA-Z0-9._%*-]+$")) {
                 return false;
             }
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", "pkg info | grep -q '^" + pattern + "'");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -2150,6 +2174,7 @@ public class SSLMailServer {
     private boolean executeServiceCommand(String service, String action) {
         try {
             System.out.println("[EXEC] Running: service " + service + " " + action);
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", service, action);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -2191,6 +2216,7 @@ public class SSLMailServer {
         Files.writeString(scriptPath, scriptContent);
         scriptPath.toFile().setExecutable(true);
 
+        // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", scriptPath.toString());
         pb.redirectErrorStream(true);
         Process process = pb.start();
@@ -3082,6 +3108,7 @@ public class SSLMailServer {
         // 2) OS clock via comando "date" (FreeBSD/Linux): più affidabile in caso di JVM
         //    settata a tz diversa dall'OS
         try {
+            // TODO: migrate to Shell.run when touched
             Process p = new ProcessBuilder("date", "+%s|%z|%Z").redirectErrorStream(true).start();
             try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
                 String line = r.readLine();
@@ -3118,6 +3145,120 @@ public class SSLMailServer {
         } catch (Exception e) {
             response.put("mysql_error", e.getMessage());
         }
+    }
+
+    // ============== Postfix Aliases Health / Fix ==============
+
+    /**
+     * Endpoint /api/postfix-aliases-health.
+     *   GET                       -> diagnose
+     *   POST { action: "fix" }    -> auto-fix (crea sorgente + postalias + reload)
+     *   POST { action: "set_root_forward", forward_to: "..." } -> aggiorna root forward
+     */
+    private void handleApiPostfixAliases(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+        String method = exchange.getRequestMethod();
+        org.json.JSONObject response = new org.json.JSONObject();
+        try {
+            org.mail_panel.security.PostfixAliasesManager mgr = new org.mail_panel.security.PostfixAliasesManager();
+
+            if ("GET".equals(method)) {
+                org.mail_panel.security.PostfixAliasesManager.AliasesStatus s = mgr.diagnose();
+                fillAliasesStatus(response, s);
+                sendJsonResponse(exchange, response);
+                return;
+            }
+            if (!"POST".equals(method)) {
+                sendJsonError(exchange, 405, "Method not allowed");
+                return;
+            }
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+            org.json.JSONObject req = new org.json.JSONObject(body);
+            String action = req.optString("action", "");
+
+            if ("fix".equals(action)) {
+                org.mail_panel.security.PostfixAliasesManager.FixResult r = mgr.fix();
+                response.put("success", r.success);
+                response.put("message", r.message);
+                response.put("log", r.log.toString());
+                if (r.aliasFile != null)   response.put("alias_file",    r.aliasFile);
+                if (r.aliasDbFile != null) response.put("alias_db_file", r.aliasDbFile);
+                logAudit(r.success ? "POSTFIX_ALIASES_FIXED" : "POSTFIX_ALIASES_FIX_FAILED",
+                    getClientIp(exchange), "msg=" + r.message);
+                // Includi anche lo status aggiornato
+                fillAliasesStatus(response, mgr.diagnose());
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            if ("set_root_forward".equals(action)) {
+                String forwardTo = req.optString("forward_to", "").trim();
+                org.mail_panel.security.PostfixAliasesManager.FixResult r = mgr.setRootForward(forwardTo);
+                response.put("success", r.success);
+                response.put("message", r.message);
+                response.put("log", r.log.toString());
+                logAudit(r.success ? "POSTFIX_ROOT_FORWARD_SET" : "POSTFIX_ROOT_FORWARD_FAILED",
+                    getClientIp(exchange), "forward_to=" + forwardTo + " msg=" + r.message);
+                fillAliasesStatus(response, mgr.diagnose());
+                sendJsonResponse(exchange, response);
+                return;
+            }
+
+            response.put("success", false);
+            response.put("error", "Azione non valida (usa: fix, set_root_forward)");
+            sendJsonResponse(exchange, response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("error", e.getMessage());
+            sendJsonResponse(exchange, response);
+        }
+    }
+
+    private void fillAliasesStatus(org.json.JSONObject obj,
+                                    org.mail_panel.security.PostfixAliasesManager.AliasesStatus s) {
+        if (s == null) return;
+        obj.put("success", s.success);
+        if (s.error != null) obj.put("error", s.error);
+        if (s.overall != null) obj.put("overall", s.overall);
+        if (s.summary != null) obj.put("summary", s.summary);
+        if (s.aliasFile != null) obj.put("alias_file", s.aliasFile);
+        if (s.aliasDbFile != null) obj.put("alias_db_file", s.aliasDbFile);
+        if (s.aliasMapsRaw != null) obj.put("alias_maps_raw", s.aliasMapsRaw);
+        if (s.aliasDatabaseRaw != null) obj.put("alias_database_raw", s.aliasDatabaseRaw);
+        obj.put("source_exists", s.sourceExists);
+        obj.put("db_exists", s.dbExists);
+        obj.put("db_stale_vs_source", s.dbStaleVsSource);
+        if (s.rootForward != null) obj.put("root_forward", s.rootForward);
+        if (s.sourceContent != null) obj.put("source_content", s.sourceContent);
+    }
+
+    /**
+     * Helper: popola un JSONObject con l'output strutturato di un JailLiveState.
+     */
+    private void fillJailLiveStateJson(org.json.JSONObject obj, Fail2banManager.JailLiveState s) {
+        if (s == null) return;
+        obj.put("name", s.name == null ? "" : s.name);
+        if (s.error != null) obj.put("error", s.error);
+        // Raw output dei comandi "get"
+        obj.put("maxretry", s.maxretry == null ? "" : s.maxretry);
+        obj.put("findtime", s.findtime == null ? "" : s.findtime);
+        obj.put("bantime", s.bantime == null ? "" : s.bantime);
+        obj.put("logpath", s.logpath == null ? "" : s.logpath);
+        obj.put("ignoreip", s.ignoreip == null ? "" : s.ignoreip);
+        obj.put("filter", s.filter == null ? "" : s.filter);
+        // Output completo "fail2ban-client status <jail>"
+        obj.put("status_raw", s.statusRaw == null ? "" : s.statusRaw);
+        // Campi parsati
+        obj.put("currently_failed", s.currentlyFailed);
+        obj.put("total_failed", s.totalFailed);
+        obj.put("currently_banned", s.currentlyBanned);
+        obj.put("total_banned", s.totalBanned);
+        if (s.bannedIpsRaw != null) obj.put("banned_ips_raw", s.bannedIpsRaw);
+        if (s.fileListRaw != null) obj.put("file_list_raw", s.fileListRaw);
     }
 
     // ============== SSL/Let's Encrypt API ==============
@@ -3993,11 +4134,11 @@ public class SSLMailServer {
                     JSONArray recentBans = new JSONArray();
                     for (Fail2banManager.BanEvent event : status.recentBans) {
                         JSONObject eventJson = new JSONObject();
-                        eventJson.put("action", event.action);
-                        eventJson.put("jail", event.jail);
-                        eventJson.put("ip", event.ip);
-                        if (event.timestamp != null) {
-                            eventJson.put("timestamp", event.timestamp.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                        eventJson.put("action", event.action());
+                        eventJson.put("jail", event.jail());
+                        eventJson.put("ip", event.ip());
+                        if (event.timestamp() != null) {
+                            eventJson.put("timestamp", event.timestamp().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
                         }
                         recentBans.put(eventJson);
                     }
@@ -4033,6 +4174,47 @@ public class SSLMailServer {
                         response.put("banned_ips", bannedIps);
                     }
 
+                } else if ("live_state".equals(action)) {
+                    // Per UNA singola jail: output di fail2ban-client get maxretry/findtime/bantime/...
+                    // + fail2ban-client status <jail>. Restituiamo sia il raw sia i campi parsati.
+                    String jailName = extractParamFromQuery(query, "name");
+                    if (jailName == null || !org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
+                        response.put("success", false);
+                        response.put("error", "Nome jail non valido");
+                    } else {
+                        Fail2banManager.JailLiveState s = fail2banManager.getJailLiveState(jailName);
+                        response.put("success", s.success);
+                        if (s.error != null) response.put("error", s.error);
+                        fillJailLiveStateJson(response, s);
+                    }
+
+                } else if ("live_state_all".equals(action)) {
+                    // Per TUTTE le jail attive: live state di ognuna IN PARALLELO.
+                    // Con N jail, prima ci voleva N * ~1s. Ora ~1s totale perche'
+                    // tutte le jail vengono interrogate in parallelo via virtual
+                    // threads, e dentro ciascuna anche i 6 fail2ban-client get
+                    // sono paralleli.
+                    Fail2banManager.Fail2banStatus overall = fail2banManager.getStatus();
+                    response.put("success", true);
+                    response.put("installed", overall.installed);
+                    response.put("running", overall.running);
+                    JSONArray arr = new JSONArray();
+                    try (var exec = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                        java.util.List<java.util.concurrent.CompletableFuture<Fail2banManager.JailLiveState>> futures
+                            = new java.util.ArrayList<>();
+                        for (String jail : overall.activeJails) {
+                            futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
+                                () -> fail2banManager.getJailLiveState(jail), exec));
+                        }
+                        for (var f : futures) {
+                            Fail2banManager.JailLiveState s = f.get(20, java.util.concurrent.TimeUnit.SECONDS);
+                            JSONObject one = new JSONObject();
+                            fillJailLiveStateJson(one, s);
+                            arr.put(one);
+                        }
+                    }
+                    response.put("jails", arr);
+
                 } else if ("banned".equals(action)) {
                     // Get all banned IPs
                     java.util.List<Fail2banManager.BannedIp> banned = fail2banManager.getAllBannedIps();
@@ -4042,9 +4224,9 @@ public class SSLMailServer {
                     JSONArray bannedArray = new JSONArray();
                     for (Fail2banManager.BannedIp ban : banned) {
                         JSONObject banJson = new JSONObject();
-                        banJson.put("ip", ban.ip);
-                        banJson.put("jail", ban.jail);
-                        banJson.put("active", ban.active);
+                        banJson.put("ip", ban.ip());
+                        banJson.put("jail", ban.jail());
+                        banJson.put("active", ban.active());
                         bannedArray.put(banJson);
                     }
                     response.put("banned", bannedArray);
@@ -4204,6 +4386,41 @@ public class SSLMailServer {
                             getClientIp(exchange),
                             "jail=" + jailName + " maxRetry=" + maxRetry + " findTime=" + findTime + " banTime=" + banTime);
                     }
+                    case "update_all_jails_config" -> {
+                        int maxRetry = json.optInt("max_retry", 5);
+                        int findTime = json.optInt("find_time", 600);
+                        int banTime  = json.optInt("ban_time", 3600);
+                        if (maxRetry < 1 || maxRetry > 100 ||
+                            findTime < 30 || findTime > 86400 ||
+                            banTime  < 60 || banTime  > 31_536_000) {
+                            response.put("success", false);
+                            response.put("message", "Valori fuori range (maxRetry 1-100, findTime 30-86400s, banTime 60-31536000s)");
+                            break;
+                        }
+                        Fail2banManager.BulkJailConfigResult bulk =
+                            fail2banManager.updateAllJailsConfig(maxRetry, findTime, banTime);
+                        response.put("success", bulk.success);
+                        response.put("success_count", bulk.successCount);
+                        response.put("fail_count", bulk.failCount);
+                        if (bulk.error != null) response.put("error", bulk.error);
+                        JSONArray jarr = new JSONArray();
+                        for (Fail2banManager.JailConfigOutcome o : bulk.results) {
+                            JSONObject jo = new JSONObject();
+                            jo.put("jail", o.jail());
+                            jo.put("success", o.success());
+                            jo.put("message", o.message());
+                            jarr.put(jo);
+                        }
+                        response.put("results", jarr);
+                        response.put("message", bulk.error != null
+                            ? bulk.error
+                            : ("Configurazione applicata a " + bulk.successCount + " jail"
+                               + (bulk.failCount > 0 ? " (" + bulk.failCount + " errori)" : "")));
+                        logAudit(bulk.success ? "FAIL2BAN_ALL_JAILS_UPDATED" : "FAIL2BAN_ALL_JAILS_UPDATE_PARTIAL",
+                            getClientIp(exchange),
+                            "maxRetry=" + maxRetry + " findTime=" + findTime + " banTime=" + banTime
+                            + " ok=" + bulk.successCount + " fail=" + bulk.failCount);
+                    }
                     case "permaban_add" -> {
                         String ip = json.optString("ip", "");
                         if (!org.mail_panel.security.InputValidator.isValidIp(ip)) {
@@ -4285,7 +4502,58 @@ public class SSLMailServer {
                             response.put("find_time", cfg.findTime);
                             response.put("ban_time", cfg.banTime);
                             response.put("enabled", cfg.enabled);
+                            response.put("filter", cfg.filter == null ? "" : cfg.filter);
+                            response.put("logpath", cfg.logpath == null ? "" : cfg.logpath);
+                            // Lista degli ignoreip a runtime (piu' affidabile che da file)
+                            JSONArray ignArr = new JSONArray();
+                            for (String s : fail2banManager.getIgnoreIps(jailName)) ignArr.put(s);
+                            response.put("ignoreip", ignArr);
                         }
+                    }
+                    case "set_jail_filter" -> {
+                        String jailName = json.getString("jail");
+                        String filter = json.optString("filter", "");
+                        if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
+                            response.put("success", false);
+                            response.put("message", "Nome jail non valido");
+                            break;
+                        }
+                        Fail2banManager.BanAction r = fail2banManager.setJailFilter(jailName, filter);
+                        response.put("success", r.success);
+                        response.put("message", r.message);
+                        logAudit(r.success ? "FAIL2BAN_FILTER_CHANGED" : "FAIL2BAN_FILTER_CHANGE_FAILED",
+                            getClientIp(exchange),
+                            "jail=" + jailName + " filter=" + filter);
+                    }
+                    case "add_jail_ignoreip" -> {
+                        String jailName = json.getString("jail");
+                        String ip = json.optString("ip", "").trim();
+                        if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
+                            response.put("success", false);
+                            response.put("message", "Nome jail non valido");
+                            break;
+                        }
+                        Fail2banManager.BanAction r = fail2banManager.addIgnoreIp(jailName, ip);
+                        response.put("success", r.success);
+                        response.put("message", r.message);
+                        logAudit(r.success ? "FAIL2BAN_IGNOREIP_ADDED" : "FAIL2BAN_IGNOREIP_ADD_FAILED",
+                            getClientIp(exchange),
+                            "jail=" + jailName + " ip=" + ip);
+                    }
+                    case "remove_jail_ignoreip" -> {
+                        String jailName = json.getString("jail");
+                        String ip = json.optString("ip", "").trim();
+                        if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
+                            response.put("success", false);
+                            response.put("message", "Nome jail non valido");
+                            break;
+                        }
+                        Fail2banManager.BanAction r = fail2banManager.removeIgnoreIp(jailName, ip);
+                        response.put("success", r.success);
+                        response.put("message", r.message);
+                        logAudit(r.success ? "FAIL2BAN_IGNOREIP_REMOVED" : "FAIL2BAN_IGNOREIP_REMOVE_FAILED",
+                            getClientIp(exchange),
+                            "jail=" + jailName + " ip=" + ip);
                     }
                     default -> {
                         response.put("success", false);
@@ -4306,6 +4574,284 @@ public class SSLMailServer {
 
     /** Endpoint per diagnosi e setup automatico di Fail2ban. */
     // ============== UNBOUND HEALTH CHECK (Resolver DNS locale) ==============
+    // ============== FIREWALL API ==============
+
+    /**
+     * Endpoint /api/firewall — gestione firewall pf con CIDR + GeoIP.
+     *
+     * GET  /api/firewall                → ritorna stato corrente (mode, liste, country selezionati,
+     *                                     dimensione tabelle pf a runtime, catalogo paesi)
+     * POST /api/firewall  action=...    → mutazioni
+     *      Azioni supportate:
+     *        - set_mode           {mode: DISABLED|CIDR_ONLY|GEO_WHITELIST|GEO_BLACKLIST}
+     *        - set_port25_geo     {value: true|false}    (applica geo anche a porta 25)
+     *        - add_cidr_wl        {cidr: "..."}
+     *        - remove_cidr_wl     {cidr: "..."}
+     *        - add_cidr_bl        {cidr: "..."}
+     *        - remove_cidr_bl     {cidr: "..."}
+     *        - add_country        {country: "it"}
+     *        - remove_country     {country: "it"}
+     *        - sync_geo           {country: "it"}        (scarica zone file da ipdeny)
+     *        - sync_geo_all       (scarica zone files per tutti i paesi selezionati)
+     *        - apply              (rigenera anchor + syntax check + carica nel kernel)
+     */
+    private void handleApiFirewall(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (firewallManager == null) {
+            firewallManager = new org.mail_panel.security.PfFirewallManager();
+        }
+        String method = exchange.getRequestMethod();
+        JSONObject response = new JSONObject();
+        try {
+            if ("GET".equals(method)) {
+                response = buildFirewallStatusJson();
+            } else if ("POST".equals(method)) {
+                String body = readRequestBodyWithLimit(exchange);
+                if (body == null) { sendJsonError(exchange, 413, "Body troppo grande"); return; }
+                JSONObject req = new JSONObject(body);
+                if (!validateCsrfForRequest(exchange, req)) { sendCsrfError(exchange); return; }
+                String action = req.optString("action", "");
+                String clientIp = getClientIp(exchange);
+
+                switch (action) {
+                    case "set_mode" -> {
+                        String modeStr = req.optString("mode", "CIDR_ONLY");
+                        try {
+                            org.mail_panel.security.PfFirewallManager.Mode m =
+                                org.mail_panel.security.PfFirewallManager.Mode.valueOf(modeStr);
+                            firewallManager.setMode(m);
+                            response.put("success", true);
+                            response.put("message", "Modalita' impostata: " + m);
+                            logAudit("FW_MODE_CHANGED", clientIp, "mode=" + m);
+                        } catch (IllegalArgumentException e) {
+                            response.put("success", false);
+                            response.put("error", "Modalita' non valida: " + modeStr);
+                        }
+                    }
+                    case "set_port25_geo" -> {
+                        boolean v = req.optBoolean("value", false);
+                        firewallManager.setApplyGeoToPort25(v);
+                        response.put("success", true);
+                        response.put("message", "Geo su port 25: " + (v ? "ATTIVO" : "INATTIVO"));
+                        logAudit("FW_PORT25_GEO_TOGGLED", clientIp, "value=" + v);
+                    }
+                    case "add_cidr_wl" -> {
+                        String cidr = req.optString("cidr", "").trim();
+                        boolean ok = firewallManager.addCidrWhitelist(cidr);
+                        response.put("success", ok);
+                        response.put("message", ok ? "Aggiunto a whitelist: " + cidr
+                                                   : "CIDR non valido o gia' presente");
+                        if (ok) logAudit("FW_CIDR_WL_ADD", clientIp, "cidr=" + cidr);
+                    }
+                    case "remove_cidr_wl" -> {
+                        String cidr = req.optString("cidr", "").trim();
+                        boolean ok = firewallManager.removeCidrWhitelist(cidr);
+                        response.put("success", ok);
+                        response.put("message", ok ? "Rimosso da whitelist: " + cidr : "Non presente");
+                        if (ok) logAudit("FW_CIDR_WL_REMOVE", clientIp, "cidr=" + cidr);
+                    }
+                    case "add_cidr_bl" -> {
+                        String cidr = req.optString("cidr", "").trim();
+                        boolean ok = firewallManager.addCidrBlacklist(cidr);
+                        response.put("success", ok);
+                        response.put("message", ok ? "Aggiunto a blacklist: " + cidr
+                                                   : "CIDR non valido o gia' presente");
+                        if (ok) logAudit("FW_CIDR_BL_ADD", clientIp, "cidr=" + cidr);
+                    }
+                    case "remove_cidr_bl" -> {
+                        String cidr = req.optString("cidr", "").trim();
+                        boolean ok = firewallManager.removeCidrBlacklist(cidr);
+                        response.put("success", ok);
+                        response.put("message", ok ? "Rimosso da blacklist: " + cidr : "Non presente");
+                        if (ok) logAudit("FW_CIDR_BL_REMOVE", clientIp, "cidr=" + cidr);
+                    }
+                    case "add_country" -> {
+                        String cc = req.optString("country", "").trim().toLowerCase();
+                        boolean ok = firewallManager.addGeoCountry(cc);
+                        response.put("success", ok);
+                        response.put("message", ok ? "Paese aggiunto: " + cc : "Codice non valido o gia' presente");
+                        if (ok) logAudit("FW_COUNTRY_ADD", clientIp, "cc=" + cc);
+                    }
+                    case "remove_country" -> {
+                        String cc = req.optString("country", "").trim().toLowerCase();
+                        boolean ok = firewallManager.removeGeoCountry(cc);
+                        response.put("success", ok);
+                        response.put("message", ok ? "Paese rimosso: " + cc : "Non presente");
+                        if (ok) logAudit("FW_COUNTRY_REMOVE", clientIp, "cc=" + cc);
+                    }
+                    case "bulk_add_countries" -> {
+                        JSONArray arr = req.optJSONArray("countries");
+                        java.util.List<String> codes = new java.util.ArrayList<>();
+                        if (arr != null) for (int i = 0; i < arr.length(); i++) codes.add(arr.getString(i));
+                        int added = firewallManager.bulkAddCountries(codes);
+                        response.put("success", true);
+                        response.put("added", added);
+                        response.put("total_requested", codes.size());
+                        response.put("message", "Aggiunti " + added + " paesi (su " + codes.size() + " richiesti)");
+                        logAudit("FW_BULK_COUNTRY_ADD", clientIp, "added=" + added + " requested=" + codes.size());
+                    }
+                    case "bulk_remove_countries" -> {
+                        JSONArray arr = req.optJSONArray("countries");
+                        java.util.List<String> codes = new java.util.ArrayList<>();
+                        if (arr != null) for (int i = 0; i < arr.length(); i++) codes.add(arr.getString(i));
+                        int removed = firewallManager.bulkRemoveCountries(codes);
+                        response.put("success", true);
+                        response.put("removed", removed);
+                        response.put("message", "Rimossi " + removed + " paesi");
+                        logAudit("FW_BULK_COUNTRY_REMOVE", clientIp, "removed=" + removed);
+                    }
+                    case "clear_countries" -> {
+                        int n = firewallManager.clearCountries();
+                        response.put("success", true);
+                        response.put("removed", n);
+                        response.put("message", "Lista paesi svuotata (" + n + " rimossi)");
+                        logAudit("FW_CLEAR_COUNTRIES", clientIp, "removed=" + n);
+                    }
+                    case "set_auto_sync" -> {
+                        boolean enabled = req.optBoolean("enabled", false);
+                        int interval = Math.max(1, Math.min(req.optInt("interval_days", 7), 365));
+                        firewallManager.setAutoSync(enabled, interval);
+                        response.put("success", true);
+                        response.put("message", "Auto-sync " + (enabled ? "ATTIVO" : "INATTIVO") + " — intervallo " + interval + " giorni");
+                        logAudit("FW_AUTOSYNC_SET", clientIp, "enabled=" + enabled + " interval=" + interval);
+                    }
+                    case "apply_preset_group" -> {
+                        String groupId = req.optString("group_id", "");
+                        org.mail_panel.security.CountryCatalog.CountryGroup grp = null;
+                        for (var g : org.mail_panel.security.CountryCatalog.getGroups()) {
+                            if (g.id().equals(groupId)) { grp = g; break; }
+                        }
+                        if (grp == null) {
+                            response.put("success", false);
+                            response.put("error", "Gruppo preset non riconosciuto: " + groupId);
+                        } else {
+                            // Sostituisce completamente la selezione corrente con quella del gruppo
+                            firewallManager.clearCountries();
+                            int added = firewallManager.bulkAddCountries(grp.codes());
+                            response.put("success", true);
+                            response.put("group", groupId);
+                            response.put("added", added);
+                            response.put("message", "Preset '" + grp.label() + "' applicato: " + added + " paesi selezionati");
+                            logAudit("FW_PRESET_APPLIED", clientIp, "group=" + groupId + " added=" + added);
+                        }
+                    }
+                    case "sync_geo" -> {
+                        String cc = req.optString("country", "").trim().toLowerCase();
+                        org.mail_panel.security.PfFirewallManager.SyncResult sr = firewallManager.syncCountry(cc);
+                        response.put("success", sr.success);
+                        response.put("message", sr.success ? sr.message : ("Errore: " + sr.error));
+                        response.put("country", sr.country);
+                        response.put("cidr_count", sr.cidrCount);
+                        logAudit(sr.success ? "FW_GEO_SYNC_OK" : "FW_GEO_SYNC_FAIL", clientIp,
+                            "cc=" + cc + " count=" + sr.cidrCount);
+                    }
+                    case "sync_geo_all" -> {
+                        java.util.List<org.mail_panel.security.PfFirewallManager.SyncResult> results =
+                            firewallManager.syncAllSelectedCountries();
+                        JSONArray arr = new JSONArray();
+                        int ok = 0;
+                        for (var sr : results) {
+                            arr.put(new JSONObject()
+                                .put("country", sr.country)
+                                .put("success", sr.success)
+                                .put("cidr_count", sr.cidrCount)
+                                .put("message", sr.success ? sr.message : sr.error));
+                            if (sr.success) ok++;
+                        }
+                        response.put("success", ok == results.size());
+                        response.put("results", arr);
+                        response.put("message", ok + "/" + results.size() + " paesi sincronizzati");
+                        logAudit("FW_GEO_SYNC_ALL", clientIp, "ok=" + ok + "/" + results.size());
+                    }
+                    case "apply" -> {
+                        org.mail_panel.security.PfFirewallManager.ApplyResult ar =
+                            firewallManager.applyConfiguration();
+                        response.put("success", ar.success);
+                        response.put("message", ar.message);
+                        if (ar.backupPath != null) response.put("backup_path", ar.backupPath);
+                        if (ar.anchorContent != null) response.put("anchor_content", ar.anchorContent);
+                        logAudit(ar.success ? "FW_APPLY_OK" : "FW_APPLY_FAIL", clientIp, ar.message);
+                    }
+                    default -> {
+                        response.put("success", false);
+                        response.put("error", "Azione non riconosciuta: " + action);
+                    }
+                }
+            }
+            sendJsonResponse(exchange, response);
+        } catch (Exception e) {
+            sendJsonError(exchange, 500, "Errore interno: " + e.getMessage());
+        }
+    }
+
+    /** Costruisce il JSON di stato per /api/firewall GET. */
+    private JSONObject buildFirewallStatusJson() {
+        JSONObject out = new JSONObject();
+        org.mail_panel.security.PfFirewallManager.FirewallState s = firewallManager.getState();
+        out.put("success", true);
+        out.put("mode", s.mode.name());
+        out.put("enabled", s.enabled);
+        out.put("apply_geo_to_port25", s.applyGeoToPort25);
+        out.put("whitelist_cidrs", new JSONArray(s.whitelistCidrs));
+        out.put("blacklist_cidrs", new JSONArray(s.blacklistCidrs));
+        out.put("geo_countries", new JSONArray(s.geoCountries));
+
+        // Per ogni paese selezionato: ultimo sync + numero CIDR + freshness
+        JSONArray geoDetail = new JSONArray();
+        for (String cc : s.geoCountries) {
+            JSONObject c = new JSONObject();
+            c.put("code", cc);
+            c.put("cidr_count", firewallManager.getCountryCidrCount(cc));
+            Long last = s.geoLastSync.get(cc);
+            long lastMs = last == null ? 0L : last;
+            c.put("last_sync_ms", lastMs);
+            org.mail_panel.security.PfFirewallManager.Freshness fresh =
+                org.mail_panel.security.PfFirewallManager.computeFreshness(lastMs, s.autoSyncIntervalDays);
+            c.put("freshness", fresh.name());
+            // ago_seconds: utile per UI ("3 giorni fa")
+            c.put("ago_seconds", lastMs > 0 ? (System.currentTimeMillis() - lastMs) / 1000 : 0);
+            org.mail_panel.security.CountryCatalog.Country meta =
+                org.mail_panel.security.CountryCatalog.byCode(cc);
+            if (meta != null) {
+                c.put("name", meta.name());
+                c.put("flag", meta.flag());
+            }
+            geoDetail.put(c);
+        }
+        out.put("geo_detail", geoDetail);
+
+        // Auto-sync settings + statistiche
+        JSONObject autoSync = new JSONObject();
+        autoSync.put("enabled", s.autoSyncEnabled);
+        autoSync.put("interval_days", s.autoSyncIntervalDays);
+        autoSync.put("last_check_ms", s.lastAutoSyncCheck);
+        autoSync.put("last_run_ms", s.lastAutoSyncRun);
+        // Conta paesi stale (necessari di update)
+        int staleCount = 0;
+        for (String cc : s.geoCountries) {
+            long lm = s.geoLastSync.getOrDefault(cc, 0L);
+            org.mail_panel.security.PfFirewallManager.Freshness f =
+                org.mail_panel.security.PfFirewallManager.computeFreshness(lm, s.autoSyncIntervalDays);
+            if (f != org.mail_panel.security.PfFirewallManager.Freshness.FRESH) staleCount++;
+        }
+        autoSync.put("stale_countries_count", staleCount);
+        out.put("auto_sync", autoSync);
+
+        // Tabelle pf a runtime
+        java.util.Map<String, Integer> sizes = firewallManager.getTableSizes();
+        JSONObject tableSizes = new JSONObject();
+        sizes.forEach(tableSizes::put);
+        out.put("table_sizes", tableSizes);
+
+        // Catalogo paesi (per UI)
+        out.put("country_catalog", org.mail_panel.security.CountryCatalog.toJsonArray());
+
+        // Gruppi preset (UE, G7, NATO, ecc.) per la UI
+        out.put("preset_groups", org.mail_panel.security.CountryCatalog.groupsToJsonArray());
+
+        return out;
+    }
+
     private void handleApiUnboundHealth(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
         String method = exchange.getRequestMethod();
@@ -4460,6 +5006,7 @@ public class SSLMailServer {
         //    Su FreeBSD c'è 'local_unbound' nel base system: stesso effetto, già installato di default.
         boolean pkgInstalled;
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "unbound");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -4615,6 +5162,7 @@ public class SSLMailServer {
 
     private boolean isPortListeningOnLocalhost(int port) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/bin/sockstat", "-l", "-4", "-6");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -4679,6 +5227,7 @@ public class SSLMailServer {
      */
     private boolean testDnsblQuery() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1",
                 "A", "2.0.0.127.zen.spamhaus.org");
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
@@ -4701,6 +5250,7 @@ public class SSLMailServer {
 
     private boolean testUnboundQuerySimple() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1", "A", "freebsd.org");
             // NIENTE redirectErrorStream: stderr di dig (es. "communications error") va separato
             // così non lo confondiamo con una risposta valida.
@@ -4731,6 +5281,7 @@ public class SSLMailServer {
     private JSONObject installUnbound() {
         JSONObject r = new JSONObject();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "unbound");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -4765,6 +5316,7 @@ public class SSLMailServer {
 
             // Test sintassi con unbound-checkconf se disponibile
             try {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/local/sbin/unbound-checkconf", UNBOUND_CONF_PATH);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
@@ -4822,6 +5374,7 @@ public class SSLMailServer {
 
             // 4. Post-flight test (risolvi con il sistema, non più @127.0.0.1)
             try {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", "+short", "+time=3", "+tries=2", "A", "freebsd.org");
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
@@ -4864,6 +5417,7 @@ public class SSLMailServer {
      */
     private JSONObject disableUnboundForwarder() {
         JSONObject r = new JSONObject();
+        StringBuilder log = new StringBuilder();
         try {
             int touched = 0;
             String[] paths = { "/var/unbound/forward.conf", "/var/unbound/unbound.conf" };
@@ -4898,36 +5452,186 @@ public class SSLMailServer {
                     }
                 }
                 if (hasForwardZone) {
-                    // Backup
                     java.nio.file.Files.copy(p, java.nio.file.Paths.get(path + ".bak." + System.currentTimeMillis()));
-                    // Rimuovi terminal newline doppi
                     String result = cleaned.toString();
                     java.nio.file.Files.writeString(p, result, java.nio.charset.StandardCharsets.UTF_8);
                     touched++;
+                    log.append("✓ Commentato forward-zone in ").append(path).append("\n");
                 }
             }
-            if (touched == 0) {
-                r.put("success", true);
-                r.put("message", "Nessun forward-zone trovato nei config — già in modalità ricorsiva.");
-                return r;
+
+            // === FIX PERSISTENZA AL REBOOT ===
+            // FreeBSD rigenera /var/unbound/forward.conf a vari trigger (pkg upgrade,
+            // local-unbound-setup, dhclient newresolv hook) leggendo dueriferimenti:
+            //   1. local_unbound_forwarders in /etc/rc.conf
+            //   2. /etc/resolv.conf  (nameserver != 127.0.0.1 vengono presi come forwarder)
+            // Se non li sistemiamo entrambi, dopo un reboot torniamo in modalita' forwarder.
+
+            // 1) Svuota local_unbound_forwarders in rc.conf (se presente)
+            try {
+                // TODO: migrate to Shell.run when touched
+                ProcessBuilder pbGet = new ProcessBuilder("/usr/sbin/sysrc", "-n", "local_unbound_forwarders");
+                pbGet.redirectErrorStream(true);
+                Process pg = pbGet.start();
+                String currentVal = new String(pg.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+                pg.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (!currentVal.isEmpty()) {
+                    // TODO: migrate to Shell.run when touched
+                    ProcessBuilder pbDel = new ProcessBuilder("/usr/sbin/sysrc", "-x", "local_unbound_forwarders");
+                    pbDel.redirectErrorStream(true);
+                    Process pd = pbDel.start();
+                    pd.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                    log.append("✓ Rimosso local_unbound_forwarders da rc.conf (era: \"").append(currentVal).append("\")\n");
+                } else {
+                    log.append("• local_unbound_forwarders gia' vuoto in rc.conf\n");
+                }
+            } catch (Exception e) {
+                log.append("⚠ Impossibile sistemare rc.conf: ").append(e.getMessage()).append("\n");
             }
-            // Reload local_unbound
-            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "local_unbound", "reload");
+
+            // 2) Assicurati che /etc/resolv.conf abbia 127.0.0.1 come PRIMO nameserver
+            try {
+                java.nio.file.Path resolv = java.nio.file.Paths.get("/etc/resolv.conf");
+                if (java.nio.file.Files.exists(resolv)) {
+                    String rc = java.nio.file.Files.readString(resolv);
+                    String firstNs = null;
+                    for (String line : rc.split("\n")) {
+                        String t = line.trim();
+                        if (t.startsWith("#") || t.isEmpty()) continue;
+                        if (t.startsWith("nameserver")) {
+                            firstNs = t.replaceFirst("nameserver\\s+", "").trim();
+                            break;
+                        }
+                    }
+                    if (firstNs == null || (!firstNs.equals("127.0.0.1") && !firstNs.equals("::1"))) {
+                        java.nio.file.Files.copy(resolv,
+                            java.nio.file.Paths.get("/etc/resolv.conf.bak." + System.currentTimeMillis()));
+                        String newContent = "# Generato dal mail panel\n# Loopback come PRIMO nameserver per local_unbound\nnameserver 127.0.0.1\noptions edns0\n";
+                        java.nio.file.Files.writeString(resolv, newContent, java.nio.charset.StandardCharsets.UTF_8);
+                        log.append("✓ /etc/resolv.conf riscritto con 127.0.0.1 come unico nameserver (backup creato)\n");
+                    } else {
+                        log.append("• /etc/resolv.conf gia' OK (127.0.0.1 primo)\n");
+                    }
+                }
+            } catch (Exception e) {
+                log.append("⚠ Impossibile sistemare /etc/resolv.conf: ").append(e.getMessage()).append("\n");
+            }
+
+            // 3) Disabilita resolvconf se attivo (altrimenti DHCP riscrive resolv.conf al reboot)
+            try {
+                // TODO: migrate to Shell.run when touched
+                ProcessBuilder pbGet = new ProcessBuilder("/usr/sbin/sysrc", "-n", "resolvconf_enable");
+                pbGet.redirectErrorStream(true);
+                Process pg = pbGet.start();
+                String currentVal = new String(pg.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+                pg.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (currentVal.equalsIgnoreCase("YES")) {
+                    // TODO: migrate to Shell.run when touched
+                    ProcessBuilder pbSet = new ProcessBuilder("/usr/sbin/sysrc", "resolvconf_enable=NO");
+                    pbSet.redirectErrorStream(true);
+                    Process ps = pbSet.start();
+                    ps.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                    log.append("✓ Disabilitato resolvconf_enable (DHCP non riscrivera' piu' resolv.conf al boot)\n");
+                }
+            } catch (Exception e) {
+                log.append("⚠ Impossibile disabilitare resolvconf: ").append(e.getMessage()).append("\n");
+            }
+
+            // 4) FIX DEFINITIVO: rimuovi 'include: forward.conf' da unbound.conf.
+            //    Anche se forward.conf venisse rigenerato da local-unbound-setup
+            //    (pkg upgrade, hook DHCP, ecc), non verrebbe piu' caricato.
+            try {
+                java.nio.file.Path ucPath = java.nio.file.Paths.get("/var/unbound/unbound.conf");
+                if (java.nio.file.Files.exists(ucPath)) {
+                    String uc = java.nio.file.Files.readString(ucPath);
+                    String[] lines = uc.split("\n", -1);
+                    boolean changed = false;
+                    StringBuilder sb = new StringBuilder();
+                    for (String line : lines) {
+                        String trimmed = line.trim();
+                        // Cattura "include: ..forward.conf" anche con virgolette o spazi
+                        if (!trimmed.startsWith("#") && trimmed.toLowerCase().startsWith("include:")
+                                && trimmed.toLowerCase().contains("forward.conf")) {
+                            sb.append("# Disabilitato dal mail panel (forward-zone bloccava Spamhaus): ").append(line).append("\n");
+                            changed = true;
+                        } else {
+                            sb.append(line).append("\n");
+                        }
+                    }
+                    if (changed) {
+                        java.nio.file.Files.copy(ucPath,
+                            java.nio.file.Paths.get("/var/unbound/unbound.conf.bak." + System.currentTimeMillis()));
+                        // toString aggiunge un \n extra alla fine — lo togliamo se serve
+                        String newContent = sb.toString();
+                        if (newContent.endsWith("\n\n")) newContent = newContent.substring(0, newContent.length() - 1);
+                        java.nio.file.Files.writeString(ucPath, newContent, java.nio.charset.StandardCharsets.UTF_8);
+                        log.append("✓ Commentato 'include: forward.conf' in /var/unbound/unbound.conf (backup creato)\n");
+                    } else {
+                        log.append("• unbound.conf: nessun 'include: forward.conf' attivo\n");
+                    }
+                }
+            } catch (Exception e) {
+                log.append("⚠ Impossibile modificare unbound.conf: ").append(e.getMessage()).append("\n");
+            }
+
+            // 5) Svuota forward.conf (anche se non e' piu' incluso, per pulizia)
+            try {
+                java.nio.file.Path fcPath = java.nio.file.Paths.get("/var/unbound/forward.conf");
+                if (java.nio.file.Files.exists(fcPath)) {
+                    // Rimuovi flag immutabile se gia' presente (per poter sovrascrivere)
+                    try {
+                        // TODO: migrate to Shell.run when touched
+                        new ProcessBuilder("/bin/chflags", "noschg", "/var/unbound/forward.conf")
+                            .redirectErrorStream(true).start().waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                    } catch (Exception ignored) {}
+                    java.nio.file.Files.copy(fcPath,
+                        java.nio.file.Paths.get("/var/unbound/forward.conf.bak." + System.currentTimeMillis()));
+                    java.nio.file.Files.writeString(fcPath,
+                        "# Mail panel: modalita' ricorsiva diretta — forward-zone DISABILITATE\n",
+                        java.nio.charset.StandardCharsets.UTF_8);
+                    log.append("✓ /var/unbound/forward.conf svuotato (backup creato)\n");
+                }
+            } catch (Exception e) {
+                log.append("⚠ Impossibile svuotare forward.conf: ").append(e.getMessage()).append("\n");
+            }
+
+            // 6) Rendi forward.conf IMMUTABILE — local-unbound-setup non puo' piu' sovrascriverlo
+            try {
+                // TODO: migrate to Shell.run when touched
+                Process pCh = new ProcessBuilder("/bin/chflags", "schg", "/var/unbound/forward.conf")
+                    .redirectErrorStream(true).start();
+                pCh.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (pCh.exitValue() == 0) {
+                    log.append("✓ chflags schg applicato a forward.conf (file IMMUTABILE)\n");
+                } else {
+                    log.append("⚠ chflags schg fallito (richiede securelevel <= 0); il file resta scrivibile ma 'include' e' gia' commentato\n");
+                }
+            } catch (Exception e) {
+                log.append("⚠ chflags non eseguibile: ").append(e.getMessage()).append("\n");
+            }
+
+            // 7) RESTART (non reload) — il reload non ricarica forward.conf se l'include e' cambiato
+            // TODO: migrate to Shell.run when touched
+            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "local_unbound", "restart");
             pb.redirectErrorStream(true);
             Process p = pb.start();
-            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
-            // Aspetta un attimo e ritesta
+            String reloadOut = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            p.waitFor(20, java.util.concurrent.TimeUnit.SECONDS);
+            log.append("✓ service local_unbound restart eseguito\n");
+            if (!reloadOut.isEmpty()) log.append("  output: ").append(reloadOut.trim()).append("\n");
+
             try { Thread.sleep(1500); } catch (Exception ignored) {}
             boolean stillForwarding = isUnboundUsingForwarder();
             boolean dnsblWorks = testDnsblQuery();
             r.put("success", !stillForwarding);
-            r.put("message", "Commentati forward-zone in " + touched + " file. Reload eseguito. "
+            r.put("message", "Modalita' ricorsiva attivata e RESA PERSISTENTE al reboot."
+                + (touched == 0 ? " (forward.conf gia' pulito) " : " (commentati " + touched + " file) ")
                 + (dnsblWorks ? "Test Spamhaus: OK ✓" : "Test Spamhaus: ancora non OK (attendi qualche secondo e ricontrolla)"));
-            r.put("output", out);
+            r.put("output", log.toString());
         } catch (Exception e) {
             r.put("success", false);
             r.put("message", "Errore: " + e.getMessage());
+            r.put("output", log.toString());
         }
         return r;
     }
@@ -4973,6 +5677,7 @@ public class SSLMailServer {
             String dnsblOut = "";
             boolean dnsblOk = false;
             try {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "A", "2.0.0.127.zen.spamhaus.org");
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
@@ -5012,6 +5717,7 @@ public class SSLMailServer {
         boolean baseAvailable = java.nio.file.Files.exists(java.nio.file.Paths.get("/usr/sbin/local-unbound"));
         boolean pkgInstalled;
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "unbound");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5305,6 +6011,7 @@ public class SSLMailServer {
         // 1. ClamAV installato
         boolean installed;
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "clamav");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5363,6 +6070,7 @@ public class SSLMailServer {
         // Fallback: se clamd risponde a clamdscan, il DB c'è anche se non ne riconosciamo i file
         if (!dbPresent) {
             try {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/clamdscan", "--version");
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
@@ -5538,6 +6246,7 @@ public class SSLMailServer {
 
     private boolean isSysrcYes(String key) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", key);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5549,6 +6258,7 @@ public class SSLMailServer {
 
     private boolean isServiceRunning(String name) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", name, "status");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5561,6 +6271,7 @@ public class SSLMailServer {
     private JSONObject sysrcSet(String key, String value) {
         JSONObject r = new JSONObject();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", key + "=" + value);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5579,6 +6290,7 @@ public class SSLMailServer {
     private JSONObject serviceCommand(String svc, String cmd, int timeoutSeconds) {
         JSONObject r = new JSONObject();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", svc, cmd);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5598,6 +6310,7 @@ public class SSLMailServer {
     private JSONObject installClamav() {
         JSONObject r = new JSONObject();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "clamav");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5617,6 +6330,7 @@ public class SSLMailServer {
     private JSONObject runFreshclam() {
         JSONObject r = new JSONObject();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/freshclam", "--foreground", "--stdout");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5658,6 +6372,7 @@ public class SSLMailServer {
             } catch (Exception ignored) {}
 
             // Esegui clamdscan
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/clamdscan", "--no-summary", tmp.toString());
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5725,6 +6440,7 @@ public class SSLMailServer {
             java.nio.file.Files.writeString(conf, content, java.nio.charset.StandardCharsets.UTF_8);
             // Reload rspamd
             try {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "rspamd", "reload");
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
@@ -5748,6 +6464,7 @@ public class SSLMailServer {
         // 1. Install
         boolean installed;
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "clamav");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -5936,6 +6653,12 @@ public class SSLMailServer {
                         logAudit(r.optBoolean("success", false) ? "FAIL2BAN_RELOADED" : "FAIL2BAN_RELOAD_FAILED",
                             clientIp, r.optString("message", ""));
                     }
+                    case "restart_service" -> {
+                        JSONObject r = restartFail2banService();
+                        response = r;
+                        logAudit(r.optBoolean("success", false) ? "FAIL2BAN_RESTARTED" : "FAIL2BAN_RESTART_FAILED",
+                            clientIp, r.optString("message", ""));
+                    }
                     case "fix_all" -> {
                         JSONObject r = runFixAll();
                         response = r;
@@ -6071,6 +6794,7 @@ public class SSLMailServer {
                 } else {
                     // Fallback 2: comando hostname
                     try {
+                        // TODO: migrate to Shell.run when touched
                         ProcessBuilder pb = new ProcessBuilder("/bin/hostname");
                         pb.redirectErrorStream(true);
                         Process p = pb.start();
@@ -6190,22 +6914,26 @@ public class SSLMailServer {
         } catch (Exception ignored) {}
 
         // Quali jail sono ATTIVE a runtime?
+        // FIX (regression del check precedente): prima parsavamo la riga "Jail list:"
+        // dell'output globale `fail2ban-client status`. Quel parsing era fragile —
+        // se il formato dell'output cambia (whitespace, tab, encoding), TUTTE le jail
+        // venivano marcate come "non attive" anche se in realtà giravano normalmente.
+        //
+        // Approccio robusto: per ciascuna jail attesa eseguiamo `status <jail>` —
+        // se ritorna un output normale (non "does not exist") significa che la jail
+        // E' caricata e attiva nel runtime di Fail2ban.
         java.util.Set<String> activeJails = new java.util.HashSet<>();
         if (f2bRunning) {
-            try {
-                ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/fail2ban-client", "status");
-                pb.redirectErrorStream(true);
-                Process p = pb.start();
-                String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-                p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-                // Output tipo: "Jail list: dovecot, postfix-auth, mail-panel-auth"
-                java.util.regex.Matcher m = java.util.regex.Pattern.compile("Jail list:\\s*(.*)").matcher(out);
-                if (m.find()) {
-                    for (String name : m.group(1).split(",")) {
-                        activeJails.add(name.trim());
-                    }
+            for (String jail : expectedMailJails) {
+                var statusRes = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(5),
+                    "/usr/local/bin/fail2ban-client", "status", jail);
+                String statusOut = statusRes.output();
+                boolean notExists = statusOut.contains("does not exist") || statusOut.contains("not found")
+                                 || statusOut.contains("Sorry, but the jail");
+                if (statusRes.success() && !notExists) {
+                    activeJails.add(jail);
                 }
-            } catch (Exception ignored) {}
+            }
         }
 
         // Per ogni jail mancante a runtime, capisci PERCHÉ
@@ -6350,6 +7078,7 @@ public class SSLMailServer {
 
     private boolean isFail2banEnabledAtBoot() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", "fail2ban_enable");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6363,6 +7092,7 @@ public class SSLMailServer {
 
     private boolean isFail2banRunning() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "fail2ban", "status");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6377,6 +7107,7 @@ public class SSLMailServer {
     private JSONObject installFail2ban() {
         JSONObject r = new JSONObject();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "py311-fail2ban");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6398,6 +7129,7 @@ public class SSLMailServer {
     private JSONObject enableFail2banAtBoot() {
         JSONObject r = new JSONObject();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "fail2ban_enable=YES");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6417,6 +7149,7 @@ public class SSLMailServer {
     /** Verifica se il modulo kernel pf è caricato (kldstat). */
     private boolean isPfModuleLoaded() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/kldstat");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6429,6 +7162,7 @@ public class SSLMailServer {
     /** Verifica se il pannello sta girando dentro una jail FreeBSD (security.jail.jailed). */
     private boolean isRunningInsideFreebsdJail() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/sysctl", "-n", "security.jail.jailed");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6452,6 +7186,7 @@ public class SSLMailServer {
                 r.put("message", "Modulo pf già caricato");
                 return r;
             }
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/kldload", "pf");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6486,6 +7221,7 @@ public class SSLMailServer {
 
     private boolean isPfEnabledAtBoot() {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", "pf_enable");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6498,6 +7234,7 @@ public class SSLMailServer {
     private boolean isPfRunning() {
         try {
             // pfctl -si ritorna info status. Se pf non gira, exit code != 0 o output dice "Disabled".
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-si");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6520,6 +7257,7 @@ public class SSLMailServer {
 
             // PRE-FLIGHT 2: pfctl -nf controlla la sintassi senza caricare le regole.
             // Se la sintassi è invalida, non lanciamo il servizio.
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", "/etc/pf.conf");
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
@@ -6533,6 +7271,7 @@ public class SSLMailServer {
             }
 
             // OK — avvio
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "pf", "start");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6558,6 +7297,7 @@ public class SSLMailServer {
     private JSONObject enablePfAtBoot() {
         JSONObject r = new JSONObject();
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "pf_enable=YES");
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -6617,6 +7357,7 @@ public class SSLMailServer {
             // scriviamo prima in temp, validiamo, poi copiamo.
             java.nio.file.Path tmp = java.nio.file.Files.createTempFile("pf-conf-", ".tmp");
             java.nio.file.Files.writeString(tmp, content, java.nio.charset.StandardCharsets.UTF_8);
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", tmp.toString());
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
@@ -6699,6 +7440,7 @@ public class SSLMailServer {
             java.util.Set<String> activeJailsNow = new java.util.HashSet<>();
             if (isFail2banRunning()) {
                 try {
+                    // TODO: migrate to Shell.run when touched
                     ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/fail2ban-client", "status");
                     pb.redirectErrorStream(true);
                     Process p = pb.start();
@@ -6877,6 +7619,7 @@ public class SSLMailServer {
                 java.nio.charset.StandardCharsets.UTF_8);
 
             // Test sintassi prima di ricaricare
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", "/etc/pf.conf");
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
@@ -6894,6 +7637,7 @@ public class SSLMailServer {
             // caricato al prossimo start)
             String loadOut = "";
             if (isPfRunning()) {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder loadPb = new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf");
                 loadPb.redirectErrorStream(true);
                 Process lp = loadPb.start();
@@ -6904,6 +7648,7 @@ public class SSLMailServer {
                     java.nio.file.Files.copy(java.nio.file.Paths.get(bakPath), pfConfPath,
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     // Re-load la versione di backup
+                    // TODO: migrate to Shell.run when touched
                     new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf").redirectErrorStream(true).start().waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
                     r.put("success", false);
                     r.put("message", "pfctl -f ha fallito il reload — rollback al backup. Output: " + loadOut);
@@ -6956,19 +7701,21 @@ public class SSLMailServer {
         }
 
         // Chiedi a fail2ban-client il motivo specifico
-        try {
-            ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/fail2ban-client", "status", jailName);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-            if (out.contains("does not exist") || out.contains("not found")) {
-                return "non caricata (serve reload Fail2ban)";
-            }
-            return "errore: " + out.trim().replace('\n', ' ');
-        } catch (Exception e) {
-            return "errore diagnostica: " + e.getMessage();
+        var r = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(5),
+            "/usr/local/bin/fail2ban-client", "status", jailName);
+        String out = r.output();
+        if (out.contains("does not exist") || out.contains("not found")
+                || out.contains("Sorry, but the jail")) {
+            return "non caricata (serve reload Fail2ban)";
         }
+        if (!r.success()) {
+            return "exit=" + r.exitCode() + " (" + (out.isBlank() ? "no output" : out.trim().replace('\n', ' ')) + ")";
+        }
+        // Se siamo qui, lo status command ha risposto normalmente (con i contatori
+        // "Currently failed", "Banned IP list", ecc). La jail E' caricata e attiva,
+        // ma per qualche motivo il check chiamante non l'ha rilevata. Non e' un errore
+        // della jail: ritorniamo una stringa che fa capire che e' un falso allarme.
+        return "in realta' attiva (rilevamento check fallito — log f2b OK)";
     }
 
     /**
@@ -6978,45 +7725,43 @@ public class SSLMailServer {
      * Se una sola jail fallisce, fail2ban rifiuta TUTTO il reload — quindi
      * conviene sempre essere proattivi.
      */
-    private JSONObject reloadFail2banAction() {
-        JSONObject r = new JSONObject();
-        try {
-            // Prereq: log file Roundcube (se manca, roundcube-auth jail fa fallire l'intero reload)
-            try { fail2banManager.ensureRoundcubeLoggingEnabled(); } catch (Exception ignored) {}
+    /**
+     * Helper: converte un {@link org.mail_panel.util.Shell.Result} in JSONObject
+     * con campi success/message/output, riducendo boilerplate.
+     */
+    private JSONObject shellResultToJson(org.mail_panel.util.Shell.Result r, String okMessage, String failPrefix) {
+        return new JSONObject()
+            .put("success", r.success())
+            .put("message", r.success() ? okMessage
+                : (r.timedOut() ? "TIMEOUT: " + failPrefix
+                                : failPrefix + " exit=" + r.exitCode()))
+            .put("output", r.output());
+    }
 
-            ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/fail2ban-client", "reload");
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
-            r.put("success", p.exitValue() == 0);
-            r.put("message", p.exitValue() == 0 ? "Fail2ban reload OK" : "Reload exit=" + p.exitValue());
-            r.put("output", out);
-            return r;
-        } catch (Exception e) {
-            r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
-            return r;
-        }
+    private JSONObject reloadFail2banAction() {
+        // Prereq: log file Roundcube (se manca, roundcube-auth jail fa fallire l'intero reload)
+        try { fail2banManager.ensureRoundcubeLoggingEnabled(); } catch (Exception ignored) {}
+        var r = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(15),
+            "/usr/local/bin/fail2ban-client", "reload");
+        return shellResultToJson(r, "Fail2ban reload OK", "Reload");
     }
 
     private JSONObject startFail2banService() {
-        JSONObject r = new JSONObject();
-        try {
-            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "fail2ban", "start");
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            p.waitFor(20, java.util.concurrent.TimeUnit.SECONDS);
-            r.put("success", p.exitValue() == 0);
-            r.put("message", p.exitValue() == 0 ? "Servizio avviato" : "service start exit=" + p.exitValue());
-            r.put("output", out);
-            return r;
-        } catch (Exception e) {
-            r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
-            return r;
-        }
+        var r = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(20),
+            "/usr/sbin/service", "fail2ban", "start");
+        return shellResultToJson(r, "Servizio avviato", "service start");
+    }
+
+    /**
+     * Restart pulito del servizio fail2ban (equivalente di `service fail2ban restart`).
+     * A differenza di "reload", questo killa il daemon e lo riavvia da zero — utile per
+     * uscire da stati confusi (es. dopo molti reload consecutivi).
+     * NB: azzera anche i contatori "Currently failed" e "Total failed" di tutte le jail.
+     */
+    private JSONObject restartFail2banService() {
+        var r = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(30),
+            "/usr/sbin/service", "fail2ban", "restart");
+        return shellResultToJson(r, "Fail2ban riavviato (restart pulito)", "service restart");
     }
 
     // ============== 2FA API ==============
@@ -7932,6 +8677,7 @@ public class SSLMailServer {
                                     java.nio.file.Path svbin = java.nio.file.Path.of("/var/mail/sieve", domain, user, ".dovecot.svbin");
                                     java.nio.file.Files.deleteIfExists(svbin);
                                     // Restart Dovecot to clear in-memory vacation cache
+                                    // TODO: migrate to Shell.run when touched
                                     ProcessBuilder pb = new ProcessBuilder("service", "dovecot", "restart");
                                     pb.redirectErrorStream(true);
                                     Process p = pb.start();
@@ -9095,7 +9841,9 @@ public class SSLMailServer {
                             Files.writeString(Path.of(keyPath), keyContent);
 
                             // Secure permissions
+                            // TODO: migrate to Shell.run when touched
                             new ProcessBuilder("chmod", "600", keyPath).start().waitFor();
+                            // TODO: migrate to Shell.run when touched
                             new ProcessBuilder("chmod", "644", certPath).start().waitFor();
 
                             String detail = "Salvati in " + sslDir + "/";
@@ -9387,6 +10135,7 @@ http {
      */
     private String digRecord(String name, String type) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", name, type);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -9410,6 +10159,7 @@ http {
      */
     private String digPtrRecord(String ip) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "-x", ip);
             pb.redirectErrorStream(true);
             Process p = pb.start();

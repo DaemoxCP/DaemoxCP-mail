@@ -168,16 +168,23 @@ public class dataBaseManager {
         }
     }
 
+    /** Mappa nome servizio → colonna DB. Null se servizio non riconosciuto. */
+    private static String serviceColumn(String service) {
+        if (service == null) return null;
+        // Switch expression (Java 14+) — nessun fall-through, return diretto del valore.
+        return switch (service.toLowerCase()) {
+            case "postfix"   -> "postfix_installed";
+            case "dovecot"   -> "dovecot_installed";
+            case "rspamd"    -> "rspamd_installed";
+            case "clamav"    -> "clamav_installed";
+            case "roundcube" -> "roundcube_installed";
+            default -> null;
+        };
+    }
+
     public boolean setServiceInstalled(String service, boolean installed) {
-        String column;
-        switch (service.toLowerCase()) {
-            case "postfix": column = "postfix_installed"; break;
-            case "dovecot": column = "dovecot_installed"; break;
-            case "rspamd": column = "rspamd_installed"; break;
-            case "clamav": column = "clamav_installed"; break;
-            case "roundcube": column = "roundcube_installed"; break;
-            default: return false;
-        }
+        String column = serviceColumn(service);
+        if (column == null) return false;
         try {
             PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
                     "UPDATE config SET " + column + " = ? WHERE id = 1");
@@ -190,15 +197,8 @@ public class dataBaseManager {
     }
 
     public boolean isServiceInstalled(String service) {
-        String column;
-        switch (service.toLowerCase()) {
-            case "postfix": column = "postfix_installed"; break;
-            case "dovecot": column = "dovecot_installed"; break;
-            case "rspamd": column = "rspamd_installed"; break;
-            case "clamav": column = "clamav_installed"; break;
-            case "roundcube": column = "roundcube_installed"; break;
-            default: return false;
-        }
+        String column = serviceColumn(service);
+        if (column == null) return false;
         try {
             PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
                     "SELECT " + column + " FROM config WHERE id = 1");

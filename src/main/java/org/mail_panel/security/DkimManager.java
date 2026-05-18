@@ -210,9 +210,11 @@ public class DkimManager {
 
         // Change ownership to rspamd (requires running as root)
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("chown", "rspamd:rspamd", keyFile.toString());
             pb.start().waitFor();
 
+            // TODO: migrate to Shell.run when touched
             pb = new ProcessBuilder("chmod", "600", keyFile.toString());
             pb.start().waitFor();
         } catch (InterruptedException e) {
@@ -256,6 +258,7 @@ public class DkimManager {
 
         // Reload Rspamd to apply changes
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", "rspamd", "reload");
             pb.start().waitFor();
         } catch (InterruptedException e) {
@@ -296,6 +299,7 @@ public class DkimManager {
             String foundPublicKey = null;
             String resolverUsed = null;
             for (String resolver : resolvers) {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", r.dnsRecordName);
                 Process proc = pb.start();
                 StringBuilder out = new StringBuilder();
@@ -735,6 +739,7 @@ public class DkimManager {
             String lastRaw = "";
             boolean found = false;
             for (String resolver : resolvers) {
+                // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", recordName);
                 pb.redirectErrorStream(false);
                 Process proc = pb.start();
@@ -1083,6 +1088,7 @@ public class DkimManager {
         try {
             String recordName = selector + "._domainkey." + domain;
 
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "TXT", recordName);
             pb.redirectErrorStream(true);
             Process process = pb.start();

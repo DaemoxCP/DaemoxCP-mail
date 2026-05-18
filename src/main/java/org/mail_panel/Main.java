@@ -218,6 +218,7 @@ public class Main {
             command[1] = scriptPath;
             System.arraycopy(args, 0, command, 2, args.length);
 
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             processBuilder.redirectErrorStream(true);
             processBuilder.directory(new File(System.getProperty("user.dir")));
@@ -804,6 +805,7 @@ public class Main {
 
     private static void executeCommand(String command) {
         try {
+            // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
             pb.inheritIO();
             Process p = pb.start();
