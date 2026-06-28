@@ -43,6 +43,7 @@ public class MailPanelContent {
             writeFile(adminDir + "/queue.html", getQueueHtml());
             writeFile(adminDir + "/security.html", getSecurityHtml());
             writeFile(adminDir + "/firewall.html", getFirewallHtml());
+            writeFile(adminDir + "/cloudflare.html", getCloudflareHtml());
             writeFile(adminDir + "/paths.html", getPathsHtml());
             writeFile(adminDir + "/install.html", getInstallHtml());
             writeFile(adminDir + "/settings.html", getSettingsHtml());
@@ -80,6 +81,7 @@ public class MailPanelContent {
                 <li class="nav-item"><a class="nav-link" href="/ssl" data-page="ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
                 <li class="nav-item"><a class="nav-link" href="/security" data-page="security"><i class="fas fa-shield-alt me-1"></i>Sicurezza</a></li>
                 <li class="nav-item"><a class="nav-link" href="/firewall" data-page="firewall"><i class="fas fa-fire me-1"></i>Firewall</a></li>
+                <li class="nav-item"><a class="nav-link" href="/cloudflare" data-page="cloudflare"><i class="fas fa-cloud me-1"></i>Cloudflare</a></li>
                 <li class="nav-item"><a class="nav-link" href="/paths" data-page="paths"><i class="fas fa-folder-tree me-1"></i>Path</a></li>
                 <li class="nav-item"><a class="nav-link" href="/logs" data-page="logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
                 <li class="nav-item"><a class="nav-link" href="/settings" data-page="settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
@@ -273,6 +275,8 @@ public class MailPanelContent {
 " href="/security"><i class="fas fa-shield-alt me-1"></i>Sicurezza</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("firewall") ? " active" : "") + """
 " href="/firewall"><i class="fas fa-fire me-1"></i>Firewall</a></li>
+                <li class="nav-item"><a class="nav-link""" + (activePage.equals("cloudflare") ? " active" : "") + """
+" href="/cloudflare"><i class="fas fa-cloud me-1"></i>Cloudflare</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("paths") ? " active" : "") + """
 " href="/paths"><i class="fas fa-folder-tree me-1"></i>Path</a></li>
                 <li class="nav-item"><a class="nav-link""" + (activePage.equals("logs") ? " active" : "") + """
@@ -430,6 +434,7 @@ public class MailPanelContent {
             case "statistiche" -> "statistics";
             case "gestione admin" -> "admins";
             case "rate limits" -> "ratelimits";
+            case "cloudflare" -> "cloudflare";
             default -> "";
         };
         return getHead(title, pageName, extraStyles);
@@ -3587,7 +3592,7 @@ public class MailPanelContent {
                         const em = data.cloudflare_account_email ? ' (' + escapeHtmlBl(data.cloudflare_account_email) + ')' : '';
                         cfInfo.innerHTML = '<div class="alert alert-info py-2 mb-0 small"><i class="fas fa-cloud me-1"></i><strong>Rotazione automatica via Cloudflare</strong> — account collegato: <strong>' + escapeHtmlBl(lbl) + '</strong>' + em + '. Il record DNS verrà creato e cancellato dal pannello.</div>';
                     } else if (data.has_dkim) {
-                        cfInfo.innerHTML = '<div class="alert alert-secondary py-2 mb-0 small"><i class="fas fa-edit me-1"></i><strong>Rotazione manuale</strong> — questo dominio non è legato a nessun account Cloudflare. Per renderla automatica, scorri sopra e assegnalo a un account nella sezione "Assegnazione domini → account".</div>';
+                        cfInfo.innerHTML = '<div class="alert alert-secondary py-2 mb-0 small"><i class="fas fa-edit me-1"></i><strong>Rotazione manuale</strong> — questo dominio non è legato a nessun account Cloudflare. Per renderla automatica, <a href="/cloudflare" class="alert-link">configura e assegna un account Cloudflare</a>.</div>';
                     } else {
                         cfInfo.innerHTML = '';
                     }
@@ -3687,7 +3692,7 @@ public class MailPanelContent {
                         if (data.cloudflare_configured) {
                             html += '<div class="alert alert-success"><i class="fas fa-robot me-1"></i><strong>Grace period terminato.</strong> Lo scheduler completerà automaticamente la rotazione al prossimo tick (entro 1 ora) — rimuoverà la vecchia chiave dal DB e cancellerà il record TXT via Cloudflare. Puoi anche cliccare qui sotto per farlo subito.</div>';
                         } else {
-                            html += '<div class="alert alert-warning"><i class="fas fa-clock me-1"></i><strong>Grace period terminato.</strong> Clicca "Completa rotazione" — poi dovrai rimuovere manualmente il record TXT dal tuo DNS provider (questo dominio non ha un account Cloudflare assegnato per l\\'auto-cancellazione).</div>';
+                            html += '<div class="alert alert-warning"><i class="fas fa-clock me-1"></i><strong>Grace period terminato.</strong> Clicca "Completa rotazione" — poi dovrai rimuovere manualmente il record TXT dal tuo DNS provider (questo dominio non ha un account Cloudflare assegnato per l\\'auto-cancellazione). <a href="/cloudflare" class="alert-link">Configura Cloudflare</a> per automatizzarlo.</div>';
                         }
                         html += '<button class="btn btn-success" onclick="rotateDkimComplete()"><i class="fas fa-flag-checkered me-1"></i>Completa rotazione</button>';
                     } else {
@@ -6536,6 +6541,34 @@ public class MailPanelContent {
                             <button class="btn btn-outline-info btn-sm" onclick="triggerManualCheck()">
                                 <i class="fas fa-play me-1"></i>Verifica e rinnova ora
                             </button>
+                            <div class="card mt-3 border-0" style="background: rgba(246,130,31,0.08)">
+                                <div class="card-body py-3">
+                                    <h6 class="mb-2"><i class="fas fa-cloud me-1" style="color:#f6821f"></i>Rinnovo automatico via Cloudflare</h6>
+                                    <p class="small text-muted mb-2">
+                                        Collega l'account Cloudflare che gestisce il DNS dell'hostname del server mail
+                                        (<strong id="autoRenewMailHost">{{MAIL_HOSTNAME}}</strong>): il pannello pubblicherà
+                                        da solo i record DNS di validazione e rinnoverà il certificato.
+                                    </p>
+                                    <label class="form-label small mb-1">Account Cloudflare per questo certificato</label>
+                                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                                        <select class="form-select form-select-sm" style="max-width:280px" id="autoRenewCfAccount" onchange="saveCfMailServerAccount(this.value)">
+                                            <option value="0">Caricamento...</option>
+                                        </select>
+                                        <button class="btn btn-outline-info btn-sm" type="button" onclick="testCfMailServer()">
+                                            <i class="fas fa-plug me-1"></i>Verifica collegamento
+                                        </button>
+                                        <a href="/cloudflare" class="btn btn-outline-secondary btn-sm">
+                                            <i class="fas fa-gear me-1"></i>Gestisci account
+                                        </a>
+                                    </div>
+                                    <div id="autoRenewCfTest" class="mt-2 small"></div>
+                                    <div class="small text-muted mt-1" id="autoRenewCfHint" style="display:none">
+                                        <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                                        Nessun account Cloudflare configurato.
+                                        <a href="/cloudflare" class="alert-link">Aggiungine uno qui</a>.
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -7129,6 +7162,79 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
         loadSslStatus();
         loadAutoRenewSettings();
+        loadCfMailServerAccount();
+
+        // ===== Cloudflare account per il certificato del server mail =====
+        function escSslCf(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function loadCfMailServerAccount() {
+            fetch('/api/cloudflare').then(r => r.json()).then(data => {
+                const sel = document.getElementById('autoRenewCfAccount');
+                const hint = document.getElementById('autoRenewCfHint');
+                if (!sel) return;
+                const accounts = data.accounts || [];
+                const ms = data.mail_server || {};
+                const cur = ms.cloudflare_account_id || 0;
+                if (ms.hostname) {
+                    const hostEl = document.getElementById('autoRenewMailHost');
+                    if (hostEl) hostEl.textContent = ms.hostname;
+                }
+                let opts = '<option value="0"' + (cur === 0 ? ' selected' : '') + '>Manuale (nessun account)</option>';
+                accounts.forEach(a => {
+                    opts += '<option value="' + a.id + '"' + (cur === a.id ? ' selected' : '') + '>'
+                        + escSslCf(a.label || ('account #' + a.id)) + '</option>';
+                });
+                sel.innerHTML = opts;
+                if (hint) hint.style.display = accounts.length ? 'none' : '';
+            }).catch(e => console.error('loadCfMailServerAccount error:', e));
+        }
+
+        function saveCfMailServerAccount(accountId) {
+            fetch('/api/cloudflare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'assign_mailserver', account_id: parseInt(accountId, 10) || 0,
+                    csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                const out = document.getElementById('autoRenewCfTest');
+                if (data.success) {
+                    out.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>'
+                        + escSslCf(data.message || 'Salvato') + '</span>';
+                } else {
+                    out.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>'
+                        + escSslCf(data.message || data.error || 'Errore') + '</span>';
+                }
+            }).catch(e => alert('Errore: ' + e.message));
+        }
+
+        function testCfMailServer() {
+            const sel = document.getElementById('autoRenewCfAccount');
+            const out = document.getElementById('autoRenewCfTest');
+            const accountId = sel ? (parseInt(sel.value, 10) || 0) : 0;
+            if (accountId <= 0) {
+                out.innerHTML = '<span class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Seleziona prima un account Cloudflare.</span>';
+                return;
+            }
+            out.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Verifica token e zona DNS...</span>';
+            fetch('/api/cloudflare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'test_mailserver', account_id: accountId,
+                    csrf_token: document.getElementById('csrf_token').value })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    out.innerHTML = '<div class="alert alert-success py-2 mb-0"><i class="fas fa-check-circle me-1"></i>'
+                        + escSslCf(data.message || 'Collegamento OK') + '</div>';
+                } else {
+                    out.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-times-circle me-1"></i>'
+                        + escSslCf(data.error || data.message || 'Verifica fallita') + '</div>';
+                }
+            }).catch(e => alert('Errore: ' + e.message));
+        }
 
         // ===== Auto-Renewal =====
         function loadAutoRenewSettings() {
@@ -12559,6 +12665,346 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
         // Init
         loadFirewall();
+""";
+    }
+
+    // ============== CLOUDFLARE.HTML — Gestione account/API token Cloudflare ==============
+    public static String getCloudflareHtml() {
+        String extraStyles = """
+        .cf-token-cell { font-family: monospace; font-size: .85rem; color: var(--text-secondary); }
+        .cf-help code { background: rgba(128,128,128,0.15); padding: 1px 5px; border-radius: 4px; }
+        .cf-account-card { border-left: 4px solid #f6821f; }
+        .cf-form-card { border-left: 4px solid #0d6efd; }
+        """;
+        return getHead("Cloudflare", extraStyles) + getNavbar("cloudflare") + """
+    <div class="content container mt-4" style="max-width: 1100px">
+
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h2 class="mb-0"><i class="fas fa-cloud me-2" style="color:#f6821f"></i>Cloudflare <small class="text-muted fs-6">— certificato hostname server mail (<code>{{MAIL_HOSTNAME}}</code>)</small></h2>
+            <button class="btn btn-outline-secondary btn-sm" onclick="cfLoad()" title="Ricarica">
+                <i class="fas fa-sync"></i> Ricarica
+            </button>
+        </div>
+
+        <p class="text-muted">
+            Collega uno o più account Cloudflare al pannello inserendo un <strong>API token</strong>.
+            Il token viene usato per pubblicare automaticamente i record DNS (DKIM, validazione SSL/ACME)
+            e per il <strong>rinnovo automatico del certificato del server mail</strong> qui sotto.
+            L'assegnazione degli account ai <strong>domini delle caselle</strong> si gestisce nella pagina
+            <a href="/dns">DNS</a>.
+        </p>
+
+        <!-- ===== Form: aggiungi / modifica account ===== -->
+        <div class="card mb-4 cf-form-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-plus-circle me-2"></i><span id="cfFormTitle">Aggiungi account Cloudflare</span></span>
+                <button class="btn btn-sm btn-outline-secondary" id="cfCancelEditBtn" style="display:none" onclick="cfResetForm()">
+                    <i class="fas fa-times me-1"></i>Annulla modifica
+                </button>
+            </div>
+            <div class="card-body">
+                <input type="hidden" id="cfEditingId" value="0">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Descrizione / Etichetta <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="cfLabel" maxlength="100"
+                               placeholder="es. Account personale, Cliente Rossi...">
+                        <small class="text-muted">Promemoria personale per ricordarti a cosa serve questo token.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email Cloudflare associata</label>
+                        <input type="email" class="form-control" id="cfEmail" maxlength="200"
+                               placeholder="es. mario@example.com">
+                        <small class="text-muted">Solo informativa: a quale account/email è legato il token.</small>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">API Token <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="cfToken" autocomplete="off"
+                                   placeholder="Incolla qui l'API token Cloudflare">
+                            <button class="btn btn-outline-secondary" type="button" onclick="cfToggleToken()" title="Mostra/nascondi">
+                                <i class="fas fa-eye" id="cfTokenEye"></i>
+                            </button>
+                            <button class="btn btn-outline-info" type="button" onclick="cfTest()">
+                                <i class="fas fa-vial me-1"></i>Verifica token
+                            </button>
+                        </div>
+                        <small class="text-muted" id="cfTokenHint">
+                            In modifica: lascia vuoto per <strong>mantenere</strong> il token attuale.
+                        </small>
+                        <div id="cfTestResult" class="mt-2"></div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-primary" onclick="cfSave()">
+                        <i class="fas fa-save me-1"></i><span id="cfSaveLabel">Verifica e salva account</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Lista account ===== -->
+        <div class="card mb-4 cf-account-card">
+            <div class="card-header"><i class="fas fa-key me-2"></i>Account configurati</div>
+            <div class="card-body">
+                <div id="cfAccountsBox">
+                    <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Certificato del server mail (Mail Hostname) ===== -->
+        <div class="card mb-4" style="border-left:4px solid #198754">
+            <div class="card-header"><i class="fas fa-server me-2"></i>Certificato SSL del server mail</div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    Questo è il certificato del <strong>Mail Hostname</strong> (il nome del server mail,
+                    es. <code>mail.tuodominio.com</code>) usato da Postfix e Dovecot. È un certificato a sé,
+                    <strong>diverso dai domini delle caselle</strong>: il suo dominio base potrebbe
+                    non essere tra i domini mail. Collega l'account Cloudflare che gestisce il DNS di
+                    <strong>questo</strong> hostname per abilitare il rinnovo automatico del certificato.
+                </p>
+                <div id="cfMailServerBox">
+                    <p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ===== Aiuto: come creare il token ===== -->
+        <div class="card mb-4 cf-help">
+            <div class="card-header"><i class="fas fa-circle-question me-2"></i>Come ottenere l'API token</div>
+            <div class="card-body small">
+                <ol class="mb-2">
+                    <li>Vai su <code>dash.cloudflare.com</code> → in alto a destra, <strong>My Profile</strong> → <strong>API Tokens</strong>.</li>
+                    <li>Clicca <strong>Create Token</strong> → usa il template <strong>Edit zone DNS</strong> (oppure "Custom token").</li>
+                    <li>Assegna i permessi: <code>Zone → DNS → Edit</code> e <code>Zone → Zone → Read</code>.</li>
+                    <li>In <em>Zone Resources</em> includi le zone (domini) che gestisci con questo pannello.</li>
+                    <li>Crea il token, copialo e incollalo qui sopra.</li>
+                </ol>
+                <div class="alert alert-warning py-2 mb-0">
+                    <i class="fas fa-shield-halved me-1"></i>
+                    Il token viene salvato nel database del pannello e mostrato solo in forma mascherata.
+                    Usa un token "scoped" con i soli permessi indicati, mai la Global API Key.
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+""" + getFooter() + """
+    <script>
+        let __cfCsrf = '';
+        try { const el = document.getElementById('csrf_token'); if (el && el.value) __cfCsrf = el.value; } catch (e) {}
+
+        // Mail Hostname pre-compilato lato server (stesso meccanismo di /settings e /ssl)
+        const __cfMailHostname = '{{MAIL_HOSTNAME}}';
+
+        let cfState = { accounts: [], mailServer: null };
+
+        function escCf(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function cfPost(body, onDone) {
+            const payload = Object.assign({ csrf_token: __cfCsrf }, body);
+            return fetch('/api/cloudflare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(data => { if (onDone) onDone(data); })
+              .catch(e => alert('Errore di rete: ' + e.message));
+        }
+
+        function cfLoad() {
+            fetch('/api/cloudflare').then(r => r.json()).then(data => {
+                cfState.accounts = data.accounts || [];
+                cfState.mailServer = data.mail_server || null;
+                cfRenderAccounts();
+                cfRenderMailServer();
+            }).catch(e => {
+                document.getElementById('cfAccountsBox').innerHTML =
+                    '<div class="alert alert-danger mb-0">Errore caricamento: ' + escCf(e.message) + '</div>';
+            });
+        }
+
+        function cfRenderAccounts() {
+            const box = document.getElementById('cfAccountsBox');
+            if (!cfState.accounts.length) {
+                box.innerHTML = '<p class="text-muted mb-0">Nessun account Cloudflare configurato. Aggiungine uno qui sopra.</p>';
+                return;
+            }
+            let html = '<div class="table-responsive"><table class="table table-striped align-middle mb-0">'
+                + '<thead><tr><th>Descrizione</th><th>Email</th><th>Token</th><th>Verificato</th><th class="text-end">Azioni</th></tr></thead><tbody>';
+            cfState.accounts.forEach(a => {
+                const verified = a.verified_at ? ('<span class="text-success"><i class="fas fa-check-circle me-1"></i>'
+                    + escCf((a.verified_at || '').replace('T', ' ').substring(0, 16)) + '</span>')
+                    : '<span class="text-muted">—</span>';
+                html += '<tr>'
+                    + '<td><strong>' + escCf(a.label || '(senza nome)') + '</strong></td>'
+                    + '<td>' + (a.email ? escCf(a.email) : '<span class="text-muted">—</span>') + '</td>'
+                    + '<td class="cf-token-cell">' + escCf(a.token_masked || '••••') + '</td>'
+                    + '<td>' + verified + '</td>'
+                    + '<td class="text-end">'
+                    + '<button class="btn btn-sm btn-outline-primary me-1" onclick="cfEdit(' + a.id + ')"><i class="fas fa-pen"></i></button>'
+                    + '<button class="btn btn-sm btn-outline-danger" onclick="cfDelete(' + a.id + ')"><i class="fas fa-trash"></i></button>'
+                    + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            box.innerHTML = html;
+        }
+
+        function cfRenderMailServer() {
+            const box = document.getElementById('cfMailServerBox');
+            const ms = cfState.mailServer || {};
+            // Hostname: usa il valore pre-compilato lato server; fallback all'API
+            let host = __cfMailHostname;
+            if (!host || host === 'Non configurato' || host.indexOf('{{') === 0) host = ms.hostname || '';
+            if (!host) {
+                box.innerHTML = '<div class="alert alert-warning py-2 mb-0">Mail Hostname non configurato. Completa prima l\\'installazione del server mail.</div>';
+                return;
+            }
+            const cur = ms.cloudflare_account_id || 0;
+            let opts = '<option value="0"' + (cur === 0 ? ' selected' : '') + '>Manuale (nessun account)</option>';
+            cfState.accounts.forEach(a => {
+                opts += '<option value="' + a.id + '"' + (cur === a.id ? ' selected' : '') + '>'
+                    + escCf(a.label || ('account #' + a.id)) + '</option>';
+            });
+            let status = cur > 0
+                ? '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Rinnovo automatico attivo</span>'
+                : '<span class="badge bg-secondary"><i class="fas fa-hand me-1"></i>Manuale</span>';
+            box.innerHTML = '<div class="table-responsive"><table class="table align-middle mb-2">'
+                + '<thead><tr><th>Mail Hostname (certificato SSL)</th><th style="width:340px">Account Cloudflare</th></tr></thead><tbody>'
+                + '<tr>'
+                + '<td><i class="fas fa-server me-1 text-success"></i><strong>' + escCf(host) + '</strong> ' + status + '</td>'
+                + '<td><select class="form-select form-select-sm" id="cfMailServerSelect" onchange="cfAssignMailServer(this.value)">' + opts + '</select></td>'
+                + '</tr></tbody></table></div>'
+                + '<button class="btn btn-outline-info btn-sm" onclick="cfTestMailServer()">'
+                + '<i class="fas fa-plug me-1"></i>Verifica collegamento</button>'
+                + '<div id="cfMailServerTest" class="mt-2"></div>'
+                + '<div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Il token dell\\'account scelto deve avere accesso alla zona DNS di <code>' + escCf(host) + '</code> (permessi Zone:DNS:Edit + Zone:Read).</div>';
+        }
+
+        function cfTestMailServer() {
+            const sel = document.getElementById('cfMailServerSelect');
+            const accountId = sel ? (parseInt(sel.value, 10) || 0) : 0;
+            const out = document.getElementById('cfMailServerTest');
+            if (accountId <= 0) {
+                out.innerHTML = '<div class="alert alert-warning py-2 mb-0">Seleziona prima un account Cloudflare dal menu.</div>';
+                return;
+            }
+            out.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Verifica token e zona DNS in corso...</span>';
+            cfPost({ action: 'test_mailserver', account_id: accountId }, data => {
+                if (data.success) {
+                    out.innerHTML = '<div class="alert alert-success py-2 mb-0"><i class="fas fa-check-circle me-1"></i>'
+                        + escCf(data.message || 'Collegamento OK') + '</div>';
+                } else {
+                    out.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-times-circle me-1"></i>'
+                        + escCf(data.error || data.message || 'Verifica fallita') + '</div>';
+                }
+            });
+        }
+
+        function cfAssignMailServer(accountId) {
+            cfPost({ action: 'assign_mailserver', account_id: parseInt(accountId, 10) || 0 }, data => {
+                if (!data.success) { alert('✗ ' + (data.message || data.error || 'Assegnazione fallita')); }
+                else if (data.message) { /* feedback silenzioso, lo stato si aggiorna sotto */ }
+                cfLoad();
+            });
+        }
+
+        function cfToggleToken() {
+            const inp = document.getElementById('cfToken');
+            const eye = document.getElementById('cfTokenEye');
+            if (inp.type === 'password') { inp.type = 'text'; eye.className = 'fas fa-eye-slash'; }
+            else { inp.type = 'password'; eye.className = 'fas fa-eye'; }
+        }
+
+        function cfTest() {
+            const token = document.getElementById('cfToken').value.trim();
+            const out = document.getElementById('cfTestResult');
+            if (!token) { out.innerHTML = '<div class="alert alert-warning py-2 mb-0">Inserisci un token da verificare.</div>'; return; }
+            out.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Verifica in corso...</span>';
+            cfPost({ action: 'test', token: token }, data => {
+                if (data.success) {
+                    out.innerHTML = '<div class="alert alert-success py-2 mb-0"><i class="fas fa-check-circle me-1"></i>'
+                        + escCf(data.message || 'Token valido') + '</div>';
+                } else {
+                    out.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-times-circle me-1"></i>'
+                        + escCf(data.message || data.error || 'Token non valido') + '</div>';
+                }
+            });
+        }
+
+        function cfEdit(id) {
+            const a = cfState.accounts.find(x => x.id === id);
+            if (!a) return;
+            document.getElementById('cfEditingId').value = id;
+            document.getElementById('cfLabel').value = a.label || '';
+            document.getElementById('cfEmail').value = a.email || '';
+            document.getElementById('cfToken').value = '';
+            document.getElementById('cfFormTitle').textContent = 'Modifica account: ' + (a.label || ('#' + id));
+            document.getElementById('cfSaveLabel').textContent = 'Salva modifiche';
+            document.getElementById('cfCancelEditBtn').style.display = '';
+            document.getElementById('cfTokenHint').style.display = '';
+            document.getElementById('cfTestResult').innerHTML = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cfResetForm() {
+            document.getElementById('cfEditingId').value = '0';
+            document.getElementById('cfLabel').value = '';
+            document.getElementById('cfEmail').value = '';
+            document.getElementById('cfToken').value = '';
+            document.getElementById('cfFormTitle').textContent = 'Aggiungi account Cloudflare';
+            document.getElementById('cfSaveLabel').textContent = 'Verifica e salva account';
+            document.getElementById('cfCancelEditBtn').style.display = 'none';
+            document.getElementById('cfTestResult').innerHTML = '';
+        }
+
+        function cfSave() {
+            const id = parseInt(document.getElementById('cfEditingId').value, 10) || 0;
+            const label = document.getElementById('cfLabel').value.trim();
+            const email = document.getElementById('cfEmail').value.trim();
+            const token = document.getElementById('cfToken').value.trim();
+
+            if (!label) { alert('Inserisci una descrizione/etichetta.'); return; }
+            if (id === 0 && !token) { alert('Inserisci l\\'API token.'); return; }
+
+            const body = id > 0
+                ? { action: 'update', account_id: id, label: label, email: email }
+                : { action: 'add', label: label, email: email, token: token };
+            if (token) body.token = token;
+
+            cfPost(body, data => {
+                if (data.success) {
+                    cfResetForm();
+                    cfLoad();
+                    alert('✓ ' + (data.message || 'Salvato'));
+                } else {
+                    alert('✗ ' + (data.message || data.error || 'Operazione fallita'));
+                }
+            });
+        }
+
+        function cfDelete(id) {
+            const a = cfState.accounts.find(x => x.id === id);
+            const name = a ? (a.label || ('#' + id)) : ('#' + id);
+            if (!confirm('Eliminare l\\'account "' + name + '"?\\nI domini collegati torneranno in modalità manuale.')) return;
+            cfPost({ action: 'delete', account_id: id }, data => {
+                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                cfLoad();
+            });
+        }
+
+        // Init
+        cfLoad();
+""" + getLogoutScript() + """
+    </script>
+</body>
+</html>
 """;
     }
 

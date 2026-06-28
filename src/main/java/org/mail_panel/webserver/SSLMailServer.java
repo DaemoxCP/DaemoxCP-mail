@@ -132,6 +132,7 @@ public class SSLMailServer {
         server.createContext("/queue", this::handleProtectedPage);
         server.createContext("/security", this::handleProtectedPage);
         server.createContext("/firewall", this::handleProtectedPage);
+        server.createContext("/cloudflare", this::handleProtectedPage);
         server.createContext("/logout", this::handleLogout);
         server.createContext("/api/logout", this::handleLogout);
 
@@ -2907,6 +2908,20 @@ public class SSLMailServer {
                 }
                 response.put("domains", domains);
 
+                // Server mail (Mail Hostname): il certificato SSL è emesso per questo
+                // hostname, il cui dominio base può NON essere tra i domini mail.
+                org.json.JSONObject mailServer = new org.json.JSONObject();
+                String mailHostname = Main.dbManager != null ? Main.dbManager.getMailHostname() : null;
+                mailServer.put("hostname", mailHostname == null ? "" : mailHostname);
+                // Riporta l'id solo se l'account esiste davvero: così badge/select restano
+                // coerenti con la logica di rinnovo (che ignora id orfani).
+                int msAccId = acmeManager != null ? acmeManager.getMailCertCloudflareAccountId() : 0;
+                if (msAccId > 0 && Main.mailDatabase.getCloudflareAccount(msAccId) == null) {
+                    msAccId = 0;
+                }
+                mailServer.put("cloudflare_account_id", msAccId);
+                response.put("mail_server", mailServer);
+
                 sendJsonResponse(exchange, response);
                 return;
             }
@@ -2979,6 +2994,101 @@ public class SSLMailServer {
                     response.put("message", ok
                         ? (accountId > 0 ? "Dominio assegnato all'account." : "Dominio impostato su modalità manuale.")
                         : "Operazione fallita");
+                }
+
+            } else if ("test_mailserver".equals(action)) {
+                // Verifica che l'account scelto: (1) abbia un token valido e (2) gestisca
+                // la zona DNS del Mail Hostname (così il rinnovo dns_cf funzionerà davvero).
+                int accountId = req.optInt("account_id", 0);
+                String mh = Main.dbManager != null ? Main.dbManager.getMailHostname() : null;
+                if (mh == null || mh.isBlank()) {
+                    response.put("success", false);
+                    response.put("error", "Mail Hostname non configurato");
+                } else if (accountId <= 0) {
+                    response.put("success", false);
+                    response.put("error", "Seleziona un account Cloudflare da testare");
+                } else {
+                    MailDatabase.CloudflareAccount acct = Main.mailDatabase.getCloudflareAccount(accountId);
+                    if (acct == null || acct.apiToken == null || acct.apiToken.isBlank()) {
+                        response.put("success", false);
+                        response.put("error", "Account o token non trovato");
+                    } else {
+                        org.mail_panel.security.CloudflareManager.TokenCheck tc =
+                            cloudflareManager.verifyToken(acct.apiToken);
+                        if (!tc.valid) {
+                            response.put("success", false);
+                            response.put("error", "Token non valido: " + tc.message);
+                        } else {
+                            org.mail_panel.security.CloudflareManager.ZoneLookup zl =
+                                cloudflareManager.findZone(acct.apiToken, mh);
+                            if (zl.found) {
+                                response.put("success", true);
+                                response.put("zone", zl.zoneName);
+                                response.put("message", "Token valido e zona DNS '" + zl.zoneName
+                                    + "' raggiungibile per " + mh + ". Il rinnovo automatico funzionerà.");
+                            } else {
+                                response.put("success", false);
+                                response.put("error", "Token valido, ma non trova la zona DNS per " + mh
+                                    + ": " + zl.error + " — aggiungi questa zona ai permessi del token.");
+                            }
+                        }
+                    }
+                }
+
+            } else if ("test_domain".equals(action)) {
+                // Verifica che l'account assegnato a un dominio caselle abbia un token
+                // valido e gestisca la zona DNS di quel dominio.
+                int domainId = req.optInt("domain_id", 0);
+                if (domainId <= 0) {
+                    response.put("success", false);
+                    response.put("error", "domain_id richiesto");
+                } else {
+                    MailDatabase.Domain dom = Main.mailDatabase.getDomain(domainId);
+                    MailDatabase.CloudflareAccount acct = cloudflareManager.getAccountForDomain(domainId);
+                    if (dom == null) {
+                        response.put("success", false);
+                        response.put("error", "Dominio non trovato");
+                    } else if (acct == null || acct.apiToken == null || acct.apiToken.isBlank()) {
+                        response.put("success", false);
+                        response.put("error", "Nessun account Cloudflare assegnato a questo dominio (modalità manuale)");
+                    } else {
+                        org.mail_panel.security.CloudflareManager.TokenCheck tc =
+                            cloudflareManager.verifyToken(acct.apiToken);
+                        if (!tc.valid) {
+                            response.put("success", false);
+                            response.put("error", "Token non valido: " + tc.message);
+                        } else {
+                            org.mail_panel.security.CloudflareManager.ZoneLookup zl =
+                                cloudflareManager.findZone(acct.apiToken, dom.domain);
+                            if (zl.found) {
+                                response.put("success", true);
+                                response.put("zone", zl.zoneName);
+                                response.put("message", "Token valido e zona DNS '" + zl.zoneName
+                                    + "' raggiungibile per " + dom.domain + ".");
+                            } else {
+                                response.put("success", false);
+                                response.put("error", "Token valido, ma non trova la zona DNS per " + dom.domain
+                                    + ": " + zl.error + " — aggiungi questa zona ai permessi del token.");
+                            }
+                        }
+                    }
+                }
+
+            } else if ("assign_mailserver".equals(action)) {
+                // Account Cloudflare per il certificato del server mail (Mail Hostname)
+                int accountId = req.optInt("account_id", 0); // 0 = manuale
+                if (acmeManager == null) {
+                    response.put("success", false);
+                    response.put("error", "ACME manager non inizializzato");
+                } else if (accountId > 0 && Main.mailDatabase.getCloudflareAccount(accountId) == null) {
+                    response.put("success", false);
+                    response.put("error", "Account non trovato");
+                } else {
+                    acmeManager.setMailCertCloudflareAccountId(accountId);
+                    response.put("success", true);
+                    response.put("message", accountId > 0
+                        ? "Account Cloudflare collegato al certificato del server mail. Il rinnovo automatico è ora attivo."
+                        : "Certificato del server mail impostato su modalità manuale.");
                 }
 
             } else {

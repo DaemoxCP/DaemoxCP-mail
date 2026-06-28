@@ -45,6 +45,9 @@ public class AcmeManager {
     public static final String SETTING_AUTO_RENEW_LAST_CHECK    = "acme_auto_renewal_last_check";
     public static final String SETTING_AUTO_RENEW_LAST_RESULT   = "acme_auto_renewal_last_result";
     public static final String SETTING_AUTO_RENEW_LAST_RENEWAL  = "acme_auto_renewal_last_renewal";
+    // Account Cloudflare scelto per il certificato del SERVER MAIL (Mail Hostname),
+    // il cui dominio base può non essere tra i domini mail gestiti.
+    public static final String SETTING_CF_ACCOUNT_ID            = "acme_cf_account_id";
 
     public boolean isAutoRenewalEnabled() {
         String v = database.getSetting(SETTING_AUTO_RENEW_ENABLED, "1");
@@ -397,8 +400,27 @@ public class AcmeManager {
             return new CertificateResult(false, "Hostname non valido", null);
         }
 
+        // Se il dominio ha un account Cloudflare collegato, rinnova in modo
+        // completamente automatico via API Cloudflare (acme.sh dns_cf).
+        // Questo è l'unico modo per auto-rinnovare i certificati emessi in
+        // modalità DNS manuale, che acme.sh NON può rinnovare da solo.
+        MailDatabase.CloudflareAccount cf = cloudflareAccountForHostname(mailHostname);
+        if (cf != null && cf.apiToken != null && !cf.apiToken.isBlank()) {
+            return renewViaCloudflare(mailHostname, cf);
+        }
+
+        return renewStandard(mailHostname);
+    }
+
+    /**
+     * Rinnovo "standard": funziona per i certificati HTTP-01 e per quelli già
+     * configurati con un provider DNS API. I certificati in modalità DNS manuale
+     * NON sono rinnovabili automaticamente da acme.sh: in quel caso restituiamo
+     * un messaggio esplicito invece del generico "Rinnovo fallito".
+     */
+    private CertificateResult renewStandard(String mailHostname) {
         try {
-            String cmd = ACME_SH + " --renew -d " + mailHostname + " --force";
+            String cmd = ACME_SH + " --renew -d " + mailHostname + " --force 2>&1";
             String output = executeCommand(cmd);
 
             // Check success
@@ -410,11 +432,106 @@ public class AcmeManager {
                     output + "\n" + (deployResult.output != null ? deployResult.output : ""));
             }
 
+            // acme.sh non può rinnovare automaticamente i certificati DNS-manuali
+            if (output.contains("manual mode") || output.contains("can not be renewed")
+                    || output.contains("cannot be renewed")) {
+                return new CertificateResult(false,
+                    "Certificato in modalità DNS manuale — rinnovo automatico non possibile. "
+                    + "Collega un account Cloudflare al dominio per il rinnovo automatico, "
+                    + "oppure rinnova manualmente dal pannello.",
+                    output);
+            }
+
             return new CertificateResult(false, "Rinnovo fallito", output);
 
         } catch (Exception e) {
             return new CertificateResult(false, "Errore: " + e.getMessage(), null);
         }
+    }
+
+    /**
+     * Rinnovo via API Cloudflare (acme.sh --dns dns_cf). Ri-emette il certificato
+     * usando il token CF dell'account collegato al dominio; questo migra anche un
+     * certificato DNS-manuale a rinnovo automatico per le volte successive.
+     * Il token viene passato come variabile d'ambiente, mai sulla command line.
+     */
+    private CertificateResult renewViaCloudflare(String mailHostname, MailDatabase.CloudflareAccount cf) {
+        try {
+            Map<String, String> env = new HashMap<>();
+            // Token "scoped" Cloudflare: richiede permessi Zone:DNS:Edit + Zone:Read
+            env.put("CF_Token", cf.apiToken);
+
+            String cmd = ACME_SH + " --issue --dns dns_cf -d " + mailHostname + " --force 2>&1";
+            String output = sanitize(executeCommand(cmd, env), cf.apiToken);
+
+            if (output.contains("Cert success") || output.contains("Cert renewed")
+                    || output.contains("Skipping. Next renewal time")) {
+                DeployResult deployResult = deployCertificate(mailHostname);
+                return new CertificateResult(deployResult.success,
+                    deployResult.success ? "Certificato rinnovato (Cloudflare DNS API)"
+                                         : "Rinnovo Cloudflare OK ma deploy fallito",
+                    output + "\n" + (deployResult.output != null ? deployResult.output : ""));
+            }
+
+            return new CertificateResult(false, "Rinnovo Cloudflare fallito", output);
+
+        } catch (Exception e) {
+            return new CertificateResult(false, "Errore Cloudflare: " + e.getMessage(), null);
+        }
+    }
+
+    /**
+     * Risale all'account Cloudflare da usare per il certificato del server mail.
+     *
+     * Il certificato è emesso per il <b>Mail Hostname</b> (es. mail.azienda.com), il cui
+     * dominio base (azienda.com) NON è necessariamente tra i domini mail gestiti.
+     * Per questo l'account si sceglie esplicitamente dalla pagina Cloudflare e viene
+     * salvato in {@link #SETTING_CF_ACCOUNT_ID}. Solo come fallback proviamo a dedurlo
+     * dai domini mail (nel caso l'hostname stia sotto un dominio mail già collegato).
+     */
+    private MailDatabase.CloudflareAccount cloudflareAccountForHostname(String hostname) {
+        try {
+            // 1) Scelta esplicita per il certificato del server mail
+            String idStr = database.getSetting(SETTING_CF_ACCOUNT_ID, "");
+            if (idStr != null && !idStr.isBlank()) {
+                int id = Integer.parseInt(idStr.trim());
+                if (id > 0) {
+                    MailDatabase.CloudflareAccount a = database.getCloudflareAccount(id);
+                    if (a != null) return a;
+                }
+            }
+            // 2) Fallback: hostname che ricade sotto un dominio mail già assegnato
+            // mail.example.com -> example.com (ma prova anche l'hostname intero)
+            String domain = hostname.replaceFirst("^[^.]+\\.", "");
+            MailDatabase.Domain d = database.getDomainByName(domain);
+            if (d == null) {
+                d = database.getDomainByName(hostname);
+            }
+            if (d == null) return null;
+            return database.getCloudflareAccountForDomain(d.id);
+        } catch (Exception e) {
+            System.err.println("[ACME] Lookup account Cloudflare fallito: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** Id dell'account Cloudflare scelto per il certificato del server mail (0 = nessuno). */
+    public int getMailCertCloudflareAccountId() {
+        try {
+            String v = database.getSetting(SETTING_CF_ACCOUNT_ID, "");
+            return (v == null || v.isBlank()) ? 0 : Integer.parseInt(v.trim());
+        } catch (Exception e) { return 0; }
+    }
+
+    /** Imposta (o azzera con 0) l'account Cloudflare usato per il certificato del server mail. */
+    public void setMailCertCloudflareAccountId(int accountId) {
+        database.setSetting(SETTING_CF_ACCOUNT_ID, accountId > 0 ? String.valueOf(accountId) : "");
+    }
+
+    /** Rimuove il token dall'output prima di restituirlo/loggarlo. */
+    private String sanitize(String output, String token) {
+        if (output == null || token == null || token.isBlank()) return output;
+        return output.replace(token, "***");
     }
 
     /**
@@ -448,7 +565,7 @@ public class AcmeManager {
             if (daysUntilExpiry <= 0) {
                 System.err.println("[ACME] WARNING: Certificato SCADUTO! Provo a rinnovarlo...");
                 CertificateResult result = renewCertificate(info.commonName);
-                String resStr = (result.success ? "OK" : "FAIL") + "|Scaduto, rinnovo: " + result.message;
+                String resStr = (result.success ? "OK" : "FAIL") + "|" + renewalSummary(result, daysUntilExpiry, true);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, resStr);
                 if (result.success) database.setSetting(SETTING_AUTO_RENEW_LAST_RENEWAL, now);
@@ -456,7 +573,7 @@ public class AcmeManager {
             } else if (daysUntilExpiry <= threshold) {
                 System.out.println("[ACME] Certificato scade in " + daysUntilExpiry + " giorni (soglia: " + threshold + "), rinnovo...");
                 CertificateResult result = renewCertificate(info.commonName);
-                String resStr = (result.success ? "OK" : "FAIL") + "|Rinnovo (" + daysUntilExpiry + "gg restanti): " + result.message;
+                String resStr = (result.success ? "OK" : "FAIL") + "|" + renewalSummary(result, daysUntilExpiry, false);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, resStr);
                 if (result.success) database.setSetting(SETTING_AUTO_RENEW_LAST_RENEWAL, now);
@@ -475,6 +592,26 @@ public class AcmeManager {
             database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "FAIL|Errore: " + e.getMessage());
             return new CertificateResult(false, "Errore: " + e.getMessage(), null);
         }
+    }
+
+    /**
+     * Compone il messaggio d'esito del rinnovo.
+     * Su SUCCESSO mostra la NUOVA scadenza (rileggendo il certificato appena installato),
+     * non i giorni che mancavano prima — così non sembra che "rinnovi e scada subito".
+     * Su FALLIMENTO mantiene il contesto (quanti giorni mancavano).
+     */
+    private String renewalSummary(CertificateResult result, long daysBefore, boolean wasExpired) {
+        if (result.success) {
+            long newDays = -1;
+            try {
+                CertificateInfo fresh = getCertificateInfo();
+                if (fresh != null && fresh.expiresAt != null) {
+                    newDays = ChronoUnit.DAYS.between(LocalDateTime.now(), fresh.expiresAt);
+                }
+            } catch (Exception ignore) { /* best-effort */ }
+            return result.message + (newDays >= 0 ? " — nuova scadenza tra " + newDays + " giorni" : "");
+        }
+        return (wasExpired ? "Scaduto, rinnovo: " : "Rinnovo (" + daysBefore + "gg restanti): ") + result.message;
     }
 
     /** Backward-compatible — chiama checkAndRenewCertificates(false) */
@@ -507,15 +644,34 @@ public class AcmeManager {
                 info.commonName = cnMatcher.group(1).trim();
             }
 
-            // Parse issuer
-            Pattern issuerPattern = Pattern.compile("issuer.*?CN\\s*=\\s*([^,/\\n]+)");
-            java.util.regex.Matcher issuerMatcher = issuerPattern.matcher(output);
-            if (issuerMatcher.find()) {
-                info.issuer = issuerMatcher.group(1).trim();
-                info.letsEncrypt = info.issuer.toLowerCase().contains("let's encrypt") ||
-                                   info.issuer.toLowerCase().contains("r3") ||
-                                   info.issuer.toLowerCase().contains("e1");
+            // Parse issuer: estrai sia l'Organizzazione (O=, il nome reale della CA)
+            // sia il CN (il codice breve dell'intermedio). Mostra entrambi: "O (CN)".
+            String issuerLine = "";
+            Pattern issuerLinePattern = Pattern.compile("issuer\\s*=\\s*(.+)");
+            java.util.regex.Matcher issuerLineMatcher = issuerLinePattern.matcher(output);
+            if (issuerLineMatcher.find()) {
+                issuerLine = issuerLineMatcher.group(1).trim();
             }
+            String issuerOrg = null;
+            java.util.regex.Matcher orgMatcher =
+                Pattern.compile("\\bO\\s*=\\s*([^,/\\n]+)").matcher(issuerLine);
+            if (orgMatcher.find()) issuerOrg = orgMatcher.group(1).trim();
+
+            String issuerCn = null;
+            java.util.regex.Matcher cnIssMatcher =
+                Pattern.compile("\\bCN\\s*=\\s*([^,/\\n]+)").matcher(issuerLine);
+            if (cnIssMatcher.find()) issuerCn = cnIssMatcher.group(1).trim();
+
+            if (issuerOrg != null && issuerCn != null) {
+                info.issuer = issuerOrg + " (" + issuerCn + ")";
+            } else if (issuerOrg != null) {
+                info.issuer = issuerOrg;
+            } else if (issuerCn != null) {
+                info.issuer = issuerCn;
+            }
+            // "Let's Encrypt" si riconosce dall'Organizzazione, non dal codice dell'intermedio
+            String issuerLc = (issuerOrg != null ? issuerOrg : "").toLowerCase();
+            info.letsEncrypt = issuerLc.contains("let's encrypt") || issuerLc.contains("lets encrypt");
 
             // Parse dates
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd HH:mm:ss yyyy z", Locale.ENGLISH);
@@ -908,9 +1064,21 @@ public class AcmeManager {
     // ============== Helper Methods ==============
 
     private String executeCommand(String command) throws Exception {
+        return executeCommand(command, null);
+    }
+
+    /**
+     * Esegue un comando shell, opzionalmente con variabili d'ambiente extra.
+     * Le env vengono passate via ProcessBuilder.environment() (NON sulla command line),
+     * così segreti come CF_Token non finiscono in argv né nei log di processo.
+     */
+    private String executeCommand(String command, Map<String, String> extraEnv) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", command);
         pb.redirectErrorStream(true);
+        if (extraEnv != null) {
+            pb.environment().putAll(extraEnv);
+        }
         Process process = pb.start();
 
         StringBuilder output = new StringBuilder();
