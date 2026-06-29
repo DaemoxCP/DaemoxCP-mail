@@ -6575,7 +6575,14 @@ public class MailPanelContent {
             </div>
 
             <!-- SSL Configuration Options -->
-            <h4 class="mb-3"><i class="fas fa-cogs me-2"></i>Configura Certificato SSL</h4>
+            <h4 class="mb-1"><i class="fas fa-cogs me-2"></i>Configura Certificato SSL <small class="text-muted fs-6">(operazioni manuali)</small></h4>
+            <div class="alert alert-secondary py-2 small">
+                <i class="fas fa-hand me-1"></i>
+                Questa sezione è per la <strong>configurazione e il rinnovo manuali</strong> del certificato:
+                emissione/rinnovo on-demand (HTTP-01, DNS-01) oppure installazione di un
+                <strong>certificato tuo</strong> (es. acquistato o con validità pluriennale, per cui non serve alcun rinnovo).
+                Per il <strong>rinnovo automatico</strong> usa invece la sezione <em>“Rinnovo automatico”</em> qui sopra.
+            </div>
 
             <div class="row mb-4">
                 <!-- Option 1: Let's Encrypt HTTP-01 -->
