@@ -6080,6 +6080,8 @@ public class SSLMailServer {
                 case "plan" -> response = UpdateManager.pianoManutenzione();
                 case "mysql84_preflight" -> response = UpdateManager.mysql84Preflight();
                 case "broken_libs" -> response = UpdateManager.pacchettiConLibrerieMancanti();
+                case "mysql_client_diag" -> response = UpdateManager.diagnosiClientMysql();
+                case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
                 case "relink" -> {
                     if (!"RICOLLEGA".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");

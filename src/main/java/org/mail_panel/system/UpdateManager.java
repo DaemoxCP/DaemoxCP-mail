@@ -2898,6 +2898,111 @@ public final class UpdateManager {
                 .put("missingLibs", new JSONArray(new ArrayList<>(librerieAssenti)));
     }
 
+    /**
+     * Chi dichiara cosa, sui client MySQL. Serve a rispondere con i fatti a una domanda che
+     * altrimenti si risponde a intuito: perche' e' stato installato un client 9.7 quando il
+     * predefinito dei port FreeBSD (Mk/bsd.default-versions.mk, rami main e 2026Q3) e' 8.4?
+     *
+     * Si guardano tre cose distinte, che e' facile confondere in una sola:
+     *  - cosa dichiara il pacchetto INSTALLATO
+     *  - cosa dichiara la versione nel REPOSITORY
+     *  - quali pacchetti forniscono davvero la libreria contesa
+     */
+    public static JSONObject diagnosiClientMysql() {
+        JSONObject r = new JSONObject();
+        JSONArray client = new JSONArray();
+        for (String riga : sh("pkg query '%n %v' 2>/dev/null | grep -E '^mysql[0-9]+-(client|server) '", 30).split("\n")) {
+            String t = riga.trim();
+            int sp = t.indexOf(' ');
+            if (sp > 0) client.put(new JSONObject().put("name", t.substring(0, sp)).put("version", t.substring(sp + 1).trim()));
+        }
+        r.put("mysqlPackages", client);
+
+        JSONArray dip = new JSONArray();
+        for (String pk : new String[]{"postfix-mysql", "dovecot-mysql"}) {
+            if (!ok("pkg info -e " + pk, 20)) continue;
+            dip.put(new JSONObject().put("name", pk)
+                    .put("versione", sh("pkg query %v " + pk, 20))
+                    .put("dipendenzeInstallato", sh("pkg query %dn " + pk + " 2>/dev/null | tr '\n' ' '", 30))
+                    .put("dipendenzeRepository", sh("pkg rquery %dn " + pk + " 2>/dev/null | tr '\n' ' '", 30))
+                    .put("librerieRichieste", sh("pkg query %B " + pk + " 2>/dev/null | tr '\n' ' '", 30)));
+        }
+        r.put("dipendenti", dip);
+
+        // Chi fornisce la libreria contesa, e da quale pacchetto proviene il file sul disco.
+        r.put("fornisconoLib", sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20));
+        r.put("fileLib", sh("ls -l /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20));
+        // File che i due pacchetti si contendono: quanti ne ha persi la 8.4.
+        r.put("conflitti", sh("pkg check -s mysql84-client 2>&1 | head -20", 180));
+        return r.put("success", true);
+    }
+
+    /**
+     * I predefiniti dei port FreeBSD, letti dalla fonte ufficiale.
+     *
+     * Colonne: componente, valore predefinito, come si rileva cio' che e' installato,
+     * cosa comporta discostarsene.
+     *
+     * FONTE: Mk/bsd.default-versions.mk del repository ufficiale dei port
+     * (cgit.freebsd.org), rami main e 2026Q3 — coincidono. Verificato il 31/08/2026.
+     *
+     * E' una fotografia datata, non una lettura dal vivo: il pannello non va su internet.
+     * Va riverificata quando cambia il trimestre, e la scheda lo dice invece di far credere
+     * che sia sempre aggiornata. Serve a rispondere alla domanda che oggi ci e' mancata —
+     * "cio' che ho installato e' quello che il sistema si aspetta?" — prima di una
+     * migrazione, non dopo.
+     */
+    private static final String[][] PREDEFINITI = {
+        {"MySQL", "8.4",
+         "pkg query %n | grep -E '^mysql[0-9]+-server$'",
+         "Un server fuori dal predefinito riceve pacchetti collegati costruiti per un'altra versione."},
+        {"PHP", "8.4",
+         "pkg query %n | grep -E '^php[0-9]+$'",
+         "Roundcube e le estensioni portano la versione nel nome: fuori dal predefinito smettono di combaciare."},
+        {"Python", "3.12",
+         "pkg query %n | grep -E '^py[0-9]+-' | sed 's/-.*//' | sort -u | tr '\n' ' '",
+         "I pacchetti py3NN fuori dal predefinito smettono di ricevere aggiornamenti senza che nulla lo segnali."},
+        {"OpenSSL", "base",
+         "pkg query %n | grep -E '^openssl[0-9]*$' | tr '\n' ' '",
+         "Con SSL_DEFAULT=base i programmi usano l'OpenSSL del sistema, non il port: se il port e' installato, con ogni probabilita' nessuno lo usa."},
+        {"Perl", "5.42",
+         "pkg query %v perl5 2>/dev/null",
+         "Molti strumenti di contorno ne dipendono."},
+        {"Java", "25",
+         "pkg query %n | grep -E '^openjdk[0-9]+$' | tr '\n' ' '",
+         "E' il runtime del pannello."},
+    };
+
+    /**
+     * Confronta i predefiniti ufficiali con cio' che e' davvero installato.
+     * La colonna "installato" viene dal sistema, quella "predefinito" dalla fonte ufficiale:
+     * il confronto e' il punto, perche' e' la divergenza a rompere le cose.
+     */
+    public static JSONObject coerenzaPredefiniti() {
+        JSONArray righe = new JSONArray();
+        for (String[] d : PREDEFINITI) {
+            String installato = sh(d[2], 60).trim().replace("\n", " ");
+            String esito;
+            if (installato.isEmpty()) {
+                esito = "assente";
+            } else if ("base".equals(d[1])) {
+                // Il predefinito e' il sistema base: il port installato e' l'anomalia.
+                esito = "port installato accanto al sistema base";
+            } else if (installato.replace(".", "").contains(d[1].replace(".", ""))) {
+                esito = "coerente";
+            } else {
+                esito = "DIVERGE";
+            }
+            righe.put(new JSONObject().put("componente", d[0]).put("predefinito", d[1])
+                    .put("installato", installato).put("esito", esito).put("perche", d[3]));
+        }
+        return new JSONObject().put("success", true).put("righe", righe)
+                .put("fonte", "Mk/bsd.default-versions.mk del repository ufficiale dei port FreeBSD "
+                        + "(cgit.freebsd.org), rami main e 2026Q3 — coincidono. Verificato il 31/08/2026.")
+                .put("avvertenza", "E' una fotografia datata, non una lettura dal vivo: il pannello non "
+                        + "va su internet. Va riverificata quando cambia il trimestre.");
+    }
+
     public static JSONObject avviaRicollegamento() {
         String id = "relink-" + System.currentTimeMillis();
         Job j = new Job(id, "relink");
@@ -2952,6 +3057,19 @@ public final class UpdateManager {
             job.scrivi("[3/5] Reinstallo dal repository...");
             StringBuilder el = new StringBuilder();
             for (String n : nomi) el.append(' ').append(n);
+            // PRIMA una simulazione: se pkg segnala conflitti di file, ci si ferma.
+            // "-f" serve a forzare la REINSTALLAZIONE, ma forza anche il passare sopra ai
+            // conflitti — e sono due cose diverse. Averle confuse ha fatto sovrascrivere i
+            // file del client MySQL 8.4 con quelli di un altro pacchetto.
+            String simulazione = sh("pkg install -f -n" + el + " 2>&1", 600);
+            if (simulazione.toLowerCase().contains("conflicts with")) {
+                job.scrivi("    pkg segnala CONFLITTI DI FILE: mi fermo senza installare nulla.");
+                for (String l : simulazione.split("\n")) {
+                    if (l.toLowerCase().contains("conflict")) job.scrivi("      " + l.trim());
+                }
+                throw new IllegalStateException("l'operazione sovrascriverebbe file di un altro pacchetto: "
+                        + "va deciso a mano quale pacchetto deve restare, non forzato.");
+            }
             int code = eseguiConLog(job, "pkg install -f -y" + el + " 2>&1", 1800);
             if (code != 0) throw new IllegalStateException("pkg install uscito con codice " + code);
 

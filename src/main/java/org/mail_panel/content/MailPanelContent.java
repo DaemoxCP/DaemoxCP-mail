@@ -13196,11 +13196,31 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 aggiornamento romperebbe <strong>questo</strong> server di posta, e impedisce quelli che lo romperebbero.
             </p>
 
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-scale-balanced me-2"></i><strong>Coerenza con i predefiniti di FreeBSD</strong>
+                        <span class="small text-muted ms-2">cosa il sistema si aspetta, contro cosa hai installato</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="defCheck()"><i class="fas fa-magnifying-glass me-1"></i>Confronta</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        I port FreeBSD hanno una versione predefinita per ogni componente. I pacchetti binari
+                        sono costruiti contro quella: starne fuori significa ricevere prima o poi un pacchetto
+                        collegato a una versione diversa da quella installata. &Egrave; il confronto che oggi
+                        ci &egrave; mancato <strong>prima</strong> della migrazione.
+                    </p>
+                    <div id="def-body"><span class="text-muted">Premi "Confronta": legge e basta.</span></div>
+                </div>
+            </div>
+
             <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-link-slash me-2"></i><strong>Pacchetti senza la libreria che richiedono</strong>
                         <span class="small text-muted ms-2">un servizio puo&rsquo; risultare attivo e non funzionare</span></span>
-                    <button class="btn btn-sm btn-outline-danger" onclick="libsCheck()"><i class="fas fa-magnifying-glass me-1"></i>Controlla</button>
+<div class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-danger me-1" onclick="libsCheck()"><i class="fas fa-magnifying-glass me-1"></i>Controlla</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="libsDiag()"><i class="fas fa-stethoscope me-1"></i>Diagnosi client MySQL</button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">
@@ -13479,6 +13499,29 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             updPoll(r.jobId, el, pre);
         }
 
+        // ---------- coerenza con i predefiniti ----------
+        async function defCheck() {
+            const el = document.getElementById('def-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Confronto...';
+            const r = await updApi('defaults_check');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                  + '<th>Componente</th><th>Predefinito FreeBSD</th><th>Installato</th><th>Esito</th></tr></thead><tbody>';
+            (r.righe || []).forEach(x => {
+                const cls = x.esito === 'coerente' ? 'upd-badge-ok'
+                          : (x.esito === 'DIVERGE' ? 'upd-badge-stop' : 'upd-badge-warn');
+                h += '<tr class="upd-cell"><td><strong>' + updEsc(x.componente) + '</strong><br>'
+                   + '<span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
+                   + '<td><code>' + updEsc(x.predefinito) + '</code></td>'
+                   + '<td><code>' + updEsc(x.installato || '-') + '</code></td>'
+                   + '<td><span class="badge ' + cls + '">' + updEsc(x.esito) + '</span></td></tr>';
+            });
+            h += '</tbody></table></div>'
+               + '<div class="small text-muted"><strong>Fonte:</strong> ' + updEsc(r.fonte) + '<br>'
+               + '<i class="fas fa-triangle-exclamation me-1"></i>' + updEsc(r.avvertenza) + '</div>';
+            el.innerHTML = h;
+        }
+
         // ---------- librerie mancanti ----------
         async function libsCheck() {
             const el = document.getElementById('libs-body');
@@ -13510,6 +13553,31 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Ricollegamento in corso...</span>';
             pre.style.display = 'block';
             planPoll(r.jobId, el, pre);
+        }
+
+        async function libsDiag() {
+            const el = document.getElementById('libs-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Raccolgo chi dichiara cosa...';
+            const r = await updApi('mysql_client_diag');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<h6 class="small">Pacchetti MySQL installati</h6><ul class="small">';
+            (r.mysqlPackages || []).forEach(p => { h += '<li><code>' + updEsc(p.name) + '</code> ' + updEsc(p.version) + '</li>'; });
+            h += '</ul>';
+            h += '<h6 class="small mt-2">Chi usa il client, e cosa dichiara</h6>';
+            (r.dipendenti || []).forEach(d => {
+                h += '<div class="small mb-2"><code>' + updEsc(d.name) + '</code> ' + updEsc(d.versione) + '<br>'
+                   + '<span class="text-muted">dipendenze del pacchetto installato:</span> ' + updEsc(d.dipendenzeInstallato) + '<br>'
+                   + '<span class="text-muted">dipendenze della versione nel repository:</span> ' + updEsc(d.dipendenzeRepository) + '<br>'
+                   + '<span class="text-muted">librerie richieste:</span> ' + updEsc(d.librerieRichieste) + '</div>';
+            });
+            h += '<h6 class="small mt-2">La libreria contesa</h6><div class="small">'
+               + '<span class="text-muted">appartiene al pacchetto:</span> ' + updEsc(r.fornisconoLib || '(nessuno)') + '<br>'
+               + '<span class="text-muted">file:</span> <code>' + updEsc(r.fileLib || '(assente)') + '</code></div>';
+            if (r.conflitti) {
+                h += '<h6 class="small mt-2">Integrita&rsquo; di mysql84-client</h6>'
+                   + '<pre class="upd-log mt-1">' + updEsc(r.conflitti) + '</pre>';
+            }
+            el.innerHTML = h;
         }
 
         // ---------- piano di manutenzione ----------
