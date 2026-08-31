@@ -624,12 +624,24 @@ mvn clean package
 ### 2. Run the Panel
 
 ```bash
-# Use the provided run script
-./run.sh
-
-# Or run directly with native access enabled
-java --enable-native-access=ALL-UNNAMED -jar target/freebsd-mail-panel-1.0.jar
+java -jar target/freebsd-mail-panel-1.0.jar
 ```
+
+Al primo avvio il pannello scrive accanto al jar un `run.sh` che rispecchia esattamente
+il comando con cui e' partito. Non e' un file da distribuire e non serve al funzionamento:
+e' solo una scorciatoia. Se esiste gia', il pannello non lo tocca.
+
+Due modi di avviarlo:
+
+| Comando | Cosa fa |
+|---|---|
+| `java -jar target/freebsd-mail-panel-1.0.jar` | menu a schermo; il server web parte dalla voce 100 |
+| `java -jar target/freebsd-mail-panel-1.0.jar --web` | **solo** il server web: nessun menu, nessun terminale richiesto |
+
+La modalita' `--web` esiste perche' il pannello deve poter tornare su da solo dopo essersi
+spento per aggiornare la propria JVM, dove un terminale non c'e'. Il comando di riavvio non
+viene letto da `run.sh`: il pannello lo ricostruisce dal processo vivo, quindi riparte
+esattamente com'era partito.
 
 ### 3. Terminal Menu
 

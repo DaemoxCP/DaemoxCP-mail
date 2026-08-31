@@ -13300,6 +13300,70 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fab fa-python me-2"></i><strong>Passaggio dei pacchetti Python</strong>
+                        <span class="small text-muted ms-2">non &egrave; un aggiornamento: &egrave; un cambio di nome del pacchetto</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="pyPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        <code>py311-certbot</code> e <code>py312-certbot</code> sono pacchetti diversi, non due versioni
+                        dello stesso: <code>pkg upgrade</code> non li tocca, e restano su un Python che prima o poi
+                        esce dal supporto senza che nulla lo segnali. La procedura toglie i vecchi e installa i nuovi
+                        <strong>in quest'ordine</strong>, cos&igrave; nessun file va forzato.
+                    </p>
+                    <div id="py-pre"><span class="text-muted">Premi "Verifica prerequisiti": legge e basta.</span></div>
+                    <pre id="py-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
+            <div class="card mb-4 border-danger">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fab fa-java me-2"></i><strong>Aggiornamento della JVM del pannello</strong>
+                        <span class="small text-muted ms-2">il pannello gira su questa Java: per aggiornarla deve spegnersi</span></span>
+                    <span>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="jvStato()"><i class="fas fa-file-alt me-1"></i>Ultimo resoconto</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="jvPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Sostituire i file della JVM sotto un processo vivo rompe l'avvio dei sottoprocessi: da quel
+                        momento ogni comando fallirebbe e <strong>ogni stato mostrato qui sarebbe falso</strong>. Per
+                        questo il lavoro lo fa uno script staccato: impacchetta la Java attuale come via di ritorno,
+                        spegne il pannello, aggiorna, controlla che <code>java</code> risponda &mdash; e se non
+                        risponde rimette quella di prima &mdash; poi riaccende il pannello e aspetta di vederlo
+                        rispondere sulla sua porta. <strong>La posta non si ferma</strong>: Postfix, Dovecot e Rspamd
+                        non c'entrano con la JVM.
+                    </p>
+                    <div id="jv-pre"><span class="text-muted">Premi "Verifica prerequisiti": legge e basta.</span></div>
+                    <pre id="jv-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
+            <div class="card mb-4 border-warning">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-envelope-open-text me-2"></i><strong>Aggiornamento Roundcube</strong>
+                        <span class="small text-muted ms-2">il pacchetto &egrave; la parte facile: a rompere &egrave; lo schema del database</span></span>
+                    <button class="btn btn-sm btn-outline-warning" onclick="rcPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Un salto di versione maggiore cambia lo schema del database: finch&eacute; non si esegue
+                        <code>bin/updatedb.sh</code> la webmail non funziona, e quel cambio non si annulla.
+                        Dalla <strong>1.7</strong> c'&egrave; anche un secondo cambiamento che rompe: Roundcube
+                        pretende che il server web punti alla sottocartella <code>public_html</code>, mentre qui
+                        nginx punta alla radice. La procedura sposta anche quella, controllando la configurazione
+                        con <code>nginx -t</code> <em>prima</em> di ricaricare e rimettendo la precedente se viene
+                        rifiutata. La copia del database viene prima di tutto, e alla fine si verifica che la
+                        webmail <strong>risponda davvero</strong>, non solo che i file siano aggiornati.
+                    </p>
+                    <div id="rc-pre"><span class="text-muted">Premi "Verifica prerequisiti": legge e basta.</span></div>
+                    <pre id="rc-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
             <div class="card mb-4 border-warning">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-database me-2"></i><strong>Migrazione MySQL 8.0 &rarr; 8.4</strong>
@@ -13735,6 +13799,111 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 }
             }
             setTimeout(() => planPoll(id, el, pre), 3000);
+        }
+
+        // ---------- passaggio Python ----------
+        async function pyPre() {
+            const el = document.getElementById('py-pre');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli: pacchetti, dipendenze, simulazione, pulizia finale...';
+            const r = await updApi('python_preflight');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                  + '<th style="width:8rem">Esito</th><th style="width:16rem">Controllo</th><th>Dettaglio</th></tr></thead><tbody>';
+            (r.checks || []).forEach(c => {
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            if (r.gia) h += '<div class="alert alert-success py-2 mb-0">Non c&rsquo;&egrave; niente da spostare.</div>';
+            else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>Non avviabile.</strong> Risolvi le righe rosse.</div>';
+            else h += '<button class="btn btn-danger" onclick="pyRun()"><i class="fas fa-play me-1"></i>Sposta a py' + updEsc(r.nuovo) + '</button>';
+            el.innerHTML = h;
+        }
+
+        async function pyRun() {
+            if (prompt('Conferma: scrivi SPOSTA PYTHON per procedere.') !== 'SPOSTA PYTHON') return;
+            const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
+            const r = await updApi('python_move', { confirm: 'SPOSTA PYTHON' });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>In corso: non chiudere la pagina.</span>';
+            pre.style.display = 'block';
+            planPoll(r.jobId, el, pre);
+        }
+
+        // ---------- aggiornamento della JVM ----------
+        async function jvPre() {
+            const el = document.getElementById('jv-pre');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli: JVM in uso, versione, riavvio, spazio...';
+            const r = await updApi('java_preflight');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                  + '<th style="width:8rem">Esito</th><th style="width:16rem">Controllo</th><th>Dettaglio</th></tr></thead><tbody>';
+            (r.checks || []).forEach(c => {
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            if (r.gia) h += '<div class="alert alert-success py-2 mb-0">Sei gi&agrave; all&rsquo;ultima versione disponibile.</div>';
+            else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>Non avviabile.</strong> Risolvi le righe rosse.</div>';
+            else h += '<div class="alert alert-danger py-2"><strong>Questa pagina smetter&agrave; di rispondere.</strong> '
+                   + 'Non &egrave; un guasto: il pannello si sta spegnendo per aggiornare la Java su cui gira. '
+                   + 'Aspetta un paio di minuti, ricarica, e premi "Ultimo resoconto" per leggere com&rsquo;&egrave; andata.</div>'
+                   + '<button class="btn btn-danger" onclick="jvRun()"><i class="fas fa-power-off me-1"></i>Aggiorna la JVM e riavvia il pannello</button>';
+            el.innerHTML = h;
+        }
+
+        async function jvRun() {
+            if (prompt('Conferma: scrivi AGGIORNA JAVA per procedere. Il pannello si spegnera.') !== 'AGGIORNA JAVA') return;
+            const el = document.getElementById('jv-pre');
+            const r = await updApi('java_update', { confirm: 'AGGIORNA JAVA' });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<div class="alert alert-warning mb-0"><strong>Avviato.</strong> Il pannello si sta spegnendo. '
+                + updEsc(r.nota || '') + '<br>Il resoconto viene scritto in <code>' + updEsc(r.log || '') + '</code>: '
+                + 'quando la pagina torna a rispondere, premi "Ultimo resoconto".</div>';
+        }
+
+        async function jvStato() {
+            const pre = document.getElementById('jv-log');
+            pre.style.display = 'block';
+            pre.textContent = 'Lettura...';
+            const r = await updApi('java_status');
+            if (!r.success) { pre.textContent = r.error || 'errore'; return; }
+            if (!r.presente) { pre.textContent = 'Da qui non e mai stato eseguito nessun aggiornamento della JVM.'; return; }
+            pre.textContent = r.testo + (r.finito ? '' : '\\n\\n(ancora in corso: ricarica fra poco)');
+        }
+
+        // ---------- aggiornamento Roundcube ----------
+        async function rcPre() {
+            const el = document.getElementById('rc-pre');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli: pacchetto, PHP, schema, database...';
+            const r = await updApi('roundcube_preflight');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                  + '<th style="width:8rem">Esito</th><th style="width:16rem">Controllo</th><th>Dettaglio</th></tr></thead><tbody>';
+            (r.checks || []).forEach(c => {
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            if (r.blocked) {
+                h += '<div class="alert alert-danger py-2 mb-0"><strong>Non avviabile.</strong> Risolvi le righe rosse.</div>';
+            } else {
+                h += '<div class="alert alert-warning py-2">La webmail rester&agrave; irraggiungibile per qualche '
+                   + 'minuto. La copia del database viene presa prima di toccare qualsiasi cosa.</div>'
+                   + '<button class="btn btn-danger" onclick="rcRun()"><i class="fas fa-play me-1"></i>Aggiorna Roundcube</button>';
+            }
+            el.innerHTML = h;
+        }
+
+        async function rcRun() {
+            if (prompt('Conferma: scrivi AGGIORNA ROUNDCUBE per procedere.') !== 'AGGIORNA ROUNDCUBE') return;
+            const el = document.getElementById('rc-pre');
+            const pre = document.getElementById('rc-log');
+            const r = await updApi('roundcube_update', { confirm: 'AGGIORNA ROUNDCUBE' });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Aggiornamento in corso: non chiudere la pagina.</span>';
+            pre.style.display = 'block';
+            planPoll(r.jobId, el, pre);
         }
 
         // ---------- migrazione MySQL 8.4: solo verifica ----------

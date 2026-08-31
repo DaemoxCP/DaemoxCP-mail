@@ -248,7 +248,8 @@ public final class UpdateManager {
          + "rigenerare la configurazione dal pannello non la rimetterebbe in piedi. Prima va adeguato il "
          + "generatore di configurazione, poi il pacchetto."},
         {"^roundcube.*", "attendi",
-         "Un cambio di versione maggiore di Roundcube richiede l'aggiornamento dello schema del database "
+         "NON aggiornarlo da qui: usa la scheda \"Aggiornamento Roundcube\", che fa anche lo schema. "
+         + "Un cambio di versione maggiore di Roundcube richiede l'aggiornamento dello schema del database "
          + "(bin/updatedb.sh): finche' non lo esegui la webmail resta inutilizzabile. Inoltre il pacchetto e' "
          + "legato alla versione di PHP (roundcube-phpNN): cambiare PHP significa cambiare anche questo."},
         {"^php[0-9]+.*", "attendi",
@@ -1885,6 +1886,1261 @@ public final class UpdateManager {
         }
     }
 
+    // ===================== aggiornamento guidato di Roundcube =====================
+
+    private static final String RC_DIR = "/usr/local/www/roundcube";
+
+    /**
+     * Credenziali del database della webmail, lette da config.inc.php.
+     *
+     * Non si indovinano: nel pannello compaiono due utenti diversi per lo stesso database
+     * (mailpanel in un punto, roundcube in un altro), e quello autorevole e' cio' che
+     * Roundcube usa davvero, cioe' il DSN nella sua configurazione. La lettura si fa in Java
+     * e non con una catena di grep e sed: niente da proteggere in una shell, e la password
+     * non passa mai da una riga di comando.
+     */
+    static JSONObject dsnRoundcube() {
+        JSONObject r = new JSONObject().put("ok", false);
+        try {
+            java.nio.file.Path f = Paths.get(RC_DIR + "/config/config.inc.php");
+            if (!Files.exists(f)) return r.put("errore", "config.inc.php non trovato in " + RC_DIR + "/config");
+            Pattern pat = Pattern.compile("db_dsnw'?\\]?\\s*=\\s*['\"]([a-z]+)://([^:]+):([^@]*)@([^/]+)/([A-Za-z0-9_]+)");
+            // Riga per riga, non su tutto il testo, per due motivi che una ricerca globale
+            // sbaglia entrambi: le righe COMMENTATE non contano — un DSN vecchio lasciato li'
+            // farebbe fare copia e aggiornamento dello schema sul database sbagliato — e in PHP
+            // vince l'ULTIMA assegnazione, non la prima, perche' i file di configurazione
+            // spesso impostano un valore e poi lo sovrascrivono.
+            JSONObject ultimo = null;
+            for (String riga : Files.readAllLines(f)) {
+                String t = riga.trim();
+                if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) continue;
+                Matcher m = pat.matcher(t);
+                if (m.find()) {
+                    ultimo = new JSONObject().put("ok", true).put("driver", m.group(1)).put("user", m.group(2))
+                            .put("pass", m.group(3)).put("host", m.group(4)).put("db", m.group(5));
+                }
+            }
+            if (ultimo == null) return r.put("errore", "nessun db_dsnw attivo riconoscibile in config.inc.php");
+            return ultimo;
+        } catch (Exception e) {
+            return r.put("errore", e.getMessage());
+        }
+    }
+
+    /** Query sul database della webmail, con le credenziali che usa Roundcube stesso. */
+    private static String rcQuery(String sql) {
+        JSONObject d = dsnRoundcube();
+        if (!d.optBoolean("ok")) return "";
+        String u = d.getString("user"), h = d.getString("host"), db = d.getString("db");
+        if (!u.matches("[A-Za-z0-9_]{1,64}") || !db.matches("[A-Za-z0-9_]{1,64}")
+                || !h.matches("[A-Za-z0-9._:-]{1,128}")) return "";
+        String host = h.contains(":") ? h.substring(0, h.indexOf(':')) : h;
+        String q = sql.replace("\"", "");
+        try {
+            ProcessBuilder pb = new ProcessBuilder("sh", "-c",
+                    "mysql -u " + u + " -h " + host + " -N -B " + db + " -e \"" + q + "\" 2>/dev/null");
+            pb.environment().put("MYSQL_PWD", d.getString("pass"));
+            Process pr = pb.start();
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(pr.getInputStream(), StandardCharsets.UTF_8))) {
+                String l; while ((l = br.readLine()) != null) sb.append(l).append('\n');
+            }
+            pr.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            return sb.toString().trim();
+        } catch (Exception e) { return ""; }
+    }
+
+    /**
+     * Controlli preliminari per il salto di versione maggiore di Roundcube. Sola lettura.
+     *
+     * Il punto delicato non e' il pacchetto ma lo SCHEMA del database: la 1.7 lo cambia, e
+     * finche' non si esegue bin/updatedb.sh la webmail non funziona. E l'aggiornamento dello
+     * schema non si annulla, quindi serve una copia del database presa prima.
+     */
+    /**
+     * Le righe "root ...roundcube" nelle configurazioni di nginx, con la posizione esatta.
+     *
+     * Dalla 1.7 Roundcube pretende che il server web punti alla sottocartella public_html:
+     * tutto il resto dell'installazione smette di essere servibile, ed e' voluto — e' una
+     * protezione. Ma su questo server nginx punta alla radice dell'applicazione (il pannello
+     * stesso la scrive cosi' in cinque punti), quindi dopo l'aggiornamento la webmail
+     * smetterebbe di funzionare. Va trovato PRIMA, non scoperto dopo.
+     */
+    private static JSONArray radiciNginxRoundcube() {
+        JSONArray fuori = new JSONArray();
+        String out = sh("grep -rn '^[[:space:]]*root[[:space:]].*roundcube' "
+                + "/usr/local/etc/nginx/ 2>/dev/null", 60);
+        for (String riga : out.split("\n")) {
+            Matcher m = Pattern.compile("^([^:]+):([0-9]+):\\s*root\\s+([^;]+);").matcher(riga.trim());
+            if (!m.find()) continue;
+            String percorso = m.group(3).trim();
+            fuori.put(new JSONObject().put("file", m.group(1)).put("riga", Integer.parseInt(m.group(2)))
+                    .put("root", percorso)
+                    .put("gia", percorso.endsWith("/public_html") || percorso.endsWith("/public_html/")));
+        }
+        return fuori;
+    }
+
+    /** Vero se la versione e' 1.7 o successiva, cioe' se pretende la radice public_html. */
+    static boolean vuolePublicHtml(String versione) {
+        Matcher m = Pattern.compile("^([0-9]+)\\.([0-9]+)").matcher(versione == null ? "" : versione);
+        if (!m.find()) return false;
+        int ma = Integer.parseInt(m.group(1)), mi = Integer.parseInt(m.group(2));
+        return ma > 1 || (ma == 1 && mi >= 7);
+    }
+
+    public static JSONObject roundcubePreflight() {
+        JSONObject r = new JSONObject();
+        JSONArray checks = new JSONArray();
+        boolean block = false;
+
+        String pkg = sh("pkg query %n 2>/dev/null | grep -E '^roundcube' | head -1", 20);
+        String ver = pkg.isEmpty() ? "" : sh("pkg query %v " + pkg, 20);
+        String disp = pkg.isEmpty() ? "" : sh("pkg rquery %v " + pkg, 30);
+        r.put("pkg", pkg).put("current", ver).put("available", disp);
+        if (pkg.isEmpty()) {
+            aggiungiCheck(checks, "pkg", "Roundcube installato", "block", "Nessun pacchetto roundcube installato.");
+            block = true;
+        } else if (disp.isEmpty() || disp.equals(ver)) {
+            aggiungiCheck(checks, "pkg", "Roundcube installato", "block",
+                    pkg + " " + ver + ": il repository non offre una versione piu' recente.");
+            block = true;
+        } else {
+            aggiungiCheck(checks, "pkg", "Roundcube installato", "ok", pkg + " " + ver + " -> " + disp);
+        }
+
+        // La famiglia PHP richiesta dalla versione nuova deve essere quella installata.
+        String phpInst = sh("pkg query %n 2>/dev/null | grep -E '^php[0-9]+$' | head -1", 20);
+        Matcher mp = Pattern.compile("roundcube-php([0-9]+)").matcher(pkg);
+        String phpRc = mp.find() ? "php" + mp.group(1) : "";
+        boolean phpOk = phpRc.isEmpty() || phpRc.equals(phpInst);
+        aggiungiCheck(checks, "php", "Versione di PHP", phpOk ? "ok" : "block",
+                phpOk ? "Roundcube e' compilato per " + (phpRc.isEmpty() ? phpInst : phpRc)
+                        + ", che e' quello installato."
+                      : "Roundcube e' per " + phpRc + " ma il PHP installato e' " + phpInst
+                        + ": vanno allineati prima.");
+        if (!phpOk) block = true;
+
+        // Lo script che aggiorna lo schema: senza, il passo non si puo' completare.
+        boolean updatedb = ok("test -x " + RC_DIR + "/bin/updatedb.sh", 15)
+                        || ok("test -f " + RC_DIR + "/bin/updatedb.sh", 15);
+        aggiungiCheck(checks, "updatedb", "Script di aggiornamento schema", updatedb ? "ok" : "block",
+                updatedb ? RC_DIR + "/bin/updatedb.sh presente."
+                         : "Manca " + RC_DIR + "/bin/updatedb.sh: senza, lo schema del database non si aggiorna "
+                           + "e la webmail resterebbe inutilizzabile dopo l'aggiornamento del pacchetto.");
+        if (!updatedb) block = true;
+
+        // Credenziali e stato del database, letti dalla configurazione di Roundcube.
+        JSONObject dsn = dsnRoundcube();
+        long tabelle = 0;
+        if (!dsn.optBoolean("ok")) {
+            aggiungiCheck(checks, "dsn", "Database della webmail", "block",
+                    "Non riesco a leggere le credenziali dal config.inc.php: " + dsn.optString("errore", "")
+                    + ". Senza, non posso ne' fare la copia ne' aggiornare lo schema.");
+            block = true;
+        } else {
+            tabelle = numero(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
+                    + dsn.getString("db") + "';"));
+            r.put("db", dsn.getString("db")).put("dbUser", dsn.getString("user")).put("tables", tabelle);
+            if (tabelle == 0) {
+                aggiungiCheck(checks, "dsn", "Database della webmail", "block",
+                        "Il database " + dsn.getString("db") + " non risponde o non ha tabelle con le "
+                        + "credenziali di Roundcube: non procedo alla cieca.");
+                block = true;
+            } else {
+                aggiungiCheck(checks, "dsn", "Database della webmail", "ok",
+                        dsn.getString("db") + " raggiungibile come utente " + dsn.getString("user")
+                        + ", " + tabelle + " tabelle. A fine aggiornamento il pannello riconta.");
+            }
+        }
+
+        aggiungiCheck(checks, "copia", "Copia del database", "verifica",
+                "Prima di toccare qualsiasi cosa viene fatta una copia completa di "
+                + (dsn.optBoolean("ok") ? dsn.getString("db") : "roundcubemail")
+                + " e del config.inc.php. L'aggiornamento dello schema non si annulla: la copia e' l'unica via di ritorno.");
+
+        aggiungiCheck(checks, "opcache", "Cache del codice PHP", "verifica",
+                "Dopo l'aggiornamento php-fpm viene riavviato: con OPcache attivo continuerebbe a servire il "
+                + "codice vecchio gia' compilato in memoria, e la webmail sembrerebbe non aggiornata.");
+
+        // Radice di nginx: dalla 1.7 deve puntare a public_html, altrimenti la webmail
+        // smette di funzionare subito dopo l'aggiornamento.
+        JSONArray radici = radiciNginxRoundcube();
+        // La domanda giusta non e' "sto passando alla 1.7?" ma "la versione che avro' pretende
+        // public_html, e nginx ci punta?". Un server GIA' sulla 1.7 con la radice vecchia ha la
+        // webmail gia' guasta adesso: chiedendo solo del passaggio non me ne accorgerei, e
+        // direi "non va toccata" proprio nel caso in cui va toccata subito.
+        java.util.List<String> daSpostare = new ArrayList<>();
+        for (int i = 0; i < radici.length(); i++) {
+            JSONObject x = radici.getJSONObject(i);
+            if (!x.getBoolean("gia"))
+                daSpostare.add(x.getString("file") + ":" + x.getInt("riga") + " -> " + x.getString("root") + "/public_html");
+        }
+        boolean pretende = vuolePublicHtml(disp);
+        boolean gia17 = vuolePublicHtml(ver);
+        boolean serve = pretende && !daSpostare.isEmpty();
+        r.put("radici", radici).put("cambioRadice", serve);
+        if (!pretende) {
+            aggiungiCheck(checks, "root", "Radice del server web", "ok",
+                    "la versione di arrivo (" + disp + ") non richiede la radice public_html");
+        } else if (radici.length() == 0) {
+            aggiungiCheck(checks, "root", "Radice del server web", "block",
+                    "la " + disp + " pretende che nginx punti a .../public_html, ma in "
+                    + "/usr/local/etc/nginx/ non trovo nessuna riga \"root\" che nomini roundcube: "
+                    + "non so quale configurazione serve la webmail, quindi non posso ne' correggerla "
+                    + "ne' garantire che resti funzionante. Dimmi dove sta e la aggiungo.");
+            block = true;
+        } else if (daSpostare.isEmpty()) {
+            aggiungiCheck(checks, "root", "Radice del server web", "ok",
+                    "nginx punta gia' a public_html: niente da cambiare");
+        } else {
+            aggiungiCheck(checks, "root", "Radice del server web", "attendi",
+                    (gia17
+                     ? "ATTENZIONE: sei GIA' sulla " + ver + ", che pretende la radice public_html, ma nginx "
+                       + "punta ancora alla radice dell'applicazione. Se la webmail non risponde, e' questo. "
+                     : "la " + disp + " pretende che nginx punti a .../public_html, altrimenti la webmail "
+                       + "smette di funzionare. ")
+                    + "La procedura corregge " + daSpostare.size() + " riga/e, controlla la configurazione "
+                    + "con \"nginx -t\" PRIMA di ricaricare e, se nginx la rifiuta, rimette quella di "
+                    + "prima: " + String.join(" ; ", daSpostare));
+        }
+
+        r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
+        return r;
+    }
+
+    /**
+     * Sposta la radice di nginx su public_html, come pretende Roundcube dalla 1.7.
+     *
+     * Riscrittura riga per riga e riscrittura atomica del file: niente sed, che su BSD si
+     * comporta diversamente da come si e' abituati e ha gia' scritto una "n" letterale al
+     * posto di un a capo in questo stesso progetto.
+     */
+    private static boolean spostaRadiceNginx(Job job, String backupDir) {
+        JSONArray radici = radiciNginxRoundcube();
+        java.util.List<String> toccati = new ArrayList<>();
+        try {
+            for (int i = 0; i < radici.length(); i++) {
+                JSONObject x = radici.getJSONObject(i);
+                if (x.getBoolean("gia")) continue;
+                String file = x.getString("file"), root = x.getString("root");
+                if (!ok("test -f " + file, 10)) continue;
+                if (!ok("test -d " + root + "/public_html", 10)) {
+                    job.scrivi("    " + root + "/public_html non esiste: NON tocco " + file);
+                    return false;
+                }
+                String nome = file.replaceAll(".*/", "");
+                ok("cp -p " + file + " " + backupDir + "/nginx-" + nome, 30);
+                java.util.List<String> righe = Files.readAllLines(Paths.get(file));
+                int n = x.getInt("riga") - 1;
+                if (n < 0 || n >= righe.size()) { job.scrivi("    " + file + ": riga " + (n + 1) + " non c'e' piu'"); return false; }
+                String vecchia = righe.get(n);
+                if (!vecchia.contains(root)) { job.scrivi("    " + file + ":" + (n + 1) + " non contiene piu' " + root); return false; }
+                righe.set(n, vecchia.replace(root + ";", root + "/public_html;"));
+                Files.write(Paths.get(file), righe);
+                toccati.add(file);
+                job.scrivi("    " + file + ":" + (n + 1) + "  root -> " + root + "/public_html");
+            }
+            if (toccati.isEmpty()) { job.scrivi("    nessuna riga da cambiare"); return true; }
+
+            // Prima di ricaricare: nginx accetta questa configurazione?
+            String prova = sh("nginx -t 2>&1", 60);
+            boolean buona = prova.toLowerCase().contains("syntax is ok") && prova.toLowerCase().contains("test is successful");
+            if (!buona) {
+                for (String l : prova.split("\n")) if (!l.trim().isEmpty()) job.scrivi("      " + l);
+                for (String f : toccati) {
+                    String nome = f.replaceAll(".*/", "");
+                    ok("cp -p " + backupDir + "/nginx-" + nome + " " + f, 30);
+                }
+                job.scrivi("    nginx ha rifiutato la configurazione: rimessa quella di prima, non ricarico");
+                return false;
+            }
+            job.scrivi("    nginx accetta la configurazione");
+            String svc = nomeServizioReale("nginx");
+            if (svc == null) { job.scrivi("    nginx non risulta fra i servizi: ricaricalo tu"); return false; }
+            boolean ric = ok("service " + svc + " reload", 60);
+            job.scrivi("    ricaricato: " + (ric ? "si" : "NO"));
+            return ric;
+        } catch (Exception e) {
+            job.scrivi("    errore nello spostamento della radice: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** Copia del database della webmail. Il marcatore finale di mysqldump prova che e' completa. */
+    private static boolean rcDump(String destinazione) {
+        JSONObject d = dsnRoundcube();
+        if (!d.optBoolean("ok")) return false;
+        String u = d.getString("user"), db = d.getString("db");
+        String h = d.getString("host");
+        String host = h.contains(":") ? h.substring(0, h.indexOf(':')) : h;
+        if (!u.matches("[A-Za-z0-9_]{1,64}") || !db.matches("[A-Za-z0-9_]{1,64}")
+                || !host.matches("[A-Za-z0-9._-]{1,128}")) return false;
+        try {
+            ProcessBuilder pb = new ProcessBuilder("sh", "-c",
+                    "mysqldump --single-transaction --routines --triggers -u " + u + " -h " + host
+                    + " " + db + " > " + destinazione + " 2>/dev/null");
+            pb.environment().put("MYSQL_PWD", d.getString("pass"));
+            Process pr = pb.start();
+            if (!pr.waitFor(1800, java.util.concurrent.TimeUnit.SECONDS)) { pr.destroyForcibly(); return false; }
+            if (pr.exitValue() != 0) return false;
+            // mysqldump chiude con "Dump completed": senza quella riga il file e' troncato,
+            // e un file troncato che sembra un backup e' peggio di nessun backup.
+            return ok("tail -3 " + destinazione + " | grep -q 'Dump completed'", 60);
+        } catch (Exception e) { return false; }
+    }
+
+    public static JSONObject avviaAggiornamentoRoundcube() {
+        String id = "rc-" + System.currentTimeMillis();
+        Job j = new Job(id, "roundcube");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> runAggiornamentoRoundcube(j), "roundcube-update");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    /**
+     * Salto di versione maggiore di Roundcube.
+     *
+     * Il pacchetto e' la parte facile. La parte che rompe e' lo SCHEMA del database: la 1.7 lo
+     * cambia, e finche' non si esegue bin/updatedb.sh la webmail non funziona. E quel cambio
+     * non si annulla, quindi la copia del database viene prima di tutto.
+     * L'altra insidia e' OPcache: aggiornati i file PHP, php-fpm continuerebbe a servire il
+     * codice vecchio gia' compilato in memoria — aggiornato sul disco, non in servizio.
+     */
+    private static void runAggiornamentoRoundcube(Job job) {
+        job.status = "running";
+        final int TOT = 8;
+        boolean sbloccato = false;
+        String pkg = "", backupDir = "";
+        try {
+            job.avanza(1, TOT);
+            job.scrivi("=== Aggiornamento di Roundcube ===");
+            job.scrivi("");
+            job.scrivi("[1/" + TOT + "] Controlli preliminari...");
+            JSONObject pf = roundcubePreflight();
+            if (!pf.optBoolean("canProceed", false)) {
+                job.status = "error";
+                job.errorMessage = "I controlli preliminari hanno trovato un impedimento.";
+                JSONArray ck = pf.optJSONArray("checks");
+                for (int i = 0; ck != null && i < ck.length(); i++) {
+                    JSONObject c = ck.getJSONObject(i);
+                    if (!"ok".equals(c.optString("level")))
+                        job.scrivi("  [" + c.optString("level").toUpperCase() + "] " + c.optString("label")
+                                + ": " + c.optString("detail"));
+                }
+                job.scrivi("RIFIUTO DI PARTIRE.");
+                return;
+            }
+            pkg = pf.optString("pkg", "");
+            long tabellePrima = pf.optLong("tables", 0);
+            job.scrivi("  " + pkg + " " + pf.optString("current") + " -> " + pf.optString("available"));
+            job.scrivi("  database " + pf.optString("db") + ", " + tabellePrima + " tabelle");
+
+            job.avanza(2, TOT);
+            job.scrivi("");
+            job.scrivi("[2/" + TOT + "] Copia del database e della configurazione...");
+            String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
+            if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("data non valida");
+            backupDir = "/var/db/mailpanel/roundcube/" + ts;
+            if (!ok("mkdir -p " + backupDir, 30)) throw new IllegalStateException("non riesco a creare " + backupDir);
+            ok("cp -p " + RC_DIR + "/config/config.inc.php " + backupDir + "/config.inc.php", 30);
+            if (!rcDump(backupDir + "/roundcube.sql")) {
+                throw new IllegalStateException("la copia del database non e' riuscita o risulta troncata: "
+                        + "non procedo senza via di ritorno");
+            }
+            job.scrivi("    copia verificata: " + backupDir + "/roundcube.sql ("
+                    + numero(sh("wc -c < " + backupDir + "/roundcube.sql", 30)) / 1024 + " KB)");
+            job.scrivi("    config.inc.php salvato");
+
+            job.avanza(3, TOT);
+            job.scrivi("");
+            job.scrivi("[3/" + TOT + "] Aggiorno il pacchetto...");
+            if (bloccato(sh("pkg lock -l 2>/dev/null"), pkg)) {
+                scriviStato(java.util.List.of(pkg));
+                sbloccato = ok("pkg unlock -y " + pkg, 30);
+                job.scrivi("    sbloccato temporaneamente");
+            }
+            String sim = sh("pkg upgrade -n " + pkg + " 2>&1", 300);
+            if (sim.toLowerCase().contains("conflicts with")) {
+                for (String l : sim.split("\n")) if (l.toLowerCase().contains("conflict")) job.scrivi("      " + l.trim());
+                throw new IllegalStateException("l'aggiornamento sovrascriverebbe file di un altro pacchetto: mi fermo.");
+            }
+            StringBuilder cat = new StringBuilder();
+            int code = eseguiConLog(job, "pkg upgrade -y " + pkg + " 2>&1", 1800, cat);
+            if (code != 0) throw new IllegalStateException("pkg upgrade uscito con codice " + code);
+            for (String m : messaggiCheChiedonoAzione(cat.toString())) {
+                job.scrivi("    IL PACCHETTO CHIEDE: " + m.replace("\n", " | "));
+            }
+
+            job.avanza(4, TOT);
+            job.scrivi("");
+            job.scrivi("[4/" + TOT + "] Configurazione...");
+            // Il pacchetto puo' aver messo un config di esempio al posto del tuo.
+            JSONObject dsnDopo = dsnRoundcube();
+            if (!dsnDopo.optBoolean("ok")) {
+                ok("cp -p " + backupDir + "/config.inc.php " + RC_DIR + "/config/config.inc.php", 30);
+                job.scrivi("    config.inc.php ripristinato dalla copia (il pacchetto lo aveva sostituito)");
+            } else job.scrivi("    config.inc.php intatto");
+
+            job.avanza(5, TOT);
+            job.scrivi("");
+            job.scrivi("[5/" + TOT + "] Aggiorno lo schema del database...");
+            String out = sh("cd " + RC_DIR + " && php bin/updatedb.sh --package=roundcube --dir=SQL 2>&1", 900);
+            for (String l : out.split("\n")) if (!l.trim().isEmpty()) job.scrivi("      " + l);
+            String ol = out.toLowerCase();
+            if (ol.contains("error") || ol.contains("fatal") || ol.contains("failed")) {
+                throw new IllegalStateException("updatedb.sh ha segnalato un errore: la copia del database e' in "
+                        + backupDir + "/roundcube.sql");
+            }
+
+            job.avanza(6, TOT);
+            job.scrivi("");
+            job.scrivi("[6/" + TOT + "] Radice del server web...");
+            boolean radiceOk = true;
+            if (pf.optBoolean("cambioRadice", false)) {
+                radiceOk = spostaRadiceNginx(job, backupDir);
+                if (!radiceOk) job.scrivi("    ATTENZIONE: la webmail non sara' raggiungibile finche' "
+                        + "nginx non punta a .../public_html. Le copie sono in " + backupDir + ".");
+            } else job.scrivi("    non serve cambiarla per questa versione");
+
+            job.avanza(7, TOT);
+            job.scrivi("");
+            job.scrivi("[7/" + TOT + "] Riavvio php-fpm per svuotare OPcache...");
+            String svc = nomeServizioReale("php_fpm");
+            if (svc != null) {
+                ok("service " + svc + " restart", 120);
+                job.scrivi("    " + svc + ": " + (ok("service " + svc + " status", 20) ? "attivo" : "NON attivo"));
+            } else job.scrivi("    php-fpm non trovato fra i servizi");
+
+            job.avanza(8, TOT);
+            job.scrivi("");
+            job.scrivi("[8/" + TOT + "] Verifica...");
+            long tabelleDopo = numero(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
+                    + pf.optString("db") + "';"));
+            job.scrivi("    tabelle: " + tabellePrima + " prima, " + tabelleDopo + " adesso");
+            boolean tabOk = tabelleDopo >= tabellePrima;
+            if (!tabOk) job.scrivi("    ALLARME: ci sono meno tabelle di prima.");
+
+            // La webmail risponde davvero? Non basta che i file siano aggiornati.
+            String dominio = "";
+            try { dominio = org.mail_panel.Main.dbManager.getRoundcubeDomain(); } catch (Exception ignored) {}
+            boolean webOk = true;
+            if (dominio != null && dominio.matches("[A-Za-z0-9.-]{1,255}")) {
+                String cod = sh("curl -sk -o /dev/null -m 20 -w '%{http_code}' https://" + dominio + "/ 2>/dev/null", 60).trim();
+                webOk = cod.startsWith("2") || cod.startsWith("3");
+                job.scrivi("    la webmail su https://" + dominio + " risponde: " + cod
+                        + (webOk ? "" : "  <- non e' una risposta valida"));
+            } else job.scrivi("    dominio della webmail non configurato: prova via web saltata");
+
+            if (tabOk && webOk && radiceOk) {
+                job.status = "completed";
+                job.scrivi("");
+                job.scrivi("=== Roundcube aggiornato e in servizio ===");
+                job.scrivi("La copia del database resta in " + backupDir + ".");
+                job.scrivi("Entra nella webmail e verifica di vedere i tuoi messaggi prima di eliminarla.");
+            } else {
+                job.status = "error";
+                job.errorMessage = "Aggiornamento eseguito ma la verifica finale non torna: la copia e' in " + backupDir;
+            }
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = e.getMessage();
+            job.scrivi("ERRORE: " + e.getMessage());
+        } finally {
+            if (sbloccato && !pkg.isEmpty()) {
+                boolean r = ok("pkg info -e " + pkg, 15) && ok("pkg lock -y " + pkg, 30);
+                job.scrivi("");
+                job.scrivi("Riprotezione di " + pkg + ": " + (r ? "fatta" : "FALLITA"));
+                if (r) pulisciStato();
+            }
+            job.fine = System.currentTimeMillis();
+        }
+    }
+
+    // ===================== aggiornamento della JVM del pannello =====================
+
+    private static final String JDK_DIR = "/var/db/mailpanel/jdk";
+
+    /**
+     * La riga di comando che riavvia QUESTO pannello, ricostruita dal processo vivo.
+     *
+     * Non si legge da uno script sul disco: quello potrebbe essere vecchio, assente, o non
+     * essere quello con cui il pannello e' stato davvero acceso. Si prende la java in uso,
+     * le opzioni con cui questa macchina virtuale e' partita e il file jar da cui questa
+     * classe e' stata caricata. Se il pannello e' stato avviato con "java -jar x.jar" e basta,
+     * la riga ricostruita e' altrettanto spoglia — ed e' giusto cosi': si riparte come si era.
+     */
+    public static String comandoAvvio(boolean soloWeb) {
+        StringBuilder c = new StringBuilder(System.getProperty("java.home", "") + "/bin/java");
+        for (String a : java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
+            // Le opzioni di misurazione non si riportano: appartengono a chi stava osservando.
+            if (a.startsWith("-agentlib") || a.startsWith("-javaagent") || a.startsWith("-Xdebug")) continue;
+            c.append(' ').append(a);
+        }
+        String jar = percorsoJar();
+        if (!jar.isEmpty()) c.append(" -jar ").append(jar);
+        return soloWeb ? c.append(" --web").toString() : c.toString();
+    }
+
+    /** Il file jar da cui gira questo pannello, o stringa vuota se non e' un jar. */
+    public static String percorsoJar() {
+        try {
+            java.io.File f = new java.io.File(
+                    UpdateManager.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            return f.isFile() ? f.getAbsolutePath() : "";
+        } catch (Exception e) { return ""; }
+    }
+
+    /**
+     * Scrive run.sh accanto al jar, se non c'e' gia'.
+     *
+     * Non e' un file da distribuire: e' una comodita' che il pannello si crea da solo, e per
+     * questo rispecchia l'avvio VERO invece di una riga scritta a mano mesi fa. Se esiste gia'
+     * non lo tocca: potrebbe essere stato adattato, e sovrascriverlo cancellerebbe l'adattamento
+     * senza dire niente.
+     */
+    public static String creaRunSh() {
+        try {
+            String jar = percorsoJar();
+            if (jar.isEmpty()) return "";
+            Path f = Paths.get(jar).getParent().resolve("run.sh");
+            if (Files.exists(f)) return "";
+            Files.writeString(f, "#!/bin/sh\n"
+                + "# Creato dal pannello: rispecchia come e' stato avviato davvero.\n"
+                + "# Senza argomenti: menu a schermo (serve un terminale).\n"
+                + "# Con --web: solo il server web, senza menu e senza terminale.\n"
+                // La cartella non e' quella del jar ma quella da cui il pannello e' PARTITO:
+                // "./database" e "./install_scripts" sono relativi a quella. Nel caso normale
+                // coincidono, ma se non coincidessero un run.sh che entra nella cartella del jar
+                // farebbe nascere un secondo database vuoto accanto al primo, senza dire niente.
+                + "cd '" + System.getProperty("user.dir", ".") + "' || exit 1\n"
+                + "exec " + comandoAvvio(false) + " \"$@\"\n");
+            ok("chmod 700 " + f, 15);
+            return "Creato " + f + " (avvio col menu, oppure ./run.sh --web per il solo server web).";
+        } catch (Exception e) { return ""; }
+    }
+
+    /**
+     * Come si rilancia il pannello dopo averlo fermato.
+     *
+     * Non si indovina: si ricostruisce la riga di comando di QUESTO processo — stessa java,
+     * stesse opzioni della macchina virtuale, stesso file jar — e le si aggiunge --web.
+     *
+     * Il --web e' la chiave di tutto. Il pannello ha un'interfaccia a schermo che pretende un
+     * terminale, e uno script staccato non ne ha uno: rilanciarlo normalmente lo farebbe morire
+     * un istante dopo, lasciando il pannello web spento. In modalita' solo-web il terminale non
+     * serve, quindi il ritorno e' certo. Si perde il MENU a schermo, non il pannello: per
+     * riaverlo basta fermare il processo e riavviarlo da SSH senza --web.
+     */
+    private static JSONObject strategiaRiavvio() {
+        String dir = System.getProperty("user.dir", "");
+        String binJava = System.getProperty("java.home", "") + "/bin/java";
+        String jar = "";
+        try {
+            java.net.URL u = UpdateManager.class.getProtectionDomain().getCodeSource().getLocation();
+            java.io.File f = new java.io.File(u.toURI());
+            if (f.isFile()) jar = f.getAbsolutePath();
+        } catch (Exception ignored) { }
+
+        String comando = comandoAvvio(true);
+
+        return new JSONObject()
+                .put("dir", dir)
+                .put("comandoMenu", comandoAvvio(false))
+                .put("jar", jar)
+                .put("comando", comando)
+                .put("riga", "/usr/sbin/daemon -f -- /bin/sh -c \"cd '" + dir + "' && exec " + comando + "\"")
+                .put("nota", jar.isEmpty()
+                        ? "non riesco a stabilire da quale file jar sto girando: senza quello non "
+                          + "posso ricostruire il comando di riavvio"
+                        : "il pannello riparte in modalita' solo-web, cioe' senza il menu a schermo: "
+                          + "l'interfaccia web torna esattamente com'e' adesso. Per riavere anche il "
+                          + "menu, quando vuoi, fermalo da SSH e rilancialo senza --web:  "
+                          + comandoAvvio(false))
+                .put("ok", !jar.isEmpty());
+    }
+
+    /**
+     * La porta su cui il pannello sta ascoltando ADESSO, chiesta al sistema operativo.
+     *
+     * Si potrebbe leggerla dalla configurazione, ma la configurazione dice cosa era stato
+     * chiesto, non cosa sta succedendo. Qui serve sapere su cosa ribussare dopo il riavvio,
+     * quindi vale solo il fatto: quale porta ha aperto questo PID. Se non si riesce a
+     * stabilirlo si torna 0, e lo script salta la verifica invece di controllare la porta
+     * sbagliata e dichiarare un guasto che non c'e'.
+     */
+    private static int portaInAscolto(long pid) {
+        for (String riga : sh("sockstat -46l 2>/dev/null").split("\n")) {
+            String[] c = riga.trim().split("\\s+");
+            if (c.length < 6 || !c[2].equals(String.valueOf(pid))) continue;
+            String indirizzo = c[5];
+            int i = Math.max(indirizzo.lastIndexOf(':'), indirizzo.lastIndexOf('.'));
+            if (i < 0) continue;
+            try {
+                int porta = Integer.parseInt(indirizzo.substring(i + 1));
+                if (porta > 0 && porta < 65536) return porta;
+            } catch (NumberFormatException ignored) { }
+        }
+        return 0;
+    }
+
+    /** Il pacchetto che possiede la JVM su cui gira QUESTO processo. Non si deduce dal nome. */
+    private static String pacchettoDellaJvm() {
+        String home = System.getProperty("java.home", "");
+        if (home.isEmpty()) return "";
+        String o = sh("pkg which -q " + home + "/bin/java 2>/dev/null").trim();
+        return o.matches("[A-Za-z0-9._+-]{1,64}") ? o : "";
+    }
+
+    /**
+     * Controlli preliminari per l'aggiornamento della JVM. Tutti in sola lettura.
+     *
+     * Questo aggiornamento e' diverso da tutti gli altri per un motivo solo: il pannello CI GIRA
+     * SOPRA. Sostituire i file della JVM sotto un processo vivo rompe l'avvio dei sottoprocessi
+     * (jspawnhelper smette di combaciare con la JVM in memoria), quindi da quel momento ogni
+     * comando fallirebbe e ogni stato riportato dal pannello sarebbe falso. Per questo il lavoro
+     * lo fa uno script staccato: prima il pannello si ferma, poi si aggiorna, poi si riparte.
+     */
+    public static JSONObject javaPreflight() {
+        JSONObject r = new JSONObject();
+        JSONArray checks = new JSONArray();
+        boolean blocca = false;
+        try {
+            String pkg = pacchettoDellaJvm();
+            String home = System.getProperty("java.home", "");
+            if (pkg.isEmpty()) {
+                aggiungiCheck(checks, "pkg", "JVM in uso", "block",
+                        "il java che sta eseguendo il pannello (" + home + ") non appartiene a nessun "
+                        + "pacchetto: non e' stato installato con pkg e non posso aggiornarlo io");
+                return r.put("success", true).put("checks", checks)
+                        .put("blocked", true).put("canProceed", false);
+            }
+            r.put("pkg", pkg);
+            String vIns = sh("pkg query %v " + pkg + " 2>/dev/null").trim();
+            String vRepo = sh("pkg rquery %v " + pkg + " 2>/dev/null").trim();
+            r.put("current", vIns).put("available", vRepo).put("home", home);
+            aggiungiCheck(checks, "pkg", "JVM in uso", "ok",
+                    pkg + " " + vIns + "  (" + home + ") — e' proprio quella che esegue il pannello");
+            if (vRepo.isEmpty()) {
+                aggiungiCheck(checks, "ver", "Versione disponibile", "block",
+                        "il repository non conosce " + pkg + ": controlla pkg update");
+                blocca = true;
+            } else if (vRepo.equals(vIns)) {
+                aggiungiCheck(checks, "ver", "Versione disponibile", "ok",
+                        "sei gia' all'ultima versione disponibile (" + vIns + "): non c'e' niente da fare");
+                return r.put("success", true).put("checks", checks)
+                        .put("blocked", false).put("canProceed", false).put("gia", true);
+            } else {
+                aggiungiCheck(checks, "ver", "Versione disponibile", "attendi",
+                        vIns + "  ->  " + vRepo + " (stesso pacchetto, quindi " + home + " non cambia posto)");
+            }
+
+            JSONObject st = strategiaRiavvio();
+            r.put("riavvio", st);
+            if (!st.optBoolean("ok")) {
+                aggiungiCheck(checks, "start", "Come il pannello verra' riacceso", "block", st.getString("nota"));
+                blocca = true;
+            } else {
+                aggiungiCheck(checks, "start", "Come il pannello verra' riacceso", "attendi", st.getString("nota"));
+                aggiungiCheck(checks, "cmd", "Comando di riavvio", "ok",
+                        "in " + st.getString("dir") + ":  " + st.getString("comando"));
+            }
+
+            if (!ok("test -x /usr/sbin/daemon", 10)) {
+                aggiungiCheck(checks, "daemon", "Distacco dello script", "block",
+                        "manca /usr/sbin/daemon: senza, lo script morirebbe insieme al pannello");
+                blocca = true;
+            } else {
+                aggiungiCheck(checks, "daemon", "Distacco dello script", "ok",
+                        "lo script viene lanciato con daemon(8), quindi sopravvive alla chiusura del pannello");
+            }
+
+            // Via di ritorno: un pacchetto ricostruito dai file INSTALLATI, non scaricato dal
+            // repository. Se il repository non ha piu' la versione vecchia, e' l'unico modo.
+            long liberi = numero(sh("df -k /var/db | tail -1 | awk '{print $4}'", 30)) / 1024;
+            long grande = numero(sh("pkg query %sb " + pkg + " 2>/dev/null", 30)) / 1024 / 1024;
+            r.put("spazioMb", liberi).put("jdkMb", grande);
+            if (grande > 0 && liberi < grande * 2) {
+                aggiungiCheck(checks, "spazio", "Spazio per la via di ritorno", "block",
+                        "servono almeno " + (grande * 2) + " MB in /var/db e ce ne sono " + liberi);
+                blocca = true;
+            } else {
+                aggiungiCheck(checks, "spazio", "Spazio per la via di ritorno", "ok",
+                        "prima di aggiornare, la JVM attuale (" + grande + " MB) viene impacchettata in "
+                        + JDK_DIR + ": se la nuova non partisse, lo script rimette quella. "
+                        + "Liberi in /var/db: " + liberi + " MB");
+            }
+
+            aggiungiCheck(checks, "down", "Interruzione", "attendi",
+                    "l'interfaccia web resta irraggiungibile per circa un minuto. La posta NON si ferma: "
+                    + "Postfix, Dovecot e Rspamd non c'entrano con la JVM e continuano a lavorare.");
+
+            r.put("success", true).put("checks", checks)
+             .put("blocked", blocca).put("canProceed", !blocca);
+            return r;
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * Prepara lo script, lo verifica e lo lancia staccato. Poi il pannello muore: da quel
+     * momento in poi l'unico testimone e' il file di log, che si rilegge alla riaccensione.
+     */
+    public static JSONObject avviaAggiornamentoJava() {
+        try {
+            JSONObject pf = javaPreflight();
+            if (!pf.optBoolean("canProceed", false))
+                return new JSONObject().put("success", false)
+                        .put("error", pf.optBoolean("gia", false)
+                                ? "Sei gia' all'ultima versione." : "I controlli preliminari non lo permettono.");
+            String pkg = pf.getString("pkg");
+            if (!nomeValido(pkg)) return new JSONObject().put("success", false).put("error", "nome pacchetto non valido");
+            JSONObject st = pf.getJSONObject("riavvio");
+            String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
+            if (!ts.matches("[0-9]{8}-[0-9]{6}"))
+                return new JSONObject().put("success", false).put("error", "data di sistema non leggibile");
+            String bk = JDK_DIR + "/" + ts;
+            String log = bk + ".log";
+            if (!ok("mkdir -p " + bk, 30))
+                return new JSONObject().put("success", false).put("error", "non riesco a creare " + bk);
+
+            long pid = ProcessHandle.current().pid();
+            int porta = portaInAscolto(pid);
+
+            String script = scriptAggiornamentoJava(pkg, pf.optString("home"), bk, log, pid,
+                    st.getString("riga"), st.getString("dir"), porta);
+            String path = bk + "/aggiorna-jdk.sh";
+            Files.writeString(Paths.get(path), script);
+            ok("chmod 700 " + path, 15);
+
+            // Uno script che non si legge non si esegue: meglio scoprirlo adesso che a pannello spento.
+            String sint = sh("sh -n " + path + " 2>&1", 30);
+            if (!sint.trim().isEmpty())
+                return new JSONObject().put("success", false)
+                        .put("error", "lo script generato non e' valido, non lo lancio: " + sint.trim());
+
+            // Il pannello segna i pacchetti sbloccati: se lo script morisse a meta', al prossimo
+            // avvio ripristinaLockDopoCrash() li riprotegge da solo.
+            scriviStato(java.util.List.of(pkg));
+            ok("/usr/sbin/daemon -f -- /bin/sh " + path, 30);
+            return new JSONObject().put("success", true).put("log", log)
+                    .put("nota", st.getString("nota"));
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /** L'ultimo resoconto lasciato dallo script, da rileggere quando il pannello e' tornato su. */
+    public static JSONObject statoAggiornamentoJava() {
+        try {
+            String ultimo = sh("ls -1t " + JDK_DIR + "/*.log 2>/dev/null | head -1").trim();
+            if (ultimo.isEmpty())
+                return new JSONObject().put("success", true).put("presente", false);
+            String testo = sh("cat " + ultimo + " 2>/dev/null", 30);
+            boolean finito = testo.contains("=== ESITO:");
+            return new JSONObject().put("success", true).put("presente", true)
+                    .put("file", ultimo).put("testo", testo).put("finito", finito)
+                    .put("riuscito", testo.contains("=== ESITO: RIUSCITO"));
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    private static String scriptAggiornamentoJava(String pkg, String home, String bk, String log,
+                                                  long pid, String rigaAvvio, String dir, int porta) {
+        return "#!/bin/sh\n"
+          + "# Generato dal pannello. Aggiorna la JVM su cui il pannello stesso gira.\n"
+          + "exec >> '" + log + "' 2>&1\n"
+          + "echo \"=== Aggiornamento JVM: $(date) ===\"\n"
+          + "PKG='" + pkg + "'\n"
+          + "BK='" + bk + "'\n"
+          + "JAVA='" + home + "/bin/java'\n"
+          + "\n"
+          + "echo '[1/6] Impacchetto la JVM attuale come via di ritorno...'\n"
+          + "if pkg create -o \"$BK\" \"$PKG\"; then\n"
+          + "  # pkg create produce .pkg sulle versioni recenti e .txz su quelle piu' vecchie:\n"
+          + "  # non lego la via di ritorno a una estensione, altrimenti sparirebbe senza motivo.\n"
+          + "  VIA=$(ls -1 \"$BK\"/${PKG}-* 2>/dev/null | head -1)\n"
+          + "  if [ -n \"$VIA\" ]; then echo \"      via di ritorno: $VIA\"; else\n"
+          + "    echo '      ERRORE: pkg create non ha prodotto nessun file. Mi fermo.'\n"
+          + "    echo '=== ESITO: ANNULLATO (nessuna via di ritorno, niente e stato toccato) ==='; exit 1; fi\n"
+          + "else\n"
+          + "  echo '      ERRORE: pkg create fallito. Mi fermo senza toccare niente.'\n"
+          + "  echo '=== ESITO: ANNULLATO (nessuna via di ritorno, niente e stato toccato) ==='; exit 1\n"
+          + "fi\n"
+          + "\n"
+          + "echo '[2/6] Fermo il pannello...'\n"
+          + "kill " + pid + " 2>/dev/null\n"
+          + "i=0\n"
+          + "while kill -0 " + pid + " 2>/dev/null; do\n"
+          + "  i=$((i+1)); [ $i -ge 45 ] && break; sleep 1\n"
+          + "done\n"
+          + "if kill -0 " + pid + " 2>/dev/null; then\n"
+          + "  echo '      non si e fermato da solo dopo 45s: lo chiudo di forza'\n"
+          + "  kill -9 " + pid + " 2>/dev/null; sleep 2\n"
+          + "fi\n"
+          + "echo '      fermo'\n"
+          + "\n"
+          + "echo '[3/6] Aggiorno il pacchetto...'\n"
+          + "pkg unlock -y \"$PKG\"\n"
+          + "if pkg upgrade -y \"$PKG\"; then ESITO_UP=0; else ESITO_UP=1; echo '      pkg upgrade FALLITO'; fi\n"
+          + "\n"
+          + "echo '[4/6] Verifico che java funzioni...'\n"
+          + "if \"$JAVA\" -version 2>&1; then\n"
+          + "  echo '      java risponde'\n"
+          + "else\n"
+          + "  echo '      java NON risponde: rimetto la versione di prima'\n"
+          + "  pkg add -f \"$VIA\" && echo '      versione precedente rimessa' || echo '      RIPRISTINO FALLITO'\n"
+          + "  \"$JAVA\" -version 2>&1 || echo '      java non risponde nemmeno adesso'\n"
+          + "fi\n"
+          + "\n"
+          + "echo '[5/6] Riproteggo il pacchetto e riaccendo il pannello...'\n"
+          + "pkg lock -y \"$PKG\" && echo '      riprotetto' || echo '      RIPROTEZIONE FALLITA'\n"
+          + "cd '" + dir + "' || echo '      ATTENZIONE: non riesco a entrare in " + dir + "'\n"
+          + rigaAvvio + "\n"
+          + "\n"
+          + "echo '[6/6] Attendo che il pannello risponda...'\n"
+          + "SU=1\n"
+          + (porta > 0
+             ? "j=0\n"
+             + "while [ $j -lt 90 ]; do\n"
+             + "  # -46l e non -4l: la JVM puo' aprire il socket in IPv6, e con -4l il pannello\n"
+             + "  # risulterebbe spento mentre e' su. Il grep serve a non contare la riga di intestazione.\n"
+             + "  # Il confine finale non e' la fine riga: sockstat stampa un'altra colonna dopo\n"
+             + "  # l'indirizzo locale. Con '$' non combacerebbe mai e il pannello risulterebbe\n"
+             + "  # spento anche da acceso. Il confine e' uno spazio oppure la fine riga.\n"
+             + "  if sockstat -46l -p " + porta + " 2>/dev/null | grep -qE '[:.]" + porta + "([[:space:]]|$)'; then SU=0; break; fi\n"
+             + "  j=$((j+1)); sleep 1\n"
+             + "done\n"
+             + "[ $SU -eq 0 ] && echo '      il pannello ascolta sulla porta " + porta + "' "
+             + "|| echo '      dopo 90s la porta " + porta + " non risponde ancora'\n"
+             : "echo '      porta del pannello non nota: salto questa verifica'\nSU=0\n")
+          + "\n"
+          + "if [ $ESITO_UP -eq 0 ] && [ $SU -eq 0 ]; then\n"
+          + "  echo \"=== ESITO: RIUSCITO ($(date)) ===\"\n"
+          + "  echo \"La via di ritorno resta in $BK: puoi cancellarla quando sei sicuro.\"\n"
+          + "else\n"
+          + "  echo \"=== ESITO: DA CONTROLLARE ($(date)) ===\"\n"
+          + "  echo \"upgrade=$ESITO_UP  pannello_su=$SU  via_di_ritorno=$VIA\"\n"
+          + "fi\n";
+    }
+
+    // ===================== passaggio py311 -> py312 =====================
+
+    /**
+     * Legge l'elenco di cio' che "pkg autoremove" toglierebbe.
+     *
+     * Il punto non e' contare: e' poter dire NO. autoremove ragiona su tutto il sistema, non
+     * solo su Python, e una volta lanciato non chiede altro. Quindi o l'elenco si legge per
+     * intero e si riconosce ogni nome, oppure la pulizia si salta. "leggibile" e' falso anche
+     * quando i nomi letti sono meno di quelli che pkg dichiara: vorrebbe dire che qualcosa
+     * sfugge alla lettura, ed e' proprio la riga sfuggita quella che farebbe danno.
+     */
+    static JSONObject analizzaAutoremove(String out, String prefissoAtteso) {
+        JSONObject r = new JSONObject();
+        java.util.List<String> rimossi = new ArrayList<>(), estranei = new ArrayList<>();
+        String o = out == null ? "" : out;
+        if (o.toLowerCase().contains("nothing to do")) {
+            return r.put("leggibile", true).put("quanti", 0)
+                    .put("rimossi", new JSONArray()).put("estranei", new JSONArray());
+        }
+        int dichiarati = -1;
+        java.util.regex.Matcher mn = Pattern.compile(
+                "(?i)number of packages to be removed:\\s*([0-9]+)").matcher(o);
+        if (mn.find()) dichiarati = Integer.parseInt(mn.group(1));
+
+        boolean dentro = false;
+        for (String riga : o.split("\n")) {
+            if (riga.matches("(?i).*packages to be REMOVED:\\s*")) { dentro = true; continue; }
+            if (!dentro) continue;
+            if (riga.trim().isEmpty()) { dentro = false; continue; }
+            java.util.regex.Matcher m = Pattern.compile(
+                    "^[ \\t]+([A-Za-z0-9._+-]+):[ \\t]").matcher(riga);
+            if (!m.find()) { dentro = false; continue; }
+            rimossi.add(m.group(1));
+            if (!m.group(1).startsWith(prefissoAtteso)) estranei.add(m.group(1));
+        }
+        boolean leggibile = dichiarati >= 0 && rimossi.size() == dichiarati;
+        return r.put("leggibile", leggibile)
+                .put("quanti", dichiarati < 0 ? rimossi.size() : dichiarati)
+                .put("rimossi", new JSONArray(rimossi))
+                .put("estranei", new JSONArray(estranei));
+    }
+
+
+    /** Versione predefinita di Python secondo bsd.default-versions.mk, senza il punto: "312". */
+    private static String pyPredefinito() {
+        // Una sola fonte: la stessa tabella che alimenta la scheda "Coerenza predefiniti".
+        // Se domani il predefinito dei port passa a 3.13, questa procedura lo segue da sola.
+        for (String[] riga : PREDEFINITI) {
+            if ("Python".equals(riga[0])) return riga[1].replace(".", "");
+        }
+        return "312";
+    }
+
+    /** I py3XX-* installati su richiesta (non tirati dentro come dipendenza). Sono quelli da spostare. */
+    private static java.util.List<String> pythonDaSpostare(String vecchio) {
+        java.util.List<String> l = new ArrayList<>();
+        for (String r : sh("pkg query '%n %a' 2>/dev/null").split("\n")) {
+            String[] c = r.trim().split("\\s+");
+            if (c.length != 2) continue;
+            if (c[0].startsWith("py" + vecchio + "-") && "0".equals(c[1])) l.add(c[0]);
+        }
+        java.util.Collections.sort(l);
+        return l;
+    }
+
+    /**
+     * Controlli preliminari, tutti in sola lettura.
+     *
+     * py311 e py312 non sono due versioni dello stesso pacchetto: sono pacchetti DIVERSI, quindi
+     * "pkg upgrade" non li tocchera' mai e resterebbero su un Python che prima o poi esce dal
+     * supporto. Il passaggio si fa a mano, e ha due punti dove si rompe qualcosa:
+     *  - i comandi in /usr/local/bin (certbot, fail2ban-server) appartengono a UNO dei due, quindi
+     *    collidono: vanno visti PRIMA, con una simulazione;
+     *  - "pkg autoremove" alla fine puo' portarsi via piu' del previsto, perche' ragiona su tutto
+     *    il sistema e non solo su Python. Qui si guarda l'elenco prima di eseguirlo.
+     */
+    public static JSONObject pythonPreflight() {
+        JSONObject r = new JSONObject();
+        JSONArray checks = new JSONArray();
+        boolean blocca = false;
+        try {
+            String nuovo = pyPredefinito();
+            String vecchio = null;
+            for (String r2 : sh("pkg query %n 2>/dev/null").split("\n")) {
+                java.util.regex.Matcher m = Pattern.compile("^py(3[0-9]{2})-").matcher(r2.trim());
+                if (m.find() && !m.group(1).equals(nuovo)) {
+                    if (vecchio == null || m.group(1).compareTo(vecchio) < 0) vecchio = m.group(1);
+                }
+            }
+            r.put("nuovo", nuovo);
+            if (vecchio == null) {
+                aggiungiCheck(checks, "ver", "Versione di Python", "ok",
+                        "tutti i pacchetti Python installati sono gia' py" + nuovo + ": non c'e' niente da spostare");
+                return r.put("success", true).put("checks", checks)
+                        .put("canProceed", false).put("blocked", false).put("gia", true);
+            }
+            r.put("vecchio", vecchio);
+            aggiungiCheck(checks, "ver", "Versione di Python", "attendi",
+                    "sono installati pacchetti py" + vecchio + ", il predefinito dei port e' py" + nuovo);
+
+            final String vec = vecchio;
+            java.util.List<String> leaf = pythonDaSpostare(vec);
+            long tot = sh("pkg query %n 2>/dev/null").lines().filter(x -> x.startsWith("py" + vec + "-")).count();
+            if (leaf.isEmpty()) {
+                aggiungiCheck(checks, "leaf", "Pacchetti da spostare", "block",
+                        "ci sono " + tot + " pacchetti py" + vecchio + " ma nessuno risulta installato su richiesta: "
+                        + "sono tutti dipendenze di qualcos'altro, e vanno seguite quelle");
+                blocca = true;
+            } else {
+                aggiungiCheck(checks, "leaf", "Pacchetti da spostare", "ok",
+                        String.join(", ", leaf) + "  (piu' " + (tot - leaf.size())
+                        + " dipendenze che seguiranno da sole)");
+            }
+            r.put("leaf", new JSONArray(leaf));
+
+            // Esiste il corrispondente py312 per ognuno? Senza, il passaggio lascerebbe un buco.
+            java.util.List<String> nuovi = new ArrayList<>(), mancanti = new ArrayList<>();
+            for (String v : leaf) {
+                String n = "py" + nuovo + "-" + v.substring(("py" + vecchio + "-").length());
+                if (!nomeValido(n)) continue;
+                if (sh("pkg rquery %n " + n + " 2>/dev/null").trim().isEmpty()) mancanti.add(n);
+                else nuovi.add(n);
+            }
+            r.put("nuovi", new JSONArray(nuovi));
+            if (!mancanti.isEmpty()) {
+                aggiungiCheck(checks, "repo", "Disponibilita' nel repository", "block",
+                        "non esiste il corrispondente py" + nuovo + " per: " + String.join(", ", mancanti));
+                blocca = true;
+            } else if (!nuovi.isEmpty()) {
+                aggiungiCheck(checks, "repo", "Disponibilita' nel repository", "ok",
+                        "il repository ha tutti i corrispondenti: " + String.join(", ", nuovi));
+            }
+
+            // Chi dipende dai pacchetti che sto per togliere? Se qualcuno dipende, toglierli
+            // porterebbe via anche lui: e' esattamente il caso da non scoprire a cose fatte.
+            // Attenzione all'ovvio che non e' ovvio: py311-certbot-nginx DIPENDE da py311-certbot,
+            // e si spostano insieme. Un dipendente che fa parte della stessa famiglia py<vecchio>
+            // non e' un problema, perche' sparisce e rinasce anche lui. Il problema e' solo un
+            // dipendente ESTERNO, che resterebbe senza cio' da cui dipende.
+            java.util.List<String> conDipendenti = new ArrayList<>();
+            for (String v : leaf) {
+                if (!nomeValido(v)) continue;
+                java.util.List<String> esterni = new ArrayList<>();
+                for (String d : sh("pkg query %rn " + v + " 2>/dev/null").split("\n")) {
+                    String t = d.trim();
+                    if (t.isEmpty() || t.startsWith("py" + vec + "-")) continue;
+                    esterni.add(t);
+                }
+                if (!esterni.isEmpty()) conDipendenti.add(v + " <- " + String.join(", ", esterni));
+            }
+            if (!conDipendenti.isEmpty()) {
+                aggiungiCheck(checks, "dip", "Chi dipende da questi pacchetti", "block",
+                        "rimuoverli si porterebbe dietro altro: " + String.join(" ; ", conDipendenti));
+                blocca = true;
+            } else {
+                aggiungiCheck(checks, "dip", "Chi dipende da questi pacchetti", "ok",
+                        "nessun altro pacchetto dipende da quelli da spostare: si possono togliere da soli");
+            }
+
+            // Simulazione vera: e' l'unico modo di sapere quali file collidono.
+            if (!nuovi.isEmpty()) {
+                String sim = sh("pkg install -n " + String.join(" ", nuovi) + " 2>&1", 300);
+                boolean coll = sim.toLowerCase().contains("conflicts with");
+                r.put("conflitto", coll);
+                if (coll) {
+                    java.util.List<String> righe = new ArrayList<>();
+                    for (String l2 : sim.split("\n")) if (l2.toLowerCase().contains("conflict")) righe.add(l2.trim());
+                    aggiungiCheck(checks, "sim", "Simulazione dell'installazione", "attendi",
+                            "i due gruppi si contendono gli stessi file, come previsto: "
+                            + String.join(" | ", righe) + ". La procedura toglie prima i py" + vecchio
+                            + " e poi installa, cosi' non c'e' nulla da forzare.");
+                } else {
+                    aggiungiCheck(checks, "sim", "Simulazione dell'installazione", "ok",
+                            "nessuna collisione di file: si possono installare accanto ai vecchi");
+                }
+            }
+
+            // Servizi coinvolti: quelli vanno fermati e riavviati, e verificati dopo.
+            java.util.List<String> serviziTocc = new ArrayList<>();
+            for (String v : leaf) {
+                String base = v.substring(("py" + vecchio + "-").length());
+                String svc = nomeServizioReale(base);
+                if (svc != null) serviziTocc.add(svc);
+            }
+            r.put("servizi", new JSONArray(serviziTocc));
+            aggiungiCheck(checks, "svc", "Servizi coinvolti", "ok", serviziTocc.isEmpty()
+                    ? "nessuno dei pacchetti corrisponde a un servizio attivo"
+                    : String.join(", ", serviziTocc) + ": vengono fermati prima e riavviati dopo, con verifica");
+
+            // Cosa toglierebbe autoremove. Se tocca roba che non e' py<vecchio>, non lo si esegue.
+            JSONObject an = analizzaAutoremove(sh("pkg autoremove -n 2>&1", 180), "py" + vec + "-");
+            java.util.List<String> estranei = jsonArrayToList(an.optJSONArray("estranei"));
+            r.put("autoremoveEstranei", new JSONArray(estranei));
+            if (!an.optBoolean("leggibile", false)) {
+                aggiungiCheck(checks, "auto", "Pulizia finale (pkg autoremove)", "attendi",
+                        "pkg rimuoverebbe qualcosa ma non riesco a leggerne l'elenco: la pulizia verra' SALTATA "
+                        + "invece di essere eseguita alla cieca");
+            } else {
+                aggiungiCheck(checks, "auto", "Pulizia finale (pkg autoremove)", estranei.isEmpty() ? "ok" : "attendi",
+                        estranei.isEmpty()
+                        ? (an.optInt("quanti", 0) == 0 ? "non c'e' niente di orfano da togliere"
+                           : "toglierebbe solo dipendenze py" + vec + " rimaste orfane ("
+                             + an.optInt("quanti", 0) + ")")
+                        : "toglierebbe anche pacchetti che non c'entrano con Python (" + String.join(", ", estranei)
+                          + "): la pulizia verra' SALTATA e te lo dico alla fine");
+            }
+
+            aggiungiCheck(checks, "backup", "Copia delle configurazioni", "ok",
+                    "prima di toccare i pacchetti vengono copiati /usr/local/etc/fail2ban e "
+                    + "/usr/local/etc/letsencrypt, che sono i dati che non si ricreano");
+
+            r.put("success", true).put("checks", checks)
+             .put("blocked", blocca).put("canProceed", !blocca && !nuovi.isEmpty());
+            return r;
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    public static JSONObject avviaPassaggioPython() {
+        String id = "py-" + System.currentTimeMillis();
+        Job j = new Job(id, "python");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> runPassaggioPython(j), "python-move");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    private static void runPassaggioPython(Job job) {
+        job.status = "running";
+        final int TOT = 7;
+        java.util.List<String> sbloccati = new ArrayList<>();
+        java.util.List<String> daRibloccare = new ArrayList<>();
+        try {
+            job.avanza(1, TOT);
+            job.scrivi("=== Passaggio dei pacchetti Python alla versione predefinita ===");
+            job.scrivi("");
+            job.scrivi("[1/" + TOT + "] Controlli preliminari...");
+            JSONObject pf = pythonPreflight();
+            if (!pf.optBoolean("canProceed", false)) {
+                job.status = "error";
+                job.errorMessage = pf.optBoolean("gia", false)
+                        ? "Non c'e' niente da spostare." : "I controlli preliminari hanno trovato un impedimento.";
+                JSONArray ck = pf.optJSONArray("checks");
+                for (int i = 0; ck != null && i < ck.length(); i++) {
+                    JSONObject c = ck.getJSONObject(i);
+                    if (!"ok".equals(c.optString("level")))
+                        job.scrivi("  [" + c.optString("level").toUpperCase() + "] " + c.optString("label")
+                                + ": " + c.optString("detail"));
+                }
+                job.scrivi("RIFIUTO DI PARTIRE.");
+                return;
+            }
+            String vecchio = pf.getString("vecchio"), nuovo = pf.getString("nuovo");
+            java.util.List<String> leaf = jsonArrayToList(pf.optJSONArray("leaf"));
+            java.util.List<String> nuovi = jsonArrayToList(pf.optJSONArray("nuovi"));
+            java.util.List<String> servizi = jsonArrayToList(pf.optJSONArray("servizi"));
+            job.scrivi("  py" + vecchio + " -> py" + nuovo);
+            job.scrivi("  " + String.join(", ", leaf));
+
+            job.avanza(2, TOT);
+            job.scrivi("");
+            job.scrivi("[2/" + TOT + "] Copia delle configurazioni...");
+            String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
+            if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("data non valida");
+            String bk = "/var/db/mailpanel/python/" + ts;
+            if (!ok("mkdir -p " + bk, 30)) throw new IllegalStateException("non riesco a creare " + bk);
+            sh("pkg query '%n %v' > " + bk + "/pacchetti-prima.txt 2>/dev/null", 60);
+            for (String d : new String[]{"/usr/local/etc/fail2ban", "/usr/local/etc/letsencrypt"}) {
+                if (!ok("test -d " + d, 10)) { job.scrivi("    " + d + ": non esiste, niente da copiare"); continue; }
+                String nome = d.substring(d.lastIndexOf('/') + 1);
+                if (!ok("tar -cf " + bk + "/" + nome + ".tar -C " + d + " . 2>/dev/null", 300))
+                    throw new IllegalStateException("copia di " + d + " non riuscita");
+                long n = numero(sh("tar -tf " + bk + "/" + nome + ".tar 2>/dev/null | wc -l", 60));
+                if (n < 1) throw new IllegalStateException("la copia di " + d + " risulta vuota");
+                job.scrivi("    " + d + " -> " + nome + ".tar (" + n + " voci)");
+            }
+            job.scrivi("    copie in " + bk);
+
+            job.avanza(3, TOT);
+            job.scrivi("");
+            job.scrivi("[3/" + TOT + "] Fermo i servizi coinvolti...");
+            if (servizi.isEmpty()) job.scrivi("    nessuno");
+            for (String s : servizi) {
+                boolean era = ok("service " + s + " status", 20);
+                if (era) { ok("service " + s + " stop", 120); job.scrivi("    " + s + ": fermato"); }
+                else job.scrivi("    " + s + ": era gia' fermo");
+            }
+
+            job.avanza(4, TOT);
+            job.scrivi("");
+            job.scrivi("[4/" + TOT + "] Rimuovo i py" + vecchio + " e installo i py" + nuovo + "...");
+            String elenco = sh("pkg lock -l 2>/dev/null");
+            for (String v : leaf) if (bloccato(elenco, v)) { ok("pkg unlock -y " + v, 30); sbloccati.add(v); }
+            if (!sbloccati.isEmpty()) {
+                scriviStato(sbloccati);
+                job.scrivi("    sbloccati: " + String.join(", ", sbloccati));
+            }
+            // L'ordine conta: prima togliere, poi installare. Cosi' nessun file va forzato,
+            // ed e' esattamente l'errore che ha rotto il client MySQL.
+            StringBuilder catDel = new StringBuilder();
+            int cd = eseguiConLog(job, "pkg delete -y " + String.join(" ", leaf) + " 2>&1", 900, catDel);
+            if (cd != 0) throw new IllegalStateException("pkg delete uscito con codice " + cd);
+            StringBuilder catIns = new StringBuilder();
+            int ci = eseguiConLog(job, "pkg install -y " + String.join(" ", nuovi) + " 2>&1", 1800, catIns);
+            if (ci != 0) {
+                job.scrivi("");
+                job.scrivi("L'installazione e' fallita e adesso i pacchetti NON ci sono piu'.");
+                job.scrivi("Per tornare indietro: pkg install -y " + String.join(" ", leaf));
+                throw new IllegalStateException("pkg install uscito con codice " + ci);
+            }
+            daRibloccare.addAll(nuovi);
+            for (String m : messaggiCheChiedonoAzione(catIns.toString()))
+                job.scrivi("    IL PACCHETTO CHIEDE: " + m.replace("\n", " | "));
+
+            job.avanza(5, TOT);
+            job.scrivi("");
+            job.scrivi("[5/" + TOT + "] Pulizia delle dipendenze rimaste orfane...");
+            String ar = sh("pkg autoremove -n 2>&1", 180);
+            JSONObject an = analizzaAutoremove(ar, "py" + vecchio + "-");
+            java.util.List<String> estranei = jsonArrayToList(an.optJSONArray("estranei"));
+            if (!an.optBoolean("leggibile", false)) {
+                job.scrivi("    SALTATA: pkg dice che rimuoverebbe qualcosa, ma non riesco a leggere");
+                job.scrivi("    l'elenco per controllarlo. Non eseguo una rimozione che non so descrivere.");
+                for (String l2 : ar.split("\n")) if (!l2.trim().isEmpty()) job.scrivi("      " + l2);
+            } else if (!estranei.isEmpty()) {
+                job.scrivi("    SALTATA: toglierebbe anche " + String.join(", ", estranei)
+                        + ", che non c'entrano con Python.");
+                job.scrivi("    Restano delle librerie py" + vecchio + " inutilizzate: occupano spazio, non fanno danno.");
+            } else if (an.optInt("quanti", 0) == 0) {
+                job.scrivi("    non e' rimasto niente di orfano");
+            } else {
+                job.scrivi("    da togliere: " + String.join(", ", jsonArrayToList(an.optJSONArray("rimossi"))));
+                eseguiConLog(job, "pkg autoremove -y 2>&1", 900);
+            }
+
+            job.avanza(6, TOT);
+            job.scrivi("");
+            job.scrivi("[6/" + TOT + "] Riavvio i servizi...");
+            boolean serviziOk = true;
+            for (String s : servizi) {
+                ok("service " + s + " start", 120);
+                boolean su = ok("service " + s + " status", 30);
+                job.scrivi("    " + s + ": " + (su ? "attivo" : "NON ATTIVO"));
+                if (!su) serviziOk = false;
+            }
+            if (servizi.isEmpty()) job.scrivi("    nessuno");
+
+            job.avanza(7, TOT);
+            job.scrivi("");
+            job.scrivi("[7/" + TOT + "] Verifica che i comandi funzionino davvero...");
+            // Che il pacchetto sia installato non dice che il comando parta: e' la lezione
+            // del client MySQL, dove tutto risultava a posto e postmap non trovava la libreria.
+            // Non indovino il nome del comando dal nome del pacchetto: per py311-fail2ban
+            // sbaglierei (i comandi sono fail2ban-server e fail2ban-client, non "fail2ban").
+            // Chiedo a pkg quali file eseguibili ha installato davvero.
+            boolean comandiOk = true;
+            for (String n : nuovi) {
+                if (!nomeValido(n)) continue;
+                int provati = 0;
+                for (String f : sh("pkg query %Fp " + n + " 2>/dev/null").split("\n")) {
+                    String t = f.trim();
+                    if (!t.startsWith("/usr/local/bin/") && !t.startsWith("/usr/local/sbin/")) continue;
+                    if (t.contains("test")) continue;   // niente suite di test lanciate per sbaglio
+                    if (!ok("test -x " + t, 10)) continue;
+                    if (++provati > 4) break;
+                    String o = sh(t + " --version 2>&1", 120);
+                    String ol = o.toLowerCase();
+                    boolean bene = !o.trim().isEmpty() && !ol.contains("not found") && !ol.contains("traceback")
+                            && !ol.contains("importerror") && !ol.contains("modulenotfound")
+                            && !ol.contains("no module named");
+                    job.scrivi("    " + t + " --version: "
+                            + (bene ? o.split("\n")[0].trim() : "FALLITO -> " + o.trim()));
+                    if (!bene) comandiOk = false;
+                }
+                if (provati == 0) job.scrivi("    " + n + ": nessun eseguibile da provare (e' una libreria)");
+            }
+            long rimasti = sh("pkg query %n 2>/dev/null").lines().filter(x -> x.startsWith("py" + vecchio + "-")).count();
+            job.scrivi("    pacchetti py" + vecchio + " ancora presenti: " + rimasti);
+
+            if (serviziOk && comandiOk) {
+                job.status = "completed";
+                job.scrivi("");
+                job.scrivi("=== Fatto: i pacchetti sono su py" + nuovo + " e i comandi rispondono ===");
+                job.scrivi("Le copie restano in " + bk + ".");
+            } else {
+                job.status = "error";
+                job.errorMessage = "Passaggio eseguito ma la verifica finale non torna. Copie in " + bk;
+            }
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = e.getMessage();
+            job.scrivi("ERRORE: " + e.getMessage());
+        } finally {
+            if (!daRibloccare.isEmpty()) {
+                java.util.List<String> falliti = new ArrayList<>();
+                for (String n : daRibloccare)
+                    if (!(ok("pkg info -e " + n, 15) && ok("pkg lock -y " + n, 30))) falliti.add(n);
+                job.scrivi("");
+                job.scrivi("Riprotezione: " + (falliti.isEmpty()
+                        ? "fatta su " + daRibloccare.size() + " pacchetti"
+                        : "FALLITA su " + String.join(", ", falliti)));
+                if (falliti.isEmpty()) pulisciStato();
+            } else if (!sbloccati.isEmpty()) {
+                job.scrivi("");
+                job.scrivi("ATTENZIONE: erano stati sbloccati " + String.join(", ", sbloccati)
+                        + " ma non sono stati sostituiti: controlla la scheda Protezione pacchetti.");
+            }
+            job.fine = System.currentTimeMillis();
+        }
+    }
+
     // ===================== piano di manutenzione guidato =====================
 
     /**
@@ -2105,6 +3361,91 @@ public final class UpdateManager {
                 rigenerata ? null : new JSONObject().put("tipo", "dovecot_config_regen")),
                 new JSONObject().put("tipo", "dovecot_config_regen")));
 
+        // --- Le tre operazioni che un semplice "pkg upgrade" non sa fare ---
+        // Stanno nel piano anche se l'azione vive in una scheda dedicata: un piano che tace su
+        // cio' che resta da fare dice implicitamente "sei a posto", e non e' vero. Lo stato e'
+        // ricavato con interrogazioni leggere — niente simulazioni, che qui costerebbero minuti.
+
+        // Roundcube: il pacchetto si aggiornerebbe da solo, ma il salto di versione maggiore
+        // cambia lo SCHEMA del database, e senza bin/updatedb.sh la webmail non funziona.
+        String rcPkg = sh("pkg query %n 2>/dev/null | grep -E '^roundcube' | head -1", 20).trim();
+        if (!rcPkg.isEmpty() && nomeValido(rcPkg)) {
+            String cur = sh("pkg query %v " + rcPkg + " 2>/dev/null", 20);
+            String av  = sh("pkg rquery %v " + rcPkg + " 2>/dev/null", 20);
+            boolean daFareRc = !cur.isEmpty() && !av.isEmpty() && !av.equals(cur);
+            // Una webmail gia' sulla 1.7 con la radice vecchia e' guasta ADESSO: se il piano
+            // guardasse solo la versione direbbe "fatto" mentre la webmail non risponde.
+            String radiceStorta = null;
+            if (vuolePublicHtml(cur) || vuolePublicHtml(av)) {
+                JSONArray rd = radiciNginxRoundcube();
+                for (int i = 0; i < rd.length(); i++)
+                    if (!rd.getJSONObject(i).getBoolean("gia"))
+                        radiceStorta = rd.getJSONObject(i).getString("file");
+            }
+            if (radiceStorta != null) daFareRc = true;
+            passi.put(passo("fase-roundcube", "fase", "Aggiornare Roundcube con lo schema del database",
+                    daFareRc ? "manuale" : "fatto",
+                    !daFareRc ? rcPkg + " " + cur + ": ultima versione, e nginx punta a public_html."
+                        : (av.equals(cur)
+                           ? rcPkg + " " + cur + ": versione a posto, ma nginx punta ancora alla radice "
+                             + "vecchia (" + radiceStorta + ") e la webmail non puo' funzionare."
+                           : rcPkg + " " + cur + " -> " + av
+                             + (radiceStorta != null ? ", e nginx punta ancora alla radice vecchia." : "")),
+                    daFareRc
+                    ? "NON usare l'aggiornamento normale: cambierebbe due cose sotto il naso. Primo, lo "
+                      + "schema del database resterebbe quello vecchio. Secondo, dalla 1.7 Roundcube pretende "
+                      + "che nginx punti alla sottocartella public_html, e qui punta alla radice: cosi' com'e' "
+                      + "la webmail smetterebbe di rispondere. Usa la scheda \"Aggiornamento Roundcube\" qui "
+                      + "sotto: copia il database, aggiorna, esegue bin/updatedb.sh, sposta la radice di nginx "
+                      + "controllandola con \"nginx -t\" prima di ricaricare, svuota OPcache riavviando "
+                      + "php-fpm e verifica che la webmail risponda davvero."
+                    : "Quando ci sara' un aggiornamento, passera' dalla scheda dedicata: il salto di versione "
+                      + "maggiore cambia lo schema del database e va fatto insieme, non dopo.", null));
+        }
+
+        // Python: py311 e py312 sono pacchetti diversi, non due versioni dello stesso.
+        String pyNuovo = pyPredefinito();
+        java.util.LinkedHashSet<String> pyVecchie = new java.util.LinkedHashSet<>();
+        for (String n : sh("pkg query %n 2>/dev/null").split("\n")) {
+            Matcher m = Pattern.compile("^py(3[0-9]{2})-").matcher(n.trim());
+            if (m.find() && !m.group(1).equals(pyNuovo)) pyVecchie.add(m.group(1));
+        }
+        if (!pyVecchie.isEmpty()) {
+            String elenco = String.join(", ", pythonDaSpostare(pyVecchie.iterator().next()));
+            passi.put(passo("fase-python", "fase", "Spostare i pacchetti Python alla versione predefinita",
+                    "manuale",
+                    "py" + String.join("/py", pyVecchie) + " installati, il predefinito dei port e' py" + pyNuovo
+                    + (elenco.isEmpty() ? "." : ": " + elenco),
+                    "pkg upgrade non li toccherebbe mai, perche' py" + pyVecchie.iterator().next()
+                    + "-qualcosa e py" + pyNuovo + "-qualcosa sono pacchetti con nomi diversi. Restano "
+                    + "fermi su un Python che prima o poi esce dal supporto, senza che nulla lo segnali. "
+                    + "Usa la scheda \"Passaggio dei pacchetti Python\" qui sotto.", null));
+        } else {
+            passi.put(passo("fase-python", "fase", "Spostare i pacchetti Python alla versione predefinita",
+                    "fatto", "Tutti i pacchetti Python installati sono gia' py" + pyNuovo + ".",
+                    "Non c'e' niente da spostare.", null));
+        }
+
+        // JVM: il pannello ci gira sopra, quindi non puo' aggiornarla restando acceso.
+        String jvmPkg = pacchettoDellaJvm();
+        if (!jvmPkg.isEmpty()) {
+            String cur = sh("pkg query %v " + jvmPkg + " 2>/dev/null", 20);
+            String av  = sh("pkg rquery %v " + jvmPkg + " 2>/dev/null", 20);
+            boolean daFareJv = !cur.isEmpty() && !av.isEmpty() && !av.equals(cur);
+            passi.put(passo("fase-jvm", "fase", "Aggiornare la Java su cui gira il pannello",
+                    daFareJv ? "manuale" : "fatto",
+                    daFareJv ? jvmPkg + " " + cur + " -> " + av
+                             : jvmPkg + " " + cur + ": e' gia' l'ultima versione disponibile.",
+                    daFareJv
+                    ? "E' l'unico aggiornamento che il pannello non puo' fare restando acceso: sostituire "
+                      + "i file della JVM sotto il processo vivo rompe l'avvio dei sottoprocessi, e da quel "
+                      + "momento ogni stato mostrato qui sarebbe falso. Usa la scheda \"Aggiornamento della "
+                      + "JVM del pannello\": uno script staccato impacchetta la Java attuale come via di "
+                      + "ritorno, spegne il pannello, aggiorna e lo riaccende da solo. La posta non si ferma."
+                    : "Quando ci sara' un aggiornamento, passera' dalla scheda dedicata: il pannello deve "
+                      + "spegnersi per farlo.", null));
+        }
+
         // Vulnerabilita' senza correzione disponibile: non sono un passo, ma vanno sapute.
         JSONArray senzaRimedio = new JSONArray();
         for (String nome : visti) {
@@ -2142,7 +3483,10 @@ public final class UpdateManager {
         "fase-nonprotetti",  "B",
         "fase-mysql84",      "C",
         "fase-dovecot",      "D",
-        "fase-rspamd-cache", "E"
+        "fase-rspamd-cache", "E",
+        "fase-roundcube",    "F",
+        "fase-python",       "G",
+        "fase-jvm",          "H"
     );
 
     /**

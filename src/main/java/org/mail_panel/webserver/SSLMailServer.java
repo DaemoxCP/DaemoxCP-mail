@@ -6082,6 +6082,34 @@ public class SSLMailServer {
                 case "broken_libs" -> response = UpdateManager.pacchettiConLibrerieMancanti();
                 case "mysql_client_diag" -> response = UpdateManager.diagnosiClientMysql();
                 case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
+                case "python_preflight" -> response = UpdateManager.pythonPreflight();
+                case "python_move" -> {
+                    if (!"SPOSTA PYTHON".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaPassaggioPython();
+                    logAudit("PYTHON_MOVE_STARTED", ip, response.optString("jobId", ""));
+                }
+                case "java_preflight" -> response = UpdateManager.javaPreflight();
+                case "java_status" -> response = UpdateManager.statoAggiornamentoJava();
+                case "java_update" -> {
+                    if (!"AGGIORNA JAVA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    logAudit("JAVA_UPDATE_STARTED", ip, "il pannello si spegnera'");
+                    response = UpdateManager.avviaAggiornamentoJava();
+                }
+                case "roundcube_preflight" -> response = UpdateManager.roundcubePreflight();
+                case "roundcube_update" -> {
+                    if (!"AGGIORNA ROUNDCUBE".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaAggiornamentoRoundcube();
+                    logAudit("ROUNDCUBE_UPDATE_STARTED", ip, response.optString("jobId", ""));
+                }
                 case "clean_client" -> {
                     if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");
@@ -10246,6 +10274,13 @@ public class SSLMailServer {
             if (sslCert == null || sslCert.isEmpty()) sslCert = "/usr/local/etc/ssl/mail/fullchain.pem";
             if (sslKey == null || sslKey.isEmpty()) sslKey = "/usr/local/etc/ssl/mail/privkey.pem";
 
+            // Dalla 1.7 Roundcube non serve piu' i file dalla radice dell'applicazione ma dalla
+            // sottocartella public_html: e' una protezione voluta, e con la radice vecchia la
+            // webmail risponde 404 su tutto. La scelta non si fa sul numero di versione ma su
+            // cosa c'e' davvero sul disco, cosi' la stessa riga vale prima e dopo il salto.
+            String rcRoot = "/usr/local/www/roundcube";
+            if (Files.isDirectory(Path.of(rcRoot, "public_html"))) rcRoot = rcRoot + "/public_html";
+
             String config = """
 worker_processes auto;
 error_log /var/log/nginx/error.log;
@@ -10277,7 +10312,7 @@ http {
     server {
         listen %s ssl;
         server_name %s;
-        root /usr/local/www/roundcube;
+        root %s;
         index index.php;
 
         ssl_certificate %s;
@@ -10299,7 +10334,7 @@ http {
         location ~ /\\. { deny all; }
     }
 }
-""".formatted(port, sslCert, sslKey, port, domain, sslCert, sslKey);
+""".formatted(port, sslCert, sslKey, port, domain, rcRoot, sslCert, sslKey);
 
             Path nginxConf = Path.of("/usr/local/etc/nginx/nginx.conf");
             Files.writeString(nginxConf, config);

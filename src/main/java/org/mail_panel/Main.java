@@ -314,6 +314,32 @@ public class Main {
             dbManager.insert_data_default();
         }
 
+        // Modalita' solo-web: nessun menu a schermo.
+        //
+        // Serve perche' il pannello deve poter tornare su DA SOLO dopo che si e' spento per
+        // aggiornare la propria JVM. L'interfaccia a schermo (Lanterna) pretende un terminale,
+        // e uno script staccato non ne ha uno: senza questa modalita' il processo ripartirebbe
+        // e morirebbe subito, lasciando il pannello web irraggiungibile.
+        // Il server web di suo non ha mai avuto bisogno del terminale: usa solo System.out.
+        boolean soloWeb = false;
+        for (String a1 : args) if ("--web".equals(a1)) soloWeb = true;
+        if (soloWeb) {
+            System.out.println("Avvio in modalita' solo-web: nessun menu a schermo.");
+            System.out.println("Per rivedere il menu: ferma questo processo e rilancialo senza --web.");
+            startWebServer(true);
+            return;
+        }
+
+        // Comodita', non dipendenza: il pannello non ha bisogno di run.sh per funzionare ne'
+        // per riaccendersi da solo (la riga di riavvio la ricostruisce dal processo vivo).
+        // Se pero' non c'e', se lo scrive, cosi' esiste un modo breve per avviare --web a mano.
+        try {
+            String creato = org.mail_panel.system.UpdateManager.creaRunSh();
+            if (!creato.isEmpty()) System.out.println(creato);
+        } catch (Exception e) {
+            // Se non si puo' scrivere accanto al jar non e' un problema: serviva solo a comodita'.
+        }
+
         // NOW start screen (after SQLite native libs are loaded)
         Screen screen = null;
         try {
@@ -388,7 +414,7 @@ public class Main {
                         // Start Mail Panel WebServer
                         try {
                             screen.stopScreen();
-                            startWebServer();
+                            startWebServer(false);
                         } catch (Exception ex) {
                             ex.printStackTrace();
                         }
@@ -626,7 +652,7 @@ public class Main {
         }
     }
 
-    private static void startWebServer() {
+    private static void startWebServer(boolean senzaTastiera) {
         try (ResultSet result = dbManager.get_data_config()) {
             if (result.next()) {
                 String certContent = result.getString("mail_panel_ssl_cert");
@@ -702,6 +728,17 @@ public class Main {
                     System.out.println(ANSI_YELLOW + "Shutting down server..." + ANSI_RESET);
                     finalServer.stop();
                 }));
+
+                if (senzaTastiera) {
+                    // Senza terminale, System.in e' /dev/null: readLine() tornerebbe subito null
+                    // e il server si spegnerebbe un istante dopo essersi acceso. Qui si resta
+                    // fermi finche' non arriva un segnale, e a quello pensa lo shutdown hook.
+                    System.out.println("In ascolto. Per fermarlo: kill " + ProcessHandle.current().pid());
+                    System.out.flush();
+                    try { new java.util.concurrent.CountDownLatch(1).await(); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    return;
+                }
 
                 // Wait for ENTER to stop (blocks until input)
                 BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));

@@ -838,6 +838,15 @@ http {
 }
 NGINX_CONF
 
+# Dalla 1.7 Roundcube non serve piu' i file dalla radice dell'applicazione ma dalla
+# sottocartella public_html: e' una protezione voluta, e con la radice vecchia la webmail
+# risponde 404 su tutto. Non lo si deduce dal numero di versione, si guarda se la cartella
+# c'e': cosi' la stessa riga vale per la 1.6 e per la 1.7 senza doverle distinguere.
+if [ -d /usr/local/www/roundcube/public_html ]; then
+    sed -i '' 's#root /usr/local/www/roundcube;#root /usr/local/www/roundcube/public_html;#' /usr/local/etc/nginx/nginx.conf
+    echo "  Roundcube 1.7 o successiva: radice di nginx impostata su public_html"
+fi
+
 sysrc nginx_enable="YES"
 sysrc php_fpm_enable="YES"
 
