@@ -549,11 +549,16 @@ public final class UpdateManager {
      */
     public static JSONObject compatibilitaDovecot() {
         JSONObject r = new JSONObject();
-        String installata = sh("pkg query %v dovecot 2>/dev/null", 20);
-        // Con un glob serve -g: senza, pkg query cerca un pacchetto chiamato letteralmente
-        // "dovecot*" e non trova mai niente, lasciando credere che Dovecot non sia installato.
-        if (installata.isEmpty()) installata = sh("pkg query -g %v 'dovecot*' 2>/dev/null | head -1", 20);
-        String disponibile = sh("pkg rquery %v dovecot 2>/dev/null", 30);
+        // Il pacchetto puo' chiamarsi dovecot, dovecot-mysql o dovecot-pgsql a seconda del
+        // sapore scelto: sono lo stesso port e si escludono a vicenda, quindi su un sistema
+        // con il sapore MySQL il nome "dovecot" NON e' installato e la query darebbe vuoto.
+        // Il binario e' la risposta piu' diretta; l'origine del port e' il ripiego esatto.
+        String installata = sh("dovecot --version 2>/dev/null | awk '{print $1}'", 20);
+        if (installata.isEmpty()) {
+            installata = sh("pkg query -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 20);
+        }
+        String disponibile = sh("pkg rquery -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 30);
+        if (disponibile.isEmpty()) disponibile = sh("pkg rquery %v dovecot 2>/dev/null", 30);
         r.put("installed", installata).put("available", disponibile);
 
         // Quali pacchetti Dovecot offre il repository. Non e' curiosita': se la 2.4 fosse un

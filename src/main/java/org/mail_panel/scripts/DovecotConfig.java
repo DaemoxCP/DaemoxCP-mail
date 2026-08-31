@@ -95,10 +95,18 @@ public final class DovecotConfig {
             # La 2.4 non accetta le configurazioni 2.3 e viceversa: non esiste un formato
             # che vada bene per entrambe, quindi la scelta va fatta qui, sul server, in base
             # a cio' che e' davvero installato.
-            DOVECOT_VER=$(pkg query %v dovecot 2>/dev/null | head -1)
-            [ -z "$DOVECOT_VER" ] && DOVECOT_VER=$(doveconf -n 2>/dev/null | head -1 | sed 's/.*version //;s/ .*//')
-            DOVECOT_MAJOR=$(echo "$DOVECOT_VER" | cut -d. -f1)
-            DOVECOT_MINOR=$(echo "$DOVECOT_VER" | cut -d. -f2)
+            # La versione si chiede al BINARIO, non al nome del pacchetto. Su FreeBSD il port
+            # mail/dovecot ha dei sapori: con il supporto MySQL il pacchetto si chiama
+            # "dovecot-mysql" e quello chiamato "dovecot" non e' installato affatto. Chiedere
+            # `pkg query %v dovecot` restituisce vuoto proprio sui sistemi come questo.
+            DOVECOT_VER=$(dovecot --version 2>/dev/null | awk '{print $1}')
+            # Ripiego: il pacchetto che proviene dal port mail/dovecot, qualunque sapore abbia.
+            [ -z "$DOVECOT_VER" ] && DOVECOT_VER=$(pkg query -e '%o = "mail/dovecot"' %v 2>/dev/null | head -1)
+            # Solo cifre: se la versione non fosse riconoscibile, un confronto numerico su una
+            # stringa qualsiasi fallirebbe in modo imprevedibile (e con "set -e" fermerebbe lo
+            # script). Meglio ricadere sul 2.3, che e' il formato compatibile con l'installato.
+            DOVECOT_MAJOR=$(echo "$DOVECOT_VER" | cut -d. -f1 | tr -cd '0-9')
+            DOVECOT_MINOR=$(echo "$DOVECOT_VER" | cut -d. -f2 | tr -cd '0-9')
             [ -z "$DOVECOT_MAJOR" ] && DOVECOT_MAJOR=2
             [ -z "$DOVECOT_MINOR" ] && DOVECOT_MINOR=3
             echo "[CONFIG] Dovecot rilevato: ${DOVECOT_VER:-sconosciuto} (${DOVECOT_MAJOR}.${DOVECOT_MINOR})"
