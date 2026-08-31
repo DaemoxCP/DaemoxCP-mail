@@ -950,7 +950,13 @@ public final class UpdateManager {
     }
 
     private static int eseguiConLog(Job job, String comando, int timeoutSecondi, StringBuilder cattura) throws Exception {
+        return eseguiConLog(job, comando, timeoutSecondi, cattura, null);
+    }
+
+    private static int eseguiConLog(Job job, String comando, int timeoutSecondi,
+                                    StringBuilder cattura, Map<String, String> ambiente) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", comando);
+        if (ambiente != null) pb.environment().putAll(ambiente);
         pb.redirectErrorStream(true);
         Process p = pb.start();
 
@@ -1088,7 +1094,19 @@ public final class UpdateManager {
             job.avanza(2, 3);
             job.scrivi("");
             job.scrivi("[2/3] Scrivo e valido la configurazione...");
-            int code = eseguiConLog(job, "sh " + script, 300);
+            // La password passa dall'AMBIENTE: non nel testo dello script (che finisce su
+            // disco) ne' sulla riga di comando (visibile nell'elenco dei processi).
+            Map<String, String> amb = new LinkedHashMap<>();
+            try (java.sql.ResultSet rs = org.mail_panel.Main.dbManager.get_data_config()) {
+                if (rs.next()) {
+                    String pw = rs.getString("mysql_password");
+                    if (pw != null && !pw.isEmpty()) amb.put("DB_PASS", pw);
+                }
+            } catch (Exception ignored) {}
+            job.scrivi("    password del database: " + (amb.containsKey("DB_PASS")
+                    ? "presa dalla configurazione del pannello"
+                    : "non disponibile qui, lo script la cerchera' da solo"));
+            int code = eseguiConLog(job, "sh " + script, 300, null, amb);
             if (code != 0) {
                 job.status = "error";
                 job.errorMessage = "Dovecot non accetta la configurazione generata: e' stata ripristinata "

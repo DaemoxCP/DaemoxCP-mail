@@ -82,12 +82,35 @@ public final class DovecotConfig {
             DB_NAME='__DBNAME__'
             DB_USER='__DBUSER__'
 
-            # --- Password del database: mai scritta qui dentro, si legge dal file ---
-            if [ -f /usr/local/etc/mail/mysql_password ]; then
+            # --- Password del database, in ordine di autorevolezza ---
+            # Non sta scritta qui dentro e non passa dalla riga di comando. Le sorgenti sono
+            # quattro perche' quattro sono le situazioni reali, verificate leggendo gli script:
+            #   1. DB_PASS dall'ambiente: la mette il pannello dalla propria configurazione,
+            #      cioe' la password con cui si collega davvero. E' la piu' attendibile.
+            #   2. MYSQL_PASSWORD: la variabile di FullMailServerScript (definita prima di qui).
+            #   3. il file creato da FullMailStackScript.
+            #   4. la configurazione Dovecot GIA' IN SERVIZIO: su un sistema che funziona e'
+            #      la prova provata di quale password vada bene.
+            # Cercare solo il file era l'errore: questo server e' stato installato con
+            # FullMailServerScript, che quel file non lo crea, e la rigenerazione si fermava.
+            if [ -z "$DB_PASS" ] && [ -n "$MYSQL_PASSWORD" ]; then
+                DB_PASS="$MYSQL_PASSWORD"
+            fi
+            if [ -z "$DB_PASS" ] && [ -f /usr/local/etc/mail/mysql_password ]; then
                 DB_PASS=$(cat /usr/local/etc/mail/mysql_password)
-            else
-                echo "[ERRORE] /usr/local/etc/mail/mysql_password non trovato:"
-                echo "         senza la password Dovecot non potrebbe autenticare nessuno."
+            fi
+            if [ -z "$DB_PASS" ]; then
+                for f in "$DOVECOT_ETC/dovecot-sql.conf" "$DOVECOT_ETC/conf.d/auth-sql.conf.ext"; do
+                    [ -f "$f" ] || continue
+                    DB_PASS=$(grep -m1 -oE 'password[[:space:]]*=[[:space:]]*[^[:space:]]+' "$f" 2>/dev/null | sed 's/.*=[[:space:]]*//')
+                    [ -n "$DB_PASS" ] && break
+                done
+                [ -n "$DB_PASS" ] && echo "[CONFIG] password ripresa dalla configurazione attualmente in servizio"
+            fi
+            if [ -z "$DB_PASS" ]; then
+                echo "[ERRORE] Non trovo la password del database in nessuna delle sorgenti previste:"
+                echo "         ambiente, MYSQL_PASSWORD, /usr/local/etc/mail/mysql_password,"
+                echo "         configurazione Dovecot esistente. Senza, nessuna casella si autenticherebbe."
                 exit 1
             fi
 
