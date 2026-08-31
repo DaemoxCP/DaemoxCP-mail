@@ -13467,12 +13467,24 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 h += '<div class="alert alert-danger py-2 small"><strong>' + vuln.length
                    + ' pacchetti con vulnerabilità note.</strong><ul class="mb-0 mt-1">';
                 vuln.forEach(v => {
-                    h += '<li><code>' + updEsc(v.name) + '</code>'
+                    h += '<li class="mb-2"><code>' + updEsc(v.name) + '</code>'
                        + (v.role ? ' <span class="text-muted">(' + updEsc(v.role) + ')</span>' : '')
                        + (v.locked
                             ? ' &mdash; <strong>protetto, quindi NON riceve la correzione</strong>'
-                            : (v.fixedByUpgrade ? ' &mdash; si risolve aggiornando' : ' &mdash; nessun aggiornamento disponibile'))
-                       + '</li>';
+                            : (v.fixedByUpgrade ? ' &mdash; si risolve aggiornando' : ' &mdash; nessun aggiornamento disponibile'));
+                    if ((v.cve || []).length) {
+                        h += '<br><span class="badge bg-dark me-1">'
+                           + v.cve.map(c => updEsc(c)).join('</span><span class="badge bg-dark me-1">')
+                           + '</span>';
+                    }
+                    if (v.descrizione) {
+                        h += '<br><span class="text-muted">' + updEsc(v.descrizione) + '</span>';
+                    }
+                    (v.riferimenti || []).forEach(u => {
+                        h += '<br><a href="' + updEsc(u) + '" target="_blank" rel="noopener noreferrer" class="small">'
+                           + updEsc(u) + '</a>';
+                    });
+                    h += '</li>';
                 });
                 h += '</ul></div>';
             } else {
@@ -13506,6 +13518,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
             h += '<details class="mt-2"><summary class="small text-muted">Simulazione completa di pkg</summary>'
                + '<pre class="upd-log mt-2">' + updEsc(r.dryRun) + '</pre></details>';
+            if (r.audit) {
+                h += '<details class="mt-1"><summary class="small text-muted">Referto completo di pkg audit</summary>'
+                   + '<pre class="upd-log mt-2">' + updEsc(r.audit) + '</pre></details>';
+            }
             el.innerHTML = h;
         }
 

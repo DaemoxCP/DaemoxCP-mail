@@ -116,6 +116,7 @@ public final class UpdateManager {
         {"^unbound$",                  "Risolutore DNS locale"},
         {"^opendkim$",                 "Firma DKIM"},
         {"^openssl[0-9]*$",            "Libreria TLS"},
+        {"^openjdk[0-9]*$",            "Runtime Java: ci gira questo pannello"},
     };
 
     /** Ruolo del pacchetto nello stack di posta, o null se non lo riguarda. */
@@ -258,6 +259,12 @@ public final class UpdateManager {
         {"^unbound$", "verifica",
          "E' il risolutore usato per le liste di blocco e le verifiche DNS. Un aggiornamento puo' rigenerare "
          + "i file di inoltro: dopo, controlla che la risoluzione funzioni ancora."},
+        {"^openjdk[0-9]*$", "attendi",
+         "E' il runtime Java su cui gira QUESTO pannello. Aggiornandolo mentre e' in esecuzione, la JVM in "
+         + "memoria non combacia piu' con i file su disco e il pannello NON riesce piu' ad avviare processi: "
+         + "da quel momento ogni comando che lancia fallisce in silenzio, compreso il riblocco dei pacchetti, "
+         + "e ogni stato che riporta diventa falso. MEGLIO ATTENDERE: aggiornalo da solo e riavvia subito il "
+         + "pannello."},
         {"^openssl[0-9]*$", "verifica",
          "Tocca TLS di Postfix, Dovecot e nginx insieme. Un cambio maggiore puo' rendere non piu' accettati "
          + "protocolli o cifrari vecchi: i client datati potrebbero non collegarsi piu'."},
@@ -395,9 +402,16 @@ public final class UpdateManager {
         for (String nome : visti) {
             boolean lk = bloccato(lock, nome);
             String ruolo = ruoloDi(nome);
-            vulnerabili.put(new JSONObject().put("name", nome).put("locked", lk)
+            JSONObject v = new JSONObject().put("name", nome).put("locked", lk)
                     .put("mailPackage", ruolo != null).put("role", ruolo == null ? "" : ruolo)
-                    .put("fixedByUpgrade", !lk && simulazioneCompleta.contains(nome + ":")));
+                    .put("fixedByUpgrade", !lk && simulazioneCompleta.contains(nome + ":"));
+            // Il dettaglio serve per decidere: "ha una vulnerabilita'" non dice se e' una
+            // esecuzione di codice da remoto o un rifiuto di servizio che non ti riguarda.
+            JSONObject d = dettaglioVulnerabilita(audit, nome);
+            v.put("cve", d.getJSONArray("cve"));
+            v.put("descrizione", d.getString("descrizione"));
+            v.put("riferimenti", d.getJSONArray("riferimenti"));
+            vulnerabili.put(v);
         }
         r.put("vulnerable", vulnerabili);
 
@@ -408,6 +422,45 @@ public final class UpdateManager {
 
         r.put("success", true);
         return r;
+    }
+
+    /**
+     * Estrae dal referto di `pkg audit` il blocco che riguarda un pacchetto: descrizione,
+     * identificativi CVE e riferimenti. Senza questo il pannello direbbe soltanto "e'
+     * vulnerabile", che non basta per decidere se valga la pena sbloccare e aggiornare.
+     */
+    static JSONObject dettaglioVulnerabilita(String audit, String pacchetto) {
+        JSONArray cve = new JSONArray();
+        JSONArray riferimenti = new JSONArray();
+        StringBuilder descrizione = new StringBuilder();
+        boolean dentro = false;
+        java.util.LinkedHashSet<String> cveVisti = new java.util.LinkedHashSet<>();
+        for (String riga : audit.split("\n")) {
+            String t = riga.trim();
+            // Inizio del blocco: "<nome>-<versione> is vulnerable:"
+            if (t.matches("^" + java.util.regex.Pattern.quote(pacchetto) + "-[0-9]\\S* is vulnerable:.*")) {
+                dentro = true;
+                continue;
+            }
+            if (!dentro) continue;
+            // Il blocco finisce quando ne inizia un altro o alla prima riga vuota dopo il testo.
+            if (t.endsWith("is vulnerable:") || (t.isEmpty() && descrizione.length() > 0)) break;
+            if (t.startsWith("CVE:")) {
+                for (String c : t.substring(4).trim().split("[\\s,]+")) {
+                    if (c.matches("CVE-[0-9]{4}-[0-9]+")) cveVisti.add(c);
+                }
+            } else if (t.startsWith("WWW:")) {
+                String u = t.substring(4).trim();
+                if (u.startsWith("https://") || u.startsWith("http://")) riferimenti.put(u);
+            } else if (!t.isEmpty()) {
+                if (descrizione.length() > 0) descrizione.append(' ');
+                descrizione.append(t);
+            }
+        }
+        for (String c : cveVisti) cve.put(c);
+        String desc = descrizione.toString();
+        if (desc.length() > 600) desc = desc.substring(0, 600) + "...";
+        return new JSONObject().put("cve", cve).put("riferimenti", riferimenti).put("descrizione", desc);
     }
 
     public static JSONObject maintenancePreview() {
