@@ -6079,6 +6079,14 @@ public class SSLMailServer {
                 case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
                 case "plan" -> response = UpdateManager.pianoManutenzione();
                 case "mysql84_preflight" -> response = UpdateManager.mysql84Preflight();
+                case "mysql84_migrate" -> {
+                    if (!"MIGRA A 8.4".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaMigrazione84();
+                    logAudit("MYSQL84_MIGRATION_STARTED", ip, response.optString("jobId", ""));
+                }
                 case "package_preflight" -> response = UpdateManager.preflightPacchetto(req.optString("package", ""));
                 case "package_update" -> {
                     // La conferma e' il NOME DEL PACCHETTO scritto a mano: cosi' non si puo'

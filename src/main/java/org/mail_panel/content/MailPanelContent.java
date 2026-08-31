@@ -13586,10 +13586,24 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + 'Ogni riga rossa descrive una situazione che finirebbe con il server di posta fermo. '
                    + 'La procedura di esecuzione verr&agrave; costruita solo dopo che questi controlli passano.</div>';
             } else {
-                h += '<div class="alert alert-warning py-2 mb-0"><strong>I prerequisiti sono superati.</strong> '
-                   + 'La procedura di esecuzione non &egrave; ancora attiva: verr&agrave; aggiunta dopo aver letto questo referto.</div>';
+                h += '<div class="alert alert-warning py-2"><strong>I prerequisiti sono superati.</strong> '
+                   + 'Postfix e Dovecot verranno fermati, MySQL sostituito, e alla fine il pannello verifica che '
+                   + 'entrambi risolvano davvero una casella: non basta che il servizio risulti avviato.</div>'
+                   + '<button class="btn btn-danger" onclick="my84Run()"><i class="fas fa-play me-1"></i>Migra a MySQL 8.4</button>';
             }
             el.innerHTML = h;
+        }
+
+        async function my84Run() {
+            if (prompt('Conferma: scrivi MIGRA A 8.4 per procedere.') !== 'MIGRA A 8.4') return;
+            const el = document.getElementById('my84-pre');
+            const pre = document.getElementById('plan-log');
+            const r = await updApi('mysql84_migrate', { confirm: 'MIGRA A 8.4' });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Migrazione in corso: '
+                         + 'non chiudere la pagina e non riavviare il pannello.</span>';
+            pre.style.display = 'block';
+            planPoll(r.jobId, el, pre);
         }
 
         // ---------- aggiornamento guidato ----------

@@ -1457,6 +1457,34 @@ public final class UpdateManager {
 
     private static final String MYSQL84_BACKUP = "/var/db/mailpanel/mysql84";
 
+    /** Inserisce una direttiva subito dopo [mysqld], se non c'e' gia'. Scrittura atomica. */
+    private static boolean aggiungiDirettivaMysqld(String riga) {
+        java.nio.file.Path f = Paths.get("/usr/local/etc/mysql/my.cnf");
+        try {
+            java.util.List<String> righe = Files.readAllLines(f);
+            String chiave = riga.split("=")[0].trim();
+            for (String r : righe) if (!r.trim().startsWith("#") && r.trim().startsWith(chiave)) return true;
+            java.util.List<String> nuove = new ArrayList<>();
+            boolean messo = false;
+            for (String r : righe) {
+                nuove.add(r);
+                if (!messo && r.trim().equalsIgnoreCase("[mysqld]")) {
+                    nuove.add("# aggiunta dal pannello: nella 8.4 mysql_native_password non e' attivo di default");
+                    nuove.add(riga);
+                    messo = true;
+                }
+            }
+            if (!messo) return false;
+            java.nio.file.Path tmp = Paths.get("/tmp/my.cnf.mailpanel-84");
+            Files.write(tmp, nuove);
+            return ok("mv " + tmp + " /usr/local/etc/mysql/my.cnf", 30)
+                && ok("chmod 644 /usr/local/etc/mysql/my.cnf", 15);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Impossibile aggiungere " + riga + " al my.cnf", e);
+            return false;
+        }
+    }
+
     /** File e byte logici di un albero: si misura con stat, MAI con du. */
     private static long[] misura(String dir) {
         long file = numero(sh("find " + dir + " -type f 2>/dev/null | wc -l", 120));
@@ -1621,7 +1649,13 @@ public final class UpdateManager {
             JSONArray nativi = pf.optJSONArray("nativePasswordUsers");
             if (nativi != null && nativi.length() > 0) {
                 job.scrivi("    " + nativi.length() + " account usano mysql_native_password: aggiungo mysql-native-password=ON");
-                ok("sed -i '' 's/^\\[mysqld\\]/[mysqld]\\nmysql-native-password=ON/' /usr/local/etc/mysql/my.cnf", 30);
+                // In Java riga per riga, NON con sed: il sed di BSD non interpreta \n nella
+                // sostituzione e inserirebbe la lettera "n" al posto di un a capo, producendo
+                // un my.cnf malformato proprio nel passo che serve a non far restare fuori
+                // nessun account. Su questa macchina il ramo non scatta, ma un difetto che non
+                // si vede oggi e' solo un difetto che aspetta.
+                job.scrivi("    " + (aggiungiDirettivaMysqld("mysql-native-password=ON")
+                        ? "aggiunta al my.cnf" : "NON aggiunta: controlla il my.cnf a mano"));
             }
 
             job.avanza(8, TOT);
