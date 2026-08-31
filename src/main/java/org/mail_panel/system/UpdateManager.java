@@ -1793,7 +1793,6 @@ public final class UpdateManager {
     public static JSONObject pianoManutenzione() {
         ok("pkg update -q", 120);
         JSONArray passi = new JSONArray();
-        int n = 0;
 
         // Dati raccolti UNA volta sola: pkg audit e la simulazione sono lente, e ripeterle
         // per ogni passo trasformerebbe il piano in un'attesa di minuti.
@@ -1806,7 +1805,7 @@ public final class UpdateManager {
         // --- Passo 1: tutto lo stack protetto ---
         int installati = stato.getInt("installedCount"), protetti = stato.getInt("lockedCount");
         boolean tuttoProtetto = installati > 0 && protetti == installati;
-        passi.put(passo(++n, "Proteggere tutti i pacchetti dello stack",
+        passi.put(passo("fase-protezione", "fase", "Proteggere tutti i pacchetti dello stack",
                 tuttoProtetto ? "fatto" : "dafare",
                 protetti + " su " + installati + " pacchetti sono protetti.",
                 "Senza il lock, un aggiornamento puo' sostituire o rimuovere un pezzo del server di posta "
@@ -1819,7 +1818,7 @@ public final class UpdateManager {
         Matcher mIn = Pattern.compile("Number of packages to be installed:\\s*([0-9]+)").matcher(dry);
         int daInstallare = mIn.find() ? Integer.parseInt(mIn.group(1)) : 0;
         boolean contornoAggiornato = (daAggiornare + daInstallare) == 0;
-        passi.put(passo(++n, "Aggiornare i pacchetti non protetti",
+        passi.put(passo("fase-nonprotetti", "fase", "Aggiornare i pacchetti non protetti",
                 contornoAggiornato ? "fatto" : "dafare",
                 contornoAggiornato ? "Nessun pacchetto non protetto ha aggiornamenti in sospeso."
                         : daAggiornare + " da aggiornare e " + daInstallare + " da installare.",
@@ -1867,7 +1866,7 @@ public final class UpdateManager {
                     ? "Aggiornare " + nome + " e " + (mem.size() - 1) + " pacchetti collegati ("
                       + v.getInt("cve") + " CVE)"
                     : "Aggiornare " + nome + " (" + v.getInt("cve") + " CVE)";
-            passi.put(passo(++n, titolo,
+            passi.put(passo("pkg-" + nome, "pacchetto", titolo,
                     attendi ? "manuale" : "dafare",
                     nome + " " + v.getString("cur") + " -> " + v.getString("av")
                         + (v.getBoolean("maggiore") ? ", salto di versione significativo" : ", solo cifre finali"),
@@ -1886,11 +1885,11 @@ public final class UpdateManager {
             boolean gia84 = srvMysql.startsWith("mysql84");
             String disp84 = gia84 ? "" : sh("pkg rquery %v mysql84-server 2>/dev/null", 30);
             if (gia84) {
-                passi.put(passo(++n, "Migrare MySQL alla 8.4", "fatto",
+                passi.put(passo("fase-mysql84", "fase", "Migrare MySQL alla 8.4", "fatto",
                         srvMysql + ": la migrazione e' gia' avvenuta.",
                         "Il port mysql80 verra' rimosso da FreeBSD dopo il 31/12/2026.", null));
             } else if (!disp84.isEmpty()) {
-                passi.put(passo(++n, "Migrare MySQL alla 8.4", "manuale",
+                passi.put(passo("fase-mysql84", "fase", "Migrare MySQL alla 8.4", "manuale",
                         srvMysql + " -> mysql84-server " + disp84
                         + ". Il port attuale sara' RIMOSSO da FreeBSD dopo il 31/12/2026.",
                         "Non e' un aggiornamento ma una sostituzione di pacchetti in conflitto, con copia "
@@ -1923,7 +1922,7 @@ public final class UpdateManager {
             String confl = conflittoFamigliaMysql(nome);
             if (confl != null) {
                 java.util.List<String> memC = membriFamiglia(nome);
-                passi.put(passo(++n, "Aggiornare " + nome
+                passi.put(passo("pkg-" + nome, "pacchetto", "Aggiornare " + nome
                             + (memC.size() > 1 ? " e " + (memC.size() - 1) + " pacchetti collegati" : ""),
                         "manuale",
                         nome + " " + cur + " -> " + av + " (nessuna vulnerabilita' nota)",
@@ -1938,7 +1937,7 @@ public final class UpdateManager {
             String titolo = mem.size() > 1
                     ? "Aggiornare " + nome + " e " + (mem.size() - 1) + " pacchetti collegati"
                     : "Aggiornare " + nome;
-            passi.put(passo(++n, titolo, attendi ? "manuale" : "dafare",
+            passi.put(passo("pkg-" + nome, "pacchetto", titolo, attendi ? "manuale" : "dafare",
                     nome + " " + cur + " -> " + av
                         + (maggiore ? ", salto di versione significativo" : ", solo cifre finali")
                         + " (nessuna vulnerabilita' nota)",
@@ -1953,7 +1952,7 @@ public final class UpdateManager {
         boolean rigenerata = ok("grep -q 'generato dal FreeBSD Mail Panel' "
                 + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
         boolean sieveAttivo = ok("grep -qE '^protocols.*sieve' " + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
-        passi.put(passo(++n, "Rigenerare la configurazione Dovecot",
+        passi.put(passo("fase-dovecot", "fase", "Rigenerare la configurazione Dovecot",
                 rigenerata ? "fatto" : "dafare",
                 rigenerata ? "La configurazione proviene gia' dalla sorgente unica del pannello."
                         + (sieveAttivo ? " ManageSieve attivo." : " ManageSieve non attivo.")
@@ -1979,9 +1978,18 @@ public final class UpdateManager {
                 .put("senzaRimedio", senzaRimedio);
     }
 
-    private static JSONObject passo(int n, String titolo, String stato, String situazione,
-                                    String perche, JSONObject azione) {
-        JSONObject o = new JSONObject().put("n", n).put("titolo", titolo).put("stato", stato)
+    /**
+     * Un passo del piano, identificato da una CHIAVE stabile e non da un numero.
+     *
+     * I numeri scorrevano: i passi sui singoli pacchetti spariscono quando il pacchetto non ha
+     * piu' niente da fare — e' la conseguenza dello stato ricavato invece che memorizzato — e
+     * quello che era "il 3" diventava un altro. Chi segue una guida deve poter dire "ho fatto
+     * openssl", non "ho fatto il tre" e scoprire che il tre adesso e' nginx.
+     */
+    private static JSONObject passo(String chiave, String gruppo, String titolo, String stato,
+                                    String situazione, String perche, JSONObject azione) {
+        JSONObject o = new JSONObject().put("chiave", chiave).put("gruppo", gruppo)
+                .put("titolo", titolo).put("stato", stato)
                 .put("situazione", situazione).put("perche", perche);
         if (azione != null) o.put("azione", azione);
         return o;
@@ -2047,6 +2055,10 @@ public final class UpdateManager {
         {"^py[0-9]+-fail2ban$",               "fail2ban"},
         {"^unbound$",                         "unbound"},
     };
+
+    /** Pacchetti che sono librerie condivise: qui un "nessun dipendente" va preso con cautela. */
+    private static final String LIBRERIE_CONDIVISE =
+            "^(openssl[0-9]*|expat|libxml2|zlib|libiconv|pcre2?|curl|libssh2|nghttp2|icu|libsodium)$";
 
     private static String servizioDiretto(String pacchetto) {
         for (String[] r : SERVIZIO_DI) if (pacchetto.matches(r[0])) return r[1];
@@ -2194,9 +2206,26 @@ public final class UpdateManager {
                     .put("pid", pidServizio(reale)));
         }
         r.put("services", servizi);
+        // Cosa ha risposto pkg, per esteso: un "nessuno" senza le prove non e' un'informazione,
+        // e su una libreria condivisa e' l'errore che vanifica l'aggiornamento.
+        JSONArray dipTrovati = new JSONArray();
+        for (String membro : famiglia) {
+            for (String riga : sh("pkg query %rn " + membro + " 2>/dev/null", 30).split("\n")) {
+                String d = riga.trim();
+                if (nomeValido(d) && !famiglia.contains(d)) dipTrovati.put(d);
+            }
+        }
+        r.put("reverseDeps", dipTrovati);
         aggiungiCheck(checks, "servizi", "Servizi da riavviare", "verifica",
                 servizi.length() == 0
-                    ? "Nessun servizio risulta dipendere da questo pacchetto: non serve riavviare nulla."
+                    ? "Nessun servizio risulta dipendere da questo pacchetto. Prova: pkg riporta "
+                      + (dipTrovati.length() == 0 ? "ZERO pacchetti dipendenti"
+                                                  : dipTrovati.length() + " pacchetti dipendenti ("
+                                                    + String.join(", ", jsonArrayToList(dipTrovati))
+                                                    + "), nessuno dei quali e' un servizio")
+                      + ". ATTENZIONE se questo pacchetto e' una libreria condivisa: i programmi "
+                      + "collegati alla versione del SISTEMA BASE non compaiono qui, e potrebbero "
+                      + "comunque tenersi in memoria quella vecchia."
                     : servizi.length() + " servizi verranno riavviati dopo l'aggiornamento, uno alla volta. "
                       + "Senza il riavvio continuerebbero a usare i file gia' caricati in memoria e la "
                       + "correzione non sarebbe in servizio, pur risultando installata.");
@@ -2258,6 +2287,7 @@ public final class UpdateManager {
         final int TOT = 6;
         java.util.List<String> daRiproteggere = new ArrayList<>();
         java.util.List<String> famiglia = new ArrayList<>();
+        boolean ricontrolloManuale = false;
         java.util.List<String> servizi = new ArrayList<>();
         Map<String, String> pidPrima = new LinkedHashMap<>();
         Map<String, Boolean> attivoPrima = new LinkedHashMap<>();
@@ -2340,6 +2370,20 @@ public final class UpdateManager {
             job.scrivi("[4/" + TOT + "] Riavvio dei servizi che usano " + nome + "...");
             job.scrivi("  (senza questo continuerebbero a usare i file gia' caricati in memoria)");
             boolean problemaServizi = false;
+            if (servizi.isEmpty()) {
+                JSONArray rd = pf.optJSONArray("reverseDeps");
+                job.scrivi("  Nessun servizio da riavviare. pkg riporta "
+                        + (rd == null || rd.length() == 0 ? "zero pacchetti dipendenti"
+                           : rd.length() + " pacchetti dipendenti: " + String.join(", ", jsonArrayToList(rd))));
+                if (nome.matches(LIBRERIE_CONDIVISE)) {
+                    job.scrivi("  ATTENZIONE: " + nome + " e' una libreria condivisa. Il fatto che nessun");
+                    job.scrivi("  pacchetto la dichiari come dipendenza NON garantisce che nessun processo la");
+                    job.scrivi("  stia usando: chi si collega alla copia del sistema base non compare in pkg.");
+                    job.scrivi("  Verifica a mano che TLS funzioni (una casella in IMAPS, la webmail in HTTPS),");
+                    job.scrivi("  e se vuoi essere certo riavvia postfix, dovecot e nginx dalla pagina Servizi.");
+                    ricontrolloManuale = true;
+                }
+            }
             for (String s : servizi) {
                 if (!Boolean.TRUE.equals(attivoPrima.get(s))) {
                     job.scrivi("    " + s + ": non era attivo prima, non lo avvio io");
@@ -2386,6 +2430,14 @@ public final class UpdateManager {
             if (problemaServizi || caduto) {
                 job.status = "error";
                 job.errorMessage = "Aggiornamento eseguito, ma un servizio non e' ripartito come doveva: leggi il log.";
+            } else if (ricontrolloManuale) {
+                // Non e' un errore, ma nemmeno un "fatto e verificato": dirlo completato
+                // sarebbe affermare una cosa che il pannello non ha potuto controllare.
+                job.status = "completed";
+                job.scrivi("");
+                job.scrivi("=== " + nome + " " + versioneDopo + " installato ===");
+                job.scrivi("ATTENZIONE: nessun servizio e' stato riavviato. Se qualche processo usava la");
+                job.scrivi("versione vecchia della libreria, la sta ancora usando. Verifica TLS a mano.");
             } else {
                 job.status = "completed";
                 job.scrivi("");

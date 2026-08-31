@@ -13206,7 +13206,9 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     <p class="small text-muted mb-2">
                         Lo stato di ogni passo non &egrave; memorizzato: viene ricavato ogni volta dal sistema reale,
                         cos&igrave; non pu&ograve; dire &ldquo;fatto&rdquo; per qualcosa che non lo &egrave; pi&ugrave;.
-                        Segui i passi dall&rsquo;alto: &egrave; attivo solo il primo da fare.
+                        Le <strong>fasi</strong> hanno una lettera fissa; i <strong>pacchetti</strong> si chiamano col proprio
+                        nome e spariscono dall&rsquo;elenco quando non hanno pi&ugrave; nulla da fare. Nessuna etichetta cambia
+                        significato mentre lavori. &Egrave; attivo solo il primo passo da fare, dall&rsquo;alto.
                     </p>
                     <div id="plan-body"><span class="text-muted">Premi "Calcola il piano": legge lo stato, non modifica niente.</span></div>
                     <pre id="plan-log" class="upd-log mt-2" style="display:none"></pre>
@@ -13473,21 +13475,18 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo lo stato del sistema: pacchetti, vulnerabilità, configurazione. Ci vuole qualche secondo...';
             const r = await updApi('plan');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+
             let primoDaFare = true;
-            let h = '<div class="mb-2 small">' + (r.daFare === 0
-                ? '<span class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Niente da fare: tutti i passi risultano completati.</strong></span>'
-                : '<strong>' + r.daFare + ' passi da fare</strong> su ' + r.totale + '.') + '</div>';
-            (r.passi || []).forEach(p => {
+            const lettere = ['A','B','C','D','E','F','G','H'];
+            let iFase = 0;
+
+            function riga(p, etichetta) {
                 const attivo = p.stato === 'dafare' && primoDaFare;
                 if (p.stato === 'dafare') primoDaFare = false;
-                h += '<div class="border rounded p-2 mb-2' + (attivo ? ' border-primary' : '') + '">'
-                   + '<div class="d-flex justify-content-between align-items-center">'
-                   + '<span><strong>' + p.n + '. ' + updEsc(p.titolo) + '</strong> ' + planBadge(p.stato) + '</span>';
+                let h = '<div class="border rounded p-2 mb-2' + (attivo ? ' border-primary' : '') + '">'
+                      + '<div class="d-flex justify-content-between align-items-center">'
+                      + '<span><strong>' + etichetta + updEsc(p.titolo) + '</strong> ' + planBadge(p.stato) + '</span>';
                 if (attivo && p.azione) {
-                    // L'azione si passa come INDICE, non serializzata dentro l'attributo.
-                    // Infilare JSON in un onclick richiede virgolette annidate dentro un
-                    // blocco di testo Java: e' la sorgente di errori di escape piu' facile da
-                    // introdurre e piu' difficile da vedere. Un numero non ha niente da proteggere.
                     const idx = planAzioni.push(p.azione) - 1;
                     h += '<button class="btn btn-sm btn-primary" onclick="planRun(' + idx + ')">'
                        + '<i class="fas fa-play me-1"></i>Esegui questo passo</button>';
@@ -13496,7 +13495,34 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + '<div class="small mt-1">' + updEsc(p.situazione) + '</div>'
                    + '<div class="small text-muted mt-1">' + updEsc(p.perche) + '</div>'
                    + '</div>';
+                return h;
+            }
+
+            const passi = r.passi || [];
+            let h = '<div class="mb-2 small">' + (r.daFare === 0
+                ? '<span class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Niente da fare.</strong></span>'
+                : '<strong>' + r.daFare + ' passi da fare.</strong> È attivo solo il primo, in ordine dall&rsquo;alto.')
+                + '</div>';
+
+            // I passi si presentano nell'ordine di esecuzione, ma con identita' stabili:
+            // le fasi hanno una lettera fissa, i pacchetti si chiamano col proprio nome.
+            // Cosi' nessuna etichetta cambia significato quando un passo viene completato.
+            let gruppoCorrente = '';
+            passi.forEach(p => {
+                if (p.gruppo !== gruppoCorrente) {
+                    gruppoCorrente = p.gruppo;
+                    h += '<h6 class="mt-3 mb-2 text-muted">'
+                       + (p.gruppo === 'fase'
+                            ? '<i class="fas fa-flag me-1"></i>Fasi'
+                            : '<i class="fas fa-box me-1"></i>Pacchetti da aggiornare')
+                       + '</h6>';
+                }
+                const etichetta = p.gruppo === 'fase'
+                    ? 'Fase ' + (lettere[iFase++] || '?') + ' &mdash; '
+                    : '';
+                h += riga(p, etichetta);
             });
+
             if ((r.senzaRimedio || []).length) {
                 h += '<div class="alert alert-secondary py-2 small mb-0"><strong>Senza rimedio disponibile:</strong> '
                    + r.senzaRimedio.map(x => updEsc(x)).join(', ')
