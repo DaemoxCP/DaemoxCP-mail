@@ -621,110 +621,7 @@ echo "${GREEN}  Postfix configured${NC}"
 echo ""
 echo "${YELLOW}[PHASE 7/10] Configuring Dovecot...${NC}"
 
-mkdir -p /usr/local/etc/dovecot/conf.d
-
-cat > /usr/local/etc/dovecot/dovecot.conf << 'DOVECOT_MAIN'
-protocols = imap pop3 lmtp
-listen = *, ::
-mail_privileged_group = mail
-first_valid_uid = 5000
-first_valid_gid = 5000
-
-!include conf.d/*.conf
-DOVECOT_MAIN
-
-cat > /usr/local/etc/dovecot/conf.d/10-mail.conf << 'DOVECOT_MAIL'
-mail_location = maildir:/var/vmail/%d/%n
-mail_uid = vmail
-mail_gid = vmail
-DOVECOT_MAIL
-
-cat > /usr/local/etc/dovecot/conf.d/10-auth.conf << 'DOVECOT_AUTH'
-disable_plaintext_auth = yes
-auth_mechanisms = plain login
-
-# Master user for admin access
-auth_master_user_separator = *
-!include auth-master.conf.ext
-!include auth-sql.conf.ext
-DOVECOT_AUTH
-
-cat > /usr/local/etc/dovecot/conf.d/10-ssl.conf << DOVECOT_SSL
-ssl = required
-ssl_cert = </usr/local/etc/ssl/mail/fullchain.pem
-ssl_key = </usr/local/etc/ssl/mail/privkey.pem
-ssl_min_protocol = TLSv1.2
-DOVECOT_SSL
-
-cat > /usr/local/etc/dovecot/conf.d/10-master.conf << 'DOVECOT_MASTER'
-service imap-login {
-  inet_listener imap {
-    port = 143
-  }
-  inet_listener imaps {
-    port = 993
-    ssl = yes
-  }
-}
-
-service pop3-login {
-  inet_listener pop3 {
-    port = 110
-  }
-  inet_listener pop3s {
-    port = 995
-    ssl = yes
-  }
-}
-
-service lmtp {
-  unix_listener lmtp {
-    mode = 0666
-    user = vmail
-    group = vmail
-  }
-  inet_listener lmtp {
-    address = 127.0.0.1
-    port = 24
-  }
-}
-
-service auth {
-  # For Postfix SASL authentication
-  unix_listener /var/spool/postfix/private/auth {
-    mode = 0660
-    user = postfix
-    group = postfix
-  }
-
-  unix_listener auth-userdb {
-    mode = 0600
-    user = vmail
-    group = vmail
-  }
-}
-DOVECOT_MASTER
-
-cat > /usr/local/etc/dovecot/conf.d/auth-sql.conf.ext << 'DOVECOT_AUTH_SQL'
-passdb {
-  driver = sql
-  args = /usr/local/etc/dovecot/dovecot-sql.conf
-}
-userdb {
-  driver = static
-  args = uid=vmail gid=vmail home=/var/vmail/%d/%n
-}
-DOVECOT_AUTH_SQL
-
-# Master user config
-cat > /usr/local/etc/dovecot/conf.d/auth-master.conf.ext << 'DOVECOT_MASTER_AUTH'
-passdb {
-  driver = passwd-file
-  master = yes
-  args = /usr/local/etc/dovecot/master-users
-  result_success = continue
-}
-DOVECOT_MASTER_AUTH
+# La configurazione Dovecot viene scritta piu' avanti, in un blocco solo.
 
 # Generate master password
 MASTER_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
@@ -746,15 +643,11 @@ chmod 640 /usr/local/etc/dovecot/master-users
 chown root:dovecot /usr/local/etc/dovecot/master-users
 
 # SQL config
-cat > /usr/local/etc/dovecot/dovecot-sql.conf << DOVECOT_SQL
-driver = mysql
-connect = host=127.0.0.1 dbname=$MYSQL_DATABASE user=$MYSQL_USER password=$MYSQL_PASSWORD
-default_pass_scheme = BLF-CRYPT
-password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' AND active=1
-DOVECOT_SQL
-
-chmod 600 /usr/local/etc/dovecot/dovecot-sql.conf
-chown root:dovecot /usr/local/etc/dovecot/dovecot-sql.conf
+"""
+            // Sorgente UNICA della configurazione Dovecot, scritta DOPO master-users
+            // perche' auth-master.conf.ext lo referenzia. Prima questo script aveva
+            // la sua copia della configurazione, divergente dalle altre due.
+            + DovecotConfig.fromPanelConfig().scriptFragment() + """
 
 sysrc dovecot_enable="YES"
 

@@ -465,93 +465,9 @@ MASTERCONF
             echo "[4/8] Installing Dovecot..."
             pkg install -y dovecot-mysql dovecot-pigeonhole
 
-            mkdir -p /usr/local/etc/dovecot
-            mkdir -p /var/run/dovecot
-            chown root:wheel /var/run/dovecot
-
-            cat > /usr/local/etc/dovecot/dovecot.conf << 'DOVECOTCONF'
-protocols = imap pop3 lmtp sieve
-log_path = /var/log/dovecot.log
-
-ssl = required
-ssl_cert = </usr/local/etc/ssl/mail/fullchain.pem
-ssl_key = </usr/local/etc/ssl/mail/privkey.pem
-ssl_min_protocol = TLSv1.2
-
-mail_location = maildir:/var/vmail/%d/%n
-mail_uid = vmail
-mail_gid = vmail
-first_valid_uid = 5000
-last_valid_uid = 5000
-
-auth_mechanisms = plain login
-disable_plaintext_auth = no
-
-# Master user for admin SSO access
-auth_master_user_separator = *
-
-# Master user passdb (MUST be first - intercepts user*admin login)
-passdb {
-    driver = passwd-file
-    master = yes
-    args = /usr/local/etc/dovecot/master-users
-}
-
-# SQL passdb for regular users (checked after master)
-passdb {
-    driver = sql
-    args = /usr/local/etc/dovecot/dovecot-sql.conf
-}
-
-userdb {
-    driver = sql
-    args = /usr/local/etc/dovecot/dovecot-sql.conf
-}
-
-service imap-login {
-    inet_listener imap { port = 143 }
-    inet_listener imaps { port = 993; ssl = yes }
-}
-
-service pop3-login {
-    inet_listener pop3 { port = 110 }
-    inet_listener pop3s { port = 995; ssl = yes }
-}
-
-service lmtp {
-    inet_listener lmtp {
-        address = 127.0.0.1
-        port = 24
-    }
-}
-
-service auth {
-    unix_listener auth-userdb {
-        mode = 0660
-        user = vmail
-        group = vmail
-    }
-    unix_listener /var/spool/postfix/private/auth {
-        mode = 0660
-        user = postfix
-        group = postfix
-    }
-}
-
-protocol lmtp {
-    postmaster_address = postmaster@localhost
-}
-DOVECOTCONF
-
-            cat > /usr/local/etc/dovecot/dovecot-sql.conf << SQLCONF
-driver = mysql
-connect = host=127.0.0.1 dbname=mailpanel user=mailpanel password=${MAILSERVER_PASS}
-default_pass_scheme = BLF-CRYPT
-password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' AND active=1
-user_query = SELECT '/var/vmail/%d/%n' as home, 'maildir:/var/vmail/%d/%n' as mail, 5000 AS uid, 5000 AS gid FROM mailboxes WHERE email='%u' AND active=1
-SQLCONF
-
-            chmod 600 /usr/local/etc/dovecot/dovecot-sql.conf
+            """
+            // Sorgente UNICA della configurazione Dovecot. Prima scriveva dbname=mailpanel, cablato e diverso da quello configurato.
+            + DovecotConfig.fromPanelConfig().scriptFragment() + """
 
             # Generate master user password for SSO
             echo "Configuring master user for SSO..."

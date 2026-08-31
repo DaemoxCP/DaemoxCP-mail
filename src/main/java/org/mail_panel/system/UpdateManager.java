@@ -556,6 +556,30 @@ public final class UpdateManager {
         String disponibile = sh("pkg rquery %v dovecot 2>/dev/null", 30);
         r.put("installed", installata).put("available", disponibile);
 
+        // Quali pacchetti Dovecot offre il repository. Non e' curiosita': se la 2.4 fosse un
+        // PACCHETTO DIVERSO (come mysql80 e mysql84) allora nessun pkg upgrade potrebbe mai
+        // portarci, e il rischio non sarebbe "un aggiornamento rompe la posta" ma "una
+        // migrazione deliberata". Sono due scenari opposti e cambiano cosa va costruito.
+        JSONArray offerti = new JSONArray();
+        for (String riga : sh("pkg rquery -g '%n %v' 'dovecot*' 2>/dev/null", 30).split("\n")) {
+            String t = riga.trim();
+            if (t.isEmpty()) continue;
+            int sp = t.indexOf(' ');
+            if (sp <= 0) continue;
+            offerti.put(new JSONObject().put("name", t.substring(0, sp)).put("version", t.substring(sp + 1).trim()));
+        }
+        r.put("repoPackages", offerti);
+
+        // Il giudizio di Dovecot stesso sulla configurazione. Finora il pannello scriveva i
+        // file e riavviava senza mai chiedere al server se li accettasse: un errore di sintassi
+        // si sarebbe scoperto a servizio gia' fermo. doveconf -n e' l'equivalente di
+        // "mysqld --validate-config", e vale oggi, a prescindere dalla 2.4.
+        Shell.Result dc = Shell.runShell(Duration.ofSeconds(30), "doveconf -n 2>&1 >/dev/null");
+        r.put("doveconfAvailable", !dc.outputTrim().contains("not found"));
+        String errori = dc.outputTrim();
+        r.put("doveconfOk", dc.success() && errori.isEmpty());
+        r.put("doveconfOutput", errori.length() > 3000 ? errori.substring(0, 3000) : errori);
+
         int magInst = versioneMaggiore(installata), magDisp = versioneMaggiore(disponibile);
         int minInst = versioneMinore(installata), minDisp = versioneMinore(disponibile);
         // 2.3 -> 2.4 e' un salto di versione MINORE nei numeri ma una rottura totale nei fatti:
@@ -698,6 +722,42 @@ public final class UpdateManager {
         r.put("notes", note);
         r.put("consistent", note.length() == 0);
         return r.put("success", true);
+    }
+
+    /**
+     * Contenuto dei file di configurazione che Dovecot legge davvero, in sola lettura.
+     *
+     * Serve per una ragione precisa: il pannello ha TRE generatori di configurazione Dovecot
+     * che nel tempo sono divergiti fra loro (userdb static contro userdb sql, Sieve presente
+     * o assente, protocolli diversi). Per unificarli bisogna sapere quale variante e'
+     * davvero in servizio, e l'unico modo onesto e' leggerla, non dedurla dal codice.
+     *
+     * Le credenziali vengono oscurate PRIMA di uscire da qui: dovecot-sql.conf contiene la
+     * password del database delle caselle, e questo testo finisce in una pagina web.
+     */
+    public static JSONObject dumpConfigDovecot() {
+        JSONArray files = new JSONArray();
+        for (String f : fileDovecot()) {
+            String contenuto = sh("cat " + f + " 2>/dev/null", 20);
+            contenuto = oscuraCredenziali(contenuto);
+            if (contenuto.length() > 20000) contenuto = contenuto.substring(0, 20000) + "\n... (troncato)";
+            files.put(new JSONObject().put("path", f).put("content", contenuto)
+                    .put("lines", contenuto.isEmpty() ? 0 : contenuto.split("\n").length));
+        }
+        return new JSONObject().put("success", true).put("files", files).put("count", files.length());
+    }
+
+    /**
+     * Toglie ogni password dal testo. Volutamente grossolana: meglio oscurare qualcosa di
+     * innocuo che lasciar passare una credenziale in una pagina web.
+     */
+    static String oscuraCredenziali(String testo) {
+        if (testo == null) return "";
+        return testo
+                .replaceAll("(?i)(password\\s*=\\s*)\\S+", "$1********")
+                .replaceAll("(?i)(password=)[^\\s;]+", "$1********")
+                .replaceAll("(?i)(pass\\s*=\\s*)\\S+", "$1********")
+                .replaceAll("(?i)(secret\\s*=\\s*)\\S+", "$1********");
     }
 
     /** Le tre verifiche insieme: e' cio' che si guarda prima di premere "aggiorna". */

@@ -6065,6 +6065,7 @@ public class SSLMailServer {
                 case "packages_status" -> response = UpdateManager.packagesStatus();
                 case "updates_status" -> response = UpdateManager.updatesStatus();
                 case "compatibility" -> response = UpdateManager.compatibilityReport();
+                case "dovecot_config_dump" -> response = UpdateManager.dumpConfigDovecot();
                 case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
                 case "packages_lock" -> {
                     boolean lock = req.optBoolean("lock", true);

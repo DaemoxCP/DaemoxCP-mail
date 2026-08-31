@@ -13200,10 +13200,14 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-vial me-2"></i><strong>Compatibilità della configurazione</strong>
                         <span class="small text-muted ms-2">non i numeri di versione: cosa c&rsquo;è scritto nei file</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="updCompat()"><i class="fas fa-magnifying-glass me-1"></i>Verifica</button>
+                    <div class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="updCompat()"><i class="fas fa-magnifying-glass me-1"></i>Verifica</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="updDumpDovecot()" title="Mostra i file che Dovecot legge davvero"><i class="fas fa-file-code me-1"></i>Mostra config Dovecot</button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div id="upd-compat"><span class="text-muted">Premi "Verifica": legge i file di configurazione, non modifica niente.</span></div>
+                    <div id="upd-dovecot-dump" class="mt-3"></div>
                 </div>
             </div>
 
@@ -13301,7 +13305,23 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             h += '<h6 class="mb-1"><i class="fas fa-inbox me-1"></i>Dovecot</h6>';
             h += '<div class="small text-muted mb-2">installato ' + updEsc(d.installed || '?')
                + ' &middot; disponibile nel repository ' + updEsc(d.available || '?')
-               + ' &middot; ' + updEsc(d.configFilesScanned || 0) + ' file letti</div>';
+               + ' &middot; ' + updEsc(d.configFilesScanned || 0) + ' file letti (solo quelli che Dovecot apre davvero)</div>';
+
+            if ((d.repoPackages || []).length) {
+                h += '<div class="small mb-2"><strong>Pacchetti Dovecot nel repository:</strong> '
+                   + d.repoPackages.map(p => updEsc(p.name) + ' ' + updEsc(p.version)).join(' &middot; ')
+                   + '</div>';
+            }
+
+            if (d.doveconfAvailable === false) {
+                h += '<div class="small text-muted mb-2">doveconf non disponibile: impossibile chiedere a Dovecot se accetta la configurazione.</div>';
+            } else if (d.doveconfOk) {
+                h += '<div class="small text-success mb-2"><i class="fas fa-check me-1"></i>'
+                   + 'Il Dovecot installato accetta la configurazione attuale (<code>doveconf -n</code> non segnala nulla).</div>';
+            } else {
+                h += '<div class="alert alert-warning py-2 small mb-2"><strong>Il Dovecot installato segnala qualcosa sulla configurazione attuale:</strong>'
+                   + '<pre class="upd-log mt-1 mb-0">' + updEsc(d.doveconfOutput || '') + '</pre></div>';
+            }
             if (!d.scanned) {
                 h += '<div class="alert alert-secondary py-2 small">' + updEsc(d.note || 'configurazione non trovata') + '</div>';
             } else if (d.compatible24) {
@@ -13357,6 +13377,21 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 h += '<div class="alert alert-warning py-2 small"><ul class="mb-0">'
                    + (w.notes || []).map(n => '<li>' + updEsc(n) + '</li>').join('') + '</ul></div>';
             }
+            el.innerHTML = h;
+        }
+
+        async function updDumpDovecot() {
+            const el = document.getElementById('upd-dovecot-dump');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo i file...';
+            const r = await updApi('dovecot_config_dump');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<hr><div class="small text-muted mb-2">'
+                  + r.count + ' file letti. Le password sono oscurate.</div>';
+            (r.files || []).forEach(f => {
+                h += '<details class="mb-1"><summary class="small"><code>' + updEsc(f.path) + '</code> '
+                   + '<span class="text-muted">(' + f.lines + ' righe)</span></summary>'
+                   + '<pre class="upd-log mt-1">' + updEsc(f.content) + '</pre></details>';
+            });
             el.innerHTML = h;
         }
 
