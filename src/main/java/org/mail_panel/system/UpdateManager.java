@@ -946,6 +946,10 @@ public final class UpdateManager {
      * significherebbe una pagina ferma senza sapere se sta funzionando.
      */
     private static int eseguiConLog(Job job, String comando, int timeoutSecondi) throws Exception {
+        return eseguiConLog(job, comando, timeoutSecondi, null);
+    }
+
+    private static int eseguiConLog(Job job, String comando, int timeoutSecondi, StringBuilder cattura) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", comando);
         pb.redirectErrorStream(true);
         Process p = pb.start();
@@ -968,7 +972,10 @@ public final class UpdateManager {
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
             String l;
-            while ((l = br.readLine()) != null) job.scrivi(l);
+            while ((l = br.readLine()) != null) {
+                job.scrivi(l);
+                if (cattura != null) cattura.append(l).append('\n');
+            }
         }
         int code = p.waitFor();
         guardia.interrupt();
@@ -1955,6 +1962,20 @@ public final class UpdateManager {
                     attendi ? null : new JSONObject().put("tipo", "package_update").put("package", nome)));
         }
 
+        // --- Cache di rspamd rimaste da un aggiornamento precedente ---
+        // Esiste come passo solo finche' quei file ci sono: e' lo stesso principio dello
+        // stato ricavato, e sparisce da solo quando non serve piu'.
+        long unser = numero(sh("find /var/db/rspamd -type f -name '*.unser' 2>/dev/null | wc -l", 60));
+        if (unser > 0) {
+            passi.put(passo("fase-rspamd-cache", "fase", "Eliminare le cache Hyperscan di rspamd", "dafare",
+                    unser + " file .unser in /var/db/rspamd, generati dalla versione precedente.",
+                    "Il port di rspamd 4.1 chiede espressamente di rimuoverli: sono cache di espressioni "
+                    + "regolari compilate dalla versione vecchia e possono far sbagliare la classificazione, "
+                    + "cioe' spam che passa o posta buona scartata, senza che nulla sembri guasto. "
+                    + "Sono file rigenerati da solo al primo avvio: non sono dati ne' configurazione.",
+                    new JSONObject().put("tipo", "rspamd_clean_cache")));
+        }
+
         // --- Passo finale: configurazione Dovecot dalla sorgente unica ---
         // Lo stato si ricava dal file vivo: l'intestazione la scrive solo il generatore nuovo.
         boolean rigenerata = ok("grep -q 'generato dal FreeBSD Mail Panel' "
@@ -1994,11 +2015,29 @@ public final class UpdateManager {
      * quello che era "il 3" diventava un altro. Chi segue una guida deve poter dire "ho fatto
      * openssl", non "ho fatto il tre" e scoprire che il tre adesso e' nginx.
      */
+    /**
+     * La lettera di ogni fase, legata alla sua CHIAVE e non all'ordine di apparizione.
+     *
+     * Assegnarle scorrendo l'elenco sembrava stabile finche' le fasi erano sempre le stesse
+     * quattro. Ma una fase che compare solo quando serve — come la pulizia delle cache di
+     * rspamd — farebbe scorrere tutte quelle dopo, e "Fase C" tornerebbe a significare cose
+     * diverse in momenti diversi: esattamente il difetto dei numeri, solo piu' lento a farsi
+     * vedere.
+     */
+    private static final java.util.Map<String, String> LETTERA_FASE = java.util.Map.of(
+        "fase-protezione",   "A",
+        "fase-nonprotetti",  "B",
+        "fase-mysql84",      "C",
+        "fase-dovecot",      "D",
+        "fase-rspamd-cache", "E"
+    );
+
     private static JSONObject passo(String chiave, String gruppo, String titolo, String stato,
                                     String situazione, String perche, JSONObject azione) {
         JSONObject o = new JSONObject().put("chiave", chiave).put("gruppo", gruppo)
                 .put("titolo", titolo).put("stato", stato)
                 .put("situazione", situazione).put("perche", perche);
+        if ("fase".equals(gruppo)) o.put("lettera", LETTERA_FASE.getOrDefault(chiave, "?"));
         if (azione != null) o.put("azione", azione);
         return o;
     }
@@ -2105,6 +2144,38 @@ public final class UpdateManager {
             return null;
         }
         return ok("test -f /usr/local/etc/rc.d/" + logico + " -o -f /etc/rc.d/" + logico, 10) ? logico : null;
+    }
+
+    /**
+     * Ripesca dai messaggi post-installazione quelli che CHIEDONO un'azione.
+     *
+     * pkg li stampa in mezzo a centinaia di righe e poi si prosegue: un "e' consigliato
+     * rimuovere i file di cache" scorre via e nessuno lo fa. Rspamd 4.1 ne aveva uno che
+     * riguardava la classificazione dello spam, ed e' passato inosservato proprio cosi'.
+     * Qui si riconoscono le formule imperative e il messaggio si ristampa ALLA FINE, dove
+     * si guarda davvero.
+     */
+    static java.util.List<String> messaggiCheChiedonoAzione(String outputPkg) {
+        java.util.List<String> fuori = new ArrayList<>();
+        StringBuilder blocco = new StringBuilder();
+        boolean dentro = false;
+        for (String r : outputPkg.split("\n")) {
+            if (r.startsWith("Message from ")) {
+                if (dentro && chiedeAzione(blocco.toString())) fuori.add(blocco.toString().trim());
+                blocco.setLength(0);
+                dentro = true;
+            }
+            if (dentro) blocco.append(r).append('\n');
+        }
+        if (dentro && chiedeAzione(blocco.toString())) fuori.add(blocco.toString().trim());
+        return fuori;
+    }
+
+    private static boolean chiedeAzione(String testo) {
+        String t = testo.toLowerCase();
+        return t.contains("it is recommended") || t.contains("you should") || t.contains("you may need")
+            || t.contains("you need to") || t.contains("remember to")
+            || t.contains("following command") || t.contains("action is needed");
     }
 
     /**
@@ -2342,6 +2413,7 @@ public final class UpdateManager {
         final int TOT = 6;
         java.util.List<String> daRiproteggere = new ArrayList<>();
         java.util.List<String> famiglia = new ArrayList<>();
+        java.util.List<String> messaggiAzione = new ArrayList<>();
         boolean ricontrolloManuale = false;
         java.util.List<String> servizi = new ArrayList<>();
         Map<String, String> pidPrima = new LinkedHashMap<>();
@@ -2411,7 +2483,11 @@ public final class UpdateManager {
             job.scrivi("[3/" + TOT + "] Aggiornamento...");
             StringBuilder elenco = new StringBuilder();
             for (String m : famiglia) if (nomeValido(m)) elenco.append(' ').append(m);
-            int code = eseguiConLog(job, "pkg upgrade -y" + elenco + " 2>&1", 1800);
+            // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
+            // ripescare i messaggi che chiedono un'azione.
+            StringBuilder catturato = new StringBuilder();
+            int code = eseguiConLog(job, "pkg upgrade -y" + elenco + " 2>&1", 1800, catturato);
+            messaggiAzione = messaggiCheChiedonoAzione(catturato.toString());
             if (code != 0) throw new IllegalStateException("pkg upgrade uscito con codice " + code);
 
             String versioneDopo = sh("pkg query %v " + nome + " 2>/dev/null", 20);
@@ -2502,6 +2578,16 @@ public final class UpdateManager {
                 job.scrivi("  Il repository potrebbe non avere ancora la correzione.");
             }
 
+            if (!messaggiAzione.isEmpty()) {
+                job.scrivi("");
+                job.scrivi("=== IL PACCHETTO CHIEDE UN'AZIONE ===");
+                job.scrivi("Erano in mezzo all'output dell'aggiornamento e sarebbero passati inosservati:");
+                for (String m : messaggiAzione) {
+                    for (String l : m.split("\n")) if (!l.trim().isEmpty()) job.scrivi("  " + l);
+                    job.scrivi("");
+                }
+            }
+
             job.avanza(6, TOT);
             job.scrivi("");
             job.scrivi("[6/" + TOT + "] Stato di tutti i servizi...");
@@ -2554,6 +2640,98 @@ public final class UpdateManager {
             }
             job.fine = System.currentTimeMillis();
         }
+    }
+
+    /**
+     * Elimina SOLO le cache Hyperscan di rspamd e riavvia il servizio.
+     *
+     * E' una cancellazione, cioe' la categoria di operazione che puo' far sparire qualcosa:
+     * il percorso e il criterio sono scritti qui e non arrivano dalla richiesta, e alla fine
+     * il pannello DIMOSTRA di non aver toccato altro contando i file rimanenti prima e dopo.
+     * "Ho cancellato solo quelli" e' un'affermazione, e le affermazioni si verificano.
+     */
+    public static JSONObject avviaPuliziaCacheRspamd() {
+        String id = "rspamd-cache-" + System.currentTimeMillis();
+        Job j = new Job(id, "rspamd_cache");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> {
+            j.status = "running";
+            try {
+                final String DIR = "/var/db/rspamd";
+                j.avanza(1, 4);
+                j.scrivi("=== Pulizia delle cache Hyperscan di rspamd ===");
+                j.scrivi("");
+                j.scrivi("[1/4] Conto cosa c'e' adesso...");
+                long unserPrima = numero(sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null | wc -l", 60));
+                long altriPrima = numero(sh("find " + DIR + " -type f ! -name '*.unser' 2>/dev/null | wc -l", 60));
+                j.scrivi("    file .unser da eliminare: " + unserPrima);
+                j.scrivi("    altri file, che NON devono essere toccati: " + altriPrima);
+                if (unserPrima == 0) {
+                    j.status = "completed";
+                    j.scrivi("    niente da fare.");
+                    return;
+                }
+                for (String f : sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null", 60).split("\n")) {
+                    if (!f.trim().isEmpty()) j.scrivi("      " + f.trim());
+                }
+
+                j.avanza(2, 4);
+                j.scrivi("");
+                j.scrivi("[2/4] Elimino...");
+                ok("find " + DIR + " -type f -name '*.unser' -delete", 120);
+
+                j.avanza(3, 4);
+                j.scrivi("");
+                j.scrivi("[3/4] Verifico di non aver toccato altro...");
+                long unserDopo = numero(sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null | wc -l", 60));
+                long altriDopo = numero(sh("find " + DIR + " -type f ! -name '*.unser' 2>/dev/null | wc -l", 60));
+                j.scrivi("    file .unser rimasti: " + unserDopo + " (attesi 0)");
+                j.scrivi("    altri file: " + altriPrima + " prima, " + altriDopo + " adesso");
+                if (altriDopo != altriPrima) {
+                    j.status = "error";
+                    j.errorMessage = "Sono spariti file che non dovevano essere toccati: "
+                            + altriPrima + " prima, " + altriDopo + " adesso.";
+                    j.scrivi("    ALLARME: " + j.errorMessage);
+                    return;
+                }
+                j.scrivi("    nessun altro file toccato.");
+
+                j.avanza(4, 4);
+                j.scrivi("");
+                j.scrivi("[4/4] Riavvio rspamd...");
+                Shell.Result pr = Shell.runShell(Duration.ofSeconds(60), "rspamadm configtest 2>&1");
+                if (!pr.success()) {
+                    j.status = "error";
+                    j.errorMessage = "rspamd non accetta la configurazione: NON lo riavvio.";
+                    j.scrivi("    " + pr.outputTrim());
+                    return;
+                }
+                j.scrivi("    configurazione accettata");
+                String pidPrima = pidServizio("rspamd");
+                ok("service rspamd restart", 120);
+                boolean attivo = ok("service rspamd status", 30);
+                String pidDopo = pidServizio("rspamd");
+                j.scrivi("    rspamd: " + (attivo ? "attivo" : "NON attivo")
+                        + (pidPrima.isEmpty() || pidDopo.isEmpty() ? "" : "  (pid " + pidPrima + " -> " + pidDopo + ")"));
+                if (!attivo) {
+                    j.status = "error";
+                    j.errorMessage = "rspamd non e' ripartito: guarda /var/log/maillog.";
+                } else {
+                    j.status = "completed";
+                    j.scrivi("");
+                    j.scrivi("Cache eliminate: rspamd le rigenerera' da solo mentre lavora.");
+                }
+            } catch (Exception e) {
+                j.status = "error";
+                j.errorMessage = e.getMessage();
+                j.scrivi("ERRORE: " + e.getMessage());
+            } finally {
+                j.fine = System.currentTimeMillis();
+            }
+        }, "rspamd-cache");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
     }
 
     public static JSONObject avviaManutenzione() {

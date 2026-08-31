@@ -13477,8 +13477,6 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
 
             let primoDaFare = true;
-            const lettere = ['A','B','C','D','E','F','G','H'];
-            let iFase = 0;
 
             function riga(p, etichetta) {
                 const attivo = p.stato === 'dafare' && primoDaFare;
@@ -13512,9 +13510,9 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             // separate cio' che e' una sequenza sola. Ogni riga si presenta gia' da se': le fasi
             // con la loro lettera, i pacchetti col loro nome.
             passi.forEach(p => {
-                const etichetta = p.gruppo === 'fase'
-                    ? 'Fase ' + (lettere[iFase++] || '?') + ' &mdash; '
-                    : '';
+                // La lettera arriva dal backend, legata alla chiave del passo: non si ricava
+                // dalla posizione, altrimenti una fase che compare farebbe scorrere le altre.
+                const etichetta = p.gruppo === 'fase' ? 'Fase ' + updEsc(p.lettera) + ' &mdash; ' : '';
                 h += riga(p, etichetta);
             });
 
@@ -13544,6 +13542,9 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             } else if (azione.tipo === 'package_update') {
                 if (prompt('Per confermare scrivi esattamente il nome del pacchetto: ' + azione.package) !== azione.package) return;
                 r = await updApi('package_update', { package: azione.package, confirm: azione.package });
+            } else if (azione.tipo === 'rspamd_clean_cache') {
+                if (prompt('Conferma: scrivi ELIMINA CACHE per procedere.') !== 'ELIMINA CACHE') return;
+                r = await updApi('rspamd_clean_cache', { confirm: 'ELIMINA CACHE' });
             } else if (azione.tipo === 'dovecot_config_regen') {
                 if (prompt('Conferma: scrivi RIGENERA per procedere.') !== 'RIGENERA') return;
                 r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });

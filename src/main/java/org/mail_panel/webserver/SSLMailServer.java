@@ -6079,6 +6079,16 @@ public class SSLMailServer {
                 case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
                 case "plan" -> response = UpdateManager.pianoManutenzione();
                 case "mysql84_preflight" -> response = UpdateManager.mysql84Preflight();
+                case "rspamd_clean_cache" -> {
+                    // E' una cancellazione: la conferma si scrive a mano, e il percorso non
+                    // arriva dalla richiesta ma e' fissato nel codice.
+                    if (!"ELIMINA CACHE".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaPuliziaCacheRspamd();
+                    logAudit("RSPAMD_CACHE_CLEANED", ip, response.optString("jobId", ""));
+                }
                 case "mysql84_migrate" -> {
                     if (!"MIGRA A 8.4".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");
