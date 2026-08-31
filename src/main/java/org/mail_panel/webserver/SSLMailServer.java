@@ -6082,6 +6082,15 @@ public class SSLMailServer {
                 case "broken_libs" -> response = UpdateManager.pacchettiConLibrerieMancanti();
                 case "mysql_client_diag" -> response = UpdateManager.diagnosiClientMysql();
                 case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
+                case "clean_client" -> {
+                    if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaPuliziaClientEstraneo(
+                            req.optString("estraneo", ""), req.optString("corretto", ""));
+                    logAudit("MYSQL_CLIENT_CLEANUP", ip, req.optString("estraneo", ""));
+                }
                 case "relink" -> {
                     if (!"RICOLLEGA".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");

@@ -3018,6 +3018,118 @@ public final class UpdateManager {
                         + "va su internet. Va riverificata quando cambia il trimestre.");
     }
 
+    /**
+     * Toglie un client MySQL estraneo e ripristina i file del client corretto.
+     *
+     * Situazione che lo rende necessario: un "pkg install -f" ha tirato dentro mysql97-client
+     * e ne ha sovrascritto 19 file di mysql84-client — i comandi e gli header, NON la libreria
+     * condivisa, che infatti e' rimasta quella della 8.4 ed e' il motivo per cui la posta ha
+     * continuato a funzionare.
+     *
+     * L'ordine e' deliberato: prima si rimuove l'estraneo, poi si reinstalla quello giusto.
+     * Cosi' qualunque file la rimozione porti via viene rimesso subito dopo. L'ordine inverso
+     * lascerebbe la rimozione libera di cancellare cio' che si era appena ripristinato.
+     */
+    public static JSONObject avviaPuliziaClientEstraneo(String estraneo, String corretto) {
+        if (!nomeValido(estraneo) || !nomeValido(corretto)
+                || !estraneo.matches("mysql[0-9]+-client") || !corretto.matches("mysql[0-9]+-client")) {
+            return new JSONObject().put("success", false).put("error", "nomi non validi");
+        }
+        String id = "cleanclient-" + System.currentTimeMillis();
+        Job j = new Job(id, "clean_client");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> {
+            j.status = "running";
+            boolean sbloccato = false;
+            try {
+                j.avanza(1, 5);
+                j.scrivi("=== Rimozione di " + estraneo + " e ripristino di " + corretto + " ===");
+                j.scrivi("");
+                j.scrivi("[1/5] Controllo che nessuno dipenda da " + estraneo + "...");
+                String dip = sh("pkg query %rn " + estraneo + " 2>/dev/null", 30).trim();
+                if (!dip.isEmpty()) {
+                    j.status = "error";
+                    j.errorMessage = "Qualcuno dipende da " + estraneo + ": " + dip.replace("\n", " ")
+                            + ". Rimuoverlo li lascerebbe senza libreria: mi fermo.";
+                    j.scrivi("    " + j.errorMessage);
+                    return;
+                }
+                j.scrivi("    nessun pacchetto dipende da " + estraneo + ": si puo' rimuovere.");
+                String libPrima = sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20).trim();
+                j.scrivi("    la libreria condivisa appartiene a: " + (libPrima.isEmpty() ? "(nessuno)" : libPrima));
+
+                j.avanza(2, 5);
+                j.scrivi("");
+                j.scrivi("[2/5] Rimuovo " + estraneo + "...");
+                for (String l : sh("pkg delete -y " + estraneo + " 2>&1", 300).split("\n")) {
+                    if (!l.trim().isEmpty()) j.scrivi("    " + l);
+                }
+
+                j.avanza(3, 5);
+                j.scrivi("");
+                j.scrivi("[3/5] Ripristino i file di " + corretto + "...");
+                if (bloccato(sh("pkg lock -l 2>/dev/null"), corretto)) {
+                    scriviStato(java.util.List.of(corretto));
+                    sbloccato = ok("pkg unlock -y " + corretto, 30);
+                    j.scrivi("    sbloccato temporaneamente");
+                }
+                int code = eseguiConLog(j, "pkg install -f -y " + corretto + " 2>&1", 900);
+                if (code != 0) throw new IllegalStateException("pkg install uscito con codice " + code);
+
+                j.avanza(4, 5);
+                j.scrivi("");
+                j.scrivi("[4/5] Verifica dell'integrita' dei file...");
+                String chk = sh("pkg check -s " + corretto + " 2>&1", 300);
+                long difformi = 0;
+                for (String l : chk.split("\n")) if (l.contains("checksum mismatch")) difformi++;
+                j.scrivi("    file con contenuto difforme: " + difformi + " (attesi 0)");
+                if (difformi > 0) {
+                    for (String l : chk.split("\n")) if (l.contains("checksum mismatch")) j.scrivi("      " + l.trim());
+                }
+
+                j.avanza(5, 5);
+                j.scrivi("");
+                j.scrivi("[5/5] La posta legge ancora le caselle?");
+                String libDopo = sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20).trim();
+                j.scrivi("    la libreria condivisa appartiene a: " + (libDopo.isEmpty() ? "(NESSUNO: manca!)" : libDopo));
+                JSONArray rotti = pacchettiConLibrerieMancanti().getJSONArray("packages");
+                j.scrivi("    pacchetti senza libreria: " + rotti.length() + " (attesi 0)");
+                String casella = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
+                boolean postfixOk = true;
+                if (casella.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
+                    String q = sh("postmap -q '" + casella + "' mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf 2>&1", 60);
+                    String ql = q.toLowerCase();
+                    postfixOk = !q.trim().isEmpty() && !ql.contains("error") && !ql.contains("fatal")
+                            && !ql.contains("not found") && !ql.contains("dlopen") && !ql.startsWith("postmap:");
+                    j.scrivi("    postfix risolve " + casella + ": " + (postfixOk ? "SI (" + q.trim() + ")" : "NO -> " + q.trim()));
+                }
+                if (difformi == 0 && rotti.length() == 0 && !libDopo.isEmpty() && postfixOk) {
+                    j.status = "completed";
+                    j.scrivi("");
+                    j.scrivi("=== Stato ripulito: un solo client MySQL, file integri, posta funzionante ===");
+                } else {
+                    j.status = "error";
+                    j.errorMessage = "La pulizia ha lasciato qualcosa fuori posto: leggi il log.";
+                }
+            } catch (Exception e) {
+                j.status = "error";
+                j.errorMessage = e.getMessage();
+                j.scrivi("ERRORE: " + e.getMessage());
+            } finally {
+                if (sbloccato) {
+                    boolean r = ok("pkg info -e " + corretto, 15) && ok("pkg lock -y " + corretto, 30);
+                    j.scrivi("");
+                    j.scrivi("Riprotezione di " + corretto + ": " + (r ? "fatta" : "FALLITA"));
+                    if (r) pulisciStato();
+                }
+                j.fine = System.currentTimeMillis();
+            }
+        }, "clean-client");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
     public static JSONObject avviaRicollegamento() {
         String id = "relink-" + System.currentTimeMillis();
         Job j = new Job(id, "relink");

@@ -13499,6 +13499,17 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             updPoll(r.jobId, el, pre);
         }
 
+        async function cleanClient(estraneo, corretto) {
+            if (prompt('Conferma: scrivi RIMUOVI per procedere.') !== 'RIMUOVI') return;
+            const el = document.getElementById('libs-body');
+            const pre = document.getElementById('libs-log');
+            const r = await updApi('clean_client', { confirm: 'RIMUOVI', estraneo: estraneo, corretto: corretto });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Pulizia in corso...</span>';
+            pre.style.display = 'block';
+            planPoll(r.jobId, el, pre);
+        }
+
         // ---------- coerenza con i predefiniti ----------
         async function defCheck() {
             const el = document.getElementById('def-body');
@@ -13577,8 +13588,25 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                + '<span class="text-muted">appartiene al pacchetto:</span> ' + updEsc(r.fornisconoLib || '(nessuno)') + '<br>'
                + '<span class="text-muted">file:</span> <code>' + updEsc(r.fileLib || '(assente)') + '</code></div>';
             if (r.conflitti) {
-                h += '<h6 class="small mt-2">Integrita&rsquo; di mysql84-client</h6>'
+                h += '<h6 class="small mt-2">Integrita&rsquo; dei file</h6>'
                    + '<pre class="upd-log mt-1">' + updEsc(r.conflitti) + '</pre>';
+            }
+            // Se ci sono due client e uno non serve a nessuno, si puo' ripulire.
+            const cl = (r.mysqlPackages || []).filter(p => /-client$/.test(p.name)).map(p => p.name);
+            if (cl.length > 1) {
+                const corretto = cl.find(n => (r.dipendenti || []).some(d =>
+                    (d.dipendenzeRepository || '').indexOf(n) >= 0));
+                const estraneo = cl.find(n => n !== corretto);
+                if (corretto && estraneo) {
+                    h += '<div class="alert alert-warning py-2 mt-2 small">'
+                       + 'Ci sono <strong>due client MySQL</strong>. I pacchetti della posta dichiarano di volere <code>'
+                       + updEsc(corretto) + '</code>; <code>' + updEsc(estraneo) + '</code> non serve a nessuno e i suoi '
+                       + 'file hanno sovrascritto quelli dell&rsquo;altro.</div>'
+                       + '<button class="btn btn-warning" onclick="cleanClient(&quot;' + updEsc(estraneo)
+                       + '&quot;,&quot;' + updEsc(corretto) + '&quot;)">'
+                       + '<i class="fas fa-broom me-1"></i>Rimuovi ' + updEsc(estraneo) + ' e ripristina '
+                       + updEsc(corretto) + '</button>';
+                }
             }
             el.innerHTML = h;
         }
