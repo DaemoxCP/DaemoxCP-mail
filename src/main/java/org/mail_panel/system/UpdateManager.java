@@ -1788,21 +1788,50 @@ public final class UpdateManager {
             // "Il servizio e' attivo" non basta: dopo aver sostituito la libreria client il
             // punto e' se Postfix e Dovecot RIESCONO ANCORA a interrogare il database.
             boolean provaOk = true;
+            // L'indirizzo finisce dentro un comando: si accetta solo cio' che e' davvero un
+            // indirizzo. Viene dal database e non da fuori, ma la convalida costa una riga e
+            // nel job di Dovecot c'era gia': trattare due volte la stessa cosa in due modi
+            // diversi e' il modo in cui una svista sopravvive.
+            if (!casellaProva.isEmpty()
+                    && !casellaProva.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
+                job.scrivi("    l'indirizzo letto dal database non ha una forma riconoscibile: prova saltata");
+                casellaProva = "";
+            }
             if (casellaProva.isEmpty()) {
-                job.scrivi("    nessuna casella attiva: prova funzionale non eseguibile");
+                job.scrivi("    nessuna casella utilizzabile: prova funzionale non eseguibile");
             } else {
+                // QUESTA e' la prova che conta: postmap interroga MySQL attraverso la
+                // libreria client appena sostituita. Se funziona, la sostituzione ha retto.
                 String mapFile = "/usr/local/etc/postfix/mysql-virtual-mailboxes.cf";
                 if (ok("test -f " + mapFile, 15)) {
-                    String q = sh("postmap -q '" + casellaProva.replace("'", "") + "' mysql:" + mapFile + " 2>&1", 60);
+                    String q = sh("postmap -q '" + casellaProva + "' mysql:" + mapFile + " 2>&1", 60);
                     boolean pOk = !q.trim().isEmpty() && !q.toLowerCase().contains("error");
-                    job.scrivi("    postfix risolve " + casellaProva + ": " + (pOk ? "SI (" + q.trim() + ")" : "NO -> " + q.trim()));
+                    job.scrivi("    postfix interroga MySQL per " + casellaProva + ": "
+                            + (pOk ? "SI (" + q.trim() + ") -> la libreria client nuova funziona"
+                                   : "NO -> " + q.trim()));
                     if (!pOk) provaOk = false;
-                } else job.scrivi("    " + mapFile + " non trovato: prova su Postfix saltata");
+                } else {
+                    job.scrivi("    " + mapFile + " non trovato: la prova sulla libreria client NON e' stata fatta");
+                    provaOk = false;
+                }
 
-                String du = sh("doveadm user '" + casellaProva.replace("'", "") + "' 2>&1 | head -5", 60);
+                // Questa invece prova meno di quanto sembri, e va detto: lo userdb qui e'
+                // "static", quindi doveadm risponde senza interrogare il database. Dimostra
+                // che Dovecot e' vivo e risolve gli utenti, non che il suo passdb SQL funzioni.
+                String du = sh("doveadm user '" + casellaProva + "' 2>&1 | head -5", 60);
                 boolean dOk = du.toLowerCase().contains("uid") || du.toLowerCase().contains("home");
-                job.scrivi("    dovecot risolve " + casellaProva + ": " + (dOk ? "SI" : "NO -> " + du.trim()));
+                job.scrivi("    dovecot risolve " + casellaProva + ": " + (dOk ? "SI" : "NO -> " + du.trim())
+                        + "  (userdb static: non prova il passdb SQL)");
                 if (!dOk) provaOk = false;
+
+                // Il percorso SQL di Dovecot si prova cosi': la stessa query che sta nel suo
+                // dovecot-sql.conf, eseguita con le stesse credenziali.
+                String righe = mysqlOut("SELECT COUNT(*) FROM mailboxes WHERE email='" + casellaProva
+                        + "' AND active=1;").trim();
+                boolean sOk = "1".equals(righe);
+                job.scrivi("    la query di autenticazione di Dovecot trova " + casellaProva + ": "
+                        + (sOk ? "SI" : "NO (risultato '" + righe + "')"));
+                if (!sOk) provaOk = false;
             }
 
             job.scrivi("");
