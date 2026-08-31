@@ -294,8 +294,9 @@ public final class UpdateManager {
          "E' il runtime Java su cui gira QUESTO pannello. Aggiornandolo mentre e' in esecuzione, la JVM in "
          + "memoria non combacia piu' con i file su disco e il pannello NON riesce piu' ad avviare processi: "
          + "da quel momento ogni comando che lancia fallisce in silenzio, compreso il riblocco dei pacchetti, "
-         + "e ogni stato che riporta diventa falso. MEGLIO ATTENDERE: aggiornalo da solo e riavvia subito il "
-         + "pannello."},
+         + "e ogni stato che riporta diventa falso. NON aggiornarlo da qui: usa la scheda \"Aggiornamento "
+         + "della JVM del pannello\", che lo fa con uno script staccato — impacchetta la Java attuale come "
+         + "via di ritorno, spegne il pannello, aggiorna, controlla che java risponda e lo riaccende da solo."},
         {"^openssl[0-9]*$", "verifica",
          "Tocca TLS di Postfix, Dovecot e nginx insieme. Un cambio maggiore puo' rendere non piu' accettati "
          + "protocolli o cifrari vecchi: i client datati potrebbero non collegarsi piu'."},
@@ -2054,10 +2055,31 @@ public final class UpdateManager {
             }
         }
 
-        aggiungiCheck(checks, "copia", "Copia del database", "verifica",
-                "Prima di toccare qualsiasi cosa viene fatta una copia completa di "
-                + (dsn.optBoolean("ok") ? dsn.getString("db") : "roundcubemail")
-                + " e del config.inc.php. L'aggiornamento dello schema non si annulla: la copia e' l'unica via di ritorno.");
+        // Non si annuncia una via di ritorno: si prova, adesso, davvero.
+        JSONObject prova = provaCopia();
+        String nomeDb = dsn.optBoolean("ok") ? dsn.getString("db") : "roundcubemail";
+        if (!prova.optBoolean("ok")) {
+            String ered = opzioniEreditate();
+            aggiungiCheck(checks, "copia", "Copia del database", "block",
+                    "la prova di copia di " + nomeDb + " NON riesce, quindi non ci sarebbe via di "
+                    + "ritorno e non si parte. Motivo: " + prova.optString("errore")
+                    + (ered.isEmpty() ? ""
+                       : "  ||  Opzioni che mysqldump si costruisce da solo, file di configurazione "
+                         + "compresi: " + ered));
+            block = true;
+        } else if (!"completa".equals(prova.optString("modo"))) {
+            aggiungiCheck(checks, "copia", "Copia del database", "attendi",
+                    "la copia di " + nomeDb + " riesce, ma solo in modo ridotto (" + prova.getString("modo")
+                    + "). Il tentativo completo non passa: " + prova.optString("storia")
+                    + " — sullo schema di Roundcube non c'e' nulla di cio' che verrebbe escluso, "
+                    + "quindi la copia resta una via di ritorno valida. E' provata adesso, non promessa.");
+        } else {
+            aggiungiCheck(checks, "copia", "Copia del database", "ok",
+                    "provata adesso per davvero: un mysqldump senza dati di " + nomeDb
+                    + " arriva fino in fondo. Prima di toccare qualsiasi cosa verra' copiato tutto, "
+                    + "con il config.inc.php. L'aggiornamento dello schema non si annulla: e' l'unica "
+                    + "via di ritorno, quindi si prova prima di averne bisogno.");
+        }
 
         aggiungiCheck(checks, "opcache", "Cache del codice PHP", "verifica",
                 "Dopo l'aggiornamento php-fpm viene riavviato: con OPcache attivo continuerebbe a servire il "
@@ -2116,7 +2138,7 @@ public final class UpdateManager {
      * comporta diversamente da come si e' abituati e ha gia' scritto una "n" letterale al
      * posto di un a capo in questo stesso progetto.
      */
-    private static boolean spostaRadiceNginx(Job job, String backupDir) {
+    private static String spostaRadiceNginx(Job job, String backupDir) {
         JSONArray radici = radiciNginxRoundcube();
         java.util.List<String> toccati = new ArrayList<>();
         try {
@@ -2125,23 +2147,34 @@ public final class UpdateManager {
                 if (x.getBoolean("gia")) continue;
                 String file = x.getString("file"), root = x.getString("root");
                 if (!ok("test -f " + file, 10)) continue;
+                // Se public_html non c'e', questa build non lo usa: non e' un guasto, e
+                // dichiararlo tale bocciarebbe un aggiornamento riuscito — che e' il modo di
+                // farsi tornare indietro senza motivo. Chi giudica resta la prova finale: se
+                // la webmail non risponde, lo dice quella.
                 if (!ok("test -d " + root + "/public_html", 10)) {
-                    job.scrivi("    " + root + "/public_html non esiste: NON tocco " + file);
-                    return false;
+                    job.scrivi("    " + root + "/public_html non esiste: questa versione non lo usa,");
+                    job.scrivi("    lascio la radice dov'e'. La prova via web dira' se e' un problema.");
+                    return "nonserve";
                 }
                 String nome = file.replaceAll(".*/", "");
                 ok("cp -p " + file + " " + backupDir + "/nginx-" + nome, 30);
                 java.util.List<String> righe = Files.readAllLines(Paths.get(file));
                 int n = x.getInt("riga") - 1;
-                if (n < 0 || n >= righe.size()) { job.scrivi("    " + file + ": riga " + (n + 1) + " non c'e' piu'"); return false; }
+                if (n < 0 || n >= righe.size()) { job.scrivi("    " + file + ": riga " + (n + 1) + " non c'e' piu'"); return "fallito"; }
                 String vecchia = righe.get(n);
-                if (!vecchia.contains(root)) { job.scrivi("    " + file + ":" + (n + 1) + " non contiene piu' " + root); return false; }
+                if (!vecchia.contains(root)) { job.scrivi("    " + file + ":" + (n + 1) + " non contiene piu' " + root); return "fallito"; }
+                // Puntare a una cartella che esiste non basta: dev'esserci cosa servire.
+                if (!ok("test -f " + root + "/public_html/index.php", 10)) {
+                    job.scrivi("    " + root + "/public_html esiste ma non contiene index.php:");
+                    job.scrivi("    non sposto la radice su una cartella che non ha nulla da servire.");
+                    return "fallito";
+                }
                 righe.set(n, vecchia.replace(root + ";", root + "/public_html;"));
                 Files.write(Paths.get(file), righe);
                 toccati.add(file);
                 job.scrivi("    " + file + ":" + (n + 1) + "  root -> " + root + "/public_html");
             }
-            if (toccati.isEmpty()) { job.scrivi("    nessuna riga da cambiare"); return true; }
+            if (toccati.isEmpty()) { job.scrivi("    nessuna riga da cambiare"); return "nonserve"; }
 
             // Prima di ricaricare: nginx accetta questa configurazione?
             String prova = sh("nginx -t 2>&1", 60);
@@ -2153,41 +2186,165 @@ public final class UpdateManager {
                     ok("cp -p " + backupDir + "/nginx-" + nome + " " + f, 30);
                 }
                 job.scrivi("    nginx ha rifiutato la configurazione: rimessa quella di prima, non ricarico");
-                return false;
+                return "fallito";
             }
             job.scrivi("    nginx accetta la configurazione");
             String svc = nomeServizioReale("nginx");
-            if (svc == null) { job.scrivi("    nginx non risulta fra i servizi: ricaricalo tu"); return false; }
+            if (svc == null) { job.scrivi("    nginx non risulta fra i servizi: ricaricalo tu"); return "fallito"; }
             boolean ric = ok("service " + svc + " reload", 60);
             job.scrivi("    ricaricato: " + (ric ? "si" : "NO"));
-            return ric;
+            return ric ? "fatto" : "fallito";
         } catch (Exception e) {
             job.scrivi("    errore nello spostamento della radice: " + e.getMessage());
-            return false;
+            return "fallito";
         }
     }
 
     /** Copia del database della webmail. Il marcatore finale di mysqldump prova che e' completa. */
-    private static boolean rcDump(String destinazione) {
+    /**
+     * Copia del database della webmail, con il motivo del fallimento quando fallisce.
+     *
+     * La versione precedente mandava stderr in /dev/null e tornava true/false: quando non
+     * riusciva, il pannello sapeva soltanto che non era riuscita — cioe' esattamente niente di
+     * utile. L'errore di mysqldump E' la diagnosi, buttarlo via era il difetto piu' grave qui.
+     *
+     * Due opzioni meritano una spiegazione, perche' sembrano dettagli e non lo sono:
+     *  - --no-tablespaces: senza, mysqldump di MySQL 8 interroga le informazioni sui tablespace
+     *    e per farlo pretende il privilegio PROCESS, che un utente di applicazione non ha e non
+     *    deve avere. E' la causa piu' comune di un "Access denied" che non c'entra nulla con le
+     *    tabelle da copiare.
+     *  - --routines e --triggers chiedono altri privilegi ancora (SHOW_ROUTINE, TRIGGER). Sullo
+     *    schema di Roundcube non c'e' niente di tutto cio', quindi se il primo tentativo cade li
+     *    si riprova senza — e lo si SCRIVE, invece di consegnare una copia piu' povera di quella
+     *    promessa facendo finta di niente.
+     */
+    /** I modi di copiare, dal piu' completo al meno esigente. Una lista sola per la prova e per la copia vera. */
+    private static final String[][] MODI_COPIA = {
+        // --no-tablespaces: senza, mysqldump di MySQL 8 legge le informazioni sui tablespace e
+        //   per farlo pretende PROCESS, che un utente di applicazione non ha e non deve avere.
+        // --skip-lock-all-tables --skip-flush-logs: "FLUSH TABLES" non lo emette --single-transaction,
+        //   lo emettono queste due — e possono arrivare da una sezione [mysqldump] in un file di
+        //   opzioni, senza che nessuno le abbia chieste sulla riga di comando. Spegnerle esplicitamente
+        //   e' l'unico modo di essere sicuri di cosa si sta eseguendo. Pretendono RELOAD, che a un
+        //   utente di applicazione non va dato per fare una copia.
+        // --no-defaults (ultimo tentativo): ignora TUTTI i file di opzioni. Va per forza per prima
+        //   sulla riga di comando, altrimenti mysqldump la rifiuta.
+        {"--single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs --routines --triggers",
+         "completa"},
+        {"--single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs",
+         "senza routine e trigger"},
+        {"--no-defaults --single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs",
+         "ignorando i file di opzioni"},
+    };
+
+    /**
+     * Da dove arrivano le opzioni che non ho chiesto io.
+     *
+     * "--print-defaults" stampa la riga di comando che mysqldump si costruisce davvero, opzioni
+     * dei file di configurazione comprese. Serve perche' un errore su un FLUSH TABLES che nessuno
+     * ha chiesto e' incomprensibile finche' non si vede chi lo ha chiesto: e a quel punto smette
+     * di essere un mistero e diventa una riga in un file.
+     */
+    private static String opzioniEreditate() {
+        String o = sh("mysqldump --print-defaults 2>&1 | tail -2", 30).replace("\n", " ").trim();
+        return o.isEmpty() ? "" : o;
+    }
+
+    /**
+     * Prova la copia PRIMA di averne bisogno, senza i dati.
+     *
+     * Una via di ritorno che non si e' mai percorsa non e' una via di ritorno: e' una speranza.
+     * Qui si esegue davvero un mysqldump --no-data, che costa un istante e mette alla prova
+     * esattamente cio' che conta — che il comando ci sia, che le credenziali entrino, che i
+     * privilegi bastino e che il file arrivi in fondo. Se questo non passa, non ha senso
+     * cominciare: e' quello che e' successo il 31/08/2026, scoperto al passo 2 invece che qui.
+     */
+    private static JSONObject provaCopia() {
+        String tmp = "/var/db/mailpanel/prova-copia.sql";
+        ok("mkdir -p /var/db/mailpanel", 20);
         JSONObject d = dsnRoundcube();
-        if (!d.optBoolean("ok")) return false;
+        if (!d.optBoolean("ok"))
+            return new JSONObject().put("ok", false)
+                    .put("errore", "credenziali non leggibili: " + d.optString("errore", "motivo non noto"));
+        if (!ok("which mysqldump >/dev/null 2>&1", 20))
+            return new JSONObject().put("ok", false)
+                    .put("errore", "mysqldump non e' installato o non e' nel PATH del pannello");
+        String h = d.getString("host");
+        String host = h.contains(":") ? h.substring(0, h.indexOf(':')) : h;
+        StringBuilder storia = new StringBuilder();
+        try {
+            for (String[] m : MODI_COPIA) {
+                JSONObject e = rcDumpUnTentativo(m[0] + " --no-data", d.getString("user"), host,
+                        d.getString("db"), d.getString("pass"), tmp);
+                if (e.optBoolean("ok"))
+                    return new JSONObject().put("ok", true).put("modo", m[1])
+                            .put("storia", storia.toString().trim());
+                storia.append("[").append(m[1]).append("] ").append(e.optString("errore")).append("  ");
+            }
+            return new JSONObject().put("ok", false).put("errore", storia.toString().trim());
+        } finally {
+            ok("rm -f " + tmp + " " + tmp + ".err", 20);
+        }
+    }
+
+    private static JSONObject rcDump(String destinazione) {
+        JSONObject r = new JSONObject().put("ok", false);
+        JSONObject d = dsnRoundcube();
+        if (!d.optBoolean("ok"))
+            return r.put("errore", "non riesco a leggere le credenziali da config.inc.php: "
+                    + d.optString("errore", "motivo non noto"));
         String u = d.getString("user"), db = d.getString("db");
         String h = d.getString("host");
         String host = h.contains(":") ? h.substring(0, h.indexOf(':')) : h;
         if (!u.matches("[A-Za-z0-9_]{1,64}") || !db.matches("[A-Za-z0-9_]{1,64}")
-                || !host.matches("[A-Za-z0-9._-]{1,128}")) return false;
+                || !host.matches("[A-Za-z0-9._-]{1,128}"))
+            return r.put("errore", "utente, database o host non hanno una forma valida: "
+                    + u + "@" + host + "/" + db);
+        if (!ok("which mysqldump >/dev/null 2>&1", 20))
+            return r.put("errore", "mysqldump non e' installato o non e' nel PATH del pannello");
+
+        StringBuilder storia = new StringBuilder();
+        for (String[] t : MODI_COPIA) {
+            JSONObject e = rcDumpUnTentativo(t[0], u, host, db, d.getString("pass"), destinazione);
+            if (e.optBoolean("ok")) {
+                r.put("ok", true).put("modo", t[1]);
+                if (!t[1].equals("completa")) r.put("ridotto", storia.toString().trim());
+                return r;
+            }
+            storia.append("[").append(t[1]).append("] ").append(e.optString("errore")).append("  ");
+        }
+        return r.put("errore", storia.toString().trim());
+    }
+
+    private static JSONObject rcDumpUnTentativo(String opzioni, String u, String host, String db,
+                                                String pass, String dest) {
+        JSONObject r = new JSONObject().put("ok", false);
+        String err = dest + ".err";
         try {
             ProcessBuilder pb = new ProcessBuilder("sh", "-c",
-                    "mysqldump --single-transaction --routines --triggers -u " + u + " -h " + host
-                    + " " + db + " > " + destinazione + " 2>/dev/null");
-            pb.environment().put("MYSQL_PWD", d.getString("pass"));
+                    "mysqldump " + opzioni + " -u " + u + " -h " + host + " " + db
+                    + " > " + dest + " 2> " + err);
+            pb.environment().put("MYSQL_PWD", pass);
             Process pr = pb.start();
-            if (!pr.waitFor(1800, java.util.concurrent.TimeUnit.SECONDS)) { pr.destroyForcibly(); return false; }
-            if (pr.exitValue() != 0) return false;
+            if (!pr.waitFor(1800, java.util.concurrent.TimeUnit.SECONDS)) {
+                pr.destroyForcibly();
+                return r.put("errore", "mysqldump non e' tornato entro 30 minuti");
+            }
+            String messaggio = sh("cat " + err + " 2>/dev/null", 30).replace("\n", " ").trim();
+            if (pr.exitValue() != 0)
+                return r.put("errore", "uscito con codice " + pr.exitValue()
+                        + (messaggio.isEmpty() ? " e nessun messaggio" : ": " + messaggio));
             // mysqldump chiude con "Dump completed": senza quella riga il file e' troncato,
             // e un file troncato che sembra un backup e' peggio di nessun backup.
-            return ok("tail -3 " + destinazione + " | grep -q 'Dump completed'", 60);
-        } catch (Exception e) { return false; }
+            if (!ok("tail -3 " + dest + " | grep -q 'Dump completed'", 60))
+                return r.put("errore", "uscito senza errori ma il file non finisce con "
+                        + "\"Dump completed\": e' troncato"
+                        + (messaggio.isEmpty() ? "" : " (" + messaggio + ")"));
+            ok("rm -f " + err, 15);
+            return r.put("ok", true);
+        } catch (Exception e) {
+            return r.put("errore", e.getMessage());
+        }
     }
 
     public static JSONObject avviaAggiornamentoRoundcube() {
@@ -2246,9 +2403,16 @@ public final class UpdateManager {
             backupDir = "/var/db/mailpanel/roundcube/" + ts;
             if (!ok("mkdir -p " + backupDir, 30)) throw new IllegalStateException("non riesco a creare " + backupDir);
             ok("cp -p " + RC_DIR + "/config/config.inc.php " + backupDir + "/config.inc.php", 30);
-            if (!rcDump(backupDir + "/roundcube.sql")) {
-                throw new IllegalStateException("la copia del database non e' riuscita o risulta troncata: "
-                        + "non procedo senza via di ritorno");
+            JSONObject cp = rcDump(backupDir + "/roundcube.sql");
+            if (!cp.optBoolean("ok")) {
+                job.scrivi("    " + cp.optString("errore"));
+                throw new IllegalStateException("la copia del database non e' riuscita: non procedo "
+                        + "senza via di ritorno. Il motivo e' la riga qui sopra.");
+            }
+            if (cp.has("ridotto")) {
+                job.scrivi("    copia RIDOTTA (" + cp.optString("modo") + "): il tentativo completo");
+                job.scrivi("    non e' passato -> " + cp.getString("ridotto"));
+                job.scrivi("    Sullo schema di Roundcube non cambia nulla, ma devi saperlo.");
             }
             job.scrivi("    copia verificata: " + backupDir + "/roundcube.sql ("
                     + numero(sh("wc -c < " + backupDir + "/roundcube.sql", 30)) / 1024 + " KB)");
@@ -2298,12 +2462,14 @@ public final class UpdateManager {
             job.avanza(6, TOT);
             job.scrivi("");
             job.scrivi("[6/" + TOT + "] Radice del server web...");
-            boolean radiceOk = true;
+            String esitoRadice = "nonserve";
             if (pf.optBoolean("cambioRadice", false)) {
-                radiceOk = spostaRadiceNginx(job, backupDir);
-                if (!radiceOk) job.scrivi("    ATTENZIONE: la webmail non sara' raggiungibile finche' "
-                        + "nginx non punta a .../public_html. Le copie sono in " + backupDir + ".");
+                esitoRadice = spostaRadiceNginx(job, backupDir);
+                if ("fallito".equals(esitoRadice))
+                    job.scrivi("    ATTENZIONE: la webmail non sara' raggiungibile finche' "
+                            + "nginx non punta a .../public_html. Le copie sono in " + backupDir + ".");
             } else job.scrivi("    non serve cambiarla per questa versione");
+            boolean radiceOk = !"fallito".equals(esitoRadice);
 
             job.avanza(7, TOT);
             job.scrivi("");
@@ -2326,18 +2492,29 @@ public final class UpdateManager {
             // La webmail risponde davvero? Non basta che i file siano aggiornati.
             String dominio = "";
             try { dominio = org.mail_panel.Main.dbManager.getRoundcubeDomain(); } catch (Exception ignored) {}
-            boolean webOk = true;
+            boolean webOk = true, webProvata = false;
             if (dominio != null && dominio.matches("[A-Za-z0-9.-]{1,255}")) {
+                webProvata = true;
                 String cod = sh("curl -sk -o /dev/null -m 20 -w '%{http_code}' https://" + dominio + "/ 2>/dev/null", 60).trim();
                 webOk = cod.startsWith("2") || cod.startsWith("3");
                 job.scrivi("    la webmail su https://" + dominio + " risponde: " + cod
                         + (webOk ? "" : "  <- non e' una risposta valida"));
-            } else job.scrivi("    dominio della webmail non configurato: prova via web saltata");
+            } else job.scrivi("    dominio della webmail non configurato: prova via web NON eseguita");
 
             if (tabOk && webOk && radiceOk) {
                 job.status = "completed";
                 job.scrivi("");
-                job.scrivi("=== Roundcube aggiornato e in servizio ===");
+                // "In servizio" si puo' dire solo se qualcuno l'ha visto rispondere. Senza quella
+                // prova il lavoro puo' essere andato benissimo, ma il verdetto sarebbe piu' verde
+                // delle prove che ho: allora lo dico, e la verifica la fai tu.
+                job.scrivi(webProvata
+                        ? "=== Roundcube aggiornato e in servizio ==="
+                        : "=== Roundcube aggiornato — NON ho potuto verificare che risponda ===");
+                if (!webProvata)
+                    job.scrivi("Non conosco il dominio della webmail, quindi non l'ho interrogata: "
+                            + "aprila nel browser prima di considerare finita questa operazione.");
+                if ("nonserve".equals(esitoRadice) && pf.optBoolean("cambioRadice", false))
+                    job.scrivi("La radice di nginx e' rimasta dov'era: questa build non usa public_html.");
                 job.scrivi("La copia del database resta in " + backupDir + ".");
                 job.scrivi("Entra nella webmail e verifica di vedere i tuoi messaggi prima di eliminarla.");
             } else {
