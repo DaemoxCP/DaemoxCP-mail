@@ -6082,6 +6082,16 @@ public class SSLMailServer {
                 case "broken_libs" -> response = UpdateManager.pacchettiConLibrerieMancanti();
                 case "mysql_client_diag" -> response = UpdateManager.diagnosiClientMysql();
                 case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
+                case "system_report" -> response = UpdateManager.rapportoSistema();
+                case "os_status" -> response = UpdateManager.sistemaOperativo();
+                case "os_fetch" -> {
+                    if (!"CERCA AGGIORNAMENTI".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.cercaAggiornamentiSistema();
+                    logAudit("OS_UPDATE_FETCH", ip, response.optString("nessunAggiornamento", ""));
+                }
                 case "python_preflight" -> response = UpdateManager.pythonPreflight();
                 case "python_leftovers" -> response = UpdateManager.restiPython(false);
                 case "python_leftovers_clean" -> {

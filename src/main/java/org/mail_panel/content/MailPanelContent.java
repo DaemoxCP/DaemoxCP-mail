@@ -13198,6 +13198,41 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fab fa-freebsd me-2"></i><strong>Sistema operativo</strong>
+                        <span class="small text-muted ms-2">i pacchetti sono met&agrave; del server: l&rsquo;altra met&agrave; &egrave; questa</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="osStato()"><i class="fas fa-magnifying-glass me-1"></i>Stato del sistema</button>
+                </div>
+                <div class="card-body">
+                    <div id="os-body"><span class="text-muted">Premi "Stato del sistema": legge e basta.</span></div>
+                    <pre id="os-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
+            <div class="card mb-4 border-info">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-clipboard-list me-2"></i><strong>Rapporto del sistema</strong>
+                        <span class="small text-muted ms-2">tutto in un testo solo, da copiare</span></span>
+                    <span>
+                        <button class="btn btn-sm btn-outline-secondary me-1" id="rep-copy" onclick="repCopia()" style="display:none"><i class="fas fa-copy me-1"></i>Copia</button>
+                        <button class="btn btn-sm btn-outline-info" onclick="repGen()"><i class="fas fa-file-lines me-1"></i>Genera rapporto</button>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Ramo dei pacchetti, versione di FreeBSD, coerenza con i predefiniti, ogni pacchetto
+                        dello stack con la versione installata e quella nel repository, le vulnerabilit&agrave;
+                        note con l&rsquo;indicazione se una correzione esista gi&agrave;, lo stato dei servizi e
+                        lo spazio. <strong>Non contiene niente di segreto</strong>: solo nomi, versioni e stati
+                        &mdash; nessun file di configurazione, nessuna password, nessuna chiave. Ci mette un
+                        minuto perch&eacute; interroga davvero il sistema.
+                    </p>
+                    <div id="rep-stato"><span class="text-muted">Premi "Genera rapporto": legge e basta.</span></div>
+                    <pre id="rep-testo" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-scale-balanced me-2"></i><strong>Coerenza con i predefiniti di FreeBSD</strong>
                         <span class="small text-muted ms-2">cosa il sistema si aspetta, contro cosa hai installato</span></span>
                     <button class="btn btn-sm btn-outline-primary" onclick="defCheck()"><i class="fas fa-magnifying-glass me-1"></i>Confronta</button>
@@ -13416,6 +13451,14 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
     }
 
     private static String getUpdatesScript() {
+        // Spezzato in parti perche' un letterale di testo non puo' superare 65535 byte
+        // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
+        // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
+        // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
+        return getUpdatesScript1() + getUpdatesScript2();
+    }
+
+    private static String getUpdatesScript1() {
         return """
         let updBusy = false;
 
@@ -13582,12 +13625,91 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         // ---------- coerenza con i predefiniti ----------
+        // ---------- sistema operativo ----------
+        async function osStato() {
+            const el = document.getElementById('os-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Lettura di versione, livello di patch, supporto...';
+            const r = await updApi('os_status');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>'
+                  + '<tr class="upd-cell"><td style="width:16rem"><strong>Kernel installato</strong></td><td><code>'
+                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Kernel in esecuzione</strong></td><td><code>'
+                  + updEsc(r.uname) + '</code>' + (r.riavvioNecessario
+                      ? ' <span class="badge upd-badge-warn ms-2">non combaciano: serve un riavvio</span>'
+                      : ' <span class="badge upd-badge-ok ms-2">combaciano</span>') + '</td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Userland</strong></td><td><code>' + updEsc(r.userland) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Architettura</strong></td><td><code>' + updEsc(r.arch) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Fine del supporto</strong></td><td>'
+                  + (r.fineSupporto
+                     ? '<strong>' + updEsc(r.fineSupporto) + '</strong> <span class="small text-muted">' + updEsc(r.noteSupporto) + '</span>'
+                     : '<span class="text-warning">la serie ' + updEsc(r.serie) + ' non &egrave; nella tabella del pannello: da riverificare</span>')
+                  + '</td></tr></tbody></table></div>'
+                  + '<p class="small text-muted">Fonte: ' + updEsc(r.fonteSupporto) + '</p>';
+            if (r.aggiornabileConFreebsdUpdate) {
+                h += '<div class="alert alert-' + (r.cePronti ? 'warning' : 'secondary') + ' py-2">'
+                   + '<strong>Aggiornamenti di base gi&agrave; scaricati:</strong> ' + updEsc(r.giaPronti) + '</div>'
+                   + '<button class="btn btn-outline-primary" onclick="osCerca()"><i class="fas fa-download me-1"></i>Cerca aggiornamenti del sistema</button>'
+                   + '<span class="small text-muted ms-2">esegue <code>freebsd-update fetch</code>: <strong>scarica, non installa</strong></span>';
+            } else {
+                h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.notaAggiornamenti) + '</div>';
+            }
+            el.innerHTML = h;
+        }
+
+        async function osCerca() {
+            if (prompt('Conferma: scrivi CERCA AGGIORNAMENTI. Scarica le patch, non le installa.') !== 'CERCA AGGIORNAMENTI') return;
+            const pre = document.getElementById('os-log');
+            pre.style.display = 'block';
+            pre.textContent = 'freebsd-update fetch in corso: pu&ograve; metterci qualche minuto...';
+            const r = await updApi('os_fetch');
+            if (!r.success) { pre.textContent = r.error || 'errore'; return; }
+            pre.textContent = r.uscita + '\\n\\n' + r.nota;
+        }
+
+        // ---------- rapporto del sistema ----------
+        async function repGen() {
+            const st = document.getElementById('rep-stato'), pre = document.getElementById('rep-testo');
+            st.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Raccolta: repository, pacchetti, vulnerabilit&agrave;, servizi... (circa un minuto)';
+            const r = await updApi('system_report');
+            if (!r.success && !r.parziale) { st.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            pre.style.display = 'block';
+            pre.textContent = r.testo || r.parziale;
+            document.getElementById('rep-copy').style.display = '';
+            st.innerHTML = r.success
+                ? '<span class="text-success"><i class="fas fa-check me-1"></i>Pronto: ' + (r.testo || '').length + ' caratteri. Premi "Copia".</span>'
+                : '<span class="text-warning">Interrotto: ' + updEsc(r.error) + '. Sotto c&rsquo;&egrave; la parte raccolta.</span>';
+        }
+
+        async function repCopia() {
+            const t = document.getElementById('rep-testo').textContent;
+            try {
+                await navigator.clipboard.writeText(t);
+                document.getElementById('rep-stato').innerHTML = '<span class="text-success"><i class="fas fa-check me-1"></i>Copiato negli appunti.</span>';
+            } catch (e) {
+                // Senza HTTPS o senza permesso la clipboard non c&#39;e&#39;: si seleziona a mano.
+                const el = document.getElementById('rep-testo');
+                const sel = window.getSelection(); const rg = document.createRange();
+                rg.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(rg);
+                document.getElementById('rep-stato').innerHTML = '<span class="text-warning">Il browser non mi lascia usare gli appunti: il testo &egrave; selezionato, premi Cmd/Ctrl+C.</span>';
+            }
+        }
+
         async function defCheck() {
             const el = document.getElementById('def-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Confronto...';
             const r = await updApi('defaults_check');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+            const rm = r.ramo || {};
+            let h = '';
+            if (rm.ramo) {
+                h += '<div class="alert alert-' + (rm.ramo === 'quarterly' ? 'warning' : rm.ramo === 'latest' ? 'info' : 'secondary')
+                   + ' py-2"><strong>Ramo dei pacchetti: ' + updEsc(rm.ramo) + '</strong>'
+                   + (rm.url ? ' &mdash; <code>' + updEsc(rm.url) + '</code>' : '')
+                   + '<br><span class="small">' + updEsc(rm.spiegazione) + '</span>'
+                   + '<br><span class="small text-muted">' + updEsc(rm.dove) + '</span></div>';
+            }
+            h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th>Componente</th><th>Predefinito FreeBSD</th><th>Installato</th><th>Esito</th></tr></thead><tbody>';
             (r.righe || []).forEach(x => {
                 const cls = x.esito === 'coerente' ? 'upd-badge-ok'
@@ -13879,6 +14001,11 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                   : '');
             el.innerHTML = h;
         }
+        """;
+    }
+
+    private static String getUpdatesScript2() {
+        return """
 
         async function pyRestiGo() {
             if (prompt('Conferma: scrivi PULISCI PYTHON per procedere.') !== 'PULISCI PYTHON') return;
@@ -14376,7 +14503,8 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             }
             setTimeout(() => updPoll(id, el, pre), 3000);
         }
-""";
+        """;
     }
+
 
 }

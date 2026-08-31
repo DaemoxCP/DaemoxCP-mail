@@ -5282,6 +5282,267 @@ public final class UpdateManager {
      * La colonna "installato" viene dal sistema, quella "predefinito" dalla fonte ufficiale:
      * il confronto e' il punto, perche' e' la divergenza a rompere le cose.
      */
+    /**
+     * Da quale ramo dei pacchetti si serve questo sistema.
+     *
+     * Cambia quanto ci mette una correzione ad arrivare, ed e' la risposta alla domanda "perche'
+     * il repository non ha ancora la versione che chiude questa vulnerabilita'". Non si legge da
+     * un file scelto a occhio: pkg fonde /etc/pkg/FreeBSD.conf con gli eventuali file in
+     * /usr/local/etc/pkg/repos/, e solo lui sa quale ha vinto. "pkg -vv" stampa la
+     * configurazione EFFICACE, quella davvero in uso.
+     *
+     * Nota sul significato, dall'Handbook di FreeBSD: quarterly viene tagliato da HEAD a
+     * gennaio, aprile, luglio e ottobre, e riceve comunque le correzioni di sicurezza — anche
+     * come aggiornamento di versione. Cio' che tiene fuori sono le novita', non le correzioni.
+     */
+    /**
+     * Un rapporto unico, in testo, da copiare e incollare.
+     *
+     * I dati ci sono gia' tutti, ma sparsi in sei schede: quando serve mandarli a qualcuno si
+     * finisce a copiare pezzi a mano, e i pezzi che si dimenticano sono sempre quelli che
+     * servivano. Qui stanno insieme, nell'ordine in cui uno li chiederebbe.
+     *
+     * Due scelte deliberate:
+     *  - le versioni installate e quelle del repository si leggono con DUE interrogazioni sole
+     *    (pkg query e pkg rquery su tutto) e si uniscono qui: interrogare pkg 41 volte per 41
+     *    pacchetti ci metterebbe minuti per la stessa informazione.
+     *  - non entra NIENTE di segreto: nomi, versioni, stati e avvisi. Nessun file di
+     *    configurazione, nessuna password, nessuna chiave. Un rapporto fatto per essere
+     *    incollato deve poter essere incollato senza rileggerlo riga per riga.
+     */
+    /**
+     * Fine supporto delle release di FreeBSD, dalla pagina ufficiale della sicurezza.
+     *
+     * Fotografia datata come PREDEFINITI, per lo stesso motivo: il pannello non va su internet.
+     * Fonte: https://www.FreeBSD.org/security/ — letta il 31/08/2026.
+     * Da rileggere quando esce una release nuova: una data di fine supporto sbagliata e' peggio
+     * di nessuna data, perche' rassicura invece di far controllare.
+     */
+    private static final String[][] FINE_SUPPORTO = {
+        {"15.1", "31/03/2027", "releng/15.1, rilasciata il 16/06/2026"},
+        {"15.0", "30/09/2026", "releng/15.0, rilasciata il 02/12/2025"},
+        {"14.4", "31/12/2026", "releng/14.4, rilasciata il 10/03/2026"},
+    };
+    private static final String FONTE_SUPPORTO =
+        "https://www.FreeBSD.org/security/ (letta il 31/08/2026). I rami stable sono supportati piu' "
+      + "a lungo: stable/15 fino al 31/12/2029, stable/14 fino al 30/11/2028.";
+
+    /**
+     * Stato del sistema operativo di base: versione, livello di patch, riavvio necessario,
+     * fine del supporto, aggiornamenti gia' scaricati.
+     *
+     * I pacchetti sono una meta' del server; l'altra e' il sistema sotto, che pkg non tocca e
+     * che nessuna delle schede finora guardava. Tutto in sola lettura: "freebsd-update fetch"
+     * SCARICA, quindi sta in un'azione separata e dichiarata, non qui dentro.
+     */
+    public static JSONObject sistemaOperativo() {
+        JSONObject r = new JSONObject();
+        try {
+            String kernel = sh("freebsd-version -k 2>/dev/null", 20).trim();     // kernel installato
+            String inEsec = sh("freebsd-version -r 2>/dev/null", 20).trim();     // kernel in esecuzione
+            String userland = sh("freebsd-version -u 2>/dev/null", 20).trim();   // userland
+            String uname = sh("uname -r 2>/dev/null", 20).trim();
+            String arch = sh("uname -mi 2>/dev/null", 20).trim();
+            r.put("kernelInstallato", kernel).put("kernelInEsecuzione", inEsec)
+             .put("userland", userland).put("uname", uname).put("arch", arch);
+
+            // L'Handbook: se freebsd-version -k e uname -r differiscono, il kernel installato
+            // non e' quello in esecuzione — cioe' manca un riavvio.
+            boolean riavvio = !kernel.isEmpty() && !uname.isEmpty() && !kernel.equals(uname);
+            r.put("riavvioNecessario", riavvio);
+
+            // Fine supporto: si confronta la parte X.Y della userland con la tabella ufficiale.
+            Matcher m = Pattern.compile("^([0-9]+\\.[0-9]+)").matcher(userland);
+            String serie = m.find() ? m.group(1) : "";
+            String eol = "", noteEol = "";
+            for (String[] e : FINE_SUPPORTO)
+                if (e[0].equals(serie)) { eol = e[1]; noteEol = e[2]; }
+            r.put("serie", serie).put("fineSupporto", eol).put("noteSupporto", noteEol)
+             .put("fonteSupporto", FONTE_SUPPORTO);
+
+            boolean release = userland.contains("-RELEASE");
+            r.put("aggiornabileConFreebsdUpdate", release);
+            if (!release) {
+                r.put("notaAggiornamenti", "La userland non e' una -RELEASE (" + userland + "): "
+                        + "freebsd-update vale per le release binarie, un sistema compilato dai "
+                        + "sorgenti si aggiorna in un altro modo. Non do indicazioni che non valgono qui.");
+            } else {
+                // updatesready NON scarica: dice solo se c'e' gia' qualcosa di pronto da installare.
+                String pronti = sh("freebsd-update updatesready 2>&1", 60).trim();
+                r.put("giaPronti", pronti);
+                r.put("cePronti", !pronti.toLowerCase().contains("no updates are available"));
+            }
+            return r.put("success", true);
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * Cerca gli aggiornamenti del sistema di base. SCARICA, non installa.
+     *
+     * Sta in un'azione a parte proprio perche' scrive: "freebsd-update fetch" scarica le patch
+     * in /var/db/freebsd-update e le lascia li'. Installarle e' un altro comando, e comporta un
+     * riavvio se tocca il kernel: quello non lo faccio partire da un pulsante senza che sia una
+     * decisione presa guardando cosa cambierebbe.
+     */
+    public static JSONObject cercaAggiornamentiSistema() {
+        try {
+            JSONObject so = sistemaOperativo();
+            if (!so.optBoolean("aggiornabileConFreebsdUpdate", false))
+                return new JSONObject().put("success", false)
+                        .put("error", so.optString("notaAggiornamenti", "sistema non aggiornabile con freebsd-update"));
+            String out = sh("freebsd-update --not-running-from-cron fetch 2>&1", 900);
+            String b = out.toLowerCase();
+            boolean nessuno = b.contains("no updates needed") || b.contains("has no updates available");
+            return new JSONObject().put("success", true).put("uscita", out.trim())
+                    .put("nessunAggiornamento", nessuno)
+                    .put("nota", nessuno
+                        ? "Nessun aggiornamento del sistema di base da applicare."
+                        : "Le patch sono state SCARICATE, non installate. Per applicarle serve "
+                          + "\"freebsd-update install\", e se toccano il kernel serve un riavvio: "
+                          + "leggi sopra cosa cambierebbe prima di decidere.");
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    public static JSONObject rapportoSistema() {
+        StringBuilder t = new StringBuilder();
+        try {
+            ok("pkg update -q", 180);
+            t.append("=== RAPPORTO DEL SISTEMA ===\n");
+            t.append("data: ").append(sh("date '+%Y-%m-%d %H:%M:%S %Z'", 15)).append('\n');
+            t.append("host: ").append(sh("hostname", 15)).append('\n');
+            t.append("FreeBSD: ").append(sh("freebsd-version -kru 2>/dev/null | tr '\n' ' '", 20)).append('\n');
+            t.append("ABI pkg: ").append(sh("pkg config abi 2>/dev/null", 20)).append('\n');
+
+            JSONObject ramo = ramoRepository();
+            JSONObject so = sistemaOperativo();
+            t.append("\n--- SISTEMA OPERATIVO ---\n");
+            t.append("kernel installato: ").append(so.optString("kernelInstallato"))
+             .append("   in esecuzione: ").append(so.optString("uname")).append('\n');
+            t.append("userland: ").append(so.optString("userland"))
+             .append("   architettura: ").append(so.optString("arch")).append('\n');
+            if (so.optBoolean("riavvioNecessario"))
+                t.append("RIAVVIO NECESSARIO: il kernel installato non e' quello in esecuzione.\n");
+            if (!so.optString("fineSupporto").isEmpty())
+                t.append("fine supporto della ").append(so.optString("serie")).append(": ")
+                 .append(so.optString("fineSupporto")).append("   (").append(so.optString("noteSupporto")).append(")\n");
+            else
+                t.append("fine supporto: serie non presente nella tabella del pannello, da riverificare\n");
+            t.append("fonte: ").append(so.optString("fonteSupporto")).append('\n');
+            if (so.has("giaPronti"))
+                t.append("aggiornamenti di base gia' scaricati: ").append(so.optString("giaPronti")).append('\n');
+            if (so.has("notaAggiornamenti"))
+                t.append(so.optString("notaAggiornamenti")).append('\n');
+
+            t.append("\n--- RAMO DEI PACCHETTI ---\n");
+            t.append(ramo.optString("ramo")).append("   ").append(ramo.optString("url")).append('\n');
+            t.append(ramo.optString("spiegazione")).append('\n');
+
+            t.append("\n--- COERENZA CON I PREDEFINITI DEI PORT ---\n");
+            JSONArray righe = coerenzaPredefiniti().optJSONArray("righe");
+            for (int i = 0; righe != null && i < righe.length(); i++) {
+                JSONObject x = righe.getJSONObject(i);
+                t.append(String.format("%-10s atteso %-8s installato %-28s %s%n",
+                        x.optString("componente"), x.optString("predefinito"),
+                        x.optString("installato"), x.optString("esito")));
+                if (x.has("fuoriPredefinito"))
+                    t.append("           fuori dal predefinito: ").append(x.getString("fuoriPredefinito")).append('\n');
+            }
+
+            // Due interrogazioni sole, poi si uniscono: e' l'unico modo di non metterci minuti.
+            java.util.Map<String, String> inst = new java.util.LinkedHashMap<>(), repo = new java.util.HashMap<>();
+            for (String r2 : sh("pkg query '%n %v' 2>/dev/null", 120).split("\n")) {
+                String[] c = r2.trim().split("\\s+");
+                if (c.length == 2) inst.put(c[0], c[1]);
+            }
+            for (String r2 : sh("pkg rquery '%n %v' 2>/dev/null", 180).split("\n")) {
+                String[] c = r2.trim().split("\\s+");
+                if (c.length == 2) repo.put(c[0], c[1]);
+            }
+            String lock = sh("pkg lock -l 2>/dev/null");
+
+            t.append("\n--- PACCHETTI DELLO STACK DI POSTA ---\n");
+            t.append(String.format("%-28s %-22s %-22s %-9s %s%n",
+                    "pacchetto", "installato", "nel repository", "protetto", "ruolo"));
+            int diversi = 0;
+            for (java.util.Map.Entry<String, String> e : inst.entrySet()) {
+                String ruolo = ruoloDi(e.getKey());
+                if (ruolo == null) continue;
+                String disp = repo.getOrDefault(e.getKey(), "(assente)");
+                boolean diff = !disp.equals(e.getValue()) && !"(assente)".equals(disp);
+                if (diff) diversi++;
+                t.append(String.format("%-28s %-22s %-22s %-9s %s%s%n",
+                        e.getKey(), e.getValue(), disp,
+                        bloccato(lock, e.getKey()) ? "si" : "NO", ruolo, diff ? "   <- aggiornabile" : ""));
+            }
+            t.append("pacchetti dello stack con una versione piu' recente nel repository: ").append(diversi).append('\n');
+
+            t.append("\n--- VULNERABILITA' NOTE (pkg audit) ---\n");
+            String audit = sh("pkg audit -F 2>&1", 240);
+            t.append(audit.isEmpty() ? "(nessuna uscita)\n" : audit + "\n");
+            t.append("\nPer ciascun pacchetto segnalato, se il repository offre gia' la correzione:\n");
+            Matcher mv = Pattern.compile("(?m)^(\\S+?)-[0-9][^\\s]* is vulnerable:").matcher(audit);
+            java.util.LinkedHashSet<String> visti = new java.util.LinkedHashSet<>();
+            while (mv.find()) visti.add(mv.group(1));
+            if (visti.isEmpty()) t.append("  (nessun pacchetto segnalato)\n");
+            for (String n : visti) {
+                String cur = inst.getOrDefault(n, "?"), av = repo.getOrDefault(n, "(assente)");
+                t.append(String.format("  %-24s installato %-18s repository %-18s -> %s%n", n, cur, av,
+                        "(assente)".equals(av) ? "il repository non lo conosce"
+                        : av.equals(cur) ? "NESSUNA CORREZIONE DISPONIBILE (stessa versione)"
+                        : "aggiornabile a " + av));
+            }
+
+            t.append("\n--- SERVIZI ---\n");
+            for (String[] cand : SERVIZI) {
+                String svc = null;
+                for (String c : cand)
+                    if (ok("test -f /usr/local/etc/rc.d/" + c + " -o -f /etc/rc.d/" + c, 10)) { svc = c; break; }
+                if (svc == null) continue;
+                t.append(String.format("  %-18s %s%n", svc, ok("service " + svc + " status", 20) ? "attivo" : "NON ATTIVO"));
+            }
+
+            t.append("\n--- SPAZIO ---\n");
+            t.append(sh("df -h / /var /usr 2>/dev/null | sort -u", 30)).append('\n');
+            t.append("\n=== FINE RAPPORTO ===\n");
+            return new JSONObject().put("success", true).put("testo", t.toString());
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage())
+                    .put("parziale", t.toString());
+        }
+    }
+
+    public static JSONObject ramoRepository() {
+        JSONObject r = new JSONObject();
+        String url = "";
+        for (String riga : sh("pkg -vv 2>/dev/null", 60).split("\n")) {
+            Matcher m = Pattern.compile("url\\s*:\\s*\"?([^\",]+)").matcher(riga);
+            if (m.find() && m.group(1).contains("pkg.FreeBSD.org")) { url = m.group(1).trim(); break; }
+        }
+        String ramo = url.contains("/quarterly") ? "quarterly"
+                    : url.contains("/latest") ? "latest" : "non riconosciuto";
+        String spiega;
+        if ("quarterly".equals(ramo))
+            spiega = "Ramo trimestrale: tagliato da HEAD a gennaio, aprile, luglio e ottobre. Riceve "
+                   + "comunque le correzioni di sicurezza, anche come aggiornamento di versione, ma "
+                   + "arrivano dopo che qualcuno le ha portate sul ramo — quindi piu' tardi che su "
+                   + "\"latest\". E' il motivo per cui una correzione gia' pubblicata a monte puo' "
+                   + "non essere ancora qui.";
+        else if ("latest".equals(ramo))
+            spiega = "Ramo continuo: le versioni arrivano appena la modifica al port e' accettata e il "
+                   + "cluster di compilazione ha finito. Se una correzione non c'e' ancora, non e' il "
+                   + "ramo a trattenerla.";
+        else
+            spiega = "Non riesco a stabilire il ramo dalla configurazione efficace di pkg.";
+        return r.put("success", true).put("ramo", ramo).put("url", url).put("spiegazione", spiega)
+                .put("dove", "configurazione efficace letta con \"pkg -vv\"; l'eventuale scelta "
+                        + "personale sta in /usr/local/etc/pkg/repos/FreeBSD.conf, il predefinito "
+                        + "in /etc/pkg/FreeBSD.conf");
+    }
+
     public static JSONObject coerenzaPredefiniti() {
         JSONArray righe = new JSONArray();
         for (String[] d : PREDEFINITI) {
@@ -5335,6 +5596,7 @@ public final class UpdateManager {
             righe.put(riga);
         }
         return new JSONObject().put("success", true).put("righe", righe)
+                .put("ramo", ramoRepository())
                 .put("fonte", "Mk/bsd.default-versions.mk del repository ufficiale dei port FreeBSD "
                         + "(cgit.freebsd.org), rami main e 2026Q3 — coincidono. Verificato il 31/08/2026.")
                 .put("avvertenza", "E' una fotografia datata, non una lettura dal vivo: il pannello non "
