@@ -6093,6 +6093,7 @@ public class SSLMailServer {
                     response = UpdateManager.scriptRcPannello(true);
                     logAudit("RC_SCRIPT_INSTALL", ip, response.optString("percorso", ""));
                 }
+                case "os_upgrade_targets" -> response = UpdateManager.versioniDiArrivo();
                 case "os_upgrade_preflight" -> response = UpdateManager.aggiornamentoSistemaPreflight(
                         req.optString("target", "15.1"));
                 case "os_upgrade_instructions" -> response = UpdateManager.istruzioniAggiornamentoSistema(

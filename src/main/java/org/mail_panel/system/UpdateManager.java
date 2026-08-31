@@ -5659,6 +5659,69 @@ public final class UpdateManager {
         }
     }
 
+    /**
+     * Verso quali versioni ha senso andare, partendo da quella installata.
+     *
+     * Un campo di testo libero lasciava scrivere 16.0 (salto maggiore, tutti i pacchetti da
+     * ricostruire), 15.9 (non esiste), o 14.4 (indietro). Il pannello sa quali release sono
+     * supportate e sa da dove parte: puo' proporre le sole scelte sensate invece di accettare
+     * qualunque cosa e poi lamentarsene.
+     */
+    /**
+     * Che rapporto c'e' fra la versione installata e quella scelta.
+     *
+     * Funzione a se' perche' dev'essere PROVABILE. Dentro il preflight era irraggiungibile da
+     * qualunque test: il primo controllo guarda se il sistema e' una -RELEASE, e su una
+     * macchina che FreeBSD non e' si ferma li'. Un test che non arriva a esercitare cio' che
+     * deve verificare passa e non dimostra niente.
+     *
+     * Restituisce: "indietro", "stessa", "minore", "maggiore", "illeggibile".
+     */
+    static String direzioneAggiornamento(String attuale, String bersaglio) {
+        Matcher a = Pattern.compile("^([0-9]+)\\.([0-9]+)").matcher(attuale == null ? "" : attuale);
+        Matcher b = Pattern.compile("^([0-9]+)\\.([0-9]+)").matcher(bersaglio == null ? "" : bersaglio);
+        if (!a.find() || !b.find()) return "illeggibile";
+        int a1 = Integer.parseInt(a.group(1)), a2 = Integer.parseInt(a.group(2));
+        int b1 = Integer.parseInt(b.group(1)), b2 = Integer.parseInt(b.group(2));
+        if (b1 < a1 || (b1 == a1 && b2 < a2)) return "indietro";
+        if (b1 == a1 && b2 == a2) return "stessa";
+        return b1 == a1 ? "minore" : "maggiore";
+    }
+
+    public static JSONObject versioniDiArrivo() {
+        try {
+            JSONObject so = sistemaOperativo();
+            String serie = so.optString("serie");
+            Matcher m = Pattern.compile("^([0-9]+)\\.([0-9]+)$").matcher(serie);
+            if (!m.find())
+                return new JSONObject().put("success", false)
+                        .put("error", "non riesco a leggere la serie dalla versione installata (" + serie + ")");
+            int magAtt = Integer.parseInt(m.group(1)), minAtt = Integer.parseInt(m.group(2));
+            JSONArray fuori = new JSONArray();
+            for (String[] e : FINE_SUPPORTO) {
+                Matcher m2 = Pattern.compile("^([0-9]+)\\.([0-9]+)$").matcher(e[0]);
+                if (!m2.find()) continue;
+                int ma = Integer.parseInt(m2.group(1)), mi = Integer.parseInt(m2.group(2));
+                if (ma != magAtt) continue;          // i salti maggiori non passano di qui
+                if (mi <= minAtt) continue;          // se stessa o indietro: non e' un aggiornamento
+                fuori.put(new JSONObject().put("versione", e[0])
+                        .put("fineSupporto", e[1]).put("note", e[2]));
+            }
+            return new JSONObject().put("success", true).put("attuale", serie)
+                    .put("versioni", fuori)
+                    .put("fonte", FONTE_SUPPORTO)
+                    .put("nota", fuori.length() == 0
+                        ? "Nella tabella del pannello (aggiornata al 31/08/2026) non c'e' nessuna release "
+                          + "piu' recente della " + serie + " nella stessa serie. Se ne e' uscita una dopo "
+                          + "quella data, verifica su https://www.FreeBSD.org/security/ e dimmelo."
+                        : "Solo salti MINORI dentro la serie " + magAtt + ": l'ABI dei pacchetti non cambia "
+                          + "e i 41 pacchetti protetti restano dove sono. Un salto alla serie "
+                          + (magAtt + 1) + " e' un'altra operazione, molto piu' grande.");
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
     public static JSONObject aggiornamentoSistemaPreflight(String bersaglio) {
         JSONObject r = new JSONObject();
         JSONArray checks = new JSONArray();
@@ -5694,18 +5757,34 @@ public final class UpdateManager {
             String magAtt = userland.replaceAll("[^0-9.].*$", "").replaceAll("\\..*$", "");
             String magNew = bersaglio.replaceAll("\\..*$", "");
             boolean minore = magAtt.equals(magNew);
+
+            // Direzione: la decide una funzione a parte, che si puo' mettere alla prova.
+            String direzione = direzioneAggiornamento(so.optString("serie"), bersaglio);
+            r.put("direzione", direzione);
+            if ("indietro".equals(direzione) || "stessa".equals(direzione)) {
+                aggiungiCheck(checks, "direzione", "Direzione dell'aggiornamento", "block",
+                        "stessa".equals(direzione)
+                        ? "la " + bersaglio + " e' la versione che hai gia' installata."
+                        : "la " + bersaglio + " e' PIU' VECCHIA della " + so.optString("serie")
+                          + ": questa procedura aggiorna, non torna indietro. Per tornare indietro "
+                          + "si usa l'ambiente di avvio, non freebsd-update.");
+                return r.put("success", true).put("checks", checks)
+                        .put("blocked", true).put("canProceed", false);
+            }
             r.put("saltoMinore", minore);
             String abi = sh("pkg config abi 2>/dev/null", 20).trim();
             r.put("abi", abi);
-            aggiungiCheck(checks, "abi", "ABI dei pacchetti", minore ? "ok" : "attendi",
+            if (!minore) blocca = true;
+            aggiungiCheck(checks, "abi", "ABI dei pacchetti", minore ? "ok" : "block",
                     minore
                     ? "resta " + abi + ": e' un salto MINORE (" + magAtt + " -> " + magNew + "), quindi i "
                       + "pacchetti NON vanno reinstallati. L'Handbook chiede \"pkg-static upgrade -f\" solo "
                       + "per i salti maggiori, a causa del cambio di ABI: qui non serve, e i 41 pacchetti "
                       + "protetti restano dove sono."
                     : "SALTO MAGGIORE " + magAtt + " -> " + magNew + ": l'ABI cambia e TUTTI i pacchetti "
-                      + "vanno reinstallati con \"pkg-static upgrade -f\". E' un'operazione molto piu' "
-                      + "grande di questa, con lo stack di posta da ricostruire.");
+                      + "vanno reinstallati con \"pkg-static upgrade -f\", stack di posta compreso. "
+                      + "Questa procedura non e' stata pensata ne' provata per quel caso, e proporla "
+                      + "come se lo fosse sarebbe peggio che rifiutarla: la rifiuto.");
 
             // Fine supporto della versione di arrivo: passare a qualcosa che scade fra poco
             // non risolve niente.

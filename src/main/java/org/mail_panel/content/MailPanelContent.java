@@ -13216,7 +13216,9 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     <span><i class="fas fa-arrow-up-right-dots me-2"></i><strong>Passaggio a una nuova release di FreeBSD</strong>
                         <span class="small text-muted ms-2">il pannello prepara e verifica; il salto lo fai tu da SSH</span></span>
                     <span>
-                        <input id="os-target" class="form-control form-control-sm d-inline-block me-1" style="width:6rem" value="15.1">
+                        <select id="os-target" class="form-select form-select-sm d-inline-block me-1" style="width:auto">
+                            <option value="">versione di arrivo...</option>
+                        </select>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="upVerifica()"><i class="fas fa-clipboard-check me-1"></i>Verifica dopo</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="upPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
                     </span>
@@ -13742,8 +13744,42 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         // ---------- passaggio di release ----------
         function upTarget() { return (document.getElementById('os-target').value || '').trim(); }
 
+        // L'elenco lo decide il pannello, non la tastiera: un campo libero lasciava scrivere
+        // 16.0 (salto maggiore), 15.9 (inesistente) o 14.4 (indietro).
+        async function upTargets() {
+            const sel = document.getElementById('os-target');
+            if (sel.options.length > 1) return true;
+            const r = await updApi('os_upgrade_targets');
+            if (!r.success) {
+                document.getElementById('up-body').innerHTML =
+                    '<span class="text-danger">' + updEsc(r.error) + '</span>';
+                return false;
+            }
+            sel.innerHTML = '';
+            (r.versioni || []).forEach(v => {
+                const o = document.createElement('option');
+                o.value = v.versione;
+                o.textContent = v.versione + '  (supportata fino al ' + v.fineSupporto + ')';
+                sel.appendChild(o);
+            });
+            if (!(r.versioni || []).length) {
+                const o = document.createElement('option');
+                o.value = ''; o.textContent = 'nessuna disponibile';
+                sel.appendChild(o);
+                document.getElementById('up-body').innerHTML =
+                    '<div class="alert alert-info py-2 mb-0">' + updEsc(r.nota) + '</div>';
+                return false;
+            }
+            document.getElementById('up-body').innerHTML =
+                '<div class="alert alert-secondary py-2 small mb-0">Sei sulla ' + updEsc(r.attuale) + '. '
+              + updEsc(r.nota) + '<br>Fonte: ' + updEsc(r.fonte) + '</div>';
+            return true;
+        }
+
         async function upPre() {
             const el = document.getElementById('up-body');
+            if (!await upTargets()) return;
+            if (!upTarget()) { el.innerHTML = '<span class="text-warning">Scegli prima la versione di arrivo.</span>'; return; }
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli: versione, ABI, kernel, ambienti di avvio, spazio, servizi...';
             const r = await updApi('os_upgrade_preflight', { target: upTarget() });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
