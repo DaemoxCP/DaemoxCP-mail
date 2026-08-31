@@ -1136,6 +1136,19 @@ public final class UpdateManager {
     }
 
     /**
+     * Query privilegiata come root attraverso il socket unix.
+     *
+     * Su FreeBSD l'utente root del sistema entra in MySQL dal socket senza password, ed e' il
+     * modo con cui il pannello ha creato database e utenti al primo avvio. Serve per leggere
+     * mysql.user, che l'utente applicativo non puo' vedere: l'alternativa sarebbe chiedere di
+     * eseguire una GRANT a mano, cioe' esattamente il dettare comandi che si vuole evitare.
+     */
+    private static String mysqlRootOut(String sql) {
+        String q = sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("`", "\\`");
+        return sh("mysql -u root -N -B -e \"" + q + "\" 2>/dev/null", 30);
+    }
+
+    /**
      * Il pannello si collega come utente applicativo, non come root: potrebbe non avere il
      * permesso di leggere mysql.user. La differenza e' decisiva — "nessun account usa
      * mysql_native_password" e "non ho potuto guardare" producono lo stesso vuoto ma
@@ -1143,7 +1156,15 @@ public final class UpdateManager {
      * che non ci sia nessuno da salvare.
      */
     private static boolean puoLeggereUtentiMysql() {
+        if (!mysqlRootOut("SELECT 1 FROM mysql.user LIMIT 1;").trim().isEmpty()) return true;
         return !mysqlOut("SELECT 1 FROM mysql.user LIMIT 1;").trim().isEmpty();
+    }
+
+    /** La lettura di mysql.user, con l'utenza che riesce a farla. */
+    private static String utentiConPluginNativo() {
+        String q = "SELECT CONCAT(user,'@',host) FROM mysql.user WHERE plugin='mysql_native_password';";
+        String r = mysqlRootOut(q);
+        return r.isEmpty() ? mysqlOut(q) : r;
     }
 
     /** Numero da output di comando; 0 se non contiene cifre. */
@@ -1160,6 +1181,25 @@ public final class UpdateManager {
             if (!v.isEmpty()) l.add(v);
         }
         return l;
+    }
+
+    /**
+     * La famiglia MySQL che la versione NEL REPOSITORY di un pacchetto pretende, quando e'
+     * diversa da quella installata; null se non c'e' conflitto.
+     *
+     * Sta in un metodo solo perche' lo usano sia il preflight sia il piano: se il vincolo
+     * vivesse in un posto solo, il piano proporrebbe un passo che il preflight poi rifiuta,
+     * e una guida che propone cio' che poi nega non guida niente.
+     */
+    static String conflittoFamigliaMysql(String nome) {
+        if (!nomeValido(nome)) return null;
+        String installato = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-client$' | head -1", 20);
+        if (installato.isEmpty()) return null;
+        String deps = sh("pkg rquery %dn " + nome + " 2>/dev/null", 30);
+        Matcher m = Pattern.compile("mysql([0-9]+)-client").matcher(deps);
+        if (!m.find()) return null;
+        String richiesto = "mysql" + m.group(1) + "-client";
+        return richiesto.equals(installato) ? null : richiesto;
     }
 
     /** Una riga del referto di controlli: esito, cosa si e' controllato, perche' conta. */
@@ -1293,7 +1333,7 @@ public final class UpdateManager {
         JSONArray nativi = new JSONArray();
         boolean leggibile = su && !runVer.isEmpty() && puoLeggereUtentiMysql();
         if (leggibile) {
-            for (String l : mysqlOut("SELECT CONCAT(user,'@',host) FROM mysql.user WHERE plugin='mysql_native_password';").split("\n")) {
+            for (String l : utentiConPluginNativo().split("\n")) {
                 if (!l.trim().isEmpty()) nativi.put(l.trim());
             }
         }
@@ -1303,8 +1343,9 @@ public final class UpdateManager {
                     "Non riesco a leggere mysql.user con l'utente del pannello: non posso dire se qualche "
                     + "account usa mysql_native_password, che la 8.4 non attiva piu'. Non lo do per assente, "
                     + "perche' un silenzio non e' una conferma: se fra quelli ci fosse l'utente di Postfix o "
-                    + "Dovecot, dopo la migrazione la posta si fermerebbe. Concedi la lettura di mysql.user "
-                    + "all'utente del pannello, oppure verificalo a parte, e ripeti il controllo.");
+                    + "Dovecot, dopo la migrazione la posta si fermerebbe. Il pannello ha provato sia come "
+                    + "utente applicativo sia come root dal socket unix: se nemmeno quello riesce, MySQL su "
+                    + "questa macchina non consente l'accesso root dal socket e la verifica va fatta a parte.");
             block = true;
         } else {
             aggiungiCheck(checks, "auth", "Plugin di autenticazione", nativi.length() > 0 ? "verifica" : "ok",
@@ -1470,6 +1511,23 @@ public final class UpdateManager {
             boolean maggiore = saltoSignificativo(nome, cur, av);
             JSONObject avv = avvertenzaPer(nome, maggiore);
             boolean attendi = avv != null && "attendi".equals(avv.getString("level"));
+            // Se il pacchetto nuovo pretende un'altra famiglia MySQL, il passo non e' "da fare":
+            // e' bloccato finche' MySQL non e' stato migrato. Offrirlo sarebbe proporre
+            // un'operazione che il preflight rifiuta un secondo dopo.
+            String confl = conflittoFamigliaMysql(nome);
+            if (confl != null) {
+                java.util.List<String> memC = membriFamiglia(nome);
+                passi.put(passo(++n, "Aggiornare " + nome
+                            + (memC.size() > 1 ? " e " + (memC.size() - 1) + " pacchetti collegati" : ""),
+                        "manuale",
+                        nome + " " + cur + " -> " + av + " (nessuna vulnerabilita' nota)",
+                        "BLOCCATO da un vincolo di ordine: la versione nel repository richiede " + confl
+                        + " mentre qui c'e' ancora la famiglia precedente, e le due sono in conflitto. "
+                        + "Va fatta PRIMA la migrazione di MySQL, altrimenti questo aggiornamento "
+                        + "sostituirebbe la libreria client sotto un server che la sta usando.",
+                        null));
+                continue;
+            }
             java.util.List<String> mem = membriFamiglia(nome);
             String titolo = mem.size() > 1
                     ? "Aggiornare " + nome + " e " + (mem.size() - 1) + " pacchetti collegati"
@@ -1679,6 +1737,27 @@ public final class UpdateManager {
                 block = true;
             } else {
                 aggiungiCheck(checks, "avvertenza", "Avvertenza sul pacchetto", avv.getString("level"), avv.getString("text"));
+            }
+        }
+
+        // Il pacchetto nuovo pretende una famiglia MySQL diversa da quella installata?
+        // E' il caso di postfix-mysql 3.11, che nel repository dipende da mysql84-client: sul
+        // sistema c'e' ancora mysql80-client, e i due sono in conflitto. Aggiornarlo prima di
+        // aver migrato MySQL significa o un fallimento o una sostituzione di libreria non
+        // voluta, con mysql80-server che ci dipende ancora.
+        String mysqlInstallato = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-client$' | head -1", 20);
+        if (!disponibile.isEmpty()) {
+            String richiesto = conflittoFamigliaMysql(nome);
+            if (richiesto != null) {
+                aggiungiCheck(checks, "mysqlfamiglia", "Versione di MySQL richiesta", "block",
+                        "La versione nel repository di " + nome + " richiede " + richiesto
+                        + ", ma su questa macchina c'e' " + mysqlInstallato + ", e i due sono in conflitto. "
+                        + "Aggiornarlo adesso o fallirebbe o sostituirebbe la libreria client mentre il server "
+                        + "MySQL installato ne dipende ancora: sul server di posta significa Postfix o Dovecot "
+                        + "che non leggono piu' le caselle. Va fatta PRIMA la migrazione di MySQL alla versione "
+                        + richiesto.replace("-client", "") + ".");
+                block = true;
+                r.put("mysqlFamilyConflict", richiesto);
             }
         }
 
