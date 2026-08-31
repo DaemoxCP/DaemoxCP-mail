@@ -314,7 +314,14 @@ public final class UpdateManager {
                         "Aggiornamento minore: normalmente sicuro. Sono i salti di versione maggiore, su questo "
                         + "pacchetto, a dover essere coordinati.");
             }
-            return new JSONObject().put("level", a[1]).put("text", a[2]);
+            // Un'avvertenza scritta per il caso peggiore, mostrata su un aggiornamento di
+            // sole cifre finali, dice il falso: parla di "cambio maggiore" quando il salto
+            // non c'e'. Chi legge o si allarma per niente, o smette di fidarsi del testo.
+            String testo = saltoMaggiore ? a[2]
+                    : "Questo NON e' un salto di versione significativo: cambiano solo le cifre finali, "
+                      + "quindi il rischio e' contenuto e in genere si tratta di correzioni. "
+                      + "Resta comunque valido: " + a[2];
+            return new JSONObject().put("level", a[1]).put("text", testo);
         }
         if (saltoMaggiore) {
             return new JSONObject().put("level", "verifica").put("text",
@@ -414,6 +421,15 @@ public final class UpdateManager {
             vulnerabili.put(v);
         }
         r.put("vulnerable", vulnerabili);
+        // Lezione pagata sull'altro server il 30/08: mysql80-server era stato aggiornato a
+        // 8.0.46 ma il processo continuava a girare sui binari 8.0.45, quindi la correzione
+        // non era in servizio pur risultando installata. Vale per ogni libreria condivisa.
+        r.put("notaRiavvio",
+            "Aggiornare un pacchetto NON aggiorna il processo gia' in esecuzione: i servizi "
+            + "continuano a usare i file caricati in memoria finche' non li riavvii. Dopo un "
+            + "aggiornamento di openssl vanno riavviati Postfix, Dovecot e nginx; dopo uno di "
+            + "MySQL va riavviato mysql-server. Finche' non lo fai, la vulnerabilita' resta "
+            + "aperta anche se il pacchetto risulta corretto.");
 
         // --- Sistema base: kernel e userland a confronto. Se differiscono manca un riavvio. ---
         String k = sh("freebsd-version -k", 15), run = sh("freebsd-version -r", 15), u = sh("freebsd-version -u", 15);

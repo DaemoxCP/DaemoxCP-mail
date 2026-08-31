@@ -13486,7 +13486,12 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     });
                     h += '</li>';
                 });
-                h += '</ul></div>';
+                h += '</ul>';
+                if (r.notaRiavvio) {
+                    h += '<div class="mt-2 pt-2 border-top small"><i class="fas fa-triangle-exclamation me-1"></i>'
+                       + '<strong>' + updEsc(r.notaRiavvio) + '</strong></div>';
+                }
+                h += '</div>';
             } else {
                 h += '<div class="alert alert-success py-2 small"><i class="fas fa-check me-1"></i>Nessuna vulnerabilità nota nei pacchetti installati.</div>';
             }
