@@ -2456,6 +2456,65 @@ public final class UpdateManager {
     }
 
     /**
+     * Cosa riceve DAVVERO PHP quando la richiesta passa da nginx.
+     *
+     * E' l'ultima incognita rimasta: static.php risolve il file con
+     * realpath(INSTALL_PATH . PATH_INFO), il file c'e', i permessi ci sono, e risponde 404
+     * lo stesso. Quindi o PATH_INFO non arriva come credo, o arriva vuoto — e "vuoto" non e'
+     * la stessa cosa di "assente", perche' l'operatore ?? di PHP non ripiega su una stringa
+     * vuota e static.php si ritroverebbe con un percorso nullo.
+     *
+     * Si scrive una sonda con un nome imprevedibile, le si fa una sola richiesta e la si
+     * elimina subito, anche se qualcosa va storto. Stampa solo le sei variabili che servono,
+     * non tutto l'ambiente.
+     */
+    public static JSONObject sondaPathInfo() {
+        String nome = "rc-sonda-" + Long.toHexString(System.nanoTime()) + ".php";
+        String file = RC_DIR + "/public_html/" + nome;
+        try {
+            Files.writeString(Paths.get(file),
+                "<?php header('Content-Type: text/plain');\n"
+              + "foreach (['PATH_INFO','PATH_TRANSLATED','ORIG_PATH_INFO','SCRIPT_FILENAME',\n"
+              + "          'SCRIPT_NAME','REQUEST_URI'] as $k) {\n"
+              + "    echo $k, ' = ', array_key_exists($k, $_SERVER)\n"
+              + "        ? '[' . $_SERVER[$k] . ']' : '(NON IMPOSTATA)', \"\\n\";\n"
+              + "}\n"
+              + "echo 'cgi.fix_pathinfo = ', ini_get('cgi.fix_pathinfo'), \"\\n\";\n");
+            ok("chmod 644 " + file, 15);
+            JSONObject pw = provaWebmailOrigine();
+            String url = pw.optString("url", "");
+            if (url.isEmpty()) return new JSONObject().put("ok", false).put("errore", "URL non ricavabile");
+            String n = url.replaceAll("^https://", "").replaceAll(":.*$", "");
+            String porta = url.replaceAll(".*:", "").replaceAll("/.*$", "");
+            String res = "--resolve " + n + ":" + porta + ":127.0.0.1 ";
+            String u = "https://" + n + ":" + porta + "/" + nome + "/skins/elastic/deps/bootstrap.min.css";
+            String out = sh("curl -sk -m 20 " + res + "'" + u + "' 2>&1 | head -c 1200", 60);
+            return new JSONObject().put("ok", true).put("url", u).put("uscita", out.trim());
+        } catch (Exception e) {
+            return new JSONObject().put("ok", false).put("errore", e.getMessage());
+        } finally {
+            // La sonda sparisce comunque: non deve restare un file PHP nella radice del web.
+            ok("rm -f " + file, 20);
+        }
+    }
+
+    /**
+     * Un CSS in uscita e' 160 KB di testo: stamparlo per intero nasconde la risposta invece di
+     * mostrarla. Qui si dice cosa e' uscito, non lo si riversa.
+     */
+    private static String riassumiUscita(String out) {
+        if (out == null) return "(niente)";
+        String t = out.trim();
+        if (t.isEmpty()) return "(nessuna uscita)";
+        String primo = t.length() > 200 ? t.substring(0, 200) : t;
+        boolean sembraCss = t.contains("{") && (t.contains(";") || t.contains("}"));
+        boolean sembraErrore = t.toLowerCase().contains("not found") || t.toLowerCase().contains("404")
+                || t.toLowerCase().contains("fatal") || t.toLowerCase().contains("warning");
+        return (sembraErrore ? "SEMBRA UN ERRORE" : sembraCss ? "SEMBRA IL CONTENUTO DEL FILE" : "uscita")
+                + " (" + t.length() + "+ caratteri):\n" + primo.replace("\n", " ");
+    }
+
+    /**
      * Scarica davvero un foglio di stile e guarda com'e' fatto.
      *
      * E' l'unica prova che distingue "la webmail risponde" da "la webmail si vede": nella 1.7
@@ -2498,9 +2557,13 @@ public final class UpdateManager {
      *
      * La cura e' un location che riconosce lo script anche quando ha un percorso attaccato, e
      * che passa a PHP il percorso separato (PATH_INFO), che e' come static.php sa quale file
-     * servire. Il "try_files $fastcgi_script_name =404" in piu' non e' cosmesi: impedisce che
-     * richieste per script inesistenti arrivino a PHP — nel log di questo server ce ne sono a
-     * centinaia, sondaggi automatici tipo /admin/config.php.
+     * servire. Niente altro: la configurazione e' quella del wiki ufficiale, senza aggiunte.
+     * Ci avevo messo un "try_files $fastcgi_script_name =404" per fermare i sondaggi automatici
+     * prima di PHP, e quella riga era la causa del guasto: la sua redirezione interna riscrive
+     * l'URI al solo nome dello script, PATH_INFO arriva vuota e ogni asset diventa un 404.
+     * Se un giorno si volesse quella protezione, la forma che NON rompe il percorso e'
+     *   if (!-f $document_root$fastcgi_script_name) { return 404; }
+     * verificata con nginx e PHP veri. Ma non e' nella documentazione, quindi non e' qui.
      *
      * fastcgi_pass NON viene inventato: si riprende dal blocco che c'e', perche' su un'altra
      * installazione potrebbe essere un indirizzo TCP invece di un socket.
@@ -2527,13 +2590,21 @@ public final class UpdateManager {
             // Gia' a posto? Si guarda TUTTO il blocco, non la riga dopo: dopo una riparazione
             // precedente la seconda riga puo' essere il rewrite degli URL sicuri, e cercando
             // solo li' il pannello riparerebbe una seconda volta cio' che e' gia' riparato.
+            boolean haSplit = false, haTryFiles = false;
             for (int i = inizio; i < Math.min(righe.size(), inizio + 25); i++) {
-                if (righe.get(i).contains("fastcgi_split_path_info"))
-                    return r.put("success", true).put("giaOk", true)
-                            .put("nota", "il location dei .php gestisce gia' il percorso "
-                                    + "(fastcgi_split_path_info alla riga " + (i + 1) + "): niente da cambiare");
+                if (righe.get(i).contains("fastcgi_split_path_info")) haSplit = true;
+                // Questa riga ANNULLA la precedente: c'e' ma non basta, anzi rompe.
+                if (righe.get(i).contains("try_files") && righe.get(i).contains("fastcgi_script_name"))
+                    haTryFiles = true;
                 if (righe.get(i).trim().equals("}")) break;
             }
+            if (haSplit && !haTryFiles)
+                return r.put("success", true).put("giaOk", true)
+                        .put("nota", "il location dei .php gestisce gia' il percorso: niente da cambiare");
+            if (haSplit && haTryFiles)
+                r.put("motivo", "c'e' fastcgi_split_path_info, ma anche un \"try_files "
+                        + "$fastcgi_script_name\" che lo annulla: la redirezione interna riscrive l'URI "
+                        + "e PATH_INFO arriva vuota. Va tolta.");
 
             // Le graffe dentro le virgolette NON sono blocchi: la riga di rewrite per gli URL
             // sicuri contiene "{16}", e contarla chiuderebbe il blocco nel punto sbagliato,
@@ -2572,10 +2643,13 @@ public final class UpdateManager {
             String ind = righe.get(inizio).replaceAll("[^ \t].*$", "");
             String i2 = ind + "    ";
             // Ricalcata sull'esempio del wiki ufficiale di Roundcube (pagina Installation),
-            // con una sola aggiunta dichiarata: "try_files $fastcgi_script_name =404".
-            // Quella non c'e' a monte, e senza di essa ogni richiesta per uno script che non
-            // esiste arriva comunque a PHP — nel log di questo server ce ne sono centinaia,
-            // sondaggi tipo /admin/config.php. Provata: gli script veri passano, gli altri no.
+            // SENZA aggiunte. Ci avevo messo un "try_files $fastcgi_script_name =404" per
+            // impedire che i sondaggi automatici arrivassero a PHP: quella riga fa una
+            // redirezione interna che riscrive l'URI al solo nome dello script, e da quel
+            // momento $fastcgi_path_info si ricalcola su un URI che il percorso non ce l'ha
+            // piu'. Risultato: PATH_INFO arriva a static.php VUOTA, e siccome l'operatore ??
+            // di PHP non ripiega su una stringa vuota, ogni foglio di stile diventa un 404.
+            // Riprodotto con nginx e un PHP veri: e' esattamente il guasto del 31/08/2026.
             java.util.List<String> nuovo = new ArrayList<>(java.util.List.of(
                 ind + "# Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css:",
                 ind + "# uno script PHP con un percorso attaccato. Un location che chiede .php",
@@ -2587,7 +2661,6 @@ public final class UpdateManager {
                 i2 + "include fastcgi_params;",
                 i2 + "fastcgi_index index.php;",
                 i2 + "fastcgi_split_path_info ^(.+\\.php)(/.+)$;",
-                i2 + "try_files $fastcgi_script_name =404;",
                 i2 + "fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;",
                 i2 + "fastcgi_param PATH_INFO $fastcgi_path_info;",
                 i2 + "fastcgi_pass " + passa + ";",
@@ -2728,6 +2801,37 @@ public final class UpdateManager {
                                 + sh("ls -l " + atteso + " 2>&1", 20) + "\n"
                                 + sh("ls -d " + RC_DIR + "/skins/*/ 2>&1 | head -5", 20)));
                 }
+
+                // L'esperimento che separa le due possibilita': static.php eseguito a mano,
+                // con un PATH_INFO noto e senza web server di mezzo. Se qui il file esce,
+                // l'applicazione funziona e il problema e' in cio' che nginx le manda; se
+                // fallisce anche qui, il problema e' dentro static.php o nei suoi percorsi.
+                if (!pathInfo.isEmpty() && pathInfo.matches("/[A-Za-z0-9._/-]{1,200}")) {
+                    String cd = "cd " + RC_DIR + "/public_html && ";
+                    String reqUri = "/static.php" + pathInfo;
+                    String conPathInfo = sh(cd + "env PATH_INFO='" + pathInfo + "' REQUEST_URI='" + reqUri
+                            + "' REQUEST_METHOD=GET php static.php 2>&1 | head -c 400", 60);
+                    String senzaPathInfo = sh(cd + "env -u PATH_INFO REQUEST_URI='" + reqUri
+                            + "' REQUEST_METHOD=GET php static.php 2>&1 | head -c 400", 60);
+                    voci.put(new JSONObject().put("titolo", "static.php eseguito a mano (senza nginx)")
+                            .put("testo",
+                                "--- con PATH_INFO=" + pathInfo + " ---\n"
+                                + riassumiUscita(conPathInfo)
+                                + "\n\n--- senza PATH_INFO, solo REQUEST_URI=" + reqUri + " ---\n"
+                                + riassumiUscita(senzaPathInfo)));
+                }
+
+                // Cosa riceve PHP passando da nginx: e' l'altra meta' della bisezione.
+                JSONObject sonda = sondaPathInfo();
+                voci.put(new JSONObject().put("titolo", "Cosa riceve PHP quando passa da nginx")
+                        .put("testo", sonda.optBoolean("ok")
+                            ? "richiesta di prova: " + sonda.optString("url") + "\n\n"
+                              + sonda.optString("uscita")
+                            : "non riuscita: " + sonda.optString("errore")));
+
+                // Il codice vero installato su QUESTO server, non quello del repository a monte.
+                voci.put(new JSONObject().put("titolo", "Le prime righe dello static.php installato")
+                        .put("testo", sh("head -45 " + RC_DIR + "/public_html/static.php 2>&1", 30)));
 
                 // PHP puo' essere confinato: se non gli e' permesso uscire da public_html,
                 // static.php non raggiunge le skin e risponde 404 pur funzionando.
