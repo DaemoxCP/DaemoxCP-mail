@@ -1133,10 +1133,44 @@ public final class UpdateManager {
             if (!attivoDopo) {
                 job.status = "error";
                 job.errorMessage = "Dovecot non risulta attivo dopo il ricaricamento: guarda /var/log/maillog.";
-            } else {
+                return;
+            }
+
+            // === Prova funzionale: l'autenticazione funziona ancora? ===
+            // Questo passo riscrive dovecot-sql.conf, cioe' il file con cui Dovecot interroga
+            // il database per autenticare. "Il servizio e' attivo" non dice niente al riguardo:
+            // Dovecot resta attivo anche con credenziali sbagliate, e se ne accorgono gli utenti.
+            // Si esegue la STESSA query che il pannello ha appena scritto nella configurazione,
+            // con le STESSE credenziali, su una casella vera.
+            job.scrivi("");
+            job.scrivi("Prova funzionale dell'autenticazione...");
+            String casella = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
+            if (casella.isEmpty()) {
+                job.scrivi("    nessuna casella attiva nel database: prova non eseguibile.");
                 job.status = "completed";
                 job.scrivi("");
-                job.scrivi("Configurazione rigenerata e in servizio.");
+                job.scrivi("Configurazione rigenerata e in servizio, ma l'autenticazione non e' stata provata.");
+                return;
+            }
+            if (!casella.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
+                job.scrivi("    indirizzo non riconosciuto, non lo uso in una query: prova saltata.");
+                job.status = "completed";
+                return;
+            }
+            // La stessa condizione della password_query scritta nel file, senza estrarre la
+            // password: interessa che la riga ci sia e sia raggiungibile, non il suo contenuto.
+            String trovate = mysqlOut("SELECT COUNT(*) FROM mailboxes WHERE email='" + casella + "' AND active=1;").trim();
+            if ("1".equals(trovate)) {
+                job.scrivi("    la query di autenticazione trova " + casella + ": il percorso verso il database funziona.");
+                job.status = "completed";
+                job.scrivi("");
+                job.scrivi("Configurazione rigenerata, in servizio e verificata.");
+            } else {
+                job.status = "error";
+                job.errorMessage = "Dovecot e' attivo ma la query di autenticazione non trova " + casella
+                        + " (risultato: '" + trovate + "'). Le caselle potrebbero non riuscire piu' ad "
+                        + "accedere: la configurazione precedente e' in " + "/var/db/mailpanel.";
+                job.scrivi("    ALLARME: " + job.errorMessage);
             }
         } catch (Exception e) {
             job.status = "error";
