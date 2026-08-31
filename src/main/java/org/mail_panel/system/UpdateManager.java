@@ -125,22 +125,40 @@ public final class UpdateManager {
         return null;
     }
 
-    /** Servizi che questo pannello governa: servono per accorgersi se un aggiornamento ne spegne uno. */
-    public static final String[] SERVIZI = {
-        "postfix", "dovecot", "rspamd", "redis", "clamav_clamd", "clamav_freshclam",
-        "mysql-server", "nginx", "php-fpm", "fail2ban", "unbound"
+    /**
+     * Servizi che questo pannello governa. Ogni riga elenca i nomi POSSIBILI dello stesso
+     * servizio, perche' lo script rc.d puo' chiamarsi in modi diversi: PHP-FPM e' "php_fpm"
+     * (con il trattino basso, come lo chiama il resto del pannello) e il resolver puo' essere
+     * "unbound" del port oppure "local_unbound" del sistema base.
+     *
+     * Non e' un dettaglio: un nome sbagliato non produce un errore, produce un SILENZIO. Il
+     * servizio semplicemente non compare fra quelli controllati, e un aggiornamento che lo
+     * spegnesse verrebbe dichiarato riuscito. E' successo: php-fpm con il trattino non e' mai
+     * stato trovato, quindi la webmail non era sorvegliata affatto.
+     */
+    public static final String[][] SERVIZI = {
+        {"postfix"}, {"dovecot"}, {"rspamd"}, {"redis"},
+        {"clamav_clamd"}, {"clamav_freshclam"},
+        {"mysql-server"}, {"nginx"},
+        {"php_fpm", "php-fpm"},
+        {"fail2ban"},
+        {"unbound", "local_unbound"},
     };
 
     /** Quali servizi risultano attivi adesso. Solo quelli davvero presenti sul sistema. */
     private static Map<String, Boolean> statoServizi() {
         Map<String, Boolean> m = new LinkedHashMap<>();
-        for (String s : SERVIZI) {
+        for (String[] candidati : SERVIZI) {
             // Un servizio non installato non e' "caduto": va distinto, altrimenti la verifica
             // finale segnalerebbe come guasto qualcosa che non c'e' mai stato. La presenza si
             // decide dallo script rc.d, non dall'esito di "status": quello e' diverso da zero
             // sia per un servizio spento sia per uno inesistente, e confonderebbe i due casi.
-            if (!ok("test -f /usr/local/etc/rc.d/" + s + " -o -f /etc/rc.d/" + s, 10)) continue;
-            m.put(s, ok("service " + s + " status", 15));
+            for (String s : candidati) {
+                if (!nomeValido(s)) continue;
+                if (!ok("test -f /usr/local/etc/rc.d/" + s + " -o -f /etc/rc.d/" + s, 10)) continue;
+                m.put(s, ok("service " + s + " status", 15));
+                break;   // trovato il nome giusto: gli altri sono lo stesso servizio
+            }
         }
         return m;
     }
