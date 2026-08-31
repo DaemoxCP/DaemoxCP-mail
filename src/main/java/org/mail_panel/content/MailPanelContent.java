@@ -13507,16 +13507,11 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             // I passi si presentano nell'ordine di esecuzione, ma con identita' stabili:
             // le fasi hanno una lettera fissa, i pacchetti si chiamano col proprio nome.
             // Cosi' nessuna etichetta cambia significato quando un passo viene completato.
-            let gruppoCorrente = '';
+            // Nessuna intestazione di gruppo: fasi e pacchetti si alternano nell'ordine di
+            // esecuzione, e ripetere "Fasi" e "Pacchetti" a ogni cambio faceva sembrare sezioni
+            // separate cio' che e' una sequenza sola. Ogni riga si presenta gia' da se': le fasi
+            // con la loro lettera, i pacchetti col loro nome.
             passi.forEach(p => {
-                if (p.gruppo !== gruppoCorrente) {
-                    gruppoCorrente = p.gruppo;
-                    h += '<h6 class="mt-3 mb-2 text-muted">'
-                       + (p.gruppo === 'fase'
-                            ? '<i class="fas fa-flag me-1"></i>Fasi'
-                            : '<i class="fas fa-box me-1"></i>Pacchetti da aggiornare')
-                       + '</h6>';
-                }
                 const etichetta = p.gruppo === 'fase'
                     ? 'Fase ' + (lettere[iFase++] || '?') + ' &mdash; '
                     : '';

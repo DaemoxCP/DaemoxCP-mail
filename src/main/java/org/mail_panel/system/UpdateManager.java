@@ -2099,6 +2099,26 @@ public final class UpdateManager {
         return ok("test -f /usr/local/etc/rc.d/" + logico + " -o -f /etc/rc.d/" + logico, 10) ? logico : null;
     }
 
+    /**
+     * Comando che chiede a un servizio se la sua configurazione e' valida, PRIMA di riavviarlo.
+     *
+     * Riavviare alla cieca dopo un aggiornamento e' il modo di scoprire un errore di sintassi
+     * a servizio gia' fermo. Su Dovecot questo controllo esisteva gia'; non c'era per gli altri,
+     * ed e' una disparita' senza motivo: nginx fra la 1.28 e la 1.30 puo' cambiare direttive,
+     * e Postfix cambia i predefiniti fra versioni.
+     */
+    private static final String[][] PROVA_CONFIG = {
+        {"nginx",        "nginx -t"},
+        {"postfix",      "postfix check"},
+        {"dovecot",      "doveconf -n >/dev/null"},
+        {"mysql-server", "su -m mysql -c '$(which mysqld 2>/dev/null || echo /usr/local/libexec/mysqld) --validate-config'"},
+    };
+
+    private static String provaConfigDi(String servizio) {
+        for (String[] r : PROVA_CONFIG) if (r[0].equals(servizio)) return r[1];
+        return null;
+    }
+
     /** Il pid di un servizio, o stringa vuota. Confrontarlo prima e dopo prova che e' ripartito davvero. */
     private static String pidServizio(String servizio) {
         if (!nomeValido(servizio)) return "";
@@ -2388,6 +2408,21 @@ public final class UpdateManager {
                 if (!Boolean.TRUE.equals(attivoPrima.get(s))) {
                     job.scrivi("    " + s + ": non era attivo prima, non lo avvio io");
                     continue;
+                }
+                // Si chiede al servizio se accetta la propria configurazione PRIMA di
+                // riavviarlo: se non la accetta, riavviarlo lo spegnerebbe e basta. Meglio
+                // lasciarlo in piedi con quella vecchia e dirlo.
+                String prova = provaConfigDi(s);
+                if (prova != null) {
+                    Shell.Result pr = Shell.runShell(Duration.ofSeconds(60), prova + " 2>&1");
+                    if (!pr.success()) {
+                        job.scrivi("    " + s + ": CONFIGURAZIONE RIFIUTATA, NON lo riavvio");
+                        for (String l : pr.outputTrim().split("\n")) if (!l.trim().isEmpty()) job.scrivi("      " + l);
+                        job.scrivi("      resta in servizio con la configurazione precedente: correggila e riavvialo a mano");
+                        problemaServizi = true;
+                        continue;
+                    }
+                    job.scrivi("    " + s + ": configurazione accettata");
                 }
                 boolean r1 = ok("service " + s + " restart", 120);
                 boolean attivo = ok("service " + s + " status", 20);
