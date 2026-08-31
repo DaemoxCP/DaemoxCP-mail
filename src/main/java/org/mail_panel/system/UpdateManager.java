@@ -2490,8 +2490,20 @@ public final class UpdateManager {
     private static String pacchettoDellaJvm() {
         String home = System.getProperty("java.home", "");
         if (home.isEmpty()) return "";
-        String o = sh("pkg which -q " + home + "/bin/java 2>/dev/null").trim();
-        return o.matches("[A-Za-z0-9._+-]{1,64}") ? o : "";
+        // "pkg which -q" risponde NOME-VERSIONE (openjdk25-25.0.2+10.f.1_2), non il nome.
+        // Con quello "pkg rquery" non trova niente, e una risposta vuota sembra "sei a posto".
+        // La normalizzazione la fa pkg stesso: e' l'unico che sa dove finisce il nome, visto
+        // che le versioni contengono + . _ e i nomi contengono cifre e trattini.
+        String nv = sh("pkg which -q " + home + "/bin/java 2>/dev/null").trim();
+        if (!nv.matches("[A-Za-z0-9._+-]{1,80}")) return "";
+        // Non do per buona nemmeno la risposta di pkg: la accetto solo se il pacchetto
+        // con quel nome esiste davvero. E' cio' che distingue un nome da una stringa.
+        String nome = sh("pkg query %n " + nv + " 2>/dev/null").trim();
+        if (nome.matches("[A-Za-z0-9._+-]{1,64}") && ok("pkg info -e " + nome, 15)) return nome;
+        // Ripiego: taglio all'ultimo trattino seguito da una cifra, dove inizia la versione,
+        // e accetto il risultato solo se pkg conferma che quel pacchetto esiste davvero.
+        Matcher m = Pattern.compile("^(.+)-[0-9][^-]*$").matcher(nv);
+        return m.find() && ok("pkg info -e " + m.group(1), 15) ? m.group(1) : "";
     }
 
     /**
@@ -3163,6 +3175,18 @@ public final class UpdateManager {
         JSONObject stato = packagesStatus();
         JSONArray pacchetti = stato.getJSONArray("packages");
 
+        // Chi ha gia' una procedura dedicata (fasi F, G, H) non deve comparire ANCHE come passo
+        // pacchetto: sarebbe la stessa operazione scritta due volte con parole diverse, e chi
+        // legge non puo' sapere se sono una o due. Si decidono qui, una volta, e valgono per
+        // entrambi gli elenchi piu' sotto e per le fasi.
+        final String rcPkg = sh("pkg query %n 2>/dev/null | grep -E '^roundcube' | head -1", 20).trim();
+        final String jvmPkg = pacchettoDellaJvm();
+        final String pyNuovo = pyPredefinito();
+        java.util.function.Predicate<String> coperto = n ->
+                   (!rcPkg.isEmpty() && rcPkg.equals(n))
+                || (!jvmPkg.isEmpty() && jvmPkg.equals(n))
+                || (n.matches("^py3[0-9]{2}-.*") && !n.startsWith("py" + pyNuovo + "-"));
+
         // --- Passo 1: tutto lo stack protetto ---
         int installati = stato.getInt("installedCount"), protetti = stato.getInt("lockedCount");
         boolean tuttoProtetto = installati > 0 && protetti == installati;
@@ -3197,6 +3221,7 @@ public final class UpdateManager {
         while (mv.find()) visti.add(mv.group(1));
         for (String nome : visti) {
             if (ruoloDi(nome) == null) continue;              // non e' dello stack di posta
+            if (coperto.test(nome)) continue;                 // ha gia' la sua fase dedicata
             String cur = sh("pkg query %v " + nome + " 2>/dev/null", 20);
             String av  = sh("pkg rquery %v " + nome + " 2>/dev/null", 20);
             if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // nessuna correzione disponibile
@@ -3269,6 +3294,7 @@ public final class UpdateManager {
             JSONObject p = pacchetti.getJSONObject(i);
             String nome = p.getString("name");
             if (visti.contains(nome)) continue;               // gia' coperto come vulnerabile
+            if (coperto.test(nome)) continue;                 // ha gia' la sua fase dedicata
             String fam = famigliaDi(nome);
             String chiave = fam == null ? nome : fam;
             if (!famiglieViste.add(chiave)) continue;         // gia' coperto dalla sua famiglia
@@ -3368,11 +3394,11 @@ public final class UpdateManager {
 
         // Roundcube: il pacchetto si aggiornerebbe da solo, ma il salto di versione maggiore
         // cambia lo SCHEMA del database, e senza bin/updatedb.sh la webmail non funziona.
-        String rcPkg = sh("pkg query %n 2>/dev/null | grep -E '^roundcube' | head -1", 20).trim();
         if (!rcPkg.isEmpty() && nomeValido(rcPkg)) {
             String cur = sh("pkg query %v " + rcPkg + " 2>/dev/null", 20);
             String av  = sh("pkg rquery %v " + rcPkg + " 2>/dev/null", 20);
-            boolean daFareRc = !cur.isEmpty() && !av.isEmpty() && !av.equals(cur);
+            boolean rcIgnoto = cur.isEmpty() || av.isEmpty();
+            boolean daFareRc = !rcIgnoto && !av.equals(cur);
             // Una webmail gia' sulla 1.7 con la radice vecchia e' guasta ADESSO: se il piano
             // guardasse solo la versione direbbe "fatto" mentre la webmail non risponde.
             String radiceStorta = null;
@@ -3382,10 +3408,15 @@ public final class UpdateManager {
                     if (!rd.getJSONObject(i).getBoolean("gia"))
                         radiceStorta = rd.getJSONObject(i).getString("file");
             }
-            if (radiceStorta != null) daFareRc = true;
-            passi.put(passo("fase-roundcube", "fase", "Aggiornare Roundcube con lo schema del database",
-                    daFareRc ? "manuale" : "fatto",
-                    !daFareRc ? rcPkg + " " + cur + ": ultima versione, e nginx punta a public_html."
+            if (radiceStorta != null) { daFareRc = true; rcIgnoto = false; }
+            int cveRc = dettaglioVulnerabilita(audit, rcPkg).getJSONArray("cve").length();
+            passi.put(passo("fase-roundcube", "fase", "Aggiornare Roundcube con lo schema del database"
+                        + (cveRc > 0 ? " (" + cveRc + " CVE)" : ""),
+                    (daFareRc || rcIgnoto) ? "manuale" : "fatto",
+                    rcIgnoto ? rcPkg + ": non riesco a sapere quale versione offre il repository "
+                             + "(installata: " + (cur.isEmpty() ? "sconosciuta" : cur) + "). "
+                             + "Non e' una conferma che sei aggiornato."
+                        : !daFareRc ? rcPkg + " " + cur + ": ultima versione, e nginx punta a public_html."
                         : (av.equals(cur)
                            ? rcPkg + " " + cur + ": versione a posto, ma nginx punta ancora alla radice "
                              + "vecchia (" + radiceStorta + ") e la webmail non puo' funzionare."
@@ -3404,7 +3435,6 @@ public final class UpdateManager {
         }
 
         // Python: py311 e py312 sono pacchetti diversi, non due versioni dello stesso.
-        String pyNuovo = pyPredefinito();
         java.util.LinkedHashSet<String> pyVecchie = new java.util.LinkedHashSet<>();
         for (String n : sh("pkg query %n 2>/dev/null").split("\n")) {
             Matcher m = Pattern.compile("^py(3[0-9]{2})-").matcher(n.trim());
@@ -3427,16 +3457,27 @@ public final class UpdateManager {
         }
 
         // JVM: il pannello ci gira sopra, quindi non puo' aggiornarla restando acceso.
-        String jvmPkg = pacchettoDellaJvm();
         if (!jvmPkg.isEmpty()) {
             String cur = sh("pkg query %v " + jvmPkg + " 2>/dev/null", 20);
             String av  = sh("pkg rquery %v " + jvmPkg + " 2>/dev/null", 20);
-            boolean daFareJv = !cur.isEmpty() && !av.isEmpty() && !av.equals(cur);
-            passi.put(passo("fase-jvm", "fase", "Aggiornare la Java su cui gira il pannello",
-                    daFareJv ? "manuale" : "fatto",
-                    daFareJv ? jvmPkg + " " + cur + " -> " + av
+            // Tre stati, non due. Il repository che non risponde NON vuol dire "sei a posto":
+            // vuol dire che non lo so, e dirlo e' l'unica risposta onesta.
+            boolean jvIgnoto = cur.isEmpty() || av.isEmpty();
+            boolean daFareJv = !jvIgnoto && !av.equals(cur);
+            int cveJv = dettaglioVulnerabilita(audit, jvmPkg).getJSONArray("cve").length();
+            passi.put(passo("fase-jvm", "fase", "Aggiornare la Java su cui gira il pannello"
+                        + (cveJv > 0 ? " (" + cveJv + " CVE)" : ""),
+                    (daFareJv || jvIgnoto) ? "manuale" : "fatto",
+                    jvIgnoto ? jvmPkg + ": non riesco a sapere quale versione offre il repository "
+                             + "(installata: " + (cur.isEmpty() ? "sconosciuta" : cur)
+                             + "). Non e' una conferma che sei aggiornato: e' una domanda senza risposta."
+                        : daFareJv ? jvmPkg + " " + cur + " -> " + av
                              : jvmPkg + " " + cur + ": e' gia' l'ultima versione disponibile.",
-                    daFareJv
+                    jvIgnoto
+                    ? "Premi di nuovo \"Ricalcola il piano\". Il piano lancia gia' \"pkg update\", "
+                      + "ma se il repository non era raggiungibile la risposta resta vuota. Finche' "
+                      + "non lo so, non ti dico ne' di aggiornare ne' che sei a posto."
+                    : daFareJv
                     ? "E' l'unico aggiornamento che il pannello non puo' fare restando acceso: sostituire "
                       + "i file della JVM sotto il processo vivo rompe l'avvio dei sottoprocessi, e da quel "
                       + "momento ogni stato mostrato qui sarebbe falso. Usa la scheda \"Aggiornamento della "
