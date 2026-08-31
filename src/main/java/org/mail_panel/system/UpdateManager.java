@@ -1369,6 +1369,11 @@ public final class UpdateManager {
         JSONArray checks = new JSONArray();
         boolean block = false;
 
+        // I pacchetti che devono muoversi insieme si sbloccano e si aggiornano insieme:
+        // altrimenti una dipendenza rimasta protetta blocca tutta l'operazione. Serve saperlo
+        // subito, perche' da questo dipendono anche i servizi da riavviare.
+        java.util.List<String> famiglia = membriFamiglia(nome);
+
         String versione = sh("pkg query %v " + nome + " 2>/dev/null", 20);
         if (versione.isEmpty()) {
             aggiungiCheck(checks, "installato", "Pacchetto installato", "block",
@@ -1414,9 +1419,16 @@ public final class UpdateManager {
                 nCve > 0 ? nCve + " CVE aperte su questo pacchetto: " + det.getString("descrizione")
                          : "Nessuna vulnerabilita' nota registrata per questo pacchetto.");
 
-        // Servizi da riavviare. Il punto dolente: senza riavvio la correzione non entra in servizio.
+        // Servizi da riavviare. Il punto dolente: senza riavvio la correzione non entra in
+        // servizio. E vanno calcolati su TUTTA la famiglia, non sul solo pacchetto nominato:
+        // aggiornando mysql80-server insieme a mysql80-client, sono i programmi collegati al
+        // CLIENT (Postfix, Dovecot, php-fpm) a tenersi in memoria la libreria vecchia. Guardare
+        // il solo nome scritto nel passo li lascerebbe fuori, ed e' esattamente il caso in cui
+        // la correzione risulta installata senza essere in servizio.
+        java.util.LinkedHashSet<String> logici = new java.util.LinkedHashSet<>();
+        for (String membro : famiglia) logici.addAll(serviziDaRiavviare(membro));
         JSONArray servizi = new JSONArray();
-        for (String logico : serviziDaRiavviare(nome)) {
+        for (String logico : logici) {
             String reale = nomeServizioReale(logico);
             if (reale == null) continue;
             servizi.put(new JSONObject().put("name", reale)
@@ -1438,9 +1450,6 @@ public final class UpdateManager {
             block = true;
         }
 
-        // I pacchetti che devono muoversi insieme si sbloccano e si aggiornano insieme:
-        // altrimenti una dipendenza rimasta protetta blocca tutta l'operazione.
-        java.util.List<String> famiglia = membriFamiglia(nome);
         r.put("family", new JSONArray(famiglia));
         if (famiglia.size() > 1) {
             aggiungiCheck(checks, "famiglia", "Pacchetti che si muovono insieme", "verifica",
