@@ -99,9 +99,11 @@ public final class DovecotConfig {
             # mail/dovecot ha dei sapori: con il supporto MySQL il pacchetto si chiama
             # "dovecot-mysql" e quello chiamato "dovecot" non e' installato affatto. Chiedere
             # `pkg query %v dovecot` restituisce vuoto proprio sui sistemi come questo.
-            DOVECOT_VER=$(dovecot --version 2>/dev/null | awk '{print $1}')
-            # Ripiego: il pacchetto che proviene dal port mail/dovecot, qualunque sapore abbia.
-            [ -z "$DOVECOT_VER" ] && DOVECOT_VER=$(pkg query -e '%o = "mail/dovecot"' %v 2>/dev/null | head -1)
+            # Prima il pacchetto per ORIGINE (funziona con qualunque sapore: dovecot-mysql,
+            # dovecot-pgsql...), poi il binario come ripiego. L'ordine conta perche' i due
+            # numeri non sono la stessa cosa: pkg include la revisione del port, il binario no.
+            DOVECOT_VER=$(pkg query -e '%o = "mail/dovecot"' %v 2>/dev/null | head -1)
+            [ -z "$DOVECOT_VER" ] && DOVECOT_VER=$(dovecot --version 2>/dev/null | awk '{print $1}')
             # Solo cifre: se la versione non fosse riconoscibile, un confronto numerico su una
             # stringa qualsiasi fallirebbe in modo imprevedibile (e con "set -e" fermerebbe lo
             # script). Meglio ricadere sul 2.3, che e' il formato compatibile con l'installato.

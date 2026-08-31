@@ -671,9 +671,15 @@ public final class UpdateManager {
         // sapore scelto: sono lo stesso port e si escludono a vicenda, quindi su un sistema
         // con il sapore MySQL il nome "dovecot" NON e' installato e la query darebbe vuoto.
         // Il binario e' la risposta piu' diretta; l'origine del port e' il ripiego esatto.
-        String installata = sh("dovecot --version 2>/dev/null | awk '{print $1}'", 20);
+        // Prima il PACCHETTO, poi il binario. Non e' indifferente: "dovecot --version" da' la
+        // versione a monte (2.3.21.1) mentre pkg da' quella del port con la revisione FreeBSD
+        // (2.3.21.1_3). Mettendo il binario per primo si finisce per confrontare due numeri di
+        // natura diversa, e la scheda mostra un aggiornamento disponibile che non esiste.
+        // L'interrogazione per ORIGINE funziona anche con i sapori, dove il nome "dovecot" non
+        // e' installato affatto: e' quella la ragione per cui il binario era diventato il primo.
+        String installata = sh("pkg query -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 20);
         if (installata.isEmpty()) {
-            installata = sh("pkg query -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 20);
+            installata = sh("dovecot --version 2>/dev/null | awk '{print $1}'", 20);
         }
         String disponibile = sh("pkg rquery -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 30);
         if (disponibile.isEmpty()) disponibile = sh("pkg rquery %v dovecot 2>/dev/null", 30);
