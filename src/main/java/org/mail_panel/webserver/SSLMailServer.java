@@ -6077,6 +6077,21 @@ public class SSLMailServer {
                     logAudit("DOVECOT_CONFIG_REGEN", ip, response.optString("jobId", ""));
                 }
                 case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
+                case "plan" -> response = UpdateManager.pianoManutenzione();
+                case "package_preflight" -> response = UpdateManager.preflightPacchetto(req.optString("package", ""));
+                case "package_update" -> {
+                    // La conferma e' il NOME DEL PACCHETTO scritto a mano: cosi' non si puo'
+                    // aggiornare per sbaglio quello sbagliato dopo aver letto il referto di
+                    // un altro. Un "sei sicuro?" non lo impedirebbe.
+                    String pk = req.optString("package", "");
+                    if (!pk.equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false)
+                                .put("error", "Per confermare scrivi esattamente il nome del pacchetto.");
+                        break;
+                    }
+                    response = UpdateManager.avviaAggiornamentoGuidato(pk);
+                    logAudit("GUIDED_UPDATE_STARTED", ip, pk + " -> " + response.optString("jobId", ""));
+                }
                 case "packages_lock" -> {
                     boolean lock = req.optBoolean("lock", true);
                     String only = req.optString("package", "");

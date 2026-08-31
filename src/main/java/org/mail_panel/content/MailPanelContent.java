@@ -13196,6 +13196,23 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 aggiornamento romperebbe <strong>questo</strong> server di posta, e impedisce quelli che lo romperebbero.
             </p>
 
+            <div class="card mb-4 border-primary">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-list-check me-2"></i><strong>Piano di manutenzione</strong>
+                        <span class="small text-muted ms-2">cosa va fatto su questa macchina, in ordine</span></span>
+                    <button class="btn btn-sm btn-primary" onclick="planLoad()"><i class="fas fa-rotate me-1"></i>Calcola il piano</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Lo stato di ogni passo non &egrave; memorizzato: viene ricavato ogni volta dal sistema reale,
+                        cos&igrave; non pu&ograve; dire &ldquo;fatto&rdquo; per qualcosa che non lo &egrave; pi&ugrave;.
+                        Segui i passi dall&rsquo;alto: &egrave; attivo solo il primo da fare.
+                    </p>
+                    <div id="plan-body"><span class="text-muted">Premi "Calcola il piano": legge lo stato, non modifica niente.</span></div>
+                    <pre id="plan-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-vial me-2"></i><strong>Compatibilità della configurazione</strong>
@@ -13240,6 +13257,23 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 <div class="card-body">
                     <div id="upd-status"><span class="text-muted">Premi "Verifica" per la simulazione.</span></div>
                     <pre id="upd-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-route me-2"></i><strong>Aggiornamento guidato di un pacchetto protetto</strong>
+                        <span class="small text-muted ms-2">sblocca, aggiorna, riavvia i servizi, riprotegge &mdash; e verifica ogni passo</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="guidList()"><i class="fas fa-list me-1"></i>Elenca candidati</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Aggiornare il pacchetto non aggiorna il processo gi&agrave; in esecuzione: senza riavviare i servizi
+                        che lo usano, la correzione risulta installata ma <strong>non &egrave; in servizio</strong>.
+                        Qui lo fa il pannello, e verifica che sia successo davvero confrontando il pid prima e dopo.
+                    </p>
+                    <div id="guid-list"><span class="text-muted">Premi "Elenca candidati" per vedere i pacchetti protetti che hanno un aggiornamento.</span></div>
+                    <div id="guid-detail" class="mt-3"></div>
                 </div>
             </div>
         </div>
@@ -13404,6 +13438,178 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             const r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
             if (!r.success) { alert(r.error || 'operazione fallita'); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Rigenerazione della configurazione Dovecot in corso...</span>';
+            pre.style.display = 'block';
+            updPoll(r.jobId, el, pre);
+        }
+
+        // ---------- piano di manutenzione ----------
+        function planBadge(stato) {
+            if (stato === 'fatto')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1"></i>fatto</span>';
+            if (stato === 'manuale') return '<span class="badge upd-badge-warn">procedura dedicata</span>';
+            return '<span class="badge upd-badge-stop">da fare</span>';
+        }
+
+        let planAzioni = [];
+
+        async function planLoad() {
+            planAzioni = [];
+            const el = document.getElementById('plan-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo lo stato del sistema: pacchetti, vulnerabilità, configurazione. Ci vuole qualche secondo...';
+            const r = await updApi('plan');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let primoDaFare = true;
+            let h = '<div class="mb-2 small">' + (r.daFare === 0
+                ? '<span class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Niente da fare: tutti i passi risultano completati.</strong></span>'
+                : '<strong>' + r.daFare + ' passi da fare</strong> su ' + r.totale + '.') + '</div>';
+            (r.passi || []).forEach(p => {
+                const attivo = p.stato === 'dafare' && primoDaFare;
+                if (p.stato === 'dafare') primoDaFare = false;
+                h += '<div class="border rounded p-2 mb-2' + (attivo ? ' border-primary' : '') + '">'
+                   + '<div class="d-flex justify-content-between align-items-center">'
+                   + '<span><strong>' + p.n + '. ' + updEsc(p.titolo) + '</strong> ' + planBadge(p.stato) + '</span>';
+                if (attivo && p.azione) {
+                    // L'azione si passa come INDICE, non serializzata dentro l'attributo.
+                    // Infilare JSON in un onclick richiede virgolette annidate dentro un
+                    // blocco di testo Java: e' la sorgente di errori di escape piu' facile da
+                    // introdurre e piu' difficile da vedere. Un numero non ha niente da proteggere.
+                    const idx = planAzioni.push(p.azione) - 1;
+                    h += '<button class="btn btn-sm btn-primary" onclick="planRun(' + idx + ')">'
+                       + '<i class="fas fa-play me-1"></i>Esegui questo passo</button>';
+                }
+                h += '</div>'
+                   + '<div class="small mt-1">' + updEsc(p.situazione) + '</div>'
+                   + '<div class="small text-muted mt-1">' + updEsc(p.perche) + '</div>'
+                   + '</div>';
+            });
+            if ((r.senzaRimedio || []).length) {
+                h += '<div class="alert alert-secondary py-2 small mb-0"><strong>Senza rimedio disponibile:</strong> '
+                   + r.senzaRimedio.map(x => updEsc(x)).join(', ')
+                   + '. Hanno vulnerabilità note ma il repository non offre ancora una correzione: non c&rsquo;è un passo da fare, va solo saputo.</div>';
+            }
+            el.innerHTML = h;
+        }
+
+        async function planRun(idx) {
+            const azione = planAzioni[idx];
+            if (!azione) { alert('Passo non piu valido: ricalcola il piano.'); return; }
+            const el = document.getElementById('plan-body');
+            const pre = document.getElementById('plan-log');
+            let r;
+            if (azione.tipo === 'packages_lock_all') {
+                r = await updApi('packages_lock', { lock: true, package: '' });
+                if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+                planLoad();
+                return;
+            }
+            if (azione.tipo === 'updates_apply') {
+                if (prompt('Conferma: scrivi AGGIORNA per procedere.') !== 'AGGIORNA') return;
+                r = await updApi('updates_apply', { confirm: 'AGGIORNA' });
+            } else if (azione.tipo === 'package_update') {
+                if (prompt('Per confermare scrivi esattamente il nome del pacchetto: ' + azione.package) !== azione.package) return;
+                r = await updApi('package_update', { package: azione.package, confirm: azione.package });
+            } else if (azione.tipo === 'dovecot_config_regen') {
+                if (prompt('Conferma: scrivi RIGENERA per procedere.') !== 'RIGENERA') return;
+                r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
+            } else {
+                alert('Passo senza azione automatica.');
+                return;
+            }
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Passo in corso: non chiudere la pagina.</span>';
+            pre.style.display = 'block';
+            planPoll(r.jobId, el, pre);
+        }
+
+        async function planPoll(id, el, pre) {
+            const s = await updApi('job_status', { jobId: id });
+            if (s.success && s.job) {
+                pre.textContent = s.job.consoleLog || '';
+                pre.scrollTop = pre.scrollHeight;
+                if (s.job.status === 'completed') {
+                    el.innerHTML = '<span class="text-success"><i class="fas fa-check me-1"></i>Passo completato in '
+                                 + s.job.elapsedSeconds + 's. Ricalcolo il piano...</span>';
+                    setTimeout(planLoad, 1500);
+                    return;
+                }
+                if (s.job.status === 'error') {
+                    el.innerHTML = '<div class="alert alert-danger py-2"><strong>Passo non riuscito:</strong> '
+                                 + updEsc(s.job.errorMessage) + '<br>Leggi il log qui sotto prima di proseguire.</div>'
+                                 + '<button class="btn btn-sm btn-outline-primary" onclick="planLoad()">Ricalcola il piano</button>';
+                    return;
+                }
+            }
+            setTimeout(() => planPoll(id, el, pre), 3000);
+        }
+
+        // ---------- aggiornamento guidato ----------
+        async function guidList() {
+            const el = document.getElementById('guid-list');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Cerco i pacchetti protetti con un aggiornamento...';
+            const r = await updApi('maintenance_preview');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            const pk = r.packages || [];
+            if (!pk.length) { el.innerHTML = '<span class="text-muted">Nessun pacchetto protetto ha aggiornamenti disponibili.</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr>'
+                  + '<th>Pacchetto</th><th>Da</th><th>A</th><th>Esito</th><th class="text-end"></th></tr></thead><tbody>';
+            pk.forEach(p => {
+                const a = p.advisory;
+                const bloccante = a && a.level === 'attendi';
+                h += '<tr class="upd-cell"><td><code>' + updEsc(p.name) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(p.role || '') + '</span></td>'
+                   + '<td class="small">' + updEsc(p.current) + '</td>'
+                   + '<td class="small">' + updEsc(p.available) + '</td>'
+                   + '<td>' + (a ? updBadge(a.level) : '<span class="badge bg-secondary">-</span>') + '</td>'
+                   + '<td class="text-end">'
+                   + (bloccante
+                        ? '<span class="small text-muted">procedura dedicata</span>'
+                        : '<button class="btn btn-sm btn-outline-primary" onclick="guidPreflight(\\'' + updEsc(p.name) + '\\')">'
+                          + '<i class="fas fa-clipboard-check me-1"></i>Prepara</button>')
+                   + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            el.innerHTML = h;
+        }
+
+        async function guidPreflight(nome) {
+            const el = document.getElementById('guid-detail');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli su ' + updEsc(nome) + '...';
+            const r = await updApi('package_preflight', { package: nome });
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<hr><h6><i class="fas fa-cube me-1"></i>' + updEsc(r.name) + ' &mdash; '
+                  + updEsc(r.current) + ' &rarr; ' + updEsc(r.available) + '</h6>';
+            h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2">'
+               + '<thead><tr><th style="width:8rem">Esito</th><th style="width:16rem">Controllo</th><th>Dettaglio</th></tr></thead><tbody>';
+            (r.checks || []).forEach(c => {
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            if ((r.cve || []).length) {
+                h += '<div class="small mb-2"><strong>Chiude:</strong> <span class="badge bg-dark me-1">'
+                   + r.cve.map(c => updEsc(c)).join('</span><span class="badge bg-dark me-1">') + '</span></div>';
+            }
+            if ((r.services || []).length) {
+                h += '<div class="small mb-2"><strong>Servizi che verranno riavviati:</strong> '
+                   + r.services.map(s => updEsc(s.name) + (s.running ? '' : ' (fermo, non verra\\' avviato)')).join(', ')
+                   + '</div>';
+            }
+            if (r.blocked) {
+                h += '<div class="alert alert-danger py-2 small mb-0">Non avviabile: risolvi le righe rosse qui sopra.</div>';
+            } else {
+                h += '<button class="btn btn-danger" onclick="guidRun(\\'' + updEsc(r.name) + '\\')">'
+                   + '<i class="fas fa-play me-1"></i>Aggiorna ' + updEsc(r.name) + '</button>';
+            }
+            el.innerHTML = h;
+        }
+
+        async function guidRun(nome) {
+            if (prompt('Per confermare scrivi esattamente il nome del pacchetto: ' + nome) !== nome) return;
+            const el = document.getElementById('guid-detail');
+            const pre = document.getElementById('upd-log');
+            const r = await updApi('package_update', { package: nome, confirm: nome });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Aggiornamento di '
+                         + updEsc(nome) + ' in corso: non chiudere la pagina.</span>';
             pre.style.display = 'block';
             updPoll(r.jobId, el, pre);
         }

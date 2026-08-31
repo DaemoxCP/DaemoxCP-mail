@@ -138,11 +138,23 @@ public final class UpdateManager {
      */
     public static final String[][] SERVIZI = {
         {"postfix"}, {"dovecot"}, {"rspamd"}, {"redis"},
-        {"clamav_clamd"}, {"clamav_freshclam"},
+        // Entrambe le grafie: il pannello stesso, in Main.java, prova "clamav_clamd" e poi
+        // "clamav-clamd", segno che il nome dello script rc.d cambia fra le versioni del port.
+        {"clamav_clamd", "clamav-clamd"}, {"clamav_freshclam", "clamav-freshclam"},
         {"mysql-server"}, {"nginx"},
         {"php_fpm", "php-fpm"},
         {"fail2ban"},
         {"unbound", "local_unbound"},
+        // pf e ntpd sono del sistema base e pkg non li aggiorna, ma se erano attivi prima e
+        // non lo sono dopo qualcosa e' successo comunque, e vale la pena accorgersene:
+        // senza firewall il server e' esposto, senza orario giusto saltano DKIM e TLS.
+        {"pf"},
+        {"ntpd"},
+        // NON si aggiungono, e il motivo va scritto perche' sembrano mancanze:
+        //  - sendmail: il pannello lo SPEGNE apposta, va in conflitto con Postfix. Metterlo
+        //    qui vorrebbe dire dichiarare guasto uno stato corretto.
+        //  - roundcube: non e' un demone, non esiste nessuno script rc.d. Il riferimento a
+        //    "service roundcube" altrove nel pannello e' verosimilmente uno sbaglio.
     };
 
     /** Quali servizi risultano attivi adesso. Solo quelli davvero presenti sul sistema. */
@@ -1082,6 +1094,458 @@ public final class UpdateManager {
             job.scrivi("ERRORE: " + e.getMessage());
         } finally {
             if (script != null) try { java.nio.file.Files.deleteIfExists(script); } catch (Exception ignored) {}
+            job.fine = System.currentTimeMillis();
+        }
+    }
+
+    /** Una riga del referto di controlli: esito, cosa si e' controllato, perche' conta. */
+    private static void aggiungiCheck(JSONArray a, String id, String label, String level, String detail) {
+        a.put(new JSONObject().put("id", id).put("label", label)
+                .put("level", level).put("detail", detail));
+    }
+
+    // ===================== piano di manutenzione guidato =====================
+
+    /**
+     * Il piano: cosa va fatto su QUESTA macchina, in quale ordine, e a che punto sei.
+     *
+     * Lo stato di ogni passo non e' memorizzato da nessuna parte: viene RICAVATO ogni volta
+     * dallo stato reale del sistema. Un flag salvato su disco potrebbe dire "fatto" per un
+     * passo che qualcuno ha disfatto, o restare indietro dopo un ripristino; un controllo
+     * ricavato dai fatti non puo' mentire. Costa qualche secondo in piu' e vale la pena.
+     */
+    public static JSONObject pianoManutenzione() {
+        ok("pkg update -q", 120);
+        JSONArray passi = new JSONArray();
+        int n = 0;
+
+        // Dati raccolti UNA volta sola: pkg audit e la simulazione sono lente, e ripeterle
+        // per ogni passo trasformerebbe il piano in un'attesa di minuti.
+        String audit = sh("pkg audit -F 2>&1", 180);
+        String dry = sh("pkg upgrade -n 2>&1", 180);
+        String lock = sh("pkg lock -l 2>/dev/null");
+        JSONObject stato = packagesStatus();
+        JSONArray pacchetti = stato.getJSONArray("packages");
+
+        // --- Passo 1: tutto lo stack protetto ---
+        int installati = stato.getInt("installedCount"), protetti = stato.getInt("lockedCount");
+        boolean tuttoProtetto = installati > 0 && protetti == installati;
+        passi.put(passo(++n, "Proteggere tutti i pacchetti dello stack",
+                tuttoProtetto ? "fatto" : "dafare",
+                protetti + " su " + installati + " pacchetti sono protetti.",
+                "Senza il lock, un aggiornamento puo' sostituire o rimuovere un pezzo del server di posta "
+                + "senza che nessuno lo decida. E' il primo passo perche' rende sicuri tutti quelli dopo.",
+                tuttoProtetto ? null : new JSONObject().put("tipo", "packages_lock_all")));
+
+        // --- Passo 2: aggiornare cio' che non e' protetto ---
+        Matcher mUp = Pattern.compile("Number of packages to be upgraded:\\s*([0-9]+)").matcher(dry);
+        int daAggiornare = mUp.find() ? Integer.parseInt(mUp.group(1)) : 0;
+        Matcher mIn = Pattern.compile("Number of packages to be installed:\\s*([0-9]+)").matcher(dry);
+        int daInstallare = mIn.find() ? Integer.parseInt(mIn.group(1)) : 0;
+        boolean contornoAggiornato = (daAggiornare + daInstallare) == 0;
+        passi.put(passo(++n, "Aggiornare i pacchetti non protetti",
+                contornoAggiornato ? "fatto" : "dafare",
+                contornoAggiornato ? "Nessun pacchetto non protetto ha aggiornamenti in sospeso."
+                        : daAggiornare + " da aggiornare e " + daInstallare + " da installare.",
+                "Sono le librerie e gli strumenti di contorno. Il lock tiene fuori lo stack di posta e il "
+                + "runtime Java del pannello, quindi il rischio e' minimo ed e' il modo giusto per verificare "
+                + "che il meccanismo funzioni prima di toccare cose delicate.",
+                contornoAggiornato ? null : new JSONObject().put("tipo", "updates_apply")));
+
+        // --- Passi 3..N: un passo per ogni pacchetto protetto vulnerabile con correzione ---
+        // L'ordine e' per numero di CVE chiuse: prima cio' che porta piu' beneficio.
+        java.util.List<JSONObject> vulnerabili = new ArrayList<>();
+        Matcher mv = Pattern.compile("(?m)^(\\S+?)-[0-9][^\\s]* is vulnerable:").matcher(audit);
+        java.util.LinkedHashSet<String> visti = new java.util.LinkedHashSet<>();
+        while (mv.find()) visti.add(mv.group(1));
+        for (String nome : visti) {
+            if (ruoloDi(nome) == null) continue;              // non e' dello stack di posta
+            String cur = sh("pkg query %v " + nome + " 2>/dev/null", 20);
+            String av  = sh("pkg rquery %v " + nome + " 2>/dev/null", 20);
+            if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // nessuna correzione disponibile
+            boolean maggiore = saltoSignificativo(nome, cur, av);
+            JSONObject avv = avvertenzaPer(nome, maggiore);
+            int nCve = dettaglioVulnerabilita(audit, nome).getJSONArray("cve").length();
+            JSONObject o = new JSONObject().put("nome", nome).put("cur", cur).put("av", av)
+                    .put("cve", nCve).put("maggiore", maggiore);
+            if (avv != null) o.put("avv", avv);
+            vulnerabili.add(o);
+        }
+        vulnerabili.sort((x, y) -> Integer.compare(y.getInt("cve"), x.getInt("cve")));
+        for (JSONObject v : vulnerabili) {
+            String nome = v.getString("nome");
+            boolean attendi = v.has("avv") && "attendi".equals(v.getJSONObject("avv").getString("level"));
+            passi.put(passo(++n, "Aggiornare " + nome + " (" + v.getInt("cve") + " CVE)",
+                    attendi ? "manuale" : "dafare",
+                    nome + " " + v.getString("cur") + " -> " + v.getString("av")
+                        + (v.getBoolean("maggiore") ? ", salto di versione significativo" : ", solo cifre finali"),
+                    attendi ? v.getJSONObject("avv").getString("text")
+                            : "Il pannello lo sblocca, lo aggiorna, riavvia i servizi che lo usano verificando "
+                              + "che siano ripartiti davvero, e lo riprotegge.",
+                    attendi ? null : new JSONObject().put("tipo", "package_update").put("package", nome)));
+        }
+
+        // --- Passo finale: configurazione Dovecot dalla sorgente unica ---
+        // Lo stato si ricava dal file vivo: l'intestazione la scrive solo il generatore nuovo.
+        boolean rigenerata = ok("grep -q 'generato dal FreeBSD Mail Panel' "
+                + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
+        boolean sieveAttivo = ok("grep -qE '^protocols.*sieve' " + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
+        passi.put(passo(++n, "Rigenerare la configurazione Dovecot",
+                rigenerata ? "fatto" : "dafare",
+                rigenerata ? "La configurazione proviene gia' dalla sorgente unica del pannello."
+                        + (sieveAttivo ? " ManageSieve attivo." : " ManageSieve non attivo.")
+                    : "La configurazione attuale e' un misto di generatori diversi.",
+                "Unifica i file con la sorgente unica, corregge il nome del database che due generatori "
+                + "scrivevano sbagliato, e attiva ManageSieve se Pigeonhole e' installato. Prima di mettere "
+                + "in servizio chiede a Dovecot se accetta la configurazione: se rifiuta, rimette quella "
+                + "precedente senza riavviare.",
+                rigenerata ? null : new JSONObject().put("tipo", "dovecot_config_regen")));
+
+        // Vulnerabilita' senza correzione disponibile: non sono un passo, ma vanno sapute.
+        JSONArray senzaRimedio = new JSONArray();
+        for (String nome : visti) {
+            String cur = sh("pkg query %v " + nome + " 2>/dev/null", 20);
+            String av  = sh("pkg rquery %v " + nome + " 2>/dev/null", 20);
+            if (!cur.isEmpty() && (av.isEmpty() || av.equals(cur))) senzaRimedio.put(nome);
+        }
+
+        int daFare = 0;
+        for (int i = 0; i < passi.length(); i++) if ("dafare".equals(passi.getJSONObject(i).getString("stato"))) daFare++;
+        return new JSONObject().put("success", true).put("passi", passi)
+                .put("daFare", daFare).put("totale", passi.length())
+                .put("senzaRimedio", senzaRimedio);
+    }
+
+    private static JSONObject passo(int n, String titolo, String stato, String situazione,
+                                    String perche, JSONObject azione) {
+        JSONObject o = new JSONObject().put("n", n).put("titolo", titolo).put("stato", stato)
+                .put("situazione", situazione).put("perche", perche);
+        if (azione != null) o.put("azione", azione);
+        return o;
+    }
+
+    // ===================== aggiornamento guidato di un singolo pacchetto =====================
+
+    /**
+     * Quale servizio dipende da quale pacchetto. Serve per la parte che ieri e' costata cara:
+     * aggiornare un pacchetto NON aggiorna il processo in esecuzione, che continua a usare i
+     * file gia' caricati in memoria. Senza riavviare, la vulnerabilita' resta aperta pur
+     * risultando corretta.
+     */
+    private static final String[][] SERVIZIO_DI = {
+        {"^postfix.*",                        "postfix"},
+        {"^dovecot[0-9]*(-[a-z]+)?$",         "dovecot"},
+        {"^dovecot[0-9]*-pigeonhole.*",       "dovecot"},
+        {"^rspamd$",                          "rspamd"},
+        {"^redis.*",                          "redis"},
+        {"^clamav.*",                         "clamav_clamd"},
+        {"^nginx.*",                          "nginx"},
+        {"^php[0-9]+.*",                      "php_fpm"},
+        {"^mysql[0-9]+-server$",              "mysql-server"},
+        {"^py[0-9]+-fail2ban$",               "fail2ban"},
+        {"^unbound$",                         "unbound"},
+    };
+
+    private static String servizioDiretto(String pacchetto) {
+        for (String[] r : SERVIZIO_DI) if (pacchetto.matches(r[0])) return r[1];
+        return null;
+    }
+
+    /**
+     * I servizi da riavviare dopo aver aggiornato un pacchetto. Per una libreria condivisa
+     * come openssl non basta guardare il pacchetto stesso: si chiede a pkg CHI dipende da lui
+     * e si traducono quei pacchetti in servizi. Un elenco scritto a mano invecchierebbe in
+     * silenzio, e un servizio dimenticato significa una vulnerabilita' che resta aperta.
+     */
+    static java.util.List<String> serviziDaRiavviare(String pacchetto) {
+        java.util.LinkedHashSet<String> servizi = new java.util.LinkedHashSet<>();
+        String diretto = servizioDiretto(pacchetto);
+        if (diretto != null) servizi.add(diretto);
+        if (!nomeValido(pacchetto)) return new ArrayList<>(servizi);
+        for (String riga : sh("pkg query %rn " + pacchetto + " 2>/dev/null", 30).split("\n")) {
+            String dip = riga.trim();
+            if (!nomeValido(dip)) continue;
+            String s = servizioDiretto(dip);
+            if (s != null) servizi.add(s);
+        }
+        return new ArrayList<>(servizi);
+    }
+
+    /** Nome effettivo dello script rc.d fra i candidati, o null se il servizio non c'e'. */
+    private static String nomeServizioReale(String logico) {
+        for (String[] candidati : SERVIZI) {
+            boolean appartiene = false;
+            for (String c : candidati) if (c.equals(logico)) appartiene = true;
+            if (!appartiene) continue;
+            for (String c : candidati) {
+                if (ok("test -f /usr/local/etc/rc.d/" + c + " -o -f /etc/rc.d/" + c, 10)) return c;
+            }
+            return null;
+        }
+        return ok("test -f /usr/local/etc/rc.d/" + logico + " -o -f /etc/rc.d/" + logico, 10) ? logico : null;
+    }
+
+    /** Il pid di un servizio, o stringa vuota. Confrontarlo prima e dopo prova che e' ripartito davvero. */
+    private static String pidServizio(String servizio) {
+        if (!nomeValido(servizio)) return "";
+        String o = sh("service " + servizio + " status 2>/dev/null", 15);
+        Matcher m = Pattern.compile("pid[s]?[: ]+([0-9]+)").matcher(o.toLowerCase());
+        return m.find() ? m.group(1) : "";
+    }
+
+    /**
+     * Controlli preliminari per l'aggiornamento di UN pacchetto protetto. Tutto in sola
+     * lettura: dice cosa succederebbe, quali vulnerabilita' si chiuderebbero e quali servizi
+     * andranno riavviati, prima che qualcuno prema qualcosa.
+     */
+    public static JSONObject preflightPacchetto(String nome) {
+        JSONObject r = new JSONObject();
+        if (!nomeValido(nome)) return r.put("success", false).put("error", "nome pacchetto non valido");
+        JSONArray checks = new JSONArray();
+        boolean block = false;
+
+        String versione = sh("pkg query %v " + nome + " 2>/dev/null", 20);
+        if (versione.isEmpty()) {
+            aggiungiCheck(checks, "installato", "Pacchetto installato", "block",
+                    nome + " non risulta installato su questa macchina.");
+            block = true;
+        } else {
+            aggiungiCheck(checks, "installato", "Pacchetto installato", "ok", nome + " " + versione);
+        }
+        r.put("name", nome).put("current", versione).put("role", ruoloDi(nome) == null ? "" : ruoloDi(nome));
+
+        String disponibile = sh("pkg rquery %v " + nome + " 2>/dev/null", 30);
+        r.put("available", disponibile);
+        boolean maggiore = !versione.isEmpty() && !disponibile.isEmpty()
+                && saltoSignificativo(nome, versione, disponibile);
+        r.put("majorJump", maggiore);
+        if (disponibile.isEmpty() || disponibile.equals(versione)) {
+            aggiungiCheck(checks, "aggiornamento", "Aggiornamento disponibile", "block",
+                    "Il repository non offre una versione piu' recente: non c'e' niente da aggiornare.");
+            block = true;
+        } else {
+            aggiungiCheck(checks, "aggiornamento", "Aggiornamento disponibile", "ok",
+                    versione + " -> " + disponibile + (maggiore ? " (salto di versione significativo)" : " (solo cifre finali)"));
+        }
+
+        JSONObject avv = avvertenzaPer(nome, maggiore);
+        if (avv != null) {
+            r.put("advisory", avv);
+            if ("attendi".equals(avv.getString("level"))) {
+                aggiungiCheck(checks, "avvertenza", "Avvertenza sul pacchetto", "block", avv.getString("text"));
+                block = true;
+            } else {
+                aggiungiCheck(checks, "avvertenza", "Avvertenza sul pacchetto", avv.getString("level"), avv.getString("text"));
+            }
+        }
+
+        // Vulnerabilita' che questo aggiornamento chiuderebbe: e' il motivo per farlo.
+        String audit = sh("pkg audit " + nome + " 2>&1", 120);
+        JSONObject det = dettaglioVulnerabilita(audit, nome);
+        r.put("cve", det.getJSONArray("cve")).put("vulnDescrizione", det.getString("descrizione"))
+         .put("riferimenti", det.getJSONArray("riferimenti"));
+        int nCve = det.getJSONArray("cve").length();
+        aggiungiCheck(checks, "vulnerabilita", "Vulnerabilita' note", nCve > 0 ? "verifica" : "ok",
+                nCve > 0 ? nCve + " CVE aperte su questo pacchetto: " + det.getString("descrizione")
+                         : "Nessuna vulnerabilita' nota registrata per questo pacchetto.");
+
+        // Servizi da riavviare. Il punto dolente: senza riavvio la correzione non entra in servizio.
+        JSONArray servizi = new JSONArray();
+        for (String logico : serviziDaRiavviare(nome)) {
+            String reale = nomeServizioReale(logico);
+            if (reale == null) continue;
+            servizi.put(new JSONObject().put("name", reale)
+                    .put("running", ok("service " + reale + " status", 15))
+                    .put("pid", pidServizio(reale)));
+        }
+        r.put("services", servizi);
+        aggiungiCheck(checks, "servizi", "Servizi da riavviare", "verifica",
+                servizi.length() == 0
+                    ? "Nessun servizio risulta dipendere da questo pacchetto: non serve riavviare nulla."
+                    : servizi.length() + " servizi verranno riavviati dopo l'aggiornamento, uno alla volta. "
+                      + "Senza il riavvio continuerebbero a usare i file gia' caricati in memoria e la "
+                      + "correzione non sarebbe in servizio, pur risultando installata.");
+
+        if (Files.exists(Paths.get(STATO_MANUTENZIONE))) {
+            aggiungiCheck(checks, "stato", "Nessuna manutenzione in sospeso", "block",
+                    "Esiste uno stato di manutenzione non concluso in " + STATO_MANUTENZIONE
+                    + ": riavvia il pannello, che lo ripristina da solo, e riprova.");
+            block = true;
+        }
+
+        boolean eraProtetto = bloccato(sh("pkg lock -l 2>/dev/null"), nome);
+        r.put("wasLocked", eraProtetto);
+        aggiungiCheck(checks, "protezione", "Protezione del pacchetto", "ok",
+                eraProtetto ? "Protetto: verra' sbloccato per l'aggiornamento e riprotetto subito dopo, "
+                            + "anche se qualcosa andasse storto."
+                            : "Non protetto: verra' aggiornato e poi protetto.");
+
+        r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
+        return r;
+    }
+
+    public static JSONObject avviaAggiornamentoGuidato(String nome) {
+        if (!nomeValido(nome)) return new JSONObject().put("success", false).put("error", "nome pacchetto non valido");
+        String id = "guid-" + System.currentTimeMillis();
+        Job j = new Job(id, "guided_update");
+        JOBS.put(id, j);
+        final String pkgNome = nome;
+        Thread t = new Thread(() -> runAggiornamentoGuidato(j, pkgNome), "guided-update");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    /**
+     * Aggiorna UN pacchetto protetto e rimette in servizio cio' che ne dipende.
+     *
+     * L'ordine e' quello che ieri, sull'altro server, abbiamo imparato a nostre spese:
+     * sbloccare, aggiornare, RIPROTEGGERE SEMPRE (anche in caso di errore), poi riavviare i
+     * servizi e verificare che siano ripartiti DAVVERO confrontando il pid. Un pacchetto
+     * aggiornato con il processo ancora sui file vecchi e' una vulnerabilita' aperta che
+     * risulta chiusa: il modo peggiore di stare fermi.
+     */
+    private static void runAggiornamentoGuidato(Job job, String nome) {
+        job.status = "running";
+        final int TOT = 6;
+        boolean sbloccato = false, eraProtetto = false;
+        java.util.List<String> servizi = new ArrayList<>();
+        Map<String, String> pidPrima = new LinkedHashMap<>();
+        Map<String, Boolean> attivoPrima = new LinkedHashMap<>();
+        try {
+            job.avanza(1, TOT);
+            job.scrivi("=== Aggiornamento guidato di " + nome + " ===");
+            job.scrivi("");
+            job.scrivi("[1/" + TOT + "] Controlli preliminari...");
+            JSONObject pf = preflightPacchetto(nome);
+            if (!pf.optBoolean("canProceed", false)) {
+                job.status = "error";
+                job.errorMessage = "I controlli preliminari hanno trovato un impedimento.";
+                JSONArray ck = pf.optJSONArray("checks");
+                for (int i = 0; ck != null && i < ck.length(); i++) {
+                    JSONObject c = ck.getJSONObject(i);
+                    if (!"ok".equals(c.optString("level"))) {
+                        job.scrivi("  [" + c.optString("level").toUpperCase() + "] "
+                                + c.optString("label") + ": " + c.optString("detail"));
+                    }
+                }
+                job.scrivi("RIFIUTO DI PARTIRE.");
+                return;
+            }
+            String versionePrima = pf.optString("current", "");
+            String attesa = pf.optString("available", "");
+            eraProtetto = pf.optBoolean("wasLocked", false);
+            JSONArray sv = pf.optJSONArray("services");
+            for (int i = 0; sv != null && i < sv.length(); i++) {
+                JSONObject o = sv.getJSONObject(i);
+                String n = o.getString("name");
+                servizi.add(n);
+                pidPrima.put(n, o.optString("pid", ""));
+                attivoPrima.put(n, o.optBoolean("running", false));
+            }
+            job.scrivi("  " + nome + " " + versionePrima + " -> " + attesa);
+            job.scrivi("  servizi coinvolti: " + (servizi.isEmpty() ? "nessuno" : String.join(", ", servizi)));
+
+            job.avanza(2, TOT);
+            job.scrivi("");
+            job.scrivi("[2/" + TOT + "] Sblocco temporaneo...");
+            if (eraProtetto) {
+                // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il
+                // ripristino all'avvio sa cosa riproteggere.
+                scriviStato(java.util.List.of(nome));
+                sbloccato = ok("pkg unlock -y " + nome, 30);
+                job.scrivi("  " + (sbloccato ? "sbloccato (elenco salvato per il ripristino automatico)"
+                                             : "SBLOCCO FALLITO"));
+                if (!sbloccato) throw new IllegalStateException("non sono riuscito a sbloccare " + nome);
+            } else {
+                job.scrivi("  non era protetto: niente da sbloccare");
+            }
+
+            job.avanza(3, TOT);
+            job.scrivi("");
+            job.scrivi("[3/" + TOT + "] Aggiornamento...");
+            int code = eseguiConLog(job, "pkg upgrade -y " + nome + " 2>&1", 1800);
+            if (code != 0) throw new IllegalStateException("pkg upgrade uscito con codice " + code);
+
+            String versioneDopo = sh("pkg query %v " + nome + " 2>/dev/null", 20);
+            job.scrivi("  versione installata adesso: " + versioneDopo);
+            if (versioneDopo.equals(versionePrima)) {
+                throw new IllegalStateException("la versione non e' cambiata: l'aggiornamento non ha avuto effetto");
+            }
+
+            job.avanza(4, TOT);
+            job.scrivi("");
+            job.scrivi("[4/" + TOT + "] Riavvio dei servizi che usano " + nome + "...");
+            job.scrivi("  (senza questo continuerebbero a usare i file gia' caricati in memoria)");
+            boolean problemaServizi = false;
+            for (String s : servizi) {
+                if (!Boolean.TRUE.equals(attivoPrima.get(s))) {
+                    job.scrivi("    " + s + ": non era attivo prima, non lo avvio io");
+                    continue;
+                }
+                boolean r1 = ok("service " + s + " restart", 120);
+                boolean attivo = ok("service " + s + " status", 20);
+                String pidDopo = pidServizio(s);
+                String pidP = pidPrima.getOrDefault(s, "");
+                String nota = "";
+                if (!pidP.isEmpty() && !pidDopo.isEmpty()) {
+                    nota = pidP.equals(pidDopo)
+                        ? "  ATTENZIONE: stesso pid " + pidDopo + ", NON e' ripartito"
+                        : "  (pid " + pidP + " -> " + pidDopo + ")";
+                    if (pidP.equals(pidDopo)) problemaServizi = true;
+                }
+                job.scrivi("    " + s + ": " + (r1 ? "riavviato" : "RIAVVIO FALLITO")
+                        + ", ora " + (attivo ? "attivo" : "NON ATTIVO") + nota);
+                if (!attivo) problemaServizi = true;
+            }
+
+            job.avanza(5, TOT);
+            job.scrivi("");
+            job.scrivi("[5/" + TOT + "] Verifica delle vulnerabilita' residue...");
+            String audit = sh("pkg audit " + nome + " 2>&1", 120);
+            JSONObject det = dettaglioVulnerabilita(audit, nome);
+            int rimaste = det.getJSONArray("cve").length();
+            if (rimaste == 0) {
+                job.scrivi("  pkg audit non segnala piu' vulnerabilita' per " + nome);
+            } else {
+                job.scrivi("  ATTENZIONE: restano " + rimaste + " CVE su " + nome + ": " + det.getString("descrizione"));
+                job.scrivi("  Il repository potrebbe non avere ancora la correzione.");
+            }
+
+            job.avanza(6, TOT);
+            job.scrivi("");
+            job.scrivi("[6/" + TOT + "] Stato di tutti i servizi...");
+            boolean caduto = false;
+            for (Map.Entry<String, Boolean> e : statoServizi().entrySet()) {
+                job.scrivi("    " + e.getKey() + ": " + (e.getValue() ? "attivo" : "NON attivo"));
+                if (!e.getValue()) caduto = true;
+            }
+
+            if (problemaServizi || caduto) {
+                job.status = "error";
+                job.errorMessage = "Aggiornamento eseguito, ma un servizio non e' ripartito come doveva: leggi il log.";
+            } else {
+                job.status = "completed";
+                job.scrivi("");
+                job.scrivi("=== " + nome + " " + versioneDopo + " in servizio ===");
+            }
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = e.getMessage();
+            job.scrivi("ERRORE: " + e.getMessage());
+        } finally {
+            // La riprotezione avviene SEMPRE, qualunque cosa sia andata storta sopra.
+            if (sbloccato) {
+                job.scrivi("");
+                job.scrivi("Riproteggo " + nome + "...");
+                boolean ril = ok("pkg info -e " + nome, 15) && ok("pkg lock -y " + nome, 30);
+                job.scrivi("  " + (ril ? "riprotetto" : "RIPROTEZIONE FALLITA: fallo a mano dalla scheda Protezione pacchetti"));
+                if (ril) pulisciStato();
+                else if ("completed".equals(job.status)) {
+                    job.status = "error";
+                    job.errorMessage = "Aggiornamento riuscito ma il pacchetto NON e' stato riprotetto.";
+                }
+            }
             job.fine = System.currentTimeMillis();
         }
     }
