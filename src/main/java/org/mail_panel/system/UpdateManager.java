@@ -5839,13 +5839,32 @@ public final class UpdateManager {
             if (liberiMb <= 5000) blocca = true;
 
             // Il pannello stesso: due riavvii, e lui non torna su da solo.
+            // Attenzione a cosa si afferma. Il file c'e' e sysrc dice YES: sono fatti. Che il
+            // pannello TORNI SU e' una previsione, e l'unica prova e' averlo avviato una volta
+            // con "service mailpanel start". Dire "tornera' su da solo" perche' esiste un file
+            // e' la stessa distanza fra "installato" e "funziona" su cui sbaglio di continuo.
             boolean rc = ok("test -f /usr/local/etc/rc.d/mailpanel -o -f /etc/rc.d/mailpanel", 10);
-            r.put("rcPannello", rc);
-            aggiungiCheck(checks, "pannello", "Il pannello dopo il riavvio", rc ? "ok" : "attendi",
-                    rc ? "esiste uno script rc.d per il pannello: tornera' su da solo."
-                       : "NON c'e' nessuno script rc.d per il pannello: ai riavvii resta spento e va "
-                         + "riacceso da SSH. Non e' un guasto, e' come e' fatto adesso — ma sappilo prima, "
-                         + "perche' durante l'aggiornamento questa pagina non ci sara'.");
+            String abil = sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim();
+            boolean acceso = "YES".equalsIgnoreCase(abil) || "yes".equalsIgnoreCase(abil)
+                    || "true".equalsIgnoreCase(abil) || "1".equals(abil);
+            boolean provato = ok("test -f /var/run/mailpanel.pid", 10);
+            r.put("rcPannello", rc).put("rcAbilitato", acceso).put("rcProvato", provato);
+            aggiungiCheck(checks, "pannello", "Il pannello dopo il riavvio",
+                    (rc && acceso && provato) ? "ok" : "attendi",
+                    !rc
+                    ? "NON c'e' nessuno script rc.d: ai riavvii il pannello resta spento e va riacceso "
+                      + "da SSH. Non e' un guasto, e' come e' fatto adesso — ma sappilo prima, perche' "
+                      + "durante l'aggiornamento questa pagina non ci sara'."
+                    : !acceso
+                    ? "lo script rc.d c'e' ma mailpanel_enable non e' YES (\"" + abil + "\"): al riavvio "
+                      + "non partirebbe. Abilitalo dalla scheda Sistema operativo."
+                    : provato
+                    ? "script rc.d presente, abilitato, e c'e' un pidfile: il pannello e' stato avviato "
+                      + "almeno una volta da \"service mailpanel start\", quindi si sa che funziona."
+                    : "script rc.d presente e abilitato, ma NON e' mai stato avviato da service: non c'e' "
+                      + "nessun pidfile. \"Installato\" non e' \"funziona\" — e l'unico momento in cui lo "
+                      + "scopriresti sarebbe il primo riavvio, a meta' procedura. Provalo prima: ferma il "
+                      + "pannello e fai \"service mailpanel start\".");
 
             // I servizi che devono tornare su: si annotano ORA per poterli confrontare DOPO.
             JSONArray servizi = new JSONArray();
@@ -6018,6 +6037,14 @@ public final class UpdateManager {
             String dir = System.getProperty("user.dir", "/home/panel");
             boolean minore = pf.optBoolean("saltoMinore", true);
 
+            // Le istruzioni devono sapere se il pannello torna su da solo, altrimenti dicono
+            // il contrario della scheda accanto. Tre stati, non due: c'e' lo script, e' abilitato,
+            // ed e' stato provato almeno una volta (il pidfile lo dimostra).
+            boolean rcC = pf.optBoolean("rcPannello", false);
+            boolean rcA = pf.optBoolean("rcAbilitato", false);
+            boolean rcP = pf.optBoolean("rcProvato", false);
+            boolean tornaSolo = rcC && rcA;
+
             JSONArray passi = new JSONArray();
             passi.put(new JSONObject().put("n", 1)
                 .put("titolo", "Scarica e prepara il salto")
@@ -6033,8 +6060,14 @@ public final class UpdateManager {
             passi.put(new JSONObject().put("n", 3)
                 .put("titolo", "Riavvia")
                 .put("cmd", "shutdown -r now")
-                .put("nota", "Il pannello si spegne e NON torna su da solo: da qui in poi lavori da SSH, "
-                    + "e lo riaccendi all'ULTIMO passo."));
+                .put("nota", tornaSolo
+                    ? "Il pannello si spegne e torna su da solo grazie allo script rc.d"
+                      + (rcP ? " (gia' provato con \"service mailpanel start\")."
+                             : ", che pero' NON e' mai stato avviato da service: se non tornasse su, "
+                               + "riaccendilo con  cd " + dir + " && " + avvio + "  — e il resto dei "
+                               + "comandi falli comunque da SSH.")
+                    : "Il pannello si spegne e NON torna su da solo: da qui in poi lavori da SSH, "
+                      + "e lo riaccendi all'ULTIMO passo."));
             passi.put(new JSONObject().put("n", 4)
                 .put("titolo", "Riprendi: toglie le vecchie librerie")
                 .put("cmd", "freebsd-update install")
@@ -6065,12 +6098,18 @@ public final class UpdateManager {
                 .put("cmd", "shutdown -r now")
                 .put("nota", "Prima verifica con \"freebsd-version -kru\" che dica " + bersaglio + "-RELEASE."));
             passi.put(new JSONObject().put("n", 8)
-                .put("titolo", "Riaccendi il pannello")
-                .put("cmd", "cd " + dir + " && " + avvio)
-                .put("nota", "Poi torna qui e premi \"Verifica dopo l'aggiornamento\"."));
+                .put("titolo", tornaSolo ? "Verifica" : "Riaccendi il pannello e verifica")
+                .put("cmd", tornaSolo ? "(il pannello riparte da solo)" : "cd " + dir + " && " + avvio)
+                .put("nota", tornaSolo
+                    ? "Con lo script rc.d attivo il pannello riparte da solo dopo il riavvio. Apri la "
+                      + "pagina e premi \"Verifica dopo\": confronta con l'inventario preso prima e ti "
+                      + "dice se qualche servizio non e' tornato su. Se la pagina non risponde, "
+                      + "riaccendilo a mano:  cd " + dir + " && " + avvio
+                    : "Poi torna qui e premi \"Verifica dopo l'aggiornamento\"."));
 
             return new JSONObject().put("success", true).put("passi", passi)
                 .put("bersaglio", bersaglio)
+                .put("rcAttivo", tornaSolo).put("rcProvato", rcP)
                 .put("ritorno", be.isEmpty()
                     ? "Ancora nessun ambiente di avvio: lo crea la PREPARAZIONE, che non hai ancora eseguito. "
                       + "Premi \"Prepara\" prima di cominciare il salto — senza, non c'e' modo di tornare indietro."
