@@ -1098,6 +1098,16 @@ public final class UpdateManager {
         }
     }
 
+    /** JSONArray di stringhe -> lista Java, per poterle unire e ciclare. */
+    private static java.util.List<String> jsonArrayToList(JSONArray a) {
+        java.util.List<String> l = new ArrayList<>();
+        for (int i = 0; a != null && i < a.length(); i++) {
+            String v = a.optString(i, "");
+            if (!v.isEmpty()) l.add(v);
+        }
+        return l;
+    }
+
     /** Una riga del referto di controlli: esito, cosa si e' controllato, perche' conta. */
     private static void aggiungiCheck(JSONArray a, String id, String label, String level, String detail) {
         a.put(new JSONObject().put("id", id).put("label", label)
@@ -1172,10 +1182,26 @@ public final class UpdateManager {
             vulnerabili.add(o);
         }
         vulnerabili.sort((x, y) -> Integer.compare(y.getInt("cve"), x.getInt("cve")));
+        // Un solo passo per famiglia: proporre "aggiorna mysql80-server" e poi "aggiorna
+        // mysql80-client" significherebbe proporre due volte la stessa operazione, e la prima
+        // non riuscirebbe nemmeno perche' l'altra meta' resta protetta.
+        java.util.LinkedHashSet<String> famiglieViste = new java.util.LinkedHashSet<>();
+        java.util.List<JSONObject> unici = new ArrayList<>();
+        for (JSONObject v : vulnerabili) {
+            String fam = famigliaDi(v.getString("nome"));
+            String chiave = fam == null ? v.getString("nome") : fam;
+            if (famiglieViste.add(chiave)) unici.add(v);
+        }
+        vulnerabili = unici;
         for (JSONObject v : vulnerabili) {
             String nome = v.getString("nome");
             boolean attendi = v.has("avv") && "attendi".equals(v.getJSONObject("avv").getString("level"));
-            passi.put(passo(++n, "Aggiornare " + nome + " (" + v.getInt("cve") + " CVE)",
+            java.util.List<String> mem = membriFamiglia(nome);
+            String titolo = mem.size() > 1
+                    ? "Aggiornare " + nome + " e " + (mem.size() - 1) + " pacchetti collegati ("
+                      + v.getInt("cve") + " CVE)"
+                    : "Aggiornare " + nome + " (" + v.getInt("cve") + " CVE)";
+            passi.put(passo(++n, titolo,
                     attendi ? "manuale" : "dafare",
                     nome + " " + v.getString("cur") + " -> " + v.getString("av")
                         + (v.getBoolean("maggiore") ? ", salto di versione significativo" : ", solo cifre finali"),
@@ -1225,6 +1251,45 @@ public final class UpdateManager {
     }
 
     // ===================== aggiornamento guidato di un singolo pacchetto =====================
+
+    /**
+     * Pacchetti che devono muoversi INSIEME.
+     *
+     * Non e' una preferenza estetica: mysql80-server dipende da mysql80-client, e se il
+     * client resta protetto un "pkg upgrade mysql80-server" trova una dipendenza bloccata e
+     * non conclude. Lo stesso vale per php84 con le sue ventotto estensioni, che portano il
+     * numero di versione nel nome. Trattarli come passi separati significa proporre
+     * un'operazione che non puo' riuscire.
+     */
+    private static final String[][] FAMIGLIE = {
+        {"^mysql[0-9]+-(server|client)$",  "MySQL: server e client vanno alla stessa versione"},
+        {"^php[0-9]+(-.+)?$",              "PHP e le sue estensioni condividono il numero di versione"},
+        {"^dovecot[0-9]*(-.+)?$",          "Dovecot e i suoi componenti"},
+    };
+
+    /** L'espressione della famiglia a cui appartiene il pacchetto, o null se sta da solo. */
+    static String famigliaDi(String nome) {
+        for (String[] f : FAMIGLIE) if (nome.matches(f[0])) return f[0];
+        return null;
+    }
+
+    static String motivoFamiglia(String nome) {
+        for (String[] f : FAMIGLIE) if (nome.matches(f[0])) return f[1];
+        return "";
+    }
+
+    /** Tutti i pacchetti INSTALLATI che appartengono alla stessa famiglia. Almeno il pacchetto stesso. */
+    static java.util.List<String> membriFamiglia(String nome) {
+        java.util.List<String> membri = new ArrayList<>();
+        String fam = famigliaDi(nome);
+        if (fam == null) { membri.add(nome); return membri; }
+        for (String riga : sh("pkg query %n 2>/dev/null", 30).split("\n")) {
+            String t = riga.trim();
+            if (nomeValido(t) && t.matches(fam)) membri.add(t);
+        }
+        if (membri.isEmpty()) membri.add(nome);
+        return membri;
+    }
 
     /**
      * Quale servizio dipende da quale pacchetto. Serve per la parte che ieri e' costata cara:
@@ -1373,12 +1438,28 @@ public final class UpdateManager {
             block = true;
         }
 
-        boolean eraProtetto = bloccato(sh("pkg lock -l 2>/dev/null"), nome);
-        r.put("wasLocked", eraProtetto);
-        aggiungiCheck(checks, "protezione", "Protezione del pacchetto", "ok",
-                eraProtetto ? "Protetto: verra' sbloccato per l'aggiornamento e riprotetto subito dopo, "
-                            + "anche se qualcosa andasse storto."
-                            : "Non protetto: verra' aggiornato e poi protetto.");
+        // I pacchetti che devono muoversi insieme si sbloccano e si aggiornano insieme:
+        // altrimenti una dipendenza rimasta protetta blocca tutta l'operazione.
+        java.util.List<String> famiglia = membriFamiglia(nome);
+        r.put("family", new JSONArray(famiglia));
+        if (famiglia.size() > 1) {
+            aggiungiCheck(checks, "famiglia", "Pacchetti che si muovono insieme", "verifica",
+                    famiglia.size() + " pacchetti verranno aggiornati insieme (" + motivoFamiglia(nome) + "): "
+                    + String.join(", ", famiglia) + ". Aggiornarne uno solo non riuscirebbe, perche' gli altri "
+                    + "restano protetti e pkg si ferma sulla dipendenza bloccata.");
+        }
+
+        String lockList = sh("pkg lock -l 2>/dev/null");
+        java.util.List<String> protettiOra = new ArrayList<>();
+        for (String m : famiglia) if (bloccato(lockList, m)) protettiOra.add(m);
+        r.put("wasLocked", !protettiOra.isEmpty());
+        r.put("lockedMembers", new JSONArray(protettiOra));
+        aggiungiCheck(checks, "protezione", "Protezione dei pacchetti", "ok",
+                protettiOra.isEmpty()
+                    ? "Nessuno di questi e' protetto: verranno aggiornati e poi protetti."
+                    : protettiOra.size() + " protetti su " + famiglia.size()
+                      + ": verranno sbloccati per l'aggiornamento e riprotetti subito dopo, "
+                      + "anche se qualcosa andasse storto.");
 
         r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
         return r;
@@ -1408,7 +1489,8 @@ public final class UpdateManager {
     private static void runAggiornamentoGuidato(Job job, String nome) {
         job.status = "running";
         final int TOT = 6;
-        boolean sbloccato = false, eraProtetto = false;
+        java.util.List<String> daRiproteggere = new ArrayList<>();
+        java.util.List<String> famiglia = new ArrayList<>();
         java.util.List<String> servizi = new ArrayList<>();
         Map<String, String> pidPrima = new LinkedHashMap<>();
         Map<String, Boolean> attivoPrima = new LinkedHashMap<>();
@@ -1434,7 +1516,10 @@ public final class UpdateManager {
             }
             String versionePrima = pf.optString("current", "");
             String attesa = pf.optString("available", "");
-            eraProtetto = pf.optBoolean("wasLocked", false);
+            famiglia = jsonArrayToList(pf.optJSONArray("family") == null
+                    ? new JSONArray().put(nome) : pf.getJSONArray("family"));
+            java.util.List<String> protetti = jsonArrayToList(pf.optJSONArray("lockedMembers") == null
+                    ? new JSONArray() : pf.getJSONArray("lockedMembers"));
             JSONArray sv = pf.optJSONArray("services");
             for (int i = 0; sv != null && i < sv.length(); i++) {
                 JSONObject o = sv.getJSONObject(i);
@@ -1444,27 +1529,37 @@ public final class UpdateManager {
                 attivoPrima.put(n, o.optBoolean("running", false));
             }
             job.scrivi("  " + nome + " " + versionePrima + " -> " + attesa);
+            if (famiglia.size() > 1) {
+                job.scrivi("  insieme a " + (famiglia.size() - 1) + " pacchetti della stessa famiglia: "
+                        + motivoFamiglia(nome));
+            }
             job.scrivi("  servizi coinvolti: " + (servizi.isEmpty() ? "nessuno" : String.join(", ", servizi)));
 
             job.avanza(2, TOT);
             job.scrivi("");
             job.scrivi("[2/" + TOT + "] Sblocco temporaneo...");
-            if (eraProtetto) {
+            if (protetti.isEmpty()) {
+                job.scrivi("  nessuno di questi era protetto: niente da sbloccare");
+            } else {
                 // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il
                 // ripristino all'avvio sa cosa riproteggere.
-                scriviStato(java.util.List.of(nome));
-                sbloccato = ok("pkg unlock -y " + nome, 30);
-                job.scrivi("  " + (sbloccato ? "sbloccato (elenco salvato per il ripristino automatico)"
-                                             : "SBLOCCO FALLITO"));
-                if (!sbloccato) throw new IllegalStateException("non sono riuscito a sbloccare " + nome);
-            } else {
-                job.scrivi("  non era protetto: niente da sbloccare");
+                scriviStato(protetti);
+                job.scrivi("  elenco salvato in " + STATO_MANUTENZIONE + " per il ripristino automatico");
+                for (String m : protetti) {
+                    if (!nomeValido(m)) continue;
+                    boolean u = ok("pkg unlock -y " + m, 30);
+                    job.scrivi("    " + m + ": " + (u ? "sbloccato" : "SBLOCCO FALLITO"));
+                    if (!u) throw new IllegalStateException("non sono riuscito a sbloccare " + m);
+                    daRiproteggere.add(m);
+                }
             }
 
             job.avanza(3, TOT);
             job.scrivi("");
             job.scrivi("[3/" + TOT + "] Aggiornamento...");
-            int code = eseguiConLog(job, "pkg upgrade -y " + nome + " 2>&1", 1800);
+            StringBuilder elenco = new StringBuilder();
+            for (String m : famiglia) if (nomeValido(m)) elenco.append(' ').append(m);
+            int code = eseguiConLog(job, "pkg upgrade -y" + elenco + " 2>&1", 1800);
             if (code != 0) throw new IllegalStateException("pkg upgrade uscito con codice " + code);
 
             String versioneDopo = sh("pkg query %v " + nome + " 2>/dev/null", 20);
@@ -1535,15 +1630,23 @@ public final class UpdateManager {
             job.scrivi("ERRORE: " + e.getMessage());
         } finally {
             // La riprotezione avviene SEMPRE, qualunque cosa sia andata storta sopra.
-            if (sbloccato) {
+            if (!daRiproteggere.isEmpty()) {
                 job.scrivi("");
-                job.scrivi("Riproteggo " + nome + "...");
-                boolean ril = ok("pkg info -e " + nome, 15) && ok("pkg lock -y " + nome, 30);
-                job.scrivi("  " + (ril ? "riprotetto" : "RIPROTEZIONE FALLITA: fallo a mano dalla scheda Protezione pacchetti"));
-                if (ril) pulisciStato();
-                else if ("completed".equals(job.status)) {
-                    job.status = "error";
-                    job.errorMessage = "Aggiornamento riuscito ma il pacchetto NON e' stato riprotetto.";
+                job.scrivi("Riproteggo " + daRiproteggere.size() + " pacchetti...");
+                int rip = 0;
+                for (String m : daRiproteggere) {
+                    boolean ril = ok("pkg info -e " + m, 15) && ok("pkg lock -y " + m, 30);
+                    if (ril) rip++;
+                    else job.scrivi("    " + m + ": RIPROTEZIONE FALLITA");
+                }
+                job.scrivi("  " + rip + "/" + daRiproteggere.size() + " riprotetti");
+                if (rip == daRiproteggere.size()) pulisciStato();
+                else {
+                    job.scrivi("  Lo stato resta in " + STATO_MANUTENZIONE + ": il pannello riprovera' al prossimo avvio.");
+                    if ("completed".equals(job.status)) {
+                        job.status = "error";
+                        job.errorMessage = "Aggiornamento riuscito ma non tutti i pacchetti sono stati riprotetti.";
+                    }
                 }
             }
             job.fine = System.currentTimeMillis();
