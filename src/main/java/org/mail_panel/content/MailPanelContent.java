@@ -13196,6 +13196,24 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 aggiornamento romperebbe <strong>questo</strong> server di posta, e impedisce quelli che lo romperebbero.
             </p>
 
+            <div class="card mb-4 border-danger">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-link-slash me-2"></i><strong>Pacchetti senza la libreria che richiedono</strong>
+                        <span class="small text-muted ms-2">un servizio puo&rsquo; risultare attivo e non funzionare</span></span>
+                    <button class="btn btn-sm btn-outline-danger" onclick="libsCheck()"><i class="fas fa-magnifying-glass me-1"></i>Controlla</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Dopo la sostituzione di una libreria condivisa, i programmi compilati contro quella vecchia
+                        non la trovano piu&rsquo;. Il servizio parte lo stesso e sembra sano: fallisce solo quando prova
+                        a usarla. Qui si chiede a <code>pkg</code> quali librerie ogni pacchetto richiede e si verifica
+                        che esistano davvero.
+                    </p>
+                    <div id="libs-body"><span class="text-muted">Premi "Controlla": legge e basta.</span></div>
+                    <pre id="libs-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
             <div class="card mb-4 border-primary">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-list-check me-2"></i><strong>Piano di manutenzione</strong>
@@ -13275,6 +13293,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         Postfix e Dovecot leggono le caselle attraverso di essa, e vanno verificati prima di sostituirla.
                     </p>
                     <div id="my84-pre"><span class="text-muted">Premi "Verifica prerequisiti": legge e basta, non modifica niente.</span></div>
+                    <pre id="my84-log" class="upd-log mt-2" style="display:none"></pre>
                 </div>
             </div>
 
@@ -13460,6 +13479,39 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             updPoll(r.jobId, el, pre);
         }
 
+        // ---------- librerie mancanti ----------
+        async function libsCheck() {
+            const el = document.getElementById('libs-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controllo le librerie richieste da ogni pacchetto...';
+            const r = await updApi('broken_libs');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            const pk = r.packages || [];
+            if (!pk.length) {
+                el.innerHTML = '<div class="alert alert-success py-2 mb-0"><i class="fas fa-check me-1"></i>'
+                             + 'Ogni pacchetto trova le librerie che richiede.</div>';
+                return;
+            }
+            let h = '<div class="alert alert-danger py-2"><strong>' + pk.length
+                  + ' pacchetti richiedono una libreria che non esiste.</strong> '
+                  + 'Non riescono a caricarla: il servizio che li usa parte ma fallisce appena prova a usarli.</div>'
+                  + '<ul class="small">';
+            pk.forEach(p => { h += '<li><code>' + updEsc(p.name) + '</code> richiede <code>' + updEsc(p.lib) + '</code></li>'; });
+            h += '</ul><button class="btn btn-danger" onclick="libsRelink()">'
+               + '<i class="fas fa-link me-1"></i>Reinstalla dal repository e ricollega</button>';
+            el.innerHTML = h;
+        }
+
+        async function libsRelink() {
+            if (prompt('Conferma: scrivi RICOLLEGA per procedere.') !== 'RICOLLEGA') return;
+            const el = document.getElementById('libs-body');
+            const pre = document.getElementById('libs-log');
+            const r = await updApi('relink', { confirm: 'RICOLLEGA' });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Ricollegamento in corso...</span>';
+            pre.style.display = 'block';
+            planPoll(r.jobId, el, pre);
+        }
+
         // ---------- piano di manutenzione ----------
         function planBadge(stato) {
             if (stato === 'fatto')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1"></i>fatto</span>';
@@ -13626,7 +13678,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         async function my84Run() {
             if (prompt('Conferma: scrivi MIGRA A 8.4 per procedere.') !== 'MIGRA A 8.4') return;
             const el = document.getElementById('my84-pre');
-            const pre = document.getElementById('plan-log');
+            // Il log va nel riquadro DI QUESTA scheda: prima finiva in quello del piano, in
+            // un'altra parte della pagina, e chi guardava sotto il messaggio di errore non
+            // trovava niente. Un log che esiste ma non e' dove lo cerchi e' un log perduto.
+            const pre = document.getElementById('my84-log');
             const r = await updApi('mysql84_migrate', { confirm: 'MIGRA A 8.4' });
             if (!r.success) { alert(r.error || 'operazione fallita'); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Migrazione in corso: '

@@ -1805,7 +1805,16 @@ public final class UpdateManager {
                 String mapFile = "/usr/local/etc/postfix/mysql-virtual-mailboxes.cf";
                 if (ok("test -f " + mapFile, 15)) {
                     String q = sh("postmap -q '" + casellaProva + "' mysql:" + mapFile + " 2>&1", 60);
-                    boolean pOk = !q.trim().isEmpty() && !q.toLowerCase().contains("error");
+                    // Cercare la sola parola "error" era sbagliato: postmap scrive "fatal:",
+                    // e il controllo ha dichiarato riuscito un fallimento mentre ne stampava
+                    // la prova. Si riconoscono tutte le forme, e soprattutto si pretende che
+                    // la risposta SIA un risultato: un indirizzo, non un messaggio.
+                    String ql = q.toLowerCase();
+                    boolean pOk = !q.trim().isEmpty()
+                            && !ql.contains("error") && !ql.contains("fatal")
+                            && !ql.contains("warning") && !ql.contains("not found")
+                            && !ql.contains("dlopen") && !ql.contains("unsupported")
+                            && !ql.startsWith("postmap:");
                     job.scrivi("    postfix interroga MySQL per " + casellaProva + ": "
                             + (pOk ? "SI (" + q.trim() + ") -> la libreria client nuova funziona"
                                    : "NO -> " + q.trim()));
@@ -2852,6 +2861,149 @@ public final class UpdateManager {
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    /**
+     * Pacchetti che pretendono una libreria condivisa che sul disco NON c'e' piu'.
+     *
+     * E' il buco che ha fermato la posta: dopo aver sostituito mysql80-client con
+     * mysql84-client, postfix-mysql e dovecot-mysql restavano compilati contro
+     * libmysqlclient.so.21 e non caricavano piu'. Il preflight aveva verificato che il
+     * REPOSITORY li fornisse compatibili con la 8.4 — ed era vero — ma non che quelli
+     * INSTALLATI lo fossero. Sono due cose diverse e le avevo trattate come una sola.
+     *
+     * Qui non si indovina: si chiede a pkg quali librerie ogni pacchetto richiede (%B) e si
+     * guarda se esistono davvero.
+     */
+    public static JSONObject pacchettiConLibrerieMancanti() {
+        JSONArray rotti = new JSONArray();
+        java.util.LinkedHashSet<String> librerieAssenti = new java.util.LinkedHashSet<>();
+        for (String riga : sh("pkg query '%n %B' 2>/dev/null", 120).split("\n")) {
+            String t = riga.trim();
+            int sp = t.indexOf(' ');
+            if (sp <= 0) continue;
+            String nome = t.substring(0, sp).trim();
+            String lib = t.substring(sp + 1).trim();
+            if (!nomeValido(nome) || lib.isEmpty()) continue;
+            if (!lib.matches("[A-Za-z0-9._+-]{1,128}")) continue;
+            if (librerieAssenti.contains(lib)) { rotti.put(new JSONObject().put("name", nome).put("lib", lib)); continue; }
+            // Una libreria c'e' se il linker riesce a trovarla fra quelle note al sistema.
+            if (!ok("ldconfig -r 2>/dev/null | grep -q ' " + lib + "$' || " +
+                    "find /lib /usr/lib /usr/local/lib -name '" + lib + "' -maxdepth 3 2>/dev/null | grep -q .", 30)) {
+                librerieAssenti.add(lib);
+                rotti.put(new JSONObject().put("name", nome).put("lib", lib));
+            }
+        }
+        return new JSONObject().put("success", true).put("packages", rotti)
+                .put("missingLibs", new JSONArray(new ArrayList<>(librerieAssenti)));
+    }
+
+    public static JSONObject avviaRicollegamento() {
+        String id = "relink-" + System.currentTimeMillis();
+        Job j = new Job(id, "relink");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> runRicollegamento(j), "relink");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    /**
+     * Reinstalla dal repository i pacchetti rimasti senza la libreria che pretendono, cosi'
+     * tornano collegati a quella presente, e rimette in servizio cio' che ne dipende.
+     */
+    private static void runRicollegamento(Job job) {
+        job.status = "running";
+        java.util.List<String> sbloccati = new ArrayList<>();
+        try {
+            job.avanza(1, 5);
+            job.scrivi("=== Ricollegamento dei pacchetti alla libreria presente ===");
+            job.scrivi("");
+            job.scrivi("[1/5] Cerco chi pretende una libreria che non c'e'...");
+            JSONObject d = pacchettiConLibrerieMancanti();
+            JSONArray rotti = d.getJSONArray("packages");
+            if (rotti.length() == 0) {
+                job.scrivi("    nessuno: tutti i pacchetti trovano le librerie che richiedono.");
+                job.status = "completed";
+                return;
+            }
+            java.util.LinkedHashSet<String> nomi = new java.util.LinkedHashSet<>();
+            for (int i = 0; i < rotti.length(); i++) {
+                JSONObject o = rotti.getJSONObject(i);
+                job.scrivi("    " + o.getString("name") + " richiede " + o.getString("lib") + ", assente");
+                nomi.add(o.getString("name"));
+            }
+
+            job.avanza(2, 5);
+            job.scrivi("");
+            job.scrivi("[2/5] Sblocco temporaneo...");
+            String lock = sh("pkg lock -l 2>/dev/null");
+            java.util.List<String> daSbloccare = new ArrayList<>();
+            for (String n : nomi) if (bloccato(lock, n)) daSbloccare.add(n);
+            if (!daSbloccare.isEmpty()) {
+                scriviStato(daSbloccare);
+                for (String n : daSbloccare) {
+                    if (ok("pkg unlock -y " + n, 30)) { sbloccati.add(n); job.scrivi("    " + n + ": sbloccato"); }
+                }
+            } else job.scrivi("    nessuno era protetto");
+
+            job.avanza(3, 5);
+            job.scrivi("");
+            job.scrivi("[3/5] Reinstallo dal repository...");
+            StringBuilder el = new StringBuilder();
+            for (String n : nomi) el.append(' ').append(n);
+            int code = eseguiConLog(job, "pkg install -f -y" + el + " 2>&1", 1800);
+            if (code != 0) throw new IllegalStateException("pkg install uscito con codice " + code);
+
+            job.avanza(4, 5);
+            job.scrivi("");
+            job.scrivi("[4/5] Riavvio i servizi coinvolti...");
+            java.util.LinkedHashSet<String> servizi = new java.util.LinkedHashSet<>();
+            for (String n : nomi) servizi.addAll(serviziDaRiavviare(n));
+            for (String logico : servizi) {
+                String reale = nomeServizioReale(logico);
+                if (reale == null) continue;
+                String prova = provaConfigDi(reale);
+                if (prova != null && !Shell.runShell(Duration.ofSeconds(60), prova + " 2>&1").success()) {
+                    job.scrivi("    " + reale + ": configurazione rifiutata, NON lo riavvio");
+                    continue;
+                }
+                ok("service " + reale + " restart", 120);
+                job.scrivi("    " + reale + ": " + (ok("service " + reale + " status", 20) ? "attivo" : "NON attivo"));
+            }
+
+            job.avanza(5, 5);
+            job.scrivi("");
+            job.scrivi("[5/5] Verifica: le librerie ci sono tutte adesso?");
+            JSONArray ancora = pacchettiConLibrerieMancanti().getJSONArray("packages");
+            if (ancora.length() == 0) {
+                job.scrivi("    nessun pacchetto senza libreria.");
+                job.status = "completed";
+                job.scrivi("");
+                job.scrivi("=== Ricollegamento riuscito ===");
+            } else {
+                job.status = "error";
+                job.errorMessage = ancora.length() + " pacchetti restano senza la libreria che richiedono.";
+                for (int i = 0; i < ancora.length(); i++) {
+                    JSONObject o = ancora.getJSONObject(i);
+                    job.scrivi("    ANCORA ROTTO: " + o.getString("name") + " richiede " + o.getString("lib"));
+                }
+            }
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = e.getMessage();
+            job.scrivi("ERRORE: " + e.getMessage());
+        } finally {
+            if (!sbloccati.isEmpty()) {
+                job.scrivi("");
+                job.scrivi("Riproteggo...");
+                int n = 0;
+                for (String p2 : sbloccati) if (ok("pkg info -e " + p2, 15) && ok("pkg lock -y " + p2, 30)) n++;
+                job.scrivi("  " + n + "/" + sbloccati.size() + " riprotetti");
+                if (n == sbloccati.size()) pulisciStato();
+            }
+            job.fine = System.currentTimeMillis();
+        }
     }
 
     public static JSONObject avviaManutenzione() {

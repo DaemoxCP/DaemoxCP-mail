@@ -6079,6 +6079,15 @@ public class SSLMailServer {
                 case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
                 case "plan" -> response = UpdateManager.pianoManutenzione();
                 case "mysql84_preflight" -> response = UpdateManager.mysql84Preflight();
+                case "broken_libs" -> response = UpdateManager.pacchettiConLibrerieMancanti();
+                case "relink" -> {
+                    if (!"RICOLLEGA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaRicollegamento();
+                    logAudit("RELINK_STARTED", ip, response.optString("jobId", ""));
+                }
                 case "rspamd_clean_cache" -> {
                     // E' una cancellazione: la conferma si scrive a mano, e il percorso non
                     // arriva dalla richiesta ma e' fissato nel codice.
