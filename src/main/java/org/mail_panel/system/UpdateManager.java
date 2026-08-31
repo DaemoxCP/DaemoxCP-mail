@@ -2060,13 +2060,23 @@ public final class UpdateManager {
         String nomeDb = dsn.optBoolean("ok") ? dsn.getString("db") : "roundcubemail";
         if (!prova.optBoolean("ok")) {
             String ered = opzioniEreditate();
+            String gtid = statoGtid();
             aggiungiCheck(checks, "copia", "Copia del database", "block",
                     "la prova di copia di " + nomeDb + " NON riesce, quindi non ci sarebbe via di "
                     + "ritorno e non si parte. Motivo: " + prova.optString("errore")
                     + (ered.isEmpty() ? ""
                        : "  ||  Opzioni che mysqldump si costruisce da solo, file di configurazione "
-                         + "compresi: " + ered));
+                         + "compresi: " + ered)
+                    + (gtid.isEmpty() ? "  ||  Stato GTID del server: non leggibile."
+                       : "  ||  Stato del server: " + gtid));
             block = true;
+        } else if ("come utente root del database".equals(prova.optString("modo"))) {
+            aggiungiCheck(checks, "copia", "Copia del database", "attendi",
+                    "la copia di " + nomeDb + " riesce, ma solo entrando come root dal socket unix: "
+                    + "come utente dell'applicazione non passa. Motivo dei tentativi precedenti: "
+                    + prova.optString("storia") + "  ||  Stato del server: " + statoGtid()
+                    + "  — la copia e' comunque una via di ritorno valida e provata adesso, ma sappi "
+                    + "che sta usando piu' privilegi del minimo necessario.");
         } else if (!"completa".equals(prova.optString("modo"))) {
             aggiungiCheck(checks, "copia", "Copia del database", "attendi",
                     "la copia di " + nomeDb + " riesce, ma solo in modo ridotto (" + prova.getString("modo")
@@ -2219,23 +2229,59 @@ public final class UpdateManager {
      *    promessa facendo finta di niente.
      */
     /** I modi di copiare, dal piu' completo al meno esigente. Una lista sola per la prova e per la copia vera. */
+    /**
+     * I modi di copiare, dal meno privilegiato al piu' potente. Terza colonna: con quale utente.
+     *
+     * --no-tablespaces: senza, mysqldump di MySQL 8 legge le informazioni sui tablespace e per
+     *   farlo pretende PROCESS, che un utente di applicazione non ha e non deve avere.
+     * --set-gtid-purged=OFF: se il server ha i GTID attivi, mysqldump in modalita' AUTO (il
+     *   default) vuole registrare quali GTID sono gia' applicati, e per prenderli coerenti fa
+     *   FLUSH TABLES + FLUSH TABLES WITH READ LOCK, che pretendono RELOAD. Nessun file di
+     *   opzioni c'entra: lo decide mysqldump guardando il server. Per una copia da rimettere
+     *   sullo stesso server quell'informazione non serve, quindi si spegne.
+     * --skip-lock-all-tables --skip-flush-logs: le altre due strade che portano allo stesso
+     *   FLUSH. Spegnerle esplicitamente e' l'unico modo di sapere cosa si sta eseguendo.
+     * --no-defaults: ignora ogni file di opzioni. Va per forza per prima sulla riga di comando.
+     * root sul socket: ultima spiaggia, e funziona sempre perche' root ha tutti i privilegi.
+     *   Sta per ultima apposta: una copia si fa col minimo necessario, non col massimo possibile.
+     */
     private static final String[][] MODI_COPIA = {
-        // --no-tablespaces: senza, mysqldump di MySQL 8 legge le informazioni sui tablespace e
-        //   per farlo pretende PROCESS, che un utente di applicazione non ha e non deve avere.
-        // --skip-lock-all-tables --skip-flush-logs: "FLUSH TABLES" non lo emette --single-transaction,
-        //   lo emettono queste due — e possono arrivare da una sezione [mysqldump] in un file di
-        //   opzioni, senza che nessuno le abbia chieste sulla riga di comando. Spegnerle esplicitamente
-        //   e' l'unico modo di essere sicuri di cosa si sta eseguendo. Pretendono RELOAD, che a un
-        //   utente di applicazione non va dato per fare una copia.
-        // --no-defaults (ultimo tentativo): ignora TUTTI i file di opzioni. Va per forza per prima
-        //   sulla riga di comando, altrimenti mysqldump la rifiuta.
-        {"--single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs --routines --triggers",
-         "completa"},
-        {"--single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs",
-         "senza routine e trigger"},
-        {"--no-defaults --single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs",
-         "ignorando i file di opzioni"},
+        {"--single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs "
+         + "--set-gtid-purged=OFF --routines --triggers", "completa", "app"},
+        {"--single-transaction --no-tablespaces --skip-lock-all-tables --skip-flush-logs "
+         + "--set-gtid-purged=OFF", "senza routine e trigger", "app"},
+        {"--no-defaults --single-transaction --no-tablespaces --skip-lock-all-tables "
+         + "--skip-flush-logs --set-gtid-purged=OFF", "ignorando i file di opzioni", "app"},
+        {"--single-transaction --no-tablespaces --set-gtid-purged=OFF --routines --triggers",
+         "come utente root del database", "root"},
     };
+
+    /**
+     * Il pannello riesce a entrare in MySQL come root dal socket unix?
+     *
+     * Si prova, non si presume: si esegue una domanda banale e si guarda se risponde. Presumerlo
+     * significherebbe offrire come ultima spiaggia una strada che non c'e', e scoprirlo nel
+     * momento in cui e' l'unica rimasta.
+     */
+    private static boolean mysqlRootDisponibile() {
+        return "1".equals(mysqlRootOut("SELECT 1;").trim());
+    }
+
+    /** La parte di connessione della riga, secondo l'utente scelto dal modo. */
+    private static String connessioneCopia(String chi, JSONObject dsn) {
+        String h = dsn.getString("host");
+        String host = h.contains(":") ? h.substring(0, h.indexOf(':')) : h;
+        return "root".equals(chi)
+                ? "-u root " + dsn.getString("db")                       // socket unix, nessuna password
+                : "-u " + dsn.getString("user") + " -h " + host + " " + dsn.getString("db");
+    }
+
+    /** Perche' mysqldump fa quel FLUSH: si guarda il server, non si deduce. */
+    private static String statoGtid() {
+        String r = mysqlRootOut("SELECT CONCAT('gtid_mode=', @@gtid_mode, "
+                + "'  log_bin=', @@log_bin, '  enforce_gtid_consistency=', @@enforce_gtid_consistency);");
+        return r == null ? "" : r.trim();
+    }
 
     /**
      * Da dove arrivano le opzioni che non ho chiesto io.
@@ -2269,13 +2315,16 @@ public final class UpdateManager {
         if (!ok("which mysqldump >/dev/null 2>&1", 20))
             return new JSONObject().put("ok", false)
                     .put("errore", "mysqldump non e' installato o non e' nel PATH del pannello");
-        String h = d.getString("host");
-        String host = h.contains(":") ? h.substring(0, h.indexOf(':')) : h;
         StringBuilder storia = new StringBuilder();
         try {
             for (String[] m : MODI_COPIA) {
-                JSONObject e = rcDumpUnTentativo(m[0] + " --no-data", d.getString("user"), host,
-                        d.getString("db"), d.getString("pass"), tmp);
+                if ("root".equals(m[2]) && !mysqlRootDisponibile()) {
+                    storia.append("[").append(m[1]).append("] non provato: il pannello non entra "
+                            + "in MySQL come root dal socket  ");
+                    continue;
+                }
+                JSONObject e = rcDumpUnTentativo(m[0] + " --no-data",
+                        connessioneCopia(m[2], d), "root".equals(m[2]) ? null : d.getString("pass"), tmp);
                 if (e.optBoolean("ok"))
                     return new JSONObject().put("ok", true).put("modo", m[1])
                             .put("storia", storia.toString().trim());
@@ -2305,7 +2354,12 @@ public final class UpdateManager {
 
         StringBuilder storia = new StringBuilder();
         for (String[] t : MODI_COPIA) {
-            JSONObject e = rcDumpUnTentativo(t[0], u, host, db, d.getString("pass"), destinazione);
+            if ("root".equals(t[2]) && !mysqlRootDisponibile()) {
+                storia.append("[").append(t[1]).append("] non provato: nessun accesso root dal socket  ");
+                continue;
+            }
+            JSONObject e = rcDumpUnTentativo(t[0], connessioneCopia(t[2], d),
+                    "root".equals(t[2]) ? null : d.getString("pass"), destinazione);
             if (e.optBoolean("ok")) {
                 r.put("ok", true).put("modo", t[1]);
                 if (!t[1].equals("completa")) r.put("ridotto", storia.toString().trim());
@@ -2316,15 +2370,16 @@ public final class UpdateManager {
         return r.put("errore", storia.toString().trim());
     }
 
-    private static JSONObject rcDumpUnTentativo(String opzioni, String u, String host, String db,
+    private static JSONObject rcDumpUnTentativo(String opzioni, String connessione,
                                                 String pass, String dest) {
         JSONObject r = new JSONObject().put("ok", false);
         String err = dest + ".err";
         try {
             ProcessBuilder pb = new ProcessBuilder("sh", "-c",
-                    "mysqldump " + opzioni + " -u " + u + " -h " + host + " " + db
-                    + " > " + dest + " 2> " + err);
-            pb.environment().put("MYSQL_PWD", pass);
+                    "mysqldump " + opzioni + " " + connessione + " > " + dest + " 2> " + err);
+            // La password sta nell'ambiente e non nella riga di comando: cosi' non compare in ps.
+            // Per il tentativo da root non c'e' password: entra dal socket unix.
+            if (pass != null && !pass.isEmpty()) pb.environment().put("MYSQL_PWD", pass);
             Process pr = pb.start();
             if (!pr.waitFor(1800, java.util.concurrent.TimeUnit.SECONDS)) {
                 pr.destroyForcibly();
@@ -2344,6 +2399,359 @@ public final class UpdateManager {
             return r.put("ok", true);
         } catch (Exception e) {
             return r.put("errore", e.getMessage());
+        }
+    }
+
+    /**
+     * Perche' la webmail non risponde. Sola lettura.
+     *
+     * Un 403 non si indovina: nginx scrive nel suo log di errore la ragione esatta, e le due
+     * ragioni possibili portano a rimedi opposti — "Permission denied" e' un problema di
+     * permessi sul file, "directory index of ... is forbidden" vuol dire che nginx non trova
+     * nessun file indice da servire. Confonderle significa aggiustare la cosa sbagliata.
+     */
+    /**
+     * Interroga la webmail SULL'ORIGINE, non attraverso quello che sta davanti.
+     *
+     * Il 31/08/2026 la prova finale ha bocciato un aggiornamento riuscito perche' chiedeva alla
+     * porta 443 mentre nginx ascolta sulla 8443: rispondeva Cloudflare, con un 403 suo, e nel
+     * log di nginx non compariva nulla perche' la richiesta non era mai arrivata al server.
+     * Qui la porta si legge dal blocco server vero, e ci si risolve su 127.0.0.1 per scavalcare
+     * qualunque cosa stia davanti. Se malgrado tutto risponde una CDN, lo si dice invece di
+     * scambiare la sua risposta per quella del server.
+     */
+    private static JSONObject provaWebmailOrigine() {
+        JSONObject r = new JSONObject().put("ok", false);
+        JSONArray radici = radiciNginxRoundcube();
+        if (radici.length() == 0) return r.put("errore", "non trovo il blocco server della webmail");
+        String file = radici.getJSONObject(0).getString("file");
+        int riga = radici.getJSONObject(0).getInt("riga");
+        // listen e server_name stanno nello stesso blocco, poche righe sopra la radice.
+        int da = Math.max(1, riga - 10);
+        String testa = sh("sed -n '" + da + "," + riga + "p' " + file + " 2>/dev/null", 30);
+        String porta = "", nome = "";
+        for (String l : testa.split("\n")) {
+            Matcher mp = Pattern.compile("^\\s*listen\\s+([0-9]{1,5})\\b").matcher(l);
+            if (mp.find()) porta = mp.group(1);
+            Matcher mn = Pattern.compile("^\\s*server_name\\s+([A-Za-z0-9._-]+)\\s*;").matcher(l);
+            if (mn.find() && !"_".equals(mn.group(1))) nome = mn.group(1);
+        }
+        if (porta.isEmpty()) return r.put("errore", "non riesco a leggere la porta dal blocco server");
+        if (nome.isEmpty()) {
+            try { nome = org.mail_panel.Main.dbManager.getRoundcubeDomain(); } catch (Exception ignored) {}
+        }
+        if (nome == null || !nome.matches("[A-Za-z0-9._-]{1,255}"))
+            return r.put("errore", "non riesco a stabilire il nome della webmail");
+        // --resolve mette a posto sia il nome nell'intestazione Host sia quello nel TLS,
+        // ma manda la richiesta all'indirizzo locale: e' il modo di parlare col server e basta.
+        String url = "https://" + nome + ":" + porta + "/";
+        String out = sh("curl -sk -m 20 -D - -o /dev/null --resolve " + nome + ":" + porta
+                + ":127.0.0.1 " + url + " 2>&1", 60);
+        Matcher mc = Pattern.compile("HTTP/[0-9.]+\\s+([0-9]{3})").matcher(out);
+        String codice = mc.find() ? mc.group(1) : "";
+        boolean cdn = out.toLowerCase().contains("cf-ray") || out.toLowerCase().contains("server: cloudflare");
+        return r.put("ok", codice.startsWith("2") || codice.startsWith("3"))
+                .put("codice", codice.isEmpty() ? "nessuna risposta" : codice)
+                .put("url", url).put("viaCdn", cdn).put("intestazioni", out.trim());
+    }
+
+    /**
+     * Scarica davvero un foglio di stile e guarda com'e' fatto.
+     *
+     * E' l'unica prova che distingue "la webmail risponde" da "la webmail si vede": nella 1.7
+     * gli asset passano da static.php con il percorso DENTRO l'URI, e se nginx non se ne accorge
+     * ogni CSS torna come pagina HTML — la pagina si apre, e non c'e' niente.
+     */
+    private static JSONObject provaAssetCss(String nome, String porta) {
+        JSONObject r = new JSONObject().put("ok", false);
+        String base = "https://" + nome + ":" + porta;
+        String res = "--resolve " + nome + ":" + porta + ":127.0.0.1 ";
+        String html = sh("curl -sk -m 20 " + res + base + "/ 2>/dev/null | head -80", 60);
+        Matcher m = Pattern.compile("href=\"([^\"]*\\.css[^\"]*)\"").matcher(html);
+        if (!m.find()) return r.put("errore", "nella pagina non c'e' nessun link a un .css");
+        String css = m.group(1).replace("&amp;", "&");
+        // Il link e' relativo ("static.php/skins/..."): va reso assoluto, altrimenti curl
+        // non ha un URL da chiamare e risponde 000 — che sembrerebbe un guasto del server.
+        String url = css.startsWith("http") ? css
+                   : css.startsWith("/") ? base + css
+                   : base + "/" + css;
+        String out = sh("curl -sk -m 20 -o /dev/null -w '%{http_code} %{content_type}' " + res
+                + "'" + url + "' 2>&1", 60).trim();
+        // Le intestazioni intere dicono CHI ha risposto: "X-Powered-By: PHP" vuol dire che la
+        // richiesta e' arrivata a PHP e il problema e' dentro l'applicazione; la sua assenza
+        // vuol dire che l'ha fermata nginx, e allora il problema e' nell'instradamento.
+        String testa = sh("curl -sk -m 20 -D - -o /dev/null " + res + "'" + url + "' 2>&1", 60).trim();
+        boolean bene = out.startsWith("200") && out.contains("text/css");
+        return r.put("ok", bene).put("url", url).put("risposta", out)
+                .put("intestazioni", testa)
+                .put("daPhp", testa.toLowerCase().contains("x-powered-by: php"));
+    }
+
+    /**
+     * Insegna a nginx a servire gli asset di Roundcube 1.7.
+     *
+     * Il problema in una riga: la 1.7 chiede i fogli di stile come
+     *   /static.php/skins/elastic/deps/bootstrap.min.css
+     * cioe' uno script PHP seguito da un percorso. Un "location ~ \.php$" non lo intercetta,
+     * perche' quell'URI finisce in .css e non in .php: finisce in "location /", che lo manda a
+     * index.php, che risponde HTML. La pagina si apre e non ha ne' grafica ne' JavaScript.
+     *
+     * La cura e' un location che riconosce lo script anche quando ha un percorso attaccato, e
+     * che passa a PHP il percorso separato (PATH_INFO), che e' come static.php sa quale file
+     * servire. Il "try_files $fastcgi_script_name =404" in piu' non e' cosmesi: impedisce che
+     * richieste per script inesistenti arrivino a PHP — nel log di questo server ce ne sono a
+     * centinaia, sondaggi automatici tipo /admin/config.php.
+     *
+     * fastcgi_pass NON viene inventato: si riprende dal blocco che c'e', perche' su un'altra
+     * installazione potrebbe essere un indirizzo TCP invece di un socket.
+     */
+    public static JSONObject riparaNginxPathInfo(boolean esegui) {
+        JSONObject r = new JSONObject();
+        try {
+            JSONArray radici = radiciNginxRoundcube();
+            if (radici.length() == 0)
+                return r.put("success", false).put("error", "non trovo il blocco server della webmail");
+            String file = radici.getJSONObject(0).getString("file");
+            int rigaRoot = radici.getJSONObject(0).getInt("riga");
+            java.util.List<String> righe = Files.readAllLines(Paths.get(file));
+
+            // Il location del PHP dentro questo blocco server.
+            int inizio = -1;
+            for (int i = rigaRoot; i < Math.min(righe.size(), rigaRoot + 60); i++) {
+                String t = righe.get(i);
+                if (t.contains("location") && t.contains(".php") && t.contains("{")) { inizio = i; break; }
+            }
+            if (inizio < 0)
+                return r.put("success", false).put("error",
+                        "nel blocco server non trovo nessun \"location\" per i file .php");
+            // Gia' a posto? Si guarda TUTTO il blocco, non la riga dopo: dopo una riparazione
+            // precedente la seconda riga puo' essere il rewrite degli URL sicuri, e cercando
+            // solo li' il pannello riparerebbe una seconda volta cio' che e' gia' riparato.
+            for (int i = inizio; i < Math.min(righe.size(), inizio + 25); i++) {
+                if (righe.get(i).contains("fastcgi_split_path_info"))
+                    return r.put("success", true).put("giaOk", true)
+                            .put("nota", "il location dei .php gestisce gia' il percorso "
+                                    + "(fastcgi_split_path_info alla riga " + (i + 1) + "): niente da cambiare");
+                if (righe.get(i).trim().equals("}")) break;
+            }
+
+            // Le graffe dentro le virgolette NON sono blocchi: la riga di rewrite per gli URL
+            // sicuri contiene "{16}", e contarla chiuderebbe il blocco nel punto sbagliato,
+            // riscrivendo mezza configurazione. Anche il testo dopo # e' commento, non codice.
+            int graffe = 0, fine = -1;
+            for (int i = inizio; i < righe.size(); i++) {
+                boolean virgolette = false;
+                for (char c : righe.get(i).toCharArray()) {
+                    if (c == '"') { virgolette = !virgolette; continue; }
+                    if (virgolette) continue;
+                    if (c == '#') break;
+                    if (c == '{') graffe++;
+                    else if (c == '}') graffe--;
+                }
+                if (graffe == 0) { fine = i; break; }
+            }
+            if (fine < 0)
+                return r.put("success", false).put("error", "il blocco location non si chiude: non lo tocco");
+
+            // use_secure_urls mette un prefisso di 16 caratteri davanti a ogni URL: se e' attivo
+            // serve la riga di rewrite, in ENTRAMBI i blocchi, altrimenti nulla combacia piu'.
+            // Non si presume: si legge dalla configurazione di Roundcube.
+            boolean urlSicuri = ok("grep -qE \"^[^/]*.use_secure_urls.*=.*(true|1)\" "
+                    + RC_DIR + "/config/config.inc.php", 20);
+            r.put("urlSicuri", urlSicuri);
+
+            String passa = "";
+            for (int i = inizio; i <= fine; i++) {
+                Matcher mp = Pattern.compile("fastcgi_pass\\s+([^;]+);").matcher(righe.get(i));
+                if (mp.find()) passa = mp.group(1).trim();
+            }
+            if (passa.isEmpty())
+                return r.put("success", false).put("error",
+                        "nel blocco non c'e' nessun fastcgi_pass: non so a chi passare le richieste");
+
+            String ind = righe.get(inizio).replaceAll("[^ \t].*$", "");
+            String i2 = ind + "    ";
+            // Ricalcata sull'esempio del wiki ufficiale di Roundcube (pagina Installation),
+            // con una sola aggiunta dichiarata: "try_files $fastcgi_script_name =404".
+            // Quella non c'e' a monte, e senza di essa ogni richiesta per uno script che non
+            // esiste arriva comunque a PHP — nel log di questo server ce ne sono centinaia,
+            // sondaggi tipo /admin/config.php. Provata: gli script veri passano, gli altri no.
+            java.util.List<String> nuovo = new ArrayList<>(java.util.List.of(
+                ind + "# Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css:",
+                ind + "# uno script PHP con un percorso attaccato. Un location che chiede .php",
+                ind + "# in fondo all'URI non lo prende, e il foglio di stile torna come HTML.",
+                ind + "# Configurazione dal wiki ufficiale di Roundcube (pagina Installation).",
+                ind + "location ~ \\.php {"));
+            if (urlSicuri) nuovo.add(i2 + "rewrite \"^/[a-zA-Z0-9]{16}/(.*)$\" /$1;");
+            nuovo.addAll(java.util.List.of(
+                i2 + "include fastcgi_params;",
+                i2 + "fastcgi_index index.php;",
+                i2 + "fastcgi_split_path_info ^(.+\\.php)(/.+)$;",
+                i2 + "try_files $fastcgi_script_name =404;",
+                i2 + "fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;",
+                i2 + "fastcgi_param PATH_INFO $fastcgi_path_info;",
+                i2 + "fastcgi_pass " + passa + ";",
+                ind + "}"));
+
+            r.put("success", true).put("file", file).put("da", inizio + 1).put("a", fine + 1)
+             .put("attuale", String.join("\n", righe.subList(inizio, fine + 1)))
+             .put("proposto", String.join("\n", nuovo));
+            if (!esegui) return r.put("eseguito", false);
+
+            String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
+            if (!ts.matches("[0-9]{8}-[0-9]{6}"))
+                return r.put("success", false).put("error", "data di sistema non leggibile");
+            String bk = "/var/db/mailpanel/nginx/" + ts;
+            ok("mkdir -p " + bk, 30);
+            if (!ok("cp -p " + file + " " + bk + "/nginx.conf", 30))
+                return r.put("success", false).put("error", "non riesco a copiare " + file);
+
+            java.util.List<String> out = new ArrayList<>(righe.subList(0, inizio));
+            out.addAll(nuovo);
+            out.addAll(righe.subList(fine + 1, righe.size()));
+            Files.write(Paths.get(file), out);
+
+            String prova = sh("nginx -t 2>&1", 60).toLowerCase();
+            if (!(prova.contains("syntax is ok") && prova.contains("test is successful"))) {
+                ok("cp -p " + bk + "/nginx.conf " + file, 30);
+                return r.put("success", false).put("eseguito", false)
+                        .put("error", "nginx ha rifiutato la configurazione, ho rimesso quella di prima: "
+                                + sh("nginx -t 2>&1", 60).replace("\n", " "));
+            }
+            String svc = nomeServizioReale("nginx");
+            if (svc == null || !ok("service " + svc + " reload", 60)) {
+                ok("cp -p " + bk + "/nginx.conf " + file, 30);
+                if (svc != null) ok("service " + svc + " reload", 60);
+                return r.put("success", false).put("eseguito", false)
+                        .put("error", "il ricaricamento di nginx non e' riuscito: rimessa quella di prima");
+            }
+
+            // La prova che conta: il CSS torna come CSS?
+            JSONObject pw = provaWebmailOrigine();
+            String nome = pw.optString("url", "").replaceAll("^https://", "").replaceAll(":.*$", "");
+            String porta = pw.optString("url", "").replaceAll(".*:", "").replaceAll("/.*$", "");
+            JSONObject css = nome.isEmpty() ? new JSONObject().put("ok", false).put("errore", "URL non ricavabile")
+                                            : provaAssetCss(nome, porta);
+            r.put("eseguito", true).put("backup", bk + "/nginx.conf").put("css", css);
+            if (!css.optBoolean("ok")) {
+                r.put("attenzione", "la configurazione e' stata applicata e nginx l'ha accettata, ma il "
+                        + "foglio di stile non torna ancora come CSS: " + css.optString("risposta",
+                        css.optString("errore")) + ". La copia di prima e' in " + bk + "/nginx.conf");
+            }
+            return r;
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    public static JSONObject roundcubeDiagnosi() {
+        JSONObject r = new JSONObject();
+        JSONArray voci = new JSONArray();
+        try {
+            // 1. Dove punta nginx adesso
+            JSONArray radici = radiciNginxRoundcube();
+            String root = radici.length() > 0 ? radici.getJSONObject(0).getString("root") : RC_DIR;
+            String file = radici.length() > 0 ? radici.getJSONObject(0).getString("file") : "?";
+            voci.put(new JSONObject().put("titolo", "Radice di nginx")
+                    .put("testo", root + "   (da " + file + ")"));
+
+            // 2. Il log di errore: e' li' che nginx dice PERCHE'
+            String logPath = sh("grep -hE '^[[:space:]]*error_log' /usr/local/etc/nginx/nginx.conf "
+                    + "2>/dev/null | head -1 | awk '{print $2}' | tr -d ';'", 30).trim();
+            if (!logPath.matches("/[A-Za-z0-9._/-]{1,200}")) logPath = "/var/log/nginx/error.log";
+            String log = sh("tail -25 " + logPath + " 2>&1", 30);
+            voci.put(new JSONObject().put("titolo", "Ultime righe di " + logPath)
+                    .put("testo", log.isEmpty() ? "(vuoto)" : log));
+
+            // 3. Permessi lungo tutto il cammino: basta una cartella non attraversabile
+            StringBuilder perm = new StringBuilder();
+            String[] pezzi = root.split("/");
+            StringBuilder acc = new StringBuilder();
+            for (String pz : pezzi) {
+                if (pz.isEmpty()) continue;
+                acc.append('/').append(pz);
+                perm.append(sh("ls -ld " + acc + " 2>&1", 20)).append('\n');
+            }
+            voci.put(new JSONObject().put("titolo", "Permessi dalla radice del filesystem in giu'")
+                    .put("testo", perm.toString().trim()));
+
+            // 4. Cosa c'e' davvero nella cartella servita
+            voci.put(new JSONObject().put("titolo", "Contenuto di " + root)
+                    .put("testo", sh("ls -la " + root + " 2>&1 | head -25", 30)));
+
+            // 5. Con quale utente gira nginx: e' lui che deve poter leggere
+            String utente = sh("grep -hE '^[[:space:]]*user[[:space:]]' /usr/local/etc/nginx/nginx.conf "
+                    + "2>/dev/null | head -1 | awk '{print $2}' | tr -d ';'", 20).trim();
+            String proc = sh("ps -axo user,command 2>/dev/null | grep '[n]ginx: worker' | head -2", 30);
+            voci.put(new JSONObject().put("titolo", "Utente di nginx")
+                    .put("testo", "dichiarato nella configurazione: " + (utente.isEmpty() ? "(non dichiarato: nobody)" : utente)
+                            + "\n" + (proc.isEmpty() ? "(nessun worker trovato)" : proc)));
+
+            // 6. La risposta del SERVER, scavalcando qualunque cosa stia davanti
+            JSONObject pw = provaWebmailOrigine();
+            voci.put(new JSONObject().put("titolo", "Risposta del server (non di cio' che sta davanti)")
+                    .put("testo", pw.optBoolean("ok")
+                            ? pw.optString("url") + " risponde " + pw.optString("codice") + "\n\n"
+                              + pw.optString("intestazioni")
+                            : "NON risponde: " + pw.optString("codice", pw.optString("errore"))
+                              + (pw.optBoolean("viaCdn") ? "  (attenzione: ha risposto una CDN, non il server)" : "")
+                              + "\n\n" + pw.optString("intestazioni")));
+
+            // 6b. Il .htaccess dice come Roundcube vuole essere servita: e' la fonte autorevole
+            voci.put(new JSONObject().put("titolo", "Come Roundcube chiede di essere servita (" + root + "/.htaccess)")
+                    .put("testo", sh("cat " + root + "/.htaccess 2>&1", 30)));
+
+            // 6c. Gli asset: nella 1.7 passano da static.php, ed e' li' che nginx sbaglia di solito.
+            if (pw.optBoolean("ok")) {
+                String u = pw.optString("url");
+                String nomeH = u.replaceAll("^https://", "").replaceAll(":.*$", "");
+                String portaH = u.replaceAll(".*:", "").replaceAll("/.*$", "");
+                JSONObject css = provaAssetCss(nomeH, portaH);
+                voci.put(new JSONObject().put("titolo", "Prova di un foglio di stile")
+                        .put("testo", css.optString("url", "(nessun link trovato)") + "\n  -> "
+                            + css.optString("risposta", css.optString("errore"))
+                            + (css.optBoolean("ok") ? "   (corretto)"
+                               : "   <- NON e' un CSS: la pagina si apre ma senza grafica")
+                            + "\n\nChi ha risposto: " + (css.optBoolean("daPhp")
+                                ? "PHP (c'e' X-Powered-By): la richiesta E' arrivata a static.php, "
+                                  + "quindi l'instradamento funziona e il problema e' dentro l'applicazione"
+                                : "nginx (nessun X-Powered-By): la richiesta NON e' arrivata a PHP, "
+                                  + "quindi il problema e' nell'instradamento")
+                            + "\n\n" + css.optString("intestazioni", "")));
+
+                // Il file che static.php dovrebbe servire esiste davvero sul disco?
+                String pathInfo = css.optString("url", "").replaceAll(".*/static\\.php", "").replaceAll("\\?.*$", "");
+                if (!pathInfo.isEmpty() && pathInfo.matches("/[A-Za-z0-9._/-]{1,200}")) {
+                    String atteso = RC_DIR + pathInfo;
+                    voci.put(new JSONObject().put("titolo", "Il file che static.php dovrebbe servire")
+                            .put("testo", "PATH_INFO: " + pathInfo + "\n"
+                                + sh("ls -l " + atteso + " 2>&1", 20) + "\n"
+                                + sh("ls -d " + RC_DIR + "/skins/*/ 2>&1 | head -5", 20)));
+                }
+
+                // PHP puo' essere confinato: se non gli e' permesso uscire da public_html,
+                // static.php non raggiunge le skin e risponde 404 pur funzionando.
+                voci.put(new JSONObject().put("titolo", "Limiti di PHP (open_basedir, chroot)")
+                        .put("testo", sh("grep -rhnE '^[^;]*(open_basedir|chroot|chdir)' "
+                            + "/usr/local/etc/php.ini /usr/local/etc/php-fpm.conf "
+                            + "/usr/local/etc/php-fpm.d/ /usr/local/etc/php/ 2>/dev/null | head -12", 30)
+                            .trim().isEmpty()
+                            ? "nessun open_basedir, chroot o chdir impostato: PHP non e' confinato"
+                            : sh("grep -rhnE '^[^;]*(open_basedir|chroot|chdir)' "
+                                + "/usr/local/etc/php.ini /usr/local/etc/php-fpm.conf "
+                                + "/usr/local/etc/php-fpm.d/ /usr/local/etc/php/ 2>/dev/null | head -12", 30)));
+            }
+
+            // 7. Il blocco server, come sta adesso sul disco
+            if (!"?".equals(file)) {
+                int riga = radici.getJSONObject(0).getInt("riga");
+                int da = Math.max(1, riga - 12), a2 = riga + 22;
+                voci.put(new JSONObject().put("titolo", "Il blocco server attorno alla riga " + riga)
+                        .put("testo", sh("sed -n '" + da + "," + a2 + "p' " + file + " 2>&1", 30)));
+            }
+            return r.put("success", true).put("voci", voci);
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
         }
     }
 
@@ -2490,16 +2898,26 @@ public final class UpdateManager {
             if (!tabOk) job.scrivi("    ALLARME: ci sono meno tabelle di prima.");
 
             // La webmail risponde davvero? Non basta che i file siano aggiornati.
-            String dominio = "";
-            try { dominio = org.mail_panel.Main.dbManager.getRoundcubeDomain(); } catch (Exception ignored) {}
-            boolean webOk = true, webProvata = false;
-            if (dominio != null && dominio.matches("[A-Za-z0-9.-]{1,255}")) {
-                webProvata = true;
-                String cod = sh("curl -sk -o /dev/null -m 20 -w '%{http_code}' https://" + dominio + "/ 2>/dev/null", 60).trim();
-                webOk = cod.startsWith("2") || cod.startsWith("3");
-                job.scrivi("    la webmail su https://" + dominio + " risponde: " + cod
-                        + (webOk ? "" : "  <- non e' una risposta valida"));
-            } else job.scrivi("    dominio della webmail non configurato: prova via web NON eseguita");
+            //
+            // E bisogna chiederlo AL SERVER. Chiedendolo al nome pubblico si finisce a parlare
+            // con cio' che sta davanti — una CDN, un proxy — e a prendere la sua risposta per
+            // quella del server: e' successo qui, con un 403 di Cloudflare scambiato per un
+            // guasto della webmail mentre nginx non aveva nemmeno visto la richiesta.
+            JSONObject pw = provaWebmailOrigine();
+            boolean webProvata = !pw.has("errore") || pw.has("codice");
+            boolean webOk = pw.optBoolean("ok");
+            if (!webProvata) {
+                job.scrivi("    prova via web NON eseguita: " + pw.optString("errore"));
+                webOk = true;   // non provata non vuol dire guasta: non boccio cio' che non ho misurato
+            } else if (webOk) {
+                job.scrivi("    " + pw.optString("url") + " risponde " + pw.optString("codice")
+                        + "  (interrogato il server, non cio' che sta davanti)");
+            } else {
+                job.scrivi("    " + pw.optString("url") + " risponde " + pw.optString("codice")
+                        + "  <- non e' una risposta valida");
+                if (pw.optBoolean("viaCdn"))
+                    job.scrivi("    ATTENZIONE: ha risposto una CDN e non il server: la prova non vale.");
+            }
 
             if (tabOk && webOk && radiceOk) {
                 job.status = "completed";

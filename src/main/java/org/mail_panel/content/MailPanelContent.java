@@ -13346,7 +13346,11 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-envelope-open-text me-2"></i><strong>Aggiornamento Roundcube</strong>
                         <span class="small text-muted ms-2">il pacchetto &egrave; la parte facile: a rompere &egrave; lo schema del database</span></span>
-                    <button class="btn btn-sm btn-outline-warning" onclick="rcPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                    <span>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcDiag()"><i class="fas fa-stethoscope me-1"></i>Perch&eacute; non risponde</button>
+                        <button class="btn btn-sm btn-outline-info me-1" onclick="rcNginx()"><i class="fas fa-wrench me-1"></i>Asset senza grafica</button>
+                        <button class="btn btn-sm btn-outline-warning" onclick="rcPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                    </span>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">
@@ -13883,6 +13887,55 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         // ---------- aggiornamento Roundcube ----------
+        // ---------- nginx: gli asset della 1.7 passano da static.php ----------
+        async function rcNginx() {
+            const pre = document.getElementById('rc-log');
+            const el = document.getElementById('rc-pre');
+            pre.style.display = 'block';
+            pre.textContent = 'Lettura della configurazione di nginx...';
+            const r = await updApi('roundcube_nginx_preview');
+            if (!r.success) { pre.textContent = r.error || 'errore'; return; }
+            if (r.giaOk) { pre.textContent = r.nota; return; }
+            pre.textContent =
+                'File: ' + r.file + '   righe ' + r.da + '-' + r.a + '\\n'
+              + 'use_secure_urls in Roundcube: ' + (r.urlSicuri ? 'attivo' : 'non attivo') + '\\n\\n'
+              + '=== COM\\u0027E\\u0300 ADESSO ===\\n' + r.attuale + '\\n\\n'
+              + '=== COME DIVENTEREBBE ===\\n' + r.proposto;
+            el.innerHTML = '<div class="alert alert-info py-2">Sopra vedi il cambiamento esatto, riga per riga. '
+              + 'La configurazione viene copiata prima, provata con <code>nginx -t</code> e rimessa com\\u0027era '
+              + 'se nginx la rifiuta o se il ricaricamento fallisce. Alla fine il pannello scarica davvero un '
+              + 'foglio di stile e controlla che torni come <code>text/css</code>.</div>'
+              + '<button class="btn btn-warning" onclick="rcNginxGo()"><i class="fas fa-wrench me-1"></i>Applica</button>';
+        }
+
+        async function rcNginxGo() {
+            if (prompt('Conferma: scrivi RIPARA NGINX per procedere.') !== 'RIPARA NGINX') return;
+            const pre = document.getElementById('rc-log');
+            const el = document.getElementById('rc-pre');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>In corso...';
+            const r = await updApi('roundcube_nginx_fix', { confirm: 'RIPARA NGINX' });
+            if (!r.success) {
+                el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>';
+                return;
+            }
+            const css = r.css || {};
+            el.innerHTML = css.ok
+              ? '<div class="alert alert-success py-2 mb-0"><strong>Fatto.</strong> Il foglio di stile torna come CSS: '
+                + updEsc(css.risposta) + '<br>Copia della configurazione precedente: <code>' + updEsc(r.backup) + '</code>'
+                + '<br>Ricarica la webmail con Ctrl+F5.</div>'
+              : '<div class="alert alert-warning py-2 mb-0">' + updEsc(r.attenzione || 'applicata, ma la prova del CSS non torna')
+                + '</div>';
+        }
+
+        async function rcDiag() {
+            const pre = document.getElementById('rc-log');
+            pre.style.display = 'block';
+            pre.textContent = 'Raccolta in corso: log di nginx, permessi, contenuto della cartella, risposta HTTP...';
+            const r = await updApi('roundcube_diag');
+            if (!r.success) { pre.textContent = r.error || 'errore'; return; }
+            pre.textContent = (r.voci || []).map(v => '=== ' + v.titolo + ' ===\\n' + v.testo).join('\\n\\n');
+        }
+
         async function rcPre() {
             const el = document.getElementById('rc-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli: pacchetto, PHP, schema, database...';

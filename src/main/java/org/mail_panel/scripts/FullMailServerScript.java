@@ -826,11 +826,20 @@ http {
             try_files \\$uri \\$uri/ /index.php?\\$args;
         }
 
-        location ~ \\\\.php\\$ {
-            fastcgi_pass unix:/var/run/php-fpm.sock;
-            fastcgi_index index.php;
-            fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
+        # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
+        # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
+        # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
+        # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga
+        # try_files ... =404 e' un'aggiunta: impedisce che richieste per script inesistenti
+        # arrivino a PHP, e questo server ne riceve a centinaia.
+        location ~ \\\\.php {
             include fastcgi_params;
+            fastcgi_index index.php;
+            fastcgi_split_path_info ^(.+\\\\.php)(/.+)\\$;
+            try_files \\$fastcgi_script_name =404;
+            fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
+            fastcgi_param PATH_INFO \\$fastcgi_path_info;
+            fastcgi_pass unix:/var/run/php-fpm.sock;
         }
 
         location ~ /\\\\. { deny all; }
