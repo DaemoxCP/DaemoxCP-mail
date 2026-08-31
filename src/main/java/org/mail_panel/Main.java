@@ -289,6 +289,17 @@ public class Main {
         // Generate all panel HTML content
         MailPanelContent.generateAllContent();
 
+        // Se una manutenzione dei pacchetti non e' arrivata in fondo (pannello ucciso, crash,
+        // riavvio a meta'), i pacchetti sono rimasti SBLOCCATI e nessuno se ne accorgerebbe
+        // finche' un aggiornamento successivo non porta via un pezzo dello stack di posta.
+        // Il ripristino va fatto qui, all'avvio, prima che il pannello torni utilizzabile.
+        try {
+            String ripristino = org.mail_panel.system.UpdateManager.ripristinaLockDopoCrash();
+            if (!ripristino.isEmpty()) System.out.println(ripristino);
+        } catch (Exception e) {
+            System.out.println("Ripristino protezione pacchetti non riuscito: " + e.getMessage());
+        }
+
         // Initialize database BEFORE screen to avoid warnings during GUI
         dbManager = new dataBaseManager();
         dbManager.ensureMailHostnameColumn();

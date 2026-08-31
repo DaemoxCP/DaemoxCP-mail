@@ -18,6 +18,7 @@ import org.mail_panel.security.DnsRecordsGenerator;
 import org.mail_panel.security.Fail2banManager;
 import org.mail_panel.security.PasskeyManager;
 import org.mail_panel.security.TotpManager;
+import org.mail_panel.system.UpdateManager;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -176,6 +177,10 @@ public class SSLMailServer {
         server.createContext("/api/unbound_health", this::handleApiUnboundHealth);
         server.createContext("/api/firewall", this::handleApiFirewall);
         server.createContext("/paths", this::handleProtectedPage);
+
+        // Aggiornamenti, protezione pacchetti e vulnerabilita'
+        server.createContext("/updates", this::handleProtectedPage);
+        server.createContext("/api/updates", this::handleApiUpdates);
 
         // New feature pages
         server.createContext("/admins", this::handleProtectedPage);
@@ -6029,6 +6034,73 @@ public class SSLMailServer {
     }
 
     // ============== CLAMAV HEALTH CHECK ==============
+    /**
+     * Protezione dei pacchetti, aggiornamenti e vulnerabilita'.
+     *
+     * GET restituisce lo stato dei pacchetti, che e' la lettura piu' leggera. Tutto il resto
+     * passa da POST con token CSRF: anche le sole letture, perche' interrogano la rete e
+     * durano decine di secondi, e perche' le azioni vere (sblocco, aggiornamento) non devono
+     * poter essere innescate da una richiesta preparata altrove.
+     */
+    private void handleApiUpdates(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        try {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                sendJsonResponse(exchange, UpdateManager.packagesStatus());
+                return;
+            }
+            if (!"POST".equals(exchange.getRequestMethod())) {
+                sendJsonError(exchange, 405, "Method not allowed");
+                return;
+            }
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) { sendJsonError(exchange, 413, "Body troppo grande"); return; }
+            JSONObject req = new JSONObject(body);
+            if (!validateCsrfForRequest(exchange, req)) { sendCsrfError(exchange); return; }
+            String action = req.optString("action", "");
+            String ip = getClientIp(exchange);
+            JSONObject response;
+
+            switch (action) {
+                case "packages_status" -> response = UpdateManager.packagesStatus();
+                case "updates_status" -> response = UpdateManager.updatesStatus();
+                case "compatibility" -> response = UpdateManager.compatibilityReport();
+                case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
+                case "packages_lock" -> {
+                    boolean lock = req.optBoolean("lock", true);
+                    String only = req.optString("package", "");
+                    response = UpdateManager.packagesLock(lock, only);
+                    logAudit(lock ? "PACKAGES_LOCKED" : "PACKAGES_UNLOCKED", ip,
+                            (only.isEmpty() ? "tutti" : only) + " -> " + response.optInt("changed", 0) + " modificati");
+                }
+                case "updates_apply" -> {
+                    // La conferma scritta a mano non e' burocrazia: distingue un click di
+                    // riflesso da una decisione. Qui si modifica un server di posta vivo.
+                    if (!"AGGIORNA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaAggiornamentoNonProtetti();
+                    logAudit("UPDATES_APPLY_STARTED", ip, response.optString("jobId", ""));
+                }
+                case "maintenance_run" -> {
+                    if (!"MANUTENZIONE".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaManutenzione();
+                    logAudit("MAINTENANCE_STARTED", ip, response.optString("jobId", ""));
+                }
+                case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
+                default -> response = new JSONObject().put("success", false).put("error", "Azione sconosciuta");
+            }
+            sendJsonResponse(exchange, response);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Errore in /api/updates", e);
+            sendJsonError(exchange, 500, "Errore interno del server");
+        }
+    }
+
     private void handleApiClamavHealth(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
         String method = exchange.getRequestMethod();
