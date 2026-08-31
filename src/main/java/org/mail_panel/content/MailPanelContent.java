@@ -13260,6 +13260,22 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
+            <div class="card mb-4 border-warning">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-database me-2"></i><strong>Migrazione MySQL 8.0 &rarr; 8.4</strong>
+                        <span class="small text-muted ms-2">il port mysql80 sar&agrave; rimosso da FreeBSD dopo il 31/12/2026</span></span>
+                    <button class="btn btn-sm btn-outline-warning" onclick="my84Pre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Su FreeBSD la 8.4 &egrave; un pacchetto <strong>diverso e in conflitto</strong>: nessun aggiornamento
+                        ci arriva. Qui il punto delicato non &egrave; il database ma la <strong>libreria client</strong>:
+                        Postfix e Dovecot leggono le caselle attraverso di essa, e vanno verificati prima di sostituirla.
+                    </p>
+                    <div id="my84-pre"><span class="text-muted">Premi "Verifica prerequisiti": legge e basta, non modifica niente.</span></div>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-route me-2"></i><strong>Aggiornamento guidato di un pacchetto protetto</strong>
@@ -13539,6 +13555,41 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 }
             }
             setTimeout(() => planPoll(id, el, pre), 3000);
+        }
+
+        // ---------- migrazione MySQL 8.4: solo verifica ----------
+        async function my84Pre() {
+            const el = document.getElementById('my84-pre');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli in corso: pacchetti, libreria client, configurazione, account, spazio, inventario...';
+            const r = await updApi('mysql84_preflight');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                  + '<th style="width:8rem">Esito</th><th style="width:16rem">Controllo</th><th>Dettaglio</th></tr></thead><tbody>';
+            (r.checks || []).forEach(c => {
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            if ((r.dependents || []).length) {
+                h += '<div class="small mb-2"><strong>Pacchetti collegati alla libreria client:</strong><ul class="mb-0">';
+                r.dependents.forEach(d => {
+                    h += '<li><code>' + updEsc(d.name) + '</code> richiede <code>' + updEsc(d.richiede) + '</code> '
+                       + (d.compatibile ? '<span class="text-success">compatibile</span>'
+                                        : '<span class="text-danger">NON compatibile con la 8.4</span>') + '</li>';
+                });
+                h += '</ul></div>';
+            }
+            if (r.alreadyDone) {
+                h += '<div class="alert alert-success py-2 mb-0">Sei gia&rsquo; sulla 8.4.</div>';
+            } else if (r.blocked) {
+                h += '<div class="alert alert-danger py-2 mb-0"><strong>Migrazione non avviabile.</strong> '
+                   + 'Ogni riga rossa descrive una situazione che finirebbe con il server di posta fermo. '
+                   + 'La procedura di esecuzione verr&agrave; costruita solo dopo che questi controlli passano.</div>';
+            } else {
+                h += '<div class="alert alert-warning py-2 mb-0"><strong>I prerequisiti sono superati.</strong> '
+                   + 'La procedura di esecuzione non &egrave; ancora attiva: verr&agrave; aggiunta dopo aver letto questo referto.</div>';
+            }
+            el.innerHTML = h;
         }
 
         // ---------- aggiornamento guidato ----------

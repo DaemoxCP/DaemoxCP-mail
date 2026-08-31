@@ -6078,6 +6078,7 @@ public class SSLMailServer {
                 }
                 case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
                 case "plan" -> response = UpdateManager.pianoManutenzione();
+                case "mysql84_preflight" -> response = UpdateManager.mysql84Preflight();
                 case "package_preflight" -> response = UpdateManager.preflightPacchetto(req.optString("package", ""));
                 case "package_update" -> {
                     // La conferma e' il NOME DEL PACCHETTO scritto a mano: cosi' non si puo'

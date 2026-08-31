@@ -314,6 +314,7 @@ public final class UpdateManager {
         {"^mysql[0-9]+-.*",      "2"},   // 8.0 -> 8.4: data dictionary, opzioni rimosse
         {"^roundcube.*",         "2"},   // 1.5 -> 1.6: schema del database
         {"^rspamd$",             "2"},   // le minori cambiano opzioni e chiavi in Redis
+        {"^postfix.*",           "2"},   // 3.10 -> 3.11 cambia i predefiniti del compatibility_level
     };
 
     /** Confronta le prime N cifre di due versioni: true se sono cambiate. */
@@ -1098,6 +1099,59 @@ public final class UpdateManager {
         }
     }
 
+    /**
+     * Esegue una query con le credenziali del pannello, prese dalla configurazione.
+     * La password passa dall'ambiente, non dalla riga di comando: altrimenti comparirebbe
+     * nell'elenco dei processi visibile a chiunque sul server.
+     */
+    private static String mysqlOut(String sql) {
+        String user = "mailpanel", pass = "", db = "mailserver", host = "127.0.0.1", port = "3306";
+        try (java.sql.ResultSet rs = org.mail_panel.Main.dbManager.get_data_config()) {
+            if (rs.next()) {
+                String u = rs.getString("mysql_user"), p2 = rs.getString("mysql_password");
+                String d = rs.getString("mysql_database"), h = rs.getString("mysql_host"), po = rs.getString("mysql_port");
+                if (u != null && !u.isBlank()) user = u.trim();
+                if (p2 != null) pass = p2;
+                if (d != null && !d.isBlank()) db = d.trim();
+                if (h != null && !h.isBlank()) host = h.trim();
+                if (po != null && po.matches("[0-9]{1,5}")) port = po.trim();
+            }
+        } catch (Exception ignored) {}
+        if (!user.matches("[A-Za-z0-9_]{1,64}") || !db.matches("[A-Za-z0-9_]{1,64}")
+                || !host.matches("[A-Za-z0-9._-]{1,128}")) return "";
+        String q = sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("`", "\\`");
+        try {
+            ProcessBuilder pb = new ProcessBuilder("sh", "-c",
+                    "mysql -u " + user + " -h " + host + " -P " + port + " -N -B " + db
+                    + " -e \"" + q + "\" 2>/dev/null");
+            pb.environment().put("MYSQL_PWD", pass);
+            Process pr = pb.start();
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(pr.getInputStream(), StandardCharsets.UTF_8))) {
+                String l; while ((l = br.readLine()) != null) sb.append(l).append('\n');
+            }
+            pr.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            return sb.toString().trim();
+        } catch (Exception e) { return ""; }
+    }
+
+    /**
+     * Il pannello si collega come utente applicativo, non come root: potrebbe non avere il
+     * permesso di leggere mysql.user. La differenza e' decisiva — "nessun account usa
+     * mysql_native_password" e "non ho potuto guardare" producono lo stesso vuoto ma
+     * significano l'opposto, e prendere il secondo per il primo vuol dire migrare convinti
+     * che non ci sia nessuno da salvare.
+     */
+    private static boolean puoLeggereUtentiMysql() {
+        return !mysqlOut("SELECT 1 FROM mysql.user LIMIT 1;").trim().isEmpty();
+    }
+
+    /** Numero da output di comando; 0 se non contiene cifre. */
+    private static long numero(String v) {
+        try { return Long.parseLong(v == null ? "" : v.trim().replaceAll("[^0-9]", "")); }
+        catch (Exception e) { return 0L; }
+    }
+
     /** JSONArray di stringhe -> lista Java, per poterle unire e ciclare. */
     private static java.util.List<String> jsonArrayToList(JSONArray a) {
         java.util.List<String> l = new ArrayList<>();
@@ -1112,6 +1166,195 @@ public final class UpdateManager {
     private static void aggiungiCheck(JSONArray a, String id, String label, String level, String detail) {
         a.put(new JSONObject().put("id", id).put("label", label)
                 .put("level", level).put("detail", detail));
+    }
+
+    // ===================== migrazione MySQL 8.0 -> 8.4 =====================
+
+    /**
+     * Controlli preliminari per il passaggio a MySQL 8.4, tutti in SOLA LETTURA.
+     *
+     * Su questa macchina la migrazione ha un ostacolo che sul pannello web non esisteva:
+     * Postfix e Dovecot leggono le caselle virtuali dal database attraverso la LIBRERIA di
+     * mysql80-client. Se i pacchetti che il repository fornisce sono compilati contro la 8.0,
+     * sostituire quella libreria li lascerebbe senza, e il server di posta non ripartirebbe.
+     * Non e' una cosa da scoprire a meta' migrazione: si chiede a pkg prima.
+     */
+    public static JSONObject mysql84Preflight() {
+        JSONObject r = new JSONObject();
+        JSONArray checks = new JSONArray();
+        boolean block = false;
+
+        // --- 1. Da dove si parte ---
+        String srvPkg = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-server$' | head -1", 20);
+        String cliPkg = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-client$' | head -1", 20);
+        r.put("srvPkg", srvPkg).put("cliPkg", cliPkg);
+        if (srvPkg.isEmpty()) {
+            aggiungiCheck(checks, "pkg", "Pacchetto MySQL installato", "block",
+                    "Nessun mysqlNN-server installato: non c'e' niente da migrare.");
+            block = true;
+        } else if (srvPkg.startsWith("mysql84")) {
+            aggiungiCheck(checks, "pkg", "Pacchetto MySQL installato", "ok",
+                    srvPkg + ": sei gia' sulla 8.4.");
+            r.put("alreadyDone", true);
+        } else {
+            String v = sh("pkg query %v " + srvPkg, 20);
+            aggiungiCheck(checks, "pkg", "Pacchetto MySQL installato", "ok",
+                    srvPkg + " " + v + " + " + cliPkg + " -> mysql84-server + mysql84-client. "
+                    + "Il port mysql80 verra' RIMOSSO da FreeBSD dopo il 31/12/2026: dopo quella data "
+                    + "non sarebbe piu' possibile nemmeno tornare indietro reinstallandolo.");
+        }
+
+        // --- 2. La destinazione esiste ---
+        String srv84 = sh("pkg rquery %v mysql84-server 2>/dev/null", 30);
+        String cli84 = sh("pkg rquery %v mysql84-client 2>/dev/null", 30);
+        r.put("target", srv84);
+        if (srv84.isEmpty() || cli84.isEmpty()) {
+            aggiungiCheck(checks, "target", "Disponibilita' della 8.4", "block",
+                    "Il repository non offre mysql84-server/mysql84-client.");
+            block = true;
+        } else {
+            aggiungiCheck(checks, "target", "Disponibilita' della 8.4", "ok",
+                    "mysql84-server " + srv84 + " e mysql84-client " + cli84 + " disponibili.");
+        }
+
+        // --- 3. IL PUNTO CRITICO: chi usa la libreria del client, e cosa pretende dal repository ---
+        JSONArray dipendenti = new JSONArray();
+        boolean conflitto = false;
+        if (!cliPkg.isEmpty()) {
+            for (String riga : sh("pkg query %rn " + cliPkg + " 2>/dev/null", 30).split("\n")) {
+                String d = riga.trim();
+                if (!nomeValido(d) || d.equals(srvPkg)) continue;
+                // Cosa pretende la versione del repository di questo dipendente: se nomina
+                // ancora mysql80-client, la 8.4 non lo soddisfa e il pacchetto va ricostruito.
+                String deps = sh("pkg rquery %dn " + d + " 2>/dev/null", 30);
+                boolean vuole80 = deps.contains(cliPkg);
+                boolean vuole84 = deps.contains("mysql84-client");
+                if (vuole80 && !vuole84) conflitto = true;
+                dipendenti.put(new JSONObject().put("name", d)
+                        .put("richiede", vuole84 ? "mysql84-client" : (vuole80 ? cliPkg : "non specificato"))
+                        .put("compatibile", !vuole80 || vuole84));
+            }
+        }
+        r.put("dependents", dipendenti).put("libraryConflict", conflitto);
+        if (conflitto) {
+            aggiungiCheck(checks, "libreria", "Pacchetti collegati alla libreria client", "block",
+                    "Almeno un pacchetto che usa la libreria di " + cliPkg + " la pretende ancora dal "
+                    + "repository nella versione 8.0. Sostituendola con la 8.4 resterebbe senza libreria e "
+                    + "NON ripartirebbe: sul server di posta significa Postfix o Dovecot che non leggono piu' "
+                    + "le caselle. Va risolto prima, non durante.");
+            block = true;
+        } else {
+            aggiungiCheck(checks, "libreria", "Pacchetti collegati alla libreria client",
+                    dipendenti.length() == 0 ? "ok" : "verifica",
+                    dipendenti.length() == 0
+                        ? "Nessun pacchetto esterno usa la libreria di " + cliPkg + "."
+                        : dipendenti.length() + " pacchetti la usano e il repository li fornisce compatibili "
+                          + "con la 8.4. Verranno comunque riavviati e ricontrollati a fine migrazione.");
+        }
+
+        // --- 4. Il processo in esecuzione e' quello del pacchetto? ---
+        boolean su = ok("service mysql-server status", 15);
+        String runVer = su ? mysqlOut("SELECT VERSION();") : "";
+        if (!su) {
+            aggiungiCheck(checks, "running", "MySQL in esecuzione", "block",
+                    "MySQL e' fermo: i controlli su account e tabelle si fanno interrogandolo.");
+            block = true;
+        } else if (runVer.isEmpty()) {
+            aggiungiCheck(checks, "running", "MySQL in esecuzione", "block",
+                    "MySQL non risponde alla query di versione con le credenziali del pannello.");
+            block = true;
+        } else {
+            String pkgVer = sh("pkg query %v " + srvPkg, 20).split("[_,]")[0];
+            boolean combacia = pkgVer.isEmpty() || runVer.startsWith(pkgVer);
+            aggiungiCheck(checks, "running", "MySQL in esecuzione", combacia ? "ok" : "block",
+                    combacia ? "Versione attiva " + runVer + ", combacia con il pacchetto."
+                             : "Il processo gira sulla " + runVer + " ma il pacchetto e' " + pkgVer
+                               + ": riavvia MySQL prima di migrare.");
+            if (!combacia) block = true;
+            r.put("runningVersion", runVer);
+        }
+
+        // --- 5. my.cnf: opzioni rimosse nella 8.4 ---
+        JSONObject cm = compatibilitaMysql();
+        JSONArray issues = cm.optJSONArray("issues");
+        if (issues != null && issues.length() > 0) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < issues.length(); i++) sb.append(issues.getJSONObject(i).getString("opzione")).append(' ');
+            aggiungiCheck(checks, "mycnf", "Configurazione compatibile", "block",
+                    "Il my.cnf contiene opzioni rimosse nella 8.4 (" + sb.toString().trim()
+                    + "): con una sola di queste il server non parte, e a quel punto la 8.0 sarebbe gia' disinstallata.");
+            block = true;
+        } else {
+            aggiungiCheck(checks, "mycnf", "Configurazione compatibile", "ok",
+                    "Nessuna opzione rimossa nella 8.4 e' attiva nel my.cnf.");
+        }
+
+        // --- 6. Account con il plugin che la 8.4 non attiva piu' ---
+        JSONArray nativi = new JSONArray();
+        boolean leggibile = su && !runVer.isEmpty() && puoLeggereUtentiMysql();
+        if (leggibile) {
+            for (String l : mysqlOut("SELECT CONCAT(user,'@',host) FROM mysql.user WHERE plugin='mysql_native_password';").split("\n")) {
+                if (!l.trim().isEmpty()) nativi.put(l.trim());
+            }
+        }
+        r.put("nativePasswordUsers", nativi).put("userTableReadable", leggibile);
+        if (!leggibile) {
+            aggiungiCheck(checks, "auth", "Plugin di autenticazione", "block",
+                    "Non riesco a leggere mysql.user con l'utente del pannello: non posso dire se qualche "
+                    + "account usa mysql_native_password, che la 8.4 non attiva piu'. Non lo do per assente, "
+                    + "perche' un silenzio non e' una conferma: se fra quelli ci fosse l'utente di Postfix o "
+                    + "Dovecot, dopo la migrazione la posta si fermerebbe. Concedi la lettura di mysql.user "
+                    + "all'utente del pannello, oppure verificalo a parte, e ripeti il controllo.");
+            block = true;
+        } else {
+            aggiungiCheck(checks, "auth", "Plugin di autenticazione", nativi.length() > 0 ? "verifica" : "ok",
+                    nativi.length() == 0
+                        ? "Nessun account usa mysql_native_password (verificato leggendo mysql.user)."
+                        : nativi.length() + " account lo usano (" + String.join(", ", jsonArrayToList(nativi))
+                          + "): la migrazione aggiungera' mysql-native-password=ON al my.cnf perche' "
+                          + "continuino a entrare.");
+        }
+
+        // --- 7. Spazio per la copia fredda ---
+        String dataDir = sh("grep -E '^[[:space:]]*datadir[[:space:]]*=' /usr/local/etc/mysql/my.cnf 2>/dev/null | tail -1 | cut -d= -f2 | tr -d ' '", 15);
+        if (dataDir.isEmpty()) dataDir = "/var/db/mysql";
+        long dirKb = numero(sh("du -sk " + dataDir + " 2>/dev/null | awk '{print $1}'", 120));
+        long freeKb = numero(sh("df -k /var/db 2>/dev/null | tail -1 | awk '{print $4}'", 20));
+        long servono = (long) (dirKb * 1.15) + 512L * 1024L;
+        r.put("dataDir", dataDir).put("dataDirMb", dirKb / 1024).put("freeMb", freeKb / 1024);
+        if (dirKb <= 0 || freeKb < servono) {
+            aggiungiCheck(checks, "spazio", "Spazio per la copia di sicurezza", "block",
+                    "Servono circa " + (servono / 1024) + " MB liberi, disponibili " + (freeKb / 1024)
+                    + ". La copia fredda e' l'unica via di ritorno: senza, il passaggio e' irreversibile.");
+            block = true;
+        } else {
+            aggiungiCheck(checks, "spazio", "Spazio per la copia di sicurezza", "ok",
+                    dataDir + " occupa " + (dirKb / 1024) + " MB, liberi " + (freeKb / 1024) + " MB.");
+        }
+
+        // --- 8. Inventario, per riconfrontare a fine migrazione ---
+        long schemi = 0, tabelle = 0, caselle = 0;
+        if (su && !runVer.isEmpty()) {
+            schemi = numero(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
+            tabelle = numero(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
+            caselle = numero(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
+        }
+        r.put("schemaCount", schemi).put("tableCount", tabelle).put("mailboxCount", caselle);
+        aggiungiCheck(checks, "inventario", "Inventario di partenza", schemi > 0 ? "ok" : "verifica",
+                schemi > 0 ? schemi + " schemi, " + tabelle + " tabelle, " + caselle
+                             + " caselle di posta. A fine migrazione il pannello riconta e segnala differenze."
+                           : "Inventario non leggibile: la verifica finale sarebbe meno stringente.");
+
+        // --- 9. Cosa si ferma, e per quanto ---
+        aggiungiCheck(checks, "servizi", "Servizi coinvolti", "verifica",
+                "Postfix e Dovecot verranno fermati PRIMA di MySQL e riavviati dopo: fermarli e' piu' pulito "
+                + "che lasciarli rispondere con errori mentre il database non c'e'. In quella finestra la posta "
+                + "in arrivo viene rifiutata temporaneamente e i mittenti riprovano; le caselle non si collegano. "
+                + "Il pannello resta utilizzabile perche' le sessioni stanno in memoria.");
+
+        r.put("success", true).put("checks", checks)
+         .put("canProceed", !block && !r.optBoolean("alreadyDone", false)).put("blocked", block);
+        return r;
     }
 
     // ===================== piano di manutenzione guidato =====================
@@ -1208,6 +1451,36 @@ public final class UpdateManager {
                     attendi ? v.getJSONObject("avv").getString("text")
                             : "Il pannello lo sblocca, lo aggiorna, riavvia i servizi che lo usano verificando "
                               + "che siano ripartiti davvero, e lo riprotegge.",
+                    attendi ? null : new JSONObject().put("tipo", "package_update").put("package", nome)));
+        }
+
+        // --- Passi per i pacchetti protetti che hanno un aggiornamento ma nessuna CVE ---
+        // Non sono urgenti, ma "aggiornare tutto l'aggiornabile" e' una richiesta legittima e
+        // il piano deve poterla rappresentare, altrimenti resterebbero invisibili per sempre.
+        for (int i = 0; i < pacchetti.length(); i++) {
+            JSONObject p = pacchetti.getJSONObject(i);
+            String nome = p.getString("name");
+            if (visti.contains(nome)) continue;               // gia' coperto come vulnerabile
+            String fam = famigliaDi(nome);
+            String chiave = fam == null ? nome : fam;
+            if (!famiglieViste.add(chiave)) continue;         // gia' coperto dalla sua famiglia
+            String cur = p.optString("version", "");
+            String av = sh("pkg rquery %v " + nome + " 2>/dev/null", 20);
+            if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;
+            boolean maggiore = saltoSignificativo(nome, cur, av);
+            JSONObject avv = avvertenzaPer(nome, maggiore);
+            boolean attendi = avv != null && "attendi".equals(avv.getString("level"));
+            java.util.List<String> mem = membriFamiglia(nome);
+            String titolo = mem.size() > 1
+                    ? "Aggiornare " + nome + " e " + (mem.size() - 1) + " pacchetti collegati"
+                    : "Aggiornare " + nome;
+            passi.put(passo(++n, titolo, attendi ? "manuale" : "dafare",
+                    nome + " " + cur + " -> " + av
+                        + (maggiore ? ", salto di versione significativo" : ", solo cifre finali")
+                        + " (nessuna vulnerabilita' nota)",
+                    attendi ? avv.getString("text")
+                            : (avv != null ? avv.getString("text")
+                                           : "Aggiornamento senza avvertenze particolari."),
                     attendi ? null : new JSONObject().put("tipo", "package_update").put("package", nome)));
         }
 
