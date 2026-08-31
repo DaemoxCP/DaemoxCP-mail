@@ -912,6 +912,88 @@ public final class UpdateManager {
 
     // ===================== i due lavori =====================
 
+    /**
+     * Riscrive la SOLA configurazione di Dovecot dalla sorgente unica, senza toccare i
+     * pacchetti. Serviva: prima, per applicare una correzione alla configurazione bisognava
+     * passare dalla reinstallazione del pacchetto — `pkg delete` e reinstallazione — che e'
+     * sproporzionato per riscrivere dei file di testo e introduce rischi che non c'entrano.
+     *
+     * Il ricaricamento avviene solo se doveconf ha accettato: se rifiuta, il frammento ha
+     * gia' rimesso la configurazione precedente ed esce diverso da zero, quindi qui non si
+     * ricarica nulla e il servizio prosegue com'era.
+     */
+    public static JSONObject avviaRigenerazioneDovecot() {
+        String id = "dovecot-cfg-" + System.currentTimeMillis();
+        Job j = new Job(id, "dovecot_config");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> runRigenerazioneDovecot(j), "dovecot-config");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    private static void runRigenerazioneDovecot(Job job) {
+        job.status = "running";
+        java.nio.file.Path script = null;
+        try {
+            job.avanza(1, 3);
+            job.scrivi("=== Rigenerazione della configurazione Dovecot ===");
+            job.scrivi("");
+
+            boolean attivoPrima = ok("service dovecot status", 15);
+            job.scrivi("Dovecot prima dell'operazione: " + (attivoPrima ? "attivo" : "non attivo"));
+
+            String frammento = org.mail_panel.scripts.DovecotConfig.fromPanelConfig().scriptFragment();
+            script = java.nio.file.Files.createTempFile("dovecot-config-", ".sh");
+            java.nio.file.Files.writeString(script, "#!/bin/sh\nset -e\n" + frammento + "\n");
+            java.nio.file.Files.setPosixFilePermissions(script,
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+
+            job.avanza(2, 3);
+            job.scrivi("");
+            job.scrivi("[2/3] Scrivo e valido la configurazione...");
+            int code = eseguiConLog(job, "sh " + script, 300);
+            if (code != 0) {
+                job.status = "error";
+                job.errorMessage = "Dovecot non accetta la configurazione generata: e' stata ripristinata "
+                        + "quella precedente e il servizio NON e' stato toccato.";
+                job.scrivi("");
+                job.scrivi(job.errorMessage);
+                return;
+            }
+
+            job.avanza(3, 3);
+            job.scrivi("");
+            job.scrivi("[3/3] Ricarico Dovecot...");
+            if (!attivoPrima) {
+                job.scrivi("    Dovecot non era attivo: non lo avvio io, la configurazione e' pronta.");
+                job.status = "completed";
+                return;
+            }
+            boolean ok1 = ok("service dovecot reload", 60);
+            job.scrivi("    reload: " + (ok1 ? "eseguito" : "fallito, provo un restart"));
+            if (!ok1) ok("service dovecot restart", 60);
+
+            boolean attivoDopo = ok("service dovecot status", 20);
+            job.scrivi("    Dovecot dopo l'operazione: " + (attivoDopo ? "attivo" : "NON attivo"));
+            if (!attivoDopo) {
+                job.status = "error";
+                job.errorMessage = "Dovecot non risulta attivo dopo il ricaricamento: guarda /var/log/maillog.";
+            } else {
+                job.status = "completed";
+                job.scrivi("");
+                job.scrivi("Configurazione rigenerata e in servizio.");
+            }
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = e.getMessage();
+            job.scrivi("ERRORE: " + e.getMessage());
+        } finally {
+            if (script != null) try { java.nio.file.Files.deleteIfExists(script); } catch (Exception ignored) {}
+            job.fine = System.currentTimeMillis();
+        }
+    }
+
     public static JSONObject avviaManutenzione() {
         String id = "maint-" + System.currentTimeMillis();
         Job j = new Job(id, "maintenance");

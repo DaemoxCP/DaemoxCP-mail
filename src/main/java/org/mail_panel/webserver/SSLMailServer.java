@@ -6066,6 +6066,16 @@ public class SSLMailServer {
                 case "updates_status" -> response = UpdateManager.updatesStatus();
                 case "compatibility" -> response = UpdateManager.compatibilityReport();
                 case "dovecot_config_dump" -> response = UpdateManager.dumpConfigDovecot();
+                case "dovecot_config_regen" -> {
+                    // Riscrive la sola configurazione, senza toccare i pacchetti. La conferma
+                    // scritta a mano c'e' perche' l'operazione ricarica un servizio vivo.
+                    if (!"RIGENERA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaRigenerazioneDovecot();
+                    logAudit("DOVECOT_CONFIG_REGEN", ip, response.optString("jobId", ""));
+                }
                 case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
                 case "packages_lock" -> {
                     boolean lock = req.optBoolean("lock", true);

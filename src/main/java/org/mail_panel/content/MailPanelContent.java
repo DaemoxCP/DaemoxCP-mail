@@ -13202,7 +13202,8 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         <span class="small text-muted ms-2">non i numeri di versione: cosa c&rsquo;è scritto nei file</span></span>
                     <div class="text-nowrap">
                         <button class="btn btn-sm btn-outline-primary me-1" onclick="updCompat()"><i class="fas fa-magnifying-glass me-1"></i>Verifica</button>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="updDumpDovecot()" title="Mostra i file che Dovecot legge davvero"><i class="fas fa-file-code me-1"></i>Mostra config Dovecot</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="updDumpDovecot()" title="Mostra i file che Dovecot legge davvero"><i class="fas fa-file-code me-1"></i>Mostra config Dovecot</button>
+                        <button class="btn btn-sm btn-outline-warning" onclick="updRegenDovecot()" title="Riscrive la configurazione dalla sorgente unica, senza toccare i pacchetti"><i class="fas fa-wand-magic-sparkles me-1"></i>Rigenera config Dovecot</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -13393,6 +13394,18 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + '<pre class="upd-log mt-1">' + updEsc(f.content) + '</pre></details>';
             });
             el.innerHTML = h;
+        }
+
+        async function updRegenDovecot() {
+            if (!confirm('Riscrivere la configurazione di Dovecot dalla sorgente unica del pannello? Non tocca i pacchetti: la configurazione attuale viene salvata prima, e se Dovecot non accettasse quella nuova viene rimessa a posto senza riavviare il servizio.')) return;
+            if (prompt('Conferma: scrivi RIGENERA per procedere.') !== 'RIGENERA') return;
+            const el = document.getElementById('upd-status');
+            const pre = document.getElementById('upd-log');
+            const r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Rigenerazione della configurazione Dovecot in corso...</span>';
+            pre.style.display = 'block';
+            updPoll(r.jobId, el, pre);
         }
 
         // ---------- protezione pacchetti ----------
