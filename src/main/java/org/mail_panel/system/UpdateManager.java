@@ -336,11 +336,29 @@ public final class UpdateManager {
         return sb.toString();
     }
 
+    /**
+     * Pacchetti il cui rischio NON dipende dal numero di versione, e per cui quindi
+     * l'avvertenza vale sempre, anche su un aggiornamento di sole cifre finali.
+     *
+     * Il caso e' openjdk: il problema non e' cosa cambia fra due versioni, e' che il pannello
+     * ci sta girando sopra. Appena i file della JVM vengono sostituiti, il processo in memoria
+     * non riesce piu' ad avviare comandi: il job che sta facendo l'aggiornamento non puo'
+     * nemmeno ribloccare il pacchetto e si ferma a meta', lasciando tutto scoperto.
+     * Trattarlo con la regola generale "i salti minori sono sicuri" significa annullare la
+     * protezione proprio nel caso per cui e' stata scritta.
+     */
+    private static final String[] SEMPRE_ATTENDI = { "^openjdk[0-9]*$" };
+
+    private static boolean rischioIndipendenteDallaVersione(String nome) {
+        for (String r : SEMPRE_ATTENDI) if (nome.matches(r)) return true;
+        return false;
+    }
+
     /** Avvertenza per un pacchetto, o null se non ne ha una specifica. */
     private static JSONObject avvertenzaPer(String nome, boolean saltoMaggiore) {
         for (String[] a : AVVERTENZE) {
             if (!nome.matches(a[0])) continue;
-            if (!saltoMaggiore && "attendi".equals(a[1])) {
+            if (!saltoMaggiore && "attendi".equals(a[1]) && !rischioIndipendenteDallaVersione(nome)) {
                 return new JSONObject().put("level", "ok").put("text",
                         "Aggiornamento minore: normalmente sicuro. Sono i salti di versione maggiore, su questo "
                         + "pacchetto, a dover essere coordinati.");
@@ -1167,6 +1185,43 @@ public final class UpdateManager {
         return r.isEmpty() ? mysqlOut(q) : r;
     }
 
+    /**
+     * Quali plugin di autenticazione sono in uso, con quanti account ciascuno.
+     *
+     * Dire "nessuno usa mysql_native_password" e' dimostrare un'assenza, e un'assenza si
+     * confonde con un errore silenzioso. Elencare i plugin presenti e' una prova positiva:
+     * se la somma degli account torna e i nomi sono quelli attesi, la lettura e' avvenuta
+     * davvero. Serve anche a vedere sha256_password, deprecato anche lui.
+     */
+    private static JSONArray pluginInUso() {
+        String q = "SELECT CONCAT(plugin,' ',COUNT(*)) FROM mysql.user GROUP BY plugin;";
+        String out = mysqlRootOut(q);
+        if (out.isEmpty()) out = mysqlOut(q);
+        JSONArray arr = new JSONArray();
+        for (String riga : out.split("\n")) {
+            String t = riga.trim();
+            int sp = t.lastIndexOf(' ');
+            if (sp <= 0) continue;
+            arr.put(new JSONObject().put("plugin", t.substring(0, sp).trim())
+                    .put("accounts", (int) numero(t.substring(sp + 1))));
+        }
+        return arr;
+    }
+
+    /** I plugin trovati, in forma leggibile. */
+    private static String descriviPlugin(JSONArray a) {
+        if (a.length() == 0) return "nessun plugin elencato (lettura non riuscita)";
+        StringBuilder sb = new StringBuilder();
+        int tot = 0;
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject o = a.getJSONObject(i);
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(o.getString("plugin")).append(' ').append(o.getInt("accounts"));
+            tot += o.getInt("accounts");
+        }
+        return sb + " (in tutto " + tot + " account)";
+    }
+
     /** Numero da output di comando; 0 se non contiene cifre. */
     private static long numero(String v) {
         try { return Long.parseLong(v == null ? "" : v.trim().replaceAll("[^0-9]", "")); }
@@ -1338,6 +1393,7 @@ public final class UpdateManager {
             }
         }
         r.put("nativePasswordUsers", nativi).put("userTableReadable", leggibile);
+        if (leggibile) r.put("authPlugins", pluginInUso());
         if (!leggibile) {
             aggiungiCheck(checks, "auth", "Plugin di autenticazione", "block",
                     "Non riesco a leggere mysql.user con l'utente del pannello: non posso dire se qualche "
@@ -1350,7 +1406,8 @@ public final class UpdateManager {
         } else {
             aggiungiCheck(checks, "auth", "Plugin di autenticazione", nativi.length() > 0 ? "verifica" : "ok",
                     nativi.length() == 0
-                        ? "Nessun account usa mysql_native_password (verificato leggendo mysql.user)."
+                        ? "Nessun account usa mysql_native_password. Prova positiva della lettura: "
+                          + descriviPlugin(pluginInUso()) + "."
                         : nativi.length() + " account lo usano (" + String.join(", ", jsonArrayToList(nativi))
                           + "): la migrazione aggiungera' mysql-native-password=ON al my.cnf perche' "
                           + "continuino a entrare.");
@@ -1396,6 +1453,291 @@ public final class UpdateManager {
         r.put("success", true).put("checks", checks)
          .put("canProceed", !block && !r.optBoolean("alreadyDone", false)).put("blocked", block);
         return r;
+    }
+
+    private static final String MYSQL84_BACKUP = "/var/db/mailpanel/mysql84";
+
+    /** File e byte logici di un albero: si misura con stat, MAI con du. */
+    private static long[] misura(String dir) {
+        long file = numero(sh("find " + dir + " -type f 2>/dev/null | wc -l", 120));
+        long byteLogici = numero(sh("find " + dir + " -type f -exec stat -f %z {} + 2>/dev/null "
+                + "| awk '{s+=$1} END {print s+0}'", 120));
+        return new long[]{file, byteLogici};
+    }
+
+    public static JSONObject avviaMigrazione84() {
+        String id = "my84-" + System.currentTimeMillis();
+        Job j = new Job(id, "mysql84_migration");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> runMigrazione84(j), "mysql84-migration");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    /**
+     * Migrazione a MySQL 8.4.
+     *
+     * Rispetto alla stessa operazione sul pannello web ci sono due differenze che vengono
+     * dalla natura di questa macchina: Postfix e Dovecot leggono le caselle dal database
+     * attraverso la libreria client, quindi si fermano PRIMA e si riverificano DOPO; e la
+     * verifica finale non si accontenta di "il servizio e' attivo" ma chiede a Postfix e a
+     * Dovecot di risolvere davvero una casella. Un servizio avviato che non legge piu' gli
+     * utenti e' il modo peggiore di sembrare a posto.
+     */
+    private static void runMigrazione84(Job job) {
+        job.status = "running";
+        final int TOT = 12;
+        String backupDir = "", dataDir = "/var/db/mysql", srvPkg = "", cliPkg = "";
+        boolean mysqlFermo = false, pacchettiSostituiti = false, arrivatoInFondo = false;
+        boolean postfixEra = false, dovecotEra = false;
+        long schemiPrima = 0, tabellePrima = 0, casellePrima = 0;
+        String casellaProva = "";
+        try {
+            job.avanza(1, TOT);
+            job.scrivi("=== Migrazione MySQL 8.0 -> 8.4 ===");
+            job.scrivi("");
+            job.scrivi("[1/" + TOT + "] Controlli preliminari...");
+            JSONObject pf = mysql84Preflight();
+            if (!pf.optBoolean("canProceed", false)) {
+                job.status = "error";
+                job.errorMessage = pf.optBoolean("alreadyDone", false)
+                        ? "Sei gia' sulla 8.4." : "I controlli preliminari hanno trovato un impedimento.";
+                JSONArray ck = pf.optJSONArray("checks");
+                for (int i = 0; ck != null && i < ck.length(); i++) {
+                    JSONObject c = ck.getJSONObject(i);
+                    if (!"ok".equals(c.optString("level")))
+                        job.scrivi("  [" + c.optString("level").toUpperCase() + "] " + c.optString("label")
+                                + ": " + c.optString("detail"));
+                }
+                job.scrivi("RIFIUTO DI PARTIRE.");
+                return;
+            }
+            srvPkg = pf.optString("srvPkg", "");
+            cliPkg = pf.optString("cliPkg", "");
+            dataDir = pf.optString("dataDir", "/var/db/mysql");
+            schemiPrima = pf.optLong("schemaCount", 0);
+            tabellePrima = pf.optLong("tableCount", 0);
+            casellePrima = pf.optLong("mailboxCount", 0);
+            casellaProva = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
+            job.scrivi("  " + srvPkg + " + " + cliPkg + " -> mysql84-server + mysql84-client");
+            job.scrivi("  inventario: " + schemiPrima + " schemi, " + tabellePrima + " tabelle, "
+                    + casellePrima + " caselle");
+            job.scrivi("  casella usata per la prova finale: "
+                    + (casellaProva.isEmpty() ? "nessuna (verifica funzionale non possibile)" : casellaProva));
+
+            job.avanza(2, TOT);
+            job.scrivi("");
+            job.scrivi("[2/" + TOT + "] Fermo Postfix e Dovecot...");
+            postfixEra = ok("service postfix status", 20);
+            dovecotEra = ok("service dovecot status", 20);
+            if (postfixEra) { ok("service postfix stop", 60); job.scrivi("    postfix: fermato"); }
+            else job.scrivi("    postfix: non era attivo");
+            if (dovecotEra) { ok("service dovecot stop", 60); job.scrivi("    dovecot: fermato"); }
+            else job.scrivi("    dovecot: non era attivo");
+
+            job.avanza(3, TOT);
+            job.scrivi("");
+            job.scrivi("[3/" + TOT + "] Fermo MySQL...");
+            ok("service mysql-server stop", 120);
+            boolean giu = false;
+            for (int i = 0; i < 120; i++) {
+                if (!ok("service mysql-server status", 10) && !ok("pgrep -q mysqld", 10)) { giu = true; break; }
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+            }
+            if (!giu) throw new IllegalStateException("MySQL non si e' fermato: una copia presa a server acceso non sarebbe ripristinabile");
+            mysqlFermo = true;
+            job.scrivi("    fermo e confermato tale");
+
+            job.avanza(4, TOT);
+            job.scrivi("");
+            job.scrivi("[4/" + TOT + "] Copia di sicurezza a freddo...");
+            String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
+            if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("data non valida per la copia");
+            backupDir = MYSQL84_BACKUP + "/" + ts;
+            if (!ok("mkdir -p " + backupDir + "/pkg", 30)) throw new IllegalStateException("non riesco a creare " + backupDir);
+            ok("cp -p /usr/local/etc/mysql/my.cnf " + backupDir + "/my.cnf", 30);
+            ok("printf '%s\\n%s\\n' " + srvPkg + " " + cliPkg + " > " + backupDir + "/pacchetti.txt", 20);
+            job.scrivi("    my.cnf e nomi dei pacchetti salvati");
+            ok("pkg fetch -y -o " + backupDir + "/pkg " + srvPkg + " " + cliPkg + " >/dev/null 2>&1", 600);
+            job.scrivi("    " + numero(sh("find " + backupDir + "/pkg -name '*.pkg' | wc -l", 30))
+                    + " pacchetti 8.0 conservati per l'eventuale ritorno");
+
+            long[] prima = misura(dataDir);
+            job.scrivi("    copio " + dataDir + ": " + prima[0] + " file, " + (prima[1] / 1024 / 1024) + " MB");
+            String cpOut = sh("cp -Rp " + dataDir + " " + backupDir + "/datadir 2>&1; echo EXIT=$?", 1800);
+            int cpCode = -1;
+            for (String l : cpOut.split("\n")) {
+                if (l.startsWith("EXIT=")) { cpCode = (int) numero(l); continue; }
+                if (!l.trim().isEmpty()) job.scrivi("      cp: " + l);
+            }
+            if (cpCode != 0) throw new IllegalStateException("cp uscito con codice " + cpCode);
+            ok("sync", 120);
+            long[] dopo = misura(backupDir + "/datadir");
+            if (dopo[0] != prima[0] || dopo[1] != prima[1]) {
+                throw new IllegalStateException("la copia non corrisponde: " + dopo[0] + " file / " + dopo[1]
+                        + " byte contro " + prima[0] + " / " + prima[1]);
+            }
+            if (!ok("test -f " + backupDir + "/datadir/ibdata1", 15)) {
+                throw new IllegalStateException("nella copia manca ibdata1: non e' una cartella dati ripristinabile");
+            }
+            ok("printf '%s\\n%s\\n' " + prima[0] + " " + prima[1] + " > " + backupDir + "/manifest.txt", 20);
+            job.scrivi("    copia verificata file per file: " + dopo[0] + " file, " + (dopo[1] / 1024 / 1024) + " MB");
+            job.scrivi("    percorso della copia: " + backupDir);
+
+            job.avanza(5, TOT);
+            job.scrivi("");
+            job.scrivi("[5/" + TOT + "] Sostituisco i pacchetti...");
+            ok("pkg unlock -y " + srvPkg, 30);
+            ok("pkg unlock -y " + cliPkg, 30);
+            String del = sh("pkg delete -f -y " + srvPkg + " " + cliPkg + " 2>&1", 300);
+            for (String l : del.split("\n")) if (!l.trim().isEmpty()) job.scrivi("    " + l);
+            pacchettiSostituiti = true;
+            String ins = sh("pkg install -y mysql84-server mysql84-client 2>&1", 900);
+            for (String l : ins.split("\n")) if (!l.trim().isEmpty()) job.scrivi("    " + l);
+            if (!ok("pkg info -e mysql84-server", 20) || !ok("pkg info -e mysql84-client", 20)) {
+                throw new IllegalStateException("l'installazione della 8.4 non e' riuscita: i dati sono intatti, la copia e' in " + backupDir);
+            }
+
+            job.avanza(6, TOT);
+            job.scrivi("");
+            job.scrivi("[6/" + TOT + "] Verifico che Postfix e Dovecot siano ancora installati...");
+            boolean persi = false;
+            for (String d : new String[]{"postfix-mysql", "dovecot-mysql"}) {
+                boolean c = ok("pkg info -e " + d, 20);
+                job.scrivi("    " + d + ": " + (c ? "presente" : "MANCANTE"));
+                if (!c) persi = true;
+            }
+            if (persi) job.scrivi("    ATTENZIONE: un pacchetto e' stato rimosso dalla sostituzione. Reinstallalo prima di proseguire.");
+
+            job.avanza(7, TOT);
+            job.scrivi("");
+            job.scrivi("[7/" + TOT + "] Configurazione...");
+            if (ok("test -f " + backupDir + "/my.cnf", 15)) {
+                ok("cp -p " + backupDir + "/my.cnf /usr/local/etc/mysql/my.cnf", 30);
+                ok("chmod 644 /usr/local/etc/mysql/my.cnf", 15);
+                job.scrivi("    my.cnf ripristinato dalla copia");
+            }
+            JSONArray nativi = pf.optJSONArray("nativePasswordUsers");
+            if (nativi != null && nativi.length() > 0) {
+                job.scrivi("    " + nativi.length() + " account usano mysql_native_password: aggiungo mysql-native-password=ON");
+                ok("sed -i '' 's/^\\[mysqld\\]/[mysqld]\\nmysql-native-password=ON/' /usr/local/etc/mysql/my.cnf", 30);
+            }
+
+            job.avanza(8, TOT);
+            job.scrivi("");
+            job.scrivi("[8/" + TOT + "] Il mysqld 8.4 accetta la configurazione?");
+            String bin = sh("which mysqld 2>/dev/null", 15);
+            if (bin.isEmpty()) bin = "/usr/local/libexec/mysqld";
+            String val = sh("su -m mysql -c '" + bin + " --validate-config' 2>&1", 120);
+            if (!val.isEmpty()) {
+                for (String l : val.split("\n")) if (!l.trim().isEmpty()) job.scrivi("      " + l);
+                if (val.toLowerCase().matches("(?s).*(error|unknown variable|aborting).*")) {
+                    throw new IllegalStateException("il mysqld 8.4 non accetta il my.cnf: i dati non sono stati toccati, "
+                            + "la copia e' in " + backupDir);
+                }
+            } else job.scrivi("    accettata senza segnalazioni");
+
+            job.avanza(9, TOT);
+            job.scrivi("");
+            job.scrivi("[9/" + TOT + "] Primo avvio della 8.4 (riscrive il data dictionary: punto di non ritorno)...");
+            ok("service mysql-server start", 120);
+            String nuovaVer = "";
+            for (int i = 0; i < 200; i++) {
+                nuovaVer = mysqlOut("SELECT VERSION();").trim();
+                if (!nuovaVer.isEmpty()) break;
+                try { Thread.sleep(3000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                if (i % 5 == 4) job.scrivi("    ...in avvio da " + ((i + 1) * 3) + "s");
+            }
+            if (nuovaVer.isEmpty()) throw new IllegalStateException("MySQL 8.4 non risponde: la copia e' in " + backupDir);
+            mysqlFermo = false;
+            job.scrivi("    SELECT VERSION() = " + nuovaVer);
+            if (!nuovaVer.startsWith("8.4")) throw new IllegalStateException("la versione attiva e' " + nuovaVer + ", non una 8.4");
+
+            job.avanza(10, TOT);
+            job.scrivi("");
+            job.scrivi("[10/" + TOT + "] Inventario...");
+            long sd = numero(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
+            long td = numero(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
+            long cd = numero(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
+            job.scrivi("    schemi " + schemiPrima + " -> " + sd + ", tabelle " + tabellePrima + " -> " + td
+                    + ", caselle " + casellePrima + " -> " + cd);
+            boolean inventarioOk = sd >= schemiPrima && td >= tabellePrima && cd >= casellePrima;
+            if (!inventarioOk) job.scrivi("    ALLARME: mancano oggetti rispetto a prima. La copia e' in " + backupDir);
+            else job.scrivi("    inventario integro");
+
+            job.avanza(11, TOT);
+            job.scrivi("");
+            job.scrivi("[11/" + TOT + "] Riproteggo i pacchetti e riavvio Postfix e Dovecot...");
+            boolean l1 = ok("pkg lock -y mysql84-server", 30), l2 = ok("pkg lock -y mysql84-client", 30);
+            job.scrivi("    protezione: mysql84-server " + (l1 ? "ok" : "FALLITA")
+                    + ", mysql84-client " + (l2 ? "ok" : "FALLITA"));
+            if (postfixEra) { ok("service postfix start", 120); job.scrivi("    postfix: " + (ok("service postfix status", 20) ? "attivo" : "NON attivo")); }
+            if (dovecotEra) { ok("service dovecot start", 120); job.scrivi("    dovecot: " + (ok("service dovecot status", 20) ? "attivo" : "NON attivo")); }
+
+            job.avanza(12, TOT);
+            job.scrivi("");
+            job.scrivi("[12/" + TOT + "] Prova funzionale: leggono davvero le caselle?");
+            // "Il servizio e' attivo" non basta: dopo aver sostituito la libreria client il
+            // punto e' se Postfix e Dovecot RIESCONO ANCORA a interrogare il database.
+            boolean provaOk = true;
+            if (casellaProva.isEmpty()) {
+                job.scrivi("    nessuna casella attiva: prova funzionale non eseguibile");
+            } else {
+                String mapFile = "/usr/local/etc/postfix/mysql-virtual-mailboxes.cf";
+                if (ok("test -f " + mapFile, 15)) {
+                    String q = sh("postmap -q '" + casellaProva.replace("'", "") + "' mysql:" + mapFile + " 2>&1", 60);
+                    boolean pOk = !q.trim().isEmpty() && !q.toLowerCase().contains("error");
+                    job.scrivi("    postfix risolve " + casellaProva + ": " + (pOk ? "SI (" + q.trim() + ")" : "NO -> " + q.trim()));
+                    if (!pOk) provaOk = false;
+                } else job.scrivi("    " + mapFile + " non trovato: prova su Postfix saltata");
+
+                String du = sh("doveadm user '" + casellaProva.replace("'", "") + "' 2>&1 | head -5", 60);
+                boolean dOk = du.toLowerCase().contains("uid") || du.toLowerCase().contains("home");
+                job.scrivi("    dovecot risolve " + casellaProva + ": " + (dOk ? "SI" : "NO -> " + du.trim()));
+                if (!dOk) provaOk = false;
+            }
+
+            job.scrivi("");
+            job.scrivi("=== Stato dei servizi ===");
+            boolean caduto = false;
+            for (Map.Entry<String, Boolean> e : statoServizi().entrySet()) {
+                job.scrivi("    " + e.getKey() + ": " + (e.getValue() ? "attivo" : "NON attivo"));
+                if (!e.getValue()) caduto = true;
+            }
+
+            arrivatoInFondo = true;
+            if (!inventarioOk || !provaOk || caduto || persi || !l1 || !l2) {
+                job.status = "error";
+                job.errorMessage = "Migrazione completata ma la verifica finale ha rilevato problemi: leggi il log. "
+                        + "La copia per tornare indietro e' in " + backupDir + ".";
+            } else {
+                job.status = "completed";
+                job.scrivi("");
+                job.scrivi("=== MySQL " + nuovaVer + " in servizio, Postfix e Dovecot leggono le caselle ===");
+                job.scrivi("La copia della 8.0 resta in " + backupDir + ": tienila finche' non sei sicuro.");
+            }
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = e.getMessage();
+            job.scrivi("");
+            job.scrivi("ERRORE: " + e.getMessage());
+        } finally {
+            if (!arrivatoInFondo) {
+                if (mysqlFermo && !pacchettiSostituiti) {
+                    job.scrivi("");
+                    job.scrivi("Ripristino: i pacchetti non sono stati toccati, riaccendo la 8.0 e i servizi.");
+                    ok("service mysql-server start", 120);
+                    if (postfixEra) ok("service postfix start", 120);
+                    if (dovecotEra) ok("service dovecot start", 120);
+                } else if (pacchettiSostituiti) {
+                    job.scrivi("");
+                    job.scrivi("La 8.0 e' gia' stata disinstallata: non posso riaccenderla da qui.");
+                    if (!backupDir.isEmpty()) job.scrivi("La copia integra e' in " + backupDir + ".");
+                }
+            }
+            job.fine = System.currentTimeMillis();
+        }
     }
 
     // ===================== piano di manutenzione guidato =====================
@@ -1493,6 +1835,30 @@ public final class UpdateManager {
                             : "Il pannello lo sblocca, lo aggiorna, riavvia i servizi che lo usano verificando "
                               + "che siano ripartiti davvero, e lo riprotegge.",
                     attendi ? null : new JSONObject().put("tipo", "package_update").put("package", nome)));
+        }
+
+        // --- Migrazione MySQL, se serve: sta QUI perche' e' un prerequisito di alcuni passi
+        //     successivi (Postfix pretende la libreria della 8.4) e perche' viene dopo gli
+        //     aggiornamenti di sicurezza indipendenti, che sono piu' urgenti e meno invasivi.
+        //     Un piano che dice "prima fai X" senza contenere X non guida: manda a cercare.
+        String srvMysql = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-server$' | head -1", 20);
+        if (!srvMysql.isEmpty()) {
+            boolean gia84 = srvMysql.startsWith("mysql84");
+            String disp84 = gia84 ? "" : sh("pkg rquery %v mysql84-server 2>/dev/null", 30);
+            if (gia84) {
+                passi.put(passo(++n, "Migrare MySQL alla 8.4", "fatto",
+                        srvMysql + ": la migrazione e' gia' avvenuta.",
+                        "Il port mysql80 verra' rimosso da FreeBSD dopo il 31/12/2026.", null));
+            } else if (!disp84.isEmpty()) {
+                passi.put(passo(++n, "Migrare MySQL alla 8.4", "manuale",
+                        srvMysql + " -> mysql84-server " + disp84
+                        + ". Il port attuale sara' RIMOSSO da FreeBSD dopo il 31/12/2026.",
+                        "Non e' un aggiornamento ma una sostituzione di pacchetti in conflitto, con copia "
+                        + "fredda a database spento. Serve anche come prerequisito: i pacchetti che nel "
+                        + "repository pretendono la libreria della 8.4 restano bloccati finche' non e' fatta. "
+                        + "Usa la scheda \"Migrazione MySQL 8.0 -> 8.4\" qui sotto: per ora esegue solo la "
+                        + "verifica dei prerequisiti.", null));
+            }
         }
 
         // --- Passi per i pacchetti protetti che hanno un aggiornamento ma nessuna CVE ---
