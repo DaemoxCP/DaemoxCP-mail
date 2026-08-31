@@ -6304,6 +6304,182 @@ public final class UpdateManager {
      * l'inventario preso dalla preparazione — versione, pacchetti, servizi — perche' un
      * confronto ha bisogno di due termini, e il primo va preso quando le cose funzionavano.
      */
+    // ===================== proseguimento guidato del salto di release =====================
+
+    /** Dove il pannello ricorda a che punto e' del salto, per ritrovarlo dopo un riavvio. */
+    private static final String STATO_SALTO = "/var/db/mailpanel/sistema/salto.json";
+
+    /**
+     * Cosa dice di fare freebsd-update, letto da chi lo esegue invece che dall'utente.
+     *
+     * freebsd-update non ha un codice di uscita che distingua "finito" da "riavvia e richiamami":
+     * lo scrive in inglese, in fondo all'output, e finora quella riga la leggeva Pietro. Le tre
+     * frasi qui sotto sono quelle che stampa davvero, viste sul server il 31/08/2026:
+     *   - "Kernel updates have been installed.  Please reboot and run ... again"
+     *   - "No updates are available to install."
+     *   - "Installing updates... done."
+     * Nel dubbio si torna "ancora", cioe' si riesegue: rieseguire quando non serve costa un
+     * comando e non fa danni, fermarsi troppo presto lascia il sistema a meta'.
+     */
+    static String cosaChiedeFreebsdUpdate(String uscita) {
+        String u = uscita == null ? "" : uscita.toLowerCase();
+        if (u.contains("please reboot")) return "riavvia";
+        if (u.contains("no updates are available to install")
+                || u.contains("no updates needed")) return "finito";
+        if (u.contains("run '/usr/sbin/freebsd-update install'")
+                || u.contains("run 'freebsd-update")) return "ancora";
+        return "ancora";
+    }
+
+    private static JSONObject leggiStatoSalto() {
+        try {
+            if (!ok("test -f " + STATO_SALTO, 10)) return new JSONObject();
+            return new JSONObject(Files.readString(Paths.get(STATO_SALTO)));
+        } catch (Exception e) { return new JSONObject(); }
+    }
+
+    private static void scriviStatoSalto(JSONObject st) {
+        try {
+            ok("mkdir -p /var/db/mailpanel/sistema", 20);
+            Files.writeString(Paths.get(STATO_SALTO), st.toString(2));
+        } catch (Exception ignored) { }
+    }
+
+    /** Lo stato del salto, per la scheda: a che punto siamo e cosa serve adesso. */
+    public static JSONObject statoSalto() {
+        JSONObject st = leggiStatoSalto();
+        JSONObject so = sistemaOperativo();
+        JSONObject r = new JSONObject()
+                .put("success", true)
+                .put("inCorso", st.has("fase"))
+                .put("fase", st.optString("fase", ""))
+                .put("bersaglio", st.optString("bersaglio", ""))
+                .put("passi", st.optJSONArray("passi") == null ? new JSONArray() : st.getJSONArray("passi"))
+                .put("kernelInstallato", so.optString("kernelInstallato"))
+                .put("kernelInEsecuzione", so.optString("uname"))
+                .put("userland", so.optString("userland"))
+                .put("riavvioNecessario", so.optBoolean("riavvioNecessario"));
+        // Se aspettavamo un riavvio e il kernel adesso combacia, il riavvio c'e' stato.
+        if ("attende-riavvio".equals(st.optString("fase")) && !so.optBoolean("riavvioNecessario"))
+            r.put("riavvioAvvenuto", true);
+        return r;
+    }
+
+    public static JSONObject avviaProseguiSalto(String bersaglio) {
+        String id = "salto-" + System.currentTimeMillis();
+        Job j = new Job(id, "salto");
+        JOBS.put(id, j);
+        final String b = bersaglio == null || bersaglio.isEmpty()
+                ? leggiStatoSalto().optString("bersaglio", "") : bersaglio;
+        Thread t = new Thread(() -> runProseguiSalto(j, b), "salto-release");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    /**
+     * Esegue "freebsd-update install" quante volte serve, leggendo cosa chiede di fare.
+     *
+     * Non e' un ciclo cieco: dopo ogni esecuzione guarda cosa freebsd-update ha scritto e si
+     * comporta di conseguenza — se chiede un riavvio, si ferma, lo annota su disco e programma
+     * il riavvio; se dice che non c'e' altro, finisce; altrimenti riesegue. Il tetto di sei giri
+     * e' una rete, non una previsione: se ci arriva vuol dire che sta succedendo qualcosa che
+     * non avevo previsto, e a quel punto e' giusto fermarsi e mostrarlo.
+     */
+    private static void runProseguiSalto(Job job, String bersaglio) {
+        job.status = "running";
+        try {
+            JSONObject st = leggiStatoSalto();
+            JSONArray passi = st.optJSONArray("passi") == null ? new JSONArray() : st.getJSONArray("passi");
+            if (!bersaglio.isEmpty()) st.put("bersaglio", bersaglio);
+
+            job.scrivi("=== Proseguimento del salto di release ===");
+            JSONObject prima = sistemaOperativo();
+            job.scrivi("kernel installato " + prima.optString("kernelInstallato")
+                    + " | in esecuzione " + prima.optString("uname")
+                    + " | userland " + prima.optString("userland"));
+            job.scrivi("");
+
+            if (prima.optBoolean("riavvioNecessario")) {
+                job.scrivi("Il kernel installato non e' quello in esecuzione: serve un riavvio PRIMA");
+                job.scrivi("di proseguire. Usa il pulsante \"Riavvia e prosegui\".");
+                st.put("fase", "attende-riavvio").put("passi", passi);
+                scriviStatoSalto(st);
+                job.status = "error";
+                job.errorMessage = "Serve un riavvio prima di proseguire.";
+                return;
+            }
+
+            for (int giro = 1; giro <= 6; giro++) {
+                job.avanza(giro, 6);
+                job.scrivi("--- freebsd-update install (giro " + giro + ") ---");
+                StringBuilder cat = new StringBuilder();
+                int codice = eseguiConLog(job, "freebsd-update install 2>&1", 3600, cat);
+                String chiede = cosaChiedeFreebsdUpdate(cat.toString());
+                JSONObject dopo = sistemaOperativo();
+                passi.put(new JSONObject().put("giro", giro).put("codice", codice)
+                        .put("chiede", chiede).put("kernel", dopo.optString("kernelInstallato"))
+                        .put("userland", dopo.optString("userland")));
+                job.scrivi("");
+                job.scrivi("    freebsd-update chiede: " + (
+                        "riavvia".equals(chiede) ? "UN RIAVVIO, poi di essere richiamato"
+                      : "finito".equals(chiede)  ? "niente, non c'e' altro da installare"
+                      : "di essere eseguito ancora"));
+                job.scrivi("    adesso: kernel " + dopo.optString("kernelInstallato")
+                        + " | in esecuzione " + dopo.optString("uname")
+                        + " | userland " + dopo.optString("userland"));
+
+                if (codice != 0 && !"finito".equals(chiede)) {
+                    st.put("fase", "errore").put("passi", passi);
+                    scriviStatoSalto(st);
+                    job.status = "error";
+                    job.errorMessage = "freebsd-update install uscito con codice " + codice;
+                    job.scrivi("ERRORE: " + job.errorMessage + " — mi fermo qui, non proseguo alla cieca.");
+                    return;
+                }
+                if ("riavvia".equals(chiede)) {
+                    st.put("fase", "attende-riavvio").put("passi", passi);
+                    scriviStatoSalto(st);
+                    job.scrivi("");
+                    job.scrivi("=== Serve un riavvio ===");
+                    job.scrivi("L'ha chiesto freebsd-update, non l'ho deciso io. Premi \"Riavvia e prosegui\":");
+                    job.scrivi("il pannello torna su da solo e potrai riprendere da qui.");
+                    job.status = "completed";
+                    return;
+                }
+                if ("finito".equals(chiede)) {
+                    st.put("fase", "finito").put("passi", passi);
+                    scriviStatoSalto(st);
+                    job.scrivi("");
+                    job.scrivi("=== Non c'e' altro da installare ===");
+                    if (dopo.optBoolean("riavvioNecessario")) {
+                        job.scrivi("Ma il kernel installato non e' ancora quello in esecuzione:");
+                        job.scrivi("serve un ultimo riavvio per entrare nella versione nuova.");
+                        st.put("fase", "attende-riavvio-finale");
+                        scriviStatoSalto(st);
+                    } else {
+                        job.scrivi("Sei su " + dopo.optString("userland") + ". Premi \"Verifica dopo\"");
+                        job.scrivi("per il confronto con l'inventario preso prima di cominciare.");
+                    }
+                    job.status = "completed";
+                    return;
+                }
+            }
+            st.put("fase", "troppi-giri").put("passi", passi);
+            scriviStatoSalto(st);
+            job.status = "error";
+            job.errorMessage = "sei esecuzioni e freebsd-update chiede ancora di essere richiamato: "
+                    + "mi fermo, perche' a questo punto sta succedendo qualcosa che non avevo previsto.";
+            job.scrivi("ERRORE: " + job.errorMessage);
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = e.getMessage();
+            job.scrivi("ERRORE: " + e.getMessage());
+        } finally {
+            job.fine = System.currentTimeMillis();
+        }
+    }
+
     public static JSONObject verificaDopoAggiornamento() {
         JSONObject r = new JSONObject();
         JSONArray checks = new JSONArray();

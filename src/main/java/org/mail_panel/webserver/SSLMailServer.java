@@ -6112,6 +6112,15 @@ public class SSLMailServer {
                 case "os_upgrade_instructions" -> response = UpdateManager.istruzioniAggiornamentoSistema(
                         req.optString("target", "15.1"));
                 case "os_upgrade_verify" -> response = UpdateManager.verificaDopoAggiornamento();
+                case "salto_stato" -> response = UpdateManager.statoSalto();
+                case "salto_prosegui" -> {
+                    if (!"PROSEGUI".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaProseguiSalto(req.optString("target", ""));
+                    logAudit("RELEASE_JUMP_CONTINUE", ip, response.optString("jobId", ""));
+                }
                 case "os_upgrade_prepare" -> {
                     if (!"PREPARA AGGIORNAMENTO".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");

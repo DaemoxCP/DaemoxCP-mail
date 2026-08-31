@@ -13220,6 +13220,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         <select id="os-target" class="form-select form-select-sm d-inline-block me-1" style="width:auto">
                             <option value="">versione di arrivo...</option>
                         </select>
+                        <button class="btn btn-sm btn-warning me-1" onclick="saltoStato()"><i class="fas fa-forward me-1"></i>Prosegui il salto</button>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="upVerifica()"><i class="fas fa-clipboard-check me-1"></i>Verifica dopo</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="upPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
                     </span>
@@ -13805,6 +13806,59 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             // Segue il lavoro con il polling: su un sistema indietro di mesi il download dura
             // minuti, e una richiesta HTTP tenuta aperta cosi' a lungo la chiude il browser.
             planPoll(r.jobId, document.getElementById('os-body'), pre);
+        }
+
+        // ---------- proseguimento del salto, che sopravvive ai riavvii ----------
+        async function saltoStato() {
+            const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo a che punto siamo...';
+            const r = await updApi('salto_stato');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
+                  + '<tr class="upd-cell"><td style="width:14rem"><strong>Kernel installato</strong></td><td><code>'
+                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Kernel in esecuzione</strong></td><td><code>'
+                  + updEsc(r.kernelInEsecuzione) + '</code>'
+                  + (r.riavvioNecessario ? ' <span class="badge upd-badge-warn ms-2">serve un riavvio</span>'
+                                         : ' <span class="badge upd-badge-ok ms-2">combaciano</span>') + '</td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Userland</strong></td><td><code>' + updEsc(r.userland) + '</code></td></tr>'
+                  + '</tbody></table></div>';
+            if ((r.passi || []).length) {
+                h += '<h6 class="mt-2 mb-1">Quello che &egrave; gi&agrave; stato fatto</h6>'
+                   + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
+                   + '<th>Giro</th><th>Esito</th><th>freebsd-update chiedeva</th><th>Userland dopo</th>'
+                   + '</tr></thead><tbody>';
+                (r.passi || []).forEach(p => {
+                    h += '<tr class="upd-cell"><td>' + updEsc(p.giro) + '</td><td>'
+                       + (p.codice === 0 ? 'ok' : 'codice ' + updEsc(p.codice)) + '</td><td>'
+                       + updEsc(p.chiede) + '</td><td><code>' + updEsc(p.userland) + '</code></td></tr>';
+                });
+                h += '</tbody></table></div>';
+            }
+            if (r.riavvioNecessario) {
+                h += '<div class="alert alert-warning py-2">Il kernel installato non &egrave; quello in esecuzione: '
+                   + '<strong>serve un riavvio prima di proseguire</strong>. Il pannello torna su da solo.</div>'
+                   + '<button class="btn btn-danger" onclick="rebPrev()"><i class="fas fa-rotate-right me-1"></i>Vai al riavvio</button>';
+            } else if (r.fase === 'finito') {
+                h += '<div class="alert alert-success py-2 mb-0">Il salto &egrave; concluso. Premi "Verifica dopo".</div>';
+            } else {
+                h += '<div class="alert alert-info py-2">Il pannello esegue <code>freebsd-update install</code>, '
+                   + '<strong>legge cosa chiede di fare</strong> e si comporta di conseguenza: lo ripete finch&eacute; '
+                   + 'serve, si ferma se chiede un riavvio, e si ferma anche se dice qualcosa che non riconosce.</div>'
+                   + '<button class="btn btn-warning" onclick="saltoVai()"><i class="fas fa-forward me-1"></i>Prosegui</button>';
+            }
+            el.innerHTML = h;
+            pre.style.display = 'none';
+        }
+
+        async function saltoVai() {
+            if (prompt('Conferma: scrivi PROSEGUI.') !== 'PROSEGUI') return;
+            const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
+            const r = await updApi('salto_prosegui', { confirm: 'PROSEGUI', target: upTarget() });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>In corso: non chiudere la pagina.</span>';
+            pre.style.display = 'block';
+            planPoll(r.jobId, el, pre);
         }
 
         // ---------- passaggio di release ----------
