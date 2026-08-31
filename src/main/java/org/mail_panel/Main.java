@@ -711,8 +711,35 @@ public class Main {
                     System.out.println(ANSI_YELLOW + "Some features will be unavailable" + ANSI_RESET);
                 }
 
-                // Start the server
-                SSLMailServer server = new SSLMailServer(port, certContent, keyContent);
+                // La porta gia' occupata quasi sempre vuol dire una cosa sola: il pannello e'
+                // gia' acceso. Da quando puo' riaccendersi da solo dopo l'aggiornamento della
+                // JVM, capita di lanciarlo credendolo spento — e una traccia di stack Java non
+                // e' una risposta a "che e' successo?". Qui si dice chi occupa la porta.
+                SSLMailServer server;
+                try {
+                    server = new SSLMailServer(port, certContent, keyContent);
+                } catch (java.net.BindException be) {
+                    System.out.println();
+                    System.out.println(ANSI_YELLOW + "La porta " + port + " e' gia' occupata: "
+                            + "il pannello e' molto probabilmente GIA' IN ESECUZIONE." + ANSI_RESET);
+                    String chi = "";
+                    try {
+                        chi = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(20),
+                                "sockstat -46l -p " + port + " 2>/dev/null | grep -v '^USER'").outputTrim();
+                    } catch (Exception ignored) { }
+                    if (!chi.isEmpty()) {
+                        System.out.println("Chi la occupa:");
+                        System.out.println(chi);
+                        System.out.println();
+                        System.out.println("Per fermarlo:  kill <PID>    (il PID e' la terza colonna)");
+                    }
+                    System.out.println("Oppure aprilo nel browser: https://" + host + ":" + port);
+                    System.out.println();
+                    System.out.println(ANSI_YELLOW + "Non ho avviato niente: il pannello che gira "
+                            + "non e' stato toccato." + ANSI_RESET);
+                    waitForEnter();
+                    return;
+                }
                 server.start();
 
                 System.out.println(ANSI_GREEN + "Mail Panel Server started on port " + port + ANSI_RESET);

@@ -3068,6 +3068,8 @@ public final class UpdateManager {
     // ===================== aggiornamento della JVM del pannello =====================
 
     private static final String JDK_DIR = "/var/db/mailpanel/jdk";
+    /** Dove finisce cio' che il pannello scrive quando riparte staccato dal terminale. */
+    private static final String LOG_PANNELLO = "/var/db/mailpanel/pannello.log";
 
     /**
      * La riga di comando che riavvia QUESTO pannello, ricostruita dal processo vivo.
@@ -3157,7 +3159,15 @@ public final class UpdateManager {
                 .put("comandoMenu", comandoAvvio(false))
                 .put("jar", jar)
                 .put("comando", comando)
-                .put("riga", "/usr/sbin/daemon -f -- /bin/sh -c \"cd '" + dir + "' && exec " + comando + "\"")
+                // -f manda i tre descrittori a /dev/null, e da solo butta via TUTTO cio' che il
+                // pannello scrive: e' successo il 31/08/2026, pannello riacceso e muto, senza
+                // nessun modo di sapere cosa stesse facendo. -o riporta stdout e stderr in un
+                // file, e per daemon(8) le due opzioni si combinano proprio cosi': prima
+                // /dev/null, poi la redirezione al file. -t da' al processo un nome riconoscibile
+                // in ps, cosi' si trova senza cercare "java" fra tutti i java.
+                .put("log", LOG_PANNELLO)
+                .put("riga", "/usr/sbin/daemon -f -o " + LOG_PANNELLO + " -t mailpanel"
+                        + " -- /bin/sh -c \"cd '" + dir + "' && exec " + comando + "\"")
                 .put("nota", jar.isEmpty()
                         ? "non riesco a stabilire da quale file jar sto girando: senza quello non "
                           + "posso ricostruire il comando di riavvio"
@@ -3417,6 +3427,12 @@ public final class UpdateManager {
           + "\n"
           + "echo '[5/6] Riproteggo il pacchetto e riaccendo il pannello...'\n"
           + "pkg lock -y \"$PKG\" && echo '      riprotetto' || echo '      RIPROTEZIONE FALLITA'\n"
+          + "mkdir -p /var/db/mailpanel\n"
+          + "# Il log si accoda per sempre: oltre i 10 MB lo si mette da parte, cosi' non cresce\n"
+          + "# senza fine e resta comunque una copia di cio' che c'era prima.\n"
+          + "if [ -f '" + LOG_PANNELLO + "' ] && [ $(stat -f %z '" + LOG_PANNELLO + "') -gt 10485760 ]; then\n"
+          + "  mv '" + LOG_PANNELLO + "' '" + LOG_PANNELLO + ".1'\n"
+          + "fi\n"
           + "cd '" + dir + "' || echo '      ATTENZIONE: non riesco a entrare in " + dir + "'\n"
           + rigaAvvio + "\n"
           + "\n"
@@ -3440,6 +3456,7 @@ public final class UpdateManager {
           + "if [ $ESITO_UP -eq 0 ] && [ $SU -eq 0 ]; then\n"
           + "  echo \"=== ESITO: RIUSCITO ($(date)) ===\"\n"
           + "  echo \"La via di ritorno resta in $BK: puoi cancellarla quando sei sicuro.\"\n"
+          + "  echo \"Cio che il pannello scrive va in " + LOG_PANNELLO + "\"\n"
           + "else\n"
           + "  echo \"=== ESITO: DA CONTROLLARE ($(date)) ===\"\n"
           + "  echo \"upgrade=$ESITO_UP  pannello_su=$SU  via_di_ritorno=$VIA\"\n"
