@@ -1256,11 +1256,19 @@ public final class UpdateManager {
         if (!nomeValido(nome)) return null;
         String installato = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-client$' | head -1", 20);
         if (installato.isEmpty()) return null;
-        String deps = sh("pkg rquery %dn " + nome + " 2>/dev/null", 30);
-        Matcher m = Pattern.compile("mysql([0-9]+)-client").matcher(deps);
-        if (!m.find()) return null;
-        String richiesto = "mysql" + m.group(1) + "-client";
-        return richiesto.equals(installato) ? null : richiesto;
+        // Si guarda TUTTA la famiglia, non il solo pacchetto nominato: php84 non dipende da
+        // MySQL, ma php84-mysqli e php84-pdo_mysql si', e vengono aggiornati insieme a lui.
+        // Controllare solo il nome scritto nel passo lascerebbe passare esattamente la stessa
+        // trappola di postfix, con la differenza che qui nessuno la vedrebbe arrivare.
+        for (String membro : membriFamiglia(nome)) {
+            if (!nomeValido(membro)) continue;
+            String deps = sh("pkg rquery %dn " + membro + " 2>/dev/null", 30);
+            Matcher m = Pattern.compile("mysql([0-9]+)-client").matcher(deps);
+            if (!m.find()) continue;
+            String richiesto = "mysql" + m.group(1) + "-client";
+            if (!richiesto.equals(installato)) return richiesto;
+        }
+        return null;
     }
 
     /** Una riga del referto di controlli: esito, cosa si e' controllato, perche' conta. */
@@ -2187,8 +2195,16 @@ public final class UpdateManager {
         if (!disponibile.isEmpty()) {
             String richiesto = conflittoFamigliaMysql(nome);
             if (richiesto != null) {
+                StringBuilder chi = new StringBuilder();
+                for (String membro : famiglia) {
+                    if (!nomeValido(membro)) continue;
+                    if (sh("pkg rquery %dn " + membro + " 2>/dev/null", 30).contains(richiesto)) {
+                        if (chi.length() > 0) chi.append(", ");
+                        chi.append(membro);
+                    }
+                }
                 aggiungiCheck(checks, "mysqlfamiglia", "Versione di MySQL richiesta", "block",
-                        "La versione nel repository di " + nome + " richiede " + richiesto
+                        "Nel repository " + (chi.length() > 0 ? chi.toString() : nome) + " richiede " + richiesto
                         + ", ma su questa macchina c'e' " + mysqlInstallato + ", e i due sono in conflitto. "
                         + "Aggiornarlo adesso o fallirebbe o sostituirebbe la libreria client mentre il server "
                         + "MySQL installato ne dipende ancora: sul server di posta significa Postfix o Dovecot "
