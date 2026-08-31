@@ -4394,6 +4394,25 @@ public final class UpdateManager {
             JSONObject riga = new JSONObject().put("componente", d[0]).put("predefinito", d[1])
                     .put("installato", installato).put("esito", esito).put("perche", d[3]);
             if (!fuori.isEmpty()) riga.put("fuoriPredefinito", fuori);
+
+            // "Port installato accanto al sistema base" descrive, non risponde. La domanda che
+            // uno si fa leggendola e' una sola: lo posso togliere? Dipende da chi lo richiede,
+            // e quello il pannello puo' chiederlo invece di lasciarlo indovinare.
+            // Solo per le righe non coerenti, e solo per i valori che sono davvero nomi di
+            // pacchetto: per Python la colonna contiene prefissi (py311), non pacchetti, e
+            // interrogarli darebbe un vuoto che sembrerebbe "non lo richiede nessuno".
+            if (!"coerente".equals(esito) && !"assente".equals(esito)) {
+                JSONArray chi = new JSONArray();
+                for (String tok : installato.split("\\s+")) {
+                    if (tok.isBlank() || !nomeValido(tok)) continue;
+                    if (!ok("pkg info -e " + tok, 15)) continue;   // e' un prefisso, non un pacchetto
+                    String dip = sh("pkg query %rn " + tok + " 2>/dev/null", 30).trim();
+                    chi.put(new JSONObject().put("pacchetto", tok)
+                            .put("richiestoDa", dip.isEmpty() ? new JSONArray()
+                                    : new JSONArray(java.util.List.of(dip.split("\n")))));
+                }
+                if (chi.length() > 0) riga.put("dipendenti", chi);
+            }
             righe.put(riga);
         }
         return new JSONObject().put("success", true).put("righe", righe)

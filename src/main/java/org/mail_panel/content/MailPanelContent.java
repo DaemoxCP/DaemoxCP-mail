@@ -13588,11 +13588,21 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 const fuori = x.fuoriPredefinito
                     ? '<br><span class="small text-danger">fuori dal predefinito: <code>'
                       + updEsc(x.fuoriPredefinito) + '</code></span>' : '';
+                let dip = '';
+                (x.dipendenti || []).forEach(d => {
+                    const q = d.richiestoDa || [];
+                    dip += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-success') + '">'
+                         + '<code>' + updEsc(d.pacchetto) + '</code> '
+                         + (q.length
+                            ? 'richiesto da: ' + q.map(updEsc).join(', ')
+                            : 'nessun pacchetto lo richiede: si puo&#39; togliere')
+                         + '</span>';
+                });
                 h += '<tr class="upd-cell"><td><strong>' + updEsc(x.componente) + '</strong><br>'
                    + '<span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
                    + '<td><code>' + updEsc(x.predefinito) + '</code></td>'
                    + '<td><code>' + updEsc(x.installato || '-') + '</code></td>'
-                   + '<td><span class="badge ' + cls + '">' + updEsc(x.esito) + '</span>' + fuori + '</td></tr>';
+                   + '<td><span class="badge ' + cls + '">' + updEsc(x.esito) + '</span>' + fuori + dip + '</td></tr>';
             });
             h += '</tbody></table></div>'
                + '<div class="small text-muted"><strong>Fonte:</strong> ' + updEsc(r.fonte) + '<br>'
