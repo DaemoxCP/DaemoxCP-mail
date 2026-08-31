@@ -13488,6 +13488,13 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     const idx = planAzioni.push(p.azione) - 1;
                     h += '<button class="btn btn-sm btn-primary" onclick="planRun(' + idx + ')">'
                        + '<i class="fas fa-play me-1"></i>Esegui questo passo</button>';
+                } else if (p.azioneRifai) {
+                    // Passo gia' fatto ma ripetibile: pulsante secondario, sempre disponibile,
+                    // fuori dalla regola del "solo il primo" perche' non e' un passo da fare.
+                    const idx = planAzioni.push(p.azioneRifai) - 1;
+                    h += '<button class="btn btn-sm btn-outline-secondary" onclick="planRun(' + idx + ')" '
+                       + 'title="Gia&rsquo; fatto, ma si pu&ograve; ripetere senza danno">'
+                       + '<i class="fas fa-rotate me-1"></i>Rifai comunque</button>';
                 }
                 h += '</div>'
                    + '<div class="small mt-1">' + updEsc(p.situazione) + '</div>'

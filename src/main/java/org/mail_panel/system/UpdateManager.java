@@ -1872,12 +1872,13 @@ public final class UpdateManager {
         // --- Passo 1: tutto lo stack protetto ---
         int installati = stato.getInt("installedCount"), protetti = stato.getInt("lockedCount");
         boolean tuttoProtetto = installati > 0 && protetti == installati;
-        passi.put(passo("fase-protezione", "fase", "Proteggere tutti i pacchetti dello stack",
+        passi.put(rifacibile(passo("fase-protezione", "fase", "Proteggere tutti i pacchetti dello stack",
                 tuttoProtetto ? "fatto" : "dafare",
                 protetti + " su " + installati + " pacchetti sono protetti.",
                 "Senza il lock, un aggiornamento puo' sostituire o rimuovere un pezzo del server di posta "
                 + "senza che nessuno lo decida. E' il primo passo perche' rende sicuri tutti quelli dopo.",
-                tuttoProtetto ? null : new JSONObject().put("tipo", "packages_lock_all")));
+                tuttoProtetto ? null : new JSONObject().put("tipo", "packages_lock_all")),
+                new JSONObject().put("tipo", "packages_lock_all")));
 
         // --- Passo 2: aggiornare cio' che non e' protetto ---
         Matcher mUp = Pattern.compile("Number of packages to be upgraded:\\s*([0-9]+)").matcher(dry);
@@ -2054,7 +2055,7 @@ public final class UpdateManager {
         boolean rigenerata = ok("grep -q 'generato dal FreeBSD Mail Panel' "
                 + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
         boolean sieveAttivo = ok("grep -qE '^protocols.*sieve' " + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
-        passi.put(passo("fase-dovecot", "fase", "Rigenerare la configurazione Dovecot",
+        passi.put(rifacibile(passo("fase-dovecot", "fase", "Rigenerare la configurazione Dovecot",
                 rigenerata ? "fatto" : "dafare",
                 rigenerata ? "La configurazione proviene gia' dalla sorgente unica del pannello."
                         + (sieveAttivo ? " ManageSieve attivo." : " ManageSieve non attivo.")
@@ -2063,7 +2064,8 @@ public final class UpdateManager {
                 + "scrivevano sbagliato, e attiva ManageSieve se Pigeonhole e' installato. Prima di mettere "
                 + "in servizio chiede a Dovecot se accetta la configurazione: se rifiuta, rimette quella "
                 + "precedente senza riavviare.",
-                rigenerata ? null : new JSONObject().put("tipo", "dovecot_config_regen")));
+                rigenerata ? null : new JSONObject().put("tipo", "dovecot_config_regen")),
+                new JSONObject().put("tipo", "dovecot_config_regen")));
 
         // Vulnerabilita' senza correzione disponibile: non sono un passo, ma vanno sapute.
         JSONArray senzaRimedio = new JSONArray();
@@ -2104,6 +2106,22 @@ public final class UpdateManager {
         "fase-dovecot",      "D",
         "fase-rspamd-cache", "E"
     );
+
+    /**
+     * Segna un passo come RIFACIBILE: gia' fatto, ma ripetibile senza danno.
+     *
+     * Vale solo per i passi che riscrivono qualcosa in modo idempotente — la configurazione
+     * Dovecot, la protezione dei pacchetti — e serve perche' lo stato ricavato, da solo,
+     * rende impossibile ripetere cio' che risulta gia' fatto. Dopo un miglioramento del
+     * generatore si vuole rigenerare, e non poterlo fare e' una limitazione, non una tutela.
+     *
+     * NON si applica agli aggiornamenti di pacchetto (rifarli non significa niente) ne' alla
+     * migrazione MySQL, che riscrive il data dictionary e non e' ripetibile per definizione.
+     */
+    private static JSONObject rifacibile(JSONObject passo, JSONObject azione) {
+        if ("fatto".equals(passo.optString("stato")) && azione != null) passo.put("azioneRifai", azione);
+        return passo;
+    }
 
     private static JSONObject passo(String chiave, String gruppo, String titolo, String stato,
                                     String situazione, String perche, JSONObject azione) {
