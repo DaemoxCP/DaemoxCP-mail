@@ -2119,11 +2119,30 @@ public final class UpdateManager {
         {"nginx",        "nginx -t"},
         {"postfix",      "postfix check"},
         {"dovecot",      "doveconf -n >/dev/null"},
+        {"rspamd",       "rspamadm configtest"},
         {"mysql-server", "su -m mysql -c '$(which mysqld 2>/dev/null || echo /usr/local/libexec/mysqld) --validate-config'"},
     };
 
     private static String provaConfigDi(String servizio) {
         for (String[] r : PROVA_CONFIG) if (r[0].equals(servizio)) return r[1];
+        return null;
+    }
+
+    /**
+     * Prove da fare DOPO il riavvio, per vedere se il servizio ha ritrovato i propri dati.
+     *
+     * "Il processo e' ripartito" non dice se ha ripreso a fare il suo mestiere. Redis riavviato
+     * con il dump non riletto riparte vuoto: rspamd continua a funzionare, ma senza
+     * addestramento bayesiano, senza greylisting e senza limiti — e non se ne accorge nessuno
+     * finche' lo spam non ricomincia a passare. Era scritto nella mia avvertenza e non lo
+     * controllava niente: un'avvertenza che non verifica e' solo una frase.
+     */
+    private static final String[][] PROVA_DOPO = {
+        {"redis", "redis-cli DBSIZE 2>/dev/null", "chiavi presenti in Redis"},
+    };
+
+    private static String[] provaDopoDi(String servizio) {
+        for (String[] r : PROVA_DOPO) if (r[0].equals(servizio)) return r;
         return null;
     }
 
@@ -2454,6 +2473,20 @@ public final class UpdateManager {
                 job.scrivi("    " + s + ": " + (r1 ? "riavviato" : "RIAVVIO FALLITO")
                         + ", ora " + (attivo ? "attivo" : "NON ATTIVO") + nota);
                 if (!attivo) problemaServizi = true;
+
+                // Ha ritrovato i suoi dati, o e' ripartito vuoto?
+                String[] dopo = provaDopoDi(s);
+                if (dopo != null && attivo) {
+                    String out = sh(dopo[1], 30).trim();
+                    long n = numero(out);
+                    job.scrivi("      " + dopo[2] + ": " + (out.isEmpty() ? "non leggibile" : String.valueOf(n)));
+                    if (n == 0) {
+                        job.scrivi("      ATTENZIONE: e' ripartito senza dati. Se ne conteneva prima, il");
+                        job.scrivi("      contenuto non e' stato riletto: rspamd perderebbe addestramento,");
+                        job.scrivi("      greylisting e limiti, continuando a sembrare sano.");
+                        problemaServizi = true;
+                    }
+                }
             }
 
             job.avanza(5, TOT);
