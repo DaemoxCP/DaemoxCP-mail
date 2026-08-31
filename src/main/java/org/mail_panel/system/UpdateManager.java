@@ -5403,7 +5403,92 @@ public final class UpdateManager {
      * riavvio se tocca il kernel: quello non lo faccio partire da un pulsante senza che sia una
      * decisione presa guardando cosa cambierebbe.
      */
-    public static JSONObject cercaAggiornamentiSistema() {
+    public static JSONObject avviaCercaAggiornamentiSistema() {
+        String id = "osf-" + System.currentTimeMillis();
+        Job j = new Job(id, "os-fetch");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> {
+            j.status = "running";
+            try {
+                j.avanza(1, 1);
+                j.scrivi("=== Ricerca degli aggiornamenti del sistema di base ===");
+                j.scrivi("Scarica le patch della release attuale. NON installa e NON cambia versione.");
+                j.scrivi("");
+                JSONObject so = sistemaOperativo();
+                if (!so.optBoolean("aggiornabileConFreebsdUpdate", false)) {
+                    j.status = "error";
+                    j.errorMessage = so.optString("notaAggiornamenti", "sistema non aggiornabile con freebsd-update");
+                    j.scrivi("ERRORE: " + j.errorMessage);
+                    return;
+                }
+                j.scrivi("Sei a " + so.optString("uname") + ". Se il sistema e' indietro di mesi, il");
+                j.scrivi("download dura parecchi minuti: freebsd-update stampa dei puntini di");
+                j.scrivi("avanzamento senza andare a capo, quindi le righe qui sotto compaiono a");
+                j.scrivi("blocchi. Il battito ogni 30 secondi dice che sta ancora lavorando.");
+                j.scrivi("");
+
+                // Battito: senza, un comando che scarica per minuti senza andare a capo sembra
+                // bloccato. Non e' un abbellimento — e' la differenza fra "sta lavorando" e
+                // "e' morto", che dal registro non si distinguerebbe altrimenti.
+                final long inizio = System.currentTimeMillis();
+                final java.util.concurrent.atomic.AtomicBoolean finito =
+                        new java.util.concurrent.atomic.AtomicBoolean(false);
+                Thread battito = new Thread(() -> {
+                    try {
+                        while (!finito.get()) {
+                            Thread.sleep(30000);
+                            if (finito.get()) break;
+                            j.scrivi("      ... ancora in corso ("
+                                    + ((System.currentTimeMillis() - inizio) / 1000) + "s)");
+                        }
+                    } catch (InterruptedException ignored) { }
+                }, "os-fetch-battito");
+                battito.setDaemon(true);
+                battito.start();
+
+                StringBuilder cat = new StringBuilder();
+                int codice;
+                try {
+                    codice = eseguiConLog(j, "freebsd-update --not-running-from-cron fetch 2>&1", 1800, cat);
+                } finally {
+                    finito.set(true);
+                    battito.interrupt();
+                }
+                String b2 = cat.toString().toLowerCase();
+                boolean nessuno = b2.contains("no updates needed") || b2.contains("has no updates available");
+                j.scrivi("");
+                if (codice != 0 && !nessuno) {
+                    j.status = "error";
+                    j.errorMessage = "freebsd-update fetch uscito con codice " + codice;
+                    j.scrivi("ERRORE: " + j.errorMessage);
+                    return;
+                }
+                j.scrivi(nessuno
+                        ? "Nessun aggiornamento del sistema di base da applicare."
+                        : "Le patch sono state SCARICATE, non installate. Le installa la preparazione "
+                          + "del passaggio di release, oppure \"freebsd-update install\" da SSH.");
+                j.scrivi("Durata: " + ((System.currentTimeMillis() - inizio) / 1000) + " secondi.");
+                j.status = "completed";
+            } catch (Exception e) {
+                j.status = "error"; j.errorMessage = e.getMessage();
+                j.scrivi("ERRORE: " + e.getMessage());
+            } finally { j.fine = System.currentTimeMillis(); }
+        }, "os-fetch");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    /**
+     * Cerca gli aggiornamenti del sistema di base. SCARICA, non installa.
+     *
+     * Gira dentro un lavoro asincrono e non dentro la richiesta HTTP: su un sistema a p0
+     * "freebsd-update fetch" deve scaricare mesi di patch e ci mette minuti, e il 31/08/2026
+     * il browser ha mollato la connessione prima che il server rispondesse — lavoro fatto,
+     * risposta persa, e a video solo un "Broken pipe". Le operazioni che durano si seguono
+     * con il polling, come tutte le altre qui dentro.
+     */
+    private static JSONObject cercaAggiornamentiSistema() {
         try {
             JSONObject so = sistemaOperativo();
             if (!so.optBoolean("aggiornabileConFreebsdUpdate", false))
@@ -5437,6 +5522,143 @@ public final class UpdateManager {
      * cambio di ABI. Qui l'ABI non cambia: i 41 pacchetti protetti non vanno toccati. Fosse
      * un salto maggiore, sarebbe un'altra procedura.
      */
+    /**
+     * Lo script rc.d del pannello: contenuto, e installazione su richiesta.
+     *
+     * Serve perche' oggi, se il server si riavvia per un qualsiasi motivo, il pannello resta
+     * spento e nessuno lo segnala. Con questo torna su da solo, in modalita' --web.
+     *
+     * Struttura presa dall'articolo ufficiale "Practical rc.d scripting in BSD" della
+     * documentazione FreeBSD: le righe PROVIDE/REQUIRE/KEYWORD per rcorder, l'inclusione di
+     * /etc/rc.subr, name, rcvar, load_rc_config e run_rc_command.
+     *
+     * Due scelte che la documentazione stessa suggerisce:
+     *  - il pannello NON e' un demone: sta in primo piano. La documentazione dice che in questi
+     *    casi si definisce un start_cmd proprio, e qui si usa daemon(8) per staccarlo, con -p
+     *    per il pidfile e -o per il registro.
+     *  - procname e' il percorso della java, non /usr/sbin/daemon: rc.subr confronta il pid del
+     *    pidfile con procname, e daemon -p scrive il pid del FIGLIO — che dopo l'exec e' java.
+     *    Sbagliando questo, "service mailpanel status" direbbe sempre che non gira.
+     *
+     * REQUIRE resta LOGIN e basta: il pannello tollera MySQL spento (lo segnala e prosegue),
+     * quindi legarlo a mysql lo renderebbe piu' fragile senza guadagnarci niente.
+     */
+    public static JSONObject scriptRcPannello(boolean esegui) {
+        JSONObject r = new JSONObject();
+        try {
+            String dir = System.getProperty("user.dir", "");
+            String jar = percorsoJar();
+            String binJava = System.getProperty("java.home", "") + "/bin/java";
+            if (jar.isEmpty())
+                return r.put("success", false)
+                        .put("error", "non riesco a stabilire da quale jar sto girando: senza, "
+                                + "lo script non saprebbe cosa avviare");
+            StringBuilder opz = new StringBuilder();
+            for (String o : java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
+                if (o.startsWith("-agentlib") || o.startsWith("-javaagent") || o.startsWith("-Xdebug")) continue;
+                opz.append(' ').append(o);
+            }
+            String percorso = "/usr/local/etc/rc.d/mailpanel";
+            r.put("percorso", percorso).put("dir", dir).put("jar", jar).put("java", binJava);
+
+            String testo =
+                "#!/bin/sh\n"
+              + "#\n"
+              + "# PROVIDE: mailpanel\n"
+              + "# REQUIRE: LOGIN\n"
+              + "# KEYWORD: shutdown\n"
+              + "#\n"
+              + "# Generato dal pannello il giorno dell'installazione. Avvia il pannello in\n"
+              + "# modalita' solo-web (--web): niente menu a schermo, nessun terminale richiesto.\n"
+              + "# Per riavere il menu: service mailpanel stop, poi lancialo a mano senza --web.\n"
+              + "#\n"
+              + "# Abilitazione:  sysrc mailpanel_enable=YES\n"
+              + "\n"
+              + ". /etc/rc.subr\n"
+              + "\n"
+              + "name=mailpanel\n"
+              + "rcvar=mailpanel_enable\n"
+              + "\n"
+              + "load_rc_config $name\n"
+              + "\n"
+              + ": ${mailpanel_enable:=\"NO\"}\n"
+              + ": ${mailpanel_dir:=\"" + dir + "\"}\n"
+              + ": ${mailpanel_java:=\"" + binJava + "\"}\n"
+              + ": ${mailpanel_jar:=\"" + jar + "\"}\n"
+              + ": ${mailpanel_opts:=\"" + opz.toString().trim() + "\"}\n"
+              + ": ${mailpanel_log:=\"" + LOG_PANNELLO + "\"}\n"
+              + "\n"
+              + "pidfile=\"/var/run/${name}.pid\"\n"
+              + "# rc.subr confronta il pid del pidfile con procname: daemon -p scrive il pid del\n"
+              + "# figlio, che dopo l'exec e' java. Mettendo /usr/sbin/daemon, status direbbe\n"
+              + "# sempre che il pannello non gira.\n"
+              + "procname=\"${mailpanel_java}\"\n"
+              + "\n"
+              + "start_cmd=\"${name}_start\"\n"
+              + "stop_postcmd=\"${name}_poststop\"\n"
+              + "\n"
+              + "mailpanel_start()\n"
+              + "{\n"
+              + "\t# kill -0 invece di pgrep -F: e' POSIX, si comporta uguale ovunque e si puo'\n"
+              + "\t# mettere alla prova. Un controllo che non si riesce a provare non protegge.\n"
+              + "\tif [ -f \"${pidfile}\" ] && kill -0 \"$(cat \"${pidfile}\")\" 2>/dev/null; then\n"
+              + "\t\techo \"${name}: gia' in esecuzione (pid $(cat ${pidfile}))\"\n"
+              + "\t\treturn 1\n"
+              + "\tfi\n"
+              + "\tmkdir -p \"$(dirname \"${mailpanel_log}\")\"\n"
+              + "\t# Il registro si accoda: oltre i 10 MB lo si mette da parte.\n"
+              + "\tif [ -f \"${mailpanel_log}\" ] && [ $(stat -f %z \"${mailpanel_log}\") -gt 10485760 ]; then\n"
+              + "\t\tmv \"${mailpanel_log}\" \"${mailpanel_log}.1\"\n"
+              + "\tfi\n"
+              + "\techo \"Avvio ${name} (solo web). Registro: ${mailpanel_log}\"\n"
+              + "\t/usr/sbin/daemon -f -o \"${mailpanel_log}\" -p \"${pidfile}\" -t \"${name}\" \\\n"
+              + "\t\t/bin/sh -c \"cd '${mailpanel_dir}' && exec '${mailpanel_java}' ${mailpanel_opts} -jar '${mailpanel_jar}' --web\"\n"
+              + "}\n"
+              + "\n"
+              + "mailpanel_poststop()\n"
+              + "{\n"
+              + "\trm -f \"${pidfile}\"\n"
+              + "}\n"
+              + "\n"
+              + "run_rc_command \"$1\"\n";
+            r.put("testo", testo);
+
+            boolean esiste = ok("test -f " + percorso, 10);
+            String abilitato = sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim();
+            r.put("esiste", esiste).put("abilitato", abilitato);
+            if (!esegui) return r.put("success", true).put("eseguito", false);
+
+            // Verifica la sintassi PRIMA di metterlo dove il sistema lo eseguira' all'avvio:
+            // uno script rc.d rotto puo' fermare la sequenza di boot.
+            String tmp = "/var/db/mailpanel/mailpanel.rc.prova";
+            ok("mkdir -p /var/db/mailpanel", 20);
+            Files.writeString(Paths.get(tmp), testo);
+            String sint = sh("sh -n " + tmp + " 2>&1", 30).trim();
+            if (!sint.isEmpty()) {
+                ok("rm -f " + tmp, 15);
+                return r.put("success", false)
+                        .put("error", "lo script generato non e' valido, NON lo installo: " + sint);
+            }
+            if (esiste) ok("cp -p " + percorso + " /var/db/mailpanel/mailpanel.rc.precedente", 20);
+            Files.writeString(Paths.get(percorso), testo);
+            ok("chmod 755 " + percorso, 15);
+            ok("rm -f " + tmp, 15);
+            boolean sysrc = ok("sysrc mailpanel_enable=YES", 30);
+
+            // La prova che conta: rc.subr lo carica senza errori?
+            String prova = sh("service mailpanel rcvar 2>&1", 30).trim();
+            boolean caricato = prova.contains("mailpanel_enable");
+            return r.put("success", true).put("eseguito", true)
+                    .put("abilitatoOra", sysrc ? sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim() : "?")
+                    .put("caricato", caricato).put("rcvar", prova)
+                    .put("nota", "Installato e abilitato. NON l'ho avviato: il pannello sta gia' girando, "
+                        + "e due istanze si contenderebbero la porta. Avra' effetto al prossimo riavvio, "
+                        + "oppure fermi questo e fai \"service mailpanel start\".");
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
     public static JSONObject aggiornamentoSistemaPreflight(String bersaglio) {
         JSONObject r = new JSONObject();
         JSONArray checks = new JSONArray();

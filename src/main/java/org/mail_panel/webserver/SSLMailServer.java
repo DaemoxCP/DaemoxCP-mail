@@ -6084,6 +6084,15 @@ public class SSLMailServer {
                 case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
                 case "system_report" -> response = UpdateManager.rapportoSistema();
                 case "os_status" -> response = UpdateManager.sistemaOperativo();
+                case "rc_preview" -> response = UpdateManager.scriptRcPannello(false);
+                case "rc_install" -> {
+                    if (!"INSTALLA RC".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.scriptRcPannello(true);
+                    logAudit("RC_SCRIPT_INSTALL", ip, response.optString("percorso", ""));
+                }
                 case "os_upgrade_preflight" -> response = UpdateManager.aggiornamentoSistemaPreflight(
                         req.optString("target", "15.1"));
                 case "os_upgrade_instructions" -> response = UpdateManager.istruzioniAggiornamentoSistema(
@@ -6102,8 +6111,8 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");
                         break;
                     }
-                    response = UpdateManager.cercaAggiornamentiSistema();
-                    logAudit("OS_UPDATE_FETCH", ip, response.optString("nessunAggiornamento", ""));
+                    response = UpdateManager.avviaCercaAggiornamentiSistema();
+                    logAudit("OS_UPDATE_FETCH", ip, response.optString("jobId", ""));
                 }
                 case "python_preflight" -> response = UpdateManager.pythonPreflight();
                 case "python_leftovers" -> response = UpdateManager.restiPython(false);
@@ -6230,6 +6239,21 @@ public class SSLMailServer {
                 default -> response = new JSONObject().put("success", false).put("error", "Azione sconosciuta");
             }
             sendJsonResponse(exchange, response);
+        } catch (java.io.IOException e) {
+            // "Broken pipe" non e' un guasto del server: e' il browser che ha chiuso prima che
+            // la risposta fosse scritta, tipicamente perche' l'operazione durava. Il lavoro e'
+            // stato fatto, si e' persa la risposta. Registrarlo come SEVERE con tutta la traccia
+            // fa credere che sia crollato qualcosa, ed e' esattamente cio' che e' successo il
+            // 31/08/2026: un messaggio allarmante per un cliente che se n'era andato.
+            String m = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+            if (m.contains("broken pipe") || m.contains("insufficient bytes")
+                    || m.contains("connection reset")) {
+                LOGGER.info("/api/updates: il client ha chiuso la connessione prima della risposta "
+                        + "(l'operazione era gia' stata eseguita). " + e.getMessage());
+            } else {
+                LOGGER.log(Level.SEVERE, "Errore di I/O in /api/updates", e);
+                try { sendJsonError(exchange, 500, "Errore interno del server"); } catch (Exception ignored) { }
+            }
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Errore in /api/updates", e);
             sendJsonError(exchange, 500, "Errore interno del server");

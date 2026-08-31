@@ -13200,7 +13200,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fab fa-freebsd me-2"></i><strong>Sistema operativo</strong>
                         <span class="small text-muted ms-2">i pacchetti sono met&agrave; del server: l&rsquo;altra met&agrave; &egrave; questa</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="osStato()"><i class="fas fa-magnifying-glass me-1"></i>Stato del sistema</button>
+                    <span>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcPrev()"><i class="fas fa-power-off me-1"></i>Avvio automatico</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="osStato()"><i class="fas fa-magnifying-glass me-1"></i>Stato del sistema</button>
+                    </span>
                 </div>
                 <div class="card-body">
                     <div id="os-body"><span class="text-muted">Premi "Stato del sistema": legge e basta.</span></div>
@@ -13651,6 +13654,46 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         // ---------- coerenza con i predefiniti ----------
+        // ---------- avvio automatico del pannello (rc.d) ----------
+        async function rcPrev() {
+            const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Preparo lo script...';
+            const r = await updApi('rc_preview');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            pre.style.display = 'block';
+            pre.textContent = r.testo;
+            let h = '<p class="small text-muted mb-2">Oggi, se il server si riavvia per un qualsiasi motivo, '
+                  + 'il pannello resta spento e nessuno te lo dice. Con questo torna su da solo, in modalit&agrave; '
+                  + 'solo-web. Sotto vedi <strong>lo script esatto</strong> che verrebbe scritto in <code>'
+                  + updEsc(r.percorso) + '</code>.</p>'
+                  + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
+                  + '<tr class="upd-cell"><td style="width:12rem"><strong>Cartella di lavoro</strong></td><td><code>' + updEsc(r.dir) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Java</strong></td><td><code>' + updEsc(r.java) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Jar</strong></td><td><code>' + updEsc(r.jar) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Gi&agrave; installato</strong></td><td>' + (r.esiste ? 's&igrave;' : 'no')
+                  + (r.abilitato ? '  &mdash; mailpanel_enable=' + updEsc(r.abilitato) : '') + '</td></tr>'
+                  + '</tbody></table></div>'
+                  + '<div class="alert alert-info py-2">Viene installato e abilitato, ma <strong>non avviato</strong>: '
+                  + 'il pannello sta gi&agrave; girando e due istanze si contenderebbero la porta. '
+                  + 'Ha effetto al prossimo riavvio.</div>'
+                  + '<button class="btn btn-warning" onclick="rcGo()"><i class="fas fa-power-off me-1"></i>Installa e abilita</button>';
+            el.innerHTML = h;
+        }
+
+        async function rcGo() {
+            if (prompt('Conferma: scrivi INSTALLA RC per procedere.') !== 'INSTALLA RC') return;
+            const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
+            const r = await updApi('rc_install', { confirm: 'INSTALLA RC' });
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
+            pre.style.display = 'block';
+            pre.textContent = 'service mailpanel rcvar:\\n' + (r.rcvar || '');
+            el.innerHTML = '<div class="alert alert-' + (r.caricato ? 'success' : 'warning') + ' py-2 mb-0">'
+                + (r.caricato
+                   ? '<strong>Installato.</strong> rc.subr lo carica senza errori e mailpanel_enable=' + updEsc(r.abilitatoOra) + '. '
+                   : '<strong>Installato, ma rc.subr non lo riconosce come previsto:</strong> guarda sotto. ')
+                + updEsc(r.nota) + '</div>';
+        }
+
         // ---------- sistema operativo ----------
         async function osStato() {
             const el = document.getElementById('os-body');
@@ -13687,10 +13730,13 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             if (prompt('Conferma: scrivi CERCA AGGIORNAMENTI. Scarica le patch, non le installa.') !== 'CERCA AGGIORNAMENTI') return;
             const pre = document.getElementById('os-log');
             pre.style.display = 'block';
-            pre.textContent = 'freebsd-update fetch in corso: pu&ograve; metterci qualche minuto...';
-            const r = await updApi('os_fetch');
+            pre.textContent = 'freebsd-update fetch in corso: pu\\u00f2 metterci qualche minuto.\\n'
+                + 'Scarica le patch della release attuale, non installa niente e non cambia versione.';
+            const r = await updApi('os_fetch', { confirm: 'CERCA AGGIORNAMENTI' });
             if (!r.success) { pre.textContent = r.error || 'errore'; return; }
-            pre.textContent = r.uscita + '\\n\\n' + r.nota;
+            // Segue il lavoro con il polling: su un sistema indietro di mesi il download dura
+            // minuti, e una richiesta HTTP tenuta aperta cosi' a lungo la chiude il browser.
+            planPoll(r.jobId, document.getElementById('os-body'), pre);
         }
 
         // ---------- passaggio di release ----------
