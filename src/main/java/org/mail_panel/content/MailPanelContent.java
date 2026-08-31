@@ -13215,7 +13215,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-arrow-up-right-dots me-2"></i><strong>Passaggio a una nuova release di FreeBSD</strong>
-                        <span class="small text-muted ms-2">il pannello prepara e verifica; il salto lo fai tu da SSH</span></span>
+                        <span class="small text-muted ms-2">un solo comando resta da fare a mano</span></span>
                     <span>
                         <select id="os-target" class="form-select form-select-sm d-inline-block me-1" style="width:auto">
                             <option value="">versione di arrivo...</option>
@@ -13227,14 +13227,18 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">
-                        <strong>Perch&eacute; non &egrave; tutto automatico.</strong> <code>freebsd-update upgrade</code> chiede
-                        conferma e pu&ograve; aprire un editor per fondere i file di <code>/etc</code> &mdash; qui dentro
-                        ci sono <code>master.passwd</code>, <code>rc.conf</code> e i file di Postfix: una fusione decisa
-                        da un automatismo &egrave; il modo di rompere qualcosa senza che nessuno se ne accorga. In pi&ugrave;
-                        servono <strong>due riavvii</strong>, e a ognuno questa pagina non esiste.
-                        Quindi: il pannello fa i controlli, crea la <strong>via di ritorno</strong> (un ambiente di avvio ZFS),
-                        applica le patch arretrate e <strong>verifica dopo</strong>. Il salto lo fai tu, con i comandi
-                        esatti generati sui valori di questo server.
+                        <strong>Cosa fa il pannello.</strong> I controlli preliminari, la copia di <code>/etc</code>,
+                        la <strong>via di ritorno</strong> (un ambiente di avvio ZFS da cui si torna con un comando),
+                        le patch arretrate, poi <code>freebsd-update install</code> ripetuto quante volte serve
+                        &mdash; <strong>leggendo cosa freebsd-update chiede di fare</strong> e comportandosi di
+                        conseguenza &mdash; i riavvii, e la verifica finale confrontata con l&rsquo;inventario preso
+                        prima. Ricorda a che punto &egrave;, quindi sopravvive ai riavvii.<br>
+                        <strong>Cosa resta a te, e solo quello:</strong> il primo comando,
+                        <code>freebsd-update -r &lt;versione&gt; upgrade</code>. Non per la conferma che chiede
+                        &mdash; quella sarebbe banale &mdash; ma perch&eacute; pu&ograve; aprire un editor per fondere
+                        i file di <code>/etc</code>: qui dentro ci sono <code>master.passwd</code>, <code>rc.conf</code>
+                        e i file di Postfix, e una fusione decisa da un automatismo &egrave; il modo di rompere qualcosa
+                        senza che nessuno se ne accorga. Succede di rado, ma quando succede serve una persona.
                     </p>
                     <div id="up-body"><span class="text-muted">Scrivi la versione di arrivo e premi "Verifica prerequisiti": legge e basta.</span></div>
                     <pre id="up-log" class="upd-log mt-2" style="display:none"></pre>
@@ -13281,6 +13285,26 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
+            <div class="card mb-4 border-warning">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-hand me-2"></i><strong>Prima di togliere un pacchetto</strong>
+                        <span class="small text-muted ms-2">pkg non sa che il pannello lo invoca</span></span>
+                    <div class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-warning" onclick="rimCandidati()"><i class="fas fa-list me-1"></i>Elenca i candidati</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        <code>pkg</code> conosce le dipendenze fra pacchetti, non le righe di comando che il
+                        pannello esegue. E&rsquo; cosi&rsquo; che il port <code>openssl</code> risultava
+                        &ldquo;non richiesto da nessuno&rdquo; mentre il pannello ne invocava il comando a ogni
+                        lettura di un certificato. Qui il controllo non consulta un elenco scritto a mano, che
+                        invecchierebbe: apre il <strong>jar che sta girando</strong>, ne estrae le classi e cerca
+                        i nomi degli eseguibili che il pacchetto installa.
+                    </p>
+                    <div id="rim-body"><span class="text-muted">Premi "Elenca i candidati": legge e basta.</span></div>
+                </div>
+            </div>
             <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-link-slash me-2"></i><strong>Pacchetti senza la libreria che richiedono</strong>
@@ -13808,6 +13832,20 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             planPoll(r.jobId, document.getElementById('os-body'), pre);
         }
 
+        // ---------- eliminazione di un ambiente di avvio ----------
+        async function beElimina(nome) {
+            if (prompt('Elimini l\\'ambiente di avvio "' + nome + '"?\\n\\n'
+                     + 'È una via di ritorno: una volta eliminato non si torna più a quello stato.\\n'
+                     + 'Scrivi ELIMINA per confermare.') !== 'ELIMINA') return;
+            const el = document.getElementById('up-body');
+            const r = await updApi('be_destroy', { confirm: 'ELIMINA', nome: nome });
+            const box = document.createElement('div');
+            box.className = 'alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mt-2';
+            box.textContent = r.nota || r.error || 'esito sconosciuto';
+            el.appendChild(box);
+            if (r.success) upVerifica();
+        }
+
         // ---------- proseguimento del salto, che sopravvive ai riavvii ----------
         async function saltoStato() {
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
@@ -13962,8 +14000,43 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                + (r.tuttoBene
                   ? '<div class="alert alert-success py-2 mb-0">Tutto quello che c&rsquo;era prima c&rsquo;&egrave; ancora.</div>'
                   : '<div class="alert alert-danger py-2 mb-0">Qualcosa non torna: leggi le righe rosse prima di distruggere l&rsquo;ambiente di avvio precedente.</div>');
+
+            // Gli ambienti di avvio meritano una tabella loro: "bectl list" e' illeggibile
+            // per chi non sa gia' cosa sta guardando.
+            const be = r.ambienti;
+            if (be && be.success) {
+                h += '<h6 class="mt-4 mb-1">Le tue vie di ritorno</h6>'
+                   + '<p class="small text-muted mb-2">' + updEsc(be.cosaSono) + '</p>'
+                   + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                   + '<th>Ambiente</th><th>Che cos&rsquo;&egrave;</th><th>Stato</th>'
+                   + '<th class="text-end">Spazio</th><th>Creato</th></tr></thead><tbody>';
+                (be.ambienti || []).forEach(x => {
+                    const badge = x.inUso
+                        ? '<span class="badge upd-badge-ok">in uso adesso</span>'
+                        : (x.alRiavvio
+                           ? '<span class="badge upd-badge-warn">partir&agrave; al riavvio</span>'
+                           : '<span class="badge upd-badge-info">di riserva</span>');
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.nome) + '</code><br>'
+                       + '<span class="small text-muted">' + updEsc(x.origine) + '</span></td>'
+                       + '<td class="small">' + updEsc(x.spiegazione) + '</td>'
+                       + '<td>' + badge + '<br><span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
+                       + '<td class="text-end">' + updEsc(x.spazio) + '</td>'
+                       + '<td class="small">' + updEsc(x.creato)
+                       + (x.eliminabile
+                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" onclick="beElimina(\\'' 
+                            + updEsc(x.nome) + '\\')"><i class="fas fa-trash me-1"></i>Elimina</button>'
+                          : '')
+                       + '</td></tr>';
+                });
+                h += '</tbody></table></div>'
+                   + '<div class="alert alert-secondary py-2 small mb-0"><strong>Per tornare indietro:</strong> '
+                   + updEsc(be.comeTornare) + '<br><strong>Quando eliminarli:</strong> ' + updEsc(be.quandoEliminare)
+                   + '</div>';
+            }
             el.innerHTML = h;
         }
+        """
+        + """
 
         // ---------- rapporto del sistema ----------
         async function repGen() {
@@ -14018,12 +14091,19 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 let dip = '';
                 (x.dipendenti || []).forEach(d => {
                     const q = d.richiestoDa || [];
-                    dip += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-success') + '">'
+                    // "si puo' togliere" era una conclusione, non una misura: %rn dice solo chi lo
+                    // DICHIARA. Qui si dice esattamente questo, e per il port openssl si offre la
+                    // misura vera, che guarda cosa i processi vivi hanno davvero aperto.
+                    dip += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-muted') + '">'
                          + '<code>' + updEsc(d.pacchetto) + '</code> '
                          + (q.length
-                            ? 'richiesto da: ' + q.map(updEsc).join(', ')
-                            : 'nessun pacchetto lo richiede: si puo&#39; togliere')
+                            ? 'dichiarato come dipendenza da: ' + q.map(updEsc).join(', ')
+                            : 'nessun pacchetto lo dichiara come dipendenza')
                          + '</span>';
+                    if (d.pacchetto === 'openssl') {
+                        dip += '<br><button class="btn btn-sm btn-outline-primary mt-1" onclick="sslUso()">'
+                             + '<i class="fas fa-magnifying-glass me-1"></i>Chi lo usa davvero?</button>';
+                    }
                 });
                 h += '<tr class="upd-cell"><td><strong>' + updEsc(x.componente) + '</strong><br>'
                    + '<span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
@@ -14032,9 +14112,166 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + '<td><span class="badge ' + cls + '">' + updEsc(x.esito) + '</span>' + fuori + dip + '</td></tr>';
             });
             h += '</tbody></table></div>'
+               + '<div id="ssl-uso" class="mb-2"></div>'
                + '<div class="small text-muted"><strong>Fonte:</strong> ' + updEsc(r.fonte) + '<br>'
                + '<i class="fas fa-triangle-exclamation me-1"></i>' + updEsc(r.avvertenza) + '</div>';
             el.innerHTML = h;
+        }
+
+        // ---------- chi usa davvero il port openssl ----------
+        async function sslUso() {
+            const el = document.getElementById('ssl-uso');
+            el.innerHTML = '<div class="alert alert-secondary py-2 mb-0"><i class="fas fa-spinner fa-spin me-1"></i>'
+                         + 'Guardo cosa i processi vivi hanno aperto adesso. Ci vuole qualche secondo.</div>';
+            const r = await updApi('ssl_uso');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            const cls = r.verdetto === 'NESSUNO LO USA' ? 'success'
+                      : (r.verdetto === 'IN USO ADESSO' || r.verdetto === 'RICHIESTO') ? 'danger' : 'warning';
+            // "IL COMANDO E' SUO" e "NON DETERMINABILE" restano gialli: non sono un divieto,
+            // ma nemmeno un via libera.
+            let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
+                  + '<strong>' + updEsc(r.verdetto) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
+                  + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.nota) + '</div>'
+                  + (r.percheEQui
+                     ? '<div class="alert alert-secondary py-2 small mb-2"><strong>Perch&eacute; sta qui:</strong> '
+                       + updEsc(r.percheEQui) + '</div>' : '');
+            // Le librerie sono meta' della domanda. L'altra meta' e' il comando: un "openssl x509"
+            // dura millisecondi e procstat non lo coglie mai, ma gira lo stesso.
+            const bn = r.binari || [];
+            if (bn.length || r.comandoInPath) {
+                h += '<h6 class="mt-2 mb-1">Il comando <code>openssl</code></h6>'
+                   + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
+                   + '<th>Eseguibile</th><th>Versione</th><th>Pacchetto</th><th>Esito</th></tr></thead><tbody>';
+                bn.forEach(b => {
+                    const vince = b.percorso === r.comandoInPath;
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(b.percorso) + '</code></td>'
+                       + '<td class="small">' + updEsc(b.versione) + '</td>'
+                       + '<td class="small">' + updEsc(b.pacchetto || 'sistema base') + '</td>'
+                       + '<td>' + (vince
+                          ? '<span class="badge ' + (b.delPort ? 'upd-badge-warn' : 'upd-badge-ok') + '">'
+                            + 'vince nel PATH</span>'
+                          : '<span class="badge upd-badge-info">presente, non scelto</span>') + '</td></tr>';
+                });
+                h += '</tbody></table></div>'
+                   + '<div class="small text-muted mb-3">' + updEsc(r.chiLoInvoca) + '</div>';
+            }
+            if (r.installato) {
+                h += '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
+                   + '<tr><td class="small">Versione del port installata</td><td><code>'
+                   + updEsc(r.versione) + '</code></td></tr>'
+                   + '<tr><td class="small">Librerie fornite dal port</td><td><code>'
+                   + updEsc((r.sonamePort || []).join(' ') || '-') + '</code></td></tr>'
+                   + '<tr><td class="small">Librerie della stessa famiglia nel sistema base</td><td><code>'
+                   + updEsc((r.sonameBase || []).join(' ') || '-') + '</code></td></tr>'
+                   + '<tr><td class="small">Nomi identici fra le due copie</td><td>'
+                   + (r.ambiguo
+                      ? '<span class="badge upd-badge-warn">s&igrave;: '
+                        + updEsc((r.sonameInComune || []).join(' ')) + '</span>'
+                        + '<br><span class="small text-muted">Per questo il registro di pkg non basta: '
+                        + 'un pacchetto che chiede questo nome pu&ograve; ricevere l&#39;una o l&#39;altra. '
+                        + 'Decide la riga qui sotto.</span>'
+                      : '<span class="badge upd-badge-ok">no</span>') + '</td></tr>'
+                   + '<tr><td class="small">Processi vivi esaminati con TLS aperto</td><td>'
+                   + '<strong>' + updEsc(r.processiConTls) + '</strong>'
+                   + '<br><span class="small text-muted">' + updEsc(r.comeHoMisurato) + '</span></td></tr>'
+                   + '</tbody></table></div>';
+                const pr = r.processi || [];
+                if (pr.length) {
+                    h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
+                       + '<th>PID</th><th>Processo</th><th>Quale OpenSSL ha aperto</th></tr></thead><tbody>';
+                    pr.forEach(x => {
+                        h += '<tr class="upd-cell"><td><code>' + updEsc(x.pid) + '</code></td>'
+                           + '<td>' + updEsc(x.comando) + '</td><td class="small">'
+                           + (x.librerie || []).map(l => '<code>' + updEsc(l) + '</code>').join('<br>')
+                           + (x.usaIlPort
+                              ? '<br><span class="badge upd-badge-stop">usa il port</span>'
+                              : '<br><span class="badge upd-badge-ok">sistema base</span>')
+                           + '</td></tr>';
+                    });
+                    h += '</tbody></table></div>';
+                }
+            }
+            if (r.pannello && r.pannello.success) {
+                h += '<h6 class="mt-2 mb-1">Lo usa il pannello nei propri script?</h6>'
+                   + rimRiquadro(r.pannello);
+            }
+            h += '<div class="alert alert-secondary py-2 small mb-0 mt-2"><strong>Se si toglie:</strong> '
+               + updEsc(r.comeSiToglie) + '</div>';
+            el.innerHTML = h;
+        }
+
+        // ---------- prima di togliere un pacchetto ----------
+        async function rimCandidati() {
+            const el = document.getElementById('rim-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Cerco i pacchetti che nessuno dichiara...';
+            const r = await updApi('removal_candidates');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            const c = r.candidati || [];
+            let h = '<p class="small text-muted">' + updEsc(r.spiegazione) + '</p>';
+            if (!c.length) {
+                h += '<div class="alert alert-info py-2 mb-0">Nessun pacchetto e&#39; candidato: '
+                   + 'tutti quelli installati esplicitamente sono dichiarati da qualcun altro.</div>';
+                el.innerHTML = h; return;
+            }
+            h += '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr>'
+               + '<th>Pacchetto</th><th>Versione</th><th>Protetto</th><th>Il pannello lo usa?</th>'
+               + '</tr></thead><tbody>';
+            c.forEach((x, i) => {
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.nome) + '</code></td>'
+                   + '<td class="small">' + updEsc(x.versione) + '</td>'
+                   + '<td>' + (x.protetto
+                      ? '<span class="badge upd-badge-ok">s&igrave;</span>'
+                      : '<span class="badge upd-badge-warn">no</span>') + '</td>'
+                   + '<td><button class="btn btn-sm btn-outline-primary" onclick="rimUsa(\\'' + updEsc(x.nome)
+                   + '\\', ' + i + ')"><i class="fas fa-magnifying-glass me-1"></i>Controlla</button>'
+                   + '<div id="rim-esito-' + i + '" class="mt-1"></div></td></tr>';
+            });
+            h += '</tbody></table></div>';
+            el.innerHTML = h;
+        }
+
+        // Il riquadro che spiega l'esito, riusato sia qui sia dentro la scheda di openssl.
+        function rimRiquadro(r) {
+            const cls = r.verdetto === 'IL PANNELLO NON LO USA' ? 'success'
+                      : r.verdetto === "LO USA, E NON C'E' RICAMBIO" ? 'danger'
+                      : r.verdetto === 'LO USA' ? 'warning'
+                      : r.verdetto === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info' : 'secondary';
+            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(r.verdetto)
+                  + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
+            const lb = r.fornisceLibrerie || [];
+            if (lb.length) {
+                h += '<div class="small text-muted mb-1">Librerie condivise fornite: '
+                   + lb.map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
+            }
+            const u = r.comandiUsati || [];
+            if (u.length) {
+                h += '<div class="table-responsive"><table class="table table-sm mb-1"><thead><tr>'
+                   + '<th>Comando</th><th>Nominato</th><th>Se togli il pacchetto</th></tr></thead><tbody>';
+                u.forEach(x => {
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.percorso) + '</code></td>'
+                       + '<td class="small">' + updEsc(x.occorrenze) + ' volte come parola intera'
+                       + (x.conArgomenti ? '<br>' + updEsc(x.conArgomenti) + ' seguito da argomenti' : '')
+                       + '</td>'
+                       + '<td class="small">' + (x.resterebbe
+                          ? '<span class="badge upd-badge-warn">resta</span> ma diventa <code>'
+                            + updEsc(x.altraCopia) + '</code>'
+                          : '<span class="badge upd-badge-stop">sparisce</span> nessuna altra copia nel PATH')
+                       + '</td></tr>';
+                });
+                h += '</tbody></table></div>';
+            }
+            h += '<div class="small text-muted">Letti ' + updEsc(r.byteLetti) + ' byte di classi da <code>'
+               + updEsc(r.jar || '?') + '</code>, ' + updEsc(r.eseguibiliTrovati)
+               + ' eseguibili nel pacchetto (elencati con <code>' + updEsc(r.comeElencato) + '</code>).</div>';
+            return h;
+        }
+
+        async function rimUsa(nome, i) {
+            const el = document.getElementById('rim-esito-' + i);
+            el.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            const r = await updApi('panel_uses', { nome: nome });
+            el.innerHTML = r.success ? rimRiquadro(r)
+                                     : '<span class="text-danger small">' + updEsc(r.error) + '</span>';
         }
 
         // ---------- librerie mancanti ----------

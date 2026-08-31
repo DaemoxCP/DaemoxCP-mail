@@ -6113,6 +6113,20 @@ public class SSLMailServer {
                         req.optString("target", "15.1"));
                 case "os_upgrade_verify" -> response = UpdateManager.verificaDopoAggiornamento();
                 case "salto_stato" -> response = UpdateManager.statoSalto();
+                case "be_list" -> response = UpdateManager.ambientiDiAvvio();
+                case "ssl_uso" -> response = UpdateManager.usoOpenssl();
+                case "removal_candidates" -> response = UpdateManager.candidatiRimozione();
+                case "panel_uses" -> response = UpdateManager.usoDalPannello(req.optString("nome", ""));
+                case "be_destroy" -> {
+                    if (!"ELIMINA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.eliminaAmbienteDiAvvio(req.optString("nome", ""));
+                    logAudit("BE_DESTROY", ip, req.optString("nome", "")
+                            + (response.optBoolean("success") ? " - eliminato"
+                               : " - NON eliminato: " + response.optString("error", "?")));
+                }
                 case "salto_prosegui" -> {
                     if (!"PROSEGUI".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");

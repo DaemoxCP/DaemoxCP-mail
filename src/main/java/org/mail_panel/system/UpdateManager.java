@@ -5220,6 +5220,427 @@ public final class UpdateManager {
     }
 
     /**
+     * "openssl: nessun pacchetto lo richiede, si puo' togliere" era una conclusione troppo
+     * sicura per come veniva calcolata. `pkg query %rn` dice chi lo DICHIARA nel registro di
+     * pkg; non dice chi lo sta davvero aprendo.
+     *
+     * La differenza conta perche' sul disco ci sono DUE OpenSSL: quella del sistema base in
+     * /usr/lib, che non e' un pacchetto, non compare in pkg e non si tocca, e il port in
+     * /usr/local/lib. Se le due copie portano lo stesso soname, nessuna lettura del registro
+     * puo' dire quale delle due venga aperta, perche' i due nomi sono identici.
+     *
+     * Si misurano quindi tre cose distinte, e la terza e' l'unica che decide:
+     *   1. chi dichiara il pacchetto                       -> pkg query %rn
+     *   2. chi richiede i suoi soname                      -> pkg query %B  (ambiguo se i
+     *      soname del port e quelli del base coincidono)
+     *   3. quali processi VIVI hanno mappato una libreria in /usr/local/lib -> procstat -v
+     *
+     * procstat(1) mostra "process virtual memory mappings, including [...] mapped object
+     * information": e' cio' che e' aperto adesso, non cio' che qualcuno ha dichiarato quando
+     * il pacchetto e' stato compilato. Richiede pero' di essere il proprietario del processo
+     * o root; se non lo si e', l'elenco torna vuoto e sembrerebbe "non lo usa nessuno".
+     * Per questo si conta anche quanti processi mappano una qualsiasi libssl/libcrypto: se
+     * quel totale e' zero su un server di posta con TLS attivo, la misura non ha funzionato
+     * e va detto, invece di spacciare il silenzio per una risposta.
+     */
+    /**
+     * Il caso openssl e' venuto fuori per intuizione di Pietro, non perche' il pannello
+     * sapesse cercarlo: il port non lo dichiarava nessuno, ma lo installa uno script del
+     * pannello e il pannello ne esegue il comando. Chiedere all'intuizione di ripetersi a
+     * ogni rimozione e' esattamente il modo di sbagliare la volta che non ci si pensa.
+     *
+     * Qui la domanda diventa una misura, e vale per QUALSIASI pacchetto: prima di toglierlo,
+     * il pannello lo usa nei propri script?
+     *
+     * Non si consulta un elenco scritto a mano, che invecchierebbe alla prima modifica:
+     * si legge il jar CHE STA GIRANDO. I nomi dei comandi che il pannello invoca sono
+     * costanti di stringa dentro le sue classi, quindi si estraggono le classi del pannello
+     * dal jar e si cercano dentro i nomi degli eseguibili che il pacchetto installa.
+     *
+     * Due cautele, perche' una ricerca puo' fallire in modi che sembrano una risposta:
+     *  - si contano i byte letti dal jar: se sono zero, la lettura non e' riuscita e va
+     *    detto, invece di concludere "non lo usa";
+     *  - i nomi cortissimi (tr, cut, ls) comparirebbero ovunque per caso, quindi sotto i
+     *    quattro caratteri non si decide e lo si dichiara.
+     */
+    /**
+     * Quali pacchetti sono anche solo CANDIDATI a essere tolti: quelli installati
+     * esplicitamente (non tirati dentro come dipendenza) e che nessun altro pacchetto
+     * dichiara. Sono gli unici su cui abbia senso porsi la domanda, ed e' l'elenco su cui
+     * il controllo "il pannello lo usa?" va passato prima di rimuovere qualsiasi cosa.
+     *
+     * Si ricava con due letture invece che con una interrogazione per pacchetto:
+     * l'elenco degli espliciti, e l'insieme di tutti i nomi che compaiono come dipendenza
+     * di qualcuno. La differenza fra i due e' la risposta.
+     */
+    public static JSONObject candidatiRimozione() {
+        java.util.LinkedHashSet<String> espliciti = new java.util.LinkedHashSet<>();
+        for (String n : sh("pkg query -e '%a = 0' '%n' 2>/dev/null", 60).split("\n"))
+            if (nomeValido(n.trim())) espliciti.add(n.trim());
+
+        java.util.HashSet<String> richiesti = new java.util.HashSet<>();
+        for (String riga : sh("pkg query '%n %dn' 2>/dev/null", 120).split("\n")) {
+            String t = riga.trim();
+            int sp = t.indexOf(' ');
+            if (sp > 0) richiesti.add(t.substring(sp + 1).trim());
+        }
+
+        java.util.HashSet<String> protetti = new java.util.HashSet<>();
+        for (String riga : sh("pkg lock -l 2>/dev/null", 30).split("\n")) {
+            String t = riga.trim();
+            if (!t.isEmpty() && !t.endsWith(":")) protetti.add(t);
+        }
+
+        JSONArray fuori = new JSONArray();
+        for (String n : espliciti) {
+            if (richiesti.contains(n)) continue;
+            fuori.put(new JSONObject().put("nome", n)
+                    .put("versione", sh("pkg query %v " + n + " 2>/dev/null", 20))
+                    .put("protetto", protetti.contains(n)));
+        }
+        return new JSONObject().put("success", true).put("candidati", fuori)
+                .put("esplicitiTotali", espliciti.size())
+                .put("spiegazione", "Sono i pacchetti che hai chiesto tu (non arrivati come dipendenza) "
+                        + "e che nessun altro pacchetto dichiara: gli unici che pkg lascerebbe rimuovere "
+                        + "senza portarsi dietro altro. Non vuol dire che si possano togliere: vuol dire "
+                        + "che la domanda ha senso. Il controllo qui accanto guarda se il pannello ne "
+                        + "invoca i comandi nei propri script, che e' il modo in cui openssl era "
+                        + "sfuggito a tutti i controlli basati su pkg.");
+    }
+
+    /** Legge l'uscita di "sort | uniq -c": conteggio, spazio, valore. */
+    private static void contaIn(String uscita, java.util.Map<String, Integer> dove) {
+        for (String riga : uscita.split("\n")) {
+            String t = riga.trim();
+            int sp = t.indexOf(' ');
+            if (sp <= 0) continue;
+            try { dove.put(t.substring(sp + 1).trim(), Integer.parseInt(t.substring(0, sp))); }
+            catch (NumberFormatException ignored) { }
+        }
+    }
+
+    public static JSONObject usoDalPannello(String pacchetto) {
+        JSONObject r = new JSONObject().put("success", true).put("pacchetto", pacchetto);
+        if (!nomeValido(pacchetto))
+            return new JSONObject().put("success", false).put("error", "nome di pacchetto non valido");
+        if (!ok("pkg info -e " + pacchetto, 20))
+            return new JSONObject().put("success", false).put("error", "il pacchetto " + pacchetto + " non e' installato");
+
+        // --- 1. quali eseguibili installa il pacchetto ---
+        String elenco = sh("pkg query '%Fp' " + pacchetto + " 2>/dev/null", 60);
+        String comeElencato = "pkg query %Fp";
+        if (elenco.isBlank()) {   // formato non disponibile: si ripiega su pkg info -l
+            elenco = sh("pkg info -l " + pacchetto + " 2>/dev/null", 60);
+            comeElencato = "pkg info -l";
+        }
+        java.util.LinkedHashMap<String, String> eseguibili = new java.util.LinkedHashMap<>();
+        for (String riga : elenco.split("\n")) {
+            String f = riga.trim();
+            if (!f.startsWith("/")) continue;
+            if (!f.matches("(/usr)?(/local)?/(s?bin|libexec)(/[A-Za-z0-9._+-]{1,64}){1,2}")) continue;
+            String nome = f.substring(f.lastIndexOf('/') + 1);
+            eseguibili.putIfAbsent(nome, f);
+        }
+        r.put("comeElencato", comeElencato).put("eseguibiliTrovati", eseguibili.size());
+
+        // --- 2. le classi del pannello, dal jar in esecuzione ---
+        String jar = percorsoJar();
+        r.put("jar", jar == null ? "" : jar);
+        long byteLetti = 0;
+        String estrai = null;
+        if (jar != null && !jar.isBlank() && ok("test -r " + jar, 15)) {
+            // bsdtar (libarchive) e' nel sistema base e legge gli archivi zip, quindi anche i jar.
+            estrai = "tar -xOf " + jar + " 'org/mail_panel/*' 2>/dev/null";
+            String n = sh(estrai + " | wc -c", 120).trim().replaceAll("[^0-9]", "");
+            if (!n.isEmpty()) byteLetti = Long.parseLong(n);
+            if (byteLetti == 0 && ok("command -v unzip >/dev/null 2>&1", 15)) {
+                estrai = "unzip -p " + jar + " 'org/mail_panel/*' 2>/dev/null";
+                n = sh(estrai + " | wc -c", 120).trim().replaceAll("[^0-9]", "");
+                if (!n.isEmpty()) byteLetti = Long.parseLong(n);
+            }
+        }
+        boolean letturaRiuscita = byteLetti > 0;
+        r.put("byteLetti", byteLetti).put("letturaRiuscita", letturaRiuscita);
+
+        // --- 3. una sola passata: quali di quei nomi compaiono nelle classi ---
+        // Due conteggi, non uno. La ricerca per SOTTOSTRINGA e' inservibile: "gif" compare 127
+        // volte nelle classi del pannello, ma dentro JSON.stringify e writeNewsyslogIfMissing,
+        // mai come comando. Con la ricerca per PAROLA INTERA scende a zero, che e' la verita'.
+        // Il secondo conteggio e' piu' stretto ancora: il nome seguito da uno spazio, cioe' un
+        // comando con argomenti. Serve a distinguere "openssl x509 -in ..." dal nome che compare
+        // per caso. Il giudizio si basa sulla parola intera; l'altro numero e' li' per farsi
+        // un'idea, perche' un nome come "test" resta ambiguo per natura.
+        java.util.Map<String, Integer> conteggi = new java.util.HashMap<>();
+        java.util.Map<String, Integer> conArgomenti = new java.util.HashMap<>();
+        java.util.List<String> troppoCorti = new ArrayList<>();
+        if (letturaRiuscita && !eseguibili.isEmpty()) {
+            StringBuilder intere = new StringBuilder(), conSpazio = new StringBuilder();
+            for (String nome : eseguibili.keySet()) {
+                if (nome.length() < 4) { troppoCorti.add(nome); continue; }
+                intere.append(" -e '").append(nome).append("'");
+                conSpazio.append(" -e '").append(nome).append(" '");
+            }
+            if (intere.length() > 0) {
+                contaIn(sh(estrai + " | grep -aowF" + intere + " | sort | uniq -c", 180), conteggi);
+                contaIn(sh(estrai + " | grep -aoF" + conSpazio + " | sort | uniq -c", 180), conArgomenti);
+            }
+        }
+
+        // --- 4. per ogni comando usato: esiste un'altra copia che resterebbe? ---
+        JSONArray usati = new JSONArray();
+        for (var e : eseguibili.entrySet()) {
+            Integer c = conteggi.get(e.getKey());
+            if (c == null || c == 0) continue;
+            String altrove = "";
+            for (String d : new String[]{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/usr/local/sbin"}) {
+                String cand = d + "/" + e.getKey();
+                if (cand.equals(e.getValue())) continue;
+                if (ok("test -x " + cand, 15)) { altrove = cand; break; }
+            }
+            usati.put(new JSONObject().put("comando", e.getKey()).put("percorso", e.getValue())
+                    .put("occorrenze", c)
+                    .put("conArgomenti", conArgomenti.getOrDefault(e.getKey(), 0))
+                    .put("altraCopia", altrove)
+                    .put("resterebbe", !altrove.isEmpty()));
+        }
+        // Un pacchetto puo' non avere nessun comando e servire lo stesso, perche' e' una
+        // LIBRERIA: nessuno la digita, ma qualcuno ci si collega. giflib e' esattamente
+        // questo. Dirlo qui evita che "non ne uso i comandi" venga letto come "si puo'
+        // togliere": per una libreria la domanda giusta e' un'altra, ed e' quella che
+        // pone la scheda dei pacchetti senza la libreria che richiedono.
+        JSONArray librerie = new JSONArray();
+        for (String l : sh("pkg query %b " + pacchetto + " 2>/dev/null", 30).split("\n"))
+            if (l.trim().matches("[A-Za-z0-9._+-]{1,128}")) librerie.put(l.trim());
+        r.put("fornisceLibrerie", librerie);
+        r.put("comandiUsati", usati).put("nomiTroppoCorti", new JSONArray(troppoCorti));
+
+        String verdetto, spiegazione;
+        if (!letturaRiuscita) {
+            verdetto = "NON DETERMINABILE";
+            spiegazione = "Non sono riuscito a leggere le classi del pannello dal jar"
+                    + (jar == null || jar.isBlank() ? " (non so da quale file sto girando)" : " " + jar)
+                    + ". Senza quella lettura non posso dire che il pannello non lo usi: il silenzio "
+                    + "qui non e' una risposta.";
+        } else if (usati.length() == 0) {
+            verdetto = librerie.length() > 0 ? "NON NE USA I COMANDI, MA E' UNA LIBRERIA"
+                                             : "IL PANNELLO NON LO USA";
+            spiegazione = "Ho letto " + byteLetti + " byte di classi del pannello e nessuno dei "
+                    + eseguibili.size() + " eseguibili di " + pacchetto + " vi compare come parola intera."
+                    + (librerie.length() > 0
+                       ? " Attenzione pero': questo pacchetto fornisce " + librerie.length()
+                         + " librerie condivise (" + String.join(", ", jsonArrayToList(librerie)) + "). "
+                         + "Una libreria non si digita, ci si collega: che il pannello non ne invochi i "
+                         + "comandi non dice NIENTE su chi la usa. La domanda giusta per un pacchetto "
+                         + "come questo e' chi dichiara quelle librerie, e la pone la scheda \"Pacchetti "
+                         + "senza la libreria che richiedono\"."
+                       : "")
+                    + (troppoCorti.isEmpty() ? ""
+                       : " Restano fuori dal giudizio " + troppoCorti.size() + " nomi troppo corti per "
+                         + "essere cercati senza falsi positivi: " + String.join(", ", troppoCorti) + ".");
+        } else {
+            int senzaRicambio = 0;
+            for (int i = 0; i < usati.length(); i++)
+                if (!usati.getJSONObject(i).getBoolean("resterebbe")) senzaRicambio++;
+            verdetto = senzaRicambio > 0 ? "LO USA, E NON C'E' RICAMBIO" : "LO USA";
+            spiegazione = "Il pannello nomina " + usati.length() + " comand"
+                    + (usati.length() == 1 ? "o" : "i") + " di questo pacchetto nelle proprie classi."
+                    + (senzaRicambio > 0
+                       ? " Di quest" + (senzaRicambio == 1 ? "o, 1 non ha" : "i, " + senzaRicambio + " non hanno")
+                         + " un'altra copia altrove nel PATH: togliendo il pacchetto quel comando "
+                         + "sparirebbe e la funzione del pannello che lo usa smetterebbe di funzionare."
+                       : " Ognuno di essi ha pero' un'altra copia altrove nel PATH: togliendo il "
+                         + "pacchetto il comando resterebbe, ma sarebbe un altro binario, "
+                         + "verosimilmente di un'altra versione.");
+        }
+        return r.put("verdetto", verdetto).put("spiegazione", spiegazione)
+                .put("perche", "Il caso openssl ha mostrato che un pacchetto puo' non essere dichiarato "
+                        + "da nessuno e servire lo stesso, perche' e' il PANNELLO a invocarne il comando. "
+                        + "Questa lettura guarda dentro il jar in esecuzione, non un elenco scritto a mano.");
+    }
+
+    /**
+     * L'analisi dell'uscita dello scan, staccata dal comando che la produce: cosi' si puo'
+     * provare senza FreeBSD, che e' l'unico modo di sapere che legge davvero cio' che crede.
+     * Una riga e' "pid TAB comando TAB percorso [percorso ...]". Il percorso in /usr/local
+     * e' il port; quello in /usr/lib e' il sistema base.
+     */
+    static JSONArray analizzaMappature(String scan) {
+        JSONArray processi = new JSONArray();
+        if (scan == null) return processi;
+        for (String riga : scan.split("\n")) {
+            String[] c = riga.split("\t");
+            if (c.length < 3 || c[0].trim().isEmpty()) continue;
+            JSONArray libs = new JSONArray();
+            boolean port = false;
+            for (String v : c[2].trim().split("\\s+")) {
+                if (v.isEmpty()) continue;
+                libs.put(v);
+                if (v.startsWith("/usr/local/")) port = true;
+            }
+            processi.put(new JSONObject().put("pid", c[0].trim())
+                    .put("comando", c[1].trim()).put("librerie", libs).put("usaIlPort", port));
+        }
+        return processi;
+    }
+
+    public static JSONObject usoOpenssl() {
+        JSONObject r = new JSONObject().put("success", true);
+        if (!ok("pkg info -e openssl", 20)) {
+            return r.put("installato", false).put("verdetto", "assente")
+                    .put("spiegazione", "Il port security/openssl non e' installato. Il sistema usa "
+                            + "l'OpenSSL del base, che non e' un pacchetto e non si rimuove.");
+        }
+        r.put("installato", true).put("versione", sh("pkg query %v openssl", 20));
+
+        // --- 1. chi lo dichiara nel registro ---
+        JSONArray dichiarano = new JSONArray();
+        for (String s : sh("pkg query %rn openssl 2>/dev/null", 30).split("\n"))
+            if (nomeValido(s.trim())) dichiarano.put(s.trim());
+        r.put("dichiarano", dichiarano);
+
+        // --- 2. i soname delle due copie, e se si sovrappongono ---
+        java.util.LinkedHashSet<String> sonPort = new java.util.LinkedHashSet<>();
+        for (String s : sh("pkg query %b openssl 2>/dev/null", 30).split("\n")) {
+            String t = s.trim();
+            if (t.matches("lib(ssl|crypto)\\.so(\\.[0-9]+)*")) sonPort.add(t);
+        }
+        java.util.LinkedHashSet<String> sonBase = new java.util.LinkedHashSet<>();
+        for (String s : sh("ls /usr/lib/libssl.so.* /usr/lib/libcrypto.so.* 2>/dev/null", 20).split("\n")) {
+            String t = s.trim();
+            int sl = t.lastIndexOf('/');
+            if (sl >= 0 && sl + 1 < t.length()) sonBase.add(t.substring(sl + 1));
+        }
+        java.util.LinkedHashSet<String> comuni = new java.util.LinkedHashSet<>(sonPort);
+        comuni.retainAll(sonBase);
+        r.put("sonamePort", new JSONArray(new ArrayList<>(sonPort)))
+         .put("sonameBase", new JSONArray(new ArrayList<>(sonBase)))
+         .put("sonameInComune", new JSONArray(new ArrayList<>(comuni)))
+         .put("ambiguo", !comuni.isEmpty());
+
+        // --- 2b. chi richiede quei soname (vale solo se NON sono in comune col base) ---
+        JSONArray richiedono = new JSONArray();
+        if (!sonPort.isEmpty()) {
+            for (String riga : sh("pkg query '%n %B' 2>/dev/null", 120).split("\n")) {
+                String t = riga.trim();
+                int sp = t.indexOf(' ');
+                if (sp <= 0) continue;
+                String nome = t.substring(0, sp).trim(), lib = t.substring(sp + 1).trim();
+                if (nomeValido(nome) && sonPort.contains(lib))
+                    richiedono.put(new JSONObject().put("pacchetto", nome).put("libreria", lib));
+            }
+        }
+        r.put("richiedonoIlSoname", richiedono);
+
+        // --- 3. la misura che decide: cosa e' mappato ADESSO dai processi vivi ---
+        JSONArray processi = new JSONArray();
+        JSONArray usanoIlPort = new JSONArray();
+        boolean haProcstat = ok("command -v procstat >/dev/null 2>&1", 15);
+        int conLibssl = 0;
+        if (haProcstat) {
+            String scan = sh("for p in $(ps -axo pid=); do "
+                    + "m=$(procstat -v $p 2>/dev/null | awk '/lib(ssl|crypto)\\.so/ {print $NF}' | sort -u | tr '\\n' ' '); "
+                    + "[ -n \"$m\" ] && printf '%s\\t%s\\t%s\\n' \"$p\" \"$(ps -o comm= -p $p 2>/dev/null)\" \"$m\"; "
+                    + "done", 240);
+            processi = analizzaMappature(scan);
+            conLibssl = processi.length();
+            for (int i = 0; i < processi.length(); i++)
+                if (processi.getJSONObject(i).getBoolean("usaIlPort")) usanoIlPort.put(processi.getJSONObject(i));
+        }
+        boolean misuraAttendibile = haProcstat && conLibssl > 0;
+
+        // --- 4. il comando, non solo le librerie. procstat vede i processi VIVI: un
+        // "openssl x509" dura millisecondi e non si fa quasi mai cogliere. Ma il pannello
+        // lo invoca eccome (AcmeManager legge i certificati cosi', e gli script di
+        // installazione generano password e chiavi con "openssl rand"), e lo invoca SENZA
+        // percorso assoluto. Nel PATH di FreeBSD /usr/local/bin viene prima di /usr/bin,
+        // quindi con il port installato e' il suo binario a vincere. Ignorarlo vorrebbe
+        // dire dire "non lo usa nessuno" di un programma che gira ogni volta che il
+        // pannello guarda un certificato.
+        JSONArray binari = new JSONArray();
+        for (String percorso : new String[]{"/usr/local/bin/openssl", "/usr/bin/openssl"}) {
+            if (!ok("test -x " + percorso, 15)) continue;
+            binari.put(new JSONObject().put("percorso", percorso)
+                    .put("versione", sh(percorso + " version 2>&1 | head -1", 20))
+                    .put("pacchetto", sh("pkg which -q " + percorso + " 2>/dev/null", 20))
+                    .put("delPort", percorso.startsWith("/usr/local/")));
+        }
+        String vincitore = sh("command -v openssl 2>/dev/null", 15).trim();
+        boolean comandoDelPort = vincitore.startsWith("/usr/local/");
+        boolean baseHaIlComando = ok("test -x /usr/bin/openssl", 15);
+        r.put("binari", binari).put("comandoInPath", vincitore)
+         .put("comandoDelPort", comandoDelPort).put("baseHaIlComando", baseHaIlComando)
+         .put("esplicito", "0".equals(sh("pkg query %a openssl 2>/dev/null", 20).trim()))
+         .put("chiLoInvoca", "Il pannello stesso: AcmeManager esegue \"openssl x509\" per leggere "
+                 + "scadenza, SAN, numero di serie, algoritmo ed emittente del certificato, e "
+                 + "\"openssl rsa\" per confrontare certificato e chiave; gli script di installazione "
+                 + "usano \"openssl rand\" per le password e \"openssl req\" per i certificati "
+                 + "autofirmati. Sempre col nome nudo, mai col percorso: decide il PATH.");
+
+        r.put("processi", processi).put("usanoIlPort", usanoIlPort)
+         .put("processiConTls", conLibssl).put("misuraAttendibile", misuraAttendibile)
+         .put("comeHoMisurato", haProcstat
+                 ? "procstat -v su ogni processo vivo: " + conLibssl + " hanno una libssl o libcrypto "
+                   + "mappata in memoria. Il conteggio e' la prova che la lettura ha funzionato: se "
+                   + "fosse zero su un server con TLS attivo, vorrebbe dire che non ho potuto leggere, "
+                   + "non che nessuno la usa."
+                 : "procstat non e' disponibile: non ho potuto guardare i processi vivi.");
+
+        // --- il verdetto, nell'ordine in cui le prove pesano ---
+        String verdetto, spiegazione;
+        if (usanoIlPort.length() > 0) {
+            verdetto = "IN USO ADESSO";
+            spiegazione = usanoIlPort.length() + " process" + (usanoIlPort.length() == 1 ? "o ha" : "i hanno")
+                    + " aperta una libreria del port in /usr/local/lib. Non si tocca: rimuoverlo "
+                    + "toglierebbe da sotto i piedi una libreria gia' in uso.";
+        } else if (dichiarano.length() > 0) {
+            verdetto = "RICHIESTO";
+            spiegazione = "Lo dichiarano come dipendenza: " + String.join(", ", jsonArrayToList(dichiarano))
+                    + ". pkg rifiuterebbe comunque di rimuoverlo.";
+        } else if (comandoDelPort) {
+            verdetto = "IL COMANDO E' SUO";
+            spiegazione = "Nessuna libreria del port risulta aperta da un processo vivo, ma "
+                    + "\"openssl\" digitato senza percorso esegue " + vincitore + ", che appartiene al "
+                    + "port. Il pannello lo invoca cosi' ogni volta che legge un certificato, e quelle "
+                    + "esecuzioni durano millisecondi: procstat non poteva vederle. "
+                    + (baseHaIlComando
+                       ? "Togliendo il port, \"openssl\" passerebbe a /usr/bin/openssl del sistema base, "
+                         + "che c'e' ed e' eseguibile: il pannello continuerebbe a funzionare, ma con "
+                         + "un'altra versione del comando. Verificare le due versioni qui sotto prima di decidere."
+                       : "ATTENZIONE: /usr/bin/openssl NON esiste o non e' eseguibile. Togliendo il port, "
+                         + "il comando \"openssl\" sparirebbe e il pannello non potrebbe piu' leggere i "
+                         + "certificati. NON rimuoverlo.");
+        } else if (!misuraAttendibile) {
+            verdetto = "NON DETERMINABILE";
+            spiegazione = "Nessun pacchetto lo dichiara, ma non ho potuto leggere cosa i processi vivi "
+                    + "hanno davvero aperto. Senza quella lettura non posso dire che sia inutilizzato: "
+                    + "il registro di pkg da solo non basta, perche' le due copie di OpenSSL possono "
+                    + "avere lo stesso nome di libreria.";
+        } else {
+            verdetto = "NESSUNO LO USA";
+            spiegazione = "Nessun pacchetto lo dichiara, nessuno dei " + conLibssl + " processi che "
+                    + "usano TLS ha aperto una libreria da /usr/local/lib, e nemmeno il comando "
+                    + "\"openssl\" senza percorso finisce sul port: tutto sta usando il sistema base, "
+                    + "come prevede il predefinito ssl=base.";
+        }
+        r.put("verdetto", verdetto).put("spiegazione", spiegazione);
+
+        r.put("nota", "Attenzione a non confondere le due cose. OpenSSL come tecnologia e' il TLS di "
+                + "Postfix, Dovecot, nginx, PHP e MySQL: indispensabile. Qui si parla solo del "
+                + "PACCHETTO port security/openssl, che e' una seconda copia in /usr/local/lib. "
+                + "Quella del sistema base in /usr/lib non e' un pacchetto, non compare in pkg e "
+                + "resta al suo posto in ogni caso.");
+        r.put("percheEQui", "Non e' arrivato come dipendenza di qualcosa: lo installa uno degli "
+                + "script di installazione del pannello (\"pkg install -y openssl\", sotto la voce SSL). "
+                + "Per questo nessun pacchetto lo dichiara: e' stato chiesto esplicitamente.");
+        r.put("pannello", usoDalPannello("openssl"));
+        r.put("comeSiToglie", "Se e NESSUNO LO USA: prima pkg unlock openssl (e' protetto), poi "
+                + "pkg delete openssl, poi subito il controllo \"Pacchetti senza la libreria che "
+                + "richiedono\", che e' la verifica che nulla sia rimasto senza libreria. "
+                + "Meglio farlo con un ambiente di avvio recente disponibile.");
+        return r;
+    }
+
+    /**
      * Chi dichiara cosa, sui client MySQL. Serve a rispondere con i fatti a una domanda che
      * altrimenti si risponde a intuito: perche' e' stato installato un client 9.7 quando il
      * predefinito dei port FreeBSD (Mk/bsd.default-versions.mk, rami main e 2026Q3) e' 8.4?
@@ -6324,6 +6745,14 @@ public final class UpdateManager {
     static String cosaChiedeFreebsdUpdate(String uscita) {
         String u = uscita == null ? "" : uscita.toLowerCase();
         if (u.contains("please reboot")) return "riavvia";
+        // Questa e' una richiesta DIVERSA dal "rieseguimi", e sta nello stesso messaggio:
+        // "Completing this upgrade requires removing old shared object files. Please rebuild
+        // all installed 3rd party software ... and then run 'freebsd-update install' again."
+        // Il 31/08/2026 il pannello ha visto solo la seconda meta' e ha proseguito in silenzio,
+        // mentre la prima meta' chiedeva di ricostruire i pacchetti. Due istruzioni in una
+        // frase: leggerne una sola e' peggio che non leggerne nessuna.
+        if (u.contains("rebuild all installed 3rd party software")
+                || u.contains("removing old shared object files")) return "ancora-ricostruisci";
         if (u.contains("no updates are available to install")
                 || u.contains("no updates needed")) return "finito";
         if (u.contains("run '/usr/sbin/freebsd-update install'")
@@ -6389,6 +6818,7 @@ public final class UpdateManager {
     private static void runProseguiSalto(Job job, String bersaglio) {
         job.status = "running";
         try {
+            boolean ricostruzioneChiesta = false;
             JSONObject st = leggiStatoSalto();
             JSONArray passi = st.optJSONArray("passi") == null ? new JSONArray() : st.getJSONArray("passi");
             if (!bersaglio.isEmpty()) st.put("bersaglio", bersaglio);
@@ -6424,7 +6854,17 @@ public final class UpdateManager {
                 job.scrivi("    freebsd-update chiede: " + (
                         "riavvia".equals(chiede) ? "UN RIAVVIO, poi di essere richiamato"
                       : "finito".equals(chiede)  ? "niente, non c'e' altro da installare"
+                      : "ancora-ricostruisci".equals(chiede)
+                        ? "di essere eseguito ancora E DI RICOSTRUIRE I PACCHETTI"
                       : "di essere eseguito ancora"));
+                if ("ancora-ricostruisci".equals(chiede)) {
+                    ricostruzioneChiesta = true;
+                    job.scrivi("");
+                    job.scrivi("    >>> ATTENZIONE: freebsd-update ha chiesto anche di ricostruire i");
+                    job.scrivi("    pacchetti di terze parti, perche' sta togliendo vecchie librerie");
+                    job.scrivi("    condivise. Non lo faccio io: prima va misurato se serve davvero,");
+                    job.scrivi("    e alla fine il pannello lo verifica.");
+                }
                 job.scrivi("    adesso: kernel " + dopo.optString("kernelInstallato")
                         + " | in esecuzione " + dopo.optString("uname")
                         + " | userland " + dopo.optString("userland"));
@@ -6458,9 +6898,32 @@ public final class UpdateManager {
                         st.put("fase", "attende-riavvio-finale");
                         scriviStatoSalto(st);
                     } else {
-                        job.scrivi("Sei su " + dopo.optString("userland") + ". Premi \"Verifica dopo\"");
-                        job.scrivi("per il confronto con l'inventario preso prima di cominciare.");
+                        job.scrivi("Sei su " + dopo.optString("userland") + ".");
                     }
+                    // La domanda "vanno ricostruiti i pacchetti?" non si risponde con un'opinione
+                    // sull'ABI: si chiede a pkg quali librerie ogni pacchetto pretende e si guarda
+                    // se esistono. E' l'unica prova diretta.
+                    if (ricostruzioneChiesta) {
+                        job.scrivi("");
+                        job.scrivi("--- freebsd-update aveva chiesto di ricostruire i pacchetti: verifico ---");
+                        JSONObject lib = pacchettiConLibrerieMancanti();
+                        JSONArray rotti = lib.optJSONArray("pacchetti");
+                        int quanti = rotti == null ? 0 : rotti.length();
+                        if (quanti == 0) {
+                            job.scrivi("    Nessun pacchetto e' rimasto senza una libreria che richiede:");
+                            job.scrivi("    la ricostruzione NON serve. La richiesta di freebsd-update e'");
+                            job.scrivi("    generica, vale anche quando nessuna libreria usata e' cambiata.");
+                        } else {
+                            job.scrivi("    " + quanti + " PACCHETTI hanno perso una libreria che richiedono:");
+                            for (int i = 0; i < Math.min(quanti, 20); i++)
+                                job.scrivi("      " + rotti.getJSONObject(i).optString("nome")
+                                        + "  ->  " + rotti.getJSONObject(i).optString("mancanti"));
+                            job.scrivi("    Vanno reinstallati. Usa la scheda \"Pacchetti senza la libreria");
+                            job.scrivi("    che richiedono\", che ha anche il pulsante per ricollegarli.");
+                        }
+                        st.put("ricostruzione", quanti == 0 ? "non serve" : "servono " + quanti);
+                    }
+                    job.scrivi("Premi \"Verifica dopo\" per il confronto con l'inventario preso prima.");
                     job.status = "completed";
                     return;
                 }
@@ -6477,6 +6940,121 @@ public final class UpdateManager {
             job.scrivi("ERRORE: " + e.getMessage());
         } finally {
             job.fine = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Gli ambienti di avvio, spiegati invece che elencati.
+     *
+     * "bectl list" e' una tabella per chi sa gia' cosa sta guardando: una colonna Active con
+     * sigle (N, R, NR), nomi generati da programmi diversi, e nessuna indicazione di cosa si
+     * possa toccare. Rovesciarla in una riga con dei trattini in mezzo, come faceva il pannello,
+     * non e' informare: e' spostare il lavoro di capire dall'altra parte.
+     *
+     * Le sigle, dal manuale di bectl(8): N = quello avviato adesso, R = quello che si avviera'
+     * al prossimo riavvio, NR = entrambi. Un trattino vuol dire che sta li' e basta.
+     */
+    public static JSONObject ambientiDiAvvio() {
+        JSONObject r = new JSONObject();
+        try {
+            if (!ok("bectl check", 20))
+                return r.put("success", false)
+                        .put("error", "gli ambienti di avvio non sono supportati su questo sistema");
+            JSONArray fuori = new JSONArray();
+            for (String riga : sh("bectl list -H 2>/dev/null", 60).split("\n")) {
+                String[] c = riga.split("\t");
+                if (c.length < 5) continue;
+                String nome = c[0].trim(), attivo = c[1].trim(), spazio = c[3].trim(), creato = c[4].trim();
+                boolean inUso = attivo.contains("N");
+                boolean alRiavvio = attivo.contains("R");
+
+                // Chi l'ha creato si capisce dal nome: il pannello usa "prima-di-", e
+                // freebsd-update usa <versione>_<data>. Saperlo cambia cosa significa tenerlo.
+                String origine, spiega;
+                if (nome.startsWith("prima-di-")) {
+                    origine = "creato dal pannello";
+                    spiega = "La via di ritorno preparata prima del salto di release. E' lo stato "
+                           + "completo del sistema com'era in quel momento.";
+                } else if (nome.matches("^[0-9]+\\.[0-9].*_[0-9]{4}-[0-9]{2}-[0-9]{2}.*")) {
+                    origine = "creato da freebsd-update";
+                    spiega = "Istantanea che freebsd-update si e' preso da solo prima di scrivere sul "
+                           + "disco. Il nome dice da quale versione partiva.";
+                } else if ("default".equals(nome)) {
+                    origine = "l'installazione originale";
+                    spiega = "L'ambiente con cui il server e' stato installato, e dentro cui hai "
+                           + "lavorato da allora: contiene il sistema vero, non e' una copia.";
+                } else {
+                    origine = "origine non riconosciuta";
+                    spiega = "Non riconosco chi l'abbia creato: guardalo prima di toccarlo.";
+                }
+
+                fuori.put(new JSONObject()
+                        .put("nome", nome).put("spazio", spazio).put("creato", creato)
+                        .put("inUso", inUso).put("alRiavvio", alRiavvio).put("sigla", attivo)
+                        .put("origine", origine).put("spiegazione", spiega)
+                        .put("stato", inUso && alRiavvio ? "in uso adesso e al prossimo riavvio"
+                                    : inUso ? "in uso adesso"
+                                    : alRiavvio ? "NON in uso, ma si avviera' al prossimo riavvio"
+                                    : "fermo, pronto se servisse")
+                        .put("eliminabile", !inUso && !alRiavvio)
+                        .put("perche", inUso || alRiavvio
+                                ? "Non si puo' eliminare: e' il sistema in uso, o quello che partira'."
+                                : "Si puo' eliminare quando sei sicuro che non ti serva piu'."));
+            }
+            return r.put("success", true).put("ambienti", fuori)
+                    .put("cosaSono", "Un ambiente di avvio e' una copia dell'intero sistema di base "
+                        + "(kernel, /etc, i comandi) che ZFS tiene senza duplicare i dati: occupa solo "
+                        + "cio' che e' cambiato da quando e' stato creato. Riavviando su uno di questi "
+                        + "torni al sistema com'era in quel momento, in un colpo solo. Non contiene la "
+                        + "posta ne' i database: quelli vivono altrove e restano come sono.")
+                    .put("comeTornare", "Per tornare a uno di questi: bectl activate <nome> e poi riavvia.")
+                    .put("quandoEliminare", "Tienili finche' non hai verificato per qualche giorno che "
+                        + "tutto funzioni. Occupano pochissimo. Poi: bectl destroy <nome>.");
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * Elimina un ambiente di avvio, ma solo uno che si puo' eliminare.
+     *
+     * Tre protezioni, e nessuna e' teorica: non si tocca quello in uso (spegneresti il sistema
+     * sotto i tuoi piedi), non si tocca quello che partirebbe al prossimo riavvio (il server non
+     * si rialzerebbe), e il nome dev'essere uno di quelli che esistono davvero — non una stringa
+     * arrivata da fuori. Il controllo non si fida di cio' che chiede il pulsante: rilegge la
+     * lista e decide su quella.
+     */
+    public static JSONObject eliminaAmbienteDiAvvio(String nome) {
+        try {
+            if (nome == null || !nome.matches("[A-Za-z0-9._:-]{1,128}"))
+                return new JSONObject().put("success", false).put("error", "nome non valido");
+            JSONObject el = ambientiDiAvvio();
+            if (!el.optBoolean("success")) return el;
+            JSONArray amb = el.getJSONArray("ambienti");
+            JSONObject trovato = null;
+            for (int i = 0; i < amb.length(); i++)
+                if (nome.equals(amb.getJSONObject(i).getString("nome"))) trovato = amb.getJSONObject(i);
+            if (trovato == null)
+                return new JSONObject().put("success", false)
+                        .put("error", "non esiste nessun ambiente di avvio chiamato \"" + nome + "\"");
+            if (!trovato.getBoolean("eliminabile"))
+                return new JSONObject().put("success", false)
+                        .put("error", "NON elimino \"" + nome + "\": " + trovato.getString("stato")
+                            + ". " + trovato.getString("perche"));
+
+            String uscita = sh("bectl destroy -F " + nome + " 2>&1", 300).trim();
+            // La prova e' che non compaia piu' nella lista, non che il comando sia uscito con zero.
+            boolean via = !ok("bectl list -H 2>/dev/null | cut -f1 | grep -qx '" + nome + "'", 30);
+            return new JSONObject().put("success", via).put("nome", nome)
+                    .put("spazio", trovato.getString("spazio"))
+                    .put("uscita", uscita)
+                    .put("nota", via
+                        ? "Eliminato: \"" + nome + "\" non compare piu' fra gli ambienti di avvio. "
+                          + "Liberati " + trovato.getString("spazio") + "."
+                        : "Il comando e' stato eseguito ma l'ambiente compare ancora nella lista.")
+                    .put("error", via ? "" : "eliminazione non riuscita: " + uscita);
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
         }
     }
 
@@ -6553,10 +7131,16 @@ public final class UpdateManager {
                     + (inst == lock ? "" : ": qualcuno si e' sbloccato, riproteggili dalla scheda apposita"));
 
             // Gli ambienti di avvio: quello vecchio va tenuto finche' non sei sicuro.
-            if (ok("bectl check", 20))
-                aggiungiCheck(checks, "be", "Ambienti di avvio", "verifica",
-                        sh("bectl list 2>/dev/null", 60).replace("\n", "  |  ")
-                        + "   — tieni quello di prima finche' non sei sicuro; poi: bectl destroy <nome>");
+            JSONObject be = ambientiDiAvvio();
+            if (be.optBoolean("success")) {
+                r.put("ambienti", be);
+                JSONArray el = be.getJSONArray("ambienti");
+                int liberi = 0;
+                for (int i = 0; i < el.length(); i++) if (el.getJSONObject(i).getBoolean("eliminabile")) liberi++;
+                aggiungiCheck(checks, "be", "Vie di ritorno disponibili", "ok",
+                        el.length() + " ambienti di avvio, di cui " + liberi + " eliminabili quando vorrai. "
+                        + "Sotto trovi cosa sono e a cosa serve ciascuno.");
+            }
 
             boolean guasto = false;
             for (int i = 0; i < checks.length(); i++)
@@ -6654,6 +7238,31 @@ public final class UpdateManager {
                         "(assente)".equals(av) ? "il repository non lo conosce"
                         : av.equals(cur) ? "NESSUNA CORREZIONE DISPONIBILE (stessa versione)"
                         : "aggiornabile a " + av));
+            }
+
+            t.append("\n--- PACCHETTI SENZA UNA LIBRERIA CHE RICHIEDONO ---\n");
+            JSONObject lib = pacchettiConLibrerieMancanti();
+            JSONArray rotti = lib.optJSONArray("pacchetti");
+            if (rotti == null || rotti.length() == 0) {
+                t.append("nessuno: ogni pacchetto trova tutte le librerie condivise che dichiara.\n");
+            } else {
+                t.append(rotti.length()).append(" pacchetti hanno perso una libreria:\n");
+                for (int i = 0; i < rotti.length(); i++)
+                    t.append("  ").append(rotti.getJSONObject(i).optString("nome"))
+                     .append("  ->  ").append(rotti.getJSONObject(i).optString("mancanti")).append('\n');
+            }
+
+            t.append("\n--- AMBIENTI DI AVVIO ---\n");
+            JSONObject be2 = ambientiDiAvvio();
+            if (!be2.optBoolean("success")) t.append("non disponibili\n");
+            else {
+                JSONArray aa = be2.getJSONArray("ambienti");
+                for (int i = 0; i < aa.length(); i++) {
+                    JSONObject x = aa.getJSONObject(i);
+                    t.append(String.format("  %-40s %-12s %-8s %s%n", x.getString("nome"),
+                            x.getBoolean("inUso") ? "IN USO" : x.getBoolean("alRiavvio") ? "al riavvio" : "di riserva",
+                            x.getString("spazio"), x.getString("origine")));
+                }
             }
 
             t.append("\n--- SERVIZI ---\n");
