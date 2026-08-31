@@ -13201,6 +13201,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     <span><i class="fab fa-freebsd me-2"></i><strong>Sistema operativo</strong>
                         <span class="small text-muted ms-2">i pacchetti sono met&agrave; del server: l&rsquo;altra met&agrave; &egrave; questa</span></span>
                     <span>
+                        <button class="btn btn-sm btn-outline-danger me-1" onclick="rebPrev()"><i class="fas fa-rotate-right me-1"></i>Riavvia il server</button>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcPrev()"><i class="fas fa-power-off me-1"></i>Avvio automatico</button>
                         <button class="btn btn-sm btn-outline-primary" onclick="osStato()"><i class="fas fa-magnifying-glass me-1"></i>Stato del sistema</button>
                     </span>
@@ -13656,6 +13657,71 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         // ---------- coerenza con i predefiniti ----------
+        // ---------- riavvio del server ----------
+        async function rebPrev() {
+            const el = document.getElementById('os-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controllo cosa comporterebbe...';
+            const r = await updApi('reboot_preview');
+            if (!r.success) {
+                el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>';
+                return;
+            }
+            let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
+                  + '<tr class="upd-cell"><td style="width:14rem"><strong>Kernel installato</strong></td><td><code>'
+                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Kernel in esecuzione</strong></td><td><code>'
+                  + updEsc(r.kernelInEsecuzione) + '</code>'
+                  + (r.riavvioNecessario
+                     ? ' <span class="badge upd-badge-warn ms-2">non combaciano: il riavvio serve</span>'
+                     : ' <span class="badge upd-badge-ok ms-2">combaciano: il riavvio non serve</span>') + '</td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Servizi che si fermano</strong></td><td>'
+                  + (r.servizi || []).map(updEsc).join(', ') + '</td></tr>'
+                  + '<tr class="upd-cell"><td><strong>Comando che verr&agrave; eseguito</strong></td><td><code>'
+                  + updEsc(r.percorsoDaemon) + ' -f -o /var/db/mailpanel/riavvio.log '
+                  + updEsc(r.percorsoShutdown) + ' -r +1</code></td></tr>' 
+                  + '</tbody></table></div>'
+                  + '<div class="alert alert-warning py-2">' + updEsc(r.effetto) + '</div>';
+            if (r.noshutdown) {
+                h += '<div class="alert alert-danger py-2"><strong>' + updEsc(r.avvisoNoshutdown) + '</strong></div>';
+            }
+            if (r.gaProgrammato) {
+                h += '<div class="alert alert-danger py-2">C&rsquo;&egrave; gi&agrave; un riavvio programmato: <code>'
+                   + updEsc(r.gaProgrammato) + '</code> '
+                   + '<button class="btn btn-sm btn-light ms-2" onclick="rebAnnulla()">Annulla il riavvio</button></div>';
+            }
+            h += '<div class="alert alert-secondary py-2 small">Il riavvio viene <strong>programmato fra un minuto</strong>, '
+               + 'non eseguito subito: &egrave; la finestra per ripensarci, con un pulsante per annullarlo. '
+               + 'Il pannello torna su da solo.</div>'
+               + '<button class="btn btn-danger" onclick="rebGo()"><i class="fas fa-rotate-right me-1"></i>Programma il riavvio</button>';
+            el.innerHTML = h;
+        }
+
+        async function rebGo() {
+            if (prompt('Conferma: scrivi RIAVVIA IL SERVER.') !== 'RIAVVIA IL SERVER') return;
+            const el = document.getElementById('os-body');
+            const r = await updApi('reboot_now', { confirm: 'RIAVVIA IL SERVER', minuti: 1 });
+            if (!r.success) {
+                el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>Riavvio NON programmato.</strong><br>'
+                    + updEsc(r.error) + (r.uscita ? '<br><code>' + updEsc(r.uscita) + '</code>' : '') + '</div>';
+                return;
+            }
+            el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.nota) + '</strong>'
+                + ' (processo ' + updEsc(r.pid) + ')'
+                + '<br>Questa pagina smetter&agrave; di rispondere. Il pannello torna su da solo: '
+                + 'aspetta un paio di minuti e ricarica.'
+                + '<br><button class="btn btn-light mt-2" onclick="rebAnnulla()">'
+                + '<i class="fas fa-ban me-1"></i>Annulla il riavvio</button></div>';
+        }
+
+        // Su FreeBSD non esiste un'opzione per annullare: il manuale di shutdown(8) dice di
+        // terminare il processo. Attenzione, "shutdown -c" NON annulla: e' power cycle.
+        async function rebAnnulla() {
+            const el = document.getElementById('os-body');
+            const r = await updApi('reboot_cancel');
+            el.innerHTML = '<div class="alert alert-' + (r.success ? (r.cera ? 'success' : 'secondary') : 'danger')
+                + ' py-2 mb-0">' + updEsc(r.nota || r.error) + '</div>';
+        }
+
         // ---------- avvio automatico del pannello (rc.d) ----------
         async function rcPrev() {
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');

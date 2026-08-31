@@ -6084,6 +6084,19 @@ public class SSLMailServer {
                 case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
                 case "system_report" -> response = UpdateManager.rapportoSistema();
                 case "os_status" -> response = UpdateManager.sistemaOperativo();
+                case "reboot_preview" -> response = UpdateManager.riavviaServer(false, 1);
+                case "reboot_cancel" -> {
+                    response = UpdateManager.annullaRiavvio();
+                    logAudit("SERVER_REBOOT_CANCEL", ip, response.optString("pid", ""));
+                }
+                case "reboot_now" -> {
+                    if (!"RIAVVIA IL SERVER".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    logAudit("SERVER_REBOOT", ip, "richiesto dal pannello");
+                    response = UpdateManager.riavviaServer(true, req.optInt("minuti", 1));
+                }
                 case "rc_preview" -> response = UpdateManager.scriptRcPannello(false);
                 case "rc_install" -> {
                     if (!"INSTALLA RC".equals(req.optString("confirm", ""))) {

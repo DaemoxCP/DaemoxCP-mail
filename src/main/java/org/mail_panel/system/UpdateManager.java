@@ -5543,6 +5543,168 @@ public final class UpdateManager {
      * REQUIRE resta LOGIN e basta: il pannello tollera MySQL spento (lo segnala e prosegue),
      * quindi legarlo a mysql lo renderebbe piu' fragile senza guadagnarci niente.
      */
+    /**
+     * Riavvio del server dal pannello.
+     *
+     * E' l'azione piu' irreversibile che il pannello possa fare, e ha senso solo da quando il
+     * pannello torna su da solo: senza lo script rc.d, premere questo pulsante significherebbe
+     * spegnere l'unica interfaccia da cui lo stai usando. Per questo, senza rc.d abilitato,
+     * si rifiuta invece di avvisare.
+     *
+     * Il riavvio e' PROGRAMMATO, non immediato, per due motivi. Il primo e' tecnico: shutdown
+     * con un tempo futuro resta in esecuzione fino al momento indicato (manuale di shutdown(8)),
+     * quindi va lanciato staccato o la risposta HTTP non arriverebbe mai. Il secondo e' umano:
+     * un minuto e' la finestra per ripensarci, e il pannello ha un pulsante per annullarlo.
+     * (Su FreeBSD si annulla terminando il processo shutdown: "-c" e' power cycle, non cancel.)
+     */
+    /**
+     * Annulla un riavvio programmato.
+     *
+     * Su FreeBSD non c'e' un'opzione per annullare: il manuale di shutdown(8) dice
+     * "A scheduled shutdown can be canceled by killing the shutdown process (a SIGTERM should
+     * suffice)". Attenzione a "shutdown -c": su Linux annulla, su FreeBSD e' POWER CYCLE —
+     * spegne e riaccende la macchina. Il 31/08/2026 l'ho scritto a memoria e l'ho detto
+     * sbagliato: e' esattamente il genere di ricordo che va verificato prima di usarlo.
+     */
+    /**
+     * Dove sta davvero un comando, chiesto al sistema invece che ricordato.
+     *
+     * Il 31/08/2026 il pulsante di riavvio non ha riavviato niente perche' avevo scritto
+     * /usr/sbin/shutdown a memoria. "daemon" fa fork e poi exec: se l'exec fallisce, il
+     * fallimento avviene nel figlio e il padre esce comunque con successo — quindi nemmeno il
+     * codice di uscita lo rivelava. Il manuale non dichiara il percorso, e allora la risposta
+     * non e' scegliere fra /sbin e /usr/sbin: e' chiederlo.
+     */
+    private static String percorsoComando(String nome, String... candidati) {
+        if (!nome.matches("[a-z0-9_-]{1,32}")) return "";
+        String v = sh("command -v " + nome + " 2>/dev/null", 20).trim();
+        if (v.startsWith("/") && ok("test -x " + v, 10)) return v;
+        for (String c : candidati) if (ok("test -x " + c, 10)) return c;
+        return "";
+    }
+
+    public static JSONObject annullaRiavvio() {
+        try {
+            String pid = sh("pgrep -x shutdown 2>/dev/null | head -1", 20).trim();
+            if (!pid.matches("[0-9]{1,7}")) pid = sh("pgrep -f '/shutdown -r' 2>/dev/null | head -1", 20).trim();
+            if (!pid.matches("[0-9]{1,7}"))
+                return new JSONObject().put("success", true).put("cera", false)
+                        .put("nota", "Non c'e' nessun riavvio programmato da annullare.");
+            String riga = sh("ps -o command= -p " + pid + " 2>/dev/null", 20).trim();
+            boolean fatto = ok("kill " + pid, 20);
+            // La prova che conta: il processo e' davvero sparito?
+            String ancora = sh("pgrep -x shutdown 2>/dev/null | head -1", 20).trim();
+            boolean via = ancora.isEmpty();
+            return new JSONObject().put("success", via).put("cera", true)
+                    .put("pid", pid).put("comando", riga)
+                    .put("nota", via
+                        ? "Riavvio annullato: il processo " + pid + " (" + riga + ") non c'e' piu'."
+                        : "Ho inviato il segnale ma il processo c'e' ancora (pid " + ancora + "): "
+                          + "riprova, oppure terminalo da SSH con  kill " + ancora)
+                    .put("error", via ? "" : "il processo shutdown non e' terminato");
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    public static JSONObject riavviaServer(boolean esegui, int minuti) {
+        JSONObject r = new JSONObject();
+        try {
+            if (minuti < 0 || minuti > 60) minuti = 1;
+            JSONObject so = sistemaOperativo();
+            r.put("kernelInstallato", so.optString("kernelInstallato"))
+             .put("kernelInEsecuzione", so.optString("uname"))
+             .put("riavvioNecessario", so.optBoolean("riavvioNecessario"))
+             .put("minuti", minuti);
+
+            boolean rc = ok("test -f /usr/local/etc/rc.d/mailpanel -o -f /etc/rc.d/mailpanel", 10);
+            String abil = sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim();
+            boolean acceso = "YES".equalsIgnoreCase(abil) || "yes".equalsIgnoreCase(abil)
+                    || "true".equalsIgnoreCase(abil) || "1".equals(abil);
+            r.put("rcAttivo", rc && acceso);
+            if (!(rc && acceso)) {
+                return r.put("success", false)
+                        .put("error", "NON riavvio: senza lo script rc.d abilitato il pannello resterebbe "
+                            + "spento e dovresti riaccenderlo da SSH. Installalo dalla scheda Sistema "
+                            + "operativo, pulsante \"Avvio automatico\", e poi torna qui.");
+            }
+
+            // Cosa si ferma: elencarlo prima e' meglio che scoprirlo dopo.
+            JSONArray servizi = new JSONArray();
+            for (String[] cand : SERVIZI) {
+                String svc = null;
+                for (String c : cand)
+                    if (ok("test -f /usr/local/etc/rc.d/" + c + " -o -f /etc/rc.d/" + c, 10)) { svc = c; break; }
+                if (svc == null) continue;
+                if (ok("service " + svc + " status", 20)) servizi.put(svc);
+            }
+            r.put("servizi", servizi);
+            r.put("effetto", "Durante il riavvio la posta in arrivo viene rifiutata temporaneamente e i "
+                + "mittenti riprovano da soli: e' il comportamento normale di SMTP, non si perde niente. "
+                + "Le caselle non si collegano finche' Dovecot non torna su. " + servizi.length()
+                + " servizi si fermano e ripartono al boot.");
+
+            String pendente = sh("ps -axo command | grep '^shutdown ' | head -1", 20).trim();
+            r.put("gaProgrammato", pendente);
+            // Il manuale: "-f  Ignore the presence of the /var/run/noshutdown file". Se quel
+            // file c'e', shutdown si rifiuta — ed e' meglio saperlo prima di premere.
+            boolean noshutdown = ok("test -f /var/run/noshutdown", 10);
+            r.put("noshutdown", noshutdown);
+            String shPrev = percorsoComando("shutdown", "/sbin/shutdown", "/usr/sbin/shutdown");
+            String dmPrev = percorsoComando("daemon", "/usr/sbin/daemon", "/sbin/daemon");
+            r.put("percorsoShutdown", shPrev.isEmpty() ? "NON TROVATO" : shPrev)
+             .put("percorsoDaemon", dmPrev.isEmpty() ? "NON TROVATO" : dmPrev);
+            if (noshutdown)
+                r.put("avvisoNoshutdown", "Esiste /var/run/noshutdown: shutdown si rifiutera' di "
+                        + "procedere. Qualcuno o qualcosa l'ha messo li' per impedire i riavvii — "
+                        + "capisci perche' prima di toglierlo.");
+            if (!esegui) return r.put("success", true).put("eseguito", false);
+
+            String msg = "Riavvio richiesto dal pannello di posta";
+            String shutdown = percorsoComando("shutdown", "/sbin/shutdown", "/usr/sbin/shutdown");
+            String daemon = percorsoComando("daemon", "/usr/sbin/daemon", "/sbin/daemon");
+            if (shutdown.isEmpty() || daemon.isEmpty())
+                return r.put("success", false)
+                        .put("error", "non trovo " + (shutdown.isEmpty() ? "shutdown" : "daemon")
+                            + " sul sistema: senza non posso programmare il riavvio.");
+            String logR = "/var/db/mailpanel/riavvio.log";
+            ok("mkdir -p /var/db/mailpanel", 20);
+            ok("rm -f " + logR, 15);
+            // Staccato: shutdown con un tempo futuro non torna finche' non e' ora. E con -o
+            // invece del solo -f, se rifiuta lo dice a qualcuno: la prima versione mandava la
+            // sua uscita in /dev/null e il 31/08/2026 il riavvio non e' avvenuto senza che
+            // nessuno sapesse perche'.
+            ok(daemon + " -f -o " + logR + " " + shutdown + " -r +" + minuti + " '" + msg + "'", 30);
+
+            // "daemon" esce subito e con successo comunque: il suo codice di uscita non dice
+            // niente su shutdown. L'unica prova e' che il processo shutdown ESISTA.
+            ok("sleep 2", 15);
+            String pidS = sh("pgrep -x shutdown 2>/dev/null | head -1", 20).trim();
+            String usc = sh("cat " + logR + " 2>/dev/null", 20).trim();
+            if (!pidS.matches("[0-9]{1,7}")) {
+                boolean nosh = ok("test -f /var/run/noshutdown", 10);
+                return r.put("success", false).put("eseguito", false)
+                        .put("uscita", usc)
+                        .put("error", "il riavvio NON e' stato programmato: dopo il comando non esiste "
+                            + "nessun processo shutdown."
+                            + (nosh ? "  Causa probabile: esiste /var/run/noshutdown, e il manuale dice "
+                                    + "che shutdown si rifiuta di procedere quando c'e' (serve -f per "
+                                    + "ignorarlo). Guarda perche' e' li' prima di forzare."
+                                    : "")
+                            + (usc.isEmpty() ? "  shutdown non ha scritto niente."
+                                             : "  Ha scritto: " + usc));
+            }
+            return r.put("success", true).put("eseguito", true).put("pid", pidS)
+                    .put("uscita", usc)
+                    .put("nota", "Riavvio programmato fra " + minuti + " minut"
+                        + (minuti == 1 ? "o" : "i") + ". Si annulla dal pannello, oppure terminando il "
+                        + "processo shutdown.")
+                    .put("annulla", "pulsante \"Annulla il riavvio\"");
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
     public static JSONObject scriptRcPannello(boolean esegui) {
         JSONObject r = new JSONObject();
         try {
@@ -5994,12 +6156,24 @@ public final class UpdateManager {
             } else {
                 StringBuilder cat = new StringBuilder();
                 eseguiConLog(job, "freebsd-update install 2>&1", 1800, cat);
-                String dopo = sh("freebsd-version -kru | tr '\n' ' '", 30);
-                job.scrivi("    dopo l'installazione: " + dopo);
-                if (cat.toString().toLowerCase().contains("kernel")) {
+                // Il criterio e' quello dell'Handbook: kernel INSTALLATO contro kernel IN
+                // ESECUZIONE. Cercare la parola "kernel" nell'output era una supposizione, e
+                // il 31/08/2026 non ha visto un caso in cui il riavvio serviva davvero: il
+                // pannello ha stampato "p13 / p0 / p13" e non ha detto niente. Avere il dato
+                // e non trarne la conclusione e' come non averlo.
+                JSONObject dopoJ = sistemaOperativo();
+                job.scrivi("    kernel installato:    " + dopoJ.optString("kernelInstallato"));
+                job.scrivi("    kernel in esecuzione: " + dopoJ.optString("uname"));
+                job.scrivi("    userland:             " + dopoJ.optString("userland"));
+                if (dopoJ.optBoolean("riavvioNecessario")) {
                     job.scrivi("");
-                    job.scrivi("    ATTENZIONE: sono state aggiornate parti del kernel.");
-                    job.scrivi("    RIAVVIA prima di proseguire con il salto di release.");
+                    job.scrivi("    >>> RIAVVIA PRIMA DI PROSEGUIRE <<<");
+                    job.scrivi("    Il kernel installato non e' quello in esecuzione: le patch ci sono");
+                    job.scrivi("    sul disco ma non sono in uso. Cominciare il salto adesso significa");
+                    job.scrivi("    sommare due cambiamenti e non sapere piu' quale ha rotto cosa.");
+                    job.scrivi("    Riavvia, poi ripremi \"Verifica prerequisiti\": deve tornare tutto verde.");
+                } else {
+                    job.scrivi("    Kernel installato e in esecuzione combaciano: nessun riavvio in sospeso.");
                 }
             }
 
