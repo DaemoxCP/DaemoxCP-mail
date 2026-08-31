@@ -1965,8 +1965,23 @@ public final class UpdateManager {
         // --- Cache di rspamd rimaste da un aggiornamento precedente ---
         // Esiste come passo solo finche' quei file ci sono: e' lo stesso principio dello
         // stato ricavato, e sparisce da solo quando non serve piu'.
-        long unser = numero(sh("find /var/db/rspamd -type f -name '*.unser' 2>/dev/null | wc -l", 60));
-        if (unser > 0) {
+        // Un "zero file trovati" puo' significare due cose opposte: che sono gia' stati
+        // eliminati, oppure che ho guardato nel posto sbagliato. Si distingue guardando se la
+        // cartella esiste e contiene qualcosa: un'assenza si dimostra, non si presume.
+        boolean rspamdPresente = ok("pkg info -e rspamd", 20);
+        boolean cartellaRspamd = ok("test -d /var/db/rspamd", 15);
+        long fileRspamd = cartellaRspamd
+                ? numero(sh("find /var/db/rspamd -type f 2>/dev/null | wc -l", 60)) : 0;
+        long unser = cartellaRspamd
+                ? numero(sh("find /var/db/rspamd -type f -name '*.unser' 2>/dev/null | wc -l", 60)) : 0;
+        if (rspamdPresente && !cartellaRspamd) {
+            passi.put(passo("fase-rspamd-cache", "fase", "Cache di rspamd: posizione da verificare", "manuale",
+                    "rspamd e' installato ma /var/db/rspamd non esiste.",
+                    "Il port di rspamd 4.1 chiede di eliminare le cache Hyperscan da quella cartella. Non "
+                    + "trovandola, il pannello non puo' dire se ci siano file da togliere: non e' un'assenza "
+                    + "verificata, e' una domanda senza risposta. Su questa installazione la cache potrebbe "
+                    + "stare altrove.", null));
+        } else if (unser > 0) {
             passi.put(passo("fase-rspamd-cache", "fase", "Eliminare le cache Hyperscan di rspamd", "dafare",
                     unser + " file .unser in /var/db/rspamd, generati dalla versione precedente.",
                     "Il port di rspamd 4.1 chiede espressamente di rimuoverli: sono cache di espressioni "
@@ -1974,6 +1989,12 @@ public final class UpdateManager {
                     + "cioe' spam che passa o posta buona scartata, senza che nulla sembri guasto. "
                     + "Sono file rigenerati da solo al primo avvio: non sono dati ne' configurazione.",
                     new JSONObject().put("tipo", "rspamd_clean_cache")));
+        } else if (rspamdPresente && cartellaRspamd) {
+            passi.put(passo("fase-rspamd-cache", "fase", "Cache Hyperscan di rspamd", "fatto",
+                    "Nessun file .unser in /var/db/rspamd, che contiene " + fileRspamd + " file in tutto.",
+                    "La pulizia chiesta dal port di rspamd 4.1 non serve: la cartella e' stata guardata ed "
+                    + "e' pulita. Il conteggio degli altri file e' la prova che la ricerca ha funzionato "
+                    + "davvero, invece di non trovare nulla perche' cercava nel posto sbagliato.", null));
         }
 
         // --- Passo finale: configurazione Dovecot dalla sorgente unica ---
