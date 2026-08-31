@@ -13510,11 +13510,14 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             (r.righe || []).forEach(x => {
                 const cls = x.esito === 'coerente' ? 'upd-badge-ok'
                           : (x.esito === 'DIVERGE' ? 'upd-badge-stop' : 'upd-badge-warn');
+                const fuori = x.fuoriPredefinito
+                    ? '<br><span class="small text-danger">fuori dal predefinito: <code>'
+                      + updEsc(x.fuoriPredefinito) + '</code></span>' : '';
                 h += '<tr class="upd-cell"><td><strong>' + updEsc(x.componente) + '</strong><br>'
                    + '<span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
                    + '<td><code>' + updEsc(x.predefinito) + '</code></td>'
                    + '<td><code>' + updEsc(x.installato || '-') + '</code></td>'
-                   + '<td><span class="badge ' + cls + '">' + updEsc(x.esito) + '</span></td></tr>';
+                   + '<td><span class="badge ' + cls + '">' + updEsc(x.esito) + '</span>' + fuori + '</td></tr>';
             });
             h += '</tbody></table></div>'
                + '<div class="small text-muted"><strong>Fonte:</strong> ' + updEsc(r.fonte) + '<br>'

@@ -2982,19 +2982,34 @@ public final class UpdateManager {
         JSONArray righe = new JSONArray();
         for (String[] d : PREDEFINITI) {
             String installato = sh(d[2], 60).trim().replace("\n", " ");
-            String esito;
+            String esito, fuori = "";
             if (installato.isEmpty()) {
                 esito = "assente";
             } else if ("base".equals(d[1])) {
                 // Il predefinito e' il sistema base: il port installato e' l'anomalia.
                 esito = "port installato accanto al sistema base";
-            } else if (installato.replace(".", "").contains(d[1].replace(".", ""))) {
-                esito = "coerente";
             } else {
-                esito = "DIVERGE";
+                // Si confrontano TUTTI i valori installati, uno per uno. Cercare se il
+                // predefinito compare "da qualche parte" nella stringa era sbagliato: con
+                // py311 e py312 insieme trovava py312 e dichiarava tutto coerente, nascondendo
+                // proprio la divergenza che la scheda esiste per mostrare. La presenza del
+                // predefinito non dimostra l'assenza di altro.
+                String cifreAttese = d[1].replaceAll("[^0-9]", "");
+                java.util.List<String> nonConformi = new ArrayList<>();
+                int conformi = 0;
+                for (String tok : installato.split("\\s+")) {
+                    if (tok.isBlank()) continue;
+                    if (tok.replaceAll("[^0-9]", "").contains(cifreAttese)) conformi++;
+                    else nonConformi.add(tok);
+                }
+                if (nonConformi.isEmpty() && conformi > 0) esito = "coerente";
+                else if (conformi == 0) esito = "DIVERGE";
+                else { esito = "MISTO"; fuori = String.join(", ", nonConformi); }
             }
-            righe.put(new JSONObject().put("componente", d[0]).put("predefinito", d[1])
-                    .put("installato", installato).put("esito", esito).put("perche", d[3]));
+            JSONObject riga = new JSONObject().put("componente", d[0]).put("predefinito", d[1])
+                    .put("installato", installato).put("esito", esito).put("perche", d[3]);
+            if (!fuori.isEmpty()) riga.put("fuoriPredefinito", fuori);
+            righe.put(riga);
         }
         return new JSONObject().put("success", true).put("righe", righe)
                 .put("fonte", "Mk/bsd.default-versions.mk del repository ufficiale dei port FreeBSD "
