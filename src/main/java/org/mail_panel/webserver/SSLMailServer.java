@@ -6084,6 +6084,19 @@ public class SSLMailServer {
                 case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
                 case "system_report" -> response = UpdateManager.rapportoSistema();
                 case "os_status" -> response = UpdateManager.sistemaOperativo();
+                case "os_upgrade_preflight" -> response = UpdateManager.aggiornamentoSistemaPreflight(
+                        req.optString("target", "15.1"));
+                case "os_upgrade_instructions" -> response = UpdateManager.istruzioniAggiornamentoSistema(
+                        req.optString("target", "15.1"));
+                case "os_upgrade_verify" -> response = UpdateManager.verificaDopoAggiornamento();
+                case "os_upgrade_prepare" -> {
+                    if (!"PREPARA AGGIORNAMENTO".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaPreparazioneSistema(req.optString("target", "15.1"));
+                    logAudit("OS_UPGRADE_PREPARE", ip, req.optString("target", ""));
+                }
                 case "os_fetch" -> {
                     if (!"CERCA AGGIORNAMENTI".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");

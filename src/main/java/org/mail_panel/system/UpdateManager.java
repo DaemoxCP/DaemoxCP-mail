@@ -5424,6 +5424,459 @@ public final class UpdateManager {
         }
     }
 
+    /**
+     * Controlli preliminari per il salto di release del sistema di base. Tutti in sola lettura.
+     *
+     * Fonti: Handbook di FreeBSD, capitolo "Updating and Upgrading FreeBSD" (procedura
+     * freebsd-update upgrade), manuale di bectl(8) per gli ambienti di avvio, e la pagina
+     * https://www.FreeBSD.org/security/ per le date di fine supporto.
+     *
+     * Il punto che decide tutto: 15.0 e 15.1 hanno la STESSA ABI dei pacchetti
+     * (FreeBSD:15:arch), perche' l'ABI porta solo il numero maggiore. L'Handbook impone
+     * "pkg-static upgrade -f" solo per i salti di versione MAGGIORE, proprio a causa del
+     * cambio di ABI. Qui l'ABI non cambia: i 41 pacchetti protetti non vanno toccati. Fosse
+     * un salto maggiore, sarebbe un'altra procedura.
+     */
+    public static JSONObject aggiornamentoSistemaPreflight(String bersaglio) {
+        JSONObject r = new JSONObject();
+        JSONArray checks = new JSONArray();
+        boolean blocca = false;
+        try {
+            if (bersaglio == null || !bersaglio.matches("[0-9]{1,2}\\.[0-9]{1,2}"))
+                return r.put("success", false).put("error", "versione di arrivo non valida");
+            String target = bersaglio + "-RELEASE";
+            r.put("bersaglio", target);
+
+            JSONObject so = sistemaOperativo();
+            String userland = so.optString("userland"), uname = so.optString("uname");
+            r.put("attuale", userland).put("uname", uname).put("arch", so.optString("arch"));
+
+            if (!userland.contains("-RELEASE")) {
+                aggiungiCheck(checks, "tipo", "Tipo di installazione", "block",
+                        "la userland e' " + userland + ", non una -RELEASE: freebsd-update non si applica "
+                        + "a un sistema compilato dai sorgenti. Questa procedura non fa per te.");
+                return r.put("success", true).put("checks", checks).put("blocked", true).put("canProceed", false);
+            }
+            aggiungiCheck(checks, "attuale", "Versione attuale", "ok",
+                    "userland " + userland + ", kernel in esecuzione " + uname
+                    + (so.optBoolean("riavvioNecessario")
+                       ? "  <- ATTENZIONE: non combaciano, c'e' gia' un riavvio in sospeso" : ""));
+            if (so.optBoolean("riavvioNecessario")) {
+                aggiungiCheck(checks, "riavvioPendente", "Riavvio gia' in sospeso", "block",
+                        "il kernel installato non e' quello in esecuzione: riavvia PRIMA di cominciare, "
+                        + "altrimenti si sommano due cambiamenti e non si capisce piu' quale ha rotto cosa");
+                blocca = true;
+            }
+
+            // Salto minore o maggiore? Cambia se i pacchetti vanno ricostruiti.
+            String magAtt = userland.replaceAll("[^0-9.].*$", "").replaceAll("\\..*$", "");
+            String magNew = bersaglio.replaceAll("\\..*$", "");
+            boolean minore = magAtt.equals(magNew);
+            r.put("saltoMinore", minore);
+            String abi = sh("pkg config abi 2>/dev/null", 20).trim();
+            r.put("abi", abi);
+            aggiungiCheck(checks, "abi", "ABI dei pacchetti", minore ? "ok" : "attendi",
+                    minore
+                    ? "resta " + abi + ": e' un salto MINORE (" + magAtt + " -> " + magNew + "), quindi i "
+                      + "pacchetti NON vanno reinstallati. L'Handbook chiede \"pkg-static upgrade -f\" solo "
+                      + "per i salti maggiori, a causa del cambio di ABI: qui non serve, e i 41 pacchetti "
+                      + "protetti restano dove sono."
+                    : "SALTO MAGGIORE " + magAtt + " -> " + magNew + ": l'ABI cambia e TUTTI i pacchetti "
+                      + "vanno reinstallati con \"pkg-static upgrade -f\". E' un'operazione molto piu' "
+                      + "grande di questa, con lo stack di posta da ricostruire.");
+
+            // Fine supporto della versione di arrivo: passare a qualcosa che scade fra poco
+            // non risolve niente.
+            String eolNew = "", noteNew = "";
+            for (String[] e : FINE_SUPPORTO) if (e[0].equals(bersaglio)) { eolNew = e[1]; noteNew = e[2]; }
+            r.put("fineSupportoBersaglio", eolNew);
+            aggiungiCheck(checks, "eol", "Supporto della versione di arrivo", eolNew.isEmpty() ? "attendi" : "ok",
+                    eolNew.isEmpty()
+                    ? bersaglio + " non e' nella tabella del pannello (aggiornata al 31/08/2026): "
+                      + "verifica su https://www.FreeBSD.org/security/ che sia supportata"
+                    : target + " e' supportata fino al " + eolNew + " (" + noteNew + "). "
+                      + "La tua " + so.optString("serie") + " scade il " + so.optString("fineSupporto") + ".");
+
+            // Kernel personalizzato: l'Handbook avverte che non viene aggiornato.
+            String kconf = sh("sysctl -n kern.conftxt 2>/dev/null | head -1", 20).trim();
+            boolean generic = so.optString("arch").contains("GENERIC");
+            aggiungiCheck(checks, "kernel", "Kernel", generic ? "ok" : "attendi",
+                    generic
+                    ? "GENERIC, cioe' quello distribuito con FreeBSD: viene aggiornato dalla procedura "
+                      + "senza passaggi in piu'"
+                    : "il kernel non sembra GENERIC (" + so.optString("arch") + "). L'Handbook avverte che "
+                      + "un kernel personalizzato NON viene aggiornato e va gestito a mano, con "
+                      + "/boot/GENERIC come passaggio intermedio.");
+
+            // Ambienti di avvio: e' la vera via di ritorno di un aggiornamento di base.
+            boolean be = ok("bectl check", 30);
+            r.put("bootEnvironment", be);
+            if (be) {
+                String elenco = sh("bectl list -H 2>/dev/null | awk '{print $1\" (\"$2\") \"$4}'", 30);
+                r.put("beEsistenti", elenco);
+                aggiungiCheck(checks, "be", "Ambienti di avvio (ZFS)", "ok",
+                        "supportati: prima di toccare il sistema il pannello ne crea uno. Se qualcosa va "
+                        + "storto si torna indietro riavviando su quello vecchio, con un comando solo. "
+                        + "Gia' presenti: " + elenco.replace("\n", " | "));
+            } else {
+                aggiungiCheck(checks, "be", "Ambienti di avvio (ZFS)", "attendi",
+                        "NON supportati su questo sistema (bectl check fallisce). Senza, la via di ritorno "
+                        + "da un aggiornamento di base e' molto piu' faticosa: assicurati di avere una copia "
+                        + "della macchina prima di procedere.");
+            }
+
+            // Spazio: l'ambiente di avvio e' un clone, ma i file scaricati e le vecchie librerie
+            // occupano comunque.
+            long liberiMb = numero(sh("df -m / | tail -1 | awk '{print $4}'", 30));
+            r.put("liberiMb", liberiMb);
+            aggiungiCheck(checks, "spazio", "Spazio su /", liberiMb > 5000 ? "ok" : "block",
+                    liberiMb + " MB liberi su /. " + (liberiMb > 5000
+                        ? "Sufficienti: l'ambiente di avvio e' un clone e all'inizio non occupa quasi nulla, "
+                          + "cresce solo con i file che cambiano."
+                        : "Troppo pochi: servono almeno 5 GB fra file scaricati, nuove librerie e le "
+                          + "vecchie che restano finche' non si completa."));
+            if (liberiMb <= 5000) blocca = true;
+
+            // Il pannello stesso: due riavvii, e lui non torna su da solo.
+            boolean rc = ok("test -f /usr/local/etc/rc.d/mailpanel -o -f /etc/rc.d/mailpanel", 10);
+            r.put("rcPannello", rc);
+            aggiungiCheck(checks, "pannello", "Il pannello dopo il riavvio", rc ? "ok" : "attendi",
+                    rc ? "esiste uno script rc.d per il pannello: tornera' su da solo."
+                       : "NON c'e' nessuno script rc.d per il pannello: ai riavvii resta spento e va "
+                         + "riacceso da SSH. Non e' un guasto, e' come e' fatto adesso — ma sappilo prima, "
+                         + "perche' durante l'aggiornamento questa pagina non ci sara'.");
+
+            // I servizi che devono tornare su: si annotano ORA per poterli confrontare DOPO.
+            JSONArray servizi = new JSONArray();
+            for (String[] cand : SERVIZI) {
+                String svc = null;
+                for (String c : cand)
+                    if (ok("test -f /usr/local/etc/rc.d/" + c + " -o -f /etc/rc.d/" + c, 10)) { svc = c; break; }
+                if (svc == null) continue;
+                servizi.put(new JSONObject().put("nome", svc).put("attivo", ok("service " + svc + " status", 20)));
+            }
+            r.put("servizi", servizi);
+            aggiungiCheck(checks, "servizi", "Servizi da ritrovare dopo", "ok",
+                    servizi.length() + " servizi annotati adesso: a fine aggiornamento il pannello "
+                    + "riconfronta e ti dice quali non sono tornati su.");
+
+            // Patch di sicurezza arretrate: l'Handbook dice di applicarle PRIMA di aggiornare.
+            String pl = uname.contains("-p") ? uname.replaceAll(".*-p", "p") : "p0 (nessuna patch applicata)";
+            aggiungiCheck(checks, "patch", "Livello di patch attuale", "attendi",
+                    "sei a " + pl + ". L'Handbook chiede di portare il sistema all'ultimo livello di patch "
+                    + "PRIMA di cambiare release: la preparazione lo fa (freebsd-update fetch + install).");
+
+            r.put("success", true).put("checks", checks)
+             .put("blocked", blocca).put("canProceed", !blocca);
+            return r;
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    public static JSONObject avviaPreparazioneSistema(String bersaglio) {
+        if (bersaglio == null || !bersaglio.matches("[0-9]{1,2}\\.[0-9]{1,2}"))
+            return new JSONObject().put("success", false).put("error", "versione di arrivo non valida");
+        String id = "sys-" + System.currentTimeMillis();
+        Job j = new Job(id, "sistema");
+        JOBS.put(id, j);
+        final String b = bersaglio;
+        Thread t = new Thread(() -> runPreparazioneSistema(j, b), "sistema-prep");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    /**
+     * Prepara il salto di release: copia di /etc, ambiente di avvio, patch arretrate.
+     *
+     * Non aggiorna la release: mette il sistema nelle condizioni in cui l'Handbook dice che
+     * deve essere prima di cominciare, e crea la via di ritorno. Il salto vero e' interattivo
+     * (chiede conferma, puo' aprire un editor per fondere i file di /etc) e comporta due
+     * riavvii durante i quali questa pagina non esiste: quella parte la fa una persona, con le
+     * istruzioni che il pannello genera sui valori veri di questo server.
+     */
+    private static void runPreparazioneSistema(Job job, String bersaglio) {
+        job.status = "running";
+        final int TOT = 4;
+        try {
+            job.avanza(1, TOT);
+            job.scrivi("=== Preparazione al passaggio a FreeBSD " + bersaglio + " ===");
+            job.scrivi("");
+            job.scrivi("[1/" + TOT + "] Controlli preliminari...");
+            JSONObject pf = aggiornamentoSistemaPreflight(bersaglio);
+            if (!pf.optBoolean("canProceed", false)) {
+                job.status = "error";
+                job.errorMessage = "I controlli preliminari hanno trovato un impedimento.";
+                JSONArray ck = pf.optJSONArray("checks");
+                for (int i = 0; ck != null && i < ck.length(); i++) {
+                    JSONObject c = ck.getJSONObject(i);
+                    if ("block".equals(c.optString("level")))
+                        job.scrivi("  [BLOCCO] " + c.optString("label") + ": " + c.optString("detail"));
+                }
+                job.scrivi("RIFIUTO DI PARTIRE.");
+                return;
+            }
+            job.scrivi("  " + pf.optString("attuale") + " -> " + pf.optString("bersaglio")
+                    + "   (salto " + (pf.optBoolean("saltoMinore") ? "minore, ABI invariata: i pacchetti non si toccano"
+                                                                   : "MAGGIORE") + ")");
+
+            String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
+            if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("data non valida");
+            String bk = "/var/db/mailpanel/sistema/" + ts;
+            if (!ok("mkdir -p " + bk, 30)) throw new IllegalStateException("non riesco a creare " + bk);
+
+            job.avanza(2, TOT);
+            job.scrivi("");
+            job.scrivi("[2/" + TOT + "] Copia di /etc e dell'inventario...");
+            if (!ok("tar -cf " + bk + "/etc.tar -C /etc . 2>/dev/null", 600))
+                throw new IllegalStateException("copia di /etc non riuscita");
+            long voci = numero(sh("tar -tf " + bk + "/etc.tar 2>/dev/null | wc -l", 120));
+            if (voci < 50) throw new IllegalStateException("la copia di /etc ha solo " + voci
+                    + " voci: non e' credibile, mi fermo");
+            job.scrivi("    /etc -> " + bk + "/etc.tar (" + voci + " voci)");
+            sh("pkg query '%n %v' > " + bk + "/pacchetti.txt 2>/dev/null", 120);
+            sh("freebsd-version -kru > " + bk + "/versione.txt 2>/dev/null", 30);
+            StringBuilder el = new StringBuilder();
+            JSONArray sv = pf.optJSONArray("servizi");
+            for (int i = 0; sv != null && i < sv.length(); i++)
+                el.append(sv.getJSONObject(i).getString("nome")).append(' ')
+                  .append(sv.getJSONObject(i).getBoolean("attivo") ? "attivo" : "fermo").append('\n');
+            Files.writeString(Paths.get(bk + "/servizi.txt"), el.toString());
+            job.scrivi("    inventario dei pacchetti, versione e stato dei servizi salvati");
+
+            job.avanza(3, TOT);
+            job.scrivi("");
+            job.scrivi("[3/" + TOT + "] Ambiente di avvio: la via di ritorno...");
+            String nomeBe = "prima-di-" + bersaglio.replace(".", "") + "-" + ts;
+            if (!pf.optBoolean("bootEnvironment", false)) {
+                job.scrivi("    NON supportati su questo sistema: non c'e' via di ritorno automatica.");
+                job.scrivi("    Assicurati di avere una copia della macchina prima di procedere.");
+            } else if (ok("bectl create " + nomeBe, 300)) {
+                boolean c1 = ok("bectl list -H 2>/dev/null | grep -q '^" + nomeBe + "'", 30);
+                job.scrivi("    creato: " + nomeBe + (c1 ? "   (verificato in bectl list)" : "   MA NON LO TROVO in bectl list"));
+                if (!c1) throw new IllegalStateException("l'ambiente di avvio non risulta creato: mi fermo");
+                job.scrivi("    Per tornare indietro, in qualunque momento:  bectl activate " + nomeBe + " && shutdown -r now");
+                job.scrivi("");
+                for (String l : sh("bectl list 2>/dev/null", 60).split("\n")) job.scrivi("      " + l);
+            } else throw new IllegalStateException("bectl create non riuscito: senza via di ritorno non proseguo");
+
+            job.avanza(4, TOT);
+            job.scrivi("");
+            job.scrivi("[4/" + TOT + "] Patch arretrate della release attuale...");
+            job.scrivi("    (l'Handbook chiede di essere all'ultimo livello di patch PRIMA di cambiare release)");
+            String fetch = sh("freebsd-update --not-running-from-cron fetch 2>&1", 1800);
+            for (String l : fetch.split("\n")) if (!l.trim().isEmpty()) job.scrivi("      " + l);
+            boolean nessuna = fetch.toLowerCase().contains("no updates needed")
+                    || fetch.toLowerCase().contains("has no updates available");
+            if (nessuna) {
+                job.scrivi("    nessuna patch arretrata: sei gia' all'ultimo livello.");
+            } else {
+                StringBuilder cat = new StringBuilder();
+                eseguiConLog(job, "freebsd-update install 2>&1", 1800, cat);
+                String dopo = sh("freebsd-version -kru | tr '\n' ' '", 30);
+                job.scrivi("    dopo l'installazione: " + dopo);
+                if (cat.toString().toLowerCase().contains("kernel")) {
+                    job.scrivi("");
+                    job.scrivi("    ATTENZIONE: sono state aggiornate parti del kernel.");
+                    job.scrivi("    RIAVVIA prima di proseguire con il salto di release.");
+                }
+            }
+
+            job.status = "completed";
+            job.scrivi("");
+            job.scrivi("=== Preparazione finita ===");
+            job.scrivi("Copie in " + bk + ", ambiente di avvio " + nomeBe + ".");
+            job.scrivi("Il salto vero e' interattivo e comporta due riavvii: leggi le istruzioni");
+            job.scrivi("nella scheda, sono generate sui valori di questo server.");
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = e.getMessage();
+            job.scrivi("ERRORE: " + e.getMessage());
+        } finally {
+            job.fine = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Le istruzioni per la parte che una persona deve fare da SSH, sui valori veri.
+     *
+     * Non e' un rinvio: e' il riconoscimento che quella parte chiede decisioni. freebsd-update
+     * puo' aprire un editor per fondere file di /etc — su questo server sono master.passwd,
+     * rc.conf, i file di Postfix — e una fusione decisa da un automatismo e' il modo di rompere
+     * qualcosa senza che nessuno se ne accorga. La sequenza e' quella dell'Handbook, capitolo
+     * "Updating and Upgrading FreeBSD".
+     */
+    public static JSONObject istruzioniAggiornamentoSistema(String bersaglio) {
+        try {
+            if (bersaglio == null || !bersaglio.matches("[0-9]{1,2}\\.[0-9]{1,2}"))
+                return new JSONObject().put("success", false).put("error", "versione non valida");
+            JSONObject pf = aggiornamentoSistemaPreflight(bersaglio);
+            String be = sh("bectl list -H 2>/dev/null | grep '^prima-di-' | tail -1 | awk '{print $1}'", 30).trim();
+            String avvio = comandoAvvio(false);
+            String dir = System.getProperty("user.dir", "/home/panel");
+            boolean minore = pf.optBoolean("saltoMinore", true);
+
+            JSONArray passi = new JSONArray();
+            passi.put(new JSONObject().put("n", 1)
+                .put("titolo", "Scarica e prepara il salto")
+                .put("cmd", "freebsd-update -r " + bersaglio + "-RELEASE upgrade")
+                .put("nota", "CHIEDE CONFERMA (\"Does this look reasonable (y/n)?\") e poi puo' aprire un "
+                    + "editor per fondere i file di configurazione. Non e' ancora stato cambiato niente sul "
+                    + "disco: lavora in una cartella a parte. Se un file di /etc ti viene proposto per la "
+                    + "fusione e non sei sicuro, TIENI LA TUA VERSIONE."));
+            passi.put(new JSONObject().put("n", 2)
+                .put("titolo", "Applica: kernel per primo")
+                .put("cmd", "freebsd-update install")
+                .put("nota", "Da qui il disco cambia. L'Handbook: \"The kernel and kernel modules will be patched first.\""));
+            passi.put(new JSONObject().put("n", 3)
+                .put("titolo", "Riavvia")
+                .put("cmd", "shutdown -r now")
+                .put("nota", "Il pannello si spegne e NON torna su da solo: da qui in poi lavori da SSH, "
+                    + "e lo riaccendi all'ULTIMO passo."));
+            passi.put(new JSONObject().put("n", 4)
+                .put("titolo", "Riprendi: toglie le vecchie librerie")
+                .put("cmd", "freebsd-update install")
+                .put("nota", "freebsd-update ricorda a che punto era. Ripeti questo comando finche' dice "
+                    + "che non c'e' altro da fare: l'Handbook avverte che le fasi possono essere due o tre, "
+                    + "secondo quante librerie hanno cambiato numero."));
+            if (minore) {
+                passi.put(new JSONObject().put("n", 5)
+                    .put("titolo", "I pacchetti NON si toccano")
+                    .put("cmd", "(nessun comando)")
+                    .put("nota", "L'ABI resta " + pf.optString("abi") + ", perche' porta solo il numero "
+                        + "maggiore. \"pkg-static upgrade -f\" serve SOLO ai salti di versione maggiore, e "
+                        + "qui farebbe reinstallare 41 pacchetti senza motivo — compreso lo stack di posta."));
+            } else {
+                passi.put(new JSONObject().put("n", 5)
+                    .put("titolo", "Reinstalla TUTTI i pacchetti (salto maggiore)")
+                    .put("cmd", "pkg-static upgrade -f")
+                    .put("nota", "Obbligatorio: l'ABI cambia. Sblocca prima i pacchetti protetti dal pannello."));
+            }
+            passi.put(new JSONObject().put("n", 6)
+                .put("titolo", "Ultima chiamata a freebsd-update")
+                .put("cmd", "freebsd-update install")
+                .put("nota", "L'Handbook la mette DOPO il passo sui pacchetti: \"finish the upgrade "
+                    + "process with a final call to freebsd-update in order to tie up all the loose ends\". "
+                    + "Se risponde che non c'e' niente da fare, hai gia' finito: e' normale."));
+            passi.put(new JSONObject().put("n", 7)
+                .put("titolo", "Riavvia nella versione nuova")
+                .put("cmd", "shutdown -r now")
+                .put("nota", "Prima verifica con \"freebsd-version -kru\" che dica " + bersaglio + "-RELEASE."));
+            passi.put(new JSONObject().put("n", 8)
+                .put("titolo", "Riaccendi il pannello")
+                .put("cmd", "cd " + dir + " && " + avvio)
+                .put("nota", "Poi torna qui e premi \"Verifica dopo l'aggiornamento\"."));
+
+            return new JSONObject().put("success", true).put("passi", passi)
+                .put("bersaglio", bersaglio)
+                .put("ritorno", be.isEmpty()
+                    ? "Ancora nessun ambiente di avvio: lo crea la PREPARAZIONE, che non hai ancora eseguito. "
+                      + "Premi \"Prepara\" prima di cominciare il salto — senza, non c'e' modo di tornare indietro."
+                    : "In qualunque momento, per tornare al sistema di prima:  bectl activate " + be
+                      + " && shutdown -r now")
+                .put("fonte", "Handbook di FreeBSD, \"Updating and Upgrading FreeBSD\" — procedura "
+                    + "freebsd-update upgrade; bectl(8) per gli ambienti di avvio.");
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * Verifica dopo il salto di release, confrontando con cio' che era stato annotato PRIMA.
+     *
+     * "Il sistema si e' acceso" non e' una verifica: un servizio puo' non essere ripartito e
+     * nessuno accorgersene finche' qualcuno non prova a mandare una mail. Qui si confronta con
+     * l'inventario preso dalla preparazione — versione, pacchetti, servizi — perche' un
+     * confronto ha bisogno di due termini, e il primo va preso quando le cose funzionavano.
+     */
+    public static JSONObject verificaDopoAggiornamento() {
+        JSONObject r = new JSONObject();
+        JSONArray checks = new JSONArray();
+        try {
+            String dir = sh("ls -1dt /var/db/mailpanel/sistema/*/ 2>/dev/null | head -1", 30).trim();
+            if (dir.isEmpty())
+                return r.put("success", false)
+                        .put("error", "non trovo nessun inventario: la preparazione non e' mai stata eseguita, "
+                            + "quindi non ho un termine di paragone. Posso solo dirti lo stato attuale.");
+            r.put("inventario", dir);
+
+            JSONObject so = sistemaOperativo();
+            String prima = sh("cat " + dir + "/versione.txt 2>/dev/null | tr '\n' ' '", 30).trim();
+            aggiungiCheck(checks, "ver", "Versione", "ok",
+                    "prima: " + prima + "   adesso: " + so.optString("kernelInstallato") + " / "
+                    + so.optString("userland"));
+            if (so.optBoolean("riavvioNecessario")) {
+                aggiungiCheck(checks, "riavvio", "Riavvio", "attendi",
+                        "il kernel installato (" + so.optString("kernelInstallato") + ") non e' quello in "
+                        + "esecuzione (" + so.optString("uname") + "): manca un riavvio.");
+            } else {
+                aggiungiCheck(checks, "riavvio", "Riavvio", "ok",
+                        "kernel installato e in esecuzione combaciano: nessun riavvio in sospeso.");
+            }
+
+            // Servizi: quelli che erano attivi prima devono esserlo adesso.
+            java.util.List<String> spenti = new ArrayList<>(), assenti = new ArrayList<>();
+            int controllati = 0;
+            for (String riga : sh("cat " + dir + "/servizi.txt 2>/dev/null", 30).split("\n")) {
+                String[] c = riga.trim().split("\\s+");
+                if (c.length != 2 || !"attivo".equals(c[1])) continue;
+                controllati++;
+                if (!ok("test -f /usr/local/etc/rc.d/" + c[0] + " -o -f /etc/rc.d/" + c[0], 10)) { assenti.add(c[0]); continue; }
+                if (!ok("service " + c[0] + " status", 20)) spenti.add(c[0]);
+            }
+            aggiungiCheck(checks, "servizi", "Servizi che erano attivi",
+                    (spenti.isEmpty() && assenti.isEmpty()) ? "ok" : "block",
+                    (spenti.isEmpty() && assenti.isEmpty())
+                    ? "tutti e " + controllati + " sono di nuovo attivi"
+                    : "su " + controllati + " ne mancano: "
+                      + (spenti.isEmpty() ? "" : "SPENTI " + String.join(", ", spenti) + "  ")
+                      + (assenti.isEmpty() ? "" : "SPARITI " + String.join(", ", assenti)));
+
+            // Pacchetti: nessuno deve essere sparito.
+            java.util.Map<String, String> ora = new java.util.HashMap<>();
+            for (String riga : sh("pkg query '%n %v' 2>/dev/null", 120).split("\n")) {
+                String[] c = riga.trim().split("\\s+");
+                if (c.length == 2) ora.put(c[0], c[1]);
+            }
+            java.util.List<String> mancanti = new ArrayList<>(), diversi = new ArrayList<>();
+            int totPrima = 0;
+            for (String riga : sh("cat " + dir + "/pacchetti.txt 2>/dev/null", 60).split("\n")) {
+                String[] c = riga.trim().split("\\s+");
+                if (c.length != 2) continue;
+                totPrima++;
+                String v = ora.get(c[0]);
+                if (v == null) mancanti.add(c[0]);
+                else if (!v.equals(c[1])) diversi.add(c[0] + " " + c[1] + " -> " + v);
+            }
+            aggiungiCheck(checks, "pkg", "Pacchetti", mancanti.isEmpty() ? "ok" : "block",
+                    mancanti.isEmpty()
+                    ? totPrima + " prima, " + ora.size() + " adesso, nessuno sparito"
+                      + (diversi.isEmpty() ? "" : ". Cambiati di versione: " + String.join(", ", diversi))
+                    : "SPARITI " + mancanti.size() + ": " + String.join(", ", mancanti));
+
+            // Protezione: dopo un'operazione di questa portata va riconfermata.
+            JSONObject st = packagesStatus();
+            int inst = st.optInt("installedCount"), lock = st.optInt("lockedCount");
+            aggiungiCheck(checks, "lock", "Protezione dei pacchetti", inst == lock ? "ok" : "attendi",
+                    lock + " su " + inst + " protetti"
+                    + (inst == lock ? "" : ": qualcuno si e' sbloccato, riproteggili dalla scheda apposita"));
+
+            // Gli ambienti di avvio: quello vecchio va tenuto finche' non sei sicuro.
+            if (ok("bectl check", 20))
+                aggiungiCheck(checks, "be", "Ambienti di avvio", "verifica",
+                        sh("bectl list 2>/dev/null", 60).replace("\n", "  |  ")
+                        + "   — tieni quello di prima finche' non sei sicuro; poi: bectl destroy <nome>");
+
+            boolean guasto = false;
+            for (int i = 0; i < checks.length(); i++)
+                if ("block".equals(checks.getJSONObject(i).getString("level"))) guasto = true;
+            return r.put("success", true).put("checks", checks).put("tuttoBene", !guasto);
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
     public static JSONObject rapportoSistema() {
         StringBuilder t = new StringBuilder();
         try {

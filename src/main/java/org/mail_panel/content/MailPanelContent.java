@@ -13208,6 +13208,32 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
+            <div class="card mb-4 border-danger">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-arrow-up-right-dots me-2"></i><strong>Passaggio a una nuova release di FreeBSD</strong>
+                        <span class="small text-muted ms-2">il pannello prepara e verifica; il salto lo fai tu da SSH</span></span>
+                    <span>
+                        <input id="os-target" class="form-control form-control-sm d-inline-block me-1" style="width:6rem" value="15.1">
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="upVerifica()"><i class="fas fa-clipboard-check me-1"></i>Verifica dopo</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="upPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        <strong>Perch&eacute; non &egrave; tutto automatico.</strong> <code>freebsd-update upgrade</code> chiede
+                        conferma e pu&ograve; aprire un editor per fondere i file di <code>/etc</code> &mdash; qui dentro
+                        ci sono <code>master.passwd</code>, <code>rc.conf</code> e i file di Postfix: una fusione decisa
+                        da un automatismo &egrave; il modo di rompere qualcosa senza che nessuno se ne accorga. In pi&ugrave;
+                        servono <strong>due riavvii</strong>, e a ognuno questa pagina non esiste.
+                        Quindi: il pannello fa i controlli, crea la <strong>via di ritorno</strong> (un ambiente di avvio ZFS),
+                        applica le patch arretrate e <strong>verifica dopo</strong>. Il salto lo fai tu, con i comandi
+                        esatti generati sui valori di questo server.
+                    </p>
+                    <div id="up-body"><span class="text-muted">Scrivi la versione di arrivo e premi "Verifica prerequisiti": legge e basta.</span></div>
+                    <pre id="up-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+
             <div class="card mb-4 border-info">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-clipboard-list me-2"></i><strong>Rapporto del sistema</strong>
@@ -13665,6 +13691,76 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             const r = await updApi('os_fetch');
             if (!r.success) { pre.textContent = r.error || 'errore'; return; }
             pre.textContent = r.uscita + '\\n\\n' + r.nota;
+        }
+
+        // ---------- passaggio di release ----------
+        function upTarget() { return (document.getElementById('os-target').value || '').trim(); }
+
+        async function upPre() {
+            const el = document.getElementById('up-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli: versione, ABI, kernel, ambienti di avvio, spazio, servizi...';
+            const r = await updApi('os_upgrade_preflight', { target: upTarget() });
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                  + '<th style="width:8rem">Esito</th><th style="width:16rem">Controllo</th><th>Dettaglio</th></tr></thead><tbody>';
+            (r.checks || []).forEach(c => {
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            if (r.blocked) {
+                h += '<div class="alert alert-danger py-2 mb-0"><strong>Non avviabile.</strong> Risolvi le righe rosse.</div>';
+            } else {
+                h += '<div class="alert alert-warning py-2">La preparazione copia <code>/etc</code>, crea un ambiente '
+                   + 'di avvio da cui si torna indietro con un comando, e applica le patch arretrate. '
+                   + '<strong>Non cambia release.</strong></div>'
+                   + '<button class="btn btn-warning me-2" onclick="upPrep()"><i class="fas fa-shield-halved me-1"></i>Prepara</button>'
+                   + '<button class="btn btn-outline-secondary" onclick="upIstr()"><i class="fas fa-list-ol me-1"></i>Mostrami i comandi del salto</button>';
+            }
+            el.innerHTML = h;
+        }
+
+        async function upPrep() {
+            if (prompt('Conferma: scrivi PREPARA AGGIORNAMENTO.') !== 'PREPARA AGGIORNAMENTO') return;
+            const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
+            const r = await updApi('os_upgrade_prepare', { confirm: 'PREPARA AGGIORNAMENTO', target: upTarget() });
+            if (!r.success) { alert(r.error || 'operazione fallita'); return; }
+            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Preparazione in corso: non chiudere la pagina.</span>';
+            pre.style.display = 'block';
+            planPoll(r.jobId, el, pre);
+        }
+
+        async function upIstr() {
+            const pre = document.getElementById('up-log');
+            pre.style.display = 'block';
+            pre.textContent = 'Genero i comandi sui valori di questo server...';
+            const r = await updApi('os_upgrade_instructions', { target: upTarget() });
+            if (!r.success) { pre.textContent = r.error || 'errore'; return; }
+            let t = 'SALTO A FreeBSD ' + r.bersaglio + ' — da eseguire da SSH, non da qui.\\n'
+                  + 'Fonte: ' + r.fonte + '\\n\\n';
+            (r.passi || []).forEach(p => {
+                t += p.n + '. ' + p.titolo + '\\n     ' + p.cmd + '\\n     ' + p.nota + '\\n\\n';
+            });
+            t += 'VIA DI RITORNO\\n     ' + r.ritorno + '\\n';
+            pre.textContent = t;
+        }
+
+        async function upVerifica() {
+            const el = document.getElementById('up-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Confronto con l&#39;inventario preso prima...';
+            const r = await updApi('os_upgrade_verify');
+            if (!r.success) { el.innerHTML = '<div class="alert alert-warning py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
+            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                  + '<th style="width:8rem">Esito</th><th style="width:16rem">Controllo</th><th>Dettaglio</th></tr></thead><tbody>';
+            (r.checks || []).forEach(c => {
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
+            });
+            h += '</tbody></table></div>'
+               + (r.tuttoBene
+                  ? '<div class="alert alert-success py-2 mb-0">Tutto quello che c&rsquo;era prima c&rsquo;&egrave; ancora.</div>'
+                  : '<div class="alert alert-danger py-2 mb-0">Qualcosa non torna: leggi le righe rosse prima di distruggere l&rsquo;ambiente di avvio precedente.</div>');
+            el.innerHTML = h;
         }
 
         // ---------- rapporto del sistema ----------
