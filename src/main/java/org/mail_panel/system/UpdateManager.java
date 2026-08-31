@@ -2003,8 +2003,15 @@ public final class UpdateManager {
             aggiungiCheck(checks, "pkg", "Roundcube installato", "block", "Nessun pacchetto roundcube installato.");
             block = true;
         } else if (disp.isEmpty() || disp.equals(ver)) {
-            aggiungiCheck(checks, "pkg", "Roundcube installato", "block",
-                    pkg + " " + ver + ": il repository non offre una versione piu' recente.");
+            // Non e' un impedimento da risolvere: non c'e' niente da fare. Chiamarlo "blocco"
+            // e poi scrivere "risolvi le righe rosse" mette l'utente a cercare un guasto che
+            // non esiste — ed e' il contrario di cio' che la riga vuole dire.
+            aggiungiCheck(checks, "pkg", "Roundcube installato", "ok",
+                    disp.isEmpty()
+                        ? pkg + " " + ver + ": il repository non risponde sulla versione disponibile, "
+                          + "quindi non posso dire se ce ne sia una piu' recente."
+                        : pkg + " " + ver + ": e' gia' l'ultima versione disponibile.");
+            r.put("gia", !disp.isEmpty()).put("ignoto", disp.isEmpty());
             block = true;
         } else {
             aggiungiCheck(checks, "pkg", "Roundcube installato", "ok", pkg + " " + ver + " -> " + disp);
@@ -3451,6 +3458,10 @@ public final class UpdateManager {
      * sfugge alla lettura, ed e' proprio la riga sfuggita quella che farebbe danno.
      */
     static JSONObject analizzaAutoremove(String out, String prefissoAtteso) {
+        // Il prefisso arriva come "py311-": se ne ricava la versione per riconoscere anche
+        // l'interprete "python311", che della famiglia fa parte quanto gli altri.
+        final String verPy = prefissoAtteso != null && prefissoAtteso.startsWith("py")
+                ? prefissoAtteso.replaceAll("[^0-9]", "") : "";
         JSONObject r = new JSONObject();
         java.util.List<String> rimossi = new ArrayList<>(), estranei = new ArrayList<>();
         String o = out == null ? "" : out;
@@ -3472,7 +3483,9 @@ public final class UpdateManager {
                     "^[ \\t]+([A-Za-z0-9._+-]+):[ \\t]").matcher(riga);
             if (!m.find()) { dentro = false; continue; }
             rimossi.add(m.group(1));
-            if (!m.group(1).startsWith(prefissoAtteso)) estranei.add(m.group(1));
+            if (!(m.group(1).startsWith(prefissoAtteso)
+                    || (!verPy.isEmpty() && m.group(1).equals("python" + verPy))))
+                estranei.add(m.group(1));
         }
         boolean leggibile = dichiarati >= 0 && rimossi.size() == dichiarati;
         return r.put("leggibile", leggibile)
@@ -3490,6 +3503,18 @@ public final class UpdateManager {
             if ("Python".equals(riga[0])) return riga[1].replace(".", "");
         }
         return "312";
+    }
+
+    /**
+     * Un pacchetto appartiene alla vecchia famiglia Python?
+     *
+     * Non basta il prefisso "py311-": l'interprete si chiama "python311", senza trattino, e
+     * cercando solo il prefisso il pannello lo ha dichiarato "estraneo a Python" — una frase
+     * assurda letta da chiunque, e sintomo di una classificazione sbagliata. La famiglia sono
+     * entrambi.
+     */
+    static boolean famigliaPython(String nome, String versione) {
+        return nome != null && (nome.startsWith("py" + versione + "-") || nome.equals("python" + versione));
     }
 
     /** I py3XX-* installati su richiesta (non tirati dentro come dipendenza). Sono quelli da spostare. */
@@ -3653,6 +3678,201 @@ public final class UpdateManager {
             r.put("success", true).put("checks", checks)
              .put("blocked", blocca).put("canProceed", !blocca && !nuovi.isEmpty());
             return r;
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * I resti della vecchia famiglia Python, rimossi uno per uno invece che con autoremove.
+     *
+     * autoremove ragiona su tutto il sistema: qui vorrebbe portare via anche capstone, che con
+     * Python non c'entra, e per questo viene giustamente saltato. Ma cosi' l'interprete vecchio
+     * resta installato con le sue vulnerabilita'. La via d'uscita non e' eseguire autoremove
+     * chiudendo un occhio: e' togliere SOLO i pacchetti della famiglia, uno alla volta, ognuno
+     * dopo aver verificato che nessuno lo richieda piu'. Cosi' l'elenco di cio' che sparisce e'
+     * scritto per intero prima di cominciare, e non contiene sorprese.
+     *
+     * A passaggi ripetuti perche' le dipendenze si liberano a catena: finche' py311-pyinotify
+     * c'e', python311 ha un dipendente e non e' togliibile; tolto quello, lo diventa.
+     */
+    /**
+     * Chi fa riferimento al vecchio interprete, fra le cose che RESTERANNO.
+     *
+     * pkg conosce le dipendenze fra pacchetti, non un file scritto a mano con
+     * "#!/usr/local/bin/python3.11" in cima. Quella e' l'unica cosa che la rimozione potrebbe
+     * rompere senza che nessun controllo automatico se ne accorga, ed e' il motivo per cui
+     * questo controllo esiste.
+     *
+     * La domanda giusta non e' "qualcuno nomina python3.11?" — lo fanno i py311 stessi, che
+     * stanno per sparire — ma "qualcosa che sopravvivera' lo nomina?". Per ogni file trovato si
+     * chiede a pkg di chi e': se appartiene alla famiglia che si sta togliendo, sparisce con
+     * lei e non e' un problema; se appartiene a un ALTRO pacchetto, o a nessuno perche' l'ha
+     * scritto una persona, allora e' esattamente il caso da segnalare.
+     */
+    static JSONObject riferimentiInterprete(String vecchia) {
+        JSONObject r = new JSONObject();
+        JSONArray problemi = new JSONArray(), innocui = new JSONArray(), citazioni = new JSONArray();
+        // 311 -> 3\.11 : il punto va protetto, altrimenti nel regex combacia con qualunque
+        // carattere e "python3x11" verrebbe contato come riferimento.
+        String punto = vecchia.length() == 3
+                ? vecchia.charAt(0) + "\\." + vecchia.substring(1) : vecchia;
+
+        // Cerco chi ESEGUE l'interprete, non chi lo nomina. La differenza non e' teorica: la
+        // prima versione di questo controllo trovava /home/panel/admin/updates.html, cioe' la
+        // pagina del pannello — e la riga che la faceva scattare era l'avvertenza che ho scritto
+        // io, che contiene "#!/usr/local/bin/python3.11" come esempio. Un testo che parla
+        // dell'interprete non lo esegue.
+        //
+        // Le tre forme che eseguono davvero:
+        //   - la riga #! in cima a uno script
+        //   - il percorso pieno del binario, che e' come lo invocano cron e gli script rc
+        //   - "env python3.11", l'altra forma comune di shebang
+        String[] modi = {
+            "^#!.*python" + punto,
+            "/usr/local/bin/python" + punto,
+            "env[[:space:]]+python" + punto,
+        };
+        StringBuilder e = new StringBuilder();
+        for (String m : modi) e.append("-e '").append(m).append("' ");
+
+        String dove = "/etc /usr/local/etc /usr/local/bin /usr/local/sbin /usr/local/libexec "
+                + "/usr/local/www /root /var/cron /var/spool/cron /home";
+        // Fuori: i file dei pacchetti Python (spariscono con loro) e le pagine che il pannello
+        // genera da se'. Quelle non sono script di nessuno: le scrivo io a ogni avvio.
+        String mieFuori = "";
+        try {
+            String jar = percorsoJar();
+            if (!jar.isEmpty()) {
+                String dirJar = Paths.get(jar).getParent().toString();
+                mieFuori = " | grep -v '^" + dirJar + "/admin/'";
+            }
+        } catch (Exception ignored) { }
+
+        String cmd = "grep -rIl " + e.toString().trim() + " " + dove
+                + " 2>/dev/null | grep -v '^/usr/local/lib/python'"
+                + " | grep -viE '\\.(html?|md|log|bak|orig|sample)$'" + mieFuori + " | head -300";
+        String out = sh(cmd, 300);
+        int esaminati = 0;
+        for (String f : out.split("\n")) {
+            String file = f.trim();
+            if (file.isEmpty()) continue;
+            esaminati++;
+            String prop = sh("pkg which -q " + file + " 2>/dev/null", 20).trim();
+            String nome = prop.isEmpty() ? "" : sh("pkg query %n " + prop + " 2>/dev/null", 20).trim();
+            boolean dellaFamiglia = !nome.isEmpty() && famigliaPython(nome, vecchia);
+
+            // Un file che NOMINA il percorso dell'interprete non lo esegue per forza: un testo
+            // che lo cita combacia come uno script che lo lancia, e grep non sa distinguerli.
+            // La differenza la fanno due fatti verificabili: il file e' eseguibile, oppure sta
+            // dove il sistema va a prendere cose da eseguire (cron, rc.d). Tutto il resto e'
+            // molto probabilmente prosa, e non deve sbarrare una rimozione legittima — ma
+            // finisce comunque in un elenco a parte, perche' "probabile" non e' "certo".
+            boolean eseguibile = ok("test -x " + file, 10);
+            boolean postoDiEsecuzione = file.startsWith("/var/cron/") || file.startsWith("/var/spool/cron/")
+                    || file.startsWith("/usr/local/etc/rc.d/") || file.startsWith("/etc/rc.d/")
+                    || file.startsWith("/etc/periodic/") || file.startsWith("/usr/local/etc/periodic/")
+                    || file.equals("/etc/crontab") || file.startsWith("/etc/rc.conf");
+            // La riga che ha fatto scattare il controllo: senza, chi legge non puo' giudicare
+            // se sia un'esecuzione vera o una citazione.
+            String riga = sh("grep -m1 -hIE " + e.toString().trim().replace("-e ", "-e ")
+                    + " " + file + " 2>/dev/null | head -c 160", 20).trim();
+            JSONObject v = new JSONObject().put("file", file).put("riga", riga)
+                    .put("proprietario", nome.isEmpty()
+                            ? (prop.isEmpty() ? "(nessun pacchetto: scritto a mano)" : prop) : nome);
+            v.put("eseguibile", eseguibile).put("postoDiEsecuzione", postoDiEsecuzione);
+            if (dellaFamiglia) innocui.put(v);
+            else if (eseguibile || postoDiEsecuzione) problemi.put(v);
+            else citazioni.put(v);
+        }
+        return r.put("esaminati", esaminati).put("problemi", problemi).put("innocui", innocui)
+                .put("citazioni", citazioni).put("comando", cmd);
+    }
+
+    public static JSONObject restiPython(boolean esegui) {
+        JSONObject r = new JSONObject();
+        try {
+            String nuovo = pyPredefinito();
+            java.util.LinkedHashSet<String> vecchie = new java.util.LinkedHashSet<>();
+            for (String n : sh("pkg query %n 2>/dev/null").split("\n")) {
+                Matcher m = Pattern.compile("^(?:py|python)(3[0-9]{2})(?:-|$)").matcher(n.trim());
+                if (m.find() && !m.group(1).equals(nuovo)) vecchie.add(m.group(1));
+            }
+            if (vecchie.isEmpty())
+                return r.put("success", true).put("niente", true)
+                        .put("nota", "non e' rimasto nessun pacchetto Python fuori dal predefinito py" + nuovo);
+            r.put("vecchie", new JSONArray(vecchie));
+
+            java.util.List<String> famiglia = new ArrayList<>();
+            for (String v : vecchie)
+                for (String n : sh("pkg query %n 2>/dev/null").split("\n"))
+                    if (famigliaPython(n.trim(), v)) famiglia.add(n.trim());
+
+            JSONArray dettaglio = new JSONArray();
+            java.util.List<String> togliibili = new ArrayList<>(), trattenuti = new ArrayList<>();
+            for (String n : famiglia) {
+                if (!nomeValido(n)) continue;
+                String ver = sh("pkg query %v " + n + " 2>/dev/null", 20).trim();
+                long kb = numero(sh("pkg query %sb " + n + " 2>/dev/null", 20)) / 1024;
+                java.util.List<String> chi = new ArrayList<>();
+                for (String d : sh("pkg query %rn " + n + " 2>/dev/null").split("\n")) {
+                    String t = d.trim();
+                    if (!t.isEmpty()) chi.add(t);
+                }
+                // Un dipendente che e' anch'esso della famiglia sparira' prima: non trattiene.
+                java.util.List<String> esterni = new ArrayList<>();
+                for (String c : chi) if (!famiglia.contains(c)) esterni.add(c);
+                boolean libero = esterni.isEmpty();
+                (libero ? togliibili : trattenuti).add(n);
+                dettaglio.put(new JSONObject().put("nome", n).put("versione", ver).put("kb", kb)
+                        .put("libero", libero).put("trattenutoDa", new JSONArray(esterni)));
+            }
+            r.put("dettaglio", dettaglio).put("togliibili", new JSONArray(togliibili))
+             .put("trattenuti", new JSONArray(trattenuti));
+
+            // Chi nomina il vecchio interprete fra cio' che resta: pkg non lo sa, va cercato.
+            JSONObject rif = riferimentiInterprete(vecchie.iterator().next());
+            r.put("riferimenti", rif);
+            if (!esegui || togliibili.isEmpty()) return r.put("success", true).put("eseguito", false);
+            if (rif.getJSONArray("problemi").length() > 0)
+                return r.put("success", false).put("eseguito", false)
+                        .put("error", "NON rimuovo: " + rif.getJSONArray("problemi").length()
+                            + " file che resterebbero fanno riferimento al vecchio interprete. "
+                            + "Guardali nell'anteprima: se sono cose che non usi piu', vanno tolte o "
+                            + "aggiornate prima, altrimenti smetterebbero di funzionare senza preavviso.");
+
+            // Passaggi ripetuti: a ogni giro si tolgono quelli che in QUEL momento non hanno
+            // piu' nessuno che li richieda.
+            JSONArray tolti = new JSONArray(), falliti = new JSONArray();
+            java.util.List<String> restanti = new ArrayList<>(famiglia);
+            for (int giro = 0; giro < 6 && !restanti.isEmpty(); giro++) {
+                boolean qualcosa = false;
+                for (String n : new ArrayList<>(restanti)) {
+                    if (!nomeValido(n) || !ok("pkg info -e " + n, 15)) { restanti.remove(n); continue; }
+                    String dip = sh("pkg query %rn " + n + " 2>/dev/null").trim();
+                    if (!dip.isEmpty()) continue;                      // ancora richiesto: al prossimo giro
+                    boolean eraProtetto = bloccato(sh("pkg lock -l 2>/dev/null"), n);
+                    if (eraProtetto) ok("pkg unlock -y " + n, 30);
+                    if (ok("pkg delete -y " + n, 300)) { tolti.put(n); qualcosa = true; }
+                    else {
+                        falliti.put(n);
+                        // Se la rimozione non riesce, il pacchetto resta: e allora deve restare
+                        // com'era, protetto. Sbloccarlo e lasciarlo cosi' sarebbe peggio che non
+                        // averci provato, perche' il prossimo aggiornamento potrebbe toccarlo.
+                        if (eraProtetto) ok("pkg lock -y " + n, 30);
+                    }
+                    restanti.remove(n);
+                }
+                if (!qualcosa) break;
+            }
+            r.put("eseguito", true).put("tolti", tolti).put("falliti", falliti)
+             .put("restano", new JSONArray(restanti));
+            // Verifica: quanti pacchetti della vecchia famiglia sono ancora installati.
+            long ancora = 0;
+            for (String v : vecchie)
+                ancora += sh("pkg query %n 2>/dev/null").lines().filter(x -> famigliaPython(x, v)).count();
+            r.put("ancoraPresenti", ancora);
+            return r.put("success", true);
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", e.getMessage());
         }

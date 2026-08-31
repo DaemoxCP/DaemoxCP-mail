@@ -6083,6 +6083,15 @@ public class SSLMailServer {
                 case "mysql_client_diag" -> response = UpdateManager.diagnosiClientMysql();
                 case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
                 case "python_preflight" -> response = UpdateManager.pythonPreflight();
+                case "python_leftovers" -> response = UpdateManager.restiPython(false);
+                case "python_leftovers_clean" -> {
+                    if (!"PULISCI PYTHON".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.restiPython(true);
+                    logAudit("PYTHON_LEFTOVERS_CLEAN", ip, response.optString("tolti", ""));
+                }
                 case "python_move" -> {
                     if (!"SPOSTA PYTHON".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");

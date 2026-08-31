@@ -13304,7 +13304,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fab fa-python me-2"></i><strong>Passaggio dei pacchetti Python</strong>
                         <span class="small text-muted ms-2">non &egrave; un aggiornamento: &egrave; un cambio di nome del pacchetto</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="pyPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                    <span>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="pyResti()"><i class="fas fa-broom me-1"></i>Resti da togliere</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="pyPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                    </span>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">
@@ -13816,6 +13819,82 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         // ---------- passaggio Python ----------
+        // ---------- resti della vecchia famiglia Python ----------
+        async function pyResti() {
+            const el = document.getElementById('py-pre');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Cerco cosa e&#39; rimasto e chi lo richiede...';
+            const r = await updApi('python_leftovers');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            if (r.niente) { el.innerHTML = '<div class="alert alert-success py-2 mb-0">' + updEsc(r.nota) + '</div>'; return; }
+            let h = '<p class="small text-muted mb-2">Non &egrave; <code>pkg autoremove</code>: quello ragiona su tutto '
+                  + 'il sistema e qui vorrebbe portare via anche <code>capstone</code>. Questi sono solo i pacchetti '
+                  + 'della vecchia famiglia Python, uno per uno, ognuno tolto solo se nessuno lo richiede pi&ugrave;.<br>'
+                  + '<strong>Un limite da sapere:</strong> <code>pkg</code> conosce le dipendenze fra pacchetti, non chi usa '
+                  + 'l&rsquo;interprete in uno script scritto a mano. Se hai tuoi script con <code>#!/usr/local/bin/python3.11</code>, '
+                  + 'quelli smetterebbero di funzionare e <code>pkg</code> non pu&ograve; saperlo.</p>' 
+                  + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+                  + '<th>Pacchetto</th><th>Versione</th><th class="text-end">KB</th><th>Stato</th></tr></thead><tbody>';
+            let liberi = 0;
+            (r.dettaglio || []).forEach(d => {
+                if (d.libero) liberi++;
+                h += '<tr class="upd-cell"><td><code>' + updEsc(d.nome) + '</code></td><td>' + updEsc(d.versione) + '</td>'
+                   + '<td class="text-end">' + updEsc(d.kb) + '</td><td>'
+                   + (d.libero ? '<span class="badge upd-badge-ok">si pu&ograve; togliere</span>'
+                               : '<span class="badge upd-badge-warn">lo richiede: ' + (d.trattenutoDa || []).map(updEsc).join(', ') + '</span>')
+                   + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            // Chi nomina il vecchio interprete fra cio' che RESTA: e' cio' che pkg non sa.
+            const rif = r.riferimenti || {};
+            const prob = rif.problemi || [];
+            h += '<h6 class="mt-3 mb-1">Chi fa riferimento al vecchio interprete</h6>'
+               + '<p class="small text-muted mb-2">' + updEsc(rif.esaminati || 0) + ' file esaminati fuori da '
+               + '<code>/usr/local/lib/python*</code>. Quelli che appartengono ai pacchetti in rimozione '
+               + 'spariscono con loro (' + updEsc((rif.innocui || []).length) + ') e non contano.</p>';
+            const cit = rif.citazioni || [];
+            if (cit.length) {
+                h += '<div class="alert alert-secondary py-2 small mb-2">' + cit.length + ' file nominano il percorso '
+                   + 'dell&rsquo;interprete ma <strong>non sono eseguibili</strong> n&eacute; stanno dove il sistema '
+                   + 'prende cose da eseguire: quasi certamente lo citano soltanto, e non sbarrano la rimozione. '
+                   + cit.map(x => '<code>' + updEsc(x.file) + '</code>').join(' ') + '</div>';
+            }
+            if (prob.length === 0) {
+                h += '<div class="alert alert-success py-2">Nessun file che <strong>resterebbe</strong> esegue '
+                   + 'il vecchio interprete: la rimozione non lascia niente a met&agrave;.</div>';
+            } else {
+                h += '<div class="alert alert-danger py-2"><strong>' + prob.length + ' file che resterebbero '
+                   + 'fanno riferimento al vecchio interprete.</strong> La rimozione &egrave; sbarrata finch&eacute; '
+                   + 'ci sono: smetterebbero di funzionare senza preavviso.</div>'
+                   + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
+                   + '<th>File e riga che lo fa scattare</th><th>Appartiene a</th></tr></thead><tbody>';
+                prob.forEach(x => { h += '<tr class="upd-cell"><td><code>' + updEsc(x.file) + '</code>'
+                   + (x.riga ? '<br><span class="small text-muted">' + updEsc(x.riga) + '</span>' : '')
+                   + '</td><td>' + updEsc(x.proprietario) + '</td></tr>'; });
+                h += '</tbody></table></div>';
+            }
+            h += (liberi > 0 && prob.length === 0)
+               ? '<button class="btn btn-warning" onclick="pyRestiGo()"><i class="fas fa-broom me-1"></i>Togli i ' + liberi + ' liberi</button>'
+               : (liberi === 0
+                  ? '<div class="alert alert-info py-2 mb-0">Nessuno di questi si pu&ograve; togliere adesso: sono tutti richiesti da qualcosa.</div>'
+                  : '');
+            el.innerHTML = h;
+        }
+
+        async function pyRestiGo() {
+            if (prompt('Conferma: scrivi PULISCI PYTHON per procedere.') !== 'PULISCI PYTHON') return;
+            const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Rimozione in corso...';
+            const r = await updApi('python_leftovers_clean', { confirm: 'PULISCI PYTHON' });
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
+            pre.style.display = 'block';
+            pre.textContent = 'Tolti: ' + ((r.tolti || []).join(', ') || '(nessuno)')
+                + '\\nNon riusciti: ' + ((r.falliti || []).join(', ') || '(nessuno)')
+                + '\\nAncora presenti della vecchia famiglia: ' + updEsc(r.ancoraPresenti);
+            el.innerHTML = '<div class="alert alert-' + ((r.falliti || []).length ? 'warning' : 'success')
+                + ' py-2 mb-0">Rimossi ' + (r.tolti || []).length + ' pacchetti. '
+                + 'Ripremi &quot;Resti da togliere&quot; per rivedere lo stato.</div>';
+        }
+
         async function pyPre() {
             const el = document.getElementById('py-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controlli: pacchetti, dipendenze, simulazione, pulizia finale...';
@@ -13948,7 +14027,13 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
-            if (r.blocked) {
+            if (r.gia) {
+                h += '<div class="alert alert-success py-2 mb-0"><strong>Non c&rsquo;&egrave; niente da fare.</strong> '
+                   + 'Roundcube &egrave; gi&agrave; all&rsquo;ultima versione che il repository offre.</div>';
+            } else if (r.ignoto) {
+                h += '<div class="alert alert-warning py-2 mb-0">Il repository non dice quale versione offre: '
+                   + 'non posso stabilire se ci sia un aggiornamento. Riprova pi&ugrave; tardi.</div>';
+            } else if (r.blocked) {
                 h += '<div class="alert alert-danger py-2 mb-0"><strong>Non avviabile.</strong> Risolvi le righe rosse.</div>';
             } else {
                 h += '<div class="alert alert-warning py-2">La webmail rester&agrave; irraggiungibile per qualche '
