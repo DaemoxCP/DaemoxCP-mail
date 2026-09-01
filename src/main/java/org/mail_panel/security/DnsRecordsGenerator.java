@@ -620,7 +620,11 @@ public class DnsRecordsGenerator {
                 aCheck.passed = false;
                 aCheck.message = "IP errato: " + foundIp + " (atteso: " + serverIp + ")";
             }
-        } else {
+        } else if (aCheck.message == null || !aCheck.message.startsWith("Errore")) {
+            // Solo se la query e' andata a buon fine e non ha trovato niente. Se invece era
+            // fallita, il messaggio preciso c'e' gia' e sovrascriverlo con "non trovato"
+            // trasforma uno strumento rotto in un record DNS mancante: due problemi con due
+            // rimedi opposti, e chi legge va a cercare nel posto sbagliato.
             aCheck.message = "Record A non trovato per " + mailHostname;
         }
         result.checks.add(aCheck);
@@ -966,7 +970,13 @@ public class DnsRecordsGenerator {
 
         } catch (Exception e) {
             check.passed = false;
-            check.message = "Errore verifica: " + e.getMessage();
+            String m = e.getMessage() == null ? "" : e.getMessage();
+            check.message = m.contains("Cannot run program")
+                    ? "Errore: il programma dig non e' raggiungibile dal pannello. Non e' un "
+                      + "problema di DNS: e' il pacchetto bind-tools, oppure il PATH con cui il "
+                      + "pannello e' stato avviato. Guarda la scheda \"Ambiente del pannello\" "
+                      + "negli Aggiornamenti."
+                    : "Errore verifica: " + m;
         }
 
         return check;

@@ -239,7 +239,7 @@ public class MailPanelContent {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>%s - Mail Control Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
     <style>
         %s
         %s
@@ -476,7 +476,7 @@ public class MailPanelContent {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Mail Control Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
     <style>
         /* Theme Variables */
         :root {
@@ -999,7 +999,7 @@ public class MailPanelContent {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Setup Iniziale - FreeBSD Mail Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
     <style>
         body {
             background: linear-gradient(135deg, #16213e 0%, #0f3460 50%, #1a1a2e 100%);
@@ -13223,9 +13223,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         <button class="btn btn-sm btn-warning me-1" onclick="saltoStato()"><i class="fas fa-forward me-1"></i>Prosegui il salto</button>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="upVerifica()"><i class="fas fa-clipboard-check me-1"></i>Verifica dopo</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="upPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-release-tog" onclick="procApri('proc-release')" title="Apri o chiudi questa procedura"><i class="fas fa-chevron-down"></i></button>
                     </span>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="proc-release" style="display:none">
                     <p class="small text-muted mb-2">
                         <strong>Cosa fa il pannello.</strong> I controlli preliminari, la copia di <code>/etc</code>,
                         la <strong>via di ritorno</strong> (un ambiente di avvio ZFS da cui si torna con un comando),
@@ -13419,9 +13420,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     <span>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="pyResti()"><i class="fas fa-broom me-1"></i>Resti da togliere</button>
                         <button class="btn btn-sm btn-outline-primary" onclick="pyPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-python-tog" onclick="procApri('proc-python')" title="Apri o chiudi questa procedura"><i class="fas fa-chevron-down"></i></button>
                     </span>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="proc-python" style="display:none">
                     <p class="small text-muted mb-2">
                         <code>py311-certbot</code> e <code>py312-certbot</code> sono pacchetti diversi, non due versioni
                         dello stesso: <code>pkg upgrade</code> non li tocca, e restano su un Python che prima o poi
@@ -13440,9 +13442,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     <span>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="jvStato()"><i class="fas fa-file-alt me-1"></i>Ultimo resoconto</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="jvPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-jvm-tog" onclick="procApri('proc-jvm')" title="Apri o chiudi questa procedura"><i class="fas fa-chevron-down"></i></button>
                     </span>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="proc-jvm" style="display:none">
                     <p class="small text-muted mb-2">
                         Sostituire i file della JVM sotto un processo vivo rompe l'avvio dei sottoprocessi: da quel
                         momento ogni comando fallirebbe e <strong>ogni stato mostrato qui sarebbe falso</strong>. Per
@@ -13465,9 +13468,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcDiag()"><i class="fas fa-stethoscope me-1"></i>Perch&eacute; non risponde</button>
                         <button class="btn btn-sm btn-outline-info me-1" onclick="rcNginx()"><i class="fas fa-wrench me-1"></i>Asset senza grafica</button>
                         <button class="btn btn-sm btn-outline-warning" onclick="rcPre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-roundcube-tog" onclick="procApri('proc-roundcube')" title="Apri o chiudi questa procedura"><i class="fas fa-chevron-down"></i></button>
                     </span>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="proc-roundcube" style="display:none">
                     <p class="small text-muted mb-2">
                         Un salto di versione maggiore cambia lo schema del database: finch&eacute; non si esegue
                         <code>bin/updatedb.sh</code> la webmail non funziona, e quel cambio non si annulla.
@@ -13488,8 +13492,9 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     <span><i class="fas fa-database me-2"></i><strong>Migrazione MySQL 8.0 &rarr; 8.4</strong>
                         <span class="small text-muted ms-2">il port mysql80 sar&agrave; rimosso da FreeBSD dopo il 31/12/2026</span></span>
                     <button class="btn btn-sm btn-outline-warning" onclick="my84Pre()"><i class="fas fa-clipboard-check me-1"></i>Verifica prerequisiti</button>
+                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-mysql-tog" onclick="procApri('proc-mysql')" title="Apri o chiudi questa procedura"><i class="fas fa-chevron-down"></i></button>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="proc-mysql" style="display:none">
                     <p class="small text-muted mb-2">
                         Su FreeBSD la 8.4 &egrave; un pacchetto <strong>diverso e in conflitto</strong>: nessun aggiornamento
                         ci arriva. Qui il punto delicato non &egrave; il database ma la <strong>libreria client</strong>:
@@ -13505,8 +13510,9 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     <span><i class="fas fa-route me-2"></i><strong>Aggiornamento guidato di un pacchetto protetto</strong>
                         <span class="small text-muted ms-2">sblocca, aggiorna, riavvia i servizi, riprotegge &mdash; e verifica ogni passo</span></span>
                     <button class="btn btn-sm btn-outline-primary" onclick="guidList()"><i class="fas fa-list me-1"></i>Elenca candidati</button>
+                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-protetto-tog" onclick="procApri('proc-protetto')" title="Apri o chiudi questa procedura"><i class="fas fa-chevron-down"></i></button>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="proc-protetto" style="display:none">
                     <p class="small text-muted mb-2">
                         Aggiornare il pacchetto non aggiorna il processo gi&agrave; in esecuzione: senza riavviare i servizi
                         che lo usano, la correzione risulta installata ma <strong>non &egrave; in servizio</strong>.
@@ -13695,9 +13701,13 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     ap.forEach(x => { h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x) + '</code></td></tr>'; });
                     h += '</tbody></table></div>';
                 }
-                if (!pf.checkPulito) {
+                // Doppia condizione di proposito: il campo puo' mancare (e' gia' successo),
+                // ma il contenuto vuoto e' un fatto che si vede sempre.
+                if (!pf.checkPulito && pf.check) {
                     h += '<div class="small mb-1"><strong>postfix check:</strong></div>'
                        + '<pre class="upd-log mb-2">' + updEsc(pf.check) + '</pre>';
+                } else {
+                    h += '<div class="small text-muted mb-2"><code>postfix check</code> non segnala nulla.</div>';
                 }
                 h += '<div class="small text-muted mb-2"><strong>Fonte:</strong> ' + updEsc(pf.fonte) + '</div>';
             }
@@ -14347,19 +14357,69 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             el.innerHTML = h;
         }
 
+        // ---------- schede di procedura: chiuse finche' non servono ----------
+        // Le schede di DIAGNOSTICA restano sempre aperte: si leggono a colpo d'occhio.
+        // Le PROCEDURE no: hanno finito il loro lavoro e tornano utili solo quando ci sara'
+        // una nuova release, una nuova Roundcube, una nuova JVM. Tenerle spalancate significa
+        // scorrere ogni volta attraverso cose gia' fatte per arrivare a quelle da leggere.
+        const PROCEDURE = ['proc-release', 'proc-python', 'proc-jvm',
+                           'proc-roundcube', 'proc-mysql', 'proc-protetto'];
+
+        function procApri(id, forza) {
+            const c = document.getElementById(id), t = document.getElementById(id + '-tog');
+            if (!c) return;
+            const chiusa = c.style.display === 'none';
+            const apri = forza === undefined ? chiusa : forza;
+            c.style.display = apri ? '' : 'none';
+            if (t) t.innerHTML = '<i class="fas fa-chevron-' + (apri ? 'up' : 'down') + '"></i>';
+            try { localStorage.setItem('mp-' + id, apri ? 'aperta' : 'chiusa'); } catch (e) { }
+        }
+
+        function procInit() {
+            PROCEDURE.forEach(id => {
+                const c = document.getElementById(id);
+                if (!c) return;
+                let voluta = null;
+                try { voluta = localStorage.getItem('mp-' + id); } catch (e) { }
+                // Chiuse per impostazione predefinita: si aprono se le hai aperte tu.
+                procApri(id, voluta === 'aperta');
+                // E si aprono DA SOLE quando hanno qualcosa da dire: premere un pulsante
+                // dell'intestazione scrive nel corpo, e un corpo nascosto non si vedrebbe.
+                try {
+                    new MutationObserver(() => {
+                        if (c.style.display === 'none') procApri(id, true);
+                    }).observe(c, { childList: true, subtree: true, characterData: true });
+                } catch (e) { }
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', procInit);
+        } else {
+            procInit();
+        }
+
         // ---------- il tempo massimo di analisi: e' mai stato raggiunto? ----------
         async function rsTimeout() {
             const el = document.getElementById('rs-timeout');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo il log di rspamd...';
             const r = await updApi('rspamd_timeout');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.verdetto === "NON E&#39; MAI SUCCESSO" || r.verdetto === "NON E' MAI SUCCESSO"
-                      ? 'success' : (r.verdetto === 'DA GUARDARE' ? 'warning' : 'secondary');
+            const cls = r.verdetto === 'NESSUNA ANALISI INTERROTTA' ? 'success'
+                      : (r.verdetto === 'CI SONO ANALISI INTERROTTE' ? 'danger'
+                      : (r.verdetto === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(r.verdetto)
                   + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
             if (r.avvisa) {
                 h += '<div class="small text-muted mb-1">task_timeout <code>' + updEsc(r.taskTimeout)
                    + '</code> &middot; massimo teorico della cache <code>' + updEsc(r.massimoTeorico) + '</code></div>';
+            }
+            if (r.righeLog !== undefined) {
+                h += '<div class="small text-muted mb-1">Campione: <strong>' + updEsc(r.righeLog)
+                   + '</strong> righe' + (r.dal ? ', dal ' + updEsc(r.dal) + ' al ' + updEsc(r.al) : '')
+                   + ' &middot; rotazioni piu&rsquo; vecchie: ' + updEsc(r.rotazioni || 0)
+                   + ((r.rotazioniCompresse || 0) > 0
+                      ? ' (' + updEsc(r.rotazioniCompresse) + ' compresse, decompresse e lette)' : '') + '</div>';
             }
             const sy = r.simboli || [];
             if (sy.length) {
@@ -14373,7 +14433,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + '<th class="text-end">Volte</th><th>Messaggio nel log</th></tr></thead><tbody>';
                 g.forEach(x => {
                     h += '<tr class="upd-cell"><td class="text-end">' + updEsc(x.volte) + '</td>'
-                       + '<td class="small"><code>' + updEsc(x.messaggio) + '</code></td></tr>';
+                       + '<td class="small">'
+                       + '<span class="badge ' + (x.eAvviso ? 'upd-badge-info' : 'upd-badge-stop') + ' me-1">'
+                       + (x.eAvviso ? 'l&rsquo;avviso stesso' : 'analisi interrotta') + '</span><br>'
+                       + '<code>' + updEsc(x.messaggio) + '</code></td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
@@ -14404,6 +14467,15 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             }
             if (r.log) h += '<pre class="upd-log mt-1">' + updEsc(r.log) + '</pre>';
             el.innerHTML = h;
+            // La scheda sopra mostra ancora lo stato di PRIMA: lasciarla li' significa
+            // far leggere "il livello e' indietro, 3.6" sotto un esito che dice 3.11.
+            // Si rilegge tutto, e l'esito appena mostrato si riattacca in fondo.
+            if (r.success) {
+                const esito = h;
+                await updCompat();
+                const nuovo = document.getElementById('pf-esito');
+                if (nuovo) nuovo.innerHTML = esito;
+            }
         }
 
         // ---------- anteprima della configurazione Dovecot 2.4 ----------

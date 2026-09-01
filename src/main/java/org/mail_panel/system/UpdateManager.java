@@ -976,7 +976,9 @@ public final class UpdateManager {
          .put("livelloEsplicito", ok("postconf -n 2>/dev/null | grep -q '^compatibility_level'", 20));
 
         String check = sh("postfix check 2>&1", 60);
-        r.put("check", check.isBlank() ? "" : check);
+        // Il campo si era perso nella riscrittura, e l'interfaccia mostrava l'intestazione
+        // "postfix check:" seguita dal nulla: un titolo senza contenuto sembra un guasto.
+        r.put("check", check.isBlank() ? "" : check).put("checkPulito", check.isBlank());
 
         // Il livello a cui Postfix stesso dice di salire, preso dal suo messaggio.
         String consigliato = "";
@@ -1105,41 +1107,98 @@ public final class UpdateManager {
         String log = "/var/log/rspamd/rspamd.log";
         boolean logC = ok("test -r " + log, 15);
         r.put("log", log).put("logLeggibile", logC);
+        // Un solo lettore per tutto lo storico, compresse comprese.
+        String lettore = "for f in " + log + " /var/log/rspamd/rspamd.log.*; do "
+                + "[ -f \"$f\" ] || continue; case \"$f\" in "
+                + "*.bz2) bzip2 -dc \"$f\" 2>/dev/null;; *.gz) gzip -dc \"$f\" 2>/dev/null;; "
+                + "*.xz) xz -dc \"$f\" 2>/dev/null;; *.zst) zstd -dc \"$f\" 2>/dev/null;; "
+                + "*) cat \"$f\" 2>/dev/null;; esac; done";
         if (logC) {
-            String righe = sh("grep -hi 'timeout' " + log + " /var/log/rspamd/rspamd.log.[0-9] 2>/dev/null "
+            // La prima riga nel formato di rspamd, non il marcatore di newsyslog.
+            r.put("dal", sh("(" + lettore + ") | grep -m1 -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
+                    + "| cut -c1-19", 120).trim());
+            r.put("al", sh("grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}' " + log
+                    + " 2>/dev/null | tail -1 | cut -c1-19", 60).trim());
+            String rot = sh("ls /var/log/rspamd/rspamd.log.* 2>/dev/null | wc -l", 30).trim().replaceAll("[^0-9]", "");
+            int rotazioni = rot.isEmpty() ? 0 : Integer.parseInt(rot);
+            String compresse = sh("ls /var/log/rspamd/rspamd.log.*.[bg]z* 2>/dev/null | wc -l", 30)
+                    .trim().replaceAll("[^0-9]", "");
+            r.put("rotazioni", rotazioni)
+             .put("rotazioniCompresse", compresse.isEmpty() ? 0 : Integer.parseInt(compresse));
+            String righe = sh("(" + lettore + ") | grep -i 'timeout' "
                     + "| sed -E 's/^[^;]*; //' | sed -E 's/[0-9a-f]{8,}/<id>/g' "
-                    + "| sed -E 's/[0-9]+\\.[0-9]+/<n>/g' | sort | uniq -c | sort -rn | head -15", 90);
+                    + "| sed -E 's/[0-9]+\\.[0-9]+/<n>/g' | sort | uniq -c | sort -rn | head -15", 300);
             JSONArray gruppi = new JSONArray();
+            int veri = 0, avviso = 0;
             for (String l : righe.split("\n")) {
                 String t = l.trim();
                 int sp = t.indexOf(' ');
                 if (sp <= 0) continue;
                 try {
-                    gruppi.put(new JSONObject().put("volte", Integer.parseInt(t.substring(0, sp)))
-                            .put("messaggio", t.substring(sp + 1).trim()));
+                    int volte = Integer.parseInt(t.substring(0, sp));
+                    String msg = t.substring(sp + 1).trim();
+                    // rspamd_worker_check_and_adjust_timeout e' il controllo di coerenza che
+                    // rspamd esegue all'avvio: e' l'avviso, non un suo effetto.
+                    boolean eAvviso = msg.contains("check_and_adjust_timeout")
+                            || msg.contains("symbols cache timeout")
+                            || msg.contains("symbols by execution time");
+                    if (eAvviso) avviso += volte; else veri += volte;
+                    gruppi.put(new JSONObject().put("volte", volte).put("messaggio", msg)
+                            .put("eAvviso", eAvviso));
                 } catch (NumberFormatException ignored) { }
             }
-            r.put("nelLog", gruppi);
-            String tot = sh("grep -hci 'timeout' " + log + " 2>/dev/null", 60).trim().replaceAll("[^0-9]", "");
+            r.put("nelLog", gruppi).put("interruzioni", veri).put("ripetizioniAvviso", avviso);
+            String tot = sh("(" + lettore + ") | grep -ci 'timeout'", 300).trim().replaceAll("[^0-9]", "");
             r.put("occorrenze", tot.isEmpty() ? 0 : Integer.parseInt(tot));
-            String righeTot = sh("wc -l < " + log + " 2>/dev/null", 60).trim().replaceAll("[^0-9]", "");
+            String righeTot = sh("(" + lettore + ") | wc -l", 300).trim().replaceAll("[^0-9]", "");
             r.put("righeLog", righeTot.isEmpty() ? 0 : Integer.parseInt(righeTot));
+            String soloCorrente = sh("wc -l < " + log + " 2>/dev/null", 60).trim().replaceAll("[^0-9]", "");
+            r.put("righeCorrente", soloCorrente.isEmpty() ? 0 : Integer.parseInt(soloCorrente));
         }
 
         int occ = r.optInt("occorrenze", -1);
-        r.put("verdetto", !logC ? "LOG NON LEGGIBILE" : (occ == 0 ? "NON E' MAI SUCCESSO" : "DA GUARDARE"));
+        int righeLog = r.optInt("righeLog", 0);
+        // Un campione piccolo non autorizza a dire "mai". La soglia non e' un numero magico:
+        // sotto le mille righe un log di posta copre tipicamente poche ore, e in poche ore
+        // puo' semplicemente non essere passato il messaggio lento che farebbe scattare il caso.
+        boolean campioneAmpio = righeLog >= 1000;
+        String periodo = r.optString("dal", "").isEmpty() ? ""
+                : " Il log va da " + r.optString("dal") + " a " + r.optString("al") + ".";
+        String rotate = r.optInt("rotazioni", 0) > 0
+                ? " Lette anche le " + r.optInt("rotazioni") + " rotazioni piu' vecchie"
+                  + (r.optInt("rotazioniCompresse", 0) > 0
+                     ? " (" + r.optInt("rotazioniCompresse") + " compresse, decompresse al volo)." : ".")
+                  + " Il file corrente da solo ne ha " + r.optInt("righeCorrente", 0) + "."
+                : " Non ci sono rotazioni piu' vecchie: questo e' tutto lo storico disponibile.";
+        r.put("campioneAmpio", campioneAmpio);
+        int interruzioni = r.optInt("interruzioni", occ);
+        r.put("verdetto", !logC ? "LOG NON LEGGIBILE"
+                : (interruzioni > 0 ? "CI SONO ANALISI INTERROTTE"
+                                    : (campioneAmpio ? "NESSUNA ANALISI INTERROTTA"
+                                                     : "NESSUNA TRACCIA, MA IL LOG E' CORTO")));
+        String scomposizione = occ == 0 ? ""
+                : " Delle " + occ + " righe che contengono la parola \"timeout\", "
+                  + r.optInt("ripetizioniAvviso", 0) + " sono l'avviso di configurazione stesso, che rspamd "
+                  + "riscrive a ogni avvio dei worker, e " + interruzioni + " sono analisi interrotte.";
         r.put("spiegazione", !logC
                 ? "Non riesco a leggere " + log + ": senza il log non posso dire se un'analisi sia mai "
                   + "stata interrotta, e senza quel dato cambiare il timeout sarebbe una scelta alla cieca."
-                : (occ == 0
-                   ? "In " + r.optInt("righeLog", 0) + " righe di log la parola \"timeout\" non compare "
-                     + "nemmeno una volta: nessuna analisi e' mai stata interrotta. L'avviso di configtest "
-                     + "riguarda un massimo TEORICO — la somma dei limiti dei singoli simboli — che perche' "
-                     + "si realizzi dovrebbe vedere ognuno esaurire il proprio tempo nello stesso messaggio. "
-                     + "Non c'e' niente da correggere."
-                   : "La parola \"timeout\" compare " + occ + " volte su " + r.optInt("righeLog", 0)
-                     + " righe. Qui sotto i messaggi raggruppati: da leggere prima di decidere, perche' non "
-                     + "tutte le righe che la contengono sono analisi interrotte."));
+                : (interruzioni == 0
+                   ? (occ == 0
+                        ? "In " + righeLog + " righe di log la parola \"timeout\" non compare nemmeno una volta."
+                        : "In " + righeLog + " righe di log nessuna analisi risulta interrotta." + scomposizione)
+                     + periodo + rotate
+                     + (campioneAmpio
+                        ? " Il campione e' abbastanza ampio da poterlo dire: nessuna analisi e' stata interrotta."
+                        : " ATTENZIONE: " + righeLog + " righe sono poche, quindi questo NON dimostra che non "
+                          + "sia mai successo — dimostra che non e' successo nel periodo coperto. Per una "
+                          + "risposta solida, rileggi fra qualche giorno.")
+                     + " In ogni caso l'avviso di configtest riguarda un massimo TEORICO — la somma dei limiti "
+                     + "dei singoli simboli — che perche' si realizzi dovrebbe vedere ognuno esaurire il proprio "
+                     + "tempo nello stesso messaggio."
+                   : interruzioni + " analisi sono state interrotte su " + righeLog + " righe di log."
+                     + scomposizione + periodo + rotate
+                     + " Questa volta la correzione serve: vedi qui sotto."));
         r.put("seServisse", "Se dal log risultassero analisi davvero interrotte, la correzione e' una riga "
                 + "in /usr/local/etc/rspamd/local.d/options.inc — task_timeout = 12s; — cioe' un valore "
                 + "superiore al massimo teorico. L'alternativa e' abbassare il limite del simbolo piu' lento "

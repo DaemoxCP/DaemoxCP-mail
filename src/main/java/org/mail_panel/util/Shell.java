@@ -146,7 +146,29 @@ public final class Shell {
      * dove --print-defaults funzionava (passava da Shell) e il dump vero no.
      */
     public static void applicaPath(ProcessBuilder pb) {
-        if (pb != null) pb.environment().put("PATH", PATH_COMPLETO);
+        if (pb == null) return;
+        pb.environment().put("PATH", PATH_COMPLETO);
+        java.util.List<String> cmd = pb.command();
+        if (cmd == null || cmd.isEmpty()) return;
+        String prog = cmd.get(0);
+        if (prog == null || prog.isEmpty() || prog.indexOf('/') >= 0) return;   // gia' assoluto
+        String assoluto = risolvi(prog);
+        if (assoluto != null) cmd.set(0, assoluto);
+    }
+
+    /**
+     * Il percorso assoluto di un programma, cercato nelle stesse cartelle del PATH completo.
+     * Restituisce null se non esiste da nessuna parte: in quel caso il nome resta com'era e
+     * l'errore che ne segue e' quello giusto, cioe' "il programma non c'e'" davvero.
+     */
+    public static String risolvi(String prog) {
+        if (prog == null || prog.isEmpty() || prog.indexOf('/') >= 0) return prog;
+        for (String d : PATH_COMPLETO.split(":")) {
+            if (d.isBlank()) continue;
+            java.io.File f = new java.io.File(d, prog);
+            if (f.isFile() && f.canExecute()) return f.getAbsolutePath();
+        }
+        return null;
     }
 
     /** Il PATH che il pannello usa davvero per i sottoprocessi. */
