@@ -6516,6 +6516,15 @@ public class SSLMailServer {
                                 "/usr/local/etc/ssl/mail/privkey.pem"))
                         .put("filtro", org.mail_panel.system.ProtezioneWeb.filtro())
                         .put("jail", org.mail_panel.system.ProtezioneWeb.jail());
+                case "mtasts_piano" -> response = org.mail_panel.system.AttivaMtaSts.piano();
+                case "mtasts_attiva" -> {
+                    if (!"ATTIVA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.avviaAttivazioneMtaSts();
+                    logAudit("MTASTS_ATTIVA", ip, "avviata come lavoro " + response.optString("jobId", ""));
+                }
                 case "web443_include" -> {
                     if (!"AGGIUNGI".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");
@@ -9217,6 +9226,15 @@ public class SSLMailServer {
                 logAudit("AUTODNS_OPZIONALE", ip, q + " su dominio " + domainId
                         + (response.optBoolean("success") ? " - creato" : " - NON creato: "
                            + response.optString("error", "?")));
+            }
+            case "configura_tutto" -> {
+                if (!"CONFIGURA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                response = org.mail_panel.system.ConfiguraDominio.esegui(domainId);
+                logAudit("DOMINIO_CONFIGURA", ip, "dominio " + domainId + " - "
+                        + response.optInt("riusciti", 0) + "/" + response.optInt("totale", 0) + " passi");
             }
             case "mailboxes" -> response = auto.caselleDisponibili();
             case "mailbox_create" -> {

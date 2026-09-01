@@ -397,6 +397,56 @@ public class CloudflareManager {
         }
     }
 
+    /**
+     * Accende o spegne il proxy di Cloudflare su un record.
+     *
+     * Serve per i nomi che devono puntare DRITTI al server: mta-sts e autoconfig. Con il
+     * proxy acceso, chi li interroga parla con Cloudflare, che a sua volta deve poter
+     * validare il certificato dell'origine — un secondo pezzo che deve funzionare, e che
+     * quando non funziona risponde 526 senza spiegare cosa manchi. Diretto sono meno cose
+     * che possono rompersi.
+     *
+     * Si usa PATCH, che tocca il solo campo indicato e lascia stare nome, contenuto e TTL.
+     */
+    public RecordOp impostaProxy(String token, String zoneId, String recordId, boolean proxato) {
+        try {
+            JSONObject payload = new JSONObject().put("proxied", proxato);
+            return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
+                    token, payload.toString()));
+        } catch (Exception e) {
+            return new RecordOp(false, null, "Errore: " + e.getMessage());
+        }
+    }
+
+    /** Corregge un CNAME esistente: destinazione giusta e proxy spento. */
+    public RecordOp aggiornaCname(String token, String zoneId, String recordId,
+                                  String name, String target) {
+        try {
+            JSONObject payload = new JSONObject()
+                    .put("type", "CNAME").put("name", name)
+                    .put("content", target).put("proxied", false);
+            return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
+                    token, payload.toString()));
+        } catch (Exception e) {
+            return new RecordOp(false, null, "Errore: " + e.getMessage());
+        }
+    }
+
+    /** Corregge un SRV esistente: destinazione e porta giuste. */
+    public RecordOp aggiornaSrv(String token, String zoneId, String recordId, String name,
+                                String target, int priority, int weight, int port) {
+        try {
+            JSONObject dati = new JSONObject().put("priority", priority).put("weight", weight)
+                    .put("port", port).put("target", target);
+            JSONObject payload = new JSONObject()
+                    .put("type", "SRV").put("name", name).put("data", dati);
+            return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
+                    token, payload.toString()));
+        } catch (Exception e) {
+            return new RecordOp(false, null, "Errore: " + e.getMessage());
+        }
+    }
+
     private RecordOp esito(HttpResponse<String> resp) {
         JSONObject body = new JSONObject(resp.body());
         if (body.optBoolean("success", false))

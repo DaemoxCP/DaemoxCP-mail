@@ -192,6 +192,28 @@ public class MtaSts {
         return provaPolitica("mta-sts." + dominio, hostDiPosta(), modoCorrente());
     }
 
+    /**
+     * I codici 520-527 non esistono nell'HTTP: li restituisce Cloudflare, e nginx non li
+     * emette mai. Se ne arriva uno, la richiesta e' passata dal proxy invece di andare
+     * dritta al server — cioe' il nome ha ancora la nuvola arancione.
+     * Significati dalla documentazione Cloudflare (Troubleshooting Cloudflare 5xx errors).
+     */
+    static String spiegaCodice(int codice) {
+        String cosa;
+        switch (codice) {
+            case 520: cosa = "il server ha risposto qualcosa che Cloudflare non ha capito"; break;
+            case 521: cosa = "Cloudflare non trova il server acceso"; break;
+            case 522: cosa = "la connessione al server e' scaduta"; break;
+            case 523: cosa = "Cloudflare non raggiunge il server"; break;
+            case 525: cosa = "l'handshake TLS con il server e' fallito"; break;
+            case 526: cosa = "Cloudflare non considera valido il certificato del server"; break;
+            default: return "";
+        }
+        return " Il codice " + codice + " lo restituisce Cloudflare (" + cosa + "), non nginx: "
+             + "vuol dire che quel nome sta ancora passando dal proxy. Va messo su Solo DNS "
+             + "(nuvola grigia), altrimenti chi legge la politica non parla mai con il server.";
+    }
+
     private static JSONObject provaPolitica(String nomeWeb, String mailHost, String modo) {
         JSONObject r = new JSONObject();
         String url = "https://" + nomeWeb + PERCORSO;
@@ -213,7 +235,7 @@ public class MtaSts {
             if (!ok) {
                 if (resp.statusCode() != 200)
                     r.put("errore", "risponde " + resp.statusCode() + " invece di 200: su quel nome la "
-                            + "politica non viene servita.");
+                            + "politica non viene servita." + spiegaCodice(resp.statusCode()));
                 else if (!corpo.contains("version: STSv1"))
                     r.put("errore", "risponde 200 ma quello che torna non e' una politica MTA-STS: "
                             + "probabilmente e' la webmail o una pagina di errore.");

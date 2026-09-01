@@ -413,3 +413,41 @@
             if (r.success) setTimeout(autoDnsCarica, 1200);
             else if (r.mancaCasella) setTimeout(autoDnsCarica, 300);
         }
+
+        // Tutto quello che serve a un dominio, in una volta. Ogni passo non sovrascrive
+        // niente: si puo' premere anche su un dominio configurato a meta', trova cio' che
+        // c'e' gia' e aggiunge solo il resto.
+        async function autoDnsConfiguraTutto() {
+            if (!currentDomainId) return;
+            if (prompt('Configurare tutto quello che serve a questo dominio?\n\n'
+                     + 'Chiavi DKIM e loro record, SPF, cassetta dei rapporti, DMARC in osservazione,\n'
+                     + 'autoconfig, i due SRV, il nome mta-sts, il certificato che copre quei nomi,\n'
+                     + 'e infine il record MTA-STS se la politica risponde.\n\n'
+                     + 'Nessun record esistente viene sovrascritto: quelli li trova, li lascia e te lo dice.\n'
+                     + 'Il certificato viene riemesso: e\' il passo piu\' lento.\n\n'
+                     + 'Scrivi CONFIGURA per confermare.') !== 'CONFIGURA') return;
+
+            const el = document.getElementById('autoDnsEsito');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Configuro il dominio. '
+                         + 'L&rsquo;emissione del certificato pu&ograve; richiedere un minuto...';
+            const r = await autoDnsApi('configura_tutto', { confirm: 'CONFIGURA' });
+            if (!r.success && !r.passi) {
+                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + adEsc(r.error) + '</div>';
+                return;
+            }
+            let h = '<div class="alert alert-info py-2 small mb-2">' + adEsc(r.nota || r.error) + '</div>'
+                  + '<div class="table-responsive"><table class="table table-sm mb-0"><tbody>';
+            (r.passi || []).forEach(p => {
+                h += '<tr class="upd-cell"><td style="width:2rem">'
+                   + (p.ok ? '<i class="fas fa-check-circle text-success"></i>'
+                           : '<i class="fas fa-times-circle text-danger"></i>')
+                   + '</td><td class="small"><strong>' + adEsc(p.titolo) + '</strong>'
+                   + '<div class="text-muted">' + adEsc(p.messaggio) + '</div></td></tr>';
+            });
+            // Stessa ragione: ricaricare la scheda cancellerebbe l'elenco dei passi appena
+            // eseguito, che e' l'unico posto dove si legge cosa non e' andato.
+            h += '</tbody></table>'
+               + '<div class="mt-2"><button class="btn btn-sm btn-outline-secondary" onclick="autoDnsCarica()">'
+               + '<i class="fas fa-rotate me-1"></i>Aggiorna la scheda</button></div></div>';
+            el.innerHTML = h;
+        }

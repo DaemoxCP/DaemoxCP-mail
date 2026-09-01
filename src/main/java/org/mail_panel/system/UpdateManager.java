@@ -1607,6 +1607,44 @@ public final class UpdateManager {
      * gia' rimesso la configurazione precedente ed esce diverso da zero, quindi qui non si
      * ricarica nulla e il servizio prosegue com'era.
      */
+    /**
+     * L'attivazione MTA-STS come lavoro in background.
+     *
+     * L'emissione del certificato dura piu' del limite di tempo di un proxy: tenuta dentro
+     * una richiesta HTTP, il browser riceve una pagina di errore mentre sul server
+     * l'operazione prosegue, e chi guarda resta senza sapere cosa sia successo a un
+     * certificato di produzione. Qui la richiesta torna subito con un identificativo e la
+     * pagina segue l'avanzamento, come per gli aggiornamenti dei pacchetti.
+     */
+    public static JSONObject avviaAttivazioneMtaSts() {
+        String id = "mtasts-" + System.currentTimeMillis();
+        Job j = new Job(id, "mtasts");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> {
+            j.status = "running";
+            try {
+                org.json.JSONObject esito = org.mail_panel.system.AttivaMtaSts.esegui(j);
+                j.scrivi("");
+                j.scrivi(esito.optString("nota", esito.optString("error", "")));
+                j.scrivi("");
+                j.scrivi("--- esito completo ---");
+                j.scrivi(esito.toString(2));
+                j.status = esito.optBoolean("success", false) ? "completed" : "error";
+                if (!esito.optBoolean("success", false))
+                    j.errorMessage = esito.optString("error", "sequenza interrotta");
+            } catch (Exception e) {
+                j.status = "error";
+                j.errorMessage = String.valueOf(e.getMessage());
+                j.scrivi("ERRORE: " + e.getMessage());
+            } finally {
+                j.fine = System.currentTimeMillis();
+            }
+        }, "mtasts-attiva");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
     public static JSONObject avviaRigenerazioneDovecot() {
         String id = "dovecot-cfg-" + System.currentTimeMillis();
         Job j = new Job(id, "dovecot_config");

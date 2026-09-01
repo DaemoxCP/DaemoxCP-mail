@@ -13585,6 +13585,30 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
+            <div class="card mb-4 border-success">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-wand-magic-sparkles me-2"></i><strong>Attiva MTA-STS</strong>
+                        <span class="small text-muted ms-2">tutta la sequenza, un pulsante</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="amsPiano()"><i class="fas fa-list-check me-1"></i>Stato</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Attivare MTA-STS richiede <strong>sette cose nell&rsquo;ordine giusto</strong>: la riga di
+                        include in nginx, la configurazione della 443, la jail, un CNAME per dominio, un
+                        certificato che copra quei nomi, la verifica che la politica risponda, e solo alla
+                        fine il record TXT. L&rsquo;ordine non &egrave; comodit&agrave;: ogni passo &egrave; il
+                        presupposto del successivo.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        Il record TXT viene pubblicato <strong>solo per i domini la cui politica risponde
+                        davvero</strong> &mdash; pubblicarlo prima sarebbe una dichiarazione che non mantieni,
+                        ed &egrave; lo stato in cui si trovano quattro dei tuoi domini adesso. Al primo passo
+                        che fallisce la sequenza si ferma e spiega cosa manca.
+                    </p>
+                    <div id="upd-ams"><span class="text-muted">Premi "Stato": legge e basta.</span></div>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-shield-halved me-2"></i><strong>Porta 443: superficie minima</strong>
@@ -13887,7 +13911,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             return '<span class="badge upd-badge-stop">ATTENDI</span>';
         }
 
-""" + risorsa("pagine/porta465.js") + risorsa("pagine/sorveglianza.js") + risorsa("pagine/diagnosi-web.js") + risorsa("pagine/web443.js") + """
+""" + risorsa("pagine/porta465.js") + risorsa("pagine/sorveglianza.js") + risorsa("pagine/diagnosi-web.js") + risorsa("pagine/web443.js") + risorsa("pagine/attiva-mtasts.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');

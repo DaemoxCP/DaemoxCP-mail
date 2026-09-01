@@ -383,11 +383,27 @@ public class AutoDns {
 
             for (CloudflareManager.TxtRecordInfo t : txtAlNome(acct.apiToken, zl.zoneId, nome)) {
                 String c = RegoleDns.contenutoCloudflare(t.content);
-                if (c.toLowerCase(java.util.Locale.ROOT).startsWith("v=stsv1"))
-                    return r.put("success", false).put("esisteGia", true).put("contenuto", c)
-                            .put("error", "Su " + nome + " esiste gia' un record MTA-STS (" + c + "): "
-                                    + "non lo sovrascrivo. Se la politica e' cambiata, va aggiornato "
-                                    + "l'id — dimmelo e aggiungo il pulsante.");
+                if (!c.toLowerCase(java.util.Locale.ROOT).startsWith("v=stsv1")) continue;
+                if (c.trim().equals(valore.trim()))
+                    return r.put("success", true).put("invariato", true).put("contenuto", c)
+                            .put("nota", "Il record su " + nome + " e' gia' quello giusto.");
+
+                // L'id NON e' decorativo: e' il segnale con cui i mittenti si accorgono che la
+                // politica e' cambiata. Un id fermo — per esempio un orologio scritto una volta
+                // sola, com'era nei record suggeriti dal vecchio pannello — fa restare tutti
+                // sulla politica vecchia finche' non scade la loro copia. Quindi si aggiorna.
+                CloudflareManager.RecordOp up = cloudflare.updateTxtRecord(
+                        acct.apiToken, zl.zoneId, t.id, nome, valore, 3600);
+                if (up == null || !up.success)
+                    return r.put("success", false).put("contenuto", c)
+                            .put("error", "Su " + nome + " c'e' un record MTA-STS con un id diverso ("
+                                    + c + ") e Cloudflare ha rifiutato l'aggiornamento: "
+                                    + (up == null ? "nessuna risposta" : up.error));
+                return r.put("success", true).put("aggiornato", true)
+                        .put("prima", c).put("dopo", valore)
+                        .put("nota", "Record MTA-STS aggiornato su " + nome + ": l'id ora segue il "
+                                + "contenuto della politica, quindi i mittenti si accorgeranno delle "
+                                + "modifiche future invece di restare sulla copia vecchia.");
             }
 
             CloudflareManager.RecordOp op =
@@ -691,9 +707,14 @@ public class AutoDns {
             MailDatabase.Domain d = trovaDominio(domainId);
             if (d == null) return errore("dominio non trovato");
             MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
-            if (acct == null) return errore("nessun account Cloudflare assegnato a " + d.domain);
+            // "non posso occuparmene" non e' "ho fallito": chi chiama deve poter distinguere
+            // i due casi, altrimenti finisce per dare un errore rosso a una configurazione
+            // legittima — o, peggio, per dare un verde a una che non ha controllato.
+            if (acct == null) return errore("nessun account Cloudflare assegnato a " + d.domain)
+                    .put("nonGestito", true);
             CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
-            if (!zl.found) return errore("la zona " + d.domain + " non e' visibile: " + zl.error);
+            if (!zl.found) return errore("la zona " + d.domain + " non e' visibile: " + zl.error)
+                    .put("nonGestito", true);
 
             String nomePieno = def[2] + "." + d.domain;
             String bersaglio = hostDiPosta(d.domain);
@@ -710,15 +731,44 @@ public class AutoDns {
             java.util.List<CloudflareManager.DnsRecordInfo> qui =
                     alNome(cloudflare.listRecords(acct.apiToken, zl.zoneId), nomePieno);
             for (CloudflareManager.DnsRecordInfo t : qui) {
-                if (def[1].equalsIgnoreCase(t.type))
-                    return r.put("success", false).put("esisteGia", true).put("contenuto", t.content)
-                            .put("error", "Su " + nomePieno + " esiste gia' un record " + def[1]
-                                    + " (" + t.content + "): NON lo sovrascrivo. Se e' sbagliato, "
-                                    + "correggilo in Cloudflare.");
-                return r.put("success", false).put("conflitto", true)
-                        .put("error", "Su " + nomePieno + " c'e' gia' un record " + t.type + " ("
-                                + t.content + "). Un " + def[1] + " non puo' stare sullo stesso nome "
-                                + "insieme ad altri dati: prima va deciso quale dei due deve restare.");
+                if (!def[1].equalsIgnoreCase(t.type))
+                    return r.put("success", false).put("conflitto", true)
+                            .put("error", "Su " + nomePieno + " c'e' gia' un record " + t.type + " ("
+                                    + t.content + "). Un " + def[1] + " non puo' stare sullo stesso nome "
+                                    + "insieme ad altri dati: prima va deciso quale dei due deve restare.");
+
+                // "Esiste" non vuol dire "e' giusto".
+                //
+                // Questi nomi appartengono al pannello: autoconfig, mta-sts e i due SRV
+                // esistono solo per puntare a questo server di posta. Se puntano altrove, o
+                // sulla porta sbagliata, o passano da un proxy, non sono "gia' fatti": sono
+                // sbagliati. Dire "esiste gia', correggilo tu in Cloudflare" scarica su chi
+                // legge un lavoro che il pannello sa fare, e soprattutto presenta come a
+                // posto una cosa che non funziona.
+                //
+                // Diverso e' il caso dell'SPF sull'apice o del DMARC: li' possono esserci
+                // dichiarazioni di altri servizi, e quelli non si toccano mai alla cieca.
+                boolean giusto = coincide(t, srv, bersaglio, porta);
+                if (giusto && !t.proxied)
+                    return r.put("success", true).put("invariato", true).put("contenuto", t.content)
+                            .put("nota", "Su " + nomePieno + " il record e' gia' quello giusto.");
+
+                java.util.List<String> cosaNonVa = new ArrayList<>();
+                if (!giusto) cosaNonVa.add("puntava a \"" + t.content + "\" invece che a \""
+                        + (srv ? "0 1 " + porta + " " + bersaglio : bersaglio) + "\"");
+                if (t.proxied) cosaNonVa.add("passava da Cloudflare invece di puntare dritto al server");
+
+                CloudflareManager.RecordOp op = srv
+                        ? cloudflare.aggiornaSrv(acct.apiToken, zl.zoneId, t.id, nomePieno, bersaglio, 0, 1, porta)
+                        : cloudflare.aggiornaCname(acct.apiToken, zl.zoneId, t.id, nomePieno, bersaglio);
+                if (op == null || !op.success)
+                    return r.put("success", false).put("contenuto", t.content)
+                            .put("error", "Su " + nomePieno + " il record non e' giusto ("
+                                    + String.join("; ", cosaNonVa) + ") e Cloudflare ha rifiutato la "
+                                    + "correzione: " + (op == null ? "nessuna risposta" : op.error));
+                return r.put("success", true).put("corretto", true)
+                        .put("prima", t.content).put("dopo", srv ? "0 1 " + porta + " " + bersaglio : bersaglio)
+                        .put("nota", "Corretto " + nomePieno + ": " + String.join("; ", cosaNonVa) + ".");
             }
 
             CloudflareManager.RecordOp op = srv
@@ -744,6 +794,20 @@ public class AutoDns {
         } catch (Exception e) {
             return errore("errore durante la creazione: " + e.getMessage());
         }
+    }
+
+    /**
+     * Il record esistente e' gia' quello che il pannello scriverebbe.
+     *
+     * Per un CNAME basta il nome di destinazione; per un SRV contano anche la porta, che e'
+     * l'unica ragione per cui quel record esiste, e la destinazione. Il confronto sui nomi e'
+     * esatto: "xmail.esempio.it" contiene "mail.esempio.it" e passerebbe per giusto.
+     */
+    private boolean coincide(CloudflareManager.DnsRecordInfo t, boolean srv, String bersaglio, int porta) {
+        String c = t.content == null ? "" : t.content.trim();
+        if (!srv) return RegoleDns.stessoNome(c, bersaglio);
+        RegoleDns.Srv s = RegoleDns.analizzaSrv(c);
+        return s != null && s.porta == porta && RegoleDns.stessoNome(s.destinazione, bersaglio);
     }
 
     /**
