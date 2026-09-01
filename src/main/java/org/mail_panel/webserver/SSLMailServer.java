@@ -9227,14 +9227,17 @@ public class SSLMailServer {
                         + (response.optBoolean("success") ? " - creato" : " - NON creato: "
                            + response.optString("error", "?")));
             }
+            // La pagina DNS deve poter seguire il lavoro che ha appena avviato: senza questo
+            // caso resterebbe con un identificativo e nessun modo di sapere com'e' finito.
+            case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
             case "configura_tutto" -> {
                 if (!"CONFIGURA".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", "Conferma mancante");
                     break;
                 }
-                response = org.mail_panel.system.ConfiguraDominio.esegui(domainId);
-                logAudit("DOMINIO_CONFIGURA", ip, "dominio " + domainId + " - "
-                        + response.optInt("riusciti", 0) + "/" + response.optInt("totale", 0) + " passi");
+                response = UpdateManager.avviaConfiguraDominio(domainId);
+                logAudit("DOMINIO_CONFIGURA", ip, "dominio " + domainId
+                        + " - avviata come lavoro " + response.optString("jobId", ""));
             }
             case "mailboxes" -> response = auto.caselleDisponibili();
             case "mailbox_create" -> {

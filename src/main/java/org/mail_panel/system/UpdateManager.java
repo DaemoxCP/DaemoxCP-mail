@@ -1645,6 +1645,44 @@ public final class UpdateManager {
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
     }
 
+    /**
+     * "Configura tutto" per un dominio, come lavoro in background.
+     *
+     * Prima era una chiamata sincrona, e andava bene finche' la sequenza si limitava a
+     * scrivere qualche record. Ora include l'attesa della propagazione DNS e l'eventuale
+     * emissione del certificato: minuti, non secondi. Dietro un proxy quella richiesta
+     * scadrebbe, e chi guarda resterebbe senza sapere cosa e' successo.
+     */
+    public static JSONObject avviaConfiguraDominio(int domainId) {
+        String id = "dominio-" + domainId + "-" + System.currentTimeMillis();
+        Job j = new Job(id, "configura_dominio");
+        JOBS.put(id, j);
+        Thread t = new Thread(() -> {
+            j.status = "running";
+            try {
+                org.json.JSONObject esito =
+                        org.mail_panel.system.ConfiguraDominio.esegui(domainId, j);
+                j.scrivi("");
+                j.scrivi(esito.optString("nota", esito.optString("error", "")));
+                j.scrivi("");
+                j.scrivi("--- esito completo ---");
+                j.scrivi(esito.toString(2));
+                j.status = esito.optBoolean("success", false) ? "completed" : "error";
+                if (!esito.optBoolean("success", false))
+                    j.errorMessage = esito.optString("error", "configurazione interrotta");
+            } catch (Exception e) {
+                j.status = "error";
+                j.errorMessage = String.valueOf(e.getMessage());
+                j.scrivi("ERRORE: " + e.getMessage());
+            } finally {
+                j.fine = System.currentTimeMillis();
+            }
+        }, "configura-dominio");
+        t.setDaemon(true);
+        t.start();
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
     public static JSONObject avviaRigenerazioneDovecot() {
         String id = "dovecot-cfg-" + System.currentTimeMillis();
         Job j = new Job(id, "dovecot_config");

@@ -24,6 +24,17 @@
                         due DMARC vengono scartati entrambi (RFC 9989). Sono guasti che non danno alcun segnale:
                         la posta continua a partire, e un giorno comincia a finire nello spam.
                     </p>
+                    <p class="small text-muted mb-2">
+                        <strong>&laquo;Configura tutto&raquo;</strong> fa l&rsquo;intera catena per questo dominio, con un click:
+                        chiavi DKIM e record, SPF, cassetta dei rapporti, DMARC in osservazione, autoconfig,
+                        i due SRV, e poi <strong>MTA-STS per intero</strong> &mdash; la riga di include in nginx, la
+                        configurazione della 443, la jail, il CNAME <code>mta-sts</code>, il proxy spento su quel
+                        nome, un certificato che lo copra, l&rsquo;attesa della propagazione, la prova della politica
+                        e infine il record TXT. DNS, nginx e certificato non funzionano separatamente se si vuole
+                        MTA-STS: &egrave; una catena sola, e la esegue una sequenza sola &mdash; la stessa del pulsante
+                        &laquo;Attiva MTA-STS&raquo;, che la fa su tutti i domini invece che su uno.
+                        Al primo passo che fallisce si ferma e spiega cosa manca.
+                    </p>
                     <div id="autoDnsBody"><span class="text-muted small">Premi "Aggiorna": legge e basta.</span></div>
                 </div>
             </div>

@@ -338,20 +338,70 @@ public class AttivaMtaSts {
      * L'esecuzione
      * =================================================================== */
 
-    public static JSONObject esegui() { return esegui(null); }
+    public static JSONObject esegui() { return esegui(null, null); }
+
+    public static JSONObject esegui(UpdateManager.Job job) { return esegui(job, null); }
+
+    /**
+     * I domini su cui la sequenza deve agire.
+     *
+     * Un elenco vuoto NON e' "nessun dominio da fare": vuol dire che il nome chiesto non
+     * esiste, e chi chiama deve accorgersene invece di vedere una sequenza che "riesce"
+     * senza aver toccato niente.
+     */
+    private static List<MailDatabase.Domain> dominiDaToccare(String soloDominio) throws Exception {
+        return filtra(Main.mailDatabase.getDomains(), soloDominio);
+    }
+
+    /**
+     * Il filtro vero e proprio, separato dalla lettura del database perche' possa essere
+     * provato: dentro dominiDaToccare sarebbe raggiungibile solo con un database vivo, e un
+     * test che non arriva alla riga che deve verificare non verifica niente.
+     *
+     * Il confronto e' senza distinzione di maiuscole perche' i nomi di dominio non ne hanno,
+     * ed e' ESATTO: "ake.net" non deve trovare "domain-d.test".
+     */
+    static List<MailDatabase.Domain> filtra(List<MailDatabase.Domain> tutti, String soloDominio) {
+        List<MailDatabase.Domain> out = new ArrayList<>();
+        if (tutti == null) return out;
+        for (MailDatabase.Domain d : tutti)
+            if (soloDominio == null || (d != null && soloDominio.equalsIgnoreCase(d.domain)))
+                out.add(d);
+        return out;
+    }
 
     /**
      * @param job se presente, l'avanzamento viene scritto li' mentre accade.
+     * @param soloDominio se presente, i passi per dominio toccano solo quello. I primi tre —
+     *        include di nginx, 443, jail — restano globali perche' quella superficie e' una
+     *        sola per tutti i domini, e installarla e' idempotente. Il certificato resta
+     *        globale per una ragione piu' seria, spiegata al suo passo.
      *
      * L'emissione del certificato dura piu' del limite di tempo di un proxy: tenendo aperta
      * la richiesta HTTP, il browser riceve una pagina di errore mentre sul server
      * l'operazione continua. Chi guarda non sa piu' cosa sia successo — e uno stato
      * sconosciuto su un certificato di produzione e' l'anticamera del danno.
      */
-    public static JSONObject esegui(UpdateManager.Job job) {
+    public static JSONObject esegui(UpdateManager.Job job, String soloDominio) {
         JSONObject r = new JSONObject();
         JSONArray fatti = new JSONArray();
-        if (job != null) job.scrivi("=== Attivazione MTA-STS ===");
+        if (job != null) job.scrivi("=== Attivazione MTA-STS ==="
+                + (soloDominio == null ? "" : " (solo " + soloDominio + ")"));
+
+        // Un nome che non corrisponde a nessun dominio non deve produrre una sequenza che
+        // "riesce": i cicli per dominio girerebbero a vuoto, nessun passo fallirebbe, e
+        // l'esito direbbe che e' andato tutto bene senza che sia stato toccato niente. E'
+        // il falso successo piu' silenzioso di tutti, e va fermato qui.
+        if (soloDominio != null) {
+            try {
+                if (dominiDaToccare(soloDominio).isEmpty())
+                    return fermati(r, fatti, "Il dominio \"" + soloDominio + "\" non e' fra quelli "
+                            + "del pannello: non c'e' niente da configurare e non voglio riportare "
+                            + "un successo per un lavoro che non ho fatto.");
+            } catch (Exception e) {
+                return fermati(r, fatti, "non riesco a leggere l'elenco dei domini: " + e.getMessage());
+            }
+        }
 
         // 1. include
         JSONObject web = ProtezioneWeb.stato();
@@ -390,7 +440,7 @@ public class AttivaMtaSts {
         JSONArray cname = new JSONArray();
         try {
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
-            for (MailDatabase.Domain d : Main.mailDatabase.getDomains()) {
+            for (MailDatabase.Domain d : dominiDaToccare(soloDominio)) {
                 // Prima qui c'era una scorciatoia: se "mta-sts.<dominio>" RISPONDEVA, il record
                 // si dava per fatto. Ma rispondere non vuol dire esistere: un jolly "*.dominio"
                 // fa rispondere qualunque nome. Su domain-d.test era esattamente cosi' — il nome
@@ -431,7 +481,7 @@ public class AttivaMtaSts {
         int sistemati = 0, dritti = 0, ciechi = 0;
         try {
             CloudflareManager cf = new CloudflareManager(Main.mailDatabase);
-            for (MailDatabase.Domain d : Main.mailDatabase.getDomains()) {
+            for (MailDatabase.Domain d : dominiDaToccare(soloDominio)) {
                 MailDatabase.CloudflareAccount a = cf.getAccountForDomain(d.id);
                 if (a == null) {
                     ciechi++;
@@ -493,6 +543,12 @@ public class AttivaMtaSts {
                 + sistemati + " sistemati, " + ciechi + " non verificabili");
 
         // 5. il certificato
+        //
+        // Questo passo NON rispetta il filtro per dominio, ed e' voluto: il certificato e'
+        // uno solo e "--issue --force" RIDEFINISCE l'insieme dei nomi. Emetterlo con i soli
+        // nomi del dominio corrente cancellerebbe dal certificato i mta-sts.* e autoconfig.*
+        // di tutti gli altri — e con i record MTA-STS gia' pubblicati, quella e' posta
+        // rifiutata. Si guardano sempre tutti i nomi, si emette solo se ne manca qualcuno.
         List<String> nomi = nomiDaCoprire();
         List<String> scoperti = new ArrayList<>();
         for (String n : nomi) if (!certificatoCopre(n)) scoperti.add(n);
@@ -564,7 +620,7 @@ public class AttivaMtaSts {
         JSONArray finali = new JSONArray();
         try {
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
-            for (MailDatabase.Domain d : Main.mailDatabase.getDomains()) {
+            for (MailDatabase.Domain d : dominiDaToccare(soloDominio)) {
                 JSONObject prova = MtaSts.provaPubblica(d.domain);
                 if (!prova.optBoolean("ok", false)) {
                     finali.put(nota(d.domain, false, "la politica non risponde ancora: "
@@ -594,6 +650,52 @@ public class AttivaMtaSts {
                         + "risulta ancora \"non risponde\", la cache di qualche resolver non era ancora "
                         + "scaduta: guarda lo Stato fra qualche minuto e, se e' rientrato, ripremi "
                         + "Attiva per pubblicare il suo record TXT.");
+    }
+
+    /**
+     * L'esito della sequenza tradotto nelle righe che la pagina DNS gia' sa disegnare
+     * ({titolo, ok, messaggio}).
+     *
+     * La traduzione sta QUI e non nella pagina DNS perche' le forme che escono da esegui()
+     * sono di questa classe: se le conoscesse anche chi chiama, ogni cambiamento qui dentro
+     * andrebbe ricordato la' — ed e' cosi' che due pezzi di codice cominciano a divergere.
+     *
+     * Un passo interrotto non sparisce: se la sequenza si e' fermata, l'ultima riga dice
+     * perche'. Un elenco di passi riusciti che si interrompe senza spiegazioni sarebbe la
+     * cosa peggiore da mostrare, perche' somiglia a un successo.
+     */
+    public static JSONArray comeVoci(JSONObject esito) {
+        JSONArray voci = new JSONArray();
+        JSONArray passi = esito.optJSONArray("passi");
+        for (int i = 0; passi != null && i < passi.length(); i++) {
+            JSONObject p = passi.optJSONObject(i);
+            if (p == null) continue;
+            String titolo = p.optString("titolo", p.optString("chiave", "passo"));
+            JSONArray dett = p.optJSONArray("dettaglio");
+            if (dett == null) {
+                voci.put(new JSONObject().put("titolo", titolo)
+                        .put("ok", p.optBoolean("ok", false))
+                        .put("messaggio", p.optString("messaggio", "")));
+                continue;
+            }
+            // Un passo per dominio: riuscito solo se lo sono tutte le righe, e il messaggio
+            // le riporta tutte. Riassumerlo in "fatto" perderebbe l'unica riga che spiega.
+            boolean tutte = dett.length() > 0;
+            List<String> righe = new ArrayList<>();
+            for (int j = 0; j < dett.length(); j++) {
+                JSONObject x = dett.optJSONObject(j);
+                if (x == null) continue;
+                if (!x.optBoolean("ok", false)) tutte = false;
+                String dom = x.optString("dominio", "");
+                righe.add((dom.isEmpty() ? "" : dom + ": ") + x.optString("messaggio", ""));
+            }
+            voci.put(new JSONObject().put("titolo", titolo).put("ok", tutte)
+                    .put("messaggio", String.join(" | ", righe)));
+        }
+        if (!esito.optBoolean("success", false) && !esito.optString("error", "").isEmpty())
+            voci.put(new JSONObject().put("titolo", "Sequenza interrotta").put("ok", false)
+                    .put("messaggio", esito.getString("error")));
+        return voci;
     }
 
     private static JSONObject fermati(JSONObject r, JSONArray fatti, String perche) {

@@ -101,7 +101,7 @@
             h += '</tbody></table></div><div id="autoDnsEsito"></div>';
 
             h += adRapporti(r.rapporti);
-            h += adOpzionali(r.opzionali, r.mtaSts);
+            h += adOpzionali(r.opzionali);
 
             h += '<div class="small text-muted mt-3">SPF e DMARC non contengono chiavi: sono dichiarazioni '
                + 'pubbliche di politica, e si cambiano quando cambia il server o la politica, non a scadenza. '
@@ -250,7 +250,7 @@
         // la casella deve sapere a memoria server, porte e tipo di cifratura. Sono gli stessi
         // valori della pagina DNS, letti dalla stessa impostazione: due modi di ricavare lo
         // stesso hostname sono due hostname che un giorno divergono.
-        function adOpzionali(lista, mtaSts) {
+        function adOpzionali(lista) {
             if (!lista || !lista.length) return '';
             const mancanti = lista.filter(x => !x.esiste && !x.conflitto).length;
 
@@ -299,13 +299,12 @@
 
             h += '</tbody></table></div><div id="adOpzEsito"></div>';
 
-            // L'unica eccezione, spiegata invece che nascosta.
-            if (mtaSts && mtaSts.creabile === false)
-                h += '<div class="alert alert-secondary py-2 small mb-0 mt-2">'
-                   + '<i class="fas fa-circle-info me-1"></i><strong>MTA-STS (<code>'
-                   + adEsc(mtaSts.nome) + '</code>) il pannello non lo crea.</strong> '
-                   + adEsc(mtaSts.motivo) + '</div>';
-
+            // Qui c'era un riquadro fisso: "MTA-STS il pannello non lo crea, perche' quel sito
+            // non lo serve". Era vero quando fu scritto e ha smesso di esserlo il giorno in cui
+            // il pannello ha cominciato a servire la politica sulla 443 — ma la frase e' rimasta,
+            // e la pagina DNS ha continuato a negare una cosa che il pannello fa di routine.
+            // Adesso "Configura tutto" esegue l'intera catena MTA-STS per questo dominio, quindi
+            // non c'e' nessuna eccezione da spiegare: c'e' un pulsante da premere.
             return h + '</div></div>';
         }
 
@@ -421,33 +420,62 @@
             if (!currentDomainId) return;
             if (prompt('Configurare tutto quello che serve a questo dominio?\n\n'
                      + 'Chiavi DKIM e loro record, SPF, cassetta dei rapporti, DMARC in osservazione,\n'
-                     + 'autoconfig, i due SRV, il nome mta-sts, il certificato che copre quei nomi,\n'
-                     + 'e infine il record MTA-STS se la politica risponde.\n\n'
+                     + 'autoconfig, i due SRV. Poi MTA-STS per intero: la riga di include in nginx,\n'
+                     + 'la configurazione della 443, la jail, il CNAME mta-sts, il proxy Cloudflare\n'
+                     + 'spento su quel nome, un certificato che lo copra, la prova della politica e\n'
+                     + 'infine il record TXT.\n\n'
                      + 'Nessun record esistente viene sovrascritto: quelli li trova, li lascia e te lo dice.\n'
-                     + 'Il certificato viene riemesso: e\' il passo piu\' lento.\n\n'
+                     + 'Un eventuale jolly *.dominio non viene toccato.\n\n'
+                     + 'Il certificato NON viene riemesso se copre gia\' tutti i nomi: la riemissione\n'
+                     + 'parte solo se ne manca almeno uno.\n\n'
+                     + 'Dove crea un record, la sequenza aspetta che il DNS propaghi prima di provare\n'
+                     + 'la politica: puo\' durare qualche minuto. Il lavoro prosegue sul server anche\n'
+                     + 'se chiudi la pagina.\n\n'
                      + 'Scrivi CONFIGURA per confermare.') !== 'CONFIGURA') return;
 
             const el = document.getElementById('autoDnsEsito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Configuro il dominio. '
-                         + 'L&rsquo;emissione del certificato pu&ograve; richiedere un minuto...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Avvio la configurazione...';
             const r = await autoDnsApi('configura_tutto', { confirm: 'CONFIGURA' });
-            if (!r.success && !r.passi) {
-                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + adEsc(r.error) + '</div>';
+            if (!r.success || !r.jobId) {
+                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">'
+                             + adEsc(r.error || 'avvio non riuscito') + '</div>';
                 return;
             }
-            let h = '<div class="alert alert-info py-2 small mb-2">' + adEsc(r.nota || r.error) + '</div>'
-                  + '<div class="table-responsive"><table class="table table-sm mb-0"><tbody>';
-            (r.passi || []).forEach(p => {
-                h += '<tr class="upd-cell"><td style="width:2rem">'
-                   + (p.ok ? '<i class="fas fa-check-circle text-success"></i>'
-                           : '<i class="fas fa-times-circle text-danger"></i>')
-                   + '</td><td class="small"><strong>' + adEsc(p.titolo) + '</strong>'
-                   + '<div class="text-muted">' + adEsc(p.messaggio) + '</div></td></tr>';
-            });
-            // Stessa ragione: ricaricare la scheda cancellerebbe l'elenco dei passi appena
-            // eseguito, che e' l'unico posto dove si legge cosa non e' andato.
-            h += '</tbody></table>'
-               + '<div class="mt-2"><button class="btn btn-sm btn-outline-secondary" onclick="autoDnsCarica()">'
-               + '<i class="fas fa-rotate me-1"></i>Aggiorna la scheda</button></div></div>';
-            el.innerHTML = h;
+            // La richiesta torna SUBITO con un identificativo. La sequenza include l'attesa
+            // della propagazione DNS e puo' durare minuti: tenendo aperta la richiesta, il
+            // browser riceverebbe la pagina di errore del proxy mentre sul server il lavoro
+            // continua, e nessuno saprebbe piu' com'e' finita.
+            el.innerHTML = '<div class="alert alert-info py-2 small mb-2">'
+                         + '<i class="fas fa-spinner fa-spin me-1"></i>Configurazione in corso. '
+                         + 'Puoi anche chiudere la pagina: il lavoro prosegue sul server.</div>'
+                         + '<pre id="adLog" class="small p-2 border rounded mb-0" '
+                         + 'style="max-height:26rem;overflow:auto"></pre>';
+            adSegui(r.jobId);
+        }
+
+        async function adSegui(id) {
+            const el = document.getElementById('autoDnsEsito');
+            const pre = document.getElementById('adLog');
+            const s = await autoDnsApi('job_status', { jobId: id });
+            if (s.success && s.job) {
+                if (pre) { pre.textContent = s.job.consoleLog || ''; pre.scrollTop = pre.scrollHeight; }
+                if (s.job.status === 'completed' || s.job.status === 'error') {
+                    const box = el.querySelector('.alert');
+                    if (box) {
+                        box.className = 'alert alert-' + (s.job.status === 'completed' ? 'success' : 'warning')
+                                      + ' py-2 small mb-2';
+                        box.innerHTML = (s.job.status === 'completed'
+                                ? '<i class="fas fa-check-circle me-1"></i>Configurazione completata in '
+                                  + adEsc(s.job.elapsedSeconds) + 's.'
+                                : '<i class="fas fa-triangle-exclamation me-1"></i>Configurazione interrotta: '
+                                  + adEsc(s.job.errorMessage) + ' Il registro qui sotto dice a che punto.')
+                            // Non si ricarica la scheda da soli: cancellerebbe il registro, che e'
+                            // l'unico posto dove si legge cosa non e' andato.
+                            + ' <button class="btn btn-sm btn-outline-secondary ms-2" onclick="autoDnsCarica()">'
+                            + '<i class="fas fa-rotate me-1"></i>Aggiorna la scheda</button>';
+                    }
+                    return;
+                }
+            }
+            setTimeout(() => adSegui(id), 3000);
         }

@@ -69,7 +69,6 @@ public class AutoDns {
             record.put(descrivi(acct.apiToken, zl.zoneId, "dmarc", d));
             r.put("record", record);
             r.put("opzionali", statoOpzionali(acct.apiToken, zl.zoneId, d));
-            r.put("mtaSts", perche_niente_mtasts(d.domain));
 
             // Dove finirebbero i rapporti, e se quella cassetta esiste davvero.
             r.put("rapporti", recapitoRapporti(d));
@@ -811,30 +810,21 @@ public class AutoDns {
     }
 
     /**
-     * Perche' MTA-STS non si crea da qui, pur essendo nell'elenco degli opzionali.
+     * Qui c'era perche_niente_mtasts(): la spiegazione del perche' MTA-STS fosse l'unica
+     * eccezione dell'elenco, cioe' l'unico record che il pannello si rifiutava di creare.
      *
-     * Non e' pigrizia ed e' l'unica eccezione: MTA-STS non e' fatto di solo DNS. RFC 8461
-     * §3.2 e §3.3 vogliono anche un file servito su
-     * https://mta-sts.&lt;dominio&gt;/.well-known/mta-sts.txt, da un host che presenti un
-     * certificato valido proprio per "mta-sts.&lt;dominio&gt;". Questo pannello quel sito non
-     * lo serve.
+     * Il ragionamento era corretto — RFC 8461 §3.2 e §3.3 vogliono anche una politica servita
+     * su https://mta-sts.<dominio>/.well-known/mta-sts.txt da un host con un certificato
+     * valido per quel nome, e pubblicare il solo TXT lascerebbe una spunta verde su una difesa
+     * che non c'e'. Ma la premessa, "questo pannello quel sito non lo serve", ha smesso di
+     * essere vera il giorno in cui e' nata la scheda della 443. La frase e' rimasta li' mesi,
+     * e la pagina DNS ha continuato a negare una cosa che il pannello faceva di routine.
      *
-     * Pubblicare il solo record TXT non romperebbe niente — §3.3 dice che chi non riesce a
-     * scaricare la policy "MUST continue with delivery as though the domain has not
-     * implemented MTA-STS" — ma non proteggerebbe nulla: resterebbe una spunta verde su una
-     * difesa che non c'e'. Fra le due, e' peggio credere di essere protetti.
+     * La conclusione giusta non era aggiornare quella frase: era togliere l'eccezione. La
+     * regola che proteggeva — il TXT non si pubblica finche' la politica non risponde — vive
+     * adesso dove deve, dentro la sequenza, che quella condizione la MISURA invece di
+     * dichiararla una volta per tutte. Vedi creaTxtMtaSts() qui sopra e AttivaMtaSts.
      */
-    public static JSONObject perche_niente_mtasts(String dominio) {
-        return new JSONObject()
-            .put("creabile", false)
-            .put("nome", "_mta-sts." + dominio)
-            .put("motivo", "MTA-STS non e' fatto di solo DNS: oltre al record TXT serve un file servito su "
-                    + "https://mta-sts." + dominio + "/.well-known/mta-sts.txt, da un host con un "
-                    + "certificato valido per mta-sts." + dominio + " (RFC 8461 §3.2 e §3.3). Questo "
-                    + "pannello quel sito non lo serve, quindi non crea il record: senza la policy i "
-                    + "mittenti proseguono come se MTA-STS non ci fosse, e resterebbe solo l'apparenza "
-                    + "di una protezione attiva.");
-    }
 
     /* ===================================================================
      * Valori

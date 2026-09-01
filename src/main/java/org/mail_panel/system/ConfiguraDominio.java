@@ -4,7 +4,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.mail_panel.Main;
 import org.mail_panel.database.MailDatabase;
-import org.mail_panel.security.AcmeManager;
 import org.mail_panel.security.AutoDns;
 import org.mail_panel.security.CloudflareManager;
 import org.mail_panel.security.DkimManager;
@@ -35,13 +34,24 @@ public class ConfiguraDominio {
 
     private ConfiguraDominio() {}
 
-    public static JSONObject esegui(int domainId) {
+    public static JSONObject esegui(int domainId) { return esegui(domainId, null); }
+
+    /**
+     * @param job dove scrivere l'avanzamento mentre accade.
+     *
+     * Serve perche' questa sequenza include l'attesa della propagazione DNS e puo' durare
+     * minuti. Tenendo aperta la richiesta HTTP, il browser riceverebbe la pagina di errore
+     * del proxy mentre sul server il lavoro continua — e uno stato sconosciuto su un
+     * certificato di produzione e' l'anticamera del danno.
+     */
+    public static JSONObject esegui(int domainId, UpdateManager.Job job) {
         JSONObject r = new JSONObject();
         JSONArray passi = new JSONArray();
         try {
             MailDatabase.Domain d = trova(domainId);
             if (d == null) return r.put("success", false).put("error", "dominio non trovato");
             r.put("dominio", d.domain);
+            if (job != null) job.scrivi("=== Configurazione di " + d.domain + " ===");
 
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
 
@@ -68,20 +78,35 @@ public class ConfiguraDominio {
             // 4. DMARC, sempre in osservazione: si stringe dopo aver letto i rapporti.
             passi.put(riduci("DMARC (p=none)", auto.crea(domainId, "dmarc", "none")));
 
-            // 5. I record che aiutano i client, piu' il nome per MTA-STS.
+            // 5. I record che aiutano i client.
             for (String[] o : new String[][] {
                     {"autoconfig", "Autoconfig (Thunderbird)"},
                     {"srv_imaps", "SRV posta in arrivo"},
-                    {"srv_submission", "SRV posta in uscita"},
-                    {"mta_sts", "Nome mta-sts"} })
+                    {"srv_submission", "SRV posta in uscita"} })
                 passi.put(riduci(o[1], auto.creaOpzionale(domainId, o[0])));
 
-            // 6. Il certificato deve coprire i nomi nuovi, altrimenti chi li interroga si
-            //    ferma all'errore TLS prima di leggere qualsiasi cosa.
-            passi.put(certificato());
-
-            // 7. Il record MTA-STS, solo se la politica risponde davvero.
-            passi.put(riduci("Record MTA-STS", auto.creaTxtMtaSts(domainId)));
+            // 6. MTA-STS: tutta la catena, per questo dominio, dall'include di nginx al
+            //    record TXT.
+            //
+            // Qui prima c'erano tre passi scritti a parte — il nome mta-sts, il certificato,
+            // il record TXT — ed era una seconda versione della stessa sequenza. Aveva gia'
+            // divergito, in tre punti che nell'originale erano corretti:
+            //
+            //   - il certificato veniva RIEMESSO a ogni pressione, senza guardare se i nomi
+            //     fossero gia' coperti: un'emissione Let's Encrypt bruciata ogni volta, su
+            //     cinque concesse a settimana per lo stesso insieme di nomi;
+            //   - il proxy Cloudflare non veniva mai spento, quindi il nome poteva restare
+            //     dietro la nuvola arancione e rispondere 526;
+            //   - la politica veniva provata un istante dopo aver creato il CNAME, quando
+            //     nessun resolver puo' ancora saperlo: il record TXT non si pubblicava mai.
+            //
+            // DNS, nginx e certificato non funzionano separatamente se si vuole MTA-STS: e'
+            // una catena sola e va eseguita da un posto solo. Due implementazioni della
+            // stessa cosa divergono sempre, e quella che si preme di rado resta indietro
+            // senza che nessuno se ne accorga.
+            if (job != null) job.scrivi("--- MTA-STS: nginx, CNAME, proxy, certificato, politica, TXT ---");
+            JSONArray mtasts = AttivaMtaSts.comeVoci(AttivaMtaSts.esegui(job, d.domain));
+            for (int i = 0; i < mtasts.length(); i++) passi.put(mtasts.get(i));
 
             int riusciti = 0;
             for (int i = 0; i < passi.length(); i++)
@@ -89,10 +114,11 @@ public class ConfiguraDominio {
 
             return r.put("success", true).put("passi", passi)
                     .put("riusciti", riusciti).put("totale", passi.length())
-                    .put("nota", riusciti + " passi su " + passi.length() + " a posto. I record appena "
-                            + "creati impiegano qualche minuto a propagarsi: ripremi Verifica nella "
-                            + "pagina DNS fra poco. Le righe rosse spiegano cosa manca — di solito e' "
-                            + "qualcosa che esiste gia' e che il pannello non sovrascrive apposta.");
+                    .put("nota", riusciti + " passi su " + passi.length() + " a posto. Dove ha creato "
+                            + "un record, la sequenza ha gia' aspettato che il DNS propagasse prima di "
+                            + "provare la politica, quindi questo e' un esito e non una fotografia a "
+                            + "meta'. Le righe rosse spiegano cosa manca — di solito e' qualcosa che "
+                            + "esiste gia' e che il pannello non sovrascrive apposta.");
         } catch (Exception e) {
             return r.put("success", false).put("passi", passi)
                     .put("error", "errore durante la configurazione: " + e.getMessage());
@@ -141,18 +167,6 @@ public class ConfiguraDominio {
                             + (op == null ? "nessuna risposta" : op.error));
         } catch (Exception e) {
             return voce("DKIM", false, "errore: " + e.getMessage());
-        }
-    }
-
-    private static JSONObject certificato() {
-        try {
-            List<String> nomi = AttivaMtaSts.nomiDaCoprire();
-            if (nomi.isEmpty()) return voce("Certificato", true, "nessun nome da coprire");
-            AcmeManager acme = new AcmeManager(Main.mailDatabase);
-            AcmeManager.CertificateResult cr = acme.emettiConNomi(MtaSts.hostDiPosta(), nomi);
-            return voce("Certificato", cr.success, cr.message);
-        } catch (Exception e) {
-            return voce("Certificato", false, "errore: " + e.getMessage());
         }
     }
 

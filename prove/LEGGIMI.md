@@ -7,6 +7,7 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/system/*.java
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaMtaSts
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaAttesa
+    java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaUnificazione
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaVecchia
 
 ## Cosa provano
@@ -20,6 +21,11 @@ sbagliato e proxato.
 veri. Verifica le tre proprieta' che devono valere: non si aspetta se i domini rispondono
 gia', si smette appena rispondono, e si esce comunque alla scadenza invece di girare
 per sempre.
+
+**ProvaUnificazione** — i pezzi nati dall'unione delle due sequenze: `filtra()`, il filtro
+per dominio (confronto esatto e senza maiuscole: "ake.net" non deve pescare "domain-d.test", e
+un dominio inesistente deve dare lista vuota, che e' la guardia contro il falso successo), e
+`comeVoci()`, che traduce l'esito nelle righe della pagina DNS senza perdere le righe rosse.
 
 **ProvaVecchia** — la logica di classificazione com'era prima della correzione, messa
 davanti agli stessi due casi. Serve a dimostrare che i controlli di ProvaMtaSts non sono
