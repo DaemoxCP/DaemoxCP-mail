@@ -20,10 +20,11 @@ import java.util.Locale;
 /**
  * MTA-STS acceso con un pulsante solo.
  *
- * Perche' esiste. Attivare MTA-STS richiede sette cose fatte NELL'ORDINE GIUSTO: la riga di
- * include in nginx, la configurazione della 443, la jail, un CNAME per dominio, un
- * certificato che copra quei nomi, la verifica che la politica risponda, e solo alla fine il
- * record TXT. Farle fare a mano una per una significa sbagliare l'ordine — come e' successo
+ * Perche' esiste. Attivare MTA-STS richiede otto cose fatte NELL'ORDINE GIUSTO: la riga di
+ * include in nginx, la configurazione della 443, la jail, un CNAME per dominio, che quel
+ * CNAME punti DRITTO al server e non passi da un proxy, un certificato che copra quei nomi,
+ * la verifica che la politica risponda, e solo alla fine il record TXT. Farle fare a mano
+ * una per una significa sbagliare l'ordine — come e' successo
  * a me, che ho chiesto di provare con curl un nome che il passo dopo doveva ancora creare.
  *
  * L'ordine non e' un dettaglio di comodita': ogni passo e' il presupposto del successivo. Il
@@ -39,6 +40,23 @@ import java.util.Locale;
 public class AttivaMtaSts {
 
     private AttivaMtaSts() {}
+
+    /**
+     * Quanto la sequenza aspetta, al massimo, che un record DNS appena creato diventi visibile.
+     *
+     * Non e' un numero scelto a sentimento: un resolver che ha gia' in cache la risposta
+     * precedente la tiene per il TTL di quella risposta, e su un jolly Cloudflare quel TTL
+     * misurato vale 300 secondi. Sotto i cinque minuti l'attesa non servirebbe a niente; sei
+     * lasciano il margine perche' la cache scada davvero.
+     */
+    private static final long ATTESA_MAX_MS = 6 * 60 * 1000L;
+
+    /**
+     * Ogni quanto si riprova. Trenta secondi perche' la JVM tiene in cache le risoluzioni
+     * riuscite per trenta secondi: riprovare piu' spesso vorrebbe dire rileggere la propria
+     * cache e credere di aver interrogato il DNS.
+     */
+    private static final long ATTESA_INTERVALLO_MS = 30 * 1000L;
 
     public static class Passo {
         public String chiave, titolo, dettaglio, stato, motivo;
@@ -84,20 +102,10 @@ public class AttivaMtaSts {
         // proprio perche' non ha guardato niente. E' l'errore che sto togliendo dal pannello:
         // non deve tornare dalla porta di servizio.
         int quantiDomini = domini().size();
-        List<String> assenti = new ArrayList<>(), storti = new ArrayList<>(),
-                     proxati = new ArrayList<>(), ciechi = new ArrayList<>(),
-                     inPropagazione = new ArrayList<>();
-        for (EsameNome e : esami) {
-            switch (e.stato) {
-                case ASSENTE -> assenti.add(e.dominio + " (" + e.motivo + ")");
-                case CIECO -> ciechi.add(e.dominio + " (" + e.motivo + ")");
-                case DA_CORREGGERE -> {
-                    if (e.motivo.contains("Cloudflare")) proxati.add(e.dominio);
-                    else storti.add(e.dominio + " (" + e.motivo + ")");
-                }
-                case GIUSTO -> { if (!e.risolve) inPropagazione.add(e.dominio); }
-            }
-        }
+        Ripartizione rip = ripartisci(esami);
+        List<String> assenti = rip.assenti, storti = rip.storti, proxati = rip.proxati,
+                     ciechi = rip.ciechi, inPropagazione = rip.inPropagazione;
+        boolean proxyDaJolly = rip.proxyDaJolly;
         if (esami.size() < quantiDomini)
             ciechi.add((quantiDomini - esami.size()) + " domini non esaminati: non sono riuscito "
                      + "a leggerne l'elenco o a interrogare Cloudflare");
@@ -107,6 +115,8 @@ public class AttivaMtaSts {
         else if (!ciechi.isEmpty()) dettCname = "non verificabili: " + String.join("; ", ciechi);
         else if (!inPropagazione.isEmpty())
             dettCname = "creati, in attesa di propagazione: " + String.join(", ", inPropagazione);
+        else if (!proxati.isEmpty())
+            dettCname = "tutti presenti; resta il proxy, che e' il passo qui sotto";
         else dettCname = "tutti presenti e giusti";
         passi.add(passo("cname", "Un CNAME mta-sts per ogni dominio", dettCname,
                 !guaiCname.isEmpty() ? "da fare" : (ciechi.isEmpty() ? "fatto" : "incerto"),
@@ -123,10 +133,16 @@ public class AttivaMtaSts {
                                  : "nessuno passa da Cloudflare"),
                 !proxati.isEmpty() ? "da fare" : (cieco ? "incerto" : "fatto"),
                 proxati.isEmpty() ? null
-                    : "Con il proxy acceso chi legge la policy parla con Cloudflare, che deve a sua "
+                    : "Con il proxy acceso chi legge la politica parla con Cloudflare, che deve a sua "
                     + "volta validare il certificato del tuo server: un secondo pezzo che deve "
                     + "funzionare, e che quando non funziona risponde 526 senza dire cosa manchi. "
-                    + "Il pannello li rimette su \"Solo DNS\"."));
+                    + "Dove il proxy sta su un record mta-sts, il pannello lo rimette su \"Solo DNS\"."
+                    + (proxyDaJolly
+                        ? " Dove invece a rispondere e' un JOLLY, il pannello non lo tocca: quel "
+                        + "record non e' suo, e' il DNS del sito, e spegnerne il proxy scoprirebbe "
+                        + "il sito. Crea il record mta-sts esplicito, che ha la precedenza sul "
+                        + "jolly e punta dritto al server: il jolly resta esattamente com'e'."
+                        : "")));
 
         // 5: il certificato
         List<String> nomiServiti = nomiDaCoprire();
@@ -142,31 +158,180 @@ public class AttivaMtaSts {
                     + String.join(", ", esclusi)));
 
         // 6-7: la prova e il record
-        List<String> nonRisponde = new ArrayList<>(), senzaTxt = new ArrayList<>();
+        List<String> nonRisponde = new ArrayList<>(), senzaTxt = new ArrayList<>(),
+                     nonMantenuti = new ArrayList<>(), txtIgnoti = new ArrayList<>();
+        String atteso = txtAtteso();
         for (String d : domini()) {
-            if (!MtaSts.provaPubblica(d).optBoolean("ok", false)) nonRisponde.add(d);
-            else if (!txtCorretto(d)) senzaTxt.add(d);
+            boolean risponde = MtaSts.provaPubblica(d).optBoolean("ok", false);
+            // Il TXT si legge SEMPRE, e soprattutto quando la politica NON risponde: e' proprio
+            // quella la combinazione da scoprire, un record gia' pubblicato che manda i mittenti
+            // del mondo contro un errore. Prima qui c'era un "else if" e a quel ramo non si
+            // arrivava mai: su domain-d.test il pannello scriveva "in attesa dei passi precedenti"
+            // mentre il record era pubblicato, con un id vecchio, e la politica dava 526. Cieco
+            // esattamente sulla cosa che questa scheda esiste per sorvegliare.
+            LetturaTxt txt = leggiTxt(d);
+            if (!risponde) {
+                nonRisponde.add(d);
+                if (txt.esito == EsitoTxt.PRESENTE) nonMantenuti.add(d + " -> " + txt.contenuto);
+                continue;
+            }
+            switch (txt.esito) {
+                case NON_CHIESTO -> txtIgnoti.add(d);
+                case ASSENTE -> senzaTxt.add(d);
+                case PRESENTE -> {
+                    if (!atteso.equals(txt.contenuto)) senzaTxt.add(d + " (id da aggiornare)");
+                }
+            }
         }
-        passi.add(passo("prova", "La politica risponde da fuori",
-                nonRisponde.isEmpty() ? "risponde per tutti"
-                                      : "non risponde per: " + String.join(", ", nonRisponde),
+        passi.add(passo("prova", "La politica risponde davvero sul nome pubblico",
+                nonRisponde.isEmpty()
+                    ? "risponde per tutti (richiesta HTTPS vera: prova DNS, certificato e cio' che "
+                    + "viene servito; parte pero' da questo server, quindi non dimostra la "
+                    + "raggiungibilita' da altre reti)"
+                    : "non risponde per: " + String.join(", ", nonRisponde),
                 nonRisponde.isEmpty() ? "fatto" : "da fare", null));
-        passi.add(passo("txt", "Il record _mta-sts e' pubblicato",
-                senzaTxt.isEmpty() && nonRisponde.isEmpty() ? "tutti pubblicati"
-                        : (senzaTxt.isEmpty() ? "in attesa dei passi precedenti"
-                                              : "mancano: " + String.join(", ", senzaTxt)),
-                (nonRisponde.isEmpty() && senzaTxt.isEmpty()) ? "fatto" : "da fare", null));
+
+        String dettTxt, statoTxt, motivoTxt = null;
+        if (!nonMantenuti.isEmpty()) {
+            dettTxt = "pubblicato ma NON mantenuto: " + String.join("; ", nonMantenuti);
+            statoTxt = "da fare";
+            motivoTxt = "Su questi domini il record c'e' gia' e dice a tutti i mittenti di andare a "
+                      + "leggere la politica — che pero' non risponde. E' esattamente la "
+                      + "dichiarazione non mantenuta per cui questa sequenza pubblica il TXT per "
+                      + "ultimo. Non si perde posta (senza una politica leggibile i mittenti "
+                      + "proseguono senza MTA-STS, RFC 8461), ma va chiusa: sistemati i passi qui "
+                      + "sopra, la sequenza riscrive il record con l'id giusto. Se la politica non "
+                      + "si puo' far rispondere, allora il record va tolto.";
+        } else if (!txtIgnoti.isEmpty()) {
+            dettTxt = "non sono riuscito a interrogare il DNS per: " + String.join(", ", txtIgnoti);
+            statoTxt = "incerto";
+            motivoTxt = "\"Non ho potuto controllare\" non e' \"va tutto bene\": non lo segno come fatto.";
+        } else if (!nonRisponde.isEmpty()) {
+            dettTxt = "in attesa dei passi precedenti"; statoTxt = "da fare";
+        } else if (!senzaTxt.isEmpty()) {
+            dettTxt = "mancano: " + String.join(", ", senzaTxt); statoTxt = "da fare";
+        } else {
+            dettTxt = "tutti pubblicati"; statoTxt = "fatto";
+        }
+        passi.add(passo("txt", "Il record _mta-sts e' pubblicato", dettTxt, statoTxt, motivoTxt));
 
         JSONArray a = new JSONArray();
-        int daFare = 0;
-        for (Passo p : passi) { a.put(p.json()); if ("da fare".equals(p.stato)) daFare++; }
-        r.put("passi", a).put("daFare", daFare);
-        r.put("completo", daFare == 0);
-        r.put("nota", daFare == 0
+        int daFare = 0, incerti = 0;
+        for (Passo p : passi) {
+            a.put(p.json());
+            if ("da fare".equals(p.stato)) daFare++;
+            else if ("incerto".equals(p.stato)) incerti++;
+        }
+        r.put("passi", a).put("daFare", daFare).put("incerti", incerti);
+        // "completo" accende la spunta verde e fa sparire il pulsante, quindi non puo' bastare
+        // che non ci sia niente DA FARE: serve anche che non sia rimasto niente da VERIFICARE.
+        // Con la sola condizione daFare==0, un passo "incerto" — cioe' uno che il pannello non
+        // ha potuto controllare — sarebbe bastato da solo a dichiarare "attivo su tutti i domini".
+        boolean completo = daFare == 0 && incerti == 0;
+        r.put("completo", completo);
+        String quantiIncerti = incerti + (incerti == 1 ? " passo" : " passi");
+        r.put("nota", completo
                 ? "MTA-STS e' attivo su tutti i domini che il pannello puo' coprire."
-                : daFare + (daFare == 1 ? " passo manca" : " passi mancano") + ". Il pulsante li esegue "
-                  + "nell'ordine e si ferma al primo che non riesce.");
+                : daFare == 0
+                  ? quantiIncerti + " che il pannello non ha potuto verificare: non c'e' niente da "
+                    + "eseguire, ma nemmeno una conferma."
+                  : daFare + (daFare == 1 ? " passo manca" : " passi mancano")
+                    + (incerti > 0 ? ", piu' " + quantiIncerti + " che non e' stato possibile verificare" : "")
+                    + ". Il pulsante li esegue nell'ordine e si ferma al primo che non riesce.");
         return r;
+    }
+
+    /**
+     * Come i domini esaminati si distribuiscono fra i passi del piano.
+     *
+     * Sta in un metodo suo, staccato da piano(), per una ragione precisa: e' QUI che sono nati
+     * i falsi verdi. Un dominio senza record che rispondeva grazie a un jolly proxato non
+     * entrava nel conto del proxy, e il passo diceva "nessuno passa da Cloudflare"; un record
+     * insieme SBAGLIATO e PROXATO finiva nel solo conto del proxy — perche' la classificazione
+     * cercava la parola "Cloudflare" dentro una frase scritta per un essere umano — e il passo
+     * dei CNAME dichiarava "tutti presenti e giusti" un record che puntava altrove.
+     *
+     * Dentro piano(), che per esistere ha bisogno del database e di Cloudflare, questa logica
+     * non si poteva provare con un test. Una logica che nessun test puo' raggiungere e' una
+     * logica che nessuno controlla: qui infatti non la controllava nessuno.
+     */
+    static final class Ripartizione {
+        final List<String> assenti = new ArrayList<>(), storti = new ArrayList<>(),
+                           proxati = new ArrayList<>(), ciechi = new ArrayList<>(),
+                           inPropagazione = new ArrayList<>();
+        boolean proxyDaJolly;
+    }
+
+    static Ripartizione ripartisci(List<EsameNome> esami) {
+        Ripartizione r = new Ripartizione();
+        for (EsameNome e : esami) {
+            // Il proxy si conta per conto suo, da un booleano: un record puo' essere insieme
+            // sbagliato E proxato, e i due fatti devono comparire tutti e due, nei due passi
+            // a cui appartengono.
+            if (e.passaDalProxy) {
+                boolean daJolly = e.stato == StatoNome.ASSENTE;
+                if (daJolly) r.proxyDaJolly = true;
+                r.proxati.add(e.dominio + (daJolly
+                        ? " (non c'e' il record, risponde il jolly *." + e.dominio
+                          + " che sta dietro Cloudflare)" : ""));
+            }
+            switch (e.stato) {
+                case ASSENTE -> r.assenti.add(e.dominio + " (" + e.motivo + ")");
+                case CIECO -> r.ciechi.add(e.dominio + " (" + e.motivo + ")");
+                case DA_CORREGGERE -> {
+                    if (e.contenutoSbagliato) r.storti.add(e.dominio + " (" + e.motivo + ")");
+                }
+                case GIUSTO -> { if (!e.risolve) r.inPropagazione.add(e.dominio); }
+            }
+        }
+        return r;
+    }
+
+    /**
+     * Il tempo, passato da fuori.
+     *
+     * Serve solo perche' l'attesa qui sotto possa essere provata: incollata a Thread.sleep e
+     * a System.currentTimeMillis, un test avrebbe dovuto aspettare sei minuti veri per
+     * esercitarla, cioe' non l'avrebbe esercitata mai.
+     */
+    interface Orologio {
+        long adesso();
+        void dormi(long ms) throws InterruptedException;
+    }
+
+    static final Orologio OROLOGIO_VERO = new Orologio() {
+        public long adesso() { return System.currentTimeMillis(); }
+        public void dormi(long ms) throws InterruptedException { Thread.sleep(ms); }
+    };
+
+    /**
+     * Aspetta che i domini indicati rispondano, e restituisce quelli che non ce l'hanno fatta.
+     *
+     * Tre proprieta' che devono valere, e che il test verifica una per una: si prova SUBITO
+     * prima di dormire (se rispondono gia', non si aspetta un istante); si smette appena la
+     * lista si svuota; e si smette comunque alla scadenza, perche' un ciclo di attesa senza
+     * un'uscita garantita, dentro un pannello di produzione, e' un blocco che non finisce piu'.
+     */
+    static List<String> attendiPropagazione(List<String> domini,
+                                            java.util.function.Predicate<String> risponde,
+                                            Orologio orologio, long maxMs, long intervalloMs,
+                                            java.util.function.Consumer<String> log) {
+        List<String> restano = new ArrayList<>(domini);
+        long scadenza = orologio.adesso() + maxMs;
+        while (true) {
+            restano.removeIf(risponde);
+            if (restano.isEmpty() || orologio.adesso() >= scadenza) break;
+            log.accept("    non rispondono ancora: " + String.join(", ", restano)
+                     + " — riprovo fra " + (intervalloMs / 1000) + "s");
+            try {
+                orologio.dormi(intervalloMs);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                log.accept("    attesa interrotta.");
+                break;
+            }
+        }
+        return restano;
     }
 
     /* ===================================================================
@@ -194,7 +359,7 @@ public class AttivaMtaSts {
         if (inc == null || !inc.optBoolean("ok", false)) {
             JSONObject e = ProtezioneWeb.aggiungiInclude();
             fatti.put(esito("include", "Riga di include in nginx", e));
-            if (job != null) job.scrivi("[1/7] include in nginx: " + (e.optBoolean("success", false) ? "fatto" : "FALLITO"));
+            if (job != null) job.scrivi("[1/8] include in nginx: " + (e.optBoolean("success", false) ? "fatto" : "FALLITO"));
             if (!e.optBoolean("success", false)) return fermati(r, fatti,
                     "Senza la riga di include, la configurazione della 443 finirebbe in un file che "
                   + "nginx non legge: mi fermo qui.");
@@ -204,7 +369,7 @@ public class AttivaMtaSts {
         if (!ProtezioneWeb.stato().optBoolean("installato", false)) {
             JSONObject e = ProtezioneWeb.installa("", "");
             fatti.put(esito("config443", "Configurazione della 443", e));
-            if (job != null) job.scrivi("[2/7] configurazione 443: " + (e.optBoolean("success", false) ? "fatta" : "FALLITA"));
+            if (job != null) job.scrivi("[2/8] configurazione 443: " + (e.optBoolean("success", false) ? "fatta" : "FALLITA"));
             if (!e.optBoolean("success", false)) return fermati(r, fatti,
                     "Senza la 443 configurata la politica non puo' rispondere: mi fermo.");
         } else fatti.put(gia("config443", "Configurazione della 443"));
@@ -217,6 +382,11 @@ public class AttivaMtaSts {
         } else fatti.put(gia("jail", "Jail fail2ban"));
 
         // 4. i CNAME
+        //
+        // I domini in cui qualcosa CAMBIA davvero si segnano: sono gli unici per cui, piu'
+        // avanti, ha senso aspettare la propagazione. Dove non e' cambiato niente non c'e'
+        // niente da propagare, e un'attesa sarebbe solo tempo tolto a chi guarda.
+        LinkedHashSet<String> appenaCambiati = new LinkedHashSet<>();
         JSONArray cname = new JSONArray();
         try {
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
@@ -239,6 +409,8 @@ public class AttivaMtaSts {
                                      + "il CNAME va creato a mano dove sta il DNS di questo dominio."));
                     continue;
                 }
+                if (e.optBoolean("success", false) && !e.optBoolean("invariato", false))
+                    appenaCambiati.add(d.domain);
                 cname.put(nota(d.domain, e.optBoolean("success", false),
                         e.optString("nota", e.optString("error", ""))));
             }
@@ -247,7 +419,7 @@ public class AttivaMtaSts {
         }
         fatti.put(new JSONObject().put("chiave", "cname").put("titolo", "CNAME mta-sts")
                 .put("dettaglio", cname));
-        if (job != null) { job.avanza(4, 7); job.scrivi("[4/7] CNAME mta-sts: " + cname.length() + " domini esaminati"); }
+        if (job != null) { job.avanza(4, 8); job.scrivi("[4/8] CNAME mta-sts: " + cname.length() + " domini esaminati"); }
 
         // 4-bis. I nomi mta-sts devono puntare dritti al server.
         // Ogni dominio riporta COSA HO VISTO. Prima questo passo diceva "era gia' a posto"
@@ -296,7 +468,7 @@ public class AttivaMtaSts {
                     }
                     CloudflareManager.RecordOp op = cf.impostaProxy(a.apiToken, zl.zoneId, t.id, false);
                     boolean fatto = op != null && op.success;
-                    if (fatto) sistemati++;
+                    if (fatto) { sistemati++; appenaCambiati.add(d.domain); }
                     proxy.put(nota(d.domain, fatto,
                             fatto ? "il record " + t.type + " era dietro Cloudflare (nuvola "
                                     + "arancione), l'ho messo su Solo DNS"
@@ -317,7 +489,7 @@ public class AttivaMtaSts {
         fatti.put(new JSONObject().put("chiave", "proxy")
                 .put("titolo", "I nomi mta-sts puntano dritti al server")
                 .put("dettaglio", proxy));
-        if (job != null) job.scrivi("[4b/7] Proxy: " + dritti + " gia' dritti, "
+        if (job != null) job.scrivi("[5/8] Proxy: " + dritti + " gia' dritti, "
                 + sistemati + " sistemati, " + ciechi + " non verificabili");
 
         // 5. il certificato
@@ -332,7 +504,7 @@ public class AttivaMtaSts {
             // ci sono gia': Let's Encrypt concede 5 emissioni a settimana per lo stesso
             // insieme di nomi, e un pulsante che riemette a ogni pressione consuma quel
             // margine lasciando senza rinnovo proprio quando servirebbe.
-            if (job != null) { job.avanza(5, 7); job.scrivi("[5/7] Emetto il certificato con "
+            if (job != null) { job.avanza(6, 8); job.scrivi("[6/8] Emetto il certificato con "
                     + nomi.size() + " nomi (" + scoperti.size()
                     + " mancano da quello in uso). Puo' richiedere un minuto..."); }
             AcmeManager.CertificateResult cr = acme.emettiConNomi(host, nomi);
@@ -360,6 +532,34 @@ public class AttivaMtaSts {
                   + "ferma all'errore TLS. Mi fermo prima di pubblicare il record.");
         } else fatti.put(gia("certificato", "Certificato con i nomi mta-sts"));
 
+        // 6-bis. L'attesa della propagazione, e solo dove serve.
+        //
+        // Un record DNS appena creato non e' visibile subito: chi ha in cache la risposta
+        // precedente la tiene per il suo TTL. Su un nome coperto da un jolly Cloudflare quel
+        // TTL vale 300 secondi, quindi la politica puo' restare irraggiungibile per cinque
+        // minuti dopo che il CNAME e' stato creato. Provando subito, la sequenza si fermerebbe
+        // sempre un passo prima della fine e lascerebbe a chi guarda il compito di ripremere
+        // piu' tardi — cioe' esattamente il lavoro a mano che questo pulsante esiste per
+        // togliere, e per giunta senza dire quanto tardi.
+        //
+        // Quindi si aspetta. Ma solo per i domini in cui qualcosa e' cambiato, si prova subito
+        // prima di dormire, e si smette appena rispondono: un'attesa che non finisce mai
+        // quando l'esito e' gia' buono e' un difetto tanto quanto non aspettare.
+        if (!appenaCambiati.isEmpty()) {
+            if (job != null) job.scrivi("[7/8] " + appenaCambiati.size() + " domini appena modificati. "
+                    + "Aspetto che il DNS propaghi, al massimo " + (ATTESA_MAX_MS / 60000)
+                    + " minuti: chi ha in cache la risposta di prima la tiene per il suo TTL.");
+            List<String> restano = attendiPropagazione(
+                    new ArrayList<>(appenaCambiati),
+                    dom -> MtaSts.provaPubblica(dom).optBoolean("ok", false),
+                    OROLOGIO_VERO, ATTESA_MAX_MS, ATTESA_INTERVALLO_MS,
+                    riga -> { if (job != null) job.scrivi(riga); });
+            if (job != null) job.scrivi(restano.isEmpty()
+                    ? "    tutti i domini modificati rispondono."
+                    : "    dopo l'attesa non rispondono ancora: " + String.join(", ", restano)
+                      + ". Per questi il record TXT non viene pubblicato.");
+        }
+
         // 6-7. la prova e il record, dominio per dominio
         JSONArray finali = new JSONArray();
         try {
@@ -382,15 +582,18 @@ public class AttivaMtaSts {
         } catch (Exception e) {
             finali.put(nota("", false, "errore: " + e.getMessage()));
         }
-        if (job != null) { job.avanza(7, 7); job.scrivi("[6-7/7] Prova della politica e record TXT: "
+        if (job != null) { job.avanza(8, 8); job.scrivi("[7-8/8] Prova della politica e record TXT: "
                 + finali.length() + " domini esaminati"); }
         fatti.put(new JSONObject().put("chiave", "txt").put("titolo", "Prova della politica e record TXT")
                 .put("dettaglio", finali));
 
         return r.put("success", true).put("passi", fatti)
-                .put("nota", "Sequenza completata. Premi di nuovo Stato per vedere com'e' rimasta: i "
-                        + "record DNS appena creati possono metterci qualche minuto a propagarsi, quindi "
-                        + "un dominio che ora risulta \"non risponde\" puo' sistemarsi da solo.");
+                .put("nota", "Sequenza completata. Dove ha creato o corretto un record, la sequenza ha "
+                        + "gia' aspettato che il DNS propagasse prima di provare la politica, quindi "
+                        + "quello che leggi qui e' un esito, non una fotografia a meta'. Se un dominio "
+                        + "risulta ancora \"non risponde\", la cache di qualche resolver non era ancora "
+                        + "scaduta: guarda lo Stato fra qualche minuto e, se e' rientrato, ripremi "
+                        + "Attiva per pubblicare il suo record TXT.");
     }
 
     private static JSONObject fermati(JSONObject r, JSONArray fatti, String perche) {
@@ -488,8 +691,25 @@ public class AttivaMtaSts {
     public static final class EsameNome {
         public final String dominio; public final StatoNome stato;
         public final String motivo; public final boolean risolve;
-        EsameNome(String d, StatoNome s, String m, boolean r) {
+        /**
+         * Il nome risponde ATTRAVERSO Cloudflare: o il record esplicito e' proxato, o il
+         * record manca e a rispondere e' un jolly proxato. Nei due casi l'effetto e' lo
+         * stesso — chi legge la politica non parla mai con il server — ma il rimedio no,
+         * e per questo il fatto viaggia come booleano invece che dentro una frase.
+         *
+         * Prima il piano ricavava questa informazione cercando la parola "Cloudflare" nel
+         * motivo. Un record insieme SBAGLIATO e PROXATO finiva cosi' nel solo conto del
+         * proxy, e il passo dei CNAME dichiarava "tutti presenti e giusti" un record che
+         * puntava altrove. Una classificazione si calcola dove stanno i fatti, non
+         * rileggendo il testo scritto per un essere umano.
+         */
+        public final boolean passaDalProxy;
+        /** Il record c'e' ma il contenuto e' sbagliato: tipo errato o destinazione errata. */
+        public final boolean contenutoSbagliato;
+        EsameNome(String d, StatoNome s, String m, boolean r) { this(d, s, m, r, false, false); }
+        EsameNome(String d, StatoNome s, String m, boolean r, boolean proxy, boolean storto) {
             dominio = d; stato = s; motivo = m; risolve = r;
+            passaDalProxy = proxy; contenutoSbagliato = storto;
         }
     }
 
@@ -535,24 +755,51 @@ public class AttivaMtaSts {
                         trovato = t; break;
                     }
                 if (trovato == null) {
+                    // "Quasi certamente c'e' un jolly" era una supposizione, scritta mentre la
+                    // lista completa dei record della zona era gia' in mano. Il jolly si guarda.
+                    // E la differenza pesa: un jolly DIETRO PROXY non e' solo il motivo per cui
+                    // il nome risponde, e' il motivo per cui risponde 526 — un fatto che il
+                    // passo del proxy deve sapere, e che una supposizione non gli puo' dare.
+                    CloudflareManager.DnsRecordInfo jolly = null;
+                    String nomeJolly = ("*." + d.domain).toLowerCase(Locale.ROOT);
+                    for (CloudflareManager.DnsRecordInfo t : tutti)
+                        if (t.name != null && t.name.toLowerCase(Locale.ROOT).equals(nomeJolly)) {
+                            jolly = t; break;
+                        }
+                    String perche;
+                    if (jolly != null)
+                        // Niente parentesi qui dentro: questo motivo viene mostrato gia' dentro
+                        // una parentesi, e due livelli annidati si leggono male.
+                        perche = ", e a rispondere al posto suo e' il jolly *." + d.domain
+                               + ", un record " + jolly.type + " verso \"" + jolly.content + "\""
+                               + (jolly.proxied
+                                    ? " dietro Cloudflare: e' da li' che arriva il 526"
+                                    : " che punta dritto al server");
+                    else if (risolve)
+                        perche = ", eppure il nome risponde e nella zona non c'e' nemmeno un jolly "
+                               + "*." + d.domain + ": la risposta arriva da fuori di questa zona";
+                    else perche = "";
                     out.add(new EsameNome(d.domain, StatoNome.ASSENTE,
-                            "nella zona non c'e' nessun record con questo nome"
-                            + (risolve ? ", eppure il nome risponde: quasi certamente c'e' un "
-                                       + "jolly (*." + d.domain + ") che risponde al posto suo"
-                                       : ""), risolve));
+                            "nella zona non c'e' nessun record con questo nome" + perche, risolve,
+                            jolly != null && jolly.proxied, false));
                     continue;
                 }
                 String bersaglio = Main.mailDatabase.getSetting("mail_hostname", "mail." + d.domain);
                 List<String> male = new ArrayList<>();
-                if (!"CNAME".equalsIgnoreCase(trovato.type))
+                boolean storto = false;
+                if (!"CNAME".equalsIgnoreCase(trovato.type)) {
                     male.add("e' un record " + trovato.type + " invece di un CNAME");
-                else if (!RegoleDns.stessoNome(trovato.content, bersaglio))
+                    storto = true;
+                } else if (!RegoleDns.stessoNome(trovato.content, bersaglio)) {
                     male.add("punta a \"" + trovato.content + "\" invece che a \"" + bersaglio + "\"");
+                    storto = true;
+                }
                 if (trovato.proxied)
                     male.add("passa da Cloudflare invece di puntare dritto al server");
                 out.add(male.isEmpty()
                         ? new EsameNome(d.domain, StatoNome.GIUSTO, "punta dritto a " + bersaglio, risolve)
-                        : new EsameNome(d.domain, StatoNome.DA_CORREGGERE, String.join("; ", male), risolve));
+                        : new EsameNome(d.domain, StatoNome.DA_CORREGGERE, String.join("; ", male),
+                                        risolve, trovato.proxied, storto));
             } catch (Exception e) {
                 out.add(new EsameNome(d.domain, StatoNome.CIECO,
                         "errore nel controllo: " + e.getMessage(), risolve));
@@ -577,30 +824,59 @@ public class AttivaMtaSts {
     }
 
     /**
-     * Il record c'e' ED E' QUELLO GIUSTO.
+     * Cosa dice il DNS del record _mta-sts, con un valore apposta per "non l'ho chiesto".
      *
-     * Non basta che esista: l'id deve corrispondere alla politica servita, altrimenti i
-     * mittenti non si accorgeranno delle modifiche future. I record suggeriti dal vecchio
-     * pannello hanno un id fisso — un orologio scritto una volta sola — che non cambierebbe
-     * mai. Un piano che li desse per "fatti" nasconderebbe proprio la cosa da sistemare.
+     * Prima questa lettura era un booleano solo — "il record c'e' ed e' quello giusto?" — e
+     * rispondeva NO in tre casi diversissimi: record assente, record presente con un id
+     * vecchio, e interrogazione DNS fallita. Il piano non poteva distinguerli, e infatti il
+     * secondo caso — l'unico pericoloso, perche' e' una dichiarazione pubblica gia' in aria —
+     * spariva. Tre risposte diverse vogliono tre valori diversi.
      */
-    private static boolean txtCorretto(String dominio) {
-        try {
-            String host = MtaSts.hostDiPosta();
-            String modo = MtaSts.modoCorrente();
-            String atteso = MtaSts.recordTxt(MtaSts.politica(host, modo, MtaSts.maxAgeConsigliato(modo)));
+    private enum EsitoTxt { PRESENTE, ASSENTE, NON_CHIESTO }
 
+    private static final class LetturaTxt {
+        final EsitoTxt esito; final String contenuto;
+        LetturaTxt(EsitoTxt e, String c) { esito = e; contenuto = c; }
+    }
+
+    private static LetturaTxt leggiTxt(String dominio) {
+        try {
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "TXT", "_mta-sts." + dominio);
             Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            p.waitFor();
-            for (String riga : org.mail_panel.security.RegoleDns.recordTxt(out))
-                if (riga.trim().equals(atteso.trim())) return true;
-            return false;
+            // dig torna 0 anche quando il nome non esiste: un'uscita diversa da zero vuol dire
+            // che non ho CHIESTO, non che la risposta sia "niente". Sono cose opposte.
+            if (p.waitFor() != 0) return new LetturaTxt(EsitoTxt.NON_CHIESTO, "");
+            for (String riga : RegoleDns.recordTxt(out)) {
+                String c = riga.trim();
+                if (c.toLowerCase(Locale.ROOT).startsWith("v=stsv1"))
+                    return new LetturaTxt(EsitoTxt.PRESENTE, c);
+            }
+            return new LetturaTxt(EsitoTxt.ASSENTE, "");
         } catch (Exception e) {
-            return false;
+            return new LetturaTxt(EsitoTxt.NON_CHIESTO, "");
+        }
+    }
+
+    /**
+     * Il record TXT che questo pannello scriverebbe adesso.
+     *
+     * Non basta che il record esista: l'id deve corrispondere alla politica servita, altrimenti
+     * i mittenti non si accorgeranno delle modifiche future. I record creati dal vecchio
+     * pannello hanno un id fisso — un orologio scritto una volta sola — che non cambierebbe
+     * mai. Un piano che li desse per "fatti" nasconderebbe proprio la cosa da sistemare.
+     */
+    private static String txtAtteso() {
+        try {
+            String host = MtaSts.hostDiPosta();
+            String modo = MtaSts.modoCorrente();
+            return MtaSts.recordTxt(MtaSts.politica(host, modo, MtaSts.maxAgeConsigliato(modo))).trim();
+        } catch (Exception e) {
+            // Un confronto contro una stringa vuota non passerebbe mai: nessun record verrebbe
+            // dato per giusto per sbaglio.
+            return "";
         }
     }
 

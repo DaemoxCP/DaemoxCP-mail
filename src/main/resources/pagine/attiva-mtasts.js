@@ -1,10 +1,10 @@
         // ---------- MTA-STS: un pulsante solo ----------
-        // La sequenza e' di sette passi e l'ordine conta: ogni passo e' il presupposto del
+        // La sequenza e' di otto passi e l'ordine conta: ogni passo e' il presupposto del
         // successivo. Farla fare a mano significa sbagliare l'ordine, quindi la conosce il
         // pannello, che sa anche a che punto e' e riparte da li'.
         async function amsPiano() {
             const el = document.getElementById('upd-ams');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardo a che punto siamo: nginx, certificato, DNS, e provo la politica da fuori...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardo a che punto siamo: nginx, certificato, DNS, il record TXT, e provo la politica sul nome pubblico...';
             const r = await updApi('mtasts_piano');
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
@@ -42,15 +42,24 @@
         async function amsAttiva() {
             if (prompt('Attivare MTA-STS su tutti i domini?\n\n'
                      + 'Il pannello esegue nell\'ordine: riga di include in nginx, configurazione\n'
-                     + 'della 443, jail fail2ban, un CNAME mta-sts per dominio, certificato che\n'
-                     + 'copre quei nomi, prova della politica, e infine il record TXT.\n\n'
+                     + 'della 443, jail fail2ban, un CNAME mta-sts per dominio, il proxy Cloudflare\n'
+                     + 'spento su quei nomi, un certificato che li copre, la prova della politica,\n'
+                     + 'e infine il record TXT.\n\n'
                      + 'Il record TXT viene pubblicato SOLO per i domini la cui politica risponde\n'
                      + 'davvero. Al primo passo che fallisce si ferma e spiega.\n\n'
-                     + 'Il certificato viene riemesso: e\' il passo piu\' delicato.\n\n'
+                     + 'Il certificato NON viene riemesso se copre gia\' tutti i nomi: la\n'
+                     + 'riemissione parte solo se ne manca almeno uno. E\' il passo piu\' delicato,\n'
+                     + 'ed e\' anche il piu\' raro.\n\n'
+                     + 'Non viene toccato nessun record che non sia mta-sts: un eventuale jolly\n'
+                     + '*.dominio resta esattamente com\'e\'.\n\n'
+                     + 'Dove crea o corregge un record, la sequenza aspetta che il DNS propaghi\n'
+                     + 'prima di provare la politica: puo\' quindi durare qualche minuto. Il\n'
+                     + 'lavoro prosegue sul server anche se chiudi la pagina.\n\n'
                      + 'Scrivi ATTIVA per confermare.') !== 'ATTIVA') return;
             const el = document.getElementById('amsEsito');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Eseguo la sequenza. '
-                         + 'L&rsquo;emissione del certificato pu&ograve; richiedere un minuto...';
+                         + 'Se crea o corregge un record DNS, aspetta che propaghi prima di provare '
+                         + 'la politica: possono volerci alcuni minuti.';
             const r = await updApi('mtasts_attiva', { confirm: 'ATTIVA' });
             if (!r.success || !r.jobId) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">'
