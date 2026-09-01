@@ -1075,6 +1075,7 @@ public class AcmeManager {
     private String executeCommand(String command, Map<String, String> extraEnv) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", command);
+        org.mail_panel.util.Shell.applicaPath(pb);
         pb.redirectErrorStream(true);
         if (extraEnv != null) {
             pb.environment().putAll(extraEnv);

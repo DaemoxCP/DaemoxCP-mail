@@ -657,6 +657,8 @@ public class SSLMailServer {
                 "-keypass", password,
                 "-dname", "CN=FreeBSD Mail Panel, OU=Mail, O=FreeBSD, L=Unknown, ST=Unknown, C=US"
             );
+            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.inheritIO();
             Process p = pb.start();
             p.waitFor();
@@ -2011,6 +2013,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", serviceName, "status");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
 
@@ -2055,6 +2058,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("pkg", "info", "-e", packageName);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             boolean finished = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -2081,6 +2085,7 @@ public class SSLMailServer {
             }
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", "pkg info | grep -q '^" + pattern + "'");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             boolean finished = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -2182,6 +2187,7 @@ public class SSLMailServer {
             System.out.println("[EXEC] Running: service " + service + " " + action);
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", service, action);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
 
@@ -2224,6 +2230,7 @@ public class SSLMailServer {
 
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", scriptPath.toString());
+        org.mail_panel.util.Shell.applicaPath(pb);
         pb.redirectErrorStream(true);
         Process process = pb.start();
 
@@ -5123,6 +5130,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "unbound");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -5279,6 +5287,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/bin/sockstat", "-l", "-4", "-6");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()));
@@ -5345,6 +5354,7 @@ public class SSLMailServer {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1",
                 "A", "2.0.0.127.zen.spamhaus.org");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -5367,6 +5377,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1", "A", "freebsd.org");
+            org.mail_panel.util.Shell.applicaPath(pb);
             // NIENTE redirectErrorStream: stderr di dig (es. "communications error") va separato
             // così non lo confondiamo con una risposta valida.
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
@@ -5398,6 +5409,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "unbound");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -5433,6 +5445,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/local/sbin/unbound-checkconf", UNBOUND_CONF_PATH);
+                org.mail_panel.util.Shell.applicaPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -5491,6 +5504,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", "+short", "+time=3", "+tries=2", "A", "freebsd.org");
+                org.mail_panel.util.Shell.applicaPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -5586,6 +5600,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pbGet = new ProcessBuilder("/usr/sbin/sysrc", "-n", "local_unbound_forwarders");
+                org.mail_panel.util.Shell.applicaPath(pbGet);
                 pbGet.redirectErrorStream(true);
                 Process pg = pbGet.start();
                 String currentVal = new String(pg.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -5593,6 +5608,7 @@ public class SSLMailServer {
                 if (!currentVal.isEmpty()) {
                     // TODO: migrate to Shell.run when touched
                     ProcessBuilder pbDel = new ProcessBuilder("/usr/sbin/sysrc", "-x", "local_unbound_forwarders");
+                    org.mail_panel.util.Shell.applicaPath(pbDel);
                     pbDel.redirectErrorStream(true);
                     Process pd = pbDel.start();
                     pd.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -5636,6 +5652,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pbGet = new ProcessBuilder("/usr/sbin/sysrc", "-n", "resolvconf_enable");
+                org.mail_panel.util.Shell.applicaPath(pbGet);
                 pbGet.redirectErrorStream(true);
                 Process pg = pbGet.start();
                 String currentVal = new String(pg.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -5643,6 +5660,7 @@ public class SSLMailServer {
                 if (currentVal.equalsIgnoreCase("YES")) {
                     // TODO: migrate to Shell.run when touched
                     ProcessBuilder pbSet = new ProcessBuilder("/usr/sbin/sysrc", "resolvconf_enable=NO");
+                    org.mail_panel.util.Shell.applicaPath(pbSet);
                     pbSet.redirectErrorStream(true);
                     Process ps = pbSet.start();
                     ps.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -5728,6 +5746,7 @@ public class SSLMailServer {
             // 7) RESTART (non reload) — il reload non ricarica forward.conf se l'include e' cambiato
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "local_unbound", "restart");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String reloadOut = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -5794,6 +5813,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "A", "2.0.0.127.zen.spamhaus.org");
+                org.mail_panel.util.Shell.applicaPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 dnsblOut = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -5834,6 +5854,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "unbound");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -6117,6 +6138,30 @@ public class SSLMailServer {
                 case "ssl_uso" -> response = UpdateManager.usoOpenssl();
                 case "removal_candidates" -> response = UpdateManager.candidatiRimozione();
                 case "panel_uses" -> response = UpdateManager.usoDalPannello(req.optString("nome", ""));
+                case "deep_scan" -> response = UpdateManager.analisiProfonda(req.optString("nome", ""));
+                case "panel_env" -> response = UpdateManager.ambienteDelPannello();
+                case "dovecot24_preview" -> response = UpdateManager.anteprimaDovecot24();
+                case "rspamd_timeout" -> response = UpdateManager.diagnosiTimeoutRspamd();
+                case "postfix_level" -> {
+                    if (!"ALZA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.alzaLivelloPostfix(req.optString("livello", ""));
+                    logAudit("POSTFIX_LEVEL", ip, req.optString("livello", "")
+                            + (response.optBoolean("success") ? " - fatto" : " - NON fatto: "
+                               + response.optString("error", "?")));
+                }
+                case "pkg_remove" -> {
+                    if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.rimuoviPacchetto(req.optString("nome", ""));
+                    logAudit("PKG_REMOVE", ip, req.optString("nome", "")
+                            + (response.optBoolean("success") ? " - rimosso" : " - NON rimosso: "
+                               + response.optString("error", "?")));
+                }
                 case "be_destroy" -> {
                     if (!"ELIMINA".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");
@@ -6391,6 +6436,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "clamav");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -6450,6 +6496,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/clamdscan", "--version");
+                org.mail_panel.util.Shell.applicaPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6626,6 +6673,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", key);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -6638,6 +6686,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", name, "status");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6651,6 +6700,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", key + "=" + value);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6670,6 +6720,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", svc, cmd);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6690,6 +6741,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "clamav");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6710,6 +6762,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/freshclam", "--foreground", "--stdout");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6752,6 +6805,7 @@ public class SSLMailServer {
             // Esegui clamdscan
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/clamdscan", "--no-summary", tmp.toString());
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6820,6 +6874,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "rspamd", "reload");
+                org.mail_panel.util.Shell.applicaPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
@@ -6844,6 +6899,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "clamav");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -7174,6 +7230,7 @@ public class SSLMailServer {
                     try {
                         // TODO: migrate to Shell.run when touched
                         ProcessBuilder pb = new ProcessBuilder("/bin/hostname");
+                        org.mail_panel.util.Shell.applicaPath(pb);
                         pb.redirectErrorStream(true);
                         Process p = pb.start();
                         String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -7458,6 +7515,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", "fail2ban_enable");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -7472,6 +7530,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "fail2ban", "status");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7487,6 +7546,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "py311-fail2ban");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7509,6 +7569,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "fail2ban_enable=YES");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7529,6 +7590,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/kldstat");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7542,6 +7604,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/sysctl", "-n", "security.jail.jailed");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -7566,6 +7629,7 @@ public class SSLMailServer {
             }
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/kldload", "pf");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7601,6 +7665,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", "pf_enable");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -7614,6 +7679,7 @@ public class SSLMailServer {
             // pfctl -si ritorna info status. Se pf non gira, exit code != 0 o output dice "Disabled".
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-si");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7637,6 +7703,7 @@ public class SSLMailServer {
             // Se la sintassi è invalida, non lanciamo il servizio.
             // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", "/etc/pf.conf");
+            org.mail_panel.util.Shell.applicaPath(testPb);
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
             String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7651,6 +7718,7 @@ public class SSLMailServer {
             // OK — avvio
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "pf", "start");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7677,6 +7745,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "pf_enable=YES");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7737,6 +7806,7 @@ public class SSLMailServer {
             java.nio.file.Files.writeString(tmp, content, java.nio.charset.StandardCharsets.UTF_8);
             // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", tmp.toString());
+            org.mail_panel.util.Shell.applicaPath(testPb);
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
             String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7820,6 +7890,7 @@ public class SSLMailServer {
                 try {
                     // TODO: migrate to Shell.run when touched
                     ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/fail2ban-client", "status");
+                    org.mail_panel.util.Shell.applicaPath(pb);
                     pb.redirectErrorStream(true);
                     Process p = pb.start();
                     String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7999,6 +8070,7 @@ public class SSLMailServer {
             // Test sintassi prima di ricaricare
             // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", "/etc/pf.conf");
+            org.mail_panel.util.Shell.applicaPath(testPb);
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
             String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -8017,6 +8089,7 @@ public class SSLMailServer {
             if (isPfRunning()) {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder loadPb = new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf");
+                org.mail_panel.util.Shell.applicaPath(loadPb);
                 loadPb.redirectErrorStream(true);
                 Process lp = loadPb.start();
                 loadOut = new String(lp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -9057,6 +9130,7 @@ public class SSLMailServer {
                                     // Restart Dovecot to clear in-memory vacation cache
                                     // TODO: migrate to Shell.run when touched
                                     ProcessBuilder pb = new ProcessBuilder("service", "dovecot", "restart");
+                                    org.mail_panel.util.Shell.applicaPath(pb);
                                     pb.redirectErrorStream(true);
                                     Process p = pb.start();
                                     p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -10528,6 +10602,7 @@ http {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", name, type);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             StringBuilder output = new StringBuilder();
@@ -10552,6 +10627,7 @@ http {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "-x", ip);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             StringBuilder output = new StringBuilder();

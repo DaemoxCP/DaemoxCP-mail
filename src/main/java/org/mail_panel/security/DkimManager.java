@@ -212,10 +212,12 @@ public class DkimManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("chown", "rspamd:rspamd", keyFile.toString());
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.start().waitFor();
 
             // TODO: migrate to Shell.run when touched
             pb = new ProcessBuilder("chmod", "600", keyFile.toString());
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.start().waitFor();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -260,6 +262,7 @@ public class DkimManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", "rspamd", "reload");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.start().waitFor();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -301,6 +304,7 @@ public class DkimManager {
             for (String resolver : resolvers) {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", r.dnsRecordName);
+                org.mail_panel.util.Shell.applicaPath(pb);
                 Process proc = pb.start();
                 StringBuilder out = new StringBuilder();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
@@ -741,6 +745,7 @@ public class DkimManager {
             for (String resolver : resolvers) {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", recordName);
+                org.mail_panel.util.Shell.applicaPath(pb);
                 pb.redirectErrorStream(false);
                 Process proc = pb.start();
                 StringBuilder out = new StringBuilder();
@@ -1090,6 +1095,7 @@ public class DkimManager {
 
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "TXT", recordName);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process process = pb.start();
 

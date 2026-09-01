@@ -313,6 +313,7 @@ public class SieveGenerator {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(sievecPath, scriptPath);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
 
@@ -359,6 +360,7 @@ public class SieveGenerator {
             // Run sievec to validate
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(sievecPath, "-d", tempFile.toString());
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
 

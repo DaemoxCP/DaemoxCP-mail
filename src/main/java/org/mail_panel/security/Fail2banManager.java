@@ -954,6 +954,7 @@ public class Fail2banManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(FAIL2BAN_CLIENT, "reload");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
@@ -1434,6 +1435,7 @@ public class Fail2banManager {
     private String executeCommand(String command) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
+        org.mail_panel.util.Shell.applicaPath(pb);
         pb.redirectErrorStream(true);
         Process process = pb.start();
 
@@ -1720,6 +1722,7 @@ public class Fail2banManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "add", ip);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -1744,6 +1747,7 @@ public class Fail2banManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "delete", ip);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -1767,6 +1771,7 @@ public class Fail2banManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "show");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -1788,6 +1793,7 @@ public class Fail2banManager {
             ensurePermabanFile();
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "replace", "-f", PERMABAN_FILE);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);

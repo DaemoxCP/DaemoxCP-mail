@@ -409,6 +409,7 @@ public class RspamdManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", "rspamd", "reload");
+            org.mail_panel.util.Shell.applicaPath(pb);
             Process p = pb.start();
             return p.waitFor() == 0;
         } catch (Exception e) {

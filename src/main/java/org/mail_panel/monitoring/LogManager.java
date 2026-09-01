@@ -91,9 +91,11 @@ public class LogManager {
                 // TODO: migrate to Shell.run when touched
                 pb = new ProcessBuilder("/bin/sh", "-c",
                     String.format("tail -n %d '%s' | grep -i '%s'", lines * 2, logFile.path, filter.replace("'", "\\'")));
+                org.mail_panel.util.Shell.applicaPath(pb);
             } else {
                 // TODO: migrate to Shell.run when touched
                 pb = new ProcessBuilder("tail", "-n", String.valueOf(lines), logFile.path);
+                org.mail_panel.util.Shell.applicaPath(pb);
             }
 
             pb.redirectErrorStream(true);
@@ -137,6 +139,7 @@ public class LogManager {
             ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c",
                 String.format("grep -E '%s' '%s' | tail -n %d",
                     pattern.replace("'", "'\\''"), logFile.path, maxResults));
+            org.mail_panel.util.Shell.applicaPath(pb);
 
             pb.redirectErrorStream(true);
             Process process = pb.start();
@@ -181,6 +184,7 @@ public class LogManager {
 
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("tail", "-f", "-n", "0", logFile.path);
+            org.mail_panel.util.Shell.applicaPath(pb);
             Process process = pb.start();
             tailProcesses.put(logId, process);
 

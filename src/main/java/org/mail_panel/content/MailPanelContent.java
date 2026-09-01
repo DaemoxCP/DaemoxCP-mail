@@ -13285,6 +13285,26 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
+            <div class="card mb-4 border-info">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-terminal me-2"></i><strong>Ambiente del pannello</strong>
+                        <span class="small text-muted ms-2">un comando che non si raggiunge sembra non installato</span></span>
+                    <div class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-info" onclick="envCheck()"><i class="fas fa-magnifying-glass me-1"></i>Controlla</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Il pannello esegue i comandi esterni attraverso una shell, e finora ereditava
+                        e basta il PATH di chi lo aveva avviato. Da riga di comando va bene; avviato
+                        da <code>rc.d</code> il PATH puo&rsquo; essere molto piu&rsquo; corto, e allora
+                        <code>mysqldump</code> o <code>doveadm</code> risultano inesistenti pur essendo
+                        installati. Qui si separano le due cose: <strong>il file c&rsquo;&egrave; sul
+                        disco?</strong> e <strong>il PATH lo raggiunge?</strong>
+                    </p>
+                    <div id="env-body"><span class="text-muted">Premi "Controlla": legge e basta.</span></div>
+                </div>
+            </div>
             <div class="card mb-4 border-warning">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-hand me-2"></i><strong>Prima di togliere un pacchetto</strong>
@@ -13552,6 +13572,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
         function updBadge(level) {
             if (level === 'ok') return '<span class="badge upd-badge-ok">OK</span>';
+            // "NOTA" e' diverso da "VERIFICA": VERIFICA chiede qualcosa a chi legge, NOTA
+            // racconta soltanto cosa fara' la procedura. Messe sotto la stessa etichetta
+            // gialla, una riga puramente descrittiva sembra una cosa rimasta da fare.
+            if (level === 'nota') return '<span class="badge upd-badge-info">NOTA</span>';
             if (level === 'verifica') return '<span class="badge upd-badge-warn">VERIFICA</span>';
             return '<span class="badge upd-badge-stop">ATTENDI</span>';
         }
@@ -13607,6 +13631,125 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 h += '</tbody></table></div>';
                 h += '<p class="small text-muted">Finché questi costrutti sono presenti, la manutenzione automatica '
                    + '<strong>non sblocca Dovecot</strong>: non è un avviso, è un blocco.</p>';
+                if (d.fonte) {
+                    h += '<p class="small text-muted"><strong>Fonte:</strong> ' + updEsc(d.fonte) + '</p>';
+                }
+                h += '<button class="btn btn-sm btn-outline-primary" onclick="dove24()">'
+                   + '<i class="fas fa-file-lines me-1"></i>Vedi la configurazione 2.4 che il pannello scriverebbe</button>'
+                   + '<div id="dove24-body" class="mt-2"></div>';
+            }
+
+            // ---------- Postfix: non una rottura annunciata, ma la rete di sicurezza ----------
+            const pf = r.postfix || {};
+            h += '<hr><h6 class="mb-1"><i class="fas fa-paper-plane me-1"></i>Postfix</h6>';
+            if (!pf.present) {
+                h += '<div class="small text-muted">' + updEsc(pf.note || 'non installato') + '</div>';
+            } else if (!pf.leggibile) {
+                h += '<div class="alert alert-warning py-2 small mb-2">' + updEsc(pf.note) + '</div>';
+            } else {
+                h += '<div class="small text-muted mb-1">' + updEsc(pf.package) + ' ' + updEsc(pf.version)
+                   + ' &middot; nel repository ' + updEsc(pf.repoVersion || '?')
+                   + ' &middot; compatibility_level ' + updEsc(pf.livello || '?')
+                   + (pf.livelloEsplicito ? ' (scritto in main.cf)' : ' (valore predefinito)') + '</div>'
+                   + '<div class="alert alert-' + (pf.verdetto === 'NIENTE IN SOSPESO' ? 'success' : 'warning')
+                   + ' py-2 small mb-2"><strong>' + updEsc(pf.verdetto) + '</strong> &mdash; '
+                   + updEsc(pf.spiegazione) + '</div>';
+                const cb = pf.cambi || [];
+                if (cb.length) {
+                    h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
+                       + '<th>Livello</th><th>Cosa cambierebbe salendo</th></tr></thead><tbody>';
+                    cb.forEach(x => {
+                        h += '<tr class="upd-cell"><td><code>' + updEsc(x.livello) + '</code></td>'
+                           + '<td class="small">' + updEsc(x.cambia)
+                           + '<div class="mt-1">' + (x.parametri || []).map(pp =>
+                                pp.giaDeciso
+                                  ? '<span class="badge upd-badge-ok me-1">' + updEsc(pp.nome)
+                                    + ' = ' + updEsc(pp.valore) + ' (deciso da te)</span>'
+                                  : (!pp.rilevante
+                                     ? '<span class="badge upd-badge-info me-1">' + updEsc(pp.nome)
+                                       + ' (irrilevante: ' + updEsc(pp.gate) + ' = ' + updEsc(pp.gateValore || 'no')
+                                       + ', la funzione non &egrave; attiva)</span>'
+                                     : '<span class="badge upd-badge-warn me-1">' + updEsc(pp.nome)
+                                       + ' (lo decide il predefinito)</span>')).join(' ')
+                           + '</div></td></tr>';
+                    });
+                    h += '</tbody></table></div>';
+                    if (pf.effettoQui) {
+                        h += '<div class="alert alert-' + (pf.apertiQui ? 'warning' : 'success')
+                           + ' py-2 small mb-2"><strong>Su questo server:</strong> ' + updEsc(pf.effettoQui) + '</div>';
+                    }
+                }
+                if (pf.indietro && pf.consigliato) {
+                    h += '<button class="btn btn-sm btn-outline-warning mb-1" onclick="pfAlza(\\''
+                       + updEsc(pf.consigliato) + '\\', ' + (pf.apertiQui || 0) + ')">'
+                       + '<i class="fas fa-arrow-up me-1"></i>Alza il livello a ' + updEsc(pf.consigliato)
+                       + '</button><div id="pf-esito" class="mt-1"></div>'
+                       + '<div class="small text-muted mb-2">Il pannello copia <code>main.cf</code> prima di '
+                       + 'toccarlo, verifica che il valore sia cambiato davvero, ricarica il servizio e '
+                       + 'controlla che Postfix sia ancora attivo. Se qualcosa non torna, rimette la copia.</div>';
+                }
+                const ap = pf.appoggi || [];
+                if (ap.length) {
+                    h += '<div class="small mb-1">Impostazioni vecchie che Postfix ha registrato nel log:</div>'
+                       + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
+                    ap.forEach(x => { h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x) + '</code></td></tr>'; });
+                    h += '</tbody></table></div>';
+                }
+                if (!pf.checkPulito) {
+                    h += '<div class="small mb-1"><strong>postfix check:</strong></div>'
+                       + '<pre class="upd-log mb-2">' + updEsc(pf.check) + '</pre>';
+                }
+                h += '<div class="small text-muted mb-2"><strong>Fonte:</strong> ' + updEsc(pf.fonte) + '</div>';
+            }
+
+            // ---------- Rspamd: cambia il comportamento, non la sintassi ----------
+            const rs = r.rspamd || {};
+            h += '<hr><h6 class="mb-1"><i class="fas fa-shield-halved me-1"></i>Rspamd</h6>';
+            if (!rs.present) {
+                h += '<div class="small text-muted">' + updEsc(rs.note || 'non installato') + '</div>';
+            } else {
+                const cls = rs.verdetto === 'NIENTE DA SEGNALARE' ? 'success'
+                          : (rs.verdetto === 'SOLO DIFFERENZE DI COMPORTAMENTO' ? 'info' : 'danger');
+                h += '<div class="small text-muted mb-1">rspamd ' + updEsc(rs.version)
+                   + ' &middot; nel repository ' + updEsc(rs.repoVersion || '?')
+                   + ' &middot; ' + updEsc(rs.fileLetti) + ' file di configurazione letti</div>'
+                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(rs.verdetto)
+                   + '</strong> &mdash; ' + updEsc(rs.spiegazione) + '</div>';
+                const is = rs.issues || [];
+                if (is.length) {
+                    h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
+                       + '<th>Costrutto</th><th>Cosa cambia</th><th>Dove</th></tr></thead><tbody>';
+                    is.forEach(x => {
+                        h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x.costrutto) + '</code><br>'
+                           + '<span class="badge ' + (x.tipo === 'rotto' ? 'upd-badge-stop'
+                                : (x.tipo === 'predefinito' ? 'upd-badge-info' : 'upd-badge-warn'))
+                           + '">' + (x.tipo === 'rotto' ? 'non piu&rsquo; valido'
+                                : (x.tipo === 'predefinito' ? 'solo predefinito del pacchetto' : 'comportamento'))
+                           + '</span></td>'
+                           + '<td class="small">' + updEsc(x.cosaCambia) + '</td>'
+                           + '<td class="small">'
+                           + ((x.files || []).length
+                              ? '<strong>nei tuoi file:</strong><br>' + x.files.map(f => updEsc(f)).join('<br>')
+                              : '<span class="text-muted">in nessun file tuo</span>')
+                           + ((x.filesPacchetto || []).length
+                              ? '<br><span class="text-muted">solo nei file del pacchetto (sostituiti a ogni '
+                                + 'aggiornamento, non una tua scelta):<br>' + x.filesPacchetto.map(f => updEsc(f)).join('<br>')
+                                + '</span>'
+                              : '')
+                           + '</td></tr>';
+                    });
+                    h += '</tbody></table></div>';
+                }
+                h += '<button class="btn btn-sm btn-outline-primary mb-2" onclick="rsTimeout()">'
+                   + '<i class="fas fa-stopwatch me-1"></i>E&rsquo; mai stata interrotta un&rsquo;analisi?</button>'
+                   + '<div id="rs-timeout" class="mb-2"></div>';
+                h += '<div class="small mb-1"><strong>rspamadm configtest:</strong> '
+                   + (rs.configtestOk
+                      ? '<span class="badge upd-badge-ok">la configurazione e&rsquo; valida</span>'
+                      : '<span class="badge upd-badge-warn">da guardare</span>')
+                   + '</div><pre class="upd-log mb-2">' + updEsc(rs.configtest) + '</pre>'
+                   + '<div class="small text-muted mb-1"><strong>Dati Bayes:</strong> ' + updEsc(rs.bayes) + '</div>'
+                   + '<div class="small text-muted mb-2"><strong>Fonte:</strong> ' + updEsc(rs.fonte) + '</div>';
             }
 
             const m = r.mysql || {};
@@ -14065,7 +14208,11 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 document.getElementById('rep-stato').innerHTML = '<span class="text-warning">Il browser non mi lascia usare gli appunti: il testo &egrave; selezionato, premi Cmd/Ctrl+C.</span>';
             }
         }
+        """ + getUpdatesScript1b();
+    }
 
+    private static String getUpdatesScript1b() {
+        return """
         async function defCheck() {
             const el = document.getElementById('def-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Confronto...';
@@ -14200,6 +14347,134 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             el.innerHTML = h;
         }
 
+        // ---------- il tempo massimo di analisi: e' mai stato raggiunto? ----------
+        async function rsTimeout() {
+            const el = document.getElementById('rs-timeout');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo il log di rspamd...';
+            const r = await updApi('rspamd_timeout');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            const cls = r.verdetto === "NON E&#39; MAI SUCCESSO" || r.verdetto === "NON E' MAI SUCCESSO"
+                      ? 'success' : (r.verdetto === 'DA GUARDARE' ? 'warning' : 'secondary');
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(r.verdetto)
+                  + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
+            if (r.avvisa) {
+                h += '<div class="small text-muted mb-1">task_timeout <code>' + updEsc(r.taskTimeout)
+                   + '</code> &middot; massimo teorico della cache <code>' + updEsc(r.massimoTeorico) + '</code></div>';
+            }
+            const sy = r.simboli || [];
+            if (sy.length) {
+                h += '<div class="small mb-1">Limiti dei singoli simboli, sommati fanno il massimo teorico:</div>'
+                   + '<div class="mb-2">' + sy.map(x => '<span class="badge upd-badge-info me-1">'
+                     + updEsc(x.nome) + ' ' + updEsc(x.secondi) + 's</span>').join(' ') + '</div>';
+            }
+            const g = r.nelLog || [];
+            if (g.length) {
+                h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
+                   + '<th class="text-end">Volte</th><th>Messaggio nel log</th></tr></thead><tbody>';
+                g.forEach(x => {
+                    h += '<tr class="upd-cell"><td class="text-end">' + updEsc(x.volte) + '</td>'
+                       + '<td class="small"><code>' + updEsc(x.messaggio) + '</code></td></tr>';
+                });
+                h += '</tbody></table></div>';
+            }
+            h += '<div class="alert alert-secondary py-2 small mb-1">' + updEsc(r.seServisse) + '</div>'
+               + '<div class="small text-muted">' + updEsc(r.fonte) + '</div>';
+            el.innerHTML = h;
+        }
+
+        // ---------- alzare il livello di compatibilita' di Postfix ----------
+        async function pfAlza(livello, aperti) {
+            const avviso = aperti > 0
+                ? 'ATTENZIONE: ' + aperti + ' parametri cambierebbero davvero comportamento.\\n'
+                : 'Sui parametri coinvolti non cambia nulla: toglie solo l\\'avviso.\\n';
+            if (prompt('Portare compatibility_level a ' + livello + '?\\n\\n' + avviso
+                     + '\\nmain.cf viene copiato prima, e rimesso se qualcosa non torna.\\n'
+                     + 'Scrivi ALZA per confermare.') !== 'ALZA') return;
+            const el = document.getElementById('pf-esito');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Copio main.cf, scrivo, ricarico e verifico...';
+            const r = await updApi('postfix_level', { confirm: 'ALZA', livello: livello });
+            let h = '<div class="alert alert-' + (r.success ? (r.avvisoVia === false ? 'warning' : 'success') : 'danger')
+                  + ' py-2 small mb-1">' + updEsc(r.error || r.nota || 'esito sconosciuto') + '</div>';
+            if (r.prima !== undefined) {
+                h += '<div class="small text-muted">compatibility_level: <code>' + updEsc(r.prima)
+                   + '</code> &rarr; <code>' + updEsc(r.dopo) + '</code>'
+                   + (r.attivo !== undefined
+                      ? ' &middot; Postfix ' + (r.attivo ? 'attivo' : '<span class="text-danger">NON attivo</span>')
+                      : '') + '</div>';
+            }
+            if (r.log) h += '<pre class="upd-log mt-1">' + updEsc(r.log) + '</pre>';
+            el.innerHTML = h;
+        }
+
+        // ---------- anteprima della configurazione Dovecot 2.4 ----------
+        async function dove24() {
+            const el = document.getElementById('dove24-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Costruisco l&#39;anteprima...';
+            const r = await updApi('dovecot24_preview');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="alert alert-info py-2 small">' + updEsc(r.avvertenza) + '</div>';
+
+            const v = r.verifiche || [];
+            const conf = v.filter(x => x.stato === 'confermato');
+            const dub = v.filter(x => x.stato !== 'confermato');
+            h += '<h6 class="mb-1">Cosa e&rsquo; stato verificato sulla documentazione</h6>'
+               + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
+            conf.forEach(x => {
+                h += '<tr class="upd-cell"><td style="width:12rem"><span class="badge upd-badge-ok">confermato</span></td>'
+                   + '<td><code class="small">' + updEsc(x.impostazione) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.nota) + '</span></td></tr>';
+            });
+            dub.forEach(x => {
+                h += '<tr class="upd-cell"><td><span class="badge ' + (x.stato === 'criterio' ? 'upd-badge-info' : 'upd-badge-warn')
+                   + '">' + updEsc(x.stato) + '</span></td>'
+                   + '<td><code class="small">' + updEsc(x.impostazione) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.nota) + '</span></td></tr>';
+            });
+            h += '</tbody></table></div>';
+
+            h += '<h6 class="mb-1">I file, come verrebbero scritti</h6>';
+            (r.file || []).forEach(f => {
+                h += '<div class="small text-muted mt-2"><code>' + updEsc(f.percorso) + '</code></div>'
+                   + '<pre class="upd-log mb-0">' + updEsc(f.contenuto) + '</pre>';
+            });
+            el.innerHTML = h;
+        }
+
+        // ---------- ambiente del pannello ----------
+        async function envCheck() {
+            const el = document.getElementById('env-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Controllo il PATH e ogni strumento...';
+            const r = await updApi('panel_env');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            const cls = r.irraggiungibili ? 'danger' : (r.assenti ? 'warning' : 'success');
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + updEsc(r.spiegazione) + '</div>'
+                  + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
+                  + '<tr><td class="small">PATH ereditato da chi ha avviato il pannello</td>'
+                  + '<td><code class="small">' + updEsc(r.pathEreditato || '(vuoto)') + '</code></td></tr>'
+                  + '<tr><td class="small">PATH usato per i sottoprocessi</td>'
+                  + '<td><code class="small">' + updEsc(r.pathUsato) + '</code>'
+                  + (r.pathEreditato !== r.pathUsato
+                     ? '<br><span class="small text-muted">Il pannello ha completato il PATH ereditato '
+                       + 'con le cartelle standard mancanti.</span>' : '') + '</td></tr>'
+                  + '</tbody></table></div>'
+                  + '<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>'
+                  + '<th>Comando</th><th>A cosa serve</th><th>Dove si risolve</th><th>Esito</th>'
+                  + '</tr></thead><tbody>';
+            (r.strumenti || []).forEach(x => {
+                const b = x.stato === 'raggiungibile' ? 'upd-badge-ok'
+                        : (x.stato === 'non installato' ? 'upd-badge-warn' : 'upd-badge-stop');
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.comando) + '</code></td>'
+                   + '<td class="small text-muted">' + updEsc(x.aCosaServe) + '</td>'
+                   + '<td class="small"><code>' + updEsc(x.risolto || '-') + '</code>'
+                   + (!x.risolto && x.suDisco
+                      ? '<br><span class="small text-danger">esiste in ' + updEsc(x.attesoIn) + '</span>' : '')
+                   + '</td>'
+                   + '<td><span class="badge ' + b + '">' + updEsc(x.stato) + '</span></td></tr>';
+            });
+            h += '</tbody></table></div>';
+            el.innerHTML = h;
+        }
+
         // ---------- prima di togliere un pacchetto ----------
         async function rimCandidati() {
             const el = document.getElementById('rim-body');
@@ -14213,12 +14488,21 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + 'tutti quelli installati esplicitamente sono dichiarati da qualcun altro.</div>';
                 el.innerHTML = h; return;
             }
+            if (r.attenzione) {
+                h += '<div class="alert alert-warning py-2 small"><i class="fas fa-triangle-exclamation me-1"></i>'
+                   + updEsc(r.attenzione) + '</div>';
+            }
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr>'
-               + '<th>Pacchetto</th><th>Versione</th><th>Protetto</th><th>Il pannello lo usa?</th>'
-               + '</tr></thead><tbody>';
+               + '<th>Pacchetto</th><th>Versione</th><th>Ruolo nel server</th><th>Protetto</th>'
+               + '<th>Il pannello lo usa?</th></tr></thead><tbody>';
             c.forEach((x, i) => {
                 h += '<tr class="upd-cell"><td><code>' + updEsc(x.nome) + '</code></td>'
                    + '<td class="small">' + updEsc(x.versione) + '</td>'
+                   + '<td class="small">' + (x.essenziale
+                      ? '<span class="badge upd-badge-stop">non si tocca</span><br>' + updEsc(x.avviso)
+                      : (x.ruolo
+                         ? '<span class="badge upd-badge-warn">' + updEsc(x.ruolo) + '</span>'
+                         : '<span class="text-muted">nessuno noto</span>')) + '</td>'
                    + '<td>' + (x.protetto
                       ? '<span class="badge upd-badge-ok">s&igrave;</span>'
                       : '<span class="badge upd-badge-warn">no</span>') + '</td>'
@@ -14235,7 +14519,8 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             const cls = r.verdetto === 'IL PANNELLO NON LO USA' ? 'success'
                       : r.verdetto === "LO USA, E NON C'E' RICAMBIO" ? 'danger'
                       : r.verdetto === 'LO USA' ? 'warning'
-                      : r.verdetto === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info' : 'secondary';
+                      : r.verdetto === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info'
+                      : r.verdetto === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
             let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(r.verdetto)
                   + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
             const lb = r.fornisceLibrerie || [];
@@ -14252,13 +14537,30 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                        + '<td class="small">' + updEsc(x.occorrenze) + ' volte come parola intera'
                        + (x.conArgomenti ? '<br>' + updEsc(x.conArgomenti) + ' seguito da argomenti' : '')
                        + '</td>'
-                       + '<td class="small">' + (x.resterebbe
-                          ? '<span class="badge upd-badge-warn">resta</span> ma diventa <code>'
-                            + updEsc(x.altraCopia) + '</code>'
-                          : '<span class="badge upd-badge-stop">sparisce</span> nessuna altra copia nel PATH')
+                       + '<td class="small">'
+                       + (!x.eSuo
+                          ? '<span class="badge upd-badge-ok">nessun effetto</span>'
+                          : (x.resterebbe ? '<span class="badge upd-badge-warn">cambia binario</span>'
+                                          : '<span class="badge upd-badge-stop">sparisce</span>'))
+                       + '<br>' + updEsc(x.effetto || '')
+                       + (x.inUsoOra ? '<br>in uso adesso: <code>' + updEsc(x.inUsoOra) + '</code>' : '')
                        + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
+            }
+            // Il pulsante compare SOLO dove la misura dice che si puo': non si offre un'azione
+            // che il controllo appena fatto rifiuterebbe.
+            if (r.pacchetto && (r.verdetto === 'IL PANNELLO NON LO USA'
+                             || r.verdetto === 'LI NOMINA, MA NON SONO I SUOI')) {
+                // L'analisi approfondita viene PRIMA del pulsante che toglie, ed e' l'unica che
+                // guarda gli script su disco: quelli girano dopo, e il jar non li contiene.
+                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" onclick="rimProfonda(\\'' 
+                   + updEsc(r.pacchetto) + '\\')"><i class="fas fa-microscope me-1"></i>Analisi approfondita</button>'
+                   + '<button class="btn btn-sm btn-outline-danger mb-1" onclick="rimTogli(\\'' 
+                   + updEsc(r.pacchetto) + '\\')"><i class="fas fa-trash me-1"></i>Togli '
+                   + updEsc(r.pacchetto) + '</button>'
+                   + '<div id="rim-prof-' + updEsc(r.pacchetto) + '" class="mt-1"></div>'
+                   + '<div id="rim-esec-' + updEsc(r.pacchetto) + '" class="mt-1"></div>';
             }
             h += '<div class="small text-muted">Letti ' + updEsc(r.byteLetti) + ' byte di classi da <code>'
                + updEsc(r.jar || '?') + '</code>, ' + updEsc(r.eseguibiliTrovati)
@@ -14272,6 +14574,86 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             const r = await updApi('panel_uses', { nome: nome });
             el.innerHTML = r.success ? rimRiquadro(r)
                                      : '<span class="text-danger small">' + updEsc(r.error) + '</span>';
+        }
+
+        // ---------- analisi approfondita: dove si nominano davvero i suoi file ----------
+        async function rimProfonda(nome) {
+            const el = document.getElementById('rim-prof-' + nome);
+            el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
+                         + '<i class="fas fa-spinner fa-spin me-1"></i>Cerco nei file di testo del sistema, '
+                         + 'nel jar e fra i pacchetti installati. Ci vuole un minuto.</div>';
+            const r = await updApi('deep_scan', { nome: nome });
+            if (!r.success) { el.innerHTML = '<span class="text-danger small">' + updEsc(r.error) + '</span>'; return; }
+            let h = '<div class="alert alert-' + (r.bloccante ? 'danger' : 'success') + ' py-2 small mb-1">'
+                  + '<strong>' + updEsc(r.verdetto) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
+                  + '<div class="small text-muted mb-1">Cercati come riferimenti che si romperebbero: '
+                  + (r.cercati || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
+
+            const ds = r.dichiaranoSoname || [];
+            h += '<div class="small mb-1"><strong>Pacchetti che dichiarano le sue librerie:</strong> '
+               + (ds.length
+                  ? '<span class="text-danger">' + ds.map(x => updEsc(x.pacchetto) + ' (' + updEsc(x.libreria) + ')').join(', ') + '</span>'
+                  : '<span class="text-success">nessuno</span>') + '</div>';
+            h += '<div class="small mb-1"><strong>Nel jar in esecuzione:</strong> '
+               + (!r.jarLetto
+                  ? '<span class="text-warning">non letto</span>'
+                  : ((r.nelJar || []).length
+                     ? r.nelJar.map(x => (x.autoRiferimento
+                          ? '<span class="text-muted"><code>' + updEsc(x.classe)
+                            + '</code> (auto-riferimento: &egrave; il codice di questo controllo)</span>'
+                          : '<span class="text-danger"><code>' + updEsc(x.classe) + '</code></span>')).join(', ')
+                     : '<span class="text-success">nessun riferimento assoluto</span>')
+                    + ' <span class="text-muted">(' + updEsc(r.byteJar) + ' byte di classi)</span>') + '</div>';
+
+            h += '<div class="table-responsive"><table class="table table-sm mb-1"><thead><tr>'
+               + '<th>Dove</th><th class="text-end">File di testo esaminati</th>'
+               + '<th class="text-end">Si romperebbero</th><th class="text-end">Reggono</th></tr></thead><tbody>';
+            (r.luoghi || []).forEach(x => {
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.dove) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.cosaContiene) + '</span></td>'
+                   + '<td class="text-end">' + updEsc(x.fileEsaminati) + '</td>'
+                   + '<td class="text-end">' + ((x.rompono || []).length
+                      ? '<span class="badge upd-badge-stop">' + updEsc(x.rompono.length) + '</span>'
+                      : '<span class="badge upd-badge-ok">0</span>') + '</td>'
+                   + '<td class="text-end small text-muted">' + updEsc(x.reggono) + '</td></tr>';
+                (x.rompono || []).forEach(riga => {
+                    h += '<tr class="upd-cell"><td colspan="4" class="small text-danger">'
+                       + '<code>' + updEsc(riga) + '</code></td></tr>';
+                });
+            });
+            h += '</tbody></table></div>'
+               + '<div class="small text-muted">I riferimenti nella colonna <em>Reggono</em> sono al nome '
+               + 'nudo del comando: ripiegano da soli sull&#39;altra copia nel PATH, non si rompono.<br>'
+               + '<i class="fas fa-triangle-exclamation me-1"></i>' + updEsc(r.avvertenza) + '</div>';
+            el.innerHTML = h;
+        }
+
+        // ---------- togliere un pacchetto, dal pannello ----------
+        async function rimTogli(nome) {
+            if (prompt('Togliere il pacchetto "' + nome + '"?\\n\\n'
+                     + 'Il pannello rifar\u00e0 il controllo prima di procedere e si fermer\u00e0 se qualcosa \u00e8 cambiato.\\n'
+                     + 'Subito dopo verifica che nessun pacchetto sia rimasto senza una libreria.\\n\\n'
+                     + 'Scrivi RIMUOVI per confermare.') !== 'RIMUOVI') return;
+            const el = document.getElementById('rim-esec-' + nome);
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Rimuovo e verifico...';
+            const r = await updApi('pkg_remove', { confirm: 'RIMUOVI', nome: nome });
+            let h = '<div class="alert alert-' + (!r.success ? 'danger' : (r.guasto ? 'danger' : 'success'))
+                  + ' py-2 small mb-1">' + updEsc(r.error || r.nota || 'esito sconosciuto') + '</div>';
+            if (r.prima !== undefined) {
+                h += '<div class="small text-muted">Pacchetti installati: ' + updEsc(r.prima)
+                   + ' &rarr; ' + updEsc(r.dopo) + '</div>';
+            }
+            const sv = r.servizi || [];
+            if (sv.length) {
+                const giu = sv.filter(x => !x.attivo);
+                h += '<div class="small ' + (giu.length ? 'text-danger' : 'text-success') + '">'
+                   + (giu.length
+                      ? 'Servizi non attivi: ' + giu.map(x => updEsc(x.nome)).join(', ')
+                      : 'Tutti i ' + sv.length + ' servizi sono ancora attivi')
+                   + '</div>';
+            }
+            if (r.log) h += '<pre class="upd-log mt-1">' + updEsc(r.log) + '</pre>';
+            el.innerHTML = h;
         }
 
         // ---------- librerie mancanti ----------
@@ -14474,6 +14856,11 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             }
             setTimeout(() => planPoll(id, el, pre), 3000);
         }
+        """ + getUpdatesScript1bb();
+    }
+
+    private static String getUpdatesScript1bb() {
+        return """
 
         // ---------- passaggio Python ----------
         // ---------- resti della vecchia famiglia Python ----------

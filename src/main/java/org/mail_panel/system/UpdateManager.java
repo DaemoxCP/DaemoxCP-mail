@@ -78,13 +78,17 @@ public final class UpdateManager {
     private static boolean bloccato(String elencoLock, String nome) {
         for (String riga : elencoLock.split("\n")) {
             String t = riga.trim();
-            if (t.isEmpty()) continue;
+            if (t.isEmpty() || t.endsWith(":")) continue;   // "Currently locked packages:"
             if (t.equals(nome)) return true;
+            // In "nome-versione" il taglio e' UNO SOLO: l'ultimo trattino, e cio' che segue
+            // dev'essere una versione, cioe' cominciare con una cifra. Provando ogni trattino
+            // "php84-curl-8.4.24" produceva anche il prefisso "php84", e il pannello
+            // dichiarava protetto php84 per colpa di una sua estensione. Le versioni dei port
+            // FreeBSD non contengono trattini (8.4.24, 1.7.2,1, 1.1.0_8, 25.0.3+9.f.1),
+            // quindi un taglio solo basta ed e' esatto.
             int d = t.lastIndexOf('-');
-            while (d > 0) {
-                if (t.substring(0, d).equals(nome)) return true;
-                d = t.lastIndexOf('-', d - 1);
-            }
+            if (d > 0 && d + 1 < t.length() && Character.isDigit(t.charAt(d + 1))
+                    && t.substring(0, d).equals(nome)) return true;
         }
         return false;
     }
@@ -752,12 +756,24 @@ public final class UpdateManager {
             if (sh("grep -lE '^[[:space:]]*dovecot_config_version' " + elenco + " 2>/dev/null", 20).isEmpty()) {
                 problemi.put(new JSONObject()
                         .put("costrutto", "dovecot_config_version assente")
-                        .put("sostituto", "obbligatoria nella 2.4 e deve essere la prima direttiva")
+                        .put("sostituto", "obbligatoria nella 2.4 e deve essere la PRIMA direttiva di dovecot.conf")
+                        .put("files", new JSONArray()));
+            }
+            if (sh("grep -lE '^[[:space:]]*dovecot_storage_version' " + elenco + " 2>/dev/null", 20).isEmpty()) {
+                problemi.put(new JSONObject()
+                        .put("costrutto", "dovecot_storage_version assente")
+                        .put("sostituto", "obbligatoria nella 2.4: serve a evitare incompatibilita' del formato "
+                                + "di archiviazione delle caselle")
                         .put("files", new JSONArray()));
             }
         }
         r.put("issues", problemi);
         r.put("compatible24", problemi.length() == 0);
+        r.put("fonte", "Guida ufficiale di Dovecot \"Upgrading Dovecot CE from 2.3 to 2.4\" "
+                + "(doc.dovecot.org/latest/installation/upgrade/2.3-to-2.4.html), letta il 31/08/2026. "
+                + "Non esiste uno strumento di conversione automatica: la guida non ne cita nessuno, "
+                + "il lavoro e' di riscrittura. Dovecot CE 2.3 riceve ormai solo correzioni di "
+                + "sicurezza critiche; per tutto il resto la 2.4 e' la versione corrente.");
         r.put("success", true);
         return r;
     }
@@ -891,10 +907,475 @@ public final class UpdateManager {
                 .replaceAll("(?i)(secret\\s*=\\s*)\\S+", "$1********");
     }
 
-    /** Le tre verifiche insieme: e' cio' che si guarda prima di premere "aggiorna". */
+    /**
+     * Postfix non ha una rottura annunciata come Dovecot 2.4: ha un meccanismo diverso, e
+     * dichiarato, che si chiama compatibility_level.
+     *
+     * Dalla 3.0 Postfix, quando cambia un valore predefinito in modo incompatibile, NON lo
+     * applica: continua a usare quello vecchio e scrive nel log "using backwards-compatible
+     * default setting nome=valore". La rete di sicurezza si toglie alzando
+     * compatibility_level al numero della versione. Quindi la domanda giusta per Postfix non
+     * e' "cosa si rompera'?" ma "su quali impostazioni vecchie mi sto appoggiando adesso?",
+     * e la risposta la scrive Postfix stesso.
+     *
+     * Fonte: https://www.postfix.org/COMPATIBILITY_README.html e postconf(5).
+     */
+    /**
+     * Cosa cambia salendo di livello di compatibilita'. Non e' un elenco decorativo: e'
+     * l'unica cosa che permette di decidere se alzarlo. Dire "sei indietro, alzalo" senza
+     * dire cosa cambia significa far premere un pulsante alla cieca.
+     *
+     * Fonte: COMPATIBILITY_README di Postfix (postfix.org), letto il 01/09/2026.
+     */
+    private static final String[][] LIVELLI_POSTFIX = {
+        {"1", "append_dot_mydomain passa da yes a no; il chroot in master.cf da y a n; "
+            + "smtpd_relay_restrictions prende un valore restrittivo; smtputf8_enable passa da no a yes",
+         "append_dot_mydomain smtpd_relay_restrictions smtputf8_enable"},
+        {"2", "mynetworks_style passa da subnet a host; relay_domains passa da $mydestination al valore vuoto",
+         "mynetworks_style relay_domains"},
+        {"3.6", "smtpd_tls_fingerprint_digest e smtp/lmtp_tls_fingerprint_digest passano da md5 a sha256; "
+              + "cambia l'ordine di valutazione fra restrizioni di relay e di destinatario; "
+              + "cambia la terminologia dei log",
+         "smtpd_tls_fingerprint_digest smtp_tls_fingerprint_digest lmtp_tls_fingerprint_digest respectful_logging"},
+        {"3.11", "smtp_tlsrpt_skip_reused_handshakes passa da yes a no; e soprattutto il livello di "
+               + "sicurezza TLS predefinito del CLIENT SMTP passa da vuoto a \"may\", cioe' Postfix "
+               + "prova a cifrare le consegne in uscita quando il server remoto lo permette",
+         "smtp_tlsrpt_skip_reused_handshakes@smtp_tlsrpt_enable=yes smtp_tls_security_level"},
+    };
+
+    /**
+     * Postfix non ha una rottura annunciata come Dovecot 2.4: ha un meccanismo diverso, e
+     * dichiarato, che si chiama compatibility_level.
+     *
+     * Dalla 3.0, quando cambia un valore predefinito in modo incompatibile, Postfix NON lo
+     * applica: continua a usare quello vecchio finche' l'amministratore non alza il livello.
+     * Quindi la domanda giusta non e' "cosa si rompera'?" ma "di quanto sono indietro, e cosa
+     * cambierebbe ad allinearmi?".
+     *
+     * La prima versione di questo controllo decideva in base al fatto che "postfix check"
+     * stampasse qualcosa, e produceva la frase assurda "sta usando 0 impostazioni vecchie,
+     * elencate qui sotto" senza elenco. Il confronto giusto e' fra il livello impostato e
+     * quello che Postfix stesso indica nel proprio messaggio.
+     */
+    public static JSONObject compatibilitaPostfix() {
+        JSONObject r = new JSONObject().put("success", true);
+        String pkg = sh("pkg query %n 2>/dev/null | grep -E '^postfix(-[a-z]+)?$' | head -1", 20).trim();
+        if (pkg.isEmpty() || !nomeValido(pkg))
+            return r.put("present", false).put("note", "Nessun pacchetto postfix installato.");
+        r.put("present", true).put("package", pkg)
+         .put("version", sh("pkg query %v " + pkg, 20))
+         .put("repoVersion", sh("pkg rquery %v " + pkg + " 2>/dev/null", 30));
+
+        if (!ok("command -v postconf >/dev/null 2>&1", 15))
+            return r.put("leggibile", false)
+                    .put("note", "postconf non e' raggiungibile: non posso leggere la configurazione.");
+        r.put("leggibile", true);
+
+        String impostato = sh("postconf -h compatibility_level 2>/dev/null", 20).trim();
+        r.put("livello", impostato)
+         .put("livelloEsplicito", ok("postconf -n 2>/dev/null | grep -q '^compatibility_level'", 20));
+
+        String check = sh("postfix check 2>&1", 60);
+        r.put("check", check.isBlank() ? "" : check);
+
+        // Il livello a cui Postfix stesso dice di salire, preso dal suo messaggio.
+        String consigliato = "";
+        Matcher mc = Pattern.compile("compatibility_level=([0-9.]+)").matcher(check);
+        if (mc.find()) consigliato = mc.group(1);
+        r.put("consigliato", consigliato);
+
+        // Cosa cambierebbe: solo i livelli STRETTAMENTE fra quello impostato e quello indicato.
+        JSONArray cambi = new JSONArray();
+        double da = numeroLivello(impostato), a = numeroLivello(consigliato);
+        if (a > da) {
+            String scritti = sh("postconf -n 2>/dev/null | sed -E 's/[[:space:]]*=.*//'", 30);
+            java.util.Set<String> decisi = new java.util.HashSet<>();
+            for (String x : scritti.split("\n")) if (!x.isBlank()) decisi.add(x.trim());
+            for (String[] l : LIVELLI_POSTFIX) {
+                double n = numeroLivello(l[0]);
+                if (!(n > da && n <= a)) continue;
+                JSONArray par = new JSONArray();
+                int aperti = 0;
+                for (String voce : l[2].split("\\s+")) {
+                    if (voce.isBlank()) continue;
+                    // "nome@gate=valore": il parametro conta solo se il gate ha quel valore.
+                    String nome = voce, gate = "", atteso = "";
+                    int at = voce.indexOf('@');
+                    if (at > 0) {
+                        nome = voce.substring(0, at);
+                        String g = voce.substring(at + 1);
+                        int eq = g.indexOf('=');
+                        if (eq > 0) { gate = g.substring(0, eq); atteso = g.substring(eq + 1); }
+                    }
+                    if (!nomeValido(nome)) continue;
+                    boolean gia = decisi.contains(nome);
+                    String valoreGate = gate.isEmpty() || !nomeValido(gate) ? ""
+                            : sh("postconf -h " + gate + " 2>/dev/null", 15).trim();
+                    boolean rilevante = gate.isEmpty() || atteso.equalsIgnoreCase(valoreGate);
+                    if (!gia && rilevante) aperti++;
+                    JSONObject o = new JSONObject().put("nome", nome).put("giaDeciso", gia)
+                            .put("valore", gia ? sh("postconf -h " + nome + " 2>/dev/null", 15).trim() : "")
+                            .put("rilevante", rilevante);
+                    if (!gate.isEmpty())
+                        o.put("gate", gate).put("gateValore", valoreGate).put("gateAtteso", atteso);
+                    par.put(o);
+                }
+                cambi.put(new JSONObject().put("livello", l[0]).put("cambia", l[1])
+                        .put("parametri", par).put("apertiQui", aperti));
+            }
+        }
+        r.put("cambi", cambi);
+
+        String avvisi = sh("grep -hE 'using backwards-compatible default setting [a-z0-9_]+=' "
+                + "/var/log/maillog /var/log/maillog.[0-9] 2>/dev/null "
+                + "| sed -E 's/.*using backwards-compatible default setting //' "
+                + "| sed -E 's/[[:space:]]*(to|;).*//' | sort -u | head -40", 60);
+        JSONArray righe = new JSONArray();
+        for (String l : avvisi.split("\n")) if (!l.isBlank()) righe.put(l.trim());
+        r.put("appoggi", righe);
+
+        boolean indietro = a > da;
+        r.put("indietro", indietro);
+        r.put("verdetto", indietro ? "IL LIVELLO E' INDIETRO" : "ALLINEATO");
+        r.put("spiegazione", indietro
+                ? "compatibility_level e' " + impostato + " ma la versione installata arriva a "
+                  + consigliato + ": Postfix sta usando i valori predefiniti vecchi. Non e' un guasto, "
+                  + "e' la rete di sicurezza che funziona. Qui sotto c'e' esattamente cosa cambierebbe "
+                  + "ad allinearsi, perche' e' l'unica cosa che permette di decidere."
+                : (impostato.isBlank()
+                   ? "Non riesco a leggere il livello di compatibilita'."
+                   : "compatibility_level e' " + impostato + " e Postfix non chiede di salire: "
+                     + "nessun valore predefinito vecchio in uso."));
+        int apertiTot = 0;
+        for (int i = 0; i < cambi.length(); i++) apertiTot += cambi.getJSONObject(i).getInt("apertiQui");
+        r.put("apertiQui", apertiTot);
+        r.put("effettoQui", !indietro ? ""
+                : (apertiTot == 0
+                   ? "nessuno dei parametri coinvolti cambierebbe qualcosa: o sono "
+                     + "scritti esplicitamente in main.cf, o governano una funzione che non e' attiva. "
+                     + "Alzare il livello non cambierebbe il comportamento, toglierebbe solo l'avviso."
+                   : apertiTot + (apertiTot == 1 ? " parametro non e' scritto" : " parametri non sono scritti")
+                     + " in main.cf: per quelli il valore lo decide il predefinito, quindi alzare il "
+                     + "livello li cambierebbe davvero."));
+        r.put("comeSiAlza", indietro
+                ? "Si alza con: postconf compatibility_level=" + consigliato + " seguito da postfix reload. "
+                  + "NON lo fa il pannello: cambia il comportamento delle consegne in uscita, ed e' una "
+                  + "decisione da prendere avendo letto cosa cambia, non un pulsante."
+                : "");
+        r.put("fonte", "Postfix COMPATIBILITY_README e postconf(5) (postfix.org), letti il 01/09/2026.");
+        return r;
+    }
+
+    /**
+     * Il tempo massimo di analisi di un messaggio, e se quel limite sia mai stato raggiunto.
+     *
+     * rspamadm configtest avverte che task_timeout (8s) e' inferiore al massimo teorico della
+     * cache dei simboli (10s). E' un controllo di coerenza AGGIUNTO nella 4.1.0, non un
+     * guasto comparso adesso, e la documentazione lo definisce informativo. Quei 10 secondi
+     * sono la somma dei limiti dei singoli simboli: perche' si raggiungano davvero, ognuno
+     * dovrebbe esaurire il proprio tempo nello stesso messaggio.
+     *
+     * Alzare un timeout perche' un avviso lo nomina sarebbe una scelta presa su una teoria.
+     * Qui si guarda se e' MAI successo: se rspamd non ha mai interrotto un'analisi, non c'e'
+     * niente da correggere; se l'ha fatto, si vede quante volte e quando.
+     */
+    public static JSONObject diagnosiTimeoutRspamd() {
+        JSONObject r = new JSONObject().put("success", true);
+        if (!ok("pkg info -e rspamd", 20))
+            return r.put("present", false).put("note", "rspamd non e' installato.");
+        r.put("present", true);
+
+        String ct = ok("command -v rspamadm >/dev/null 2>&1", 15)
+                ? sh("rspamadm configtest 2>&1", 60) : "";
+        r.put("configtest", ct);
+        Matcher m = Pattern.compile("task_timeout ([0-9.]+) is less than maximum symbols cache timeout ([0-9.]+)")
+                .matcher(ct);
+        if (m.find()) r.put("taskTimeout", m.group(1)).put("massimoTeorico", m.group(2)).put("avvisa", true);
+        else r.put("avvisa", false);
+
+        JSONArray simboli = new JSONArray();
+        Matcher ms = Pattern.compile("([A-Z0-9_]+)\\(([0-9.]+)\\)").matcher(ct);
+        while (ms.find())
+            simboli.put(new JSONObject().put("nome", ms.group(1)).put("secondi", ms.group(2)));
+        r.put("simboli", simboli);
+
+        // La prova, se c'e', sta nel log. Non cerco una frase precisa — non la conosco e
+        // inventarla darebbe zero risultati che sembrerebbero una buona notizia. Cerco la
+        // parola e mostro cosa c'e', raggruppato.
+        String log = "/var/log/rspamd/rspamd.log";
+        boolean logC = ok("test -r " + log, 15);
+        r.put("log", log).put("logLeggibile", logC);
+        if (logC) {
+            String righe = sh("grep -hi 'timeout' " + log + " /var/log/rspamd/rspamd.log.[0-9] 2>/dev/null "
+                    + "| sed -E 's/^[^;]*; //' | sed -E 's/[0-9a-f]{8,}/<id>/g' "
+                    + "| sed -E 's/[0-9]+\\.[0-9]+/<n>/g' | sort | uniq -c | sort -rn | head -15", 90);
+            JSONArray gruppi = new JSONArray();
+            for (String l : righe.split("\n")) {
+                String t = l.trim();
+                int sp = t.indexOf(' ');
+                if (sp <= 0) continue;
+                try {
+                    gruppi.put(new JSONObject().put("volte", Integer.parseInt(t.substring(0, sp)))
+                            .put("messaggio", t.substring(sp + 1).trim()));
+                } catch (NumberFormatException ignored) { }
+            }
+            r.put("nelLog", gruppi);
+            String tot = sh("grep -hci 'timeout' " + log + " 2>/dev/null", 60).trim().replaceAll("[^0-9]", "");
+            r.put("occorrenze", tot.isEmpty() ? 0 : Integer.parseInt(tot));
+            String righeTot = sh("wc -l < " + log + " 2>/dev/null", 60).trim().replaceAll("[^0-9]", "");
+            r.put("righeLog", righeTot.isEmpty() ? 0 : Integer.parseInt(righeTot));
+        }
+
+        int occ = r.optInt("occorrenze", -1);
+        r.put("verdetto", !logC ? "LOG NON LEGGIBILE" : (occ == 0 ? "NON E' MAI SUCCESSO" : "DA GUARDARE"));
+        r.put("spiegazione", !logC
+                ? "Non riesco a leggere " + log + ": senza il log non posso dire se un'analisi sia mai "
+                  + "stata interrotta, e senza quel dato cambiare il timeout sarebbe una scelta alla cieca."
+                : (occ == 0
+                   ? "In " + r.optInt("righeLog", 0) + " righe di log la parola \"timeout\" non compare "
+                     + "nemmeno una volta: nessuna analisi e' mai stata interrotta. L'avviso di configtest "
+                     + "riguarda un massimo TEORICO — la somma dei limiti dei singoli simboli — che perche' "
+                     + "si realizzi dovrebbe vedere ognuno esaurire il proprio tempo nello stesso messaggio. "
+                     + "Non c'e' niente da correggere."
+                   : "La parola \"timeout\" compare " + occ + " volte su " + r.optInt("righeLog", 0)
+                     + " righe. Qui sotto i messaggi raggruppati: da leggere prima di decidere, perche' non "
+                     + "tutte le righe che la contengono sono analisi interrotte."));
+        r.put("seServisse", "Se dal log risultassero analisi davvero interrotte, la correzione e' una riga "
+                + "in /usr/local/etc/rspamd/local.d/options.inc — task_timeout = 12s; — cioe' un valore "
+                + "superiore al massimo teorico. L'alternativa e' abbassare il limite del simbolo piu' lento "
+                + "(ARC_CHECK) in local.d/arc.conf. Il pannello non lo fa da solo: senza una prova nel log "
+                + "sarebbe una modifica a caso.");
+        r.put("fonte", "Documentazione Rspamd (docs.rspamd.com/configuration/options/) e note della 4.1.0, "
+                + "lette il 01/09/2026: il controllo che produce questo avviso e' stato AGGIUNTO nella 4.1.0, "
+                + "e la documentazione lo descrive come informativo, che non richiede necessariamente un "
+                + "intervento.");
+        return r;
+    }
+
+    /**
+     * Alza il livello di compatibilita' di Postfix, dal pannello.
+     *
+     * Non e' un comando incollato in un pulsante: e' la stessa cosa che si farebbe a mano,
+     * piu' le tre cose che a mano si dimenticano — la copia di main.cf prima di toccarlo, la
+     * verifica che il valore sia DAVVERO cambiato, e il ritorno indietro automatico se
+     * qualcosa non torna.
+     *
+     * L'esito lo dice il sistema, non il codice di uscita di postconf: si rilegge il valore,
+     * si richiede a Postfix se e' ancora in piedi, e si riesegue "postfix check" per vedere
+     * se l'avviso e' effettivamente sparito.
+     */
+    public static JSONObject alzaLivelloPostfix(String bersaglio) {
+        JSONObject r = new JSONObject().put("pacchetto", "postfix");
+        if (bersaglio == null || !bersaglio.matches("[0-9]+(\\.[0-9]+)?"))
+            return r.put("success", false).put("error", "livello non valido: " + bersaglio);
+        if (!ok("command -v postconf >/dev/null 2>&1", 15))
+            return r.put("success", false).put("error", "postconf non e' raggiungibile");
+
+        StringBuilder log = new StringBuilder();
+        String prima = sh("postconf -h compatibility_level 2>/dev/null", 20).trim();
+        log.append("livello prima: ").append(prima).append("\n");
+        if (prima.equals(bersaglio))
+            return r.put("success", true).put("giaAlLivello", true).put("prima", prima).put("dopo", prima)
+                    .put("log", log.toString())
+                    .put("nota", "Il livello era gia' " + bersaglio + ": non ho toccato niente.");
+
+        if (numeroLivello(bersaglio) < numeroLivello(prima))
+            return r.put("success", false).put("prima", prima)
+                    .put("error", "NON scendo di livello: " + prima + " -> " + bersaglio
+                            + ". Abbassarlo rimetterebbe in uso valori predefiniti vecchi, e questa "
+                            + "procedura esiste per fare il contrario.");
+
+        // La copia viene prima di tutto: e' cio' che rende reversibile il resto.
+        String mainCf = sh("postconf -h config_directory 2>/dev/null", 20).trim();
+        if (mainCf.isEmpty()) mainCf = "/usr/local/etc/postfix";
+        mainCf = mainCf + "/main.cf";
+        if (!ok("test -f " + mainCf, 15))
+            return r.put("success", false).put("error", "non trovo " + mainCf);
+        String copia = "/var/db/mailpanel/main.cf-" + sh("date '+%Y%m%d-%H%M%S'", 15).trim();
+        sh("mkdir -p /var/db/mailpanel && cp -p " + mainCf + " " + copia, 30);
+        boolean copiaOk = ok("test -s " + copia, 15);
+        r.put("copia", copia).put("copiaOk", copiaOk);
+        log.append(copiaOk ? "copia di main.cf in " + copia + "\n"
+                           : "ATTENZIONE: la copia di main.cf NON e' riuscita\n");
+        if (!copiaOk)
+            return r.put("success", false).put("log", log.toString())
+                    .put("error", "non sono riuscito a copiare main.cf: non procedo, perche' senza "
+                            + "copia non ci sarebbe modo di tornare indietro.");
+
+        log.append("--- scrittura ---\n")
+           .append(sh("postconf -e compatibility_level=" + bersaglio + " 2>&1", 60)).append("\n");
+
+        String dopo = sh("postconf -h compatibility_level 2>/dev/null", 20).trim();
+        log.append("livello dopo: ").append(dopo).append("\n");
+        r.put("prima", prima).put("dopo", dopo);
+        if (!dopo.equals(bersaglio)) {
+            sh("cp -p " + copia + " " + mainCf, 30);
+            log.append("valore non cambiato: ho rimesso main.cf come prima\n");
+            return r.put("success", false).put("log", log.toString())
+                    .put("error", "postconf non ha scritto il valore: rileggendolo risulta ancora \""
+                            + dopo + "\". main.cf e' stato rimesso come prima e il servizio non e' "
+                            + "stato toccato.");
+        }
+
+        log.append("--- ricarica del servizio ---\n")
+           .append(sh("postfix reload 2>&1", 60)).append("\n");
+
+        // Postfix e' ancora in piedi? La domanda non e' retorica: una main.cf accettata da
+        // postconf puo' comunque non piacere al master.
+        boolean attivo = ok("service postfix status", 30);
+        r.put("attivo", attivo);
+        log.append("postfix attivo dopo la ricarica: ").append(attivo ? "si" : "NO").append("\n");
+        if (!attivo) {
+            sh("cp -p " + copia + " " + mainCf, 30);
+            sh("service postfix start 2>&1 || postfix start 2>&1", 60);
+            boolean risalito = ok("service postfix status", 30);
+            log.append("ho rimesso main.cf e riavviato: ").append(risalito ? "risalito" : "NON risalito").append("\n");
+            return r.put("success", false).put("log", log.toString())
+                    .put("error", "dopo la ricarica Postfix non risultava attivo: ho rimesso main.cf "
+                            + "come prima e " + (risalito ? "il servizio e' tornato su."
+                                                          : "il servizio NON e' tornato su: guarda subito il log."));
+        }
+
+        String check = sh("postfix check 2>&1", 60);
+        boolean avvisoVia = !check.contains("backwards-compatible");
+        r.put("check", check).put("avvisoVia", avvisoVia);
+        log.append("--- postfix check ---\n").append(check.isBlank() ? "(nessun messaggio)" : check).append("\n");
+
+        return r.put("success", true).put("log", log.toString())
+                .put("nota", "Livello portato da " + prima + " a " + dopo + ". Postfix e' attivo"
+                        + (avvisoVia ? " e l'avviso di retrocompatibilita' e' sparito."
+                                     : ", ma \"postfix check\" segnala ancora qualcosa: leggi qui sotto.")
+                        + " La copia di main.cf precedente e' in " + copia + ".");
+    }
+
+    /** "3.11" -> 3.11, "2" -> 2. Serve solo a ordinare i livelli fra loro. */
+    private static double numeroLivello(String v) {
+        if (v == null) return -1;
+        Matcher m = Pattern.compile("^([0-9]+)(?:\\.([0-9]+))?").matcher(v.trim());
+        if (!m.find()) return -1;
+        double n = Double.parseDouble(m.group(1));
+        if (m.group(2) != null) n += Double.parseDouble(m.group(2)) / 100.0;
+        return n;
+    }
+
+    /**
+     * Rspamd cambia per gradi, e i cambiamenti che contano non sono di sintassi ma di
+     * COMPORTAMENTO: un'opzione che sparisce, un predefinito che si rovescia, un simbolo che
+     * cambia nome. Un file che resta valido puo' quindi produrre risultati diversi.
+     *
+     * Le voci qui sotto vengono una per una dalle note ufficiali di rilascio 4.0 e 4.1.
+     */
+    private static final String[][] RSPAMD_COSTRUTTI = {
+        {"(^|[^A-Za-z0-9_])ssl[[:space:]]*=[[:space:]]*true", "ssl = true dentro un blocco worker",
+         "RIMOSSA nella 4.0: ora si scrive bind_socket = \"host:porta ssl\"", "rotto"},
+        {"include_content_urls", "include_content_urls",
+         "nella 4.0 il predefinito e' diventato true: gli URL dentro i PDF vengono estratti", "comportamento"},
+        {"token_bucket", "token_bucket nel proxy",
+         "nella 4.0 il bilanciamento a token bucket e' diventato il predefinito", "comportamento"},
+        {"senderscore_reputation", "senderscore_reputation",
+         "nella 4.0 e' disabilitata per impostazione predefinita", "comportamento"},
+        {"MX_NXDOMAIN|MX_MISSING", "simboli MX_NXDOMAIN / MX_MISSING",
+         "nella 4.1.1 sono stati unificati in MX_NONE: punteggi e composite che li nominano non "
+         + "corrispondono piu' a niente", "comportamento"},
+    };
+
+    public static JSONObject compatibilitaRspamd() {
+        JSONObject r = new JSONObject().put("success", true);
+        if (!ok("pkg info -e rspamd", 20))
+            return r.put("present", false).put("note", "rspamd non e' installato.");
+        r.put("present", true)
+         .put("version", sh("pkg query %v rspamd", 20))
+         .put("repoVersion", sh("pkg rquery %v rspamd 2>/dev/null", 30));
+
+        String etc = "/usr/local/etc/rspamd";
+        boolean c = ok("test -d " + etc, 15);
+        r.put("configPresente", c);
+        JSONArray problemi = new JSONArray();
+        int fileLetti = 0;
+        if (c) {
+            String n = sh("grep -rIl '' " + etc + " 2>/dev/null | wc -l", 60).trim().replaceAll("[^0-9]", "");
+            fileLetti = n.isEmpty() ? 0 : Integer.parseInt(n);
+            for (String[] k : RSPAMD_COSTRUTTI) {
+                String dove = sh("grep -rIlE '" + k[0] + "' " + etc + " 2>/dev/null | head -20", 60);
+                if (dove.isBlank()) continue;
+                JSONArray tuoi = new JSONArray(), delPacchetto = new JSONArray();
+                for (String f : dove.split("\n")) {
+                    String t = f.trim();
+                    if (t.isEmpty()) continue;
+                    if (!t.matches("[A-Za-z0-9_./+-]{1,256}")) continue;
+                    boolean diPkg = !sh("pkg which -q " + t + " 2>/dev/null", 20).trim().isEmpty();
+                    (diPkg ? delPacchetto : tuoi).put(t);
+                }
+                if (tuoi.length() == 0 && delPacchetto.length() == 0) continue;
+                problemi.put(new JSONObject().put("costrutto", k[1]).put("cosaCambia", k[2])
+                        .put("tipo", tuoi.length() > 0 ? k[3] : "predefinito")
+                        .put("files", tuoi).put("filesPacchetto", delPacchetto));
+            }
+        }
+        r.put("fileLetti", fileLetti).put("issues", problemi);
+
+        // rspamadm configtest e' l'equivalente di doveconf -n: lo dice rspamd, non io.
+        if (ok("command -v rspamadm >/dev/null 2>&1", 15)) {
+            String t = sh("rspamadm configtest 2>&1", 60);
+            r.put("configtest", t).put("configtestOk", t.toLowerCase().contains("syntax ok"));
+        } else {
+            r.put("configtest", "rspamadm non raggiungibile").put("configtestOk", false);
+        }
+
+        // Il ricalcolo dei Bayes riguarda SOLO le installazioni con Redis suddiviso su piu'
+        // server: dirlo evita di spaventare chi non e' in quel caso.
+        int redis = 0;
+        if (c) {
+            String rr = sh("grep -rhoE 'servers[[:space:]]*=[[:space:]]*\"[^\"]+\"' " + etc
+                    + "/local.d/redis.conf 2>/dev/null | head -1", 20);
+            redis = rr.isBlank() ? 1 : rr.split(",").length;
+        }
+        r.put("redisServer", redis)
+         .put("bayes", redis > 1
+                ? "Redis e' suddiviso su piu' server: prima di un aggiornamento maggiore va eseguito "
+                  + "rspamadm statistics_dump migrate, altrimenti i dati Bayes per utente finiscono "
+                  + "sulla partizione sbagliata."
+                : "Redis e' su un solo server: il ricalcolo dei Bayes della 4.0 non ti riguarda.");
+
+        int rotti = 0, tuoiTot = 0, soloPacchetto = 0;
+        for (int i = 0; i < problemi.length(); i++) {
+            JSONObject q = problemi.getJSONObject(i);
+            int nTuoi = q.getJSONArray("files").length();
+            tuoiTot += nTuoi;
+            if (nTuoi == 0) soloPacchetto++;
+            if (nTuoi > 0 && "rotto".equals(q.getString("tipo"))) rotti++;
+        }
+        r.put("tuoi", tuoiTot).put("soloPacchetto", soloPacchetto);
+        r.put("verdetto", rotti > 0 ? "C'E' UN COSTRUTTO NON PIU' VALIDO"
+                : (tuoiTot > 0 ? "DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE"
+                               : "NIENTE DA SEGNALARE"));
+        r.put("spiegazione", rotti > 0
+                ? rotti + " costrutti non sono piu' accettati e si trovano in file TUOI: vanno corretti."
+                : (tuoiTot > 0
+                   ? "Nessun costrutto invalido. Le voci trovate nei tuoi file non impediscono l'avvio: "
+                     + "cambiano cosa fa rspamd, ed e' bene saperlo prima e non dopo un aggiornamento."
+                   : "Nei file che amministri tu — local.d, override.d, rspamd.conf.local — non compare "
+                     + "nessuno dei costrutti rimossi o cambiati dalla 4.0 e dalla 4.1."
+                     + (soloPacchetto > 0
+                        ? " I " + soloPacchetto + " nomi trovati stanno solo in file che appartengono al "
+                          + "pacchetto rspamd: sono i suoi predefiniti, vengono sostituiti a ogni "
+                          + "aggiornamento e non sono una tua scelta. Elencarli come problemi sarebbe un "
+                          + "falso allarme."
+                        : "")));
+        r.put("fonte", "Note di rilascio ufficiali Rspamd 4.0 e 4.1 e la guida di aggiornamento "
+                + "(docs.rspamd.com/tutorials/migration/), lette il 01/09/2026. La 4.1 introduce anche "
+                + "cambiamenti che nessun file puo' rivelare: nella 4.1.2 i map glob si ancorano "
+                + "all'intera stringa, nella 4.1.3 cambia la curva dei punteggi fuzzy, nella 4.1.4 "
+                + "l'autenticazione del controller rifiuta tutto se l'hash della password e' malformato.");
+        return r;
+    }
+
+    /** Le verifiche insieme: e' cio' che si guarda prima di premere "aggiorna". */
     public static JSONObject compatibilityReport() {
         return new JSONObject().put("success", true)
                 .put("dovecot", compatibilitaDovecot())
+                .put("postfix", compatibilitaPostfix())
+                .put("rspamd", compatibilitaRspamd())
                 .put("mysql", compatibilitaMysql())
                 .put("webmail", compatibilitaWebmail());
     }
@@ -958,6 +1439,7 @@ public final class UpdateManager {
     private static int eseguiConLog(Job job, String comando, int timeoutSecondi,
                                     StringBuilder cattura, Map<String, String> ambiente) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", comando);
+        org.mail_panel.util.Shell.applicaPath(pb);
         if (ambiente != null) pb.environment().putAll(ambiente);
         pb.redirectErrorStream(true);
         Process p = pb.start();
@@ -1209,6 +1691,7 @@ public final class UpdateManager {
             ProcessBuilder pb = new ProcessBuilder("sh", "-c",
                     "mysql -u " + user + " -h " + host + " -P " + port + " -N -B " + db
                     + " -e \"" + q + "\" 2>/dev/null");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.environment().put("MYSQL_PWD", pass);
             Process pr = pb.start();
             StringBuilder sb = new StringBuilder();
@@ -1940,6 +2423,7 @@ public final class UpdateManager {
         try {
             ProcessBuilder pb = new ProcessBuilder("sh", "-c",
                     "mysql -u " + u + " -h " + host + " -N -B " + db + " -e \"" + q + "\" 2>/dev/null");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.environment().put("MYSQL_PWD", d.getString("pass"));
             Process pr = pb.start();
             StringBuilder sb = new StringBuilder();
@@ -2098,9 +2582,12 @@ public final class UpdateManager {
                     + "via di ritorno, quindi si prova prima di averne bisogno.");
         }
 
-        aggiungiCheck(checks, "opcache", "Cache del codice PHP", "verifica",
-                "Dopo l'aggiornamento php-fpm viene riavviato: con OPcache attivo continuerebbe a servire il "
-                + "codice vecchio gia' compilato in memoria, e la webmail sembrerebbe non aggiornata.");
+        // Non chiede niente a chi legge: dice cosa fa la procedura. Sotto l'etichetta gialla
+        // "VERIFICA" sembrava una cosa rimasta da fare, in mezzo a righe tutte verdi.
+        aggiungiCheck(checks, "opcache", "Cache del codice PHP", "nota",
+                "Nessuna azione richiesta: e' cio' che fara' la procedura. Dopo l'aggiornamento php-fpm "
+                + "viene riavviato, altrimenti con OPcache attivo continuerebbe a servire il codice "
+                + "vecchio gia' compilato in memoria e la webmail sembrerebbe non aggiornata.");
 
         // Radice di nginx: dalla 1.7 deve puntare a public_html, altrimenti la webmail
         // smette di funzionare subito dopo l'aggiornamento.
@@ -2384,6 +2871,7 @@ public final class UpdateManager {
         try {
             ProcessBuilder pb = new ProcessBuilder("sh", "-c",
                     "mysqldump " + opzioni + " " + connessione + " > " + dest + " 2> " + err);
+            org.mail_panel.util.Shell.applicaPath(pb);
             // La password sta nell'ambiente e non nella riga di comando: cosi' non compare in ps.
             // Per il tentativo da root non c'e' password: entra dal socket unix.
             if (pass != null && !pass.isEmpty()) pb.environment().put("MYSQL_PWD", pass);
@@ -5285,27 +5773,453 @@ public final class UpdateManager {
             if (sp > 0) richiesti.add(t.substring(sp + 1).trim());
         }
 
-        java.util.HashSet<String> protetti = new java.util.HashSet<>();
-        for (String riga : sh("pkg lock -l 2>/dev/null", 30).split("\n")) {
-            String t = riga.trim();
-            if (!t.isEmpty() && !t.endsWith(":")) protetti.add(t);
-        }
+        String lock = sh("pkg lock -l 2>/dev/null", 30);
 
         JSONArray fuori = new JSONArray();
+        int conRuolo = 0;
         for (String n : espliciti) {
             if (richiesti.contains(n)) continue;
+            String ruolo = ruoloDi(n);
+            if (ruolo != null) conRuolo++;
+            boolean essenziale = n.equals("pkg") || n.equals("pkg-devel");
             fuori.put(new JSONObject().put("nome", n)
                     .put("versione", sh("pkg query %v " + n + " 2>/dev/null", 20))
-                    .put("protetto", protetti.contains(n)));
+                    .put("protetto", bloccato(lock, n))
+                    .put("ruolo", ruolo == null ? "" : ruolo)
+                    .put("essenziale", essenziale)
+                    .put("avviso", essenziale
+                            ? "E' il gestore dei pacchetti: senza, non si installa e non si aggiorna piu' niente."
+                            : (ruolo == null ? "" : "Fa parte dello stack di posta.")));
         }
         return new JSONObject().put("success", true).put("candidati", fuori)
-                .put("esplicitiTotali", espliciti.size())
+                .put("esplicitiTotali", espliciti.size()).put("conRuolo", conRuolo)
+                .put("attenzione", "\"Candidato\" vuol dire soltanto che pkg lo lascerebbe rimuovere "
+                        + "senza portarsi dietro altro. NON vuol dire che si possa togliere: in questo "
+                        + "elenco ci sono nginx, il database, la webmail e perfino pkg. Quelli con un "
+                        + "ruolo indicato servono al server di posta, e vanno lasciati dove sono.")
                 .put("spiegazione", "Sono i pacchetti che hai chiesto tu (non arrivati come dipendenza) "
                         + "e che nessun altro pacchetto dichiara: gli unici che pkg lascerebbe rimuovere "
                         + "senza portarsi dietro altro. Non vuol dire che si possano togliere: vuol dire "
                         + "che la domanda ha senso. Il controllo qui accanto guarda se il pannello ne "
                         + "invoca i comandi nei propri script, che e' il modo in cui openssl era "
                         + "sfuggito a tutti i controlli basati su pkg.");
+    }
+
+    /**
+     * I luoghi in cui il pannello, i pacchetti e l'amministratore lasciano cose che vengono
+     * eseguite DOPO: script di rinnovo, cron, rc.d, periodic, configurazioni. Il jar non li
+     * contiene, quindi cercarli solo li' dentro non basta.
+     */
+    private static final String[][] LUOGHI = {
+        {"/etc",                    "configurazioni di base, crontab di sistema, rc.conf"},
+        {"/usr/local/etc",          "configurazioni dei pacchetti, rc.d, periodic, hook"},
+        {"/var/cron/tabs",          "crontab degli utenti"},
+        {"/var/db/mailpanel",       "stato e script lasciati dal pannello"},
+        {"/root",                   "script e note dell'amministratore"},
+        {"/usr/local/bin",          "programmi installati: qui si guardano solo quelli di testo, cioe' gli script"},
+        {"/usr/local/sbin",         "come sopra"},
+        {"/usr/local/www/roundcube","la webmail e la sua configurazione"},
+    };
+
+    /**
+     * L'analisi approfondita prima di togliere un pacchetto. Nasce da una richiesta precisa:
+     * "non voglio che poi script o altro smettano di funzionare".
+     *
+     * Il controllo sul jar rispondeva a una domanda sola — il pannello ne invoca i comandi? —
+     * e quella domanda e' la meno pericolosa, perche' un comando invocato col nome nudo
+     * ripiega da solo sull'altra copia nel PATH. Cio' che rompe davvero e' un riferimento che
+     * NON puo' ripiegare:
+     *
+     *   - un percorso assoluto dentro il pacchetto (/usr/local/bin/openssl): sparisce il file,
+     *     e chi lo nomina fallisce;
+     *   - un soname fornito dal pacchetto (libssl.so.12): sparisce la libreria, e chi ci si
+     *     collega non parte piu'.
+     *
+     * Quindi si separano nettamente due elenchi: i riferimenti che ROMPONO e quelli che
+     * REGGONO. E si cerca in tre posti diversi, perche' bastano due su tre per ingannarsi:
+     * dentro il jar, fra i pacchetti installati (chi dichiara quei soname), e sui file di
+     * testo del sistema, dove vivono gli script che girano piu' tardi.
+     *
+     * Ogni ricerca dichiara quanti file di testo ha esaminato. Una ricerca che non trova
+     * nulla perche' non ha guardato da nessuna parte e' indistinguibile, nel risultato, da
+     * una che ha guardato e non ha trovato: il conteggio e' cio' che le distingue.
+     */
+    public static JSONObject analisiProfonda(String pacchetto) {
+        if (!nomeValido(pacchetto))
+            return new JSONObject().put("success", false).put("error", "nome di pacchetto non valido");
+        if (!ok("pkg info -e " + pacchetto, 20))
+            return new JSONObject().put("success", false).put("error", pacchetto + " non e' installato");
+
+        JSONObject r = new JSONObject().put("success", true).put("pacchetto", pacchetto);
+
+        // --- cosa il pacchetto mette sul disco: percorsi assoluti e soname ---
+        String elenco = sh("pkg query '%Fp' " + pacchetto + " 2>/dev/null", 60);
+        if (elenco.isBlank()) elenco = sh("pkg info -l " + pacchetto + " 2>/dev/null", 60);
+        java.util.LinkedHashSet<String> percorsi = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashSet<String> basi = new java.util.LinkedHashSet<>();
+        for (String riga : elenco.split("\n")) {
+            String f = riga.trim();
+            if (!f.matches("(/usr)?(/local)?/(s?bin|libexec)(/[A-Za-z0-9._+-]{1,64}){1,2}")) continue;
+            percorsi.add(f);
+            basi.add(f.substring(f.lastIndexOf('/') + 1));
+        }
+        java.util.LinkedHashSet<String> soname = new java.util.LinkedHashSet<>();
+        for (String l : sh("pkg query %b " + pacchetto + " 2>/dev/null", 30).split("\n"))
+            if (l.trim().matches("[A-Za-z0-9._+-]{1,128}")) soname.add(l.trim());
+        r.put("percorsi", new JSONArray(new ArrayList<>(percorsi)))
+         .put("soname", new JSONArray(new ArrayList<>(soname)));
+
+        // I motivi per cui una rimozione rompe: percorso assoluto, o soname.
+        java.util.LinkedHashSet<String> rompono = new java.util.LinkedHashSet<>(percorsi);
+        rompono.addAll(soname);
+        for (String sn : soname) { rompono.add("/usr/local/lib/" + sn); }
+        r.put("cercati", new JSONArray(new ArrayList<>(rompono)));
+
+        // --- 1. chi, fra i pacchetti installati, dichiara quei soname ---
+        JSONArray dichiaranoSoname = new JSONArray();
+        if (!soname.isEmpty()) {
+            for (String riga : sh("pkg query '%n %B' 2>/dev/null", 120).split("\n")) {
+                String t = riga.trim();
+                int sp = t.indexOf(' ');
+                if (sp <= 0) continue;
+                String n = t.substring(0, sp).trim(), lib = t.substring(sp + 1).trim();
+                if (!n.equals(pacchetto) && soname.contains(lib))
+                    dichiaranoSoname.put(new JSONObject().put("pacchetto", n).put("libreria", lib));
+            }
+        }
+        r.put("dichiaranoSoname", dichiaranoSoname);
+
+        // --- 2. il jar in esecuzione: percorsi assoluti e soname, non solo i nomi nudi ---
+        String jar = percorsoJar();
+        JSONArray nelJar = new JSONArray();
+        long byteJar = 0;
+        int jarBloccanti = 0;
+        String mioFile = UpdateManager.class.getSimpleName();
+        if (jar != null && !jar.isBlank() && ok("test -r " + jar, 15)) {
+            String n = sh("tar -xOf " + jar + " 'org/mail_panel/*' 2>/dev/null | wc -c", 120)
+                    .trim().replaceAll("[^0-9]", "");
+            if (!n.isEmpty()) byteJar = Long.parseLong(n);
+            if (byteJar > 0) {
+                StringBuilder pat = new StringBuilder();
+                for (String x : rompono) pat.append(" -e '").append(x).append("'");
+                // Estrazione in una cartella temporanea: solo cosi' grep puo' dire QUALE classe.
+                String uscita = sh("d=$(mktemp -d) && tar -xf " + jar + " -C \"$d\" 'org/mail_panel/*' "
+                        + "2>/dev/null; grep -rlaF" + pat + " \"$d\" 2>/dev/null "
+                        + "| sed \"s|^$d/||\"; rm -rf \"$d\"", 240);
+                for (String riga : uscita.split("\n")) {
+                    String f = riga.trim();
+                    if (f.isEmpty() || !f.endsWith(".class")) continue;
+                    String classe = f.substring(f.lastIndexOf('/') + 1).replace(".class", "");
+                    boolean mio = classe.equals(mioFile) || classe.startsWith(mioFile + "$");
+                    if (!mio) jarBloccanti++;
+                    nelJar.put(new JSONObject().put("classe", classe).put("file", f)
+                            .put("autoRiferimento", mio));
+                }
+            }
+        }
+        r.put("jar", jar == null ? "" : jar).put("byteJar", byteJar)
+         .put("jarLetto", byteJar > 0).put("nelJar", nelJar).put("jarBloccanti", jarBloccanti)
+         .put("classeDelControllo", mioFile);
+
+        // --- 3. i file di testo del sistema: dove vivono gli script che girano dopo ---
+        JSONArray luoghi = new JSONArray();
+        int totaleRompono = 0, totaleReggono = 0;
+        StringBuilder patRompono = new StringBuilder();
+        for (String x : rompono) patRompono.append(" -e '").append(x).append("'");
+        StringBuilder patReggono = new StringBuilder();
+        for (String b : basi) if (b.length() >= 4) patReggono.append(" -e '").append(b).append("'");
+
+        for (String[] L : LUOGHI) {
+            if (!ok("test -d " + L[0], 15)) continue;
+            JSONObject u = new JSONObject().put("dove", L[0]).put("cosaContiene", L[1]);
+            // Quanti file di testo esistono qui: e' la prova che la ricerca ha guardato.
+            String cnt = sh("grep -rIl '' " + L[0] + " 2>/dev/null | wc -l", 180).trim().replaceAll("[^0-9]", "");
+            int esaminati = cnt.isEmpty() ? 0 : Integer.parseInt(cnt);
+            u.put("fileEsaminati", esaminati);
+
+            JSONArray rotture = new JSONArray();
+            if (patRompono.length() > 0) {
+                for (String riga : sh("grep -rInIF" + patRompono + " " + L[0]
+                        + " 2>/dev/null | head -40", 240).split("\n")) {
+                    if (riga.isBlank()) continue;
+                    rotture.put(riga.length() > 300 ? riga.substring(0, 300) + "..." : riga);
+                }
+            }
+            int reggono = 0;
+            if (patReggono.length() > 0) {
+                String q = sh("grep -rIwoF" + patReggono + " " + L[0] + " 2>/dev/null | wc -l", 240)
+                        .trim().replaceAll("[^0-9]", "");
+                if (!q.isEmpty()) reggono = Integer.parseInt(q);
+            }
+            u.put("rompono", rotture).put("reggono", reggono);
+            totaleRompono += rotture.length();
+            totaleReggono += reggono;
+            luoghi.put(u);
+        }
+        r.put("luoghi", luoghi).put("totaleRompono", totaleRompono).put("totaleReggono", totaleReggono);
+
+        // --- il giudizio ---
+        // Il riferimento che sta nella classe che ESEGUE questo controllo non blocca: e'
+        // l'analisi che nomina cio' che deve ispezionare, non un uso che si romperebbe.
+        boolean bloccante = totaleRompono > 0 || jarBloccanti > 0 || dichiaranoSoname.length() > 0;
+        r.put("bloccante", bloccante);
+        r.put("verdetto", bloccante ? "CI SONO RIFERIMENTI CHE SI ROMPEREBBERO" : "NESSUN RIFERIMENTO CHE SI ROMPA");
+        int auto = nelJar.length() - jarBloccanti;
+        r.put("spiegazione", bloccante
+                ? "Ho trovato riferimenti a percorsi assoluti o a librerie di " + pacchetto
+                  + " che non possono ripiegare su nient'altro: se il pacchetto sparisce, quei "
+                  + "riferimenti falliscono. Sono elencati qui sotto uno per uno, con file e riga."
+                : "Ho cercato in tre posti indipendenti i percorsi assoluti e i soname di " + pacchetto
+                  + " — le uniche forme di riferimento che una rimozione romperebbe — e non ne ho "
+                  + "trovato nessuno che si romperebbe. I " + totaleReggono + " riferimenti al nome "
+                  + "nudo del comando non contano: quelli ripiegano da soli sull'altra copia nel PATH."
+                  + (auto > 0
+                     ? " " + auto + (auto == 1 ? " riferimento assoluto e' nel jar, ma nella classe "
+                                               : " riferimenti assoluti sono nel jar, ma nella classe ")
+                       + mioFile + ", cioe' nel codice che esegue QUESTA analisi: nomina il percorso "
+                       + "per andarlo a ispezionare, e se non lo trova lo salta. Non e' un uso."
+                     : ""));
+        r.put("avvertenza", "Questa ricerca legge i file di TESTO. Un riferimento dentro un programma "
+                + "compilato non lo vede: quel caso e' coperto dall'elenco dei pacchetti che dichiarano "
+                + "i soname, che e' la forma in cui pkg lo registra, e dal controllo delle librerie "
+                + "mancanti da rifare subito dopo la rimozione.");
+        return r;
+    }
+
+    /**
+     * La rimozione di un pacchetto, fatta dal pannello e non dettata come comando da SSH.
+     *
+     * Non e' un pulsante che esegue "pkg delete": e' il controllo che decide se eseguirlo.
+     * Rifiuta da solo nei casi in cui la rimozione farebbe danno, e in quelli in cui non ha
+     * potuto stabilire che non ne farebbe — che e' la stessa cosa. Poi verifica l'esito
+     * guardando il sistema, non il codice di uscita di pkg: il pacchetto e' sparito davvero,
+     * nessun altro pacchetto e' rimasto senza una libreria, i servizi sono ancora su.
+     */
+    public static JSONObject rimuoviPacchetto(String nome) {
+        if (!nomeValido(nome))
+            return new JSONObject().put("success", false).put("error", "nome di pacchetto non valido");
+        StringBuilder log = new StringBuilder();
+        JSONObject r = new JSONObject().put("pacchetto", nome);
+
+        if (!ok("pkg info -e " + nome, 20)) {
+            log.append(nome).append(" non risulta installato: non c'e' niente da rimuovere.\n")
+               .append("Faccio comunque le verifiche che seguono una rimozione, perche' e' probabile "
+                       + "che sia gia' stata fatta.\n");
+            JSONObject lib0 = pacchettiConLibrerieMancanti();
+            JSONArray rotti0 = lib0.optJSONArray("packages");
+            boolean guasto0 = rotti0 != null && rotti0.length() > 0;
+            r.put("librerieMancanti", lib0).put("servizi", serviziJson())
+             .put("rimosso", true).put("giaAssente", true).put("guasto", guasto0)
+             .put("dopo", contaRighe(sh("pkg query %n 2>/dev/null", 60)));
+            log.append("--- verifica ---\n")
+               .append(guasto0 ? rotti0.length() + " pacchetti sono rimasti senza una libreria"
+                               : "nessun pacchetto e' rimasto senza una libreria").append("\n");
+            return r.put("success", true).put("log", log.toString())
+                    .put("nota", guasto0
+                            ? "ATTENZIONE: " + nome + " non c'e' piu', e ci sono pacchetti senza una "
+                              + "libreria che richiedono. Rimettilo con: pkg install -y " + nome
+                            : nome + " non e' installato: risulta gia' rimosso. Ho verificato lo stesso "
+                              + "che nessun pacchetto sia rimasto senza una libreria e che i servizi "
+                              + "siano attivi, perche' e' proprio dopo una rimozione che serve saperlo.");
+        }
+
+        // --- chi lo dichiara: se qualcuno lo fa, non si tocca ---
+        String dichiarano = sh("pkg query %rn " + nome + " 2>/dev/null", 30).trim();
+        if (!dichiarano.isEmpty())
+            return new JSONObject().put("success", false)
+                    .put("error", "NON lo rimuovo: e' dichiarato come dipendenza da "
+                            + dichiarano.replace("\n", ", ") + ".");
+
+        // --- e il pannello? la stessa misura della scheda, rifatta adesso ---
+        JSONObject uso = usoDalPannello(nome);
+        r.put("uso", uso);
+        String v = uso.optString("verdetto", "");
+        if (!v.equals("IL PANNELLO NON LO USA") && !v.equals("LI NOMINA, MA NON SONO I SUOI")
+                && !v.startsWith("NON NE USA I COMANDI"))
+            return new JSONObject().put("success", false).put("uso", uso)
+                    .put("error", "NON lo rimuovo: il controllo sul jar dice \"" + v + "\". "
+                            + uso.optString("spiegazione", ""));
+
+        // --- e i riferimenti sul disco? il jar e' solo uno dei tre posti ---
+        JSONObject prof = analisiProfonda(nome);
+        r.put("profonda", prof);
+        if (prof.optBoolean("bloccante"))
+            return new JSONObject().put("success", false).put("profonda", prof)
+                    .put("error", "NON lo rimuovo: l'analisi approfondita ha trovato riferimenti a "
+                            + "percorsi assoluti o a librerie di " + nome + " che non possono ripiegare "
+                            + "su nient'altro. Sono elencati nella scheda: vanno sistemati prima.");
+
+        // --- fotografia prima, per poter confrontare dopo ---
+        int prima = contaRighe(sh("pkg query %n 2>/dev/null", 60));
+        log.append("pacchetti installati prima: ").append(prima).append("\n");
+
+        boolean protetto = bloccato(sh("pkg lock -l 2>/dev/null", 30), nome);
+        log.append("protetto prima: ").append(protetto ? "si" : "no").append("\n");
+        if (protetto) {
+            log.append("--- sblocco ---\n")
+               .append(sh("pkg unlock -y " + nome + " 2>&1", 60)).append("\n");
+            if (bloccato(sh("pkg lock -l 2>/dev/null", 30), nome)) {
+                log.append("la protezione c'e' ancora: non procedo\n");
+                return r.put("success", false).put("log", log.toString())
+                        .put("error", "non sono riuscito a togliere la protezione da " + nome
+                                + ": non ho tentato la rimozione. Il pacchetto e' intatto.");
+            }
+            log.append("protezione rimossa, verificato rileggendo pkg lock -l\n");
+        }
+
+        String uscitaDelete = sh("pkg delete -y " + nome + " 2>&1", 180);
+        log.append("--- rimozione ---\n").append(uscitaDelete).append("\n");
+
+        // L'esito lo dice il sistema, non il codice di uscita.
+        boolean via = !ok("pkg info -e " + nome, 20);
+        int dopo = contaRighe(sh("pkg query %n 2>/dev/null", 60));
+        log.append("pacchetti installati dopo: ").append(dopo).append("\n");
+        r.put("prima", prima).put("dopo", dopo).put("rimosso", via);
+
+        if (!via) {
+            if (protetto) log.append("--- riprotezione ---\n").append(sh("pkg lock -y " + nome + " 2>&1", 60));
+            // Il motivo lo dice pkg nella sua uscita: riportarlo invece di lasciare
+            // l'utente a leggersi il log per capire perche'.
+            String perche = uscitaDelete.contains("locked")
+                    ? " perche' risulta ancora protetto (pkg dice \"locked or vital\")"
+                    : (uscitaDelete.contains("vital") ? " perche' e' marcato come vitale" : "");
+            return r.put("success", false).put("log", log.toString())
+                    .put("error", "il pacchetto risulta ancora installato: non e' stato rimosso"
+                            + perche + (protetto ? ". L'ho riprotetto come era prima." : "."));
+        }
+
+        // --- la verifica che conta: qualcuno e' rimasto senza una libreria? ---
+        JSONObject lib = pacchettiConLibrerieMancanti();
+        JSONArray rotti = lib.optJSONArray("packages");
+        r.put("librerieMancanti", lib);
+        r.put("servizi", serviziJson());
+
+        boolean guasto = rotti != null && rotti.length() > 0;
+        log.append("--- verifica ---\n")
+           .append(guasto ? rotti.length() + " pacchetti sono rimasti senza una libreria"
+                          : "nessun pacchetto e' rimasto senza una libreria").append("\n");
+        return r.put("success", true).put("log", log.toString()).put("guasto", guasto)
+                .put("nota", guasto
+                        ? "ATTENZIONE: dopo la rimozione ci sono pacchetti senza una libreria che "
+                          + "richiedono. Rimetti " + nome + " con: pkg install -y " + nome
+                        : "Rimosso. Nessun pacchetto e' rimasto senza una libreria e i servizi "
+                          + "sono stati ricontrollati uno per uno.");
+    }
+
+    /**
+     * Strumenti esterni da cui il pannello dipende, con la cartella in cui il port li mette.
+     * Non e' un elenco decorativo: se uno di questi non si raggiunge, la funzione che lo usa
+     * fallisce lontano da qui e con un messaggio che parla d'altro.
+     */
+    private static final String[][] STRUMENTI = {
+        {"mysqldump",       "/usr/local/bin",  "copia del database prima di ogni migrazione"},
+        {"mysql",           "/usr/local/bin",  "interrogazione dei database"},
+        {"doveadm",         "/usr/local/bin",  "amministrazione di Dovecot"},
+        {"postmap",         "/usr/local/sbin", "mappe di Postfix"},
+        {"postconf",        "/usr/local/sbin", "configurazione di Postfix"},
+        {"rspamadm",        "/usr/local/bin",  "amministrazione di Rspamd"},
+        {"fail2ban-client", "/usr/local/bin",  "stato e sblocco degli IP"},
+        {"nginx",           "/usr/local/sbin", "prova della configurazione con nginx -t"},
+        {"pkg",             "/usr/local/sbin", "tutto cio' che riguarda i pacchetti"},
+        {"openssl",         "/usr/bin",        "lettura dei certificati"},
+        {"procstat",        "/usr/bin",        "quali librerie ha aperto un processo"},
+        {"bectl",           "/sbin",           "ambienti di avvio"},
+    };
+
+    /**
+     * L'ambiente in cui il pannello esegue i comandi. Nasce da un guasto che ha impiegato
+     * mezz'ora a essere capito: il preflight di Roundcube diceva "mysqldump non e' installato
+     * o non e' nel PATH del pannello" mentre mysql84-client era regolarmente installato.
+     * Le due cose che quel messaggio metteva insieme sono diversissime, e distinguerle e'
+     * banale: si guarda se il file c'e' sul disco, e separatamente se il PATH lo raggiunge.
+     */
+    public static JSONObject ambienteDelPannello() {
+        JSONObject r = new JSONObject().put("success", true)
+                .put("pathEreditato", org.mail_panel.util.Shell.pathEreditato())
+                .put("pathUsato", org.mail_panel.util.Shell.pathCompleto());
+        JSONArray a = new JSONArray();
+        int irraggiungibili = 0, assenti = 0;
+        for (String[] t : STRUMENTI) {
+            String risolto = sh("command -v " + t[0] + " 2>/dev/null", 15).trim();
+            String atteso = t[1] + "/" + t[0];
+            boolean suDisco = ok("test -x " + atteso, 15);
+            String stato;
+            if (!risolto.isEmpty()) stato = "raggiungibile";
+            else if (suDisco) { stato = "C'E' MA IL PATH NON LO RAGGIUNGE"; irraggiungibili++; }
+            else { stato = "non installato"; assenti++; }
+            a.put(new JSONObject().put("comando", t[0]).put("attesoIn", t[1]).put("aCosaServe", t[2])
+                    .put("risolto", risolto).put("suDisco", suDisco).put("stato", stato));
+        }
+        return r.put("strumenti", a).put("irraggiungibili", irraggiungibili).put("assenti", assenti)
+                .put("spiegazione", irraggiungibili > 0
+                        ? irraggiungibili + " strumenti esistono sul disco ma il PATH del pannello non "
+                          + "li raggiunge: le funzioni che li usano falliscono dicendo che non sono "
+                          + "installati. Riavvia il pannello con il jar aggiornato: da questa versione "
+                          + "il PATH dei sottoprocessi viene completato dal pannello stesso."
+                        : (assenti > 0
+                           ? assenti + " strumenti non sono installati. Non e' un problema di PATH: "
+                             + "manca il pacchetto che li fornisce."
+                           : "Ogni strumento da cui il pannello dipende e' raggiungibile."));
+    }
+
+    /**
+     * L'anteprima della configurazione che il pannello scriverebbe su un Dovecot 2.4.
+     *
+     * Serve a poterla leggere ORA, mentre il repository non ha ancora la 2.4 e non c'e'
+     * nessuna fretta. Un template che si vede per la prima volta il giorno in cui il
+     * pacchetto arriva e' un template che si legge di corsa.
+     *
+     * Non scrive niente: prende gli stessi file che scriverebbe lo script, sostituisce i
+     * valori veri del database e nasconde la password.
+     */
+    public static JSONObject anteprimaDovecot24() {
+        JSONObject r = new JSONObject().put("success", true);
+        try {
+            org.mail_panel.scripts.DovecotConfig c = org.mail_panel.scripts.DovecotConfig.fromPanelConfig();
+            boolean pigeonhole = ok("pkg info -e dovecot-pigeonhole", 15)
+                    || ok("pkg info -e dovecot-pigeonhole-mysql", 15)
+                    || ok("pkg info -e dovecot-pigeonhole-pgsql", 15);
+            JSONArray file = new JSONArray();
+            for (var f : org.mail_panel.scripts.DovecotConfig.file24()) {
+                String testo = f.contenuto()
+                        .replace("${DB_USER}", c.getDbUser())
+                        .replace("${DB_NAME}", c.getDbName())
+                        .replace("${DB_PASS}", "«la password del database, non mostrata qui»")
+                        .replace("${SIEVE_PROTO}", pigeonhole ? " sieve" : "");
+                file.put(new JSONObject().put("percorso", "/usr/local/etc/dovecot/" + f.percorso())
+                        .put("contenuto", testo));
+            }
+            JSONArray ver = new JSONArray();
+            for (String[] v : org.mail_panel.scripts.DovecotConfig.verifiche24())
+                ver.put(new JSONObject().put("stato", v[0]).put("impostazione", v[1]).put("nota", v[2]));
+            return r.put("file", file).put("verifiche", ver)
+                    .put("dbName", c.getDbName()).put("dbUser", c.getDbUser())
+                    .put("pigeonhole", pigeonhole)
+                    .put("installata", sh("pkg query -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 20))
+                    .put("avvertenza", "Questa configurazione NON e' stata scritta: e' cio' che il pannello "
+                            + "scriverebbe il giorno in cui il repository offrira' Dovecot 2.4. La versione "
+                            + "installata resta quella attuale e non viene toccata. Quando arrivera' la 2.4, "
+                            + "prima di mettere in servizio il pannello eseguira' comunque doveconf -n: se "
+                            + "Dovecot rifiutasse anche una sola riga, rimette la configurazione precedente "
+                            + "senza riavviare il servizio.");
+        } catch (Exception e) {
+            return new JSONObject().put("success", false)
+                    .put("error", "non riesco a costruire l'anteprima: " + e.getMessage());
+        }
+    }
+
+    /** statoServizi() in forma di elenco JSON, per le schede che lo mostrano. */
+    private static JSONArray serviziJson() {
+        JSONArray a = new JSONArray();
+        for (var e : statoServizi().entrySet())
+            a.put(new JSONObject().put("nome", e.getKey()).put("attivo", e.getValue()));
+        return a;
+    }
+
+    private static int contaRighe(String s) {
+        int n = 0;
+        for (String l : s.split("\n")) if (!l.isBlank()) n++;
+        return n;
     }
 
     /** Legge l'uscita di "sort | uniq -c": conteggio, spazio, valore. */
@@ -5397,11 +6311,25 @@ public final class UpdateManager {
                 if (cand.equals(e.getValue())) continue;
                 if (ok("test -x " + cand, 15)) { altrove = cand; break; }
             }
+            // Non basta sapere che una seconda copia esiste: bisogna sapere QUALE delle due
+            // gira adesso. Se il PATH gia' sceglie l'altra, togliere il pacchetto non cambia
+            // nulla — dire "diventerebbe un altro binario" sarebbe falso, e contraddirebbe il
+            // riquadro qui sopra che ha appena misurato chi vince nel PATH.
+            String inUsoOra = sh("command -v " + e.getKey() + " 2>/dev/null", 15).trim();
+            boolean eSuo = inUsoOra.equals(e.getValue());
             usati.put(new JSONObject().put("comando", e.getKey()).put("percorso", e.getValue())
                     .put("occorrenze", c)
                     .put("conArgomenti", conArgomenti.getOrDefault(e.getKey(), 0))
                     .put("altraCopia", altrove)
-                    .put("resterebbe", !altrove.isEmpty()));
+                    .put("inUsoOra", inUsoOra).put("eSuo", eSuo)
+                    .put("resterebbe", !altrove.isEmpty())
+                    .put("effetto", eSuo
+                            ? (altrove.isEmpty()
+                               ? "sparisce: e' il binario in uso e non ce n'e' un altro nel PATH"
+                               : "cambia: oggi gira questo, dopo girerebbe " + altrove)
+                            : (inUsoOra.isEmpty()
+                               ? "nessun binario con questo nome e' raggiungibile dal PATH nemmeno adesso"
+                               : "nessun effetto: il PATH gia' sceglie " + inUsoOra + ", non questo")));
         }
         // Un pacchetto puo' non avere nessun comando e servire lo stesso, perche' e' una
         // LIBRERIA: nessuno la digita, ma qualcuno ci si collega. giflib e' esattamente
@@ -5438,9 +6366,28 @@ public final class UpdateManager {
                        : " Restano fuori dal giudizio " + troppoCorti.size() + " nomi troppo corti per "
                          + "essere cercati senza falsi positivi: " + String.join(", ", troppoCorti) + ".");
         } else {
-            int senzaRicambio = 0;
-            for (int i = 0; i < usati.length(); i++)
-                if (!usati.getJSONObject(i).getBoolean("resterebbe")) senzaRicambio++;
+            int senzaRicambio = 0, davveroSuoi = 0;
+            for (int i = 0; i < usati.length(); i++) {
+                JSONObject u = usati.getJSONObject(i);
+                if (u.getBoolean("eSuo")) {
+                    davveroSuoi++;
+                    if (!u.getBoolean("resterebbe")) senzaRicambio++;
+                }
+            }
+            if (davveroSuoi == 0) {
+                // Li nomina, ma non e' questo pacchetto a fornire i binari che girano.
+                verdetto = "LI NOMINA, MA NON SONO I SUOI";
+                spiegazione = "Il pannello nomina " + usati.length() + " comand"
+                        + (usati.length() == 1 ? "o" : "i") + " con questi nomi, ma per "
+                        + (usati.length() == 1 ? "quello" : "tutti") + " il PATH sceglie gia' un altro "
+                        + "binario, non quello di " + pacchetto + ". Togliere il pacchetto non "
+                        + "cambierebbe quale programma viene eseguito.";
+                return r.put("verdetto", verdetto).put("spiegazione", spiegazione)
+                        .put("perche", "Il caso openssl ha mostrato che un pacchetto puo' non essere "
+                                + "dichiarato da nessuno e servire lo stesso, perche' e' il PANNELLO a "
+                                + "invocarne il comando. Questa lettura guarda dentro il jar in esecuzione, "
+                                + "non un elenco scritto a mano.");
+            }
             verdetto = senzaRicambio > 0 ? "LO USA, E NON C'E' RICAMBIO" : "LO USA";
             spiegazione = "Il pannello nomina " + usati.length() + " comand"
                     + (usati.length() == 1 ? "o" : "i") + " di questo pacchetto nelle proprie classi."
@@ -5633,10 +6580,18 @@ public final class UpdateManager {
                 + "script di installazione del pannello (\"pkg install -y openssl\", sotto la voce SSL). "
                 + "Per questo nessun pacchetto lo dichiara: e' stato chiesto esplicitamente.");
         r.put("pannello", usoDalPannello("openssl"));
-        r.put("comeSiToglie", "Se e NESSUNO LO USA: prima pkg unlock openssl (e' protetto), poi "
-                + "pkg delete openssl, poi subito il controllo \"Pacchetti senza la libreria che "
-                + "richiedono\", che e' la verifica che nulla sia rimasto senza libreria. "
-                + "Meglio farlo con un ambiente di avvio recente disponibile.");
+        // Questo testo diceva di digitare "pkg unlock" e "pkg delete" da riga di comando.
+        // Da quando la rimozione e' un pulsante, dettare i comandi e' peggio che inutile:
+        // il pulsante rifa' i controlli e verifica dopo, una mano no.
+        r.put("comeSiToglie", "Non serve digitare niente. Il pulsante rosso \"Togli openssl\" sta "
+                + "accanto a \"Analisi approfondita\", subito sopra l'esito di quest'ultima. Compare "
+                + "solo se i controlli lo consentono, e prima di procedere li rifa' tutti da "
+                + "capo — compresa l'analisi approfondita — fermandosi se qualcosa e' cambiato nel "
+                + "frattempo. Toglie la protezione, rimuove, verifica che sia sparito davvero, poi "
+                + "ricontrolla che nessun pacchetto sia rimasto senza una libreria e che i servizi "
+                + "siano ancora attivi. Se qualcosa si rompe te lo dice e ti da' il comando per "
+                + "rimetterlo. Meglio farlo con un ambiente di avvio recente disponibile: ne hai "
+                + "diversi nella scheda del passaggio di release.");
         return r;
     }
 
@@ -6158,6 +7113,15 @@ public final class UpdateManager {
               + "# Abilitazione:  sysrc mailpanel_enable=YES\n"
               + "\n"
               + ". /etc/rc.subr\n"
+              + "\n"
+              + "# Misurato il 31/08/2026 su questo server: avviato da rc.d il pannello riceveva\n"
+              + "# PATH=/sbin:/bin:/usr/sbin:/usr/bin, cioe' senza /usr/local. Meta' degli strumenti\n"
+              + "# da cui dipende (mysqldump, mysql, doveadm, postmap, rspamadm, fail2ban-client,\n"
+              + "# nginx) sta in /usr/local: risultavano \"non installati\" pur essendoci. Il pannello\n"
+              + "# ora completa da solo il PATH dei sottoprocessi, ma impostarlo anche qui non costa\n"
+              + "# nulla e rende l'ambiente esplicito a chi legge questo file.\n"
+              + "PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin\n"
+              + "export PATH\n"
               + "\n"
               + "name=mailpanel\n"
               + "rcvar=mailpanel_enable\n"

@@ -111,6 +111,7 @@ public final class Fail2banAutoSetup {
                     Files.writeString(tmp, newContent);
                     // TODO: migrate to Shell.run when touched
                     ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", tmp.toString());
+                    org.mail_panel.util.Shell.applicaPath(testPb);
                     testPb.redirectErrorStream(true);
                     Process tp = testPb.start();
                     String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -124,6 +125,7 @@ public final class Fail2banAutoSetup {
                         try {
                             // TODO: migrate to Shell.run when touched
                             ProcessBuilder loadPb = new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf");
+                            org.mail_panel.util.Shell.applicaPath(loadPb);
                             loadPb.redirectErrorStream(true);
                             Process lp = loadPb.start();
                             lp.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -138,6 +140,7 @@ public final class Fail2banAutoSetup {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", Fail2banManager.PERMABAN_TABLE,
                     "-T", "replace", "-f", Fail2banManager.PERMABAN_FILE);
+                org.mail_panel.util.Shell.applicaPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -259,6 +262,7 @@ public final class Fail2banAutoSetup {
             }
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(FAIL2BAN_CLIENT, "reload");
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             boolean done = p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);

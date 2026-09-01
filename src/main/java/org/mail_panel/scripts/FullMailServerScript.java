@@ -169,8 +169,15 @@ pkg install -y dovecot-mysql dovecot-pigeonhole
 # Anti-spam and antivirus
 pkg install -y rspamd redis clamav
 
-# SSL
-pkg install -y openssl
+# SSL: NON si installa il port security/openssl.
+# Il predefinito dei port FreeBSD e' ssl=base, cioe' i pacchetti binari sono costruiti contro
+# l'OpenSSL del sistema, che sta in /usr/lib e non e' un pacchetto. Installare anche il port
+# aggiunge una seconda copia in /usr/local/lib che nessuno usa: verificato il 31/08/2026 su
+# questo server con tre misure indipendenti (nessun pacchetto la dichiarava, nessuno dei 12
+# processi con TLS l'aveva aperta, e il comando "openssl" nel PATH risolveva gia' a
+# /usr/bin/openssl del base). In piu' il port era fermo alla 3.0, che esce dal supporto il
+# 07/09/2026, mentre il base e' sulla 3.5 LTS supportata fino all'08/04/2030.
+# Fonte: https://openssl-library.org/policies/releasestrat/
 
 # Roundcube
 pkg install -y nginx php84 php84-extensions

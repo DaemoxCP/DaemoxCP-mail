@@ -855,6 +855,7 @@ public class DnsRecordsGenerator {
             // 1. Reverse lookup: dig -x <IP>
             // TODO: migrate to Shell.run when touched
             ProcessBuilder revPb = new ProcessBuilder("dig", "+short", "-x", serverIp);
+            org.mail_panel.util.Shell.applicaPath(revPb);
             revPb.redirectErrorStream(true);
             Process revP = revPb.start();
             String revOut;
@@ -892,6 +893,7 @@ public class DnsRecordsGenerator {
             // 3. FCrDNS — risolvi il PTR e verifica che torni allo stesso IP
             // TODO: migrate to Shell.run when touched
             ProcessBuilder fwdPb = new ProcessBuilder("dig", "+short", "A", ptr);
+            org.mail_panel.util.Shell.applicaPath(fwdPb);
             fwdPb.redirectErrorStream(true);
             Process fwdP = fwdPb.start();
             String fwdOut;
@@ -937,6 +939,7 @@ public class DnsRecordsGenerator {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", type, name);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process process = pb.start();
 

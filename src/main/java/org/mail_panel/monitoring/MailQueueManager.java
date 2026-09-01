@@ -447,6 +447,7 @@ public class MailQueueManager {
     private String executeCommand(String command) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
+        org.mail_panel.util.Shell.applicaPath(pb);
         pb.redirectErrorStream(true);
         Process process = pb.start();
 

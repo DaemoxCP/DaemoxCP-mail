@@ -110,8 +110,57 @@ public final class Shell {
         return runShell(DEFAULT_TIMEOUT, shellCommand);
     }
 
+    /**
+     * Il PATH con cui vengono lanciati i processi figli.
+     *
+     * Il pannello ereditava e basta il PATH di chi lo aveva avviato. Da riga di comando va
+     * bene; avviato da rc.d puo' essere molto piu' corto, e allora un comando che sta in
+     * /usr/local/bin — mysqldump, mysql, doveadm, postmap, rspamadm, fail2ban-client —
+     * semplicemente "non esiste". Il guasto si presenta lontano da qui, sotto forma di
+     * "mysqldump non e' installato", che manda a cercare un pacchetto che c'e'.
+     *
+     * Le cartelle standard vengono AGGIUNTE IN CODA a quelle ereditate: cosi' non si cambia
+     * quale binario vince per i comandi che gia' si risolvevano, e si aggiunge soltanto cio'
+     * che mancava. L'ordine e' quello del PATH predefinito di FreeBSD in login.conf.
+     */
+    private static final String PATH_COMPLETO = costruisciPath();
+
+    private static String costruisciPath() {
+        String ereditato = System.getenv("PATH");
+        java.util.LinkedHashSet<String> parti = new java.util.LinkedHashSet<>();
+        if (ereditato != null)
+            for (String d : ereditato.split(":")) if (!d.isBlank()) parti.add(d);
+        for (String d : new String[]{"/sbin", "/bin", "/usr/sbin", "/usr/bin",
+                                     "/usr/local/sbin", "/usr/local/bin"})
+            parti.add(d);
+        return String.join(":", parti);
+    }
+
+    /**
+     * Applica lo stesso PATH a un ProcessBuilder costruito altrove.
+     *
+     * Serve perche' non tutto passa da qui: i comandi lunghi che scrivono il log mentre
+     * arrivano, e quelli che devono ricevere una password via ambiente (MYSQL_PWD), si
+     * costruiscono il ProcessBuilder da soli. Senza questa chiamata ereditano il PATH del
+     * pannello e possono non trovare programmi che ci sono: e' successo con mysqldump,
+     * dove --print-defaults funzionava (passava da Shell) e il dump vero no.
+     */
+    public static void applicaPath(ProcessBuilder pb) {
+        if (pb != null) pb.environment().put("PATH", PATH_COMPLETO);
+    }
+
+    /** Il PATH che il pannello usa davvero per i sottoprocessi. */
+    public static String pathCompleto() { return PATH_COMPLETO; }
+
+    /** Il PATH ereditato da chi ha avviato il pannello, prima dell'integrazione. */
+    public static String pathEreditato() {
+        String e = System.getenv("PATH");
+        return e == null ? "" : e;
+    }
+
     private static Result runInternal(Duration timeout, List<String> cmd) {
         ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.environment().put("PATH", PATH_COMPLETO);
         pb.redirectErrorStream(true);
         Process p = null;
         try {

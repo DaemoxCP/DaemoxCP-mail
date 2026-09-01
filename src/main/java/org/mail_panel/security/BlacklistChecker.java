@@ -230,6 +230,7 @@ public class BlacklistChecker {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short",
                 "+time=" + timeSeconds, "+tries=" + tries, "A", queryHost);
+            org.mail_panel.util.Shell.applicaPath(pb);
             // Merge stderr in stdout: dig stampa errori di rete su stderr con prefisso ';;'
             pb.redirectErrorStream(true);
             Process p = pb.start();

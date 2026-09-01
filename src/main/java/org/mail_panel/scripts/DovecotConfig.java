@@ -375,57 +375,116 @@ public final class DovecotConfig {
      * senza riavviare: se qualcosa qui e' sbagliato, il risultato e' un messaggio di
      * errore, non un server di posta fermo.
      */
-    private static String config24() {
-        return """
-            echo "[CONFIG] Scrivo la configurazione in formato Dovecot 2.4"
-            echo "[CONFIG] NOTA: template 2.4 mai eseguito su un 2.4 reale — sara' validato"
-            echo "[CONFIG]       con doveconf e, se rifiutato, la configurazione precedente"
-            echo "[CONFIG]       verra' ripristinata senza riavviare il servizio."
+    // =====================================================================
+    // Dovecot 2.4 — contenuto dei file, sorgente unica
+    // =====================================================================
+    //
+    // Il template esisteva ma non era mai stato confrontato con la documentazione. La
+    // verifica del 31/08/2026 ha trovato quattro errori VERI, tutti confermati da un
+    // esempio ufficiale:
+    //
+    //   disable_plaintext_auth    -> auth_allow_cleartext  (e il valore si INVERTE)
+    //   ssl_prefer_server_ciphers -> ssl_server_prefer_ciphers
+    //   mail_plugins = sieve      -> mail_plugins { sieve = yes }   (tipo "boollist")
+    //   default_password_scheme   -> dentro il blocco passdb, non al livello globale
+    //
+    // E ha prodotto un errore mio, poi corretto: avevo dichiarato rimosse
+    // mail_privileged_group, first_valid_uid, first_valid_gid e auth_master_user_separator
+    // sulla base del RIASSUNTO di una pagina, non del suo testo. L'elenco vero delle
+    // impostazioni rimosse e' un altro: auth_stats, dict_db_config, imap_id_log,
+    // login_access_sockets, quota_set, sieve_dir, sieve_global_dir, sieve_global_path,
+    // sieve_vacation_max_subject_codepoints. Di queste, la configurazione 2.3 del pannello
+    // usa sieve_dir e sieve_global_dir, sostituite qui dai blocchi sieve_script.
+    //
+    // IL CRITERIO, che vale piu' dei singoli casi:
+    //   si TIENE cio' che la 2.3 aveva, a meno che la documentazione dica positivamente che
+    //   e' cambiato. Il motivo e' asimmetrico: un'impostazione che la 2.4 non conosce piu'
+    //   fa fallire doveconf, quindi si scopre subito e la configurazione precedente torna al
+    //   suo posto; un'impostazione GIUSTA ma non scritta non fa fallire niente e cambia il
+    //   comportamento in silenzio. Fra i due errori possibili, si sceglie quello rumoroso.
+    //
+    // Il caso che lo dimostra: auth_master_user_separator. Toglierla avrebbe rotto l'accesso
+    // unico a Roundcube, perche' RoundcubeSsoManager compone il login come "email*masteruser"
+    // — e doveconf non avrebbe segnalato nulla.
+    //
+    // Fonti (lette il 31/08/2026):
+    //   https://doc.dovecot.org/2.4.0/installation/upgrade/2.3-to-2.4.html
+    //   https://doc.dovecot.org/2.4.1/core/config/auth/master_users.html
+    //   https://doc.dovecot.org/main/core/config/auth/databases/sql.html
+    //   https://doc.dovecot.org/main/core/config/auth/databases/static.html
+    //   https://doc.dovecot.org/main/core/config/auth/databases/passwd_file.html
+    //   https://doc.dovecot.org/2.4.1/core/plugins/sieve.html
+    //   https://doc.dovecot.org/main/core/settings/variables.html
+    //
+    // I file si definiscono UNA volta sola qui: da questa mappa si genera sia lo script che
+    // li scrive sul server, sia l'anteprima leggibile dal pannello.
 
-            cat > "$DOVECOT_ETC/dovecot.conf" <<DOVECOT_MAIN
+    /** Un file di configurazione: percorso relativo a /usr/local/etc/dovecot, contenuto,
+     *  e se il contenuto contiene variabili di shell da espandere (la password del database). */
+    public record FileConf(String percorso, String contenuto, boolean espandi) {}
+
+    public static java.util.List<FileConf> file24() {
+        java.util.List<FileConf> f = new java.util.ArrayList<>();
+
+        f.add(new FileConf("dovecot.conf", """
             # Dovecot 2.4 — generato dal FreeBSD Mail Panel
+            # dovecot_config_version DEVE essere la prima direttiva del file.
             dovecot_config_version = 2.4.0
             dovecot_storage_version = 2.4.0
 
+            # Nella 2.4 il valore predefinito di protocols e' VUOTO: senza questa riga non
+            # verrebbe abilitato nessun protocollo.
             protocols = imap pop3 lmtp${SIEVE_PROTO}
             listen = *, ::
+            sendmail_path = /usr/local/sbin/sendmail
             mail_privileged_group = mail
+
+            # Il limite inferiore di uid e gid: senza, un utente di sistema potrebbe ricevere
+            # posta. Non e' fra le impostazioni rimosse dalla 2.4.
             first_valid_uid = 5000
             first_valid_gid = 5000
-            sendmail_path = /usr/local/sbin/sendmail
 
             !include conf.d/*.conf
-            DOVECOT_MAIN
+            """, true));
 
-            cat > "$DOVECOT_ETC/conf.d/10-auth.conf" <<'DOVECOT_AUTH'
-            disable_plaintext_auth = yes
+        f.add(new FileConf("conf.d/10-auth.conf", """
+            # disable_plaintext_auth non esiste piu': si chiama auth_allow_cleartext e il
+            # valore e' rovesciato. "no" qui significa cio' che "yes" significava prima.
+            auth_allow_cleartext = no
             auth_mechanisms = plain login
 
+            # Il separatore dei master user: il pannello ne dipende, perche' l'accesso unico
+            # a Roundcube fa login come "email*masteruser". Non e' fra le rimosse, ed e' nel
+            # esempio ufficiale della 2.4.
             auth_master_user_separator = *
+
             !include auth-master.conf.ext
             !include auth-sql.conf.ext
-            DOVECOT_AUTH
+            """, false));
 
-            # mail_location e' stato scomposto in mail_driver + mail_path,
-            # e le variabili a lettera singola non esistono piu'.
-            cat > "$DOVECOT_ETC/conf.d/10-mail.conf" <<'DOVECOT_MAIL'
+        f.add(new FileConf("conf.d/10-mail.conf", """
+            # mail_location scomposto: il formato e il percorso sono due impostazioni.
+            # Le variabili a lettera singola non esistono piu': %d -> %{user | domain},
+            # %n -> %{user | username}.
             mail_driver = maildir
             mail_path = /var/vmail/%{user | domain}/%{user | username}
             mail_uid = vmail
             mail_gid = vmail
-            DOVECOT_MAIL
+            """, false));
 
-            # ssl_cert/ssl_key rinominate in ssl_server_cert_file/ssl_server_key_file,
-            # e non si usa piu' il prefisso "<" per indicare un file.
-            cat > "$DOVECOT_ETC/conf.d/10-ssl.conf" <<'DOVECOT_SSL'
+        f.add(new FileConf("conf.d/10-ssl.conf", """
             ssl = required
+            # ssl_cert/ssl_key rinominate, e non si usa piu' il prefisso "<" per dire "e' un file".
             ssl_server_cert_file = /usr/local/etc/ssl/mail/fullchain.pem
             ssl_server_key_file = /usr/local/etc/ssl/mail/privkey.pem
             ssl_min_protocol = TLSv1.2
-            ssl_prefer_server_ciphers = yes
-            DOVECOT_SSL
+            ssl_server_prefer_ciphers = yes
+            # Non e' fra le rimosse: si tiene l'elenco della 2.3 invece di affidarsi ai
+            # predefiniti, cosi' il comportamento non cambia insieme alla sintassi.
+            ssl_cipher_list = ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+            """, false));
 
-            cat > "$DOVECOT_ETC/conf.d/10-master.conf" <<'DOVECOT_MASTER'
+        f.add(new FileConf("conf.d/10-master.conf", """
             service imap-login {
               inet_listener imap {
                 port = 143
@@ -481,8 +540,12 @@ public final class DovecotConfig {
             service managesieve {
             }
 
+            # mail_plugins non e' piu' un elenco su una riga: e' un "boollist", cioe' un
+            # blocco in cui ogni voce si accende singolarmente.
             protocol lmtp {
-              mail_plugins = sieve
+              mail_plugins {
+                sieve = yes
+              }
             }
 
             # I percorsi Sieve non sono piu' impostazioni singole ma blocchi di archivio.
@@ -499,33 +562,29 @@ public final class DovecotConfig {
               path = /var/mail/sieve/global/
             }
 
-            sieve_extensions {
-              fileinto = yes
-              reject = yes
-              envelope = yes
-              vacation = yes
-              copy = yes
-              imap4flags = yes
-              regex = yes
-              relational = yes
-              date = yes
-              variables = yes
-            }
-            DOVECOT_MASTER
+            # sieve_extensions NON viene piu' elencato. Nella 2.4 tutte le estensioni
+            # supportate sono attive per impostazione predefinita, tranne quelle deprecate,
+            # quelle che modificano i messaggi e quelle che richiedono configurazione
+            # esplicita. L'elenco della 2.3 (+fileinto +reject +envelope +vacation +copy
+            # +imap4flags +regex +relational +date +variables) e' interamente compreso in
+            # quel predefinito: riscriverlo aggiungerebbe solo occasioni di sbagliare un
+            # nome, e un nome sbagliato impedisce l'avvio.
+            """, false));
 
-            # passdb e userdb devono avere un nome; args del passwd-file
-            # e' diventato passwd_file_path.
-            cat > "$DOVECOT_ETC/conf.d/auth-master.conf.ext" <<'DOVECOT_AUTH_MASTER'
+        f.add(new FileConf("conf.d/auth-master.conf.ext", """
+            # Il nome del blocco e' obbligatorio nella 2.4, e "args" e' diventato
+            # passwd_file_path.
             passdb passwd-file {
               passwd_file_path = /usr/local/etc/dovecot/master-users
               master = yes
               result_success = continue
             }
-            DOVECOT_AUTH_MASTER
+            """, false));
 
-            # La connessione SQL non sta piu' in un file a parte: si dichiara con un blocco
-            # del driver, e la query di passdb si chiama "query" invece di password_query.
-            cat > "$DOVECOT_ETC/conf.d/auth-sql.conf.ext" <<DOVECOT_AUTH_SQL
+        f.add(new FileConf("conf.d/auth-sql.conf.ext", """
+            # La connessione al database non sta piu' in un file a parte (dovecot-sql.conf
+            # non esiste nella 2.4): si dichiara con un blocco del driver, e la query di
+            # passdb si chiama "query", non "password_query".
             sql_driver = mysql
 
             mysql 127.0.0.1 {
@@ -535,10 +594,10 @@ public final class DovecotConfig {
             }
 
             passdb sql {
+              # default_password_scheme sta DENTRO il blocco passdb, non al livello globale.
+              default_password_scheme = BLF-CRYPT
               query = SELECT email AS user, password FROM mailboxes WHERE email = '%{user}' AND active = 1
             }
-
-            passdb_default_password_scheme = BLF-CRYPT
 
             userdb static {
               fields {
@@ -547,15 +606,81 @@ public final class DovecotConfig {
                 home = /var/vmail/%{user | domain}/%{user | username}
               }
             }
-            DOVECOT_AUTH_SQL
+            """, true));
 
-            # Nella 2.4 non esiste piu' dovecot-sql.conf: se e' rimasto da una 2.3, va tolto
+        return f;
+    }
+
+    /**
+     * Impostazioni che la documentazione ufficiale conferma, e quelle che invece restano da
+     * confermare sul campo. Dichiararlo e' il punto: un template dato per buono e mai provato
+     * e' esattamente cio' che ha prodotto i sei errori trovati oggi.
+     */
+    public static String[][] verifiche24() {
+        return new String[][]{
+            {"confermato", "dovecot_config_version / dovecot_storage_version", "obbligatorie; la prima dev'essere in cima a dovecot.conf"},
+            {"confermato", "mail_driver + mail_path", "sostituiscono mail_location"},
+            {"confermato", "%{user}, %{user | username}, %{user | domain}", "sostituiscono %u, %n, %d"},
+            {"confermato", "auth_allow_cleartext", "sostituisce disable_plaintext_auth, e il valore si inverte"},
+            {"confermato", "ssl_server_cert_file / ssl_server_key_file", "sostituiscono ssl_cert / ssl_key, senza il prefisso <"},
+            {"confermato", "ssl_server_prefer_ciphers", "sostituisce ssl_prefer_server_ciphers"},
+            {"confermato", "passdb sql { query = ... }", "il blocco vuole un nome; password_query si chiama query"},
+            {"confermato", "userdb static { fields { ... } }", "esempio ufficiale identico"},
+            {"confermato", "passdb passwd-file { passwd_file_path = ... }", "args si chiama passwd_file_path"},
+            {"confermato", "sql_driver + blocco mysql <host> { ... }", "dovecot-sql.conf non esiste piu'"},
+            {"confermato", "mail_plugins { sieve = yes }", "non piu' un elenco su una riga: e' un boollist"},
+            {"confermato", "default_password_scheme dentro passdb", "non piu' al livello globale"},
+            {"confermato", "blocchi sieve_script al posto di sieve_dir e sieve_global_dir",
+             "sieve_dir, sieve_global_dir e sieve_global_path sono nell'elenco ufficiale delle rimosse"},
+            {"confermato", "protocols va scritto esplicitamente",
+             "nella 2.4 il valore predefinito e' vuoto: senza quella riga non si abilita nessun protocollo"},
+            {"confermato", "auth_master_user_separator = *",
+             "NON e' rimossa: l'esempio ufficiale della 2.4 la mostra. Il pannello ne dipende, perche' "
+             + "l'accesso unico a Roundcube fa login come email*masteruser"},
+            {"confermato", "first_valid_uid / first_valid_gid / mail_privileged_group / ssl_cipher_list",
+             "non compaiono fra le impostazioni rimosse: si tengono come nella 2.3"},
+            {"da confermare", "sieve_script { type = ... }",
+             "la descrizione elenca 'type' fra le chiavi, l'esempio ufficiale non lo scrive. Qui c'e': se doveconf lo rifiuta, va tolto"},
+            {"da confermare", "mail_uid / mail_gid",
+             "non citate fra le modifiche, quindi tenute. Se la 2.4 le avesse tolte, doveconf lo direbbe: "
+             + "uid e gid arrivano comunque anche da userdb static, quindi togliendole non cambia niente"},
+            {"da confermare", "ssl = required, ssl_min_protocol, sendmail_path, !include",
+             "non citate fra le modifiche, quindi presumibilmente invariate"},
+            {"criterio", "si tiene cio' che la 2.3 aveva, salvo cambi documentati",
+             "i due errori possibili non pesano uguale: un'impostazione che la 2.4 non conosce piu' fa "
+             + "fallire doveconf, quindi si scopre subito e la configurazione precedente torna al suo "
+             + "posto; un'impostazione giusta ma non scritta non fa fallire niente e cambia il "
+             + "comportamento in silenzio. Fra i due si sceglie l'errore rumoroso"},
+        };
+    }
+
+    private static String config24() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("""
+            echo "[CONFIG] Scrivo la configurazione in formato Dovecot 2.4"
+            echo "[CONFIG] Template verificato sulla documentazione ufficiale il 31/08/2026,"
+            echo "[CONFIG] ma mai eseguito su un 2.4 reale: doveconf decide, e se rifiuta"
+            echo "[CONFIG] la configurazione precedente torna al suo posto senza riavvii."
+            """);
+        for (FileConf f : file24()) {
+            String delim = "DOVECOT_" + f.percorso().replaceAll("[^A-Za-z0-9]", "_").toUpperCase();
+            // Heredoc quotato quando NON ci sono variabili da espandere: cosi' un $ nel
+            // contenuto (le %{...} non ne hanno, ma le query potrebbero) resta letterale.
+            sb.append("\ncat > \"$DOVECOT_ETC/").append(f.percorso()).append("\" <<")
+              .append(f.espandi() ? delim : "'" + delim + "'").append("\n");
+            sb.append(f.contenuto());
+            sb.append(delim).append("\n");
+        }
+        sb.append("""
+
+            # Nella 2.4 non esiste piu' dovecot-sql.conf: se e' rimasto da una 2.3 va tolto
             # di mezzo, altrimenti resterebbe sul disco un file con la password del database
             # che nessuno legge piu' e nessuno aggiorna.
             if [ -f "$DOVECOT_ETC/dovecot-sql.conf" ]; then
                 mv "$DOVECOT_ETC/dovecot-sql.conf" "$DOVECOT_ETC/dovecot-sql.conf.pre-2.4"
                 chmod 600 "$DOVECOT_ETC/dovecot-sql.conf.pre-2.4"
             fi
-            """;
+            """);
+        return sb.toString();
     }
 }

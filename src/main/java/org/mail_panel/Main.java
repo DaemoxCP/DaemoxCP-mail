@@ -220,6 +220,7 @@ public class Main {
 
             // TODO: migrate to Shell.run when touched
             ProcessBuilder processBuilder = new ProcessBuilder(command);
+            org.mail_panel.util.Shell.applicaPath(processBuilder);
             processBuilder.redirectErrorStream(true);
             processBuilder.directory(new File(System.getProperty("user.dir")));
 
@@ -882,6 +883,7 @@ public class Main {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
+            org.mail_panel.util.Shell.applicaPath(pb);
             pb.inheritIO();
             Process p = pb.start();
             p.waitFor();
