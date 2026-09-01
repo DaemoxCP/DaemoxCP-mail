@@ -1,0 +1,25 @@
+            <!-- SPF e DMARC creati dal pannello -->
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-cloud-arrow-up me-2"></i><strong>Crea i record su Cloudflare</strong>
+                        <span class="small text-muted ms-2">SPF e DMARC, pi&ugrave; quelli che semplificano i client</span></span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="autoDnsCarica()"><i class="fas fa-rotate me-1"></i>Aggiorna</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        SPF dice quali server possono spedire per il dominio; DMARC dice ai destinatari cosa fare
+                        con la posta che non si autentica. Il pannello li scrive su Cloudflare con l&rsquo;account
+                        gi&agrave; collegato al dominio &mdash; lo stesso che usa per la rotazione DKIM.
+                        <strong>Se un record di quel tipo esiste gi&agrave;, non lo tocca</strong>: si ferma e te lo mostra.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        Il controllo guarda il <strong>contenuto</strong> dei record, non il nome: un
+                        <code>google-site-verification</code> sull&rsquo;apice non ha nulla a che vedere con l&rsquo;SPF
+                        e non deve impedirne la creazione. E se i record fossero due, lo dice: due SPF sullo stesso
+                        nome danno <code>permerror</code> e SPF smette di funzionare del tutto (RFC 7208 &sect;4.5),
+                        due DMARC vengono scartati entrambi (RFC 9989). Sono guasti che non danno alcun segnale:
+                        la posta continua a partire, e un giorno comincia a finire nello spam.
+                    </p>
+                    <div id="autoDnsBody"><span class="text-muted small">Premi "Aggiorna": legge e basta.</span></div>
+                </div>
+            </div>

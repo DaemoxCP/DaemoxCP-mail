@@ -706,6 +706,10 @@ public class Main {
                 if (mailDatabase.connect()) {
                     mysqlAvailable = true;
                     setupRequired = !mailDatabase.hasAdminUser();
+                    // Si annota su disco che l'installazione c'e' gia' stata. Serve a tenere
+                    // chiusa la procedura anche quando MySQL non risponde, e vale anche per
+                    // le installazioni fatte prima che questo controllo esistesse.
+                    if (!setupRequired) org.mail_panel.security.CancelloSetup.segnaCompletata();
                     System.out.println(ANSI_GREEN + "Connected to MySQL database" + ANSI_RESET);
                 } else {
                     System.out.println(ANSI_YELLOW + "[WARNING] Could not connect to MySQL database" + ANSI_RESET);
@@ -913,6 +917,9 @@ public class Main {
 
             mysqlAvailable = true;
             setupRequired = false;
+            // Appena l'installazione e' conclusa la si annota su disco: da questo momento la
+            // procedura resta chiusa anche se il database smette di rispondere.
+            org.mail_panel.security.CancelloSetup.segnaCompletata();
 
             System.out.println(ANSI_GREEN + "Database setup completed" + ANSI_RESET);
             return true;
@@ -953,6 +960,9 @@ public class Main {
 
             mysqlAvailable = true;
             setupRequired = false;
+            // Appena l'installazione e' conclusa la si annota su disco: da questo momento la
+            // procedura resta chiusa anche se il database smette di rispondere.
+            org.mail_panel.security.CancelloSetup.segnaCompletata();
 
             System.out.println(ANSI_GREEN + "Database setup completed" + ANSI_RESET);
             return true;

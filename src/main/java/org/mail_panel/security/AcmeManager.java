@@ -192,11 +192,20 @@ public class AcmeManager {
         }
 
         try {
-            // Build domains list (mail hostname + autodiscover subdomains)
+            // I nomi da mettere nel certificato: l'hostname del server e autoconfig.
+            //
+            // "autodiscover" e' stato tolto insieme al resto: serviva solo a Outlook. Non e'
+            // pulizia estetica — acme.sh VALIDA ogni nome che gli si chiede, quindi lasciarlo
+            // qui dopo aver smesso di proporne il record significherebbe, su un dominio nuovo,
+            // far fallire l'emissione dell'INTERO certificato per un nome che non esiste e
+            // che nessuno usa. Un certificato che non si emette ferma la posta.
             List<String> domains = new ArrayList<>();
             domains.add(mailHostname);
             domains.add("autoconfig." + domain);
-            domains.add("autodiscover." + domain);
+            // MTA-STS: e' proprio questo certificato a dimostrare che la politica viene dal
+            // proprietario del dominio, perche' il protocollo non usa DNSSEC. Senza il nome
+            // qui dentro, i server mittenti ignorano la politica.
+            domains.add("mta-sts." + domain);
 
             // Build acme.sh command
             StringBuilder cmd = new StringBuilder();

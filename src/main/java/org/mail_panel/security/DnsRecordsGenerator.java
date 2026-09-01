@@ -15,7 +15,7 @@ import java.util.*;
  * - DKIM Record: DomainKeys Identified Mail
  * - DMARC Record: Domain-based Message Authentication
  * - PTR Record: Reverse DNS (info only, requires ISP)
- * - Autoconfig: Thunderbird/Outlook autodiscover
+ * - Autoconfig e SRV: come i client trovano da soli server e porte
  *
  * Also verifies existing DNS configuration.
  */
@@ -87,8 +87,8 @@ public class DnsRecordsGenerator {
         // 5. DMARC Record
         records.records.add(generateDmarcRecord(domain));
 
-        // 6. Autodiscover records for email clients
-        records.records.addAll(generateAutodiscoverRecords(domain, mailServerHostname));
+        // 6. I record con cui i client trovano da soli le impostazioni
+        records.records.addAll(generateRecordScopertaClient(domain, mailServerHostname));
 
         // 7. PTR Record (informational)
         records.records.add(generatePtrRecord(serverIp, mailServerHostname));
@@ -240,7 +240,10 @@ public class DnsRecordsGenerator {
         DnsRecord record = new DnsRecord();
         record.type = "TXT";
         record.name = "_dmarc";
-        String dmarcValue = "v=DMARC1; p=quarantine; rua=mailto:dmarc@" + domain;
+        // RFC 9989 §5.1.5: si parte da "none". Proporre "quarantine" come primo record
+        // significa mandare in quarantena la propria posta legittima prima di aver letto un
+        // solo rapporto — ed e' esattamente cio' che i rapporti servono a evitare.
+        String dmarcValue = "v=DMARC1; p=none; rua=mailto:dmarc@" + domain;
         record.value = dmarcValue;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
@@ -259,17 +262,23 @@ public class DnsRecordsGenerator {
             <hr>
             <strong>Cosa significa:</strong>
             <ul class="mb-0 small">
-                <li><code>p=quarantine</code> = metti in spam le email non autenticate</li>
-                <li><code>rua=mailto:...</code> = ricevi report (opzionale)</li>
+                <li><code>p=none</code> = non bloccare nulla, limitati a segnalare. E&rsquo; il punto di
+                    partenza: prima si guarda chi spedisce a nome tuo, poi si stringe verso
+                    <code>quarantine</code> e infine <code>reject</code>.</li>
+                <li><code>rua=mailto:...</code> = dove mandare i rapporti. Non &egrave; un dettaglio
+                    opzionale: senza, non si sapr&agrave; mai se si pu&ograve; stringere la politica
+                    senza fermare posta buona. L&rsquo;indirizzo deve esistere gi&agrave;.</li>
             </ul>
             """.formatted(domain, dmarcValue);
         return record;
     }
 
     /**
-     * Generate Autodiscover records for email clients
+     * I record che aiutano i client a configurarsi: il CNAME autoconfig (Thunderbird) e i
+     * due SRV di RFC 6186. Il CNAME "autodiscover" non c'e' piu': serviva solo a Outlook, e
+     * un metodo che si chiama ancora come cio' che non fa piu' e' un tranello per chi legge.
      */
-    private List<DnsRecord> generateAutodiscoverRecords(String domain, String mailServer) {
+    private List<DnsRecord> generateRecordScopertaClient(String domain, String mailServer) {
         List<DnsRecord> records = new ArrayList<>();
 
         // Thunderbird autoconfig
@@ -296,31 +305,7 @@ public class DnsRecordsGenerator {
             """.formatted(domain, mailServer);
         records.add(autoconfig);
 
-        // Outlook autodiscover
-        DnsRecord autodiscover = new DnsRecord();
-        autodiscover.type = "CNAME";
-        autodiscover.name = "autodiscover";
-        autodiscover.value = mailServer;
-        autodiscover.ttl = DEFAULT_TTL;
-        autodiscover.dnsZone = domain;
-        autodiscover.description = "Autodiscover per Outlook (autodiscover." + domain + ")";
-        autodiscover.required = false;
-        autodiscover.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>CNAME</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>autodiscover</code></td></tr>
-                <tr><td><strong>Target:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>Proxy status:</strong></td><td>DNS only (nuvola grigia)</td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            <small class="text-muted">Permette a Outlook di configurare automaticamente l'account email.</small>
-            """.formatted(domain, mailServer);
-        records.add(autodiscover);
-
-        // SRV records for proper autodiscover
+        // I due SRV di RFC 6186: questi funzionano da soli, senza alcun file da servire.
         DnsRecord srvImap = new DnsRecord();
         srvImap.type = "SRV";
         srvImap.name = "_imaps._tcp";
@@ -634,11 +619,30 @@ public class DnsRecordsGenerator {
         DnsCheck mxCheck = verifyRecord(domain, "MX");
         mxCheck.expectedValue = "10 " + mailHostname + ".";
         if (mxCheck.passed && mxCheck.currentValue != null) {
-            if (!mxCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
-                mxCheck.passed = false;
-                mxCheck.message = "MX non punta a " + mailHostname;
+            // Un dominio puo' avere piu' MX: basta che UNO punti qui. Ma il confronto e'
+            // esatto sul nome di destinazione, non per contenimento: un MX verso
+            // "xmail.esempio.it" contiene "mail.esempio.it" e passava per giusto, mentre la
+            // posta sarebbe finita a un server che non e' questo.
+            java.util.List<String> altrove = new java.util.ArrayList<>();
+            boolean nostro = false;
+            for (String riga : mxCheck.currentValue.split("\n")) {
+                String t = riga.trim();
+                if (t.isEmpty()) continue;
+                String[] campi = t.split("\\s+");
+                String bersaglio = campi.length >= 2 ? campi[1] : campi[0];
+                if (RegoleDns.stessoNome(bersaglio, mailHostname)) nostro = true;
+                else altrove.add(bersaglio);
+            }
+            if (nostro) {
+                mxCheck.passed = true;
+                mxCheck.message = "OK: punta a " + mailHostname
+                        + (altrove.isEmpty() ? "" : ". Ci sono anche altri MX (" + String.join(", ", altrove)
+                           + "): se non sono voluti, ricevono posta al posto di questo server.");
             } else {
-                mxCheck.message = "OK: punta a " + mailHostname;
+                mxCheck.passed = false;
+                mxCheck.message = "Nessun MX punta a " + mailHostname
+                        + (altrove.isEmpty() ? "." : ": puntano a " + String.join(", ", altrove)
+                           + ". La posta in arrivo va li', non qui.");
             }
         }
         result.checks.add(mxCheck);
@@ -646,16 +650,47 @@ public class DnsRecordsGenerator {
 
         // 3. Check SPF - verify it contains our server IP
         String expectedSpf = "v=spf1 ip4:" + serverIp + " mx -all";
-        DnsCheck spfCheck = verifyTxtRecord(domain, "v=spf1");
+        // Si legge il TXT grezzo e si applicano le regole di RFC 7208, invece di cercare
+        // sottostringhe. Il vecchio controllo faceva contains("mx"): un SPF come
+        // "v=spf1 include:_spf.mxlogic.com -all", che NON autorizza questo server, passava
+        // perche' la parola "mx" compare dentro un nome di dominio. Un controllo che dice
+        // "tutto a posto" davanti a un SPF che non ti autorizza e' peggio di nessun controllo.
+        DnsCheck spfCheck = verifyRecord(domain, "TXT");
         spfCheck.recordType = "SPF";
+        spfCheck.recordName = domain;
         spfCheck.expectedValue = expectedSpf;
-        if (spfCheck.passed && spfCheck.currentValue != null) {
-            if (spfCheck.currentValue.contains(serverIp) || spfCheck.currentValue.contains("mx")) {
-                spfCheck.message = "OK: include IP/MX corretto";
-            } else {
+        if (spfCheck.currentValue != null) {
+            RegoleDns.EsitoSpf e = RegoleDns.analizzaSpf(RegoleDns.recordTxt(spfCheck.currentValue), serverIp);
+            if (e.record != null) spfCheck.currentValue = e.record;
+            if (!e.valido) {
                 spfCheck.passed = false;
-                spfCheck.message = "SPF non include IP " + serverIp;
+                spfCheck.message = e.problema;
+            } else {
+                spfCheck.passed = true;
+                if (e.autorizzaEsplicito) {
+                    spfCheck.message = "OK: autorizza esplicitamente " + serverIp;
+                } else if (e.viaMx) {
+                    spfCheck.message = "OK tramite il meccanismo \"mx\": vale finche' l'MX punta qui "
+                                     + "(vedi il controllo MX qui sopra).";
+                } else if (e.viaA) {
+                    spfCheck.message = "OK tramite il meccanismo \"a\": vale finche' il record A punta qui.";
+                } else if (e.include > 0) {
+                    // Ne' promosso ne' bocciato: detto com'e'. Bocciare un SPF che delega a
+                    // terzi porterebbe a "sistemare" un record che funziona.
+                    spfCheck.message = "Non determinabile da qui: l'autorizzazione dipende da "
+                                     + e.include + (e.include == 1 ? " termine che rimanda" : " termini che rimandano")
+                                     + " ad altri record. Il server non e' elencato direttamente.";
+                } else {
+                    spfCheck.passed = false;
+                    spfCheck.message = "L'SPF non autorizza questo server: non contiene l'IP " + serverIp
+                                     + " ne' un meccanismo \"mx\" o \"a\".";
+                }
             }
+            if (!e.avvisi.isEmpty())
+                spfCheck.message = (spfCheck.message == null ? "" : spfCheck.message + " ")
+                                 + String.join(" ", e.avvisi);
+        } else if (spfCheck.message != null && spfCheck.message.startsWith("Record non trovato")) {
+            spfCheck.message = "Nessun record SPF: il dominio non dichiara chi puo' spedire per lui.";
         }
         result.checks.add(spfCheck);
         if (!spfCheck.passed) result.allPassed = false;
@@ -669,47 +704,119 @@ public class DnsRecordsGenerator {
         }
 
         String selector = (dbDomain != null && dbDomain.dkimSelector != null) ? dbDomain.dkimSelector : "mail";
-        DnsCheck dkimCheck = verifyTxtRecord(selector + "._domainkey." + domain, "v=DKIM1");
+        String attesa = (dbDomain == null || dbDomain.dkimPublicKey == null)
+                ? null : dbDomain.dkimPublicKey.replaceAll("\\s+", "");
+
+        DnsCheck dkimCheck = verifyRecord(selector + "._domainkey." + domain, "TXT");
         dkimCheck.recordType = "DKIM";
-        if (dbDomain != null && dbDomain.dkimPublicKey != null) {
-            dkimCheck.expectedValue = "v=DKIM1; k=rsa; p=" + dbDomain.dkimPublicKey.substring(0, 20) + "...";
-        }
-        if (dkimCheck.passed && dkimCheck.currentValue != null) {
-            if (dkimCheck.currentValue.contains("p=") && dkimCheck.currentValue.length() > 100) {
-                // Verify the key matches if we have it
-                if (dbDomain != null && dbDomain.dkimPublicKey != null) {
-                    String keyPart = dbDomain.dkimPublicKey.substring(0, Math.min(50, dbDomain.dkimPublicKey.length()));
-                    if (dkimCheck.currentValue.contains(keyPart)) {
-                        dkimCheck.message = "OK: chiave pubblica corretta";
-                    } else {
-                        dkimCheck.passed = false;
-                        dkimCheck.message = "Chiave DKIM non corrisponde";
-                    }
-                } else {
-                    dkimCheck.message = "OK: chiave pubblica presente";
-                }
-            } else {
+        dkimCheck.recordName = selector + "._domainkey." + domain;
+        if (attesa != null)
+            // substring(0, 20) senza rete di sicurezza: con una chiave corrotta piu' corta di
+            // venti caratteri sollevava un'eccezione che usciva da tutto il metodo e faceva
+            // sparire l'INTERA pagina di verifica, non solo questa riga.
+            dkimCheck.expectedValue = "v=DKIM1; k=rsa; p="
+                    + attesa.substring(0, Math.min(20, attesa.length())) + "...";
+
+        if (dkimCheck.currentValue != null) {
+            // Le chiavi da 2048 bit superano i 255 caratteri, quindi in DNS stanno in piu'
+            // stringhe che vanno unite senza spazi (RFC 7208 §3.3). Confrontare l'uscita
+            // grezza di dig significherebbe confrontare anche le virgolette in mezzo.
+            java.util.List<String> txt = RegoleDns.recordTxt(dkimCheck.currentValue);
+            java.util.List<String> chiavi = RegoleDns.soloDkim(txt);
+
+            if (chiavi.isEmpty()) {
                 dkimCheck.passed = false;
-                dkimCheck.message = "Record DKIM incompleto o malformato";
+                dkimCheck.message = "Su quel nome c'e' un TXT, ma non e' una chiave DKIM: manca il tag \"p=\".";
+            } else if (chiavi.size() > 1) {
+                dkimCheck.passed = false;
+                dkimCheck.message = "Ci sono " + chiavi.size() + " chiavi DKIM sullo stesso selector: "
+                        + "chi verifica la firma non sa quale usare. Va lasciata una sola.";
+            } else {
+                dkimCheck.currentValue = chiavi.get(0);
+                String pubblicata = RegoleDns.chiaveDkim(chiavi.get(0));
+                dkimCheck.passed = true;
+                if (pubblicata == null || pubblicata.isEmpty()) {
+                    dkimCheck.passed = false;
+                    dkimCheck.message = "Il record ha il tag \"p=\" ma vuoto: e' il modo di dichiarare una "
+                            + "chiave REVOCATA, e le firme fatte con quel selector vengono rifiutate.";
+                } else if (attesa == null) {
+                    dkimCheck.message = "Chiave pubblicata (il pannello non ne ha una da confrontare).";
+                } else if (pubblicata.equals(attesa)) {
+                    // Confronto INTERO, non i primi 50 caratteri: una chiave giusta all'inizio
+                    // e corrotta in fondo passava il vecchio controllo e non firmava niente.
+                    dkimCheck.message = "OK: la chiave pubblicata e' esattamente quella del pannello.";
+                } else {
+                    dkimCheck.passed = false;
+                    dkimCheck.message = "La chiave pubblicata NON e' quella del pannello: le firme non "
+                            + "verranno verificate. Pubblicata " + pubblicata.length() + " caratteri, "
+                            + "attesa " + attesa.length() + ".";
+                }
             }
+        } else if (dkimCheck.message != null && dkimCheck.message.startsWith("Record non trovato")) {
+            dkimCheck.message = "Nessun record DKIM su " + selector + "._domainkey." + domain
+                    + ": la posta parte firmata, ma nessuno puo' verificare la firma.";
         }
         result.checks.add(dkimCheck);
         if (!dkimCheck.passed) result.allPassed = false;
 
         // 5. Check DMARC - verify policy present
-        DnsCheck dmarcCheck = verifyTxtRecord("_dmarc." + domain, "v=DMARC1");
+        // Il record si legge coi tag, non cercando "p=none" dentro la stringa: "p=none"
+        // compare per sottostringa anche in "sp=none", e il verdetto uscirebbe sbagliato.
+        // E p=none NON e' una "policy debole": RFC 9989 §5.1.5 dice di partire da li'.
+        DnsCheck dmarcCheck = verifyRecord("_dmarc." + domain, "TXT");
         dmarcCheck.recordType = "DMARC";
-        dmarcCheck.expectedValue = "v=DMARC1; p=quarantine; ...";
-        if (dmarcCheck.passed && dmarcCheck.currentValue != null) {
-            if (dmarcCheck.currentValue.contains("p=none")) {
-                dmarcCheck.message = "OK ma policy debole (p=none)";
-            } else if (dmarcCheck.currentValue.contains("p=quarantine")) {
-                dmarcCheck.message = "OK: policy quarantine";
-            } else if (dmarcCheck.currentValue.contains("p=reject")) {
-                dmarcCheck.message = "OK: policy reject (massima sicurezza)";
+        dmarcCheck.recordName = "_dmarc." + domain;
+        dmarcCheck.expectedValue = "v=DMARC1; p=none; rua=mailto:dmarc@" + domain;
+        if (dmarcCheck.currentValue != null) {
+            RegoleDns.EsitoDmarc e = RegoleDns.analizzaDmarc(
+                    RegoleDns.recordTxt(dmarcCheck.currentValue), domain);
+            if (e.record != null) dmarcCheck.currentValue = e.record;
+            if (!e.valido) {
+                dmarcCheck.passed = false;
+                dmarcCheck.message = e.problema;
             } else {
-                dmarcCheck.message = "OK: DMARC configurato";
+                dmarcCheck.passed = true;
+                String p = e.politica == null ? "none" : e.politica.toLowerCase();
+                if (p.equals("none"))
+                    dmarcCheck.message = "OK: p=none, modalita' di osservazione. E' il punto di partenza "
+                                       + "previsto: si leggono i rapporti e poi si irrigidisce.";
+                else if (p.equals("quarantine"))
+                    dmarcCheck.message = "OK: p=quarantine, chi non si autentica finisce in quarantena.";
+                else if (p.equals("reject"))
+                    dmarcCheck.message = "OK: p=reject, chi non si autentica viene rifiutato.";
+                else
+                    dmarcCheck.message = "DMARC presente.";
+
+                // RFC 9990 §4: se il rua punta fuori dominio serve l'autorizzazione, altrimenti
+                // i rapporti non partono e nessuno se ne accorge. Qui non si indovina: si guarda.
+                for (String nomeAut : e.daAutorizzare) {
+                    DnsCheck aut = verifyRecord(nomeAut, "TXT");
+                    boolean concessa = aut.currentValue != null
+                            && !RegoleDns.soloDmarc(RegoleDns.recordTxt(aut.currentValue)).isEmpty();
+                    if (!concessa) {
+                        // Si SEGNALA senza bocciare. Per sapere se l'autorizzazione serve davvero
+                        // occorre confrontare i domini ORGANIZZATIVI, che RFC 9989 §4.10 ricava con
+                        // il "tree walk": due sottodomini fratelli (a.esempio.it e b.esempio.it)
+                        // appartengono allo stesso dominio organizzativo e non richiedono nulla.
+                        // Senza quel calcolo, bocciare significherebbe dichiarare rotto un DMARC
+                        // che funziona, e spingere a "sistemare" cio' che va gia' bene.
+                        dmarcCheck.message += " DA CONTROLLARE: l'indirizzo dei rapporti sta su un altro "
+                                + "dominio e non trovo l'autorizzazione. Se i due domini appartengono a "
+                                + "organizzazioni diverse, "
+                                + "va pubblicato un TXT su " + nomeAut + " con valore \"v=DMARC1\" "
+                                + "(RFC 9990 §4), altrimenti i rapporti non vengono nemmeno inviati. Se "
+                                + "invece sono due nomi della stessa organizzazione, non serve nulla.";
+                    } else {
+                        dmarcCheck.message += " Autorizzazione rapporti fuori dominio presente su " + nomeAut + ".";
+                    }
+                }
             }
+            if (!e.avvisi.isEmpty())
+                dmarcCheck.message = (dmarcCheck.message == null ? "" : dmarcCheck.message + " ")
+                                   + String.join(" ", e.avvisi);
+        } else if (dmarcCheck.message != null && dmarcCheck.message.startsWith("Record non trovato")) {
+            dmarcCheck.message = "Nessun record DMARC: chiunque puo' scrivere questo dominio nel campo Da: "
+                               + "e nessuno ha istruzioni su cosa farne.";
         }
         result.checks.add(dmarcCheck);
         if (!dmarcCheck.passed) result.allPassed = false;
@@ -718,43 +825,29 @@ public class DnsRecordsGenerator {
         DnsCheck autoconfigCheck = verifyRecord("autoconfig." + domain, "CNAME");
         autoconfigCheck.recordType = "Autoconfig";
         autoconfigCheck.expectedValue = mailHostname + ".";
-        if (autoconfigCheck.passed && autoconfigCheck.currentValue != null) {
-            if (autoconfigCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
+        if (autoconfigCheck.currentValue != null) {
+            String puntaA = autoconfigCheck.currentValue.trim().split("\\s+")[0];
+            if (RegoleDns.stessoNome(puntaA, mailHostname)) {
+                autoconfigCheck.passed = true;
                 autoconfigCheck.message = "OK: autoconfig → " + mailHostname;
             } else {
-                // Record exists but points to wrong hostname
                 autoconfigCheck.passed = false;
-                autoconfigCheck.message = "Punta a " + autoconfigCheck.currentValue.trim() + " invece di " + mailHostname;
+                autoconfigCheck.message = "Punta a " + puntaA + " invece di " + mailHostname + ".";
             }
-        } else {
-            // Not critical, just informational
+        } else if (autoconfigCheck.message != null && autoconfigCheck.message.startsWith("Record non trovato")) {
             autoconfigCheck.passed = false;
-            autoconfigCheck.message = "Non configurato (opzionale)";
+            autoconfigCheck.informativo = true;
+            autoconfigCheck.message = "Non configurato. Serve solo a Thunderbird, e richiede un sito "
+                    + "raggiungibile su https://autoconfig." + domain + " (porta 443). Apple Mail non lo "
+                    + "usa: per quello c'e' il profilo di configurazione nella pagina Caselle.";
+        } else {
+            // NON si sovrascrive un errore preciso ("dig non raggiungibile") con "non
+            // configurato": sono due guasti diversi e mandano a cercare in posti opposti.
+            autoconfigCheck.passed = false;
         }
         result.checks.add(autoconfigCheck);
         // Don't fail overall for optional records
         // if (!autoconfigCheck.passed) result.allPassed = false;
-
-        // 7. Check Autodiscover for Outlook (CNAME)
-        DnsCheck autodiscoverCheck = verifyRecord("autodiscover." + domain, "CNAME");
-        autodiscoverCheck.recordType = "Autodiscover";
-        autodiscoverCheck.expectedValue = mailHostname + ".";
-        if (autodiscoverCheck.passed && autodiscoverCheck.currentValue != null) {
-            if (autodiscoverCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
-                autodiscoverCheck.message = "OK: autodiscover → " + mailHostname;
-            } else {
-                // Record exists but points to wrong hostname
-                autodiscoverCheck.passed = false;
-                autodiscoverCheck.message = "Punta a " + autodiscoverCheck.currentValue.trim() + " invece di " + mailHostname;
-            }
-        } else {
-            // Not critical, just informational
-            autodiscoverCheck.passed = false;
-            autodiscoverCheck.message = "Non configurato (opzionale)";
-        }
-        result.checks.add(autodiscoverCheck);
-        // Don't fail overall for optional records
-        // if (!autodiscoverCheck.passed) result.allPassed = false;
 
         // 8. Check PTR / Reverse DNS + FCrDNS (Forward-Confirmed reverse DNS)
         //    CRITICO per la deliverability — Gmail e Outlook RIFIUTANO o spammano
@@ -767,13 +860,32 @@ public class DnsRecordsGenerator {
         // Note: MTA-STS ID is just a version timestamp, doesn't need to match exactly
         DnsCheck mtaStsCheck = verifyTxtRecord("_mta-sts." + domain, "v=STSv1");
         mtaStsCheck.recordType = "MTA-STS";
-        mtaStsCheck.expectedValue = "v=STSv1; id=(timestamp)";
+        mtaStsCheck.expectedValue = "v=STSv1; id=...";
         if (mtaStsCheck.passed && mtaStsCheck.currentValue != null) {
-            // Extract ID from current value for display
-            mtaStsCheck.message = "Record presente (opzionale)";
+            // Il record c'e': ora si va a CHIEDERE la politica. Guardare solo il TXT diceva
+            // "fatto" su domini che dichiarano pubblicamente una protezione e poi non la
+            // servono. E' una promessa non mantenuta, e il pannello la mostrava come esito
+            // positivo — misurare il cartello invece della cosa.
+            org.json.JSONObject prova = org.mail_panel.system.MtaSts.provaPubblica(domain);
+            if (prova.optBoolean("ok", false)) {
+                mtaStsCheck.message = "Attivo: il record c'e' e la politica risponde.";
+            } else {
+                mtaStsCheck.passed = false;
+                mtaStsCheck.message = "IL RECORD C'E' MA LA POLITICA NON RISPONDE. Stai dichiarando "
+                        + "pubblicamente di avere MTA-STS, e chi va a leggerlo su https://mta-sts."
+                        + domain + "/.well-known/mta-sts.txt non trova niente: "
+                        + prova.optString("errore", "irraggiungibile")
+                        + " I mittenti proseguono come se non l'avessi (RFC 8461 §3.3), quindi non "
+                        + "rompe la posta — ma e' una dichiarazione che non mantieni. O la si serve, "
+                        + "o si toglie il record.";
+            }
         } else {
             mtaStsCheck.passed = false;
-            mtaStsCheck.message = "Non configurato (opzionale)";
+            mtaStsCheck.informativo = true;
+            mtaStsCheck.message = "Non attivo. Non e' una dimenticanza: MTA-STS richiede che la politica "
+                    + "sia raggiungibile da tutto il mondo su https://mta-sts." + domain + " (porta 443), "
+                    + "perche' la leggono i server mittenti. Su un server chiuso agli IP esterni non "
+                    + "puo' funzionare, e pubblicare il solo record dichiarerebbe una protezione assente.";
         }
         result.checks.add(mtaStsCheck);
         // Don't fail overall for optional records
@@ -783,42 +895,31 @@ public class DnsRecordsGenerator {
         DnsCheck srvImapCheck = verifyRecord("_imaps._tcp." + domain, "SRV");
         srvImapCheck.recordType = "SRV (_imaps)";
         srvImapCheck.expectedValue = "0 1 993 " + mailHostname + ".";
-        if (srvImapCheck.passed && srvImapCheck.currentValue != null) {
-            if (srvImapCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
-                srvImapCheck.message = "OK: _imaps._tcp → " + mailHostname + ":993";
-            } else {
-                srvImapCheck.passed = false;
-                srvImapCheck.message = "Punta a " + srvImapCheck.currentValue.trim() + " invece di " + mailHostname;
-            }
-        } else {
-            srvImapCheck.passed = false;
-            srvImapCheck.message = "Non configurato (opzionale)";
-        }
+        controllaSrv(srvImapCheck, mailHostname, 993, "posta in arrivo");
         result.checks.add(srvImapCheck);
 
         DnsCheck srvSmtpCheck = verifyRecord("_submission._tcp." + domain, "SRV");
         srvSmtpCheck.recordType = "SRV (_submission)";
         srvSmtpCheck.expectedValue = "0 1 587 " + mailHostname + ".";
-        if (srvSmtpCheck.passed && srvSmtpCheck.currentValue != null) {
-            if (srvSmtpCheck.currentValue.toLowerCase().contains(mailHostname.toLowerCase())) {
-                srvSmtpCheck.message = "OK: _submission._tcp → " + mailHostname + ":587";
-            } else {
-                srvSmtpCheck.passed = false;
-                srvSmtpCheck.message = "Punta a " + srvSmtpCheck.currentValue.trim() + " invece di " + mailHostname;
-            }
-        } else {
-            srvSmtpCheck.passed = false;
-            srvSmtpCheck.message = "Non configurato (opzionale)";
-        }
+        controllaSrv(srvSmtpCheck, mailHostname, 587, "posta in uscita");
         result.checks.add(srvSmtpCheck);
 
-        // Calculate score - only count required records (A, MX, SPF, DKIM, DMARC)
-        int requiredCount = 5;
-        int requiredPassed = 0;
-        for (int i = 0; i < Math.min(requiredCount, result.checks.size()); i++) {
-            if (result.checks.get(i).passed) requiredPassed++;
+        // Il punteggio conta i record indispensabili: A, MX, SPF, DKIM, DMARC.
+        //
+        // Prima li contava PER POSIZIONE, "i primi cinque della lista". Funzionava, ma basta
+        // che qualcuno inserisca un controllo in mezzo o ne sposti uno perche' il punteggio
+        // cominci a misurare tutt'altro senza che niente si rompa e senza che nessuno lo
+        // noti: resterebbe un numero plausibile, e sarebbe falso. Ora ogni controllo dice
+        // di se' se conta, e la posizione non c'entra piu' nulla.
+        for (DnsCheck c : result.checks) {
+            String t = c.recordType == null ? "" : c.recordType;
+            c.indispensabile = t.equals("A") || t.equals("MX") || t.equals("SPF")
+                            || t.equals("DKIM") || t.equals("DMARC");
         }
-        result.score = (requiredPassed * 100) / requiredCount;
+        int indispensabili = 0, superati = 0;
+        for (DnsCheck c : result.checks)
+            if (c.indispensabile) { indispensabili++; if (c.passed) superati++; }
+        result.score = indispensabili == 0 ? 0 : (superati * 100) / indispensabili;
 
         return result;
     }
@@ -933,6 +1034,46 @@ public class DnsRecordsGenerator {
             check.message = "Errore verifica PTR: " + e.getMessage();
             return check;
         }
+    }
+
+    /**
+     * Controlla un record SRV per davvero: destinazione E PORTA.
+     *
+     * Il controllo precedente guardava solo se il nome dell'host compariva da qualche parte
+     * nella riga. Due cose gli sfuggivano: un SRV che punta a "xmail.esempio.it" (che
+     * CONTIENE "mail.esempio.it") passava per giusto, e la porta non veniva guardata affatto
+     * — mentre la porta e' l'unica ragione per cui quel record esiste.
+     */
+    private void controllaSrv(DnsCheck check, String mailHostname, int portaAttesa, String aCosaServe) {
+        if (check.currentValue == null) {
+            check.passed = false;
+            if (check.message != null && check.message.startsWith("Record non trovato"))
+                check.message = "Non configurato (opzionale)";
+            return;
+        }
+        RegoleDns.Srv s = RegoleDns.analizzaSrv(check.currentValue.trim().split("\n")[0]);
+        if (s == null) {
+            check.passed = false;
+            check.message = "Il record c'e' ma non ha la forma di un SRV: " + check.currentValue.trim();
+            return;
+        }
+        boolean host = RegoleDns.stessoNome(s.destinazione, mailHostname);
+        boolean porta = s.porta == portaAttesa;
+        if (host && porta) {
+            check.passed = true;
+            check.message = "OK: " + aCosaServe + " su " + mailHostname + ":" + portaAttesa + ".";
+            return;
+        }
+        check.passed = false;
+        if (!host && !porta)
+            check.message = "Punta a " + s.destinazione + " sulla porta " + s.porta
+                    + ", invece che a " + mailHostname + " sulla " + portaAttesa + ".";
+        else if (!host)
+            check.message = "La porta e' giusta, ma punta a " + s.destinazione
+                    + " invece che a " + mailHostname + ".";
+        else
+            check.message = "L'host e' giusto, ma la porta e' " + s.porta + " invece di " + portaAttesa
+                    + ": i client proverebbero a collegarsi dove non risponde nessuno.";
     }
 
     private DnsCheck verifyRecord(String name, String type) {
@@ -1105,5 +1246,13 @@ public class DnsRecordsGenerator {
         public String message;
         public String currentValue;
         public String expectedValue;
+        /** Conta nel punteggio. Gli opzionali no: la posta funziona anche senza. */
+        public boolean indispensabile;
+        /**
+         * Informativo: non e' un esito, e' una constatazione. Si disegna in grigio, non in
+         * rosso. Una croce rossa su una cosa che si e' deciso di non fare e' rumore, e il
+         * rumore insegna a ignorare tutte le altre righe.
+         */
+        public boolean informativo;
     }
 }

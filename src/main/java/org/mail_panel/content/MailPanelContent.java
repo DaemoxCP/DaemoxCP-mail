@@ -14,6 +14,32 @@ import java.nio.file.StandardOpenOption;
  */
 public class MailPanelContent {
 
+    /**
+     * Legge un pezzo di interfaccia dalle risorse del jar.
+     *
+     * Perche' esiste: finche' HTML, CSS e JavaScript vivono dentro literal Java, si sbatte
+     * contro il limite di 65535 byte per costante del formato .class — e ci si sbatte a ogni
+     * aggiunta, perche' javac fonde anche i literal adiacenti uniti da un "+". La cura non e'
+     * spezzare i metodi all'infinito: e' smettere di tenere il contenuto dentro il codice.
+     * Un file nel jar non ha nessun limite di dimensione, si legge con gli accenti giusti, e
+     * si puo' aprire in un editor che sa cos'e' invece che come stringa Java.
+     *
+     * Il contenuto e' fissato al momento della compilazione, quindi nessun percorso arriva
+     * mai dalla rete: qui non c'e' niente da filtrare, a differenza della rotta /fa e /vendor.
+     */
+    private static String risorsa(String percorso) {
+        try (java.io.InputStream in = MailPanelContent.class.getResourceAsStream("/" + percorso)) {
+            if (in == null) {
+                System.err.println("[Contenuto] risorsa mancante nel jar: " + percorso);
+                return "<!-- risorsa mancante: " + percorso + " -->";
+            }
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            System.err.println("[Contenuto] non riesco a leggere " + percorso + ": " + e.getMessage());
+            return "<!-- risorsa illeggibile: " + percorso + " -->";
+        }
+    }
+
     private static String getJarDirectory() throws URISyntaxException {
         String jarPath = MailPanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
         return new File(jarPath).getParent();
@@ -238,8 +264,8 @@ public class MailPanelContent {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>%s - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap.min.css" rel="stylesheet">
+    <link href="/fa/css/all.min.css" rel="stylesheet">
     <style>
         %s
         %s
@@ -309,7 +335,7 @@ public class MailPanelContent {
         </div>
     </footer>""").replace("{{YEAR}}", String.valueOf(year)) + """
     <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/vendor/bootstrap.bundle.min.js"></script>
     <script>
         // ===== THEME MANAGEMENT =====
         (function() {
@@ -475,8 +501,8 @@ public class MailPanelContent {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Mail Control Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap.min.css" rel="stylesheet">
+    <link href="/fa/css/all.min.css" rel="stylesheet">
     <style>
         /* Theme Variables */
         :root {
@@ -510,15 +536,45 @@ public class MailPanelContent {
         .input-invalid { border-color: #dc3545 !important; }
         .btn-mail { background-color: #e94560; border-color: #e94560; }
         .btn-mail:hover { background-color: #d63850; border-color: #d63850; }
-        .btn-passkey { background-color: #6f42c1; border-color: #6f42c1; }
-        .btn-passkey:hover { background-color: #5a32a3; border-color: #5a32a3; }
+        /* La passkey usa il colore del pannello, non un colore suo: e' un'azione come le
+           altre, e un accento estraneo la faceva sembrare un pezzo di un'altra applicazione. */
+        .btn-passkey {
+            background-color: #e94560; border-color: #e94560; color: #fff;
+            font-weight: 600; letter-spacing: .2px;
+            padding: .7rem 1rem; border-radius: 10px;
+            display: inline-flex; align-items: center; justify-content: center; gap: .6rem;
+            transition: background-color .15s ease, border-color .15s ease, transform .06s ease;
+        }
+        .btn-passkey:hover, .btn-passkey:focus { background-color: #d63850; border-color: #d63850; color: #fff; }
+        .btn-passkey:active { transform: translateY(1px); }
+        .btn-passkey:focus-visible { outline: 3px solid rgba(233, 69, 96, .45); outline-offset: 2px; }
+        /* L'icona dentro il pulsante non deve gareggiare con la parola: nella versione
+           precedente la chiave era grande quanto il testo e tirava l'occhio da sola. */
+        .btn-passkey i { font-size: .95em; opacity: .9; }
         .step { display: none; }
         .step.active { display: block; }
         .user-info { background: var(--bg-input); padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
         .user-info .username { font-weight: 600; }
         .user-info .change-user { color: #e94560; cursor: pointer; font-size: 0.9rem; }
-        .passkey-prompt { text-align: center; padding: 30px 20px; }
-        .passkey-prompt i { font-size: 48px; color: #6f42c1; margin-bottom: 15px; }
+        .passkey-prompt { text-align: center; padding: 26px 20px 22px; }
+        /* L'impronta stava sospesa nel vuoto. Dentro un cerchio diventa un oggetto, e si
+           legge come "il dispositivo sta chiedendo" invece che come una decorazione. */
+        .passkey-prompt .passkey-badge {
+            width: 76px; height: 76px; margin: 0 auto 18px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%;
+            background-color: rgba(233, 69, 96, .12);
+            border: 1px solid rgba(233, 69, 96, .28);
+        }
+        .passkey-prompt .passkey-badge i { font-size: 34px; color: #e94560; margin: 0; }
+        /* Sul fondo scuro un velo al 12% si perde: serve piu' contrasto, non lo stesso valore. */
+        [data-theme="dark"] .passkey-prompt .passkey-badge {
+            background-color: rgba(233, 69, 96, .18);
+            border-color: rgba(233, 69, 96, .42);
+        }
+        [data-theme="dark"] .passkey-prompt .passkey-badge i { color: #ff6b83; }
+        .passkey-prompt h5 { font-weight: 600; margin-bottom: .35rem; }
+        .passkey-prompt p { font-size: .9rem; line-height: 1.45; max-width: 21rem; margin-left: auto; margin-right: auto; }
         .divider { display: flex; align-items: center; text-align: center; margin: 20px 0; }
         .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid var(--border-color); }
         .divider span { padding: 0 10px; color: var(--text-secondary); font-size: 0.9rem; }
@@ -591,7 +647,8 @@ public class MailPanelContent {
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-user"></i></span>
                             <input type="text" class="form-control" id="username" placeholder="Inserisci il tuo username"
-                                   pattern="^[a-zA-Z0-9_\\-]{3,50}$" minlength="3" maxlength="50" autocomplete="username">
+                                   pattern="^[a-zA-Z0-9_\\-]{3,50}$" minlength="3" maxlength="50" autocomplete="username"
+                                   inputmode="latin" autocapitalize="off" autocorrect="off" spellcheck="false">
                         </div>
                         <div class="validation-error" id="usernameError">Username non valido.</div>
                     </div>
@@ -610,11 +667,11 @@ public class MailPanelContent {
                         <span class="change-user" onclick="goToStep('username')"><i class="fas fa-edit me-1"></i>Cambia</span>
                     </div>
                     <div class="passkey-prompt">
-                        <i class="fas fa-fingerprint"></i>
+                        <div class="passkey-badge"><i class="fas fa-fingerprint"></i></div>
                         <h5>Usa la tua Passkey</h5>
                         <p class="text-muted mb-3">Tocca il sensore biometrico o inserisci il PIN del dispositivo</p>
-                        <button type="button" class="btn btn-passkey btn-lg text-white w-100" id="btnPasskey">
-                            <i class="fas fa-key me-2"></i>Usa Passkey
+                        <button type="button" class="btn btn-passkey w-100" id="btnPasskey">
+                            <i class="fas fa-right-to-bracket"></i>Usa Passkey
                         </button>
                     </div>
                     <div class="divider"><span>oppure</span></div>
@@ -676,7 +733,7 @@ public class MailPanelContent {
     <footer class="footer bg-light text-center text-lg-start mt-4">
         <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; {{YEAR}} FreeBSD 15 - Mail Control Panel - Copyright by Pietro Giuseppe D'Amico</div>
     </footer>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/vendor/bootstrap.bundle.min.js"></script>
     <script>
         // State
         let currentUsername = '';
@@ -687,6 +744,28 @@ public class MailPanelContent {
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
         const otpInput = document.getElementById('otpCode');
+
+        // ---------- il campo username accetta solo cio' che un username puo' essere ----------
+        // Whitelist, non lista di cose vietate: si tiene [A-Za-z0-9_-] e si butta tutto il
+        // resto. Non e' una difesa — quella sta sul server, dove nessuno puo' aggirarla — ma
+        // evita che un carattere non ammesso arrivi fin li' e produca un rifiuto misterioso.
+        // Vale anche per l'incollato, che e' il modo in cui un carattere strano entra davvero.
+        const AMMESSI_USERNAME = /[^A-Za-z0-9_-]/g;
+        if (usernameInput) {
+            const ripulisci = () => {
+                const prima = usernameInput.value;
+                const dopo = prima.replace(AMMESSI_USERNAME, '').slice(0, 50);
+                if (dopo === prima) return;
+                // Il cursore va rimesso dove sarebbe finito, altrimenti scrivere in mezzo a
+                // un nome gia' digitato lo fa saltare in fondo a ogni carattere scartato.
+                const pos = usernameInput.selectionStart || 0;
+                const tolti = prima.slice(0, pos).replace(AMMESSI_USERNAME, '').length;
+                usernameInput.value = dopo;
+                try { usernameInput.setSelectionRange(tolti, tolti); } catch (e) { }
+            };
+            usernameInput.addEventListener('input', ripulisci);
+            usernameInput.addEventListener('paste', () => setTimeout(ripulisci, 0));
+        }
 
         // Utility functions
         function showError(msg) {
@@ -795,7 +874,7 @@ public class MailPanelContent {
                 if (!startData.success || startData.error) {
                     showError(startData.error || 'Errore nell avvio passkey');
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-key me-2"></i>Usa Passkey';
+                    btn.innerHTML = '<i class="fas fa-right-to-bracket"></i>Usa Passkey';
                     return;
                 }
 
@@ -811,7 +890,7 @@ public class MailPanelContent {
                     }));
                 }
 
-                btn.innerHTML = '<i class="fas fa-fingerprint fa-spin me-2"></i>Conferma...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Conferma sul dispositivo...';
 
                 // Call WebAuthn API
                 const credential = await navigator.credentials.get(options);
@@ -857,7 +936,7 @@ public class MailPanelContent {
             }
 
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-key me-2"></i>Usa Passkey';
+            btn.innerHTML = '<i class="fas fa-right-to-bracket"></i>Usa Passkey';
         });
 
         // Use password instead of passkey
@@ -998,8 +1077,8 @@ public class MailPanelContent {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Setup Iniziale - FreeBSD Mail Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap.min.css" rel="stylesheet">
+    <link href="/fa/css/all.min.css" rel="stylesheet">
     <style>
         body {
             background: linear-gradient(135deg, #16213e 0%, #0f3460 50%, #1a1a2e 100%);
@@ -1038,7 +1117,7 @@ public class MailPanelContent {
         }
         .info-box {
             background: #f8f9fa;
-            border-left: 4px solid #17a2b8;
+            border-left: 4px solid #0dcaf0;
             padding: 15px;
             margin-bottom: 20px;
             font-size: 0.9rem;
@@ -1115,7 +1194,7 @@ public class MailPanelContent {
     </div>
 
     <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/vendor/bootstrap.bundle.min.js"></script>
     <script>
         function completeSetup() {
             const adminUser = document.getElementById('adminUser').value.trim();
@@ -1221,7 +1300,11 @@ public class MailPanelContent {
             </div>
 
             <!-- CRITICAL DNS SETUP WARNING -->
-            <div class="alert alert-danger mt-4" id="dnsSetupWarning">
+            <!-- Parte NASCOSTO: si apre solo se la verifica dice che il record A non va.
+                 Senza display:none inline lampeggerebbe in rosso a ogni caricamento, prima
+                 che il JS lo chiuda: un allarme che compare e sparisce e' comunque un allarme
+                 che hai letto. -->
+            <div class="alert alert-danger mt-4" id="dnsSetupWarning" style="display:none;">
                 <h5><i class="fas fa-exclamation-triangle me-2"></i>CONFIGURAZIONE DNS ESSENZIALE</h5>
                 <p class="mb-2"><strong>Prima di tutto, devi configurare questo record A sul dominio del mail server:</strong></p>
                 <div class="bg-white p-3 rounded border mb-3">
@@ -1410,7 +1493,12 @@ public class MailPanelContent {
                     document.getElementById('mailServerSubdomain').textContent = subdomain;
                     document.getElementById('serverIpDisplay').textContent = serverIp;
                     document.getElementById('mailHostnameDisplay').textContent = mailHostname;
-                    dnsWarning.style.display = 'block';
+                    // I campi si riempiono, ma il riquadro NON si mostra ancora: prima si guarda
+                    // com'e' il DNS davvero. Mostrarlo sempre voleva dire gridare "se non
+                    // configuri questo, tutto il resto e' INUTILE" anche a chi lo aveva gia'
+                    // configurato, contraddicendo la card verde due centimetri piu' sotto.
+                    // Chi legge non sa piu' a quale dei due messaggi credere.
+                    dnsWarning.style.display = 'none';
                 } else {
                     dnsWarning.style.display = 'none';
                 }
@@ -1453,8 +1541,13 @@ public class MailPanelContent {
                 results.style.display = 'block';
 
                 if (!data.success) {
+                    // Non si e' potuto guardare: si dice questo, non "il DNS e' sbagliato".
+                    // Un controllo che non ha funzionato non e' una diagnosi.
                     document.getElementById('dnsVerificationBody').innerHTML =
-                        '<tr><td colspan="5" class="text-danger">Errore: ' + (data.error || 'sconosciuto') + '</td></tr>';
+                        '<tr><td colspan="5" class="text-danger">Non ho potuto verificare il DNS: '
+                        + (data.error || 'errore sconosciuto') + '. Non vuol dire che i record siano '
+                        + 'sbagliati: vuol dire che non li ho letti. Le istruzioni complete sono nella '
+                        + 'sezione <a href="/dns">DNS</a>.</td></tr>';
                     return;
                 }
 
@@ -1479,7 +1572,10 @@ public class MailPanelContent {
                 const domain = hostname.indexOf('.') > 0 ? hostname.substring(hostname.indexOf('.') + 1) : hostname;
                 const subdomain = hostname.indexOf('.') > 0 ? hostname.substring(0, hostname.indexOf('.')) : hostname;
 
+                const avviso = document.getElementById('dnsSetupWarning');
+
                 if (data.all_passed) {
+                    if (avviso) avviso.style.display = 'none';
                     header.className = 'card-header bg-success text-white';
                     header.innerHTML = '<i class="fas fa-check-circle me-2"></i>DNS Configurato Correttamente';
                     summary.innerHTML = '<div class="alert alert-success mb-0 py-2">' +
@@ -1490,6 +1586,9 @@ public class MailPanelContent {
                     header.className = 'card-header bg-danger text-white';
                     header.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>DNS Da Configurare';
                     const failed = data.checks.filter(c => !c.passed);
+                    // Le istruzioni per il record A si mostrano quando e' il record A a
+                    // mancare, non ogni volta che un qualsiasi record opzionale non c'e'.
+                    if (avviso) avviso.style.display = failed.some(c => c.type === 'A') ? 'block' : 'none';
                     let advice = '';
 
                     failed.forEach(c => {
@@ -1553,7 +1652,9 @@ public class MailPanelContent {
                 loading.style.display = 'none';
                 results.style.display = 'block';
                 document.getElementById('dnsVerificationBody').innerHTML =
-                    '<tr><td colspan="5" class="text-muted">Verifica non disponibile</td></tr>';
+                    '<tr><td colspan="5" class="text-muted">Verifica non disponibile: non ho potuto '
+                    + 'leggere il DNS, quindi non so dire se sia a posto. Le istruzioni sono nella '
+                    + 'sezione <a href="/dns">DNS</a>.</td></tr>';
             });
         }
 
@@ -1696,16 +1797,19 @@ public class MailPanelContent {
                     tbody.innerHTML = '<tr><td colspan="6" class="text-center">Nessun dominio. Clicca "Aggiungi Dominio" per crearne uno.</td></tr>';
                     return;
                 }
+                // L'elenco si conserva: cosi' i pulsanti passano un id e vanno a prendersi il
+                // record, invece di ricevere il testo infilato dentro un attributo HTML.
+                currentDomains = data.domains;
                 tbody.innerHTML = data.domains.map(d => `
                     <tr>
-                        <td><strong>${d.domain}</strong></td>
-                        <td>${d.description || '-'}</td>
+                        <td><strong>${escDom(d.domain)}</strong></td>
+                        <td>${escDom(d.description || '-')}</td>
                         <td><span class="badge bg-info">${d.mailbox_count || 0}</span></td>
                         <td><span class="badge bg-info">${d.alias_count || 0}</span></td>
                         <td>${d.has_dkim ? '<span class="badge bg-success">Attivo</span>' : '<span class="badge bg-warning">Non configurato</span>'}</td>
                         <td>
-                            <button class="btn btn-sm btn-secondary" onclick="editDomain(${d.id}, '${d.domain}', '${(d.description || '').replace(/'/g, "\\'")}')"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-primary" onclick="viewDns('${d.domain}')"><i class="fas fa-server"></i> DNS</button>
+                            <button class="btn btn-sm btn-secondary" onclick="editDomain(${d.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-primary" onclick="viewDnsById(${d.id})"><i class="fas fa-server"></i> DNS</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteDomain(${d.id})"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
@@ -1740,11 +1844,34 @@ public class MailPanelContent {
             window.location.href = '/dns?domain=' + domain;
         }
 
-        function editDomain(id, domain, desc) {
-            document.getElementById('editDomainId').value = id;
-            document.getElementById('editDomainName').value = domain;
-            document.getElementById('editDomainDesc').value = desc;
+        // La descrizione finiva dentro un attributo onclick racchiuso fra virgolette doppie,
+        // protetta soltanto dall'apice: bastava una virgoletta doppia nella descrizione per
+        // uscire dall'attributo e far eseguire codice nella sessione di un altro
+        // amministratore. Ora il pulsante passa un id e il testo non attraversa piu' l'HTML.
+        let currentDomains = [];
+
+        function escDom(t) {
+            const d = document.createElement('div');
+            d.textContent = t === null || t === undefined ? '' : String(t);
+            return d.innerHTML;
+        }
+
+        function trovaDominio(id) {
+            return (currentDomains || []).find(x => x.id === id) || null;
+        }
+
+        function editDomain(id) {
+            const d = trovaDominio(id);
+            if (!d) return;
+            document.getElementById('editDomainId').value = d.id;
+            document.getElementById('editDomainName').value = d.domain;
+            document.getElementById('editDomainDesc').value = d.description || '';
             new bootstrap.Modal(document.getElementById('editDescModal')).show();
+        }
+
+        function viewDnsById(id) {
+            const d = trovaDominio(id);
+            if (d) viewDns(d.domain);
         }
 
         function saveDomainDesc() {
@@ -2403,7 +2530,9 @@ public class MailPanelContent {
         .feature-badge { font-size: 0.7rem; padding: 2px 6px; margin-left: 4px; }
         .action-dropdown .dropdown-menu { min-width: 200px; }
         .filter-rule { background: #f8f9fa; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 3px solid #0d6efd; }
+        [data-theme="dark"] .filter-rule { background: #343a40; }
         .condition-row, .action-row { background: #fff; padding: 8px; margin: 5px 0; border-radius: 4px; border: 1px solid #dee2e6; }
+        [data-theme="dark"] .condition-row, [data-theme="dark"] .action-row { background: #3d4249; border-color: #495057; }
         """;
         return getHead("Caselle Email", extraStyles) + getNavbar("mailboxes") + """
     <div class="content container mt-4">
@@ -2428,6 +2557,7 @@ public class MailPanelContent {
                     </tbody>
                 </table>
             </div>
+""" + risorsa("pagine/profilo-apple-card.html") + """
         </div>
     </div>
 
@@ -2733,6 +2863,15 @@ public class MailPanelContent {
         let domains = [];
         let currentMailboxes = [];
 
+        // Il nome della casella e' testo libero e NON e' validato in ingresso: una whitelist
+        // stretta boccerebbe nomi veri come "D'Amico Real Estate". La difesa giusta e'
+        // all'uscita, neutralizzando il testo quando entra nella pagina.
+        function escMbx(t) {
+            const d = document.createElement('div');
+            d.textContent = t === null || t === undefined ? '' : String(t);
+            return d.innerHTML;
+        }
+
         function loadDomains() {
             fetch('/api/domains').then(r => r.json()).then(data => {
                 domains = data.domains || [];
@@ -2756,7 +2895,7 @@ public class MailPanelContent {
                             ${!m.receive_enabled ? '<span class="badge bg-secondary ms-1" title="Solo invio (No-Reply)"><i class="fas fa-ban"></i> No-Reply</span>' : ''}
                             ${!m.active ? '<span class="badge bg-danger ms-1">Disattivo</span>' : ''}
                         </td>
-                        <td>${m.name || '-'}</td>
+                        <td>${escMbx(m.name || '-')}</td>
                         <td>${m.quota_mb === 0 ? '<span class="text-success"><i class="fas fa-infinity"></i> Illimitato</span>' : m.quota_mb + ' MB'}</td>
                         <td>
                             ${m.autoresponder_enabled ? '<span class="badge bg-info feature-badge" title="Auto-Responder Attivo"><i class="fas fa-reply-all"></i></span>' : ''}
@@ -3379,6 +3518,14 @@ public class MailPanelContent {
         let sieveConditions = [];
         let sieveActions = [];
 
+        // Il nome del filtro lo sceglie chi lo crea: testo libero, quindi neutralizzato
+        // quando entra nella pagina.
+        function escSieve(t) {
+            const d = document.createElement('div');
+            d.textContent = t === null || t === undefined ? '' : String(t);
+            return d.innerHTML;
+        }
+
         function openSieveFilters(mailboxId, email) {
             document.getElementById('svMailboxId').value = mailboxId;
             document.querySelector('#sieveModal .modal-title').innerHTML =
@@ -3403,7 +3550,7 @@ public class MailPanelContent {
                     container.innerHTML = filters.map(f => `
                         <div class="filter-rule ${!f.enabled ? 'opacity-50' : ''}" onclick="editSieveFilter(${f.id})">
                             <div class="d-flex justify-content-between">
-                                <strong>${f.name}</strong>
+                                <strong>${escSieve(f.name)}</strong>
                                 ${f.enabled ? '<span class="badge bg-success">Attivo</span>' : '<span class="badge bg-secondary">Off</span>'}
                             </div>
                         </div>
@@ -3524,9 +3671,10 @@ public class MailPanelContent {
             });
         }
 
-""" + getLogoutScript() + """
+""" + getLogoutScript() + risorsa("pagine/profilo-apple.js") + """
         loadDomains();
         loadMailboxes();
+        paCarica();
     </script>
 </body>
 </html>
@@ -3615,8 +3763,8 @@ public class MailPanelContent {
 
                 // Badge sull'header
                 if (state === 'pending_dns')      badge.innerHTML = '<span class="badge bg-warning text-dark">In attesa DNS</span>';
-                else if (state === 'propagated')  badge.innerHTML = '<span class="badge bg-info text-dark">DNS propagato — pronto da attivare</span>';
-                else if (state === 'active_grace') badge.innerHTML = '<span class="badge bg-success">Nuova chiave attiva — grace period</span>';
+                else if (state === 'propagated')  badge.innerHTML = '<span class="badge bg-info text-dark">Rotazione: DNS propagato, pronta da attivare</span>';
+                else if (state === 'active_grace') badge.innerHTML = '<span class="badge bg-success">Rotazione: nuova chiave attiva — grace period</span>';
 
                 // Stepper
                 const stepDef = [
@@ -4042,9 +4190,20 @@ public class MailPanelContent {
                 }
                 let html = '';
                 if (data.match) {
-                    html += '<div class="alert alert-success py-2 mb-2"><i class="fas fa-check-circle me-1"></i><strong>OK</strong> — ' + escapeHtmlBl(data.message || '') + '</div>';
+                        html += '<div class="alert alert-success py-2 mb-2">'
+                             + '<i class="fas fa-check-circle me-1"></i><strong>La firma &egrave; verificabile.</strong> '
+                             + 'In DNS pubblico il record del selector attivo corrisponde alla chiave: chi riceve '
+                             + 'la tua posta pu&ograve; controllarne l&rsquo;autenticit&agrave;.'
+                             + '<div class="small mt-1">' + escapeHtmlBl(data.message || '') + '</div></div>';
                 } else {
-                    html += '<div class="alert alert-danger py-2 mb-2"><i class="fas fa-exclamation-triangle me-1"></i><strong>NON CORRISPONDE</strong> — ' + escapeHtmlBl(data.message || '') + '</div>';
+                        html += '<div class="alert alert-danger py-2 mb-2">'
+                             + '<i class="fas fa-exclamation-triangle me-1"></i><strong>La firma NON &egrave; verificabile.</strong> '
+                             + 'In DNS pubblico non c&rsquo;&egrave; un record che corrisponda alla chiave del '
+                             + '<strong>selector attivo</strong>: le email escono firmate, ma chi le riceve non pu&ograve; '
+                             + 'controllare la firma &mdash; e per molti destinatari equivale a non averla.'
+                             + '<div class="small mt-1">' + escapeHtmlBl(data.message || '') + '</div>'
+                             + '<div class="small mt-1">Se una rotazione &egrave; gi&agrave; propagata, attivare la nuova '
+                             + 'chiave risolve: da quel momento si firma con un selector che in DNS esiste.</div></div>';
                 }
                 html += '<table class="table table-sm mb-0 small"><tbody>';
                 html += '<tr><th style="width:180px">Record interrogato</th><td><code>' + escapeHtmlBl(data.dns_record_name || '') + '</code></td></tr>';
@@ -5340,7 +5499,7 @@ public class MailPanelContent {
             <h2 class="mb-3"><i class="fas fa-server me-2"></i>Configurazione DNS</h2>
 
             <!-- BANNER: dominio corrente sempre visibile, con switcher -->
-            <div class="card text-white mb-3" style="background:linear-gradient(135deg,#0d6efd 0%,#6610f2 100%)">
+            <div class="card text-white mb-3" style="background:linear-gradient(135deg,#e94560 0%,#a52a45 100%)">
                 <div class="card-body py-3">
                     <div class="row align-items-center g-3">
                         <div class="col-md-7">
@@ -5378,12 +5537,14 @@ public class MailPanelContent {
             <!-- Verification Results -->
             <div id="verificationResults" class="d-none mb-4">
                 <div class="card">
-                    <div class="card-header bg-dark text-white">
-                        <i class="fas fa-clipboard-check me-2"></i>Risultati Verifica DNS
+                    <div class="card-header">
+                        <i class="fas fa-clipboard-check me-2"></i><strong>Risultati della verifica DNS</strong>
                     </div>
                     <div class="card-body" id="verificationBody">
                     </div>
                 </div>
+
+""" + risorsa("pagine/autodns-card.html") + risorsa("pagine/autoconfig-card.html") + risorsa("pagine/mtasts-card.html") + """
             </div>
 
             <!-- DNS Records -->
@@ -5391,32 +5552,9 @@ public class MailPanelContent {
                 <p class="text-muted">Seleziona un dominio per visualizzare i record DNS necessari.</p>
             </div>
 
-            <!-- Diagnostica orario server (timezone) -->
-            <div class="card mt-4 border-info">
-                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center" style="cursor:pointer" onclick="toggleTzDiag()">
-                    <span><i class="fas fa-clock me-2"></i>Diagnostica orario server (timezone)</span>
-                    <span id="tzDiagStatusBadge"><span class="badge bg-light text-dark"><i class="fas fa-spinner fa-spin me-1"></i>controllo...</span></span>
-                </div>
-                <div class="card-body d-none" id="tzDiagBody">
-                    <p class="small text-muted mb-2">Se i timestamp delle rotazioni risultano sbagliati, il problema è quasi sempre il fuso orario di MySQL non allineato col sistema operativo. Da qui puoi vedere lo stato e correggerlo.</p>
-                    <div id="tzDiagTable">
-                        <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</div>
-                    </div>
-                    <div class="mt-3 d-flex gap-2 flex-wrap">
-                        <button class="btn btn-success btn-sm" onclick="tzSyncToSystem()"><i class="fas fa-magic me-1"></i>Sincronizza MySQL al fuso del sistema</button>
-                        <div class="input-group input-group-sm" style="width:auto">
-                            <input type="text" class="form-control form-control-sm" id="tzManualValue" placeholder='es. "+02:00" o "Europe/Rome"' style="width:200px">
-                            <button class="btn btn-outline-secondary btn-sm" onclick="tzSetManual()"><i class="fas fa-cog me-1"></i>Imposta manualmente</button>
-                        </div>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="loadTzDiag()"><i class="fas fa-sync me-1"></i>Ricontrolla</button>
-                    </div>
-                    <div id="tzDiagLog" class="mt-2 small"></div>
-                </div>
-            </div>
-
             <!-- Cloudflare integration Section -->
             <div class="card mt-4">
-                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-cloud me-2"></i>Account Cloudflare (per la rotazione DKIM automatica)</span>
                     <small id="cfAccountsCountBadge"></small>
                 </div>
@@ -5571,13 +5709,36 @@ public class MailPanelContent {
 
 """ + getDnsRotateModeChooserModal() + """
             <!-- Blacklist Check -->
-            <div class="card mt-4 border-danger">
-                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span><i class="fas fa-ban me-2"></i><strong>Check Blacklist (DNSBL/RHSBL)</strong> <small class="ms-2" id="blOverallStatus"></small></span>
-                    <button class="btn btn-sm btn-light" id="btnBlCheck" onclick="runBlacklistCheck()">
+                    <button class="btn btn-sm btn-outline-secondary" id="btnBlCheck" onclick="runBlacklistCheck()">
                         <i class="fas fa-search me-1"></i>Verifica IP + domini
                     </button>
                 </div>
+
+            <!-- Diagnostica orario server (timezone) -->
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer" onclick="toggleTzDiag()">
+                    <span><i class="fas fa-clock me-2"></i>Diagnostica orario server (timezone)</span>
+                    <span id="tzDiagStatusBadge"><span class="badge bg-secondary"><i class="fas fa-spinner fa-spin me-1"></i>controllo...</span></span>
+                </div>
+                <div class="card-body d-none" id="tzDiagBody">
+                    <p class="small text-muted mb-2">Se i timestamp delle rotazioni risultano sbagliati, il problema è quasi sempre il fuso orario di MySQL non allineato col sistema operativo. Da qui puoi vedere lo stato e correggerlo.</p>
+                    <div id="tzDiagTable">
+                        <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</div>
+                    </div>
+                    <div class="mt-3 d-flex gap-2 flex-wrap">
+                        <button class="btn btn-success btn-sm" onclick="tzSyncToSystem()"><i class="fas fa-magic me-1"></i>Sincronizza MySQL al fuso del sistema</button>
+                        <div class="input-group input-group-sm" style="width:auto">
+                            <input type="text" class="form-control form-control-sm" id="tzManualValue" placeholder='es. "+02:00" o "Europe/Rome"' style="width:200px">
+                            <button class="btn btn-outline-secondary btn-sm" onclick="tzSetManual()"><i class="fas fa-cog me-1"></i>Imposta manualmente</button>
+                        </div>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="loadTzDiag()"><i class="fas fa-sync me-1"></i>Ricontrolla</button>
+                    </div>
+                    <div id="tzDiagLog" class="mt-2 small"></div>
+                </div>
+            </div>
                 <div class="card-body" id="blContainer">
                     <p class="text-muted mb-0">
                         <i class="fas fa-info-circle me-1"></i>
@@ -6066,9 +6227,12 @@ public class MailPanelContent {
                 const verifyBtn = document.getElementById('verifyActiveDkimBtn');
                 const generateBtn = document.getElementById('generateDkimBtn');
                 if (data.configured) {
-                    status.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>DKIM Configurato!</strong><br>' +
-                        'Selector: <code>' + data.selector + '</code><br>' +
-                        'Record DNS: <code>' + data.dns_record_name + '</code></div>';
+                    status.innerHTML = '<div class="alert alert-secondary"><i class="fas fa-database me-2"></i>'
+                        + '<strong>Nel pannello:</strong> esiste una chiave DKIM per questo dominio.<br>'
+                        + 'Selector attivo: <code>' + data.selector + '</code><br>'
+                        + 'Record che deve esistere in DNS: <code>' + data.dns_record_name + '</code>'
+                        + '<div class="small text-muted mt-1">Questo non dice ancora se la firma sia verificabile:'
+                        + ' dipende dal record TXT pubblico, che si controlla qui sotto.</div></div>';
                     if (rotateBtn) rotateBtn.disabled = false;
                     if (verifyBtn) verifyBtn.disabled = false;
                     // DKIM già configurato: il bottone "Genera Chiavi DKIM" deve essere NASCOSTO/disabilitato
@@ -6371,7 +6535,7 @@ public class MailPanelContent {
             }).catch(e => alert('Errore rete: ' + e.message));
         }
 
-""" + getDnsJsPart3() + getDnsJsPart2() + getLogoutScript() + """
+""" + getDnsJsPart3() + getDnsJsPart2() + risorsa("pagine/autodns.js") + risorsa("pagine/autoconfig.js") + risorsa("pagine/mtasts.js") + getLogoutScript() + """
     </script>
 </body>
 </html>
@@ -7360,6 +7524,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         .log-preset-group { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
         .log-preset-cat { font-size:.7rem; font-weight:600; text-transform:uppercase; color:#6c757d; min-width:90px; }
         #filterActiveDesc { font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; background: #eef5ff; border-left: 3px solid #0d6efd; }
+        [data-theme="dark"] #filterActiveDesc { background: rgba(13, 110, 253, .16); }
         """;
         return getHead("Logs", extraStyles) + getNavbar("logs") + """
     <div class="content container mt-4">
@@ -7646,7 +7811,8 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         .install-progress { max-height: 400px; overflow-y: auto; background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.85rem; }
         .component-card { border: 2px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 15px; transition: all 0.2s; }
         .component-card:hover { border-color: #e94560; }
-        .component-card.installed { background: #d4edda; border-color: #28a745; }
+        .component-card.installed { background: #d4edda; border-color: #198754; }
+        [data-theme="dark"] .component-card.installed { background: rgba(25, 135, 84, .18); }
         """;
         return getHead("Installazione", extraStyles) + getNavbar("") + """
     <div class="content container mt-4">
@@ -7734,12 +7900,23 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
     }
 
     // ============== SETTINGS.HTML ==============
+    /**
+     * Il JavaScript della scheda "Rapporto periodico". Sta in un metodo suo per due
+     * ragioni: la pagina Impostazioni superava i 65535 byte di un singolo letterale
+     * (limite del formato .class), e una chiamata a metodo interrompe la fusione che
+     * javac fa dei letterali adiacenti, che e' il motivo per cui spezzare il testo
+     * in due pezzi affiancati non basterebbe.
+     */
+
     public static String getSettingsHtml() {
         String extraStyles = """
         .totp-enabled { color: #198754; }
         .totp-disabled { color: #dc3545; }
         .backup-code { font-family: monospace; background: #f8f9fa; padding: 4px 8px; margin: 2px; display: inline-block; border-radius: 4px; }
+        [data-theme="dark"] .backup-code { background: #3d4249; border-color: #495057; }
         .qr-container { text-align: center; padding: 20px; }
+        /* Il QR resta su fondo bianco anche col tema scuro: e' un requisito di
+           leggibilita' del codice, non una svista. */
         .qr-container img { max-width: 200px; border: 1px solid #dee2e6; border-radius: 8px; padding: 10px; background: white; }
         """;
         return getHead("Impostazioni", extraStyles) + getNavbar("settings") + """
@@ -7748,6 +7925,20 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             <h2><i class="fas fa-cog me-2"></i>Impostazioni</h2>
             <p class="text-muted">Configurazione del Mail Panel e del tuo account.</p>
 
+            <div class="card mb-4 mb-4 border-success">
+""" + risorsa("pagine/rapporto-card.html") + """
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Il pannello si manda un rapporto da solo, ogni tanto. In cima c&rsquo;&egrave;
+                        <strong>cosa c&rsquo;&egrave; da fare</strong>, non lo stato: se non c&rsquo;&egrave;
+                        niente da fare, lo dice in una riga. Sotto ci sono versione del sistema, pacchetti,
+                        vulnerabilit&agrave; distinte fra quelle rimediabili e quelle no, certificato, servizi,
+                        spazio e vie di ritorno. Parte da <code>sendmail</code> di Postfix, su questo stesso
+                        server: nessuna credenziale da custodire.
+                    </p>
+                    <div id="rep-body"><span class="text-muted">Premi "Aggiorna": legge e basta.</span></div>
+                </div>
+            </div>
             <div class="row">
                 <div class="col-md-6">
                     <!-- 2FA Section -->
@@ -8962,10 +9153,12 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         // Load on page load
+""" + risorsa("pagine/rapporto.js") + """
         load2FAStatus();
         loadPasskeys();
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
+        repCarica();
 
         let csrfToken = document.getElementById('csrf_token').value;
 """ + getLogoutScript() + """
@@ -8979,9 +9172,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
     public static String getQueueHtml() {
         String extraStyles = """
         .queue-item { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #e94560; }
+        [data-theme="dark"] .queue-item { background: #343a40; }
         .queue-item:hover { background: #e9ecef; }
         .stat-pending { border-color: #ffc107; }
-        .stat-inflight { border-color: #17a2b8; }
+        .stat-inflight { border-color: #0dcaf0; }
         .stat-tempfail { border-color: #fd7e14; }
         .stat-permfail { border-color: #dc3545; }
         .queue-state { font-size: 0.75rem; padding: 2px 8px; border-radius: 3px; }
@@ -9249,15 +9443,29 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         function purgePermfails() {
-            if (!confirm('Eliminare tutti i messaggi con errori permanenti?')) return;
+            // Prima si guarda, poi si cancella. E si legge data.error quando c'e', invece di
+            // mostrare "undefined": e' cosi' che si presentava questo pulsante finora.
             fetch('/api/queue', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'purge_permfails' })
             }).then(r => r.json()).then(data => {
-                alert(data.message);
-                loadQueue();
-                loadStats();
+                if (!data.success) { alert(data.error || data.message || 'Errore'); return; }
+                if (!data.quanti) { alert(data.message); return; }
+                const righe = (data.messaggi || []).slice(0, 15)
+                    .map(m => '\u2022 ' + m.destinatario + '  \u2014  ' + (m.errore || '')).join('\n');
+                const extra = data.quanti > 15 ? '\n... e altri ' + (data.quanti - 15) : '';
+                if (prompt(data.message + '\n\n' + righe + extra
+                         + '\n\nScrivi ELIMINA per cancellarli definitivamente.') !== 'ELIMINA') return;
+                fetch('/api/queue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'purge_permfails', confirm: 'ELIMINA' })
+                }).then(r => r.json()).then(d2 => {
+                    alert((d2.success ? '\u2705 ' : '\u274c ') + (d2.message || d2.error || 'fatto'));
+                    loadQueue();
+                    loadStats();
+                });
             });
         }
 
@@ -9277,10 +9485,12 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
     public static String getSecurityHtml() {
         String extraStyles = """
         .jail-card { border-left: 4px solid #dc3545; }
-        .jail-card.enabled { border-color: #28a745; }
+        .jail-card.enabled { border-color: #198754; }
         .ban-event { font-size: 0.85rem; padding: 8px; border-left: 3px solid; margin-bottom: 5px; }
         .ban-event.ban { border-color: #dc3545; background: #fff5f5; }
-        .ban-event.unban { border-color: #28a745; background: #f5fff5; }
+        [data-theme="dark"] .ban-event.ban { background: rgba(220, 53, 69, .14); }
+        .ban-event.unban { border-color: #198754; background: #f5fff5; }
+        [data-theme="dark"] .ban-event.unban { background: rgba(25, 135, 84, .14); }
         .ip-badge { font-family: monospace; background: #f8f9fa; color: #212529; padding: 2px 6px; border-radius: 3px; }
         [data-theme="dark"] .ip-badge { background: var(--table-stripe); color: var(--text-primary); border: 1px solid var(--border-color); }
         /* Form helper text — leggibile sia in light che dark */
@@ -9618,7 +9828,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         <div class="jail-card card mb-2 ${jail.enabled ? 'enabled' : ''}">
                             <div class="card-body py-2">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <strong>${jail.name}</strong>
+                                    <strong>${escapeHtml(jail.name)}</strong>
                                     <span class="badge bg-danger">${jail.currently_banned} bannati</span>
                                 </div>
                                 <small class="text-muted">
@@ -9833,7 +10043,14 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     return;
                 }
                 if (!data.running) {
-                    body.innerHTML = '<div class="alert alert-warning m-2 mb-0">Fail2ban è installato ma NON in esecuzione. Avvialo con <code>service fail2ban start</code>.</div>';
+                    // Il pannello sa avviarlo da solo (start_service): dettare un comando da
+                    // terminale per una cosa che il pannello fa gia' e' mandare fuori da qui
+                    // un lavoro che sta qui dentro.
+                    body.innerHTML = '<div class="alert alert-warning m-2 mb-0">'
+                        + '<strong>Fail2ban è installato ma non è in esecuzione.</strong> '
+                        + 'Finché resta fermo, nessun tentativo di accesso viene bloccato.'
+                        + '<button class="btn btn-sm btn-warning ms-2" onclick="avviaFail2banDalPannello()">'
+                        + '<i class="fas fa-play me-1"></i>Avvialo adesso</button></div>';
                     return;
                 }
                 const jails = data.jails || [];
@@ -10249,6 +10466,22 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 alert((data.success ? '✅ ' : '❌ ') + (data.message || 'fatto') +
                     (data.output ? '\\n\\nOutput:\\n' + data.output : ''));
                 loadFail2banHealth();
+                if (typeof loadJailLiveState === 'function') loadJailLiveState();
+            }).catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        // Avvio di fail2ban dal pannello. Esiste gia' l'azione start_service: quello che
+        // mancava era il modo di premerla dalla pagina dove il problema si vede.
+        function avviaFail2banDalPannello() {
+            if (!confirm('Avviare fail2ban adesso?\n\nEsegue: service fail2ban start')) return;
+            fetch('/api/fail2ban_health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'start_service', csrf_token: ensureFhcCsrfToken() })
+            }).then(r => r.json()).then(data => {
+                alert((data.success ? '✅ ' : '❌ ') + (data.message || 'fatto') +
+                    (data.output ? '\n\nOutput:\n' + data.output : ''));
+                if (typeof loadFail2banHealth === 'function') loadFail2banHealth();
                 if (typeof loadJailLiveState === 'function') loadJailLiveState();
             }).catch(e => alert('Errore rete: ' + e.message));
         }
@@ -10721,8 +10954,8 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         String extraStyles = """
         .stat-card { border-left: 4px solid; transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-2px); }
-        .stat-card.sent { border-color: #28a745; }
-        .stat-card.received { border-color: #17a2b8; }
+        .stat-card.sent { border-color: #198754; }
+        .stat-card.received { border-color: #0dcaf0; }
         .stat-card.spam { border-color: #dc3545; }
         .stat-card.rejected { border-color: #ffc107; }
         .chart-container { position: relative; height: 300px; }
@@ -10891,7 +11124,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         </div>
     </div>
 """ + getFooter() + """
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/vendor/chart.umd.js"></script>
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
         let trafficChart, distributionChart;
@@ -10955,7 +11188,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         {
                             label: 'Inviate',
                             data: dailyStats.map(d => d.sent),
-                            borderColor: '#28a745',
+                            borderColor: '#198754',
                             backgroundColor: 'rgba(40, 167, 69, 0.1)',
                             fill: true,
                             tension: 0.4
@@ -10963,7 +11196,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         {
                             label: 'Ricevute',
                             data: dailyStats.map(d => d.received),
-                            borderColor: '#17a2b8',
+                            borderColor: '#0dcaf0',
                             backgroundColor: 'rgba(23, 162, 184, 0.1)',
                             fill: true,
                             tension: 0.4
@@ -10994,7 +11227,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                             data.total_spam || 0,
                             data.total_rejected || 0
                         ],
-                        backgroundColor: ['#28a745', '#dc3545', '#ffc107']
+                        backgroundColor: ['#198754', '#dc3545', '#ffc107']
                     }]
                 },
                 options: {
@@ -11205,6 +11438,24 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
 
+        function escAdm(t) {
+            const d = document.createElement('div');
+            d.textContent = t === null || t === undefined ? '' : String(t);
+            return d.innerHTML;
+        }
+
+        // Dentro onclick="..." il testo attraversa DUE interpreti: prima l'HTML, poi
+        // JavaScript. Sfuggire solo per l'uno lascia scoperto l'altro.
+        function escAdmJs(t) {
+            return String(t === null || t === undefined ? '' : t)
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/&(?!quot;|lt;|gt;|amp;)/g, '&amp;');
+        }
+
         function loadAdmins() {
             fetch('/api/admins?action=list')
                 .then(r => r.json())
@@ -11215,10 +11466,14 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         return;
                     }
 
+                    // Il nome arriva dal database, ma "arriva dal database" non vuol dire
+                    // "e' sicuro": ci e' arrivato da una richiesta. Si sfugge comunque, sia
+                    // per l'HTML sia per la stringa JavaScript dentro l'attributo onclick,
+                    // dove un solo apice basterebbe a uscire dalle virgolette.
                     tbody.innerHTML = data.admins.map(admin => `
                         <tr>
                             <td>
-                                <i class="fas fa-user me-1"></i>${admin.username}
+                                <i class="fas fa-user me-1"></i>${escAdm(admin.username)}
                                 ${admin.is_current ? '<span class="badge bg-info ms-1">Tu</span>' : ''}
                             </td>
                             <td><span class="badge role-badge ${admin.role}">${admin.role}</span></td>
@@ -11230,11 +11485,11 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                             <td><small>${admin.last_login || 'Mai'}</small></td>
                             <td><small>${admin.created_at}</small></td>
                             <td>
-                                <button class="btn btn-sm btn-outline-primary" onclick="editAdmin(${admin.id}, '${admin.username}', '${admin.role}')"
+                                <button class="btn btn-sm btn-outline-primary" onclick="editAdmin(${Number(admin.id)}, '${escAdmJs(admin.username)}', '${escAdmJs(admin.role)}')"
                                         ${admin.is_current ? 'disabled' : ''}>
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteAdmin(${admin.id}, '${admin.username}')"
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteAdmin(${Number(admin.id)}, '${escAdmJs(admin.username)}')"
                                         ${admin.is_current || admin.role === 'superadmin' ? 'disabled' : ''}>
                                     <i class="fas fa-trash"></i>
                                 </button>
@@ -11405,7 +11660,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                                     <th>Mailbox</th>
                                     <th class="text-center">Max/Ora</th>
                                     <th class="text-center">Max/Giorno</th>
-                                    <th class="text-center">Uso Oggi</th>
+                                    <th class="text-center">Destinatari max</th>
                                     <th class="text-center">Stato</th>
                                     <th>Azioni</th>
                                 </tr>
@@ -11418,30 +11673,12 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
-            <!-- Blocked Senders -->
-            <div class="card mt-4">
-                <div class="card-header">
-                    <i class="fas fa-ban me-2"></i>Mittenti Bloccati per Rate Limit
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Mailbox</th>
-                                    <th>Bloccato Alle</th>
-                                    <th>Scadenza Blocco</th>
-                                    <th>Motivo</th>
-                                    <th>Azioni</th>
-                                </tr>
-                            </thead>
-                            <tbody id="blockedBody">
-                                <tr><td colspan="5" class="text-center text-muted">Nessun blocco attivo</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+            <!-- La sezione "Mittenti bloccati" e' stata TOLTA.
+                 Non esisteva nessun meccanismo di blocco: ne' una tabella nel database, ne'
+                 una regola in Postfix. Era una tabella che scriveva "Nessun blocco attivo"
+                 qualunque cosa succedesse, con un pulsante "Sblocca" che rispondeva "azione
+                 sconosciuta". Una schermata che dichiara di sorvegliare qualcosa che non
+                 sorveglia e' peggio della sua assenza: fa credere di avere una protezione. -->
         </div>
     </div>
 
@@ -11486,51 +11723,41 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         let csrfToken = document.getElementById('csrf_token').value;
 
         function loadRateLimits() {
-            // Load global limits
-            fetch('/api/ratelimits?action=global')
+            // Una sola richiesta: i due "?action=" di prima venivano ignorati dal server, che
+            // rispondeva sempre la stessa cosa. E i limiti globali si leggono da "globale",
+            // non da "limits", che e' l'elenco delle caselle.
+            fetch('/api/ratelimits')
                 .then(r => r.json())
                 .then(data => {
-                    if (data.limits) {
-                        document.getElementById('globalHourly').value = data.limits.hourly || 50;
-                        document.getElementById('globalDaily').value = data.limits.daily || 500;
-                        document.getElementById('globalMaxSize').value = data.limits.max_size_mb || 25;
-                    }
-                });
-
-            // Load per-mailbox limits
-            fetch('/api/ratelimits?action=list')
-                .then(r => r.json())
-                .then(data => {
+                    const g = data.globale || {};
+                    document.getElementById('globalHourly').value = g.hourly || 50;
+                    document.getElementById('globalDaily').value = g.daily || 500;
+                    if (g.max_size_mb !== null && g.max_size_mb !== undefined)
+                        document.getElementById('globalMaxSize').value = g.max_size_mb;
                     const tbody = document.getElementById('limitsBody');
                     if (!data.limits || !data.limits.length) {
                         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessun limite personalizzato configurato</td></tr>';
                         return;
                     }
 
+                    currentLimits = data.limits;
                     tbody.innerHTML = data.limits.map(limit => {
-                        const usagePercent = limit.daily_limit > 0 ? Math.min(100, (limit.usage_today / limit.daily_limit) * 100) : 0;
-                        const usageClass = usagePercent > 90 ? 'bg-danger' : usagePercent > 70 ? 'bg-warning' : 'bg-success';
-
+                        // La colonna "Uso Oggi" mostrava un conteggio che nessuno calcola:
+                        // il pannello non tiene traccia degli invii per casella. Al suo posto
+                        // c'e' un dato che esiste davvero, il numero massimo di destinatari.
                         return `
                         <tr class="${!limit.enabled ? 'table-secondary' : ''}">
-                            <td><i class="fas fa-envelope me-1"></i>${limit.email}</td>
+                            <td><i class="fas fa-envelope me-1"></i>${escLim(limit.email)}</td>
                             <td class="text-center">${limit.hourly_limit}</td>
                             <td class="text-center">${limit.daily_limit}</td>
-                            <td class="text-center">
-                                <div class="d-flex align-items-center">
-                                    <span class="me-2">${limit.usage_today || 0}</span>
-                                    <div class="progress flex-grow-1 usage-bar">
-                                        <div class="progress-bar ${usageClass}" style="width: ${usagePercent}%"></div>
-                                    </div>
-                                </div>
-                            </td>
+                            <td class="text-center">${limit.max_recipients}</td>
                             <td class="text-center">
                                 ${limit.enabled
                                     ? '<span class="badge bg-success">Attivo</span>'
                                     : '<span class="badge bg-secondary">Disattivo</span>'}
                             </td>
                             <td>
-                                <button class="btn btn-sm btn-outline-primary" onclick="editLimit(${JSON.stringify(limit).replace(/"/g, '&quot;')})">
+                                <button class="btn btn-sm btn-outline-primary" onclick="editLimitById(${limit.id})">
                                     <i class="fas fa-edit"></i>
                                 </button>
                                 <button class="btn btn-sm btn-outline-danger" onclick="deleteLimit(${limit.id})">
@@ -11539,31 +11766,6 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                             </td>
                         </tr>
                     `}).join('');
-                });
-
-            // Load blocked senders
-            fetch('/api/ratelimits?action=blocked')
-                .then(r => r.json())
-                .then(data => {
-                    const tbody = document.getElementById('blockedBody');
-                    if (!data.blocked || !data.blocked.length) {
-                        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nessun blocco attivo</td></tr>';
-                        return;
-                    }
-
-                    tbody.innerHTML = data.blocked.map(block => `
-                        <tr>
-                            <td>${block.email}</td>
-                            <td><small>${block.blocked_at}</small></td>
-                            <td><small>${block.expires_at}</small></td>
-                            <td><small class="text-muted">${block.reason}</small></td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-success" onclick="unblockSender(${block.id})">
-                                    <i class="fas fa-unlock"></i> Sblocca
-                                </button>
-                            </td>
-                        </tr>
-                    `).join('');
                 });
 
             // Load mailboxes for dropdown
@@ -11596,9 +11798,25 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             });
         }
 
+        // Un oggetto JSON infilato in un attributo HTML regge finche' nessun valore contiene
+        // una virgoletta, una & o un <. Passare l'id e rileggere il record e' la stessa cosa,
+        // e non dipende da cosa c'e' dentro i dati.
+        let currentLimits = [];
+
+        function escLim(t) {
+            const d = document.createElement('div');
+            d.textContent = t === null || t === undefined ? '' : String(t);
+            return d.innerHTML;
+        }
+
+        function editLimitById(id) {
+            const l = (currentLimits || []).find(x => x.id === id);
+            if (l) editLimit(l);
+        }
+
         function editLimit(limit) {
             document.getElementById('limitId').value = limit.id;
-            document.getElementById('limitMailbox').value = limit.mailbox_id;
+            document.getElementById('limitMailbox').value = limit.target_id;
             document.getElementById('limitHourly').value = limit.hourly_limit;
             document.getElementById('limitDaily').value = limit.daily_limit;
             document.getElementById('limitEnabled').checked = limit.enabled;
@@ -11647,21 +11865,6 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'delete', id })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) loadRateLimits();
-                else alert(data.error || 'Errore');
-            });
-        }
-
-        function unblockSender(id) {
-            if (!confirm('Sbloccare questo mittente?')) return;
-
-            fetch('/api/ratelimits', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'unblock', id })
             })
             .then(r => r.json())
             .then(data => {
@@ -13023,9 +13226,9 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
     public static String getPathsHtml() {
         String extraStyles = """
         .path-entry { display: flex; flex-direction: column; padding: 12px; border-left: 4px solid #6c757d; background: #f8f9fa; border-radius: 4px; margin-bottom: 8px; }
-        .path-entry.exists { border-color: #28a745; }
+        .path-entry.exists { border-color: #198754; }
         .path-entry.missing { border-color: #dc3545; }
-        .path-entry.directory { border-color: #17a2b8; }
+        .path-entry.directory { border-color: #0dcaf0; }
         .path-label { font-weight: 600; }
         .path-code { font-family: monospace; word-break: break-all; padding: 4px 8px; background: rgba(0,0,0,0.05); border-radius: 3px; user-select: all; }
         .path-meta { font-size: 0.8rem; color: #6c757d; }
@@ -13037,7 +13240,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         .copy-btn:hover { background: #e9ecef; }
         [data-theme="dark"] .copy-btn { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-color); }
         [data-theme="dark"] .copy-btn:hover { background: var(--table-hover); }
-        .copy-btn.copied { background: #28a745; color: white; border-color: #28a745; }
+        .copy-btn.copied { background: #198754; color: white; border-color: #198754; }
         """;
         return getHead("Path di Sistema", extraStyles) + getNavbar("paths") + """
     <div class="content container mt-4">
@@ -13384,6 +13587,104 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-shield-halved me-2"></i><strong>Porta 443: superficie minima</strong>
+                        <span class="small text-muted ms-2">due file e nient&rsquo;altro</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="w443Carica()"><i class="fas fa-magnifying-glass me-1"></i>Stato</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Due funzioni hanno bisogno della 443 perch&eacute; i protocolli non ammettono altra
+                        porta: la <strong>politica MTA-STS</strong>, letta dai server mittenti di tutto il mondo,
+                        e il <strong>file di configurazione di Thunderbird</strong>. Aprire quella porta espone
+                        qualcosa, quindi quel qualcosa dev&rsquo;essere il meno possibile.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        Il blocco che il pannello installa &egrave; <strong>separato</strong> da quello della
+                        webmail sulla 8443 &mdash; se ci si aggiungesse dentro, erediterebbe la radice di
+                        Roundcube e il gestore del PHP, aprendo un&rsquo;applicazione intera per servire due file
+                        di testo. Ha <code>default_server</code>, quindi nessun altro sito pu&ograve; rispondere
+                        su quella porta; due sole <code>location</code> esatte e <strong>404 su tutto il
+                        resto</strong>; solo GET e HEAD; limiti di frequenza e di connessioni per indirizzo;
+                        attese brevi. La politica MTA-STS &egrave; un <strong>file statico</strong>: una
+                        richiesta l&igrave; non raggiunge mai il pannello n&eacute; il database.
+                    </p>
+                    <div id="upd-443"><span class="text-muted">Premi "Stato": legge e basta.</span></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-globe me-2"></i><strong>Cosa espone il web server</strong>
+                        <span class="small text-muted ms-2">letto dal server, non dedotto</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="webDiag()"><i class="fas fa-magnifying-glass me-1"></i>Diagnosi</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Il pannello contiene <strong>due</strong> script di installazione che scrivono
+                        configurazioni nginx diverse: uno mette un blocco sulla porta 80 che serve la webmail
+                        <strong>in chiaro</strong>, l&rsquo;altro solo la 443 cifrata. Guardando il codice non si
+                        pu&ograve; sapere quale abbia costruito questa macchina.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        Questa diagnosi legge <code>nginx -T</code>, cio&egrave; la configurazione completa come
+                        nginx la vede davvero, pi&ugrave; le porte in ascolto, le regole di <code>pf</code> e le
+                        jail di fail2ban. <strong>Non modifica niente.</strong> E se un comando non riesce lo
+                        dice, invece di concludere che vada tutto bene.
+                    </p>
+                    <div id="upd-web"><span class="text-muted">Premi "Diagnosi": legge e basta.</span></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-binoculars me-2"></i><strong>Sorveglianza</strong>
+                        <span class="small text-muted ms-2">cosa &egrave; cambiato sotto i piedi del pannello</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="sorvCarica()"><i class="fas fa-magnifying-glass me-1"></i>Controlla</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Le regole su cui questo pannello &egrave; costruito cambiano, e finora ce ne accorgevamo
+                        per caso, mentre stavamo facendo altro. Il 1&deg; settembre 2026 &egrave; successo con
+                        DMARC: il pannello era scritto su RFC&nbsp;7489, sostituito a maggio da tre documenti
+                        nuovi, e nessuno lo aveva detto.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        Quella scoperta si poteva automatizzare: il RFC&nbsp;Editor pubblica lo stato di ogni
+                        documento in forma leggibile da un programma. Il pannello lo interroga per ognuna delle
+                        specifiche che implementa e dice se sono state sostituite o aggiornate.
+                        <strong>Le stesse voci finiscono nel rapporto periodico</strong>, cos&igrave; arrivano per
+                        email invece di aspettare che qualcuno passi di qui.
+                    </p>
+                    <div id="upd-sorv"><span class="text-muted">Premi "Controlla": legge e basta.</span></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-lock me-2"></i><strong>Porta 465: sottomissione autenticata</strong>
+                        <span class="small text-muted ms-2">abilitare l&rsquo;autenticazione non &egrave; richiederla</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="upd465()"><i class="fas fa-magnifying-glass me-1"></i>Verifica</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        La 465 non &egrave; &ldquo;una porta 25 cifrata&rdquo;: &egrave; una porta di
+                        <strong>sottomissione</strong>. RFC&nbsp;8314 &sect;3.3 dice che quel servizio d&agrave;
+                        accesso a un Message Submission Agent, e RFC&nbsp;6409 &sect;4.3 &mdash; intitolata
+                        <em>Require Authentication</em> &mdash; dice che un MSA <strong>deve</strong> rifiutare il
+                        comando MAIL se la sessione non &egrave; autenticata.
+                        <code>smtpd_sasl_auth_enable=yes</code> abilita l&rsquo;autenticazione ma non la richiede.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        La stessa riga sulla <strong>porta 25</strong> fermerebbe tutta la posta in arrivo, perch&eacute;
+                        &egrave; l&igrave; che i server del mondo consegnano senza autenticarsi: il pannello tocca
+                        una sola voce, riconosciuta dal primo campo della riga.
+                    </p>
+                    <div id="upd-465"><span class="text-muted">Premi "Verifica": legge master.cf, non modifica niente.</span></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-shield-halved me-2"></i><strong>Protezione pacchetti</strong>
                         <span class="small text-muted ms-2">impedisce che un aggiornamento sostituisca o rimuova un pezzo dello stack</span></span>
                     <div class="text-nowrap">
@@ -13586,6 +13887,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             return '<span class="badge upd-badge-stop">ATTENDI</span>';
         }
 
+""" + risorsa("pagine/porta465.js") + risorsa("pagine/sorveglianza.js") + risorsa("pagine/diagnosi-web.js") + risorsa("pagine/web443.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');

@@ -52,6 +52,7 @@ public class SSLMailServer {
     private SieveGenerator sieveGenerator;
     private DnsRecordsGenerator dnsGenerator;
     private AcmeManager acmeManager;
+    private org.mail_panel.system.RapportoPeriodico rapportoPeriodico;
     private LogManager logManager;
     private MailQueueManager queueManager;
     private RoundcubeSsoManager ssoManager;
@@ -114,6 +115,20 @@ public class SSLMailServer {
 
     private void setupRoutes() {
         // Public routes (no auth required)
+        // I file di Font Awesome viaggiano dentro il jar e li serve il pannello stesso.
+        // NON richiede autenticazione di proposito: il foglio di stile serve anche alla
+        // pagina di accesso, che per definizione si vede prima di essere autenticati.
+        // Rotta PUBBLICA e senza autenticazione, e non puo' essere altrimenti: e' Thunderbird
+        // a chiederla, prima ancora che l'utente abbia inserito una password. Restituisce solo
+        // nomi di server e numeri di porta, che sono gia' pubblici (stanno nei record DNS), e
+        // solo per i domini che questo pannello ospita davvero.
+        server.createContext("/autoconfig", this::handleAutoconfigPubblico);
+        // Anche questa e' pubblica per forza: la politica MTA-STS la leggono i server mittenti
+        // del mondo, che non hanno e non devono avere credenziali. Contiene solo il nome del
+        // proprio MX, che sta gia' nei record DNS.
+        server.createContext("/mta-sts", this::handleMtaStsPubblico);
+        server.createContext("/fa", this::handleStatico);
+        server.createContext("/vendor", this::handleStatico);
         server.createContext("/", this::handleRoot);
         server.createContext("/index", this::handleIndex);
         server.createContext("/login_check", this::handleLoginCheck);
@@ -202,6 +217,11 @@ public class SSLMailServer {
 
         // API endpoints - Admin management
         server.createContext("/api/admins", this::handleApiAdmins);
+        server.createContext("/api/report", this::handleApiReport);
+        server.createContext("/api/autodns", this::handleApiAutoDns);
+        server.createContext("/api/autoconfig", this::handleApiAutoconfig);
+        server.createContext("/api/profilo-apple", this::handleApiProfiloApple);
+        server.createContext("/profilo-apple", this::handleScaricaProfiloApple);
 
         // API endpoints - Auto-responder
         server.createContext("/api/autoresponder", this::handleApiAutoResponder);
@@ -266,6 +286,11 @@ public class SSLMailServer {
             // Start DKIM rotation scheduler (polls DNS propagation hourly)
             this.dkimRotationScheduler = new DkimRotationScheduler(Main.mailDatabase, dkimManager);
             this.dkimRotationScheduler.start();
+
+            // Il rapporto periodico: sa leggere il certificato solo se glielo si passa.
+            org.mail_panel.system.RapportoPeriodico.collega(this.acmeManager);
+            this.rapportoPeriodico = new org.mail_panel.system.RapportoPeriodico();
+            this.rapportoPeriodico.start();
 
             // Auto-install/update Roundcube SSO plugin if Roundcube is installed
             autoInstallSsoPlugin();
@@ -715,11 +740,72 @@ public class SSLMailServer {
 
     // ============== PAGE HANDLERS ==============
 
+    /**
+     * Cosa mostrare quando il pannello non puo' funzionare ma l'installazione NON va rifatta.
+     *
+     * Prima, in questa situazione, si veniva mandati alla procedura di installazione: era il
+     * modo in cui il cancello si apriva da solo. Ora la procedura e' chiusa, e mandare li'
+     * chiunque produrrebbe soltanto un rimbalzo infinito fra /index e /setup. Si dice invece
+     * cosa sta succedendo davvero, che e' anche l'unica cosa utile a chi deve rimediare.
+     */
+    private void paginaNonDisponibile(HttpExchange exchange, String motivo, String rimedio)
+            throws IOException {
+        String html = "<!doctype html><html lang=\"it\"><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<title>Pannello non disponibile</title><style>"
+                + "body{background:#16213e;color:#e6e6e6;font-family:-apple-system,Segoe UI,Roboto,sans-serif;"
+                + "display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:1.5rem}"
+                + ".c{max-width:38rem;background:#1a1a2e;border:1px solid #2b2b45;border-radius:12px;padding:2rem}"
+                + "h1{font-size:1.3rem;margin:0 0 1rem;color:#e94560}"
+                + "p{line-height:1.6;margin:0 0 1rem}code{background:#0f3460;padding:.15rem .4rem;border-radius:4px}"
+                + "</style></head><body><div class=\"c\">"
+                + "<h1>Il pannello non puo' rispondere</h1>"
+                + "<p>" + escapeHtmlServer(motivo) + "</p>"
+                + "<p>" + escapeHtmlServer(rimedio) + "</p>"
+                + "<p style=\"opacity:.7;font-size:.9rem\">La procedura di installazione non viene "
+                + "riaperta: risulta gia' completata, e riaprirla quando un componente cade sarebbe un "
+                + "modo di perdere il server, non di recuperarlo.</p>"
+                + "</div></body></html>";
+        byte[] dati = html.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+        exchange.sendResponseHeaders(503, dati.length);
+        try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
+        exchange.close();
+    }
+
+    /** Neutralizza il testo prima di metterlo in una pagina costruita a mano. */
+    private static String escapeHtmlServer(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
+    }
+
+    /** Il motivo per cui il pannello non e' utilizzabile, quando il setup e' chiuso. */
+    private String motivoIndisponibilita() {
+        if (!Main.mysqlAvailable)
+            return "Il database MySQL non risponde, quindi il pannello non puo' leggere domini, "
+                 + "caselle e amministratori.";
+        return "Il database risponde, ma non risulta configurato nessun amministratore.";
+    }
+
+    private String rimedioIndisponibilita() {
+        if (!Main.mysqlAvailable)
+            return "Va rimesso in funzione MySQL sul server: di solito basta riavviare il servizio "
+                 + "e controllare lo spazio libero sul disco. Appena risponde, questa pagina torna "
+                 + "a essere la schermata di accesso.";
+        return "Va ricreato un amministratore. Se serve rieseguire l'installazione, crea sul server "
+             + "il file /var/db/mailpanel/consenti-setup e riprova entro quindici minuti.";
+    }
+
     private void handleRoot(HttpExchange exchange) throws IOException {
         try {
             // Redirect based on system state
             if (!Main.mysqlAvailable || Main.setupRequired) {
-                redirect(exchange, "/setup");
+                if (org.mail_panel.security.CancelloSetup.consentito()) {
+                    redirect(exchange, "/setup");
+                } else {
+                    paginaNonDisponibile(exchange, motivoIndisponibilita(), rimedioIndisponibilita());
+                }
             } else if (isAuthenticated(exchange)) {
                 redirect(exchange, "/home");
             } else {
@@ -733,9 +819,11 @@ public class SSLMailServer {
 
     private void handleIndex(HttpExchange exchange) throws IOException {
         try {
-            // If setup required, redirect to setup
+            // Se l'installazione e' gia' stata fatta non si rimbalza verso /setup — che ora
+            // rimanda indietro — ma si dice cosa non va.
             if (!Main.mysqlAvailable || Main.setupRequired) {
-                redirect(exchange, "/setup");
+                if (org.mail_panel.security.CancelloSetup.consentito()) redirect(exchange, "/setup");
+                else paginaNonDisponibile(exchange, motivoIndisponibilita(), rimedioIndisponibilita());
                 return;
             }
 
@@ -762,8 +850,10 @@ public class SSLMailServer {
     }
 
     private void handleSetup(HttpExchange exchange) throws IOException {
-        // If already configured, redirect to login
-        if (Main.mysqlAvailable && !Main.setupRequired) {
+        // Stessa regola dell'endpoint: se l'installazione risulta fatta, qui non si arriva —
+        // nemmeno con MySQL giu'. Mostrare il modulo e poi rifiutare le richieste sarebbe
+        // un invito a insistere, e direbbe a un estraneo che il pannello e' in difficolta'.
+        if (!org.mail_panel.security.CancelloSetup.consentito()) {
             redirect(exchange, "/index");
             return;
         }
@@ -830,11 +920,14 @@ public class SSLMailServer {
             return;
         }
 
-        // If setup required, reject login
+        // Il messaggio non manda piu' a /setup quando l'installazione c'e' gia': sarebbe un
+        // consiglio sbagliato e un invito a insistere su una porta che deve restare chiusa.
         if (!Main.mysqlAvailable || Main.setupRequired) {
             sendJsonResponse(exchange, new JSONObject()
                 .put("success", false)
-                .put("Message", "Setup richiesto. Vai a /setup"));
+                .put("Message", org.mail_panel.security.CancelloSetup.consentito()
+                        ? "Installazione non ancora completata. Vai a /setup"
+                        : motivoIndisponibilita() + " " + rimedioIndisponibilita()));
             return;
         }
 
@@ -986,11 +1079,22 @@ public class SSLMailServer {
             return;
         }
 
-        // Only allow if setup is required
-        if (Main.mysqlAvailable && !Main.setupRequired) {
-            sendJsonError(exchange, 403, "Setup already completed");
+        // Il cancello non dipende piu' dalla raggiungibilita' di MySQL: con la vecchia
+        // condizione bastava che il database non rispondesse perche' questa procedura —
+        // che esegue script di installazione — tornasse aperta a chiunque, senza credenziali.
+        org.mail_panel.security.CancelloSetup.Esito cancello =
+                org.mail_panel.security.CancelloSetup.valuta();
+        if (cancello == org.mail_panel.security.CancelloSetup.Esito.CHIUSO) {
+            // Ogni tentativo respinto viene registrato: un attacco che non lascia traccia
+            // e' un attacco che nessuno scopre.
+            logAudit("SETUP_RIFIUTATO", getClientIp(exchange),
+                    "tentativo di eseguire la procedura di installazione a installazione gia' completata");
+            sendJsonError(exchange, 403, org.mail_panel.security.CancelloSetup.motivoRifiuto());
             return;
         }
+        if (cancello == org.mail_panel.security.CancelloSetup.Esito.APERTO_PER_RECUPERO)
+            logAudit("SETUP_RECUPERO", getClientIp(exchange),
+                    org.mail_panel.security.CancelloSetup.notaRecupero());
 
         String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
@@ -2263,6 +2367,238 @@ public class SSLMailServer {
         return "<html><body><h1>Page not found</h1></body></html>";
     }
 
+    /**
+     * Serve i file statici dalle risorse del jar: Font Awesome sotto /fa, Bootstrap e
+     * Chart.js sotto /vendor.
+     *
+     * Prima arrivavano da un CDN, fermi alla 6.0.0-beta3, dove due delle icone usate non
+     * esistevano affatto. Ora viaggiano dentro il jar (356 KB in tutto): il pannello non
+     * dipende piu' da un sito esterno, e la versione e' quella scelta, non quella che
+     * l'indirizzo del CDN si porta dietro.
+     *
+     * Il percorso richiesto viene ripulito prima di essere usato: e' l'unico punto del
+     * pannello in cui una stringa che arriva dalla rete diventa il nome di una risorsa da
+     * leggere, quindi "../" e i nomi strani non devono passare.
+     */
+    /**
+     * Il file che Thunderbird cerca da solo. Nessuna autenticazione: e' il client a chiederlo
+     * prima di sapere qualsiasi cosa dell'utente.
+     *
+     * Il dominio si ricava dal parametro emailaddress, e in mancanza dall'intestazione Host
+     * che nginx passa avanti. In entrambi i casi viene confrontato con l'elenco dei domini
+     * gestiti: se non e' uno di quelli, 404. Cosi' il valore che arriva da fuori non finisce
+     * mai dentro il file: quello che si scrive e' sempre il nome preso dal database.
+     */
+    private void handleAutoconfigPubblico(HttpExchange exchange) throws IOException {
+        try {
+            String path = exchange.getRequestURI().getPath();
+            if (!"/autoconfig/mail/config-v1.1.xml".equals(path)) {
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
+                return;
+            }
+
+            String indirizzo = parametro(exchange.getRequestURI().getRawQuery(), "emailaddress");
+            String candidato = org.mail_panel.system.Autoconfig.dominioDaIndirizzo(indirizzo);
+            if (candidato == null) {
+                java.util.List<String> host = exchange.getRequestHeaders().get("Host");
+                if (host != null && !host.isEmpty()) candidato = host.get(0);
+            }
+
+            String dominio = org.mail_panel.system.Autoconfig.dominioGestito(candidato);
+            String hostPosta = org.mail_panel.system.Autoconfig.hostDiPosta();
+            if (dominio == null || hostPosta == null || hostPosta.isBlank()) {
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
+                return;
+            }
+
+            byte[] dati = org.mail_panel.system.Autoconfig.xml(dominio, hostPosta)
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/xml; charset=UTF-8");
+            exchange.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
+            exchange.sendResponseHeaders(200, dati.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
+        } catch (Exception e) {
+            try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
+        } finally {
+            exchange.close();
+        }
+    }
+
+    /** Un parametro dalla query, senza portarsi dietro una libreria per farlo. */
+    private static String parametro(String query, String nome) {
+        if (query == null || query.isEmpty()) return null;
+        for (String coppia : query.split("&")) {
+            int i = coppia.indexOf('=');
+            if (i <= 0) continue;
+            if (!java.net.URLDecoder.decode(coppia.substring(0, i),
+                    java.nio.charset.StandardCharsets.UTF_8).equals(nome)) continue;
+            return java.net.URLDecoder.decode(coppia.substring(i + 1),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        }
+        return null;
+    }
+
+    /**
+     * La politica MTA-STS, come la chiede un server mittente. Il dominio si ricava
+     * dall'intestazione Host che nginx passa avanti, e viene confrontato con l'elenco dei
+     * domini gestiti: se non e' uno di quelli, 404.
+     */
+    private void handleMtaStsPubblico(HttpExchange exchange) throws IOException {
+        try {
+            if (!"/mta-sts/policy".equals(exchange.getRequestURI().getPath())) {
+                exchange.sendResponseHeaders(404, -1);
+                return;
+            }
+            java.util.List<String> host = exchange.getRequestHeaders().get("Host");
+            String dominio = org.mail_panel.system.MtaSts.dominioGestito(
+                    host == null || host.isEmpty() ? null : host.get(0));
+            String mail = org.mail_panel.system.MtaSts.hostDiPosta();
+            if (dominio == null || mail == null || mail.isBlank()) {
+                exchange.sendResponseHeaders(404, -1);
+                return;
+            }
+            String modo = org.mail_panel.system.MtaSts.modoCorrente();
+            byte[] dati = org.mail_panel.system.MtaSts
+                    .politica(mail, modo, org.mail_panel.system.MtaSts.maxAgeConsigliato(modo))
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
+            exchange.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
+            exchange.sendResponseHeaders(200, dati.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
+        } catch (Exception e) {
+            try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
+        } finally {
+            exchange.close();
+        }
+    }
+
+    private void handleApiAutoconfig(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, "Method not allowed"); return; }
+        String body = readRequestBodyWithLimit(exchange);
+        if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+        String ip = getClientIp(exchange);
+        JSONObject req;
+        try { req = new JSONObject(body); }
+        catch (Exception e) { sendJsonError(exchange, 400, "JSON non valido"); return; }
+
+        JSONObject response;
+        switch (req.optString("action", "")) {
+            case "status" -> response = org.mail_panel.system.Autoconfig.stato();
+            case "preview" -> response = org.mail_panel.system.Autoconfig.anteprima();
+            case "install" -> {
+                if (!"INSTALLA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                response = org.mail_panel.system.Autoconfig.installa();
+                logAudit("AUTOCONFIG_INSTALL", ip, response.optBoolean("success")
+                        ? "nginx configurato" : "NON configurato: " + response.optString("error", "?"));
+            }
+            default -> response = new JSONObject().put("success", false).put("error", "azione sconosciuta");
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * Scarica il profilo di configurazione per Apple Mail. E' una GET perche' deve essere un
+     * link che il browser scarica, ma richiede la sessione: il profilo contiene il nome di
+     * una casella, e non ha motivo di essere pubblico. Non contiene la password.
+     */
+    private void handleScaricaProfiloApple(HttpExchange exchange) throws IOException {
+        try {
+            if (!isAuthenticated(exchange)) {
+                exchange.sendResponseHeaders(401, -1);
+                return;
+            }
+            String email = parametro(exchange.getRequestURI().getRawQuery(), "email");
+            var casella = org.mail_panel.system.ProfiloApple.casella(email);
+            String host = org.mail_panel.system.ProfiloApple.hostDiPosta();
+            if (casella == null || host == null || host.isBlank()) {
+                exchange.sendResponseHeaders(404, -1);
+                return;
+            }
+
+            String profilo = org.mail_panel.system.ProfiloApple
+                    .mobileconfig(casella.email(), casella.nome(), host, host);
+            if (!org.mail_panel.system.ProfiloApple.benFormato(profilo)) {
+                // Non si consegna un file rotto: Mail lo rifiuterebbe senza spiegare perche'.
+                exchange.sendResponseHeaders(500, -1);
+                return;
+            }
+            byte[] dati = profilo.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            String nome = org.mail_panel.system.ProfiloApple.nomeFile(casella.email());
+            exchange.getResponseHeaders().set("Content-Type", "application/x-apple-aspen-config");
+            exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + nome + "\"");
+            exchange.sendResponseHeaders(200, dati.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
+            logAudit("PROFILO_APPLE", getClientIp(exchange), "scaricato per " + casella.email());
+        } catch (Exception e) {
+            try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
+        } finally {
+            exchange.close();
+        }
+    }
+
+    private void handleApiProfiloApple(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, "Method not allowed"); return; }
+        String body = readRequestBodyWithLimit(exchange);
+        if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+        JSONObject req;
+        try { req = new JSONObject(body); }
+        catch (Exception e) { sendJsonError(exchange, 400, "JSON non valido"); return; }
+
+        JSONObject response = switch (req.optString("action", "")) {
+            case "status" -> org.mail_panel.system.ProfiloApple.stato();
+            case "preview" -> org.mail_panel.system.ProfiloApple.anteprima(req.optString("email", ""));
+            default -> new JSONObject().put("success", false).put("error", "azione sconosciuta");
+        };
+        sendJsonResponse(exchange, response);
+    }
+
+    private void handleStatico(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        String risorsa = null;
+        if (path.startsWith("/fa/")) {
+            String rel = path.substring(4);                        // css/... oppure webfonts/...
+            if (rel.matches("(css|webfonts)/[A-Za-z0-9._-]{1,64}")) risorsa = "/fa/" + rel;
+        } else if (path.startsWith("/vendor/")) {
+            String rel = path.substring(8);                        // un solo livello, nessuna cartella
+            if (rel.matches("[A-Za-z0-9._-]{1,64}")) risorsa = "/vendor/" + rel;
+        }
+        if (risorsa == null) {
+            exchange.sendResponseHeaders(404, -1);
+            exchange.close();
+            return;
+        }
+        String tipo = risorsa.endsWith(".css") ? "text/css; charset=UTF-8"
+                    : risorsa.endsWith(".js") ? "application/javascript; charset=UTF-8"
+                    : risorsa.endsWith(".woff2") ? "font/woff2"
+                    : risorsa.endsWith(".woff") ? "font/woff"
+                    : risorsa.endsWith(".ttf") ? "font/ttf"
+                    : "application/octet-stream";
+        byte[] dati;
+        try (java.io.InputStream in = getClass().getResourceAsStream(risorsa)) {
+            if (in == null) {
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
+                return;
+            }
+            dati = in.readAllBytes();
+        }
+        exchange.getResponseHeaders().add("Content-Type", tipo);
+        exchange.getResponseHeaders().add("X-Content-Type-Options", "nosniff");
+        // Il contenuto cambia solo quando cambia il jar: si puo' tenere in cache a lungo.
+        exchange.getResponseHeaders().add("Cache-Control", "public, max-age=604800");
+        exchange.sendResponseHeaders(200, dati.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(dati);
+        }
+    }
+
     private void sendHtml(HttpExchange exchange, String html) throws IOException {
         byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
         addSecurityHeaders(exchange);
@@ -2311,12 +2647,12 @@ public class SSLMailServer {
         // Content Security Policy - Restrict resource loading
         headers.set("Content-Security-Policy",
             "default-src 'self'; " +
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; " +
-            "style-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; " +
+            "script-src 'self' 'unsafe-inline'; " +
+            "style-src 'self' 'unsafe-inline'; " +
+            "style-src-elem 'self' 'unsafe-inline'; " +
             "img-src 'self' data: https:; " +
-            "font-src 'self' data: https:; " +
-            "connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+            "font-src 'self' data:; " +
+            "connect-src 'self'; " +
             "frame-ancestors 'none'");
         // Permissions Policy - Disable unnecessary features
         headers.set("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
@@ -2826,6 +3162,7 @@ public class SSLMailServer {
                         checkJson.put("type", check.recordType);
                         checkJson.put("name", check.recordName);
                         checkJson.put("passed", check.passed);
+                        checkJson.put("informativo", check.informativo);
                         checkJson.put("message", check.message);
                         if (check.currentValue != null) {
                             checkJson.put("current_value", check.currentValue);
@@ -4044,6 +4381,35 @@ public class SSLMailServer {
                         MailQueueManager.QueueAction result = queueManager.resumeQueue();
                         response.put("success", result.success);
                         response.put("message", result.message);
+                    }
+                    case "purge_permfails" -> {
+                        // Prima si mostra COSA verrebbe eliminato, poi si elimina. Cancellare
+                        // posta e' irreversibile: una finestra di conferma che non dice quanti
+                        // e quali messaggi tocca non e' una conferma, e' un pulsante.
+                        java.util.List<MailQueueManager.QueuedMessage> perm =
+                                queueManager.permanentFailures();
+                        if (!"ELIMINA".equals(json.optString("confirm", ""))) {
+                            JSONArray elenco = new JSONArray();
+                            for (MailQueueManager.QueuedMessage m : perm)
+                                elenco.put(new JSONObject()
+                                        .put("id", m.envelopeId == null ? "" : m.envelopeId)
+                                        .put("mittente", m.sender == null ? "" : m.sender)
+                                        .put("destinatario", m.recipient == null ? "" : m.recipient)
+                                        .put("errore", m.errorReason == null ? "" : m.errorReason));
+                            response.put("success", true).put("anteprima", true)
+                                    .put("quanti", perm.size()).put("messaggi", elenco)
+                                    .put("message", perm.isEmpty()
+                                            ? "Nessun messaggio con errore permanente."
+                                            : perm.size() + " messaggi hanno ricevuto un rifiuto definitivo "
+                                              + "(5xx) e non partiranno mai. I messaggi con errore "
+                                              + "temporaneo non vengono toccati.");
+                            break;
+                        }
+                        MailQueueManager.QueueAction result = queueManager.purgePermanentFailures();
+                        response.put("success", result.success).put("message", result.message)
+                                .put("output", result.output == null ? "" : result.output);
+                        logAudit("QUEUE_PURGE_PERMFAILS", getClientIp(exchange),
+                                perm.size() + " messaggi - " + result.message);
                     }
                     case "purge_deferred" -> {
                         MailQueueManager.QueueAction result = queueManager.purgeDeferred();
@@ -6142,6 +6508,59 @@ public class SSLMailServer {
                 case "panel_env" -> response = UpdateManager.ambienteDelPannello();
                 case "dovecot24_preview" -> response = UpdateManager.anteprimaDovecot24();
                 case "rspamd_timeout" -> response = UpdateManager.diagnosiTimeoutRspamd();
+                case "web_diagnosi" -> response = org.mail_panel.system.DiagnosiWeb.stato();
+                case "web443_status" -> response = org.mail_panel.system.ProtezioneWeb.stato();
+                case "web443_config" -> response = new JSONObject().put("success", true)
+                        .put("configurazione", org.mail_panel.system.ProtezioneWeb.configurazione(
+                                "/usr/local/etc/ssl/mail/fullchain.pem",
+                                "/usr/local/etc/ssl/mail/privkey.pem"))
+                        .put("filtro", org.mail_panel.system.ProtezioneWeb.filtro())
+                        .put("jail", org.mail_panel.system.ProtezioneWeb.jail());
+                case "web443_include" -> {
+                    if (!"AGGIUNGI".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = org.mail_panel.system.ProtezioneWeb.aggiungiInclude();
+                    logAudit("NGINX_INCLUDE", ip, response.optBoolean("success")
+                            ? "include aggiunto" : "NON aggiunto: " + response.optString("error", "?"));
+                }
+                case "web443_install" -> {
+                    if (!"APRI".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = org.mail_panel.system.ProtezioneWeb.installa("", "");
+                    logAudit("WEB443_INSTALL", ip, response.optBoolean("success")
+                            ? "443 aperta con superficie minima" : "NON aperta: " + response.optString("error", "?"));
+                }
+                case "web443_jail" -> {
+                    if (!"ATTIVA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = org.mail_panel.system.ProtezioneWeb.installaJail();
+                    logAudit("WEB443_JAIL", ip, response.optBoolean("success")
+                            ? "jail attiva" : "NON attiva: " + response.optString("error", "?"));
+                }
+                case "sorveglianza" -> response = org.mail_panel.system.Sorveglianza.controlla();
+                case "sorveglianza_cambi" -> response = org.mail_panel.system.Sorveglianza.cosaECambiato(
+                        req.optString("rfc", ""),
+                        // Per un aggiornamento il documento nuovo e la specifica del pannello
+                        // sono due numeri diversi: gli identificatori da incrociare sono quelli
+                        // della specifica, non del documento che la aggiorna.
+                        req.optString("riferimento", req.optString("rfc", "")));
+                case "openssl_scadenza" -> response = org.mail_panel.system.ScadenzaOpenssl.stato();
+                case "porta465_status" -> response = org.mail_panel.system.PortaSottomissione.stato();
+                case "porta465_apply" -> {
+                    if (!"APPLICA".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = org.mail_panel.system.PortaSottomissione.applica();
+                    logAudit("PORTA_465", ip, response.optBoolean("success")
+                            ? "restrizione applicata" : "NON applicata: " + response.optString("error", "?"));
+                }
                 case "postfix_level" -> {
                     if (!"ALZA".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");
@@ -8375,9 +8794,11 @@ public class SSLMailServer {
             JSONObject req = new JSONObject(body);
             String username = req.optString("username", "").trim();
 
-            if (username.isEmpty()) {
+            // Whitelist, non lista di cose vietate: si accetta SOLO cio' che un username puo'
+            // essere. Controllare che non sia vuoto lasciava passare qualsiasi altra cosa.
+            if (!SecurityUtils.isValidUsername(username)) {
                 response.put("success", false);
-                response.put("error", "Username required");
+                response.put("error", "Username non valido");
                 sendJsonResponse(exchange, response);
                 return;
             }
@@ -8535,9 +8956,11 @@ public class SSLMailServer {
             JSONObject req = new JSONObject(body);
             String username = req.optString("username", "").trim();
 
-            if (username.isEmpty()) {
+            // Whitelist, non lista di cose vietate: si accetta SOLO cio' che un username puo'
+            // essere. Controllare che non sia vuoto lasciava passare qualsiasi altra cosa.
+            if (!SecurityUtils.isValidUsername(username)) {
                 response.put("success", false);
-                response.put("error", "Username required");
+                response.put("error", "Username non valido");
                 sendJsonResponse(exchange, response);
                 return;
             }
@@ -8722,6 +9145,147 @@ public class SSLMailServer {
     }
 
     // ============== ADMIN MANAGEMENT API ==============
+
+    /**
+     * Il rapporto periodico appartiene alle IMPOSTAZIONI, non agli aggiornamenti: destinatario,
+     * mittente e frequenza sono scelte, non diagnosi. Era finito nella pagina degli
+     * aggiornamenti solo perche' li' l'impianto delle chiamate esisteva gia' — comodo per chi
+     * scrive, non per chi usa — e per giunta il piede dell'email diceva gia' di cercarlo qui.
+     */
+    /**
+     * Creazione automatica su Cloudflare dei record che finora si aggiungevano a mano.
+     * L'automatismo esisteva gia' ma solo dentro la rotazione DKIM: stessi strumenti, non
+     * collegati a niente altro.
+     */
+    private void handleApiAutoDns(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, "Method not allowed"); return; }
+        String body = readRequestBodyWithLimit(exchange);
+        if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+        String ip = getClientIp(exchange);
+        JSONObject req;
+        try { req = new JSONObject(body); }
+        catch (Exception e) { sendJsonError(exchange, 400, "JSON non valido"); return; }
+
+        org.mail_panel.security.AutoDns auto =
+                new org.mail_panel.security.AutoDns(Main.mailDatabase,
+                        new org.mail_panel.security.CloudflareManager(Main.mailDatabase));
+        int domainId = req.optInt("domain_id", 0);
+        JSONObject response;
+        switch (req.optString("action", "")) {
+            case "status" -> response = auto.stato(domainId);
+            case "create" -> {
+                if (!"CREA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                String quale = req.optString("quale", "");
+                // Il predefinito e' "none", non "quarantine": RFC 9989 §5.1.5. Un valore
+                // predefinito che blocca posta e' una trappola per chi preme senza scegliere.
+                response = auto.crea(domainId, quale, req.optString("politica", "none"));
+                logAudit("AUTODNS_CREATE", ip, quale + " su dominio " + domainId
+                        + (response.optBoolean("success") ? " - creato" : " - NON creato: "
+                           + response.optString("error", "?")));
+            }
+            case "change_policy" -> {
+                response = auto.cambiaPolitica(domainId, req.optString("politica", ""),
+                        "CAMBIA".equals(req.optString("confirm", "")));
+                if ("CAMBIA".equals(req.optString("confirm", "")))
+                    logAudit("AUTODNS_POLITICA", ip, "dominio " + domainId + " -> p="
+                            + req.optString("politica", "") + (response.optBoolean("success")
+                            ? " - fatto" : " - NON fatto: " + response.optString("error", "?")));
+            }
+            case "mtasts_status" -> response = org.mail_panel.system.MtaSts.stato();
+            case "mtasts_mode" -> response = org.mail_panel.system.MtaSts.impostaModo(req.optString("modo", ""));
+            case "mtasts_txt" -> {
+                if (!"CREA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                response = auto.creaTxtMtaSts(domainId);
+                logAudit("MTASTS_TXT", ip, "dominio " + domainId
+                        + (response.optBoolean("success") ? " - pubblicato" : " - NON pubblicato: "
+                           + response.optString("error", "?")));
+            }
+            case "create_optional" -> {
+                if (!"CREA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                String q = req.optString("quale", "");
+                response = auto.creaOpzionale(domainId, q);
+                logAudit("AUTODNS_OPZIONALE", ip, q + " su dominio " + domainId
+                        + (response.optBoolean("success") ? " - creato" : " - NON creato: "
+                           + response.optString("error", "?")));
+            }
+            case "mailboxes" -> response = auto.caselleDisponibili();
+            case "mailbox_create" -> {
+                if (!"CREA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                response = auto.creaCasellaRapporti(domainId);
+                logAudit("AUTODNS_CASELLA", ip, "casella dmarc@ dominio " + domainId
+                        + (response.optBoolean("success") ? " - creata" : " - NON creata: "
+                           + response.optString("error", "?")));
+            }
+            case "alias_create" -> {
+                if (!"CREA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                String verso = req.optString("verso", "");
+                response = auto.creaAliasRapporti(domainId, verso);
+                logAudit("AUTODNS_ALIAS", ip, "alias dmarc@ dominio " + domainId + " verso " + verso
+                        + (response.optBoolean("success") ? " - creato" : " - NON creato: "
+                           + response.optString("error", "?")));
+            }
+            default -> response = new JSONObject().put("success", false).put("error", "azione sconosciuta");
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    private void handleApiReport(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, "Method not allowed"); return; }
+        String body = readRequestBodyWithLimit(exchange);
+        if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+        String ip = getClientIp(exchange);
+        JSONObject req;
+        try { req = new JSONObject(body); }
+        catch (Exception e) { sendJsonError(exchange, 400, "JSON non valido"); return; }
+
+        JSONObject response;
+        switch (req.optString("action", "")) {
+            case "status" -> response = org.mail_panel.system.RapportoPeriodico.stato();
+            case "identity" -> response = org.mail_panel.system.RapportoPeriodico.statoIdentita();
+            case "preview" -> response = org.mail_panel.system.RapportoPeriodico.anteprima();
+            case "save" -> response = org.mail_panel.system.RapportoPeriodico.salvaImpostazioni(
+                    req.optString("destinatario", ""), req.optString("mittente", ""),
+                    req.optString("frequenza", ""), req.optString("ora", ""),
+                    req.optBoolean("attivo", false));
+            case "identity_create" -> {
+                if (!"CREA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                response = org.mail_panel.system.RapportoPeriodico.creaIdentita(req.optString("indirizzo", ""));
+                logAudit("REPORT_IDENTITY", ip, req.optString("indirizzo", "")
+                        + (response.optBoolean("success") ? " - creata" : " - NON creata"));
+            }
+            case "send" -> {
+                if (!"INVIA".equals(req.optString("confirm", ""))) {
+                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    break;
+                }
+                response = org.mail_panel.system.RapportoPeriodico.inviaAdesso(req.optString("destinatario", ""));
+                logAudit("REPORT_SEND", ip, req.optString("destinatario", "")
+                        + (response.optBoolean("success") ? " - inviato" : " - NON inviato"));
+            }
+            default -> response = new JSONObject().put("success", false).put("error", "azione sconosciuta");
+        }
+        sendJsonResponse(exchange, response);
+    }
 
     private void handleApiAdmins(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
@@ -9011,9 +9575,26 @@ public class SSLMailServer {
 
                     switch (action) {
                         case "create" -> {
-                            String username = req.optString("username", "");
+                            String username = req.optString("username", "").trim();
                             String password = req.optString("password", "");
                             String role = req.optString("role", "admin");
+
+                            // Qui non si validava nulla: un username qualsiasi finiva nel
+                            // database, e da li' nell'elenco degli amministratori, che lo
+                            // interpola in HTML. La catena si spezza al primo anello.
+                            if (!SecurityUtils.isValidUsername(username)) {
+                                response.put("success", false);
+                                response.put("error", "Username non valido: sono ammessi solo "
+                                        + "lettere, cifre, trattino e trattino basso, da 3 a 50 caratteri.");
+                                sendJsonResponse(exchange, response);
+                                return;
+                            }
+                            if (!"admin".equals(role) && !"superadmin".equals(role)) {
+                                response.put("success", false);
+                                response.put("error", "Ruolo non valido");
+                                sendJsonResponse(exchange, response);
+                                return;
+                            }
 
                             if (Main.mailDatabase.createAdmin(username, password, role)) {
                                 response.put("success", true);
@@ -9420,21 +10001,41 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
+                    // La pagina leggeva "limits.hourly" da quello che era un ARRAY, e i campi
+                    // delle righe con nomi che il server non ha mai prodotto: la tabella
+                    // mostrava "undefined" e il modulo si riempiva di valori predefiniti.
+                    // Qui la risposta prende la forma che la pagina legge davvero.
                     JSONArray limits = new JSONArray();
+                    JSONObject globale = null;
                     for (MailDatabase.RateLimit rl : Main.mailDatabase.getRateLimits()) {
-                        JSONObject limit = new JSONObject();
-                        limit.put("id", rl.id);
-                        limit.put("target_type", rl.targetType);
-                        limit.put("target_id", rl.targetId);
-                        limit.put("target_name", rl.targetName);
-                        limit.put("max_per_hour", rl.maxPerHour);
-                        limit.put("max_per_day", rl.maxPerDay);
-                        limit.put("max_recipients", rl.maxRecipients);
-                        limit.put("enabled", rl.enabled);
-                        limits.put(limit);
+                        if ("global".equalsIgnoreCase(rl.targetType)) {
+                            globale = new JSONObject()
+                                    .put("hourly", rl.maxPerHour)
+                                    .put("daily", rl.maxPerDay)
+                                    .put("max_recipients", rl.maxRecipients);
+                            continue;
+                        }
+                        limits.put(new JSONObject()
+                                .put("id", rl.id)
+                                .put("email", rl.targetName == null ? "" : rl.targetName)
+                                .put("target_id", rl.targetId)
+                                .put("hourly_limit", rl.maxPerHour)
+                                .put("daily_limit", rl.maxPerDay)
+                                .put("max_recipients", rl.maxRecipients)
+                                .put("enabled", rl.enabled));
                     }
+                    if (globale == null)
+                        globale = new JSONObject().put("hourly", 50).put("daily", 500)
+                                                 .put("max_recipients", 50).put("nonImpostato", true);
+                    // La dimensione massima non sta nel database: e' un parametro di Postfix,
+                    // e si legge da li' invece di tenerne una copia che diverge.
+                    int mb = org.mail_panel.system.LimiteDimensione.leggiMega();
+                    globale.put("max_size_mb", mb < 0 ? JSONObject.NULL : mb);
+                    if (mb < 0) globale.put("max_size_nota", "non riesco a leggere message_size_limit da Postfix");
+
                     response.put("success", true);
                     response.put("limits", limits);
+                    response.put("globale", globale);
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
@@ -9460,6 +10061,58 @@ public class SSLMailServer {
                                 response.put("success", false);
                                 response.put("error", "Impossibile salvare limite");
                             }
+                        }
+                        case "save_global" -> {
+                            int hourly = req.optInt("hourly", 0);
+                            int daily = req.optInt("daily", 0);
+                            int maxSize = req.optInt("max_size_mb", 0);
+                            if (hourly < 1 || daily < 1) {
+                                response.put("success", false)
+                                        .put("error", "I limiti orario e giornaliero devono essere almeno 1. "
+                                                + "Zero non vuol dire \"nessun limite\": vuol dire che non "
+                                                + "parte piu' niente.");
+                                break;
+                            }
+                            if (daily < hourly) {
+                                response.put("success", false)
+                                        .put("error", "Il limite giornaliero (" + daily + ") e' piu' basso di "
+                                                + "quello orario (" + hourly + "): quello orario non si "
+                                                + "raggiungerebbe mai, e il valore piu' basso vincerebbe "
+                                                + "sempre. Probabilmente non e' cio' che vuoi.");
+                                break;
+                            }
+                            // Il conteggio dei destinatari per messaggio non e' in questo modulo:
+                            // si conserva quello gia' salvato invece di azzerarlo di nascosto.
+                            int destinatari = 50;
+                            for (MailDatabase.RateLimit rl : Main.mailDatabase.getRateLimits())
+                                if ("global".equalsIgnoreCase(rl.targetType)) destinatari = rl.maxRecipients;
+
+                            boolean okDb = Main.mailDatabase.saveRateLimit("global", null, hourly, daily,
+                                    destinatari, true);
+                            response.put("success", okDb);
+                            if (!okDb) {
+                                response.put("error", "Impossibile salvare i limiti globali nel database.");
+                                break;
+                            }
+                            StringBuilder nota = new StringBuilder("Limiti globali salvati: " + hourly
+                                    + " all'ora, " + daily + " al giorno.");
+                            if (maxSize > 0) {
+                                JSONObject dim = org.mail_panel.system.LimiteDimensione.imposta(maxSize);
+                                response.put("dimensione", dim);
+                                if (dim.optBoolean("success", false)) {
+                                    nota.append(" ").append(dim.optString("nota", ""));
+                                } else {
+                                    // I limiti sono salvati, la dimensione no: si dice esattamente
+                                    // questo, invece di un "errore" generico che farebbe credere
+                                    // che non sia stato salvato niente.
+                                    response.put("success", false)
+                                            .put("error", nota + " La dimensione massima invece NON e' stata "
+                                                    + "cambiata: " + dim.optString("error", "errore sconosciuto"));
+                                    break;
+                                }
+                            }
+                            response.put("message", nota.toString());
+                            logAudit("RATELIMIT_GLOBAL", getClientIp(exchange), nota.toString());
                         }
                         case "delete" -> {
                             int limitId = req.optInt("limit_id", 0);
@@ -9935,8 +10588,8 @@ public class SSLMailServer {
                             .put("detail", "Contatta il provider hosting per aggiornare il PTR all'IP del server con '" + newHostname + "'")
                             .put("type", "dns"));
                     manualActions.put(new JSONObject()
-                            .put("action", "Aggiorna CNAME autoconfig/autodiscover")
-                            .put("detail", "autoconfig." + domain + " e autodiscover." + domain + " devono puntare a '" + newHostname + "'")
+                            .put("action", "Aggiorna il CNAME autoconfig")
+                            .put("detail", "autoconfig." + domain + " deve puntare a '" + newHostname + "'")
                             .put("type", "dns"));
                     manualActions.put(new JSONObject()
                             .put("action", "Emetti nuovo certificato SSL")

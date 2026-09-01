@@ -1,0 +1,26 @@
+            <!-- Il file che Thunderbird cerca da solo -->
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-file-code me-2"></i><strong>Configurazione automatica dei client</strong>
+                        <span class="small text-muted ms-2">il file che Thunderbird cerca da solo</span></span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="acCarica()"><i class="fas fa-rotate me-1"></i>Aggiorna</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        I record SRV qui sopra dicono ai client dove sta il server, ma
+                        <strong>Thunderbird non li usa</strong>: le richieste
+                        <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=342242" target="_blank" rel="noopener">342242</a> e
+                        <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=675476" target="_blank" rel="noopener">675476</a>
+                        chiedono il supporto a RFC&nbsp;6186 da anni e non &egrave; mai stato aggiunto. Thunderbird cerca
+                        invece un file XML su <code>autoconfig.&lt;dominio&gt;</code>: se lo trova, chi aggiunge
+                        la casella scrive indirizzo e password e basta.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        Il file lo genera il pannello, <strong>uno per dominio</strong>, con i valori veri di questo
+                        server. Perch&eacute; arrivi al client serve una riga in nginx: il pannello la aggiunge dopo
+                        aver fatto una copia di sicurezza, e se <code>nginx -t</code> boccia la configurazione
+                        rimette quella di prima senza ricaricare nulla.
+                    </p>
+                    <div id="acBody"><span class="text-muted small">Premi "Aggiorna": legge e basta.</span></div>
+                </div>
+            </div>

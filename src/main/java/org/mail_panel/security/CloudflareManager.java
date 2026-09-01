@@ -326,6 +326,130 @@ public class CloudflareManager {
         public String comment;
     }
 
+    /**
+     * Crea un CNAME. Sempre con proxied=false, e non e' una preferenza: un CNAME
+     * proxato non risponde piu' con il CNAME ma con gli indirizzi di Cloudflare, quindi
+     * il client di posta non troverebbe piu' l'host che cerca e la verifica del pannello
+     * direbbe "punta altrove". La nuvola grigia qui non e' un consiglio, e' un requisito.
+     */
+    public RecordOp createCnameRecord(String token, String zoneId, String name, String target, int ttl) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("type", "CNAME");
+            payload.put("name", name);
+            payload.put("content", target);
+            payload.put("proxied", false);
+            payload.put("ttl", ttl <= 0 ? 1 : ttl);
+            payload.put("comment", "Creato dal pannello di posta");
+            return esito(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
+        } catch (Exception e) {
+            return new RecordOp(false, null, "Errore: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Crea un SRV nella forma documentata da Cloudflare: nome completo in "name" e i soli
+     * campi priority/weight/port/target dentro "data".
+     *
+     * Esempio della documentazione ufficiale:
+     *   {"type":"SRV","name":"_xmpp._tcp.example.com",
+     *    "data":{"priority":10,"weight":5,"port":5223,"target":"server.example.com"}}
+     */
+    public RecordOp createSrvRecord(String token, String zoneId, String name, String target,
+                                    int priority, int weight, int port, int ttl) {
+        try {
+            JSONObject dati = new JSONObject()
+                    .put("priority", priority).put("weight", weight)
+                    .put("port", port).put("target", target);
+            JSONObject payload = new JSONObject();
+            payload.put("type", "SRV");
+            payload.put("name", name);
+            payload.put("data", dati);
+            payload.put("ttl", ttl <= 0 ? 1 : ttl);
+            payload.put("comment", "Creato dal pannello di posta");
+            return esito(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
+        } catch (Exception e) {
+            return new RecordOp(false, null, "Errore: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Cambia il contenuto di un record TXT esistente.
+     *
+     * Metodo e percorso presi dalla documentazione ufficiale, letta a pagina renderizzata:
+     *   PATCH /zones/{zone_id}/dns_records/{dns_record_id}  -  "Update an existing DNS record"
+     * Il corpo segue la forma dell'esempio della stessa pagina, che indica tipo, nome e
+     * contenuto. PATCH lascia stare cio' che non si nomina, quindi commento e altri campi
+     * del record restano dove sono.
+     */
+    public RecordOp updateTxtRecord(String token, String zoneId, String recordId,
+                                    String name, String value, int ttl) {
+        try {
+            JSONObject payload = new JSONObject()
+                    .put("type", "TXT")
+                    .put("name", name)
+                    .put("content", formatTxtRecordContent(value))
+                    .put("ttl", ttl <= 0 ? 1 : ttl);
+            return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
+                    token, payload.toString()));
+        } catch (Exception e) {
+            return new RecordOp(false, null, "Errore: " + e.getMessage());
+        }
+    }
+
+    private RecordOp esito(HttpResponse<String> resp) {
+        JSONObject body = new JSONObject(resp.body());
+        if (body.optBoolean("success", false))
+            return new RecordOp(true, body.getJSONObject("result").getString("id"), null);
+        return new RecordOp(false, null, extractErrorMessage(body));
+    }
+
+    /**
+     * Tutti i record della zona, di qualunque tipo, con il tipo riportato.
+     *
+     * Serve guardare ANCHE i tipi diversi da quello che si vuole creare: il DNS non
+     * ammette un CNAME accanto ad altri dati sullo stesso nome, quindi un record A su
+     * "autoconfig" fa rifiutare il CNAME da Cloudflare. Meglio dirlo prima, spiegando
+     * perche', che mostrare l'errore grezzo dell'API.
+     */
+    public java.util.List<DnsRecordInfo> listRecords(String token, String zoneId) {
+        java.util.List<DnsRecordInfo> result = new java.util.ArrayList<>();
+        try {
+            int page = 1;
+            while (page <= 10) {
+                String path = "/zones/" + zoneId + "/dns_records?per_page=100&page=" + page;
+                HttpResponse<String> resp = call("GET", path, token, null);
+                JSONObject body = new JSONObject(resp.body());
+                if (!body.optBoolean("success", false)) break;
+                JSONArray arr = body.optJSONArray("result");
+                if (arr == null || arr.length() == 0) break;
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject r = arr.getJSONObject(i);
+                    DnsRecordInfo info = new DnsRecordInfo();
+                    info.id = r.optString("id", "");
+                    info.type = r.optString("type", "");
+                    info.name = r.optString("name", "");
+                    info.content = r.optString("content", "");
+                    info.proxied = r.optBoolean("proxied", false);
+                    result.add(info);
+                }
+                JSONObject ri = body.optJSONObject("result_info");
+                int totalPages = ri == null ? 1 : ri.optInt("total_pages", 1);
+                if (page >= totalPages) break;
+                page++;
+            }
+        } catch (Exception ignore) {}
+        return result;
+    }
+
+    public static class DnsRecordInfo {
+        public String id;
+        public String type;
+        public String name;
+        public String content;
+        public boolean proxied;
+    }
+
     public RecordOp deleteRecord(String token, String zoneId, String recordId) {
         try {
             HttpResponse<String> resp = call("DELETE", "/zones/" + zoneId + "/dns_records/" + recordId, token, null);

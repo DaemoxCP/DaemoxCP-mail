@@ -6267,6 +6267,155 @@ public final class UpdateManager {
         }
     }
 
+    /**
+     * Tutto cio' che un rapporto periodico deve poter dire, raccolto in una lettura sola.
+     *
+     * Sta qui e non nella classe che manda l'email per un motivo preciso: qui vivono gli
+     * strumenti che interrogano il sistema, e duplicarli altrove significherebbe averne due
+     * versioni che col tempo divergono. La classe del rapporto compone il testo, questa
+     * raccoglie i fatti.
+     *
+     * La chiave "daFare" e' la ragione d'essere del rapporto: un elenco di cose da fare,
+     * ordinate per urgenza, gia' scritte in italiano. Se e' vuoto, non c'e' niente da fare —
+     * e anche quello va detto, altrimenti un'email che arriva ogni settimana diventa rumore
+     * che si smette di leggere.
+     */
+    public static JSONObject datiPerRapporto() {
+        JSONObject r = new JSONObject();
+        JSONArray daFare = new JSONArray();
+
+        // --- sistema ---
+        JSONObject so = sistemaOperativo();
+        r.put("sistema", so);
+        String kernel = so.optString("kernelInstallato", ""), inEsecuzione = so.optString("kernelInEsecuzione", "");
+        if (!kernel.isEmpty() && !inEsecuzione.isEmpty() && !kernel.equals(inEsecuzione))
+            daFare.put(new JSONObject().put("urgenza", 1)
+                    .put("cosa", "Riavviare il server: il kernel installato (" + kernel + ") non e' quello in "
+                            + "esecuzione (" + inEsecuzione + "). Fino al riavvio le correzioni del kernel non sono attive.")
+                    .put("dove", "Aggiornamenti -> Sistema operativo"));
+        String fine = so.optString("fineSupporto", "");
+        long giorniEol = giorniAllaData(fine);
+        r.put("giorniAllaFineSupporto", giorniEol);
+        if (giorniEol >= 0 && giorniEol < 120)
+            daFare.put(new JSONObject().put("urgenza", giorniEol < 45 ? 1 : 3)
+                    .put("cosa", "La release in uso esce dal supporto fra " + giorniEol + " giorni (" + fine
+                            + "): va pianificato il passaggio alla successiva.")
+                    .put("dove", "Aggiornamenti -> Passaggio a una nuova release"));
+
+        // --- pacchetti ---
+        JSONObject pk = packagesStatus();
+        r.put("pacchetti", pk);
+        int conAggiornamento = 0, protetti = 0, totali = 0;
+        JSONArray elenco = pk.optJSONArray("packages");
+        JSONArray daAggiornare = new JSONArray();
+        if (elenco != null) {
+            totali = elenco.length();
+            for (int i = 0; i < elenco.length(); i++) {
+                JSONObject x = elenco.getJSONObject(i);
+                if (x.optBoolean("locked")) protetti++;
+                String ins = x.optString("current", ""), rep = x.optString("available", "");
+                if (!rep.isEmpty() && !rep.equals(ins) && !"-".equals(rep)) {
+                    conAggiornamento++;
+                    if (daAggiornare.length() < 25)
+                        daAggiornare.put(x.optString("name") + " " + ins + " -> " + rep);
+                }
+            }
+        }
+        r.put("pacchettiTotali", totali).put("pacchettiProtetti", protetti)
+         .put("pacchettiConAggiornamento", conAggiornamento).put("daAggiornare", daAggiornare);
+        if (conAggiornamento > 0)
+            daFare.put(new JSONObject().put("urgenza", 2)
+                    .put("cosa", conAggiornamento + (conAggiornamento == 1 ? " pacchetto ha" : " pacchetti hanno")
+                            + " una versione piu' recente nel repository.")
+                    .put("dove", "Aggiornamenti -> Piano di manutenzione"));
+
+        // --- vulnerabilita', separando quelle a cui si puo' rimediare ---
+        String audit = sh("pkg audit -F 2>&1 | tail -40", 180);
+        r.put("audit", audit);
+        JSONArray conRimedio = new JSONArray(), senzaRimedio = new JSONArray();
+        for (String riga : audit.split("\n")) {
+            Matcher m = Pattern.compile("^([A-Za-z0-9._+-]+)-([0-9][^\\s]*) is vulnerable").matcher(riga.trim());
+            if (!m.find()) continue;
+            String nome = m.group(1), installata = m.group(2);
+            if (!nomeValido(nome)) continue;
+            String nelRepo = sh("pkg rquery %v " + nome + " 2>/dev/null", 30).trim();
+            if (!nelRepo.isEmpty() && !nelRepo.equals(installata))
+                conRimedio.put(nome + ": " + installata + " -> " + nelRepo);
+            else
+                senzaRimedio.put(nome + " " + installata);
+        }
+        r.put("vulnConRimedio", conRimedio).put("vulnSenzaRimedio", senzaRimedio);
+        if (conRimedio.length() > 0)
+            daFare.put(new JSONObject().put("urgenza", 1)
+                    .put("cosa", conRimedio.length() + (conRimedio.length() == 1 ? " pacchetto vulnerabile ha"
+                            : " pacchetti vulnerabili hanno") + " una correzione disponibile: "
+                            + String.join(", ", jsonArrayToList(conRimedio)))
+                    .put("dove", "Aggiornamenti -> Aggiornamento guidato di un pacchetto protetto"));
+
+        // --- librerie mancanti ---
+        JSONArray rotti = pacchettiConLibrerieMancanti().optJSONArray("packages");
+        r.put("librerieMancanti", rotti == null ? new JSONArray() : rotti);
+        if (rotti != null && rotti.length() > 0)
+            daFare.put(new JSONObject().put("urgenza", 1)
+                    .put("cosa", rotti.length() + " pacchetti non trovano una libreria che richiedono: un servizio "
+                            + "puo' risultare attivo e non funzionare.")
+                    .put("dove", "Aggiornamenti -> Pacchetti senza la libreria che richiedono"));
+
+        // --- servizi ---
+        JSONArray servizi = serviziJson();
+        r.put("servizi", servizi);
+        JSONArray giu = new JSONArray();
+        for (int i = 0; i < servizi.length(); i++)
+            if (!servizi.getJSONObject(i).getBoolean("attivo")) giu.put(servizi.getJSONObject(i).getString("nome"));
+        r.put("serviziNonAttivi", giu);
+        if (giu.length() > 0)
+            daFare.put(new JSONObject().put("urgenza", 0)
+                    .put("cosa", "Servizi NON attivi: " + String.join(", ", jsonArrayToList(giu)))
+                    .put("dove", "Home del pannello"));
+
+        // --- spazio ---
+        String df = sh("df -h / 2>/dev/null | tail -1", 30);
+        r.put("spazio", df);
+        Matcher mp = Pattern.compile("([0-9]+)%").matcher(df);
+        if (mp.find()) {
+            int usata = Integer.parseInt(mp.group(1));
+            r.put("percentualeUsata", usata);
+            if (usata >= 85)
+                daFare.put(new JSONObject().put("urgenza", usata >= 92 ? 0 : 2)
+                        .put("cosa", "Il disco e' pieno al " + usata + "%.")
+                        .put("dove", "Aggiornamenti -> Rapporto del sistema"));
+        }
+
+        // --- ambienti di avvio ---
+        JSONObject be = ambientiDiAvvio();
+        r.put("ambienti", be);
+
+        r.put("ramo", ramoRepository());
+        r.put("daFare", ordinaPerUrgenza(daFare));
+        return r;
+    }
+
+    /** Giorni da oggi a una data scritta come gg/mm/aaaa; -1 se non leggibile. */
+    private static long giorniAllaData(String gg_mm_aaaa) {
+        Matcher m = Pattern.compile("([0-9]{2})/([0-9]{2})/([0-9]{4})").matcher(gg_mm_aaaa == null ? "" : gg_mm_aaaa);
+        if (!m.find()) return -1;
+        try {
+            java.time.LocalDate d = java.time.LocalDate.of(Integer.parseInt(m.group(3)),
+                    Integer.parseInt(m.group(2)), Integer.parseInt(m.group(1)));
+            return java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), d);
+        } catch (Exception e) { return -1; }
+    }
+
+    /** Le cose da fare, dalla piu' urgente. 0 = un servizio e' giu', 3 = da pianificare. */
+    private static JSONArray ordinaPerUrgenza(JSONArray a) {
+        java.util.List<JSONObject> l = new ArrayList<>();
+        for (int i = 0; i < a.length(); i++) l.add(a.getJSONObject(i));
+        l.sort(java.util.Comparator.comparingInt(x -> x.optInt("urgenza", 9)));
+        JSONArray out = new JSONArray();
+        for (JSONObject x : l) out.put(x);
+        return out;
+    }
+
     /** statoServizi() in forma di elenco JSON, per le schede che lo mostrano. */
     private static JSONArray serviziJson() {
         JSONArray a = new JSONArray();

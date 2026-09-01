@@ -406,6 +406,86 @@ public class MailQueueManager {
         return action;
     }
 
+    /**
+     * Un messaggio in coda ha fallito in modo PERMANENTE.
+     *
+     * Il criterio non e' "e' in coda da tanto": e' il codice di risposta. SMTP distingue il
+     * 4xx (riprova piu' tardi) dal 5xx (non riprovarci), e i secondi in coda non si
+     * risolveranno mai da soli. Si riconoscono dal codice di stato esteso 5.x.x (RFC 3463)
+     * oppure dal codice a tre cifre che comincia per 5 riportato nel messaggio d'errore.
+     *
+     * Il confronto NON e' su sottostringa: cercare "5." dentro il testo troverebbe anche una
+     * dimensione "1.5.", un orario o un indirizzo IP, e si cancellerebbe posta buona.
+     */
+    public static boolean fallimentoPermanente(String errore) {
+        if (errore == null || errore.isBlank()) return false;
+        // 1. codice di stato esteso 5.x.y (RFC 3463), isolato: "10.5.0.1" non deve contare
+        if (java.util.regex.Pattern.compile("(?<![0-9.])5\\.[0-9]{1,3}\\.[0-9]{1,3}(?![0-9.])")
+                .matcher(errore).find()) return true;
+        // 2. codice di risposta a tre cifre, ma SOLO dove un codice puo' stare davvero:
+        //    dopo "said:" o all'inizio della riga. Accettarlo ovunque farebbe scambiare
+        //    "size=550" per un rifiuto definitivo, e si cancellerebbe un messaggio buono.
+        return java.util.regex.Pattern
+                .compile("(?:said:\\s*|^\\s*)5[0-9]{2}(?![0-9])", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(errore).find();
+    }
+
+    /** I messaggi in coda che hanno fallito in modo permanente. Legge e basta. */
+    public List<QueuedMessage> permanentFailures() {
+        List<QueuedMessage> fuori = new java.util.ArrayList<>();
+        for (QueuedMessage m : getQueue())
+            if (fallimentoPermanente(m.errorReason)) fuori.add(m);
+        return fuori;
+    }
+
+    /**
+     * Cancella i soli messaggi con errore permanente, uno per uno.
+     *
+     * Non si usa "postsuper -d ALL deferred" come fa purgeDeferred: quello cancella TUTTA la
+     * coda differita, compresi i messaggi con errore temporaneo che sarebbero stati
+     * consegnati al prossimo tentativo. Qui si cancella solo cio' che non partira' mai.
+     */
+    public QueueAction purgePermanentFailures() {
+        QueueAction action = new QueueAction();
+        action.action = "purge_permfails";
+        try {
+            List<QueuedMessage> da = permanentFailures();
+            if (da.isEmpty()) {
+                action.success = true;
+                action.message = "Nessun messaggio con errore permanente: non c'e' niente da eliminare.";
+                return action;
+            }
+            StringBuilder log = new StringBuilder();
+            int fatti = 0, falliti = 0;
+            for (QueuedMessage m : da) {
+                String id = m.envelopeId != null ? m.envelopeId : m.messageId;
+                // L'identificativo di coda e' alfanumerico: si controlla prima di passarlo a
+                // un comando, invece di fidarsi di come e' stato letto.
+                if (id == null || !id.matches("[A-Za-z0-9]{1,32}")) {
+                    falliti++;
+                    log.append("saltato (identificativo inatteso): ").append(id).append("\n");
+                    continue;
+                }
+                try {
+                    log.append(executeCommand(POSTSUPER + " -d " + id)).append("\n");
+                    fatti++;
+                } catch (Exception e) {
+                    falliti++;
+                    log.append("errore su ").append(id).append(": ").append(e.getMessage()).append("\n");
+                }
+            }
+            action.success = falliti == 0;
+            action.message = fatti + " messaggi con errore permanente eliminati"
+                    + (falliti > 0 ? ", " + falliti + " non eliminati (vedi output)" : "")
+                    + ". La coda differita con errori temporanei non e' stata toccata.";
+            action.output = log.toString();
+        } catch (Exception e) {
+            action.success = false;
+            action.message = "Errore: " + e.getMessage();
+        }
+        return action;
+    }
+
     // Utility methods
 
     private String extractDomain(String email) {
