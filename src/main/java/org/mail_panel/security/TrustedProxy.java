@@ -69,6 +69,13 @@ public final class TrustedProxy {
         "fc00::/7"         // IPv6 ULA
     );
 
+    /** Quando la lista qui sopra e' stata allineata a quella ufficiale, a mano. */
+    public static final String AGGIORNATA_IL = "2025-12";
+
+    /** Gli intervalli Cloudflare compilati dentro il pannello, per poterli confrontare. */
+    public static List<String> cloudflareV4() { return List.copyOf(CLOUDFLARE_V4); }
+    public static List<String> cloudflareV6() { return List.copyOf(CLOUDFLARE_V6); }
+
     /**
      * Ritorna true se l'IP appartiene a un range Cloudflare o privato/loopback.
      * @param ipString l'IP da verificare in formato testuale

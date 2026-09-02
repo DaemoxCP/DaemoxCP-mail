@@ -7377,6 +7377,99 @@ public final class UpdateManager {
      * DKIM, il rinnovo automatico dei certificati e il rapporto periodico. Se il pannello non
      * riparte, quelle cose non si rompono — si fermano dove sono, e nessuno lo segnala.
      */
+    /**
+     * La lista degli intervalli Cloudflare compilata nel pannello e' ancora quella ufficiale?
+     *
+     * Perche' serve. Il pannello si fida di CF-Connecting-IP soltanto se la richiesta arriva da
+     * un indirizzo che riconosce come Cloudflare; l'elenco di quegli indirizzi e' scritto a mano
+     * dentro TrustedProxy e va tenuto uguale a cloudflare.com/ips-v4 e ips-v6.
+     *
+     * Se Cloudflare aggiunge un intervallo e comincia a servire da li', il pannello smette di
+     * riconoscerlo: da quel momento TUTTI i visitatori diventano un indirizzo solo — quello
+     * dell'edge — e il limite dei tentativi di accesso si applica a tutti insieme. Cinque
+     * tentativi sbagliati di chiunque chiuderebbero fuori anche te. Non e' un buco, e' un
+     * blocco: fallisce diventando piu' severo, che e' il modo piu' silenzioso di rompersi.
+     *
+     * Questa funzione LEGGE e basta: scarica le due liste ufficiali e le confronta. Non
+     * aggiorna niente da sola — una lista di chi e' degno di fiducia non si riscrive senza
+     * che un essere umano l'abbia guardata.
+     */
+    public static JSONObject intervalliCloudflare() {
+        JSONObject r = new JSONObject().put("aggiornataIl", org.mail_panel.security.TrustedProxy.AGGIORNATA_IL);
+        try {
+            java.util.List<String> v4 = scaricaIntervalli("https://www.cloudflare.com/ips-v4");
+            java.util.List<String> v6 = scaricaIntervalli("https://www.cloudflare.com/ips-v6");
+            if (v4.isEmpty() || v6.isEmpty())
+                return r.put("success", false).put("verificato", false)
+                        .put("error", "Non sono riuscito a scaricare le liste ufficiali da "
+                            + "cloudflare.com. Non so dire se quella compilata sia aggiornata: "
+                            + "\"non ho potuto controllare\" non e' \"va bene\".");
+
+            java.util.List<String> miaV4 = org.mail_panel.security.TrustedProxy.cloudflareV4();
+            java.util.List<String> miaV6 = org.mail_panel.security.TrustedProxy.cloudflareV6();
+
+            // Mancanti = presenti da Cloudflare e NON nel pannello. Sono quelli che contano:
+            // sono gli indirizzi da cui il pannello non riconoscerebbe il proxy.
+            JSONArray mancanti = new JSONArray();
+            for (String c : v4) if (!miaV4.contains(c)) mancanti.put(c);
+            for (String c : v6) if (!miaV6.contains(c)) mancanti.put(c);
+
+            // In piu' = nel pannello e non piu' ufficiali. Non fanno danno diretto, ma sono
+            // fiducia concessa a indirizzi che Cloudflare non usa piu'.
+            JSONArray inPiu = new JSONArray();
+            for (String c : miaV4) if (!v4.contains(c)) inPiu.put(c);
+            for (String c : miaV6) if (!v6.contains(c)) inPiu.put(c);
+
+            r.put("success", true).put("verificato", true)
+             .put("ufficialiV4", v4.size()).put("ufficialiV6", v6.size())
+             .put("compilatiV4", miaV4.size()).put("compilatiV6", miaV6.size())
+             .put("mancanti", mancanti).put("inPiu", inPiu)
+             .put("allineata", mancanti.length() == 0 && inPiu.length() == 0);
+
+            r.put("nota", mancanti.length() > 0
+                ? "ATTENZIONE: " + mancanti.length() + " intervalli che Cloudflare usa non sono "
+                  + "nella lista del pannello. Se le tue richieste passassero da uno di quelli, il "
+                  + "pannello non riconoscerebbe il proxy e vedrebbe tutti i visitatori come un "
+                  + "indirizzo solo: il limite dei tentativi di accesso varrebbe per tutti insieme, "
+                  + "e cinque tentativi sbagliati di chiunque chiuderebbero fuori anche te. "
+                  + "Vanno aggiunti a mano in TrustedProxy."
+                : inPiu.length() > 0
+                  ? inPiu.length() + " intervalli nella lista del pannello non sono piu' fra quelli "
+                    + "ufficiali. Non fanno danno diretto — nessuno ci arriva — ma sono fiducia "
+                    + "concessa a indirizzi che Cloudflare non usa piu': meglio toglierli."
+                  : "La lista compilata nel pannello coincide esattamente con quella ufficiale di "
+                    + "Cloudflare. Il riconoscimento del proxy e' affidabile, quindi il limite dei "
+                    + "tentativi di accesso conta l'indirizzo vero di chi bussa.");
+            return r;
+        } catch (Exception e) {
+            return r.put("success", false).put("verificato", false)
+                    .put("error", "Non sono riuscito a fare il confronto: " + e.getMessage());
+        }
+    }
+
+    /** Una riga per intervallo, righe vuote e commenti scartati. */
+    private static java.util.List<String> scaricaIntervalli(String url) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        try {
+            var http = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(8)).build();
+            var req = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(url))
+                    .timeout(java.time.Duration.ofSeconds(15)).GET().build();
+            var resp = http.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) return out;
+            for (String riga : resp.body().split("\n")) {
+                String c = riga.trim();
+                // Si accetta solo cio' che ha la forma di un CIDR: da una pagina di errore o da
+                // una risposta inattesa non deve entrare niente in una lista di fiducia.
+                if (c.isEmpty() || c.startsWith("#")) continue;
+                if (!c.matches("[0-9a-fA-F:.]+/[0-9]{1,3}")) continue;
+                out.add(c);
+            }
+        } catch (Exception ignora) { }
+        return out;
+    }
+
     public static JSONObject avvioAutomatico() {
         JSONObject r = new JSONObject();
         try {

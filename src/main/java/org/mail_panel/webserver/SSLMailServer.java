@@ -2642,8 +2642,26 @@ public class SSLMailServer {
         headers.set("X-XSS-Protection", "1; mode=block");
         headers.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-        // HSTS - Force HTTPS for 1 year, include subdomains
-        headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+        // HSTS: un anno di solo-HTTPS per questo nome, sottodomini compresi.
+        //
+        // Il token "preload" c'era ed e' stato tolto il 02/09/2026. Non faceva niente: la lista
+        // di preload e' compilata dentro il browser, e servire il token e' solo un REQUISITO per
+        // candidarsi — la candidatura va presentata a hstspreload.org. Verificato quel giorno:
+        // ne' domain-b.test ne' mail.domain-b.test risultano nella lista ("status": "unknown").
+        // Era quindi una dichiarazione pubblica mai presentata: la stessa forma del record TXT
+        // MTA-STS pubblicato senza una politica che risponde.
+        //
+        // E toglierlo protegge dal caso peggiore: che un domani qualcuno candidi il dominio
+        // vedendo il token gia' li'. Da quel momento la regola vive dentro il binario dei
+        // browser, e rimuoverla richiede mesi — mentre qui basta che il certificato del
+        // pannello si rompa una volta per restare fuori proprio quando serve entrare a
+        // ripararlo (HSTS toglie il "prosegui comunque" sugli avvisi di certificato).
+        //
+        // Cosa resta, e perche': max-age si rinnova a ogni visita e includeSubDomains vale per
+        // i sottodomini di QUESTO nome. Si tengono perche' il certificato si rinnova da solo e
+        // il pannello ne sorveglia la scadenza. Nota: la regola e' per NOME, non per porta
+        // (RFC 6797 §8.1), quindi servita dalla 2096 vale per quel nome ovunque.
+        headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         // Content Security Policy - Restrict resource loading
         headers.set("Content-Security-Policy",
             "default-src 'self'; " +
@@ -6552,6 +6570,7 @@ public class SSLMailServer {
                     response = UpdateManager.riavviaServer(true, req.optInt("minuti", 1));
                 }
                 case "rc_stato" -> response = UpdateManager.avvioAutomatico();
+                case "cf_intervalli" -> response = UpdateManager.intervalliCloudflare();
                 case "rc_remove_preview" -> response = UpdateManager.rimuoviScriptRcPannello(false);
                 case "rc_remove" -> {
                     if (!"RIMUOVI RC".equals(req.optString("confirm", ""))) {

@@ -12960,6 +12960,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     <div id="upd-ams"><span class="text-muted">Premi "Stato": legge e basta.</span></div>
                 </div>
             </div>
+""" + risorsa("pagine/cf-intervalli-card.html") + """
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -13263,7 +13264,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             return '<span class="badge upd-badge-stop">ATTENDI</span>';
         }
 
-""" + risorsa("pagine/porta465.js") + risorsa("pagine/sorveglianza.js") + risorsa("pagine/diagnosi-web.js") + risorsa("pagine/web443.js") + risorsa("pagine/attiva-mtasts.js") + """
+""" + risorsa("pagine/porta465.js") + risorsa("pagine/sorveglianza.js") + risorsa("pagine/diagnosi-web.js") + risorsa("pagine/web443.js") + risorsa("pagine/attiva-mtasts.js") + risorsa("pagine/cf-intervalli.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');
