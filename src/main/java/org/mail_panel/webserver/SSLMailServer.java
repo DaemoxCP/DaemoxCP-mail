@@ -6570,6 +6570,7 @@ public class SSLMailServer {
                     response = UpdateManager.riavviaServer(true, req.optInt("minuti", 1));
                 }
                 case "rc_stato" -> response = UpdateManager.avvioAutomatico();
+                case "riepilogo_sistema" -> response = UpdateManager.riepilogoSistema();
                 case "cf_intervalli" -> response = UpdateManager.intervalliCloudflare();
                 case "rc_remove_preview" -> response = UpdateManager.rimuoviScriptRcPannello(false);
                 case "rc_remove" -> {

@@ -7005,6 +7005,17 @@ public final class UpdateManager {
       + "a lungo: stable/15 fino al 31/12/2029, stable/14 fino al 30/11/2028.";
 
     /**
+     * Quando la tabella qui sopra e' stata copiata, in forma leggibile da un programma.
+     *
+     * La stessa informazione e' gia' dentro FONTE_SUPPORTO, ma dentro una frase: per mostrarla
+     * accanto alla data di fine supporto bisognerebbe estrarla dal testo con un'espressione
+     * regolare. Un dato che serve a un programma si mette in un campo, non lo si va a pescare
+     * da una prosa scritta per un essere umano — e' lo stesso errore per cui il piano MTA-STS
+     * cercava la parola "Cloudflare" dentro un motivo.
+     */
+    private static final String FONTE_SUPPORTO_LETTA = "31/08/2026";
+
+    /**
      * Stato del sistema operativo di base: versione, livello di patch, riavvio necessario,
      * fine del supporto, aggiornamenti gia' scaricati.
      *
@@ -7034,7 +7045,16 @@ public final class UpdateManager {
             String eol = "", noteEol = "";
             for (String[] e : FINE_SUPPORTO)
                 if (e[0].equals(serie)) { eol = e[1]; noteEol = e[2]; }
+            // "Non conosco questa serie" e' un'informazione, e va detta.
+            //
+            // Prima, se la serie non era in tabella, eol restava vuoto e la scheda non mostrava
+            // nulla: un silenzio che si legge come "niente da segnalare". Ma il caso in cui la
+            // serie manca e' esattamente quello in cui il sistema e' PIU' NUOVO della fotografia,
+            // cioe' quello in cui la tabella andrebbe riletta. Il difetto si nascondeva proprio
+            // dove voleva farsi notare.
             r.put("serie", serie).put("fineSupporto", eol).put("noteSupporto", noteEol)
+             .put("serieConosciuta", !eol.isEmpty())
+             .put("fonteSupportoLetta", FONTE_SUPPORTO_LETTA)
              .put("fonteSupporto", FONTE_SUPPORTO);
 
             boolean release = userland.contains("-RELEASE");
@@ -7516,6 +7536,60 @@ public final class UpdateManager {
             return b.length == (ipv4 ? 4 : 16);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * Il riepilogo per la Home: versioni, riavvio necessario, quanti aggiornamenti, quante
+     * vulnerabilita'. VELOCE — e la velocita' qui e' un requisito, non un vezzo.
+     *
+     * updatesStatus() risponde alle stesse domande ma esegue "pkg update" e "pkg upgrade -n":
+     * fino a cinque minuti, e con la rete di mezzo. In una pagina che si apre di continuo
+     * sarebbe una Home che gira. Qui si legge il catalogo GIA' scaricato e il database delle
+     * vulnerabilita' GIA' presente: nessuna richiesta di rete.
+     *
+     * Il prezzo di quella scelta e' che i numeri possono essere vecchi, e va detto invece che
+     * nascosto: si riporta anche l'ETA' del catalogo e del database. Un conteggio preciso
+     * ricavato da dati di tre settimane fa e' un numero che sembra una misura e non lo e' —
+     * per la simulazione vera resta la pagina Aggiornamenti, che la fa apposta.
+     */
+    public static JSONObject riepilogoSistema() {
+        JSONObject r = new JSONObject();
+        try {
+            r.put("so", sistemaOperativo());
+
+            // Quanti pacchetti differiscono dal catalogo locale. "-R" usa il catalogo del
+            // repository gia' scaricato: non va in rete.
+            String elenco = sh("pkg version -vRL= 2>/dev/null", 60);
+            int quanti = 0;
+            for (String riga : elenco.split("\n")) if (!riga.trim().isEmpty()) quanti++;
+            r.put("daAggiornare", quanti);
+
+            // L'eta' del catalogo: senza, il numero qui sopra sembra piu' preciso di quanto sia.
+            r.put("catalogoGiorni", giorniDa("/var/db/pkg/repo-FreeBSD.sqlite"));
+
+            // Vulnerabilita' dal database locale: "pkg audit" senza -F non scarica.
+            String audit = sh("pkg audit -q 2>/dev/null", 60);
+            int vuln = 0;
+            for (String riga : audit.split("\n")) if (!riga.trim().isEmpty()) vuln++;
+            r.put("vulnerabili", vuln);
+            r.put("vulnDbGiorni", giorniDa("/var/db/pkg/vuln.xml"));
+
+            return r.put("success", true);
+        } catch (Exception e) {
+            return r.put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /** Da quanti giorni non viene toccato un file. -1 se non c'e' o non si riesce a leggerlo. */
+    private static long giorniDa(String percorso) {
+        try {
+            String m = sh("stat -f %m " + percorso + " 2>/dev/null", 15).trim();
+            if (m.isEmpty()) return -1;
+            long epoch = Long.parseLong(m);
+            return (System.currentTimeMillis() / 1000L - epoch) / 86400L;
+        } catch (Exception e) {
+            return -1;
         }
     }
 
