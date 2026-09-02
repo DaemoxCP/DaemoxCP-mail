@@ -971,15 +971,10 @@ public class AttivaMtaSts {
      * mai. Un piano che li desse per "fatti" nasconderebbe proprio la cosa da sistemare.
      */
     private static String txtAtteso() {
-        try {
-            String host = MtaSts.hostDiPosta();
-            String modo = MtaSts.modoCorrente();
-            return MtaSts.recordTxt(MtaSts.politica(host, modo, MtaSts.maxAgeConsigliato(modo))).trim();
-        } catch (Exception e) {
-            // Un confronto contro una stringa vuota non passerebbe mai: nessun record verrebbe
-            // dato per giusto per sbaglio.
-            return "";
-        }
+        // Non si ricalcola qui: lo sa MtaSts, che e' anche chi serve la politica. Tre punti
+        // che compongono la stessa stringa sono tre stringhe che un giorno divergono — ed e'
+        // gia' successo, con l'id da orologio del riepilogo DNS.
+        return MtaSts.recordTxtCorrente();
     }
 
     private static boolean jailAttiva() {

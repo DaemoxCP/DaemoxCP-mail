@@ -550,7 +550,23 @@ public class DnsRecordsGenerator {
         DnsRecord record = new DnsRecord();
         record.type = "TXT";
         record.name = "_mta-sts";
-        String mtaStsValue = "v=STSv1; id=" + System.currentTimeMillis();
+        // Il valore e' quello VERO, lo stesso che il pannello pubblica: si chiede a chi lo
+        // sa, non se ne inventa un altro qui.
+        //
+        // Prima era "v=STSv1; id=" + System.currentTimeMillis(): un id preso dall'orologio,
+        // ricalcolato a ogni caricamento della pagina. Due difetti in una riga. Il primo: chi
+        // seguiva queste istruzioni pubblicava un id che non corrisponde alla politica servita
+        // e che non cambia mai piu', quindi i mittenti non si accorgono delle modifiche —
+        // esattamente il difetto che i record del vecchio pannello si portavano dietro. Il
+        // secondo: il valore mostrato cambiava a ogni sguardo, mentre la riga accanto diceva
+        // "configurato correttamente". Due modi di calcolare lo stesso record sono due record
+        // che un giorno divergono; qui divergevano subito.
+        String mtaStsValue = org.mail_panel.system.MtaSts.recordTxtCorrente();
+        // recordTxtCorrente() torna vuoto quando non riesce a calcolarlo: meglio niente che un
+        // valore inventato. Ma una casella "Content" vuota nelle istruzioni non aiuta nessuno,
+        // quindi si dice a parole cosa ci andra', senza suggerire di incollare una sciocchezza.
+        if (mtaStsValue == null || mtaStsValue.isBlank())
+            mtaStsValue = "v=STSv1; id=<lo genera il pannello quando pubblica il record>";
         record.value = mtaStsValue;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
@@ -860,7 +876,7 @@ public class DnsRecordsGenerator {
         // Note: MTA-STS ID is just a version timestamp, doesn't need to match exactly
         DnsCheck mtaStsCheck = verifyTxtRecord("_mta-sts." + domain, "v=STSv1");
         mtaStsCheck.recordType = "MTA-STS";
-        mtaStsCheck.expectedValue = "v=STSv1; id=...";
+        mtaStsCheck.expectedValue = org.mail_panel.system.MtaSts.recordTxtCorrente();
         if (mtaStsCheck.passed && mtaStsCheck.currentValue != null) {
             // Il record c'e': ora si va a CHIEDERE la politica. Guardare solo il TXT diceva
             // "fatto" su domini che dichiarano pubblicamente una protezione e poi non la

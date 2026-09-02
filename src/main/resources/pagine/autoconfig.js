@@ -28,19 +28,29 @@
             h += '<div class="alert alert-' + (r.pronto ? 'success' : 'warning') + ' py-2 small mb-2">'
                + '<i class="fas fa-' + (r.pronto ? 'check-circle' : 'triangle-exclamation') + ' me-1"></i>'
                + (r.pronto
-                  ? 'nginx serve gi&agrave; il file: Thunderbird lo trover&agrave; da solo.'
-                  : 'nginx <strong>non serve ancora il file</strong>: i client continuano a doversi configurare a mano.')
+                  ? 'Il file <strong>arriva</strong>: Thunderbird lo trover&agrave; da solo.'
+                  : 'Il file <strong>non arriva</strong>: i client continuano a doversi configurare a mano.')
+               // Il verdetto viene dallo scarico vero, e qui si dice perche'. Prima veniva da
+               // una ricerca dentro nginx.conf del marcatore di questa scheda, e siccome la
+               // rotta la installa la scheda della 443 in un altro file, la riga diceva "non
+               // serve il file" mentre il file arrivava.
+               + (r.perche ? '<div class="mt-1">' + acEsc(r.perche) + '</div>' : '')
                + '</div>';
 
             h += '<div class="small text-muted mb-2">Configurazione letta da <code>' + acEsc(r.conf) + '</code>'
                + ' &middot; server di posta <code>' + acEsc(r.hostDiPosta) + '</code></div>';
 
-            h += '<table class="table table-sm mb-2"><tbody>'
-               + acRiga('nginx risponde per autoconfig.&lt;dominio&gt;', r.nomeCoperto,
-                        'Senza, la richiesta non arriva nemmeno: nginx non riconosce quel nome.')
-               + acRiga('la rotta del file &egrave; installata', r.rottaPresente,
-                        'La richiesta viene girata al pannello, che costruisce l&rsquo;XML del dominio giusto.')
-               + '</tbody></table>';
+            // Queste due righe NON sono il verdetto e non sono requisiti: dicono solo se la
+            // rotta sta in QUESTO file. Puo' benissimo stare in un altro — e sta in un altro,
+            // quando la scheda della 443 ha installato la sua superficie pubblica. Mostrarle
+            // con spunta e croce le faceva sembrare condizioni da soddisfare, e invitava a
+            // premere un pulsante per aggiungere una rotta che c'era gia' altrove.
+            h += '<div class="small text-muted mb-2">In questo file: il nome autoconfig '
+               + (r.nomeCoperto ? '&egrave; dichiarato' : 'non &egrave; dichiarato')
+               + ', la rotta ' + (r.rottaPresente ? '&egrave; presente' : 'non &egrave; presente')
+               + '. &Egrave; un&rsquo;informazione, non un requisito: la rotta pu&ograve; stare '
+               + '(e di norma sta) nel file della scheda <em>Porta 443</em>, che serve proprio '
+               + 'questo XML e la politica MTA-STS.</div>';
 
             if (r.domini && r.domini.length) {
                 h += '<div class="small fw-bold mb-1">Dominio per dominio</div>'
@@ -68,10 +78,22 @@
             h += '<div class="d-flex gap-2 flex-wrap">'
                + '<button class="btn btn-sm btn-outline-secondary" onclick="acAnteprima()">'
                + '<i class="fas fa-eye me-1"></i>Guarda il file</button>'
-               + (r.pronto ? ''
+               + ((r.pronto || r.superficie443) ? ''
                   : '<button class="btn btn-sm btn-outline-success" onclick="acInstalla()">'
                     + '<i class="fas fa-screwdriver-wrench me-1"></i>Configura nginx</button>')
-               + '</div><div id="acEsito" class="mt-2"></div>';
+               + '</div>'
+               // Il pulsante sparisce anche quando il file NON arriva, se la superficie sulla
+               // 443 e' installata: in quel caso la causa non e' nginx, e modificare nginx.conf
+               // toglierebbe autoconfig.* e mta-sts.* al blocco protetto per darli alla webmail.
+               + ((!r.pronto && r.superficie443)
+                  ? '<div class="alert alert-warning py-2 small mt-2 mb-0">'
+                    + '<i class="fas fa-circle-info me-1"></i>Qui non c&rsquo;&egrave; niente da '
+                    + 'configurare: di <code>autoconfig.&lt;dominio&gt;</code> se ne occupa gi&agrave; '
+                    + 'la scheda <strong>Porta 443</strong>. Se il file non arriva, la causa &egrave; '
+                    + 'altrove &mdash; quasi sempre il server web del pannello, che &egrave; chi genera '
+                    + 'l&rsquo;XML: un <code>502</code> dice esattamente quello.</div>'
+                  : '')
+               + '<div id="acEsito" class="mt-2"></div>';
 
             el.innerHTML = h;
         }
@@ -81,10 +103,6 @@
                      : '<i class="fas fa-times-circle text-danger"></i>';
         }
 
-        function acRiga(cosa, ok, perche) {
-            return '<tr><td style="width:2rem">' + acSpunta(ok) + '</td><td class="small">' + cosa
-                 + '<div class="text-muted">' + perche + '</div></td></tr>';
-        }
 
         async function acAnteprima() {
             const el = document.getElementById('acEsito');

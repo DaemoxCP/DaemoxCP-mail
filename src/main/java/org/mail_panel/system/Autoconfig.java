@@ -171,12 +171,21 @@ public class Autoconfig {
         boolean rottaPresente = testo.contains(MARCATORE);
         r.put("nomeCoperto", nomeCoperto).put("rottaPresente", rottaPresente);
         r.put("serverName", primaRigaCon(testo, "server_name"));
+        // Se la superficie pubblica sulla 443 e' installata, quei nomi sono suoi e questa
+        // scheda non deve nemmeno offrire di toccare nginx: un pulsante che, premuto, si
+        // rifiuta, e' un pulsante che non andava mostrato.
+        r.put("superficie443", ProtezioneWeb.stato().optBoolean("installato", false));
 
         // Il certificato: se non copre autoconfig.<dominio>, Thunderbird sbatte su un errore
         // TLS prima ancora di leggere il file.
         JSONArray domini = new JSONArray();
+        List<String> guai = new ArrayList<>();
+        int esaminati = 0, funzionanti = 0;
+        boolean elencoLetto = false;
         try {
-            for (var d : Main.mailDatabase.getDomains()) {
+            var tutti = Main.mailDatabase.getDomains();
+            elencoLetto = true;
+            for (var d : tutti) {
                 String nome = "autoconfig." + d.domain;
                 JSONObject j = new JSONObject().put("dominio", d.domain).put("nome", nome);
                 j.put("dns", risolve(nome));
@@ -185,13 +194,41 @@ public class Autoconfig {
                 // Leggere la configurazione di nginx dice cosa dovrebbe succedere; questa
                 // dice cosa succede. Non sono la stessa cosa, e quando divergono e' sempre
                 // la seconda ad avere ragione.
-                j.put("prova", provaScarico(nome, d.domain));
+                JSONObject prova = provaScarico(nome, d.domain);
+                j.put("prova", prova);
+                esaminati++;
+                if (prova.optBoolean("ok", false)) funzionanti++;
+                else guai.add(d.domain + " (" + prova.optString("errore", "non riuscito") + ")");
                 domini.put(j);
             }
-        } catch (Exception ignore) {}
-        r.put("domini", domini);
+        } catch (Exception e) {
+            guai.add("non riesco a leggere l'elenco dei domini: " + e.getMessage());
+        }
+        r.put("domini", domini).put("esaminati", esaminati).put("funzionanti", funzionanti);
 
-        r.put("pronto", nomeCoperto && rottaPresente);
+        // Il verdetto viene dalla PROVA, non dal testo della configurazione.
+        //
+        // Prima era "nomeCoperto && rottaPresente", cioe' il risultato di una ricerca dentro
+        // nginx.conf del marcatore che questa classe stessa scrive. Ma la rotta puo' stare
+        // altrove — e sta altrove: la scheda della 443 la installa in
+        // conf.d/mailpanel-pubblico.conf, che serve esattamente questi due file, la politica
+        // MTA-STS e questo XML. Risultato: il pannello scaricava il file davvero, lo otteneva,
+        // e un attimo dopo dichiarava che nginx non lo serve e che i client devono
+        // configurarsi a mano. Il commento qui sopra diceva gia' quale delle due misure ha
+        // ragione; il verdetto usava l'altra.
+        boolean pronto = pronto(elencoLetto, esaminati, funzionanti);
+        r.put("pronto", pronto);
+        r.put("perche", pronto
+                ? "Il file arriva su tutti i " + esaminati + " domini, chiesto come lo chiede "
+                  + "Thunderbird." + (rottaPresente ? " La rotta e' in " + conf + "."
+                        : " La rotta non e' in " + conf + " ma in un altro file di configurazione — "
+                        + "quello della scheda \"Porta 443\" — e va benissimo cosi': quello che "
+                        + "conta e' che il file arrivi.")
+                : esaminati == 0
+                  ? "Non ho potuto provare nessun dominio, quindi non so se il file arrivi. "
+                    + "\"Non ho controllato\" non e' \"non funziona\", ma non e' nemmeno \"va bene\"."
+                  : "Il file non arriva per " + guai.size() + " domini su " + esaminati + ": "
+                    + String.join("; ", guai));
         return r;
     }
 
@@ -202,6 +239,24 @@ public class Autoconfig {
      * e "il file non c'e'" sono due guasti diversi con due rimedi opposti, e confonderli
      * manderebbe a rifare la cosa sbagliata.
      */
+    /**
+     * Il verdetto, staccato da stato() perche' un test possa arrivarci.
+     *
+     * E' la riga che sbagliava: prima diceva "pronto" in base a una ricerca di testo dentro
+     * nginx.conf, e cosi' dichiarava che nginx non serviva un file che stava servendo. Ora
+     * dipende solo dalle prove, e ha tre condizioni, tutte necessarie:
+     *
+     *  - l'elenco dei domini si e' potuto leggere: se non si e' letto, non si e' provato nulla;
+     *  - almeno un dominio e' stato provato: zero prove tutte riuscite fanno "0 == 0", cioe'
+     *    verde. Su zero domini un conteggio dice sempre di si', ed e' il modo piu' silenzioso
+     *    di dichiarare funzionante una cosa che non e' stata guardata;
+     *  - tutte le prove sono riuscite: una sola che fallisce basta, perche' e' un dominio i
+     *    cui client continuano a doversi configurare a mano.
+     */
+    static boolean pronto(boolean elencoLetto, int esaminati, int funzionanti) {
+        return elencoLetto && esaminati > 0 && funzionanti == esaminati;
+    }
+
     private static JSONObject provaScarico(String nome, String dominio) {
         JSONObject r = new JSONObject();
         String url = "https://" + nome + "/mail/config-v1.1.xml?emailaddress=prova@" + dominio;
@@ -314,7 +369,40 @@ public class Autoconfig {
                 return r.put("success", false).put("error", st.optString("error", "stato non leggibile"));
             if (st.optBoolean("pronto", false))
                 return r.put("success", true).put("giaFatto", true)
-                        .put("nota", "nginx e' gia' configurato per servire il file: non c'e' niente da fare.");
+                        .put("nota", "Il file arriva gia' su tutti i domini: non c'e' niente da fare, e "
+                                + "non tocco nginx. " + st.optString("perche", ""));
+
+            // La guardia che conta, e vale anche quando il file NON arriva.
+            //
+            // Se la superficie pubblica sulla 443 e' installata, autoconfig.<dominio> e
+            // mta-sts.<dominio> li serve gia' lei, ed e' un blocco scritto apposta per questo:
+            // due sole location esatte, 404 su tutto il resto, limiti di frequenza, solo GET e
+            // HEAD, e un log suo che la jail fail2ban sorveglia.
+            //
+            // Quel blocco e' dichiarato "server_name _", cioe' vince come default_server solo
+            // finche' nessun altro rivendica quei nomi. Aggiungere "autoconfig.* mta-sts.*" al
+            // server_name della webmail glieli porterebbe via — in nginx un nome con jolly
+            // batte il default_server — e con essi la protezione e il log della jail, che
+            // resterebbe "attiva" su un file che nessuno scrive piu'.
+            //
+            // "nginx -t" non se ne accorgerebbe: e' una rottura di significato, non di
+            // sintassi. Quindi la decisione va presa qui, prima di scrivere.
+            if (ProtezioneWeb.stato().optBoolean("installato", false))
+                return r.put("success", false).put("giaAltrove", true)
+                        .put("error", "Non tocco nginx.conf. La superficie pubblica sulla 443 e' gia' "
+                                + "installata (conf.d/mailpanel-pubblico.conf) ed e' lei a rispondere "
+                                + "per autoconfig.<dominio> e mta-sts.<dominio>, servendo sia questo "
+                                + "file sia la politica MTA-STS. Aggiungere quei nomi al server_name "
+                                + "della webmail glieli toglierebbe, insieme ai limiti di frequenza, "
+                                + "al vincolo GET/HEAD, al 404 su tutto il resto e al log sorvegliato "
+                                + "dalla jail fail2ban. Se il file non arriva, la causa e' altrove: "
+                                + "quasi sempre e' il server web del pannello, che e' chi genera "
+                                + "l'XML — un 502 dice esattamente quello. " + st.optString("perche", ""));
+
+            // Quali politiche MTA-STS rispondono PRIMA di toccare qualcosa. Senza questa
+            // fotografia, dopo non c'e' modo di sapere se una l'ho rotta io.
+            List<String> politichePrima = politicheCheRispondono();
+            r.put("politichePrima", new JSONArray(politichePrima));
 
             String conf = st.getString("conf");
             Path p = Path.of(conf);
@@ -381,20 +469,61 @@ public class Autoconfig {
                                 + "quella di prima. Detto dal sistema: " + ric.uscita.trim());
             }
 
+            // Una verifica non puo' guardare solo cio' che volevo ottenere: va guardato anche
+            // cio' che potevo aver rotto. Spostare dei nomi fra due server_name sposta le
+            // richieste da un blocco all'altro, e il blocco che li perde e' quello che serve la
+            // politica MTA-STS. Con i record TXT gia' pubblicati, farla sparire vuol dire
+            // lasciare al mondo la dichiarazione di una protezione che non risponde piu'.
+            List<String> politicheDopo = politicheCheRispondono();
+            List<String> perse = new ArrayList<>(politichePrima);
+            perse.removeAll(politicheDopo);
+            if (!perse.isEmpty()) {
+                Files.writeString(p, testo);
+                esegui("service", "nginx", "reload");
+                return r.put("success", false).put("ripristinato", true)
+                        .put("error", "Ho rimesso la configurazione di prima e ricaricato: la modifica "
+                                + "aveva fatto smettere di rispondere la politica MTA-STS di "
+                                + String.join(", ", perse) + ". Quei domini hanno il record TXT "
+                                + "pubblicato, quindi una politica che non risponde e' una "
+                                + "dichiarazione non mantenuta: meglio nessun autoconfig che questo.");
+            }
+
             JSONObject dopo = stato();
             r.put("statoDopo", dopo);
-            if (!dopo.optBoolean("pronto", false))
-                return r.put("success", false)
-                        .put("error", "Ho scritto e ricaricato, ma rileggendo il file la configurazione "
-                                + "non risulta applicata. Guarda " + conf + " prima di riprovare.");
+            if (!dopo.optBoolean("pronto", false)) {
+                Files.writeString(p, testo);
+                esegui("service", "nginx", "reload");
+                return r.put("success", false).put("ripristinato", true)
+                        .put("error", "Ho scritto e ricaricato, ma il file continua a non arrivare: "
+                                + dopo.optString("perche", "") + " Ho rimesso la configurazione di "
+                                + "prima, perche' una modifica che non ottiene quello per cui e' stata "
+                                + "fatta e' solo una modifica in piu' da ricordarsi. Copia in " + copia + ".");
+            }
 
             return r.put("success", true)
-                    .put("nota", "nginx ora risponde anche per autoconfig.<dominio> e gira la richiesta "
-                            + "del file al pannello. Copia di sicurezza in " + copia + ".");
+                    .put("nota", "Il file ora arriva su tutti i domini, e le politiche MTA-STS che "
+                            + "rispondevano prima rispondono ancora. Copia di sicurezza in " + copia + ".");
         } catch (Exception e) {
             return new JSONObject().put("success", false)
                     .put("error", "errore durante l'installazione: " + e.getMessage());
         }
+    }
+
+    /**
+     * I domini la cui politica MTA-STS risponde adesso.
+     *
+     * Serve a fare un prima/dopo attorno a una modifica di nginx: e' l'unico modo per
+     * accorgersi di aver rotto una cosa che non si stava cercando di toccare. Un dominio che
+     * gia' non rispondeva prima non conta come danno — non lo si e' rotto qui — e includerlo
+     * farebbe fallire un'installazione riuscita.
+     */
+    private static List<String> politicheCheRispondono() {
+        List<String> vive = new ArrayList<>();
+        try {
+            for (var d : Main.mailDatabase.getDomains())
+                if (MtaSts.provaPubblica(d.domain).optBoolean("ok", false)) vive.add(d.domain);
+        } catch (Exception ignore) {}
+        return vive;
     }
 
     private record Esito(int codice, String uscita) {}

@@ -65,12 +65,20 @@
             });
             h += '</tbody></table></div>';
 
+            // Qui c'era una procedura manuale in quattro passi. Il terzo mandava a premere
+            // "Configura nginx" nella scheda della configurazione automatica: un pulsante che
+            // oggi non va premuto, perche' quella rotta la installa la scheda della 443 e
+            // toccare nginx.conf toglierebbe autoconfig.* e mta-sts.* al blocco protetto.
+            // Una sequenza scritta a parole diverge dal codice appena il codice cambia, e
+            // continua a insegnare l'ordine di ieri: il posto giusto per l'ordine e' il
+            // pulsante che lo esegue.
             h += '<div class="alert alert-secondary py-2 small mb-0"><i class="fas fa-list-ol me-1"></i>'
-               + '<strong>L&rsquo;ordine da seguire:</strong> 1) crea il CNAME <code>mta-sts</code> dalla scheda '
-               + 'dei record opzionali qui sopra &middot; 2) rigenera il certificato dalla sezione SSL, cos&igrave; '
-               + 'copre <code>mta-sts.&lt;dominio&gt;</code> &middot; 3) premi <em>Configura nginx</em> nella scheda '
-               + 'della configurazione automatica &middot; 4) torna qui: quando la politica risponde, il pulsante '
-               + 'per pubblicare il TXT si accende da solo.</div>'
+               + '<strong>Non c&rsquo;&egrave; un ordine da seguire a mano.</strong> Il pulsante '
+               + '<em>Attiva MTA-STS</em> (pagina Aggiornamenti) esegue tutta la catena su tutti i domini, '
+               + 'e <em>Configura tutto</em> nella pagina DNS la esegue su un dominio solo: include di nginx, '
+               + '443, jail, CNAME, proxy spento, certificato, attesa della propagazione, prova della politica '
+               + 'e infine il TXT. Al primo passo che fallisce si fermano e spiegano cosa manca. Il pulsante '
+               + 'qui sopra serve solo se vuoi pubblicare il TXT di un singolo dominio a mano.</div>'
                + '<div id="stsEsito" class="mt-2"></div>';
 
             el.innerHTML = h;

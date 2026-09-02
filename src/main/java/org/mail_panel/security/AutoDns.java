@@ -600,10 +600,14 @@ public class AutoDns {
     private static final String[][] OPZIONALI = {
         { "autoconfig",     "CNAME", "autoconfig",       "0",
           "L'indirizzo a cui Thunderbird va a cercare le impostazioni gia' pronte.",
-          "Il record da solo non basta: perche' serva, su quel nome qualcosa deve rispondere con il "
-          + "file di configurazione (/mail/config-v1.1.xml). Questo pannello quel file non lo serve, "
-          + "quindi per ora il CNAME e' una predisposizione. I client intanto si configurano con i "
-          + "due SRV qui sotto, che invece funzionano da soli." },
+          // Questa nota diceva "questo pannello quel file non lo serve" e mandava i client sui
+          // due SRV. Erano due affermazioni false nello stesso periodo, e la pagina si
+          // contraddiceva da sola: la scheda della configurazione automatica, poche righe piu'
+          // giu', misura che il file arriva — e spiega che Thunderbird gli SRV non li legge.
+          "Il record da solo non basta: perche' serva, su quel nome deve rispondere il file di "
+          + "configurazione (/mail/config-v1.1.xml). Il pannello lo serve: la scheda \"Configurazione "
+          + "automatica dei client\" qui sotto lo scarica davvero e dice se arriva. Non contare sui "
+          + "due SRV per Thunderbird: non li legge (e' scritto nella stessa scheda)." },
         { "srv_imaps",      "SRV",   "_imaps._tcp",      "993",
           "Dice ai client dove prendere la posta in arrivo (IMAP su TLS, porta 993). Funziona da solo: "
           + "il client interroga il DNS e ricava host e porta senza altro (RFC 6186 §4).", "" },

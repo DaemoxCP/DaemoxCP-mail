@@ -188,6 +188,27 @@ public class MtaSts {
      * non copre quel nome" e "il file non c'e'" hanno due rimedi opposti.
      */
     /** Come provaPolitica, ma per un dominio qualsiasi: la usa la verifica DNS. */
+    /**
+     * Il record TXT che corrisponde alla politica servita ADESSO.
+     *
+     * Unico posto in cui quel valore si calcola. Ce n'erano due: qui la politica, e in
+     * DnsRecordsGenerator un "v=STSv1; id=" + System.currentTimeMillis() che proponeva a chi
+     * legge le istruzioni un id preso dall'orologio — diverso a ogni caricamento della pagina,
+     * e per sempre scollegato dal contenuto della politica. L'id non e' decorativo: e' il
+     * segnale con cui i mittenti si accorgono che la politica e' cambiata, e uno fermo li
+     * lascia sulla copia vecchia finche' non scade.
+     */
+    public static String recordTxtCorrente() {
+        try {
+            String modo = modoCorrente();
+            return recordTxt(politica(hostDiPosta(), modo, maxAgeConsigliato(modo))).trim();
+        } catch (Exception e) {
+            // Meglio niente che un valore inventato: una stringa vuota non fa passare per
+            // giusto nessun record, e non suggerisce a nessuno di pubblicare una sciocchezza.
+            return "";
+        }
+    }
+
     public static JSONObject provaPubblica(String dominio) {
         return provaPolitica("mta-sts." + dominio, hostDiPosta(), modoCorrente());
     }

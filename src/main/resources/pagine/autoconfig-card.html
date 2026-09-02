@@ -17,9 +17,17 @@
                     </p>
                     <p class="small text-muted mb-2">
                         Il file lo genera il pannello, <strong>uno per dominio</strong>, con i valori veri di questo
-                        server. Perch&eacute; arrivi al client serve una riga in nginx: il pannello la aggiunge dopo
-                        aver fatto una copia di sicurezza, e se <code>nginx -t</code> boccia la configurazione
-                        rimette quella di prima senza ricaricare nulla.
+                        server. Perch&eacute; arrivi al client serve una rotta in nginx, e di norma la installa gi&agrave;
+                        la scheda <strong>Porta 443</strong>: quella superficie serve esattamente due file, la politica
+                        MTA-STS e questo XML. In quel caso qui non c&rsquo;&egrave; niente da configurare.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        <strong>Il verdetto qui sotto viene dallo scarico vero</strong>, non da cosa c&rsquo;&egrave;
+                        scritto nei file di nginx: il pannello chiede il file come lo chiederebbe Thunderbird e guarda
+                        cosa torna. Sono due domande diverse, e quando divergono ha ragione la seconda &mdash; la rotta
+                        pu&ograve; stare in un file che questa scheda non legge, e il file arrivare lo stesso.
+                        Se invece il file non arriva ma la 443 &egrave; a posto, la causa &egrave; quasi sempre il
+                        server web del pannello, che &egrave; chi genera l&rsquo;XML: un <code>502</code> dice quello.
                     </p>
                     <div id="acBody"><span class="text-muted small">Premi "Aggiorna": legge e basta.</span></div>
                 </div>
