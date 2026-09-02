@@ -1435,6 +1435,7 @@ public class MailPanelContent {
                 <div class="col-md-3 mb-2"><span class="badge bg-secondary w-100 p-2" id="comp-rspamd">Rspamd: -</span></div>
                 <div class="col-md-3 mb-2"><span class="badge bg-secondary w-100 p-2" id="comp-roundcube">Roundcube: -</span></div>
             </div>
+""" + risorsa("pagine/home-stato-card.html") + """
         </div>
     </div>
 """ + getFooterSection() + getScriptStart() + """
@@ -1711,7 +1712,7 @@ public class MailPanelContent {
         }
 
         checkStatus();
-""" + getScriptEnd();
+""" + risorsa("pagine/home-stato.js") + getScriptEnd();
     }
 
     // ============== DOMAINS.HTML ==============

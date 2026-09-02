@@ -11685,14 +11685,8 @@ http {
                 return trimmed;
             }
         }
-        String forwarded = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isEmpty()) {
-            // X-Forwarded-For può essere "IP1, IP2, IP3" — prendiamo il primo (client originale)
-            String first = forwarded.split(",")[0].trim();
-            if (org.mail_panel.security.InputValidator.isValidIp(first)) {
-                return first;
-            }
-        }
+        String daXff = ipDaForwardedFor(exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
+        if (daXff != null) return daXff;
         String realIp = exchange.getRequestHeaders().getFirst("X-Real-IP");
         if (realIp != null && !realIp.isEmpty()) {
             String trimmed = realIp.trim();
@@ -11702,6 +11696,38 @@ http {
         }
         // Fallback all'IP TCP se nessun header valido (improbabile passando da CF)
         return tcpIp;
+    }
+
+    /**
+     * L'indirizzo di chi bussa, letto da X-Forwarded-For DA DESTRA. null se non si ricava.
+     *
+     * La forma dell'intestazione e' "client, proxy1, proxy2": a sinistra c'e' il client
+     * originale, ed e' per questo che prima si prendeva il primo pezzo. Ma quel pezzo e'
+     * l'unico che il client puo' SCRIVERSI DA SOLO: chi manda una richiesta con gia' dentro
+     * "X-Forwarded-For: 1.2.3.4" se la vede accodare dal proxy, che aggiunge il proprio
+     * mittente in coda. Il primo valore e' quindi il piu' facile da falsificare, non il piu'
+     * attendibile — e usandolo per il limite dei tentativi bastava cambiarlo a ogni prova per
+     * non essere mai bloccati.
+     *
+     * Si scorre da destra saltando gli indirizzi che sono a loro volta proxy fidati (una
+     * catena vera ne ha piu' d'uno) e ci si ferma al primo che non lo e': quello l'ha scritto
+     * un proxy di cui ci fidiamo, non chi bussa. Se sono tutti fidati non si inventa niente:
+     * si torna null e chi chiama usa l'indirizzo TCP.
+     *
+     * Sta in un metodo suo per poter essere provato: dentro getClientIp servirebbe un
+     * HttpExchange vero, e una logica che nessun test raggiunge e' una logica che nessuno
+     * controlla.
+     */
+    static String ipDaForwardedFor(String intestazione) {
+        if (intestazione == null || intestazione.isEmpty()) return null;
+        String[] pezzi = intestazione.split(",");
+        for (int i = pezzi.length - 1; i >= 0; i--) {
+            String cand = pezzi[i].trim();
+            if (!org.mail_panel.security.InputValidator.isValidIp(cand)) continue;
+            if (org.mail_panel.security.TrustedProxy.isTrustedProxy(cand)) continue;
+            return cand;
+        }
+        return null;
     }
 
     private String getSessionUsername() {

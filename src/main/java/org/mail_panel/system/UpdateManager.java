@@ -7396,14 +7396,38 @@ public final class UpdateManager {
      */
     public static JSONObject intervalliCloudflare() {
         JSONObject r = new JSONObject().put("aggiornataIl", org.mail_panel.security.TrustedProxy.AGGIORNATA_IL);
+        // Cio' che il pannello CREDE si mostra sempre, anche se la rete non risponde: e' una
+        // conoscenza sua, non dipende da cloudflare.com. Una lista che decide di chi fidarsi e
+        // che nessuno puo' leggere e' una regola segreta; e nel momento in cui il confronto
+        // fallisce e' proprio quando serve poter guardare cosa c'e' scritto.
+        r.put("listaV4", new JSONArray(org.mail_panel.security.TrustedProxy.cloudflareV4()));
+        r.put("listaV6", new JSONArray(org.mail_panel.security.TrustedProxy.cloudflareV6()));
+        r.put("listaLocali", new JSONArray(org.mail_panel.security.TrustedProxy.intervalliLocali()));
         try {
-            java.util.List<String> v4 = scaricaIntervalli("https://www.cloudflare.com/ips-v4");
-            java.util.List<String> v6 = scaricaIntervalli("https://www.cloudflare.com/ips-v6");
-            if (v4.isEmpty() || v6.isEmpty())
+            java.util.List<String> v4 = scaricaIntervalli("https://www.cloudflare.com/ips-v4", true);
+            java.util.List<String> v6 = scaricaIntervalli("https://www.cloudflare.com/ips-v6", false);
+
+            // Una soglia minima, non il solo "non vuoto".
+            //
+            // Senza, una risposta parziale o una pagina di errore da cui si salvano due righe
+            // darebbe una lista ufficiale corta. Nessun intervallo "mancante" — quindi niente
+            // rosso — e invece una dozzina di "non piu' ufficiali": il pannello consiglierebbe
+            // di TOGLIERE dalla lista di fiducia intervalli che Cloudflare usa eccome. Un
+            // consiglio sbagliato e' peggio di un verde sbagliato, perche' chi lo segue rompe
+            // qualcosa di suo con le proprie mani.
+            //
+            // Cloudflare pubblica da anni almeno 15 intervalli IPv4 e 7 IPv6. La soglia sta
+            // sotto apposta: deve scattare su una risposta rotta, non su un aggiornamento
+            // legittimo della lista.
+            final int MINIMO_V4 = 10, MINIMO_V6 = 5;
+            if (v4.size() < MINIMO_V4 || v6.size() < MINIMO_V6)
                 return r.put("success", false).put("verificato", false)
-                        .put("error", "Non sono riuscito a scaricare le liste ufficiali da "
-                            + "cloudflare.com. Non so dire se quella compilata sia aggiornata: "
-                            + "\"non ho potuto controllare\" non e' \"va bene\".");
+                        .put("ufficialiV4", v4.size()).put("ufficialiV6", v6.size())
+                        .put("error", "Le liste ufficiali sono arrivate incomplete, o non sono "
+                            + "arrivate affatto (" + v4.size() + " IPv4 e " + v6.size() + " IPv6, "
+                            + "me ne aspetto almeno " + MINIMO_V4 + " e " + MINIMO_V6 + "). NON "
+                            + "faccio il confronto: su una lista monca direi che intervalli buoni "
+                            + "sono da togliere. \"Non ho potuto controllare\" non e' \"va bene\".");
 
             java.util.List<String> miaV4 = org.mail_panel.security.TrustedProxy.cloudflareV4();
             java.util.List<String> miaV6 = org.mail_panel.security.TrustedProxy.cloudflareV6();
@@ -7447,8 +7471,14 @@ public final class UpdateManager {
         }
     }
 
-    /** Una riga per intervallo, righe vuote e commenti scartati. */
-    private static java.util.List<String> scaricaIntervalli(String url) {
+    /**
+     * Una riga per intervallo, righe vuote e commenti scartati.
+     *
+     * @param ipv4 la famiglia attesa: una riga della famiglia sbagliata viene scartata. Il
+     *             controllo di forma da solo non distingue un CIDR IPv6 da uno IPv4, e una
+     *             lista arrivata sul file sbagliato falserebbe il confronto.
+     */
+    private static java.util.List<String> scaricaIntervalli(String url, boolean ipv4) {
         java.util.List<String> out = new java.util.ArrayList<>();
         try {
             var http = java.net.http.HttpClient.newBuilder()
@@ -7463,11 +7493,30 @@ public final class UpdateManager {
                 // Si accetta solo cio' che ha la forma di un CIDR: da una pagina di errore o da
                 // una risposta inattesa non deve entrare niente in una lista di fiducia.
                 if (c.isEmpty() || c.startsWith("#")) continue;
+                // Due filtri, non uno. La forma deve valere per la riga INTERA — cosi' una riga
+                // di HTML che contenga un CIDR non passa — e la riga dev'essere un CIDR vero
+                // della famiglia giusta.
                 if (!c.matches("[0-9a-fA-F:.]+/[0-9]{1,3}")) continue;
+                boolean sembraV4 = c.indexOf(':') < 0;
+                if (sembraV4 != ipv4) continue;
+                if (!cidrValido(c, ipv4)) continue;
                 out.add(c);
             }
         } catch (Exception ignora) { }
         return out;
+    }
+
+    /** Il CIDR e' scrivibile davvero: indirizzo letterale valido e prefisso nella scala giusta. */
+    private static boolean cidrValido(String cidr, boolean ipv4) {
+        try {
+            int i = cidr.indexOf('/');
+            int prefisso = Integer.parseInt(cidr.substring(i + 1));
+            if (prefisso < 0 || prefisso > (ipv4 ? 32 : 128)) return false;
+            byte[] b = java.net.InetAddress.getByName(cidr.substring(0, i)).getAddress();
+            return b.length == (ipv4 ? 4 : 16);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public static JSONObject avvioAutomatico() {
