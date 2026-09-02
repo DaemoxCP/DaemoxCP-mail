@@ -541,6 +541,23 @@
         }
 
         // Aggiorna i due box prominenti "Ultima/Prossima rotazione"
+        // Lo scheduler vive dentro il server web del pannello. Dire "gira mentre il pannello
+        // e' acceso" e' un avvertimento generico che scarica su chi legge il compito di andare
+        // a controllare da un'altra parte; il pannello quel dato ce l'ha e puo' dirlo.
+        function fraseAvvioAutomatico(data) {
+            if (data.avvio_automatico === true)
+                return 'Lo scheduler vive nel server web del pannello, che dopo un riavvio del '
+                     + 'server <strong>si riaccende da s&eacute;</strong>: la sequenza prosegue comunque.';
+            if (data.avvio_automatico === false)
+                return '<span class="text-warning"><strong>Attenzione:</strong> lo scheduler vive nel '
+                     + 'server web del pannello, e il pannello <strong>non &egrave; impostato per '
+                     + 'riaccendersi</strong> dopo un riavvio del server. Se lo riavvii, la rotazione '
+                     + 'resta ferma dov&rsquo;&egrave; finch&eacute; non riaccendi il pannello a mano. '
+                     + 'Si sistema con &laquo;Avvio automatico&raquo; nella scheda Sistema operativo.</span>';
+            // Il campo non e' arrivato: si dice quel che si sa, senza inventare un verdetto.
+            return 'Lo scheduler gira mentre il server web del pannello &egrave; acceso.';
+        }
+
         // Com'e' messa la prossima rotazione, decisa in un posto solo.
         //
         // Esiste perche' la stessa domanda veniva risposta due volte nella stessa scheda: il
@@ -649,7 +666,7 @@
                         + ' (' + formatRelativeTime(nextTs) + ', ogni ' + interval + ' giorni). '
                         + 'Lo scheduler controlla ogni ora e la avvia da s&eacute;: crea la chiave nuova, '
                         + 'pubblica il record, attende la propagazione, attiva la firma e dopo 7 giorni '
-                        + 'rimuove la vecchia. Gira solo mentre il server web del pannello &egrave; acceso.</div>';
+                        + 'rimuove la vecchia. ' + fraseAvvioAutomatico(data) + '</div>';
                 } else {
                     nextEl.innerHTML = '<strong>' + formatItalianDate(nextTs) + '</strong>' +
                         '<div class="small text-muted">' + formatRelativeTime(nextTs) + ' (ogni ' + interval + ' giorni)</div>';

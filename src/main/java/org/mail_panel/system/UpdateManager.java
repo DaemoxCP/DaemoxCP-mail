@@ -7277,11 +7277,11 @@ public final class UpdateManager {
              .put("riavvioNecessario", so.optBoolean("riavvioNecessario"))
              .put("minuti", minuti);
 
-            boolean rc = ok("test -f /usr/local/etc/rc.d/mailpanel -o -f /etc/rc.d/mailpanel", 10);
-            String abil = sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim();
-            boolean acceso = "YES".equalsIgnoreCase(abil) || "yes".equalsIgnoreCase(abil)
-                    || "true".equalsIgnoreCase(abil) || "1".equals(abil);
-            r.put("rcAttivo", rc && acceso);
+            JSONObject avvio = avvioAutomatico();
+            boolean rc = avvio.optBoolean("installato", false);
+            boolean acceso = avvio.optBoolean("abilitato", false);
+            r.put("rcAttivo", avvio.optBoolean("attivo", false));
+            r.put("avvioAutomatico", avvio);
             if (!(rc && acceso)) {
                 return r.put("success", false)
                         .put("error", "NON riavvio: senza lo script rc.d abilitato il pannello resterebbe "
@@ -7362,6 +7362,154 @@ public final class UpdateManager {
                     .put("annulla", "pulsante \"Annulla il riavvio\"");
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * Il pannello torna su da solo dopo un riavvio del server?
+     *
+     * La risposta esisteva gia', ma solo DENTRO riavviaServer(): serviva a rifiutare un
+     * riavvio, e non veniva mai detta a nessuno. Cosi' il fatto piu' importante — se il
+     * pannello si riaccende o no — si scopriva soltanto provando a riavviare, cioe' nel
+     * momento peggiore per scoprirlo.
+     *
+     * Conta piu' di quanto sembri: dentro il server web vivono lo scheduler della rotazione
+     * DKIM, il rinnovo automatico dei certificati e il rapporto periodico. Se il pannello non
+     * riparte, quelle cose non si rompono — si fermano dove sono, e nessuno lo segnala.
+     */
+    public static JSONObject avvioAutomatico() {
+        JSONObject r = new JSONObject();
+        try {
+            String percorso = ok("test -f /usr/local/etc/rc.d/mailpanel", 10)
+                    ? "/usr/local/etc/rc.d/mailpanel"
+                    : (ok("test -f /etc/rc.d/mailpanel", 10) ? "/etc/rc.d/mailpanel" : null);
+            boolean installato = percorso != null;
+            String abil = sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim();
+            boolean abilitato = "YES".equalsIgnoreCase(abil) || "yes".equalsIgnoreCase(abil)
+                    || "true".equalsIgnoreCase(abil) || "1".equals(abil);
+            r.put("success", true)
+             .put("installato", installato)
+             .put("abilitato", abilitato)
+             .put("attivo", installato && abilitato)
+             .put("percorso", percorso == null ? "" : percorso)
+             .put("valoreSysrc", abil);
+            r.put("motivo", installato && abilitato
+                ? "Dopo un riavvio del server il pannello si riaccende da solo, e con lui lo "
+                  + "scheduler della rotazione DKIM, il rinnovo dei certificati e il rapporto "
+                  + "periodico."
+                : !installato
+                  ? "Lo script rc.d non c'e': dopo un riavvio del server il pannello resta spento "
+                    + "finche' non lo riaccendi a mano da SSH. Nel frattempo si fermano anche lo "
+                    + "scheduler della rotazione DKIM, il rinnovo dei certificati e il rapporto "
+                    + "periodico. Si installa dal pulsante \"Avvio automatico\"."
+                  : "Lo script rc.d c'e' ma NON e' abilitato (mailpanel_enable="
+                    + (abil.isEmpty() ? "non impostato" : abil) + "): dopo un riavvio il pannello "
+                    + "resta spento. Si abilita dal pulsante \"Avvio automatico\".");
+            return r;
+        } catch (Exception e) {
+            // "Non ho potuto controllare" non e' "va bene": chi legge deve vederlo.
+            return r.put("success", false).put("attivo", false)
+                    .put("motivo", "Non sono riuscito a controllare se il pannello riparta da solo: "
+                            + e.getMessage());
+        }
+    }
+
+    /**
+     * Toglie l'avvio automatico: disabilita mailpanel_enable e rimuove lo script rc.d.
+     *
+     * NON ferma il pannello. Se stai leggendo queste righe da un pannello avviato dal
+     * servizio, quel processo continua a girare: chiudergli la porta in faccia mentre premi
+     * il pulsante sarebbe assurdo. Cambia solo che al prossimo riavvio non torna su — e con
+     * lui non tornano su lo scheduler della rotazione DKIM, il rinnovo dei certificati e il
+     * rapporto periodico.
+     *
+     * Tre cautele, tutte imparate a spese di qualcun altro:
+     *
+     *  - Prima di cancellare si fa una COPIA, e se la copia non riesce non si cancella. Uno
+     *    script rc.d cancellato senza copia si riscrive solo reinstallandolo.
+     *  - "sysrc -x" su una variabile che non esiste ha un esito non documentato: in quel caso
+     *    non lo si chiama nemmeno. Non si danno comandi al buio a un file di configurazione
+     *    del boot.
+     *  - Il verdetto NON si legge dai codici di uscita: si rilegge "sysrc -n" e si ricontrolla
+     *    il file. Un comando che "riesce" senza aver fatto la cosa e' il modo piu' comune di
+     *    raccontarsi che e' andata bene.
+     *
+     * @param esegui false = anteprima, non tocca niente.
+     */
+    public static JSONObject rimuoviScriptRcPannello(boolean esegui) {
+        JSONObject r = new JSONObject();
+        try {
+            JSONObject prima = avvioAutomatico();
+            r.put("prima", prima);
+            String percorso = prima.optString("percorso", "");
+            boolean installato = prima.optBoolean("installato", false);
+            String valore = prima.optString("valoreSysrc", "").trim();
+            boolean variabileEsiste = !valore.isEmpty();
+
+            String copia = "/var/db/mailpanel/mailpanel.rc.rimosso";
+            r.put("percorso", percorso).put("copia", copia)
+             .put("installato", installato).put("variabileEsiste", variabileEsiste);
+
+            if (!installato && !variabileEsiste)
+                return r.put("success", true).put("eseguito", false).put("nienteDaFare", true)
+                        .put("nota", "Non c'e' niente da togliere: lo script rc.d non esiste e "
+                            + "mailpanel_enable non e' impostato. Il pannello gia' adesso non "
+                            + "riparte da solo dopo un riavvio del server.");
+
+            if (!esegui)
+                return r.put("success", true).put("eseguito", false)
+                        .put("nota", "Anteprima. Se confermi: "
+                            + (variabileEsiste ? "tolgo mailpanel_enable da /etc/rc.conf" : "")
+                            + (variabileEsiste && installato ? " e " : "")
+                            + (installato ? "cancello " + percorso + " (dopo averne messo una copia "
+                                          + "in " + copia + ")" : "")
+                            + ". Il pannello in esecuzione NON viene fermato: continua a girare "
+                            + "fino al prossimo riavvio del server.");
+
+            ok("mkdir -p /var/db/mailpanel", 20);
+
+            // 1. La copia PRIMA di tutto: se non riesce, non si prosegue.
+            if (installato) {
+                ok("cp -p " + percorso + " " + copia, 20);
+                if (!ok("test -s " + copia, 10))
+                    return r.put("success", false)
+                            .put("error", "Non sono riuscito a fare una copia di " + percorso + " in "
+                                + copia + ", quindi NON ho cancellato niente. Senza copia, per "
+                                + "riavere lo script bisognerebbe reinstallarlo.");
+                r.put("copiaFatta", true);
+            }
+
+            // 2. La variabile, solo se c'e' davvero.
+            if (variabileEsiste) ok("sysrc -x mailpanel_enable", 30);
+
+            // 3. Lo script.
+            if (installato) ok("rm -f " + percorso, 20);
+
+            // 4. Il verdetto: si RILEGGE, non si deduce dai codici di uscita.
+            JSONObject dopo = avvioAutomatico();
+            r.put("dopo", dopo);
+            boolean restaFile = dopo.optBoolean("installato", false);
+            boolean restaVar = !dopo.optString("valoreSysrc", "").trim().isEmpty();
+            if (restaFile || restaVar) {
+                java.util.List<String> resta = new java.util.ArrayList<>();
+                if (restaFile) resta.add("lo script " + percorso + " c'e' ancora");
+                if (restaVar) resta.add("mailpanel_enable vale ancora \""
+                        + dopo.optString("valoreSysrc", "") + "\"");
+                return r.put("success", false)
+                        .put("error", "Rimozione incompleta: " + String.join("; ", resta)
+                            + ". La copia dello script e' in " + copia + ". Guarda i permessi: "
+                            + "queste due operazioni richiedono i diritti di root.");
+            }
+
+            return r.put("success", true).put("eseguito", true)
+                    .put("nota", "Avvio automatico rimosso: verificato rileggendo sysrc e il file, "
+                        + "non dai codici di uscita. Copia dello script in " + copia + ". "
+                        + "Il pannello che stai usando NON e' stato fermato e continua a girare; "
+                        + "cambia solo che al prossimo riavvio del server non torna su da solo, e "
+                        + "con lui non tornano su lo scheduler della rotazione DKIM, il rinnovo dei "
+                        + "certificati e il rapporto periodico.");
+        } catch (Exception e) {
+            return r.put("success", false).put("error", "errore durante la rimozione: " + e.getMessage());
         }
     }
 

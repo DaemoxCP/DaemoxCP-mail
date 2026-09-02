@@ -2904,6 +2904,11 @@ public class SSLMailServer {
                             org.mail_panel.security.DkimRotationScheduler.AUTO_ACTIVATE_AFTER_HOURS);
                         response.put("grace_period_days",
                             org.mail_panel.security.DkimRotationScheduler.GRACE_PERIOD_DAYS);
+                        // Lo scheduler vive dentro questo server web: se il pannello non
+                        // riparte da solo dopo un riavvio, i passi 3 e 4 restano fermi. La
+                        // scheda deve poterlo DIRE, non lasciarlo scoprire.
+                        response.put("avvio_automatico",
+                            UpdateManager.avvioAutomatico().optBoolean("attivo", false));
                         putTs(response, "started_at", info.startedAt);
                         if (info.activatedAt != null) {
                             putTs(response, "activated_at", info.activatedAt);
@@ -3046,6 +3051,8 @@ public class SSLMailServer {
                         // lo schedule resta inattivo" — proprio sotto al riquadro che diceva
                         // "account collegato: Pietro". Un dato che si legge dall'aria dipende
                         // dall'ordine di due richieste, e prima o poi quell'ordine cambia.
+                        response.put("avvio_automatico",
+                            UpdateManager.avvioAutomatico().optBoolean("attivo", false));
                         try {
                             response.put("cloudflare_configured",
                                 dkimManager.getRotationInfo(domainId) != null
@@ -6543,6 +6550,17 @@ public class SSLMailServer {
                     }
                     logAudit("SERVER_REBOOT", ip, "richiesto dal pannello");
                     response = UpdateManager.riavviaServer(true, req.optInt("minuti", 1));
+                }
+                case "rc_stato" -> response = UpdateManager.avvioAutomatico();
+                case "rc_remove_preview" -> response = UpdateManager.rimuoviScriptRcPannello(false);
+                case "rc_remove" -> {
+                    if (!"RIMUOVI RC".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        break;
+                    }
+                    response = UpdateManager.rimuoviScriptRcPannello(true);
+                    logAudit("RC_REMOVE", ip, response.optBoolean("success")
+                            ? "avvio automatico rimosso" : "NON rimosso: " + response.optString("error", "?"));
                 }
                 case "rc_preview" -> response = UpdateManager.scriptRcPannello(false);
                 case "rc_install" -> {

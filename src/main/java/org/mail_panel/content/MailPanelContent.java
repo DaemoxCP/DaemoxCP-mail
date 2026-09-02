@@ -3826,7 +3826,11 @@ public class MailPanelContent {
                     } else {
                         // propagated
                         html += '<div class="alert alert-info"><i class="fas fa-check-circle me-1"></i>Il record DNS è stato pubblicato correttamente. ' + (cloudflareConfigured
-                            ? 'L&rsquo;attivazione avviene <strong>da sé</strong> circa ' + (data.auto_activate_after_hours || 24) + 'h dopo l&rsquo;avvio: da quel momento le mail in uscita verranno firmate con il nuovo selector, e dopo altri ' + (data.grace_period_days || 7) + ' giorni la vecchia chiave viene rimossa. Il bottone qui sotto serve solo se non vuoi aspettare. Lo scheduler gira mentre il server web del pannello è acceso.'
+                            ? 'L&rsquo;attivazione avviene <strong>da sé</strong> circa ' + (data.auto_activate_after_hours || 24) + 'h dopo l&rsquo;avvio: da quel momento le mail in uscita verranno firmate con il nuovo selector, e dopo altri ' + (data.grace_period_days || 7) + ' giorni la vecchia chiave viene rimossa. Il bottone qui sotto serve solo se non vuoi aspettare. ' + (data.avvio_automatico === true
+                                ? 'Il pannello si riaccende da sé dopo un riavvio del server, quindi la sequenza prosegue comunque.'
+                                : data.avvio_automatico === false
+                                  ? '<strong class="text-warning">Attenzione: il pannello non è impostato per riaccendersi dopo un riavvio del server. Se lo riavvii, questa rotazione resta ferma qui finché non lo riaccendi a mano — si sistema con «Avvio automatico» nella scheda Sistema operativo.</strong>'
+                                  : 'Lo scheduler gira mentre il server web del pannello è acceso.')
                             : 'Ora puoi attivare la nuova chiave: da quel momento le mail in uscita verranno firmate con il nuovo selector.') + '</div>';
                         html += '<div class="d-flex gap-2 flex-wrap">';
                         html += '<button class="btn btn-success" onclick="rotateDkimActivate(false)"><i class="fas fa-bolt me-1"></i>Attiva nuova chiave</button>';
@@ -13596,8 +13600,66 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                   + '<div class="alert alert-info py-2">Viene installato e abilitato, ma <strong>non avviato</strong>: '
                   + 'il pannello sta gi&agrave; girando e due istanze si contenderebbero la porta. '
                   + 'Ha effetto al prossimo riavvio.</div>'
-                  + '<button class="btn btn-warning" onclick="rcGo()"><i class="fas fa-power-off me-1"></i>Installa e abilita</button>';
+                  + '<button class="btn btn-warning" onclick="rcGo()"><i class="fas fa-power-off me-1"></i>Installa e abilita</button>'
+                  // La via d'uscita si mostra solo quando c'e' qualcosa da togliere: un
+                  // pulsante che, premuto, risponde "non c'e' niente da fare" e' un pulsante
+                  // che non andava mostrato.
+                  + ((r.esiste || r.abilitato)
+                     ? ' <button class="btn btn-outline-danger ms-2" onclick="rcRimuoviPrev()"><i class="fas fa-trash me-1"></i>Togli l&rsquo;avvio automatico</button>'
+                     : '');
             el.innerHTML = h;
+        }
+
+        // ---------- togliere l'avvio automatico ----------
+        // Esiste perche' un pulsante che si puo' solo premere in un verso non e' una scelta:
+        // e' una porta a senso unico. Il pannello web ha la rimozione da stamattina, qui
+        // mancava.
+        async function rcRimuoviPrev() {
+            const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardo cosa c&rsquo;&egrave; da togliere...';
+            const r = await updApi('rc_remove_preview');
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            pre.style.display = 'none';
+            if (r.nienteDaFare) {
+                el.innerHTML = '<div class="alert alert-info py-2 mb-0">' + updEsc(r.nota) + '</div>'
+                             + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">Torna</button>';
+                return;
+            }
+            el.innerHTML = '<div class="alert alert-warning py-2 mb-2"><strong>Cosa succede.</strong> '
+                + updEsc(r.nota) + '</div>'
+                + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
+                + '<tr class="upd-cell"><td style="width:14rem"><strong>Script rc.d</strong></td><td>'
+                + (r.installato ? '<code>' + updEsc(r.percorso) + '</code> &mdash; verr&agrave; cancellato'
+                                : '<span class="text-muted">non presente</span>') + '</td></tr>'
+                + '<tr class="upd-cell"><td><strong>mailpanel_enable</strong></td><td>'
+                + (r.variabileEsiste ? '<code>' + updEsc((r.prima && r.prima.valoreSysrc) || '') + '</code> &mdash; verr&agrave; tolta da /etc/rc.conf'
+                                     : '<span class="text-muted">non impostata: non la tocco</span>') + '</td></tr>'
+                + '<tr class="upd-cell"><td><strong>Copia di sicurezza</strong></td><td><code>' + updEsc(r.copia) + '</code>'
+                + '<div class="small text-muted">Se la copia non riesce, non cancello niente.</div></td></tr>'
+                + '</tbody></table></div>'
+                + '<div class="alert alert-info py-2 mb-2"><i class="fas fa-circle-info me-1"></i>'
+                + 'Il pannello che stai usando <strong>non viene fermato</strong>: continua a girare. '
+                + 'Cambia solo che al prossimo riavvio del server non torna su da solo &mdash; e con lui '
+                + 'restano fermi lo scheduler della rotazione DKIM, il rinnovo dei certificati e il '
+                + 'rapporto periodico.</div>'
+                + '<button class="btn btn-danger" onclick="rcRimuoviGo()"><i class="fas fa-trash me-1"></i>Togli l&rsquo;avvio automatico</button>'
+                + ' <button class="btn btn-outline-secondary ms-2" onclick="rcPrev()">Annulla</button>';
+        }
+
+        async function rcRimuoviGo() {
+            if (prompt('Togliere l\\'avvio automatico?\\n\\n'
+                     + 'Il pannello NON viene fermato: continua a girare fino al prossimo riavvio\\n'
+                     + 'del server. Da quel riavvio in poi resterebbe spento, e con lui lo scheduler\\n'
+                     + 'della rotazione DKIM, il rinnovo dei certificati e il rapporto periodico.\\n\\n'
+                     + 'Dello script viene tenuta una copia in /var/db/mailpanel.\\n\\n'
+                     + 'Conferma: scrivi RIMUOVI RC per procedere.') !== 'RIMUOVI RC') return;
+            const el = document.getElementById('os-body');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Tolgo l&rsquo;avvio automatico...';
+            const r = await updApi('rc_remove', { confirm: 'RIMUOVI RC' });
+            el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mb-0">'
+                + updEsc(r.nota || r.error) + '</div>'
+                + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">'
+                + '<i class="fas fa-rotate me-1"></i>Rileggi lo stato</button>';
         }
 
         async function rcGo() {
