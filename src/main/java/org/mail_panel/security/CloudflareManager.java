@@ -481,6 +481,18 @@ public class CloudflareManager {
                     info.name = r.optString("name", "");
                     info.content = r.optString("content", "");
                     info.proxied = r.optBoolean("proxied", false);
+                    // I campi strutturati, quando ci sono, valgono piu' della stringa.
+                    JSONObject dati = r.optJSONObject("data");
+                    if (dati != null) {
+                        if (dati.has("priority")) info.srvPriorita = dati.optInt("priority");
+                        if (dati.has("weight"))   info.srvPeso     = dati.optInt("weight");
+                        if (dati.has("port"))     info.srvPorta    = dati.optInt("port");
+                        String bers = dati.optString("target", "");
+                        if (!bers.isEmpty()) info.srvDestinazione = bers;
+                    }
+                    // La priorita' Cloudflare la espone anche fuori da "data".
+                    if (info.srvPriorita == null && r.has("priority"))
+                        info.srvPriorita = r.optInt("priority");
                     result.add(info);
                 }
                 JSONObject ri = body.optJSONObject("result_info");
@@ -498,6 +510,20 @@ public class CloudflareManager {
         public String name;
         public String content;
         public boolean proxied;
+        /**
+         * SRV: i campi che Cloudflare restituisce in "data", piu' la priorita'.
+         *
+         * Per un SRV il campo "content" e' una stringa di comodo, e Cloudflare ci mette solo
+         * PESO, PORTA e DESTINAZIONE: la priorita' vive in un campo suo. Chi legge la
+         * priorita' da "content" la legge dal posto sbagliato — e chi pretende quattro campi
+         * da una stringa che ne ha tre non ottiene un valore sbagliato, ottiene NULL, cioe'
+         * "record non riconosciuto". E' cosi' che il pannello ha riscritto a ogni esecuzione
+         * due SRV che erano gia' giusti, annunciando ogni volta una differenza inesistente.
+         */
+        public Integer srvPriorita;
+        public Integer srvPeso;
+        public Integer srvPorta;
+        public String srvDestinazione;
     }
 
     public RecordOp deleteRecord(String token, String zoneId, String recordId) {

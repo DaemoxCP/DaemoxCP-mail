@@ -10,6 +10,7 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaUnificazione
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaAutoconfig
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaVecchia
+    java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.ProvaSrv
 
 ## Cosa provano
 
@@ -31,6 +32,14 @@ un dominio inesistente deve dare lista vuota, che e' la guardia contro il falso 
 **ProvaAutoconfig** — il verdetto della scheda Autoconfig. Il caso che conta e' `pronto(true, 0, 0)`:
 zero domini provati, zero riusciti, e senza la condizione `esaminati > 0` il conteggio direbbe
 verde proprio quando non e' stato guardato niente.
+
+**ProvaSrv** — il confronto di un record SRV, che faceva riscrivere in produzione due SRV
+gia' giusti a ogni esecuzione. Cloudflare mette nel `content` di un SRV tre campi (peso,
+porta, destinazione) e tiene la priorita' a parte; `analizzaSrv` ne pretende quattro perche'
+e' scritta per l'uscita di `dig`, quindi tornava `null` — "non lo riconosco" — e il record
+risultava sbagliato. La prova copre tutte e tre le forme e finisce riproducendo il difetto
+sulla logica vecchia: se un giorno quell'ultimo controllo passa, la prova non verifica piu'
+niente.
 
 **ProvaVecchia** — la logica di classificazione com'era prima della correzione, messa
 davanti agli stessi due casi. Serve a dimostrare che i controlli di ProvaMtaSts non sono

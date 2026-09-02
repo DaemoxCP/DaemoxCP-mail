@@ -245,7 +245,7 @@
                     const badge = r.required ? '<span class="badge bg-danger">Richiesto</span>' : '<span class="badge bg-secondary">Opzionale</span>';
                     // ID univoco basato su name+type per il matching con la verifica
                     const recordKey = (r.name + '|' + r.type).replace(/[^a-zA-Z0-9_|.\-]/g, '_');
-                    html += '<div class="dns-record ' + reqClass + '" data-record-key="' + recordKey + '" data-record-name="' + r.name + '" data-record-type="' + r.type + '" data-record-zone="' + (r.dnsZone || '') + '">';
+                    html += '<div class="dns-record ' + reqClass + '" data-record-key="' + recordKey + '" data-record-name="' + r.name + '" data-record-type="' + r.type + '" data-check-type="' + (r.checkType || '') + '" data-record-zone="' + (r.dnsZone || '') + '">';
                     html += '<div class="d-flex justify-content-between align-items-start">';
                     html += '<div><span class="record-type">' + r.type + '</span> ' + badge;
                     // Status badge — placeholder finché non parte la verifica automatica
@@ -257,7 +257,7 @@
                     html += '<i class="fas fa-copy copy-btn" onclick="copyToClipboard(this.parentElement.parentElement)" title="Copia"></i>';
                     html += '</div>';
                     html += '<div class="mt-2"><strong>Nome:</strong> <code>' + r.name + '</code></div>';
-                    html += '<div class="mt-1"><strong>Valore:</strong> <code style="word-break:break-all">' + r.value + '</code></div>';
+                    html += '<div class="mt-1"><strong>Valore consigliato dal pannello:</strong> <code style="word-break:break-all">' + r.value + '</code></div>';
                     html += '<small class="text-muted">' + r.description + '</small>';
                     // Area dettagli verifica (popolata dopo verifyDnsAuto)
                     html += '<div class="record-verify-detail mt-2" data-detail-key="' + recordKey + '"></div>';
@@ -312,8 +312,15 @@
                 }
                 // Mappa fqdn → check (i check del verifier usano sempre FQDN come name)
                 const checkByFqdn = new Map();
+                // E mappa TIPO → check, che e' quella giusta: all'apice del dominio MX e SPF
+                // hanno lo STESSO nome, quindi appaiare per nome faceva sovrascrivere l'uno
+                // con l'altro e la scheda MX mostrava il verdetto dell'SPF. Il tipo lo dichiara
+                // il record stesso (checkType), cosi' l'accoppiamento e' un dato e non
+                // un'ipotesi ricavata dal nome.
+                const checkByTipo = new Map();
                 (data.checks || []).forEach(c => {
                     if (c.name) checkByFqdn.set(c.name.toLowerCase(), c);
+                    if (c.type) checkByTipo.set(c.type, c);
                 });
 
                 let okCount = 0, koCount = 0, unkCount = 0;
@@ -326,11 +333,16 @@
                     const detailWrap = card.querySelector('[data-detail-key="' + key + '"]');
                     if (!badgeWrap) return;
 
-                    // Costruisci l'FQDN corrispondente al record per matchare il check
-                    const fqdn = recordFqdn(rname, rzone).toLowerCase();
-                    let check = checkByFqdn.get(fqdn);
-                    // Fallback: prova anche col rname diretto (per i record che hanno già FQDN)
-                    if (!check && rname) check = checkByFqdn.get(rname.toLowerCase());
+                    // Prima per tipo dichiarato: e' l'unico appaiamento che non puo' confondere
+                    // due record diversi con lo stesso nome.
+                    const ctype = card.getAttribute('data-check-type') || '';
+                    let check = ctype ? checkByTipo.get(ctype) : null;
+                    // Solo se il record non dichiara un tipo si ripiega sul nome, com'era prima.
+                    if (!check) {
+                        const fqdn = recordFqdn(rname, rzone).toLowerCase();
+                        check = checkByFqdn.get(fqdn);
+                        if (!check && rname) check = checkByFqdn.get(rname.toLowerCase());
+                    }
                     if (!check) {
                         // Nessun check per questo record (es. SRV autodiscover, MTA-STS policy, alcuni TXT secondari)
                         badgeWrap.innerHTML = '<span class="badge bg-light text-dark border"><i class="fas fa-minus-circle me-1"></i>Non verificato</span>';
@@ -342,7 +354,24 @@
                     if (check.passed) {
                         badgeWrap.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Configurato correttamente</span>';
                         if (detailWrap) {
-                            detailWrap.innerHTML = '<div class="alert alert-success py-1 px-2 mb-0 small mt-2"><i class="fas fa-check me-1"></i><strong>Nessuna azione richiesta</strong> — il record DNS risulta già configurato correttamente. ' + (check.message ? escapeHtmlBl(check.message) : '') + '</div>';
+                            let ok = '<div class="alert alert-success py-1 px-2 mb-0 small mt-2"><i class="fas fa-check me-1"></i><strong>Nessuna azione richiesta</strong> — il record DNS risulta già configurato correttamente. ' + (check.message ? escapeHtmlBl(check.message) : '');
+                            // Il valore vero si mostra anche quando il record PASSA, non solo
+                            // quando fallisce: senza, a schermo resta la sola proposta e sembra
+                            // che sia quello pubblicato.
+                            //
+                            // E si mostra SENZA confrontarlo con la proposta. Il confronto che
+                            // avevo scritto dichiarava "diverso" per un punto finale, per le
+                            // virgolette di un TXT, o perche' per un SRV la proposta e' il solo
+                            // host e il valore vero contiene anche priorita' e peso — e in piu'
+                            // aggiungeva "e va bene cosi'", che e' un giudizio che questa riga
+                            // non e' in grado di dare. Il giudizio lo da' gia' check.message.
+                            const vero = check.current_value;
+                            if (vero) {
+                                const corto = vero.length > 140 ? vero.substring(0, 140) + '…' : vero;
+                                ok += '<div class="mt-1"><span class="text-muted">Pubblicato in DNS:</span> '
+                                    + '<code class="small" style="word-break:break-all">' + escapeHtmlBl(corto) + '</code></div>';
+                            }
+                            detailWrap.innerHTML = ok + '</div>';
                         }
                         // Stile leggero: bordo verde
                         card.style.borderLeft = '4px solid #198754';

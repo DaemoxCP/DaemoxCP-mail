@@ -672,7 +672,11 @@ public class AutoDns {
                 StringBuilder sb = new StringBuilder();
                 for (CloudflareManager.DnsRecordInfo t : stessoTipo) {
                     if (sb.length() > 0) sb.append("  ||  ");
-                    sb.append(t.content);
+                    // Un SRV si mostra INTERO. Mostrando il solo "content" la colonna diceva
+                    // "1 993 mail.domain-b.test" accanto alla proposta "0 1 993 mail.domain-b.test",
+                    // e le due sembravano diverse mentre erano lo stesso record scritto in due
+                    // formati: manca solo la priorita', che Cloudflare tiene da parte.
+                    sb.append(srvIntero(t));
                     if (t.proxied) sb.append("  (proxato)");
                 }
                 j.put("contenuto", sb.toString());
@@ -806,11 +810,46 @@ public class AutoDns {
      * l'unica ragione per cui quel record esiste, e la destinazione. Il confronto sui nomi e'
      * esatto: "xmail.esempio.it" contiene "mail.esempio.it" e passerebbe per giusto.
      */
-    private boolean coincide(CloudflareManager.DnsRecordInfo t, boolean srv, String bersaglio, int porta) {
+    /** Il record SRV nella forma completa "priorita' peso porta destinazione". */
+    private static String srvIntero(CloudflareManager.DnsRecordInfo t) {
+        if (!"SRV".equalsIgnoreCase(t.type) || t.srvPorta == null || t.srvDestinazione == null)
+            return t.content == null ? "" : t.content;
+        return (t.srvPriorita == null ? 0 : t.srvPriorita) + " "
+             + (t.srvPeso == null ? 1 : t.srvPeso) + " "
+             + t.srvPorta + " " + t.srvDestinazione;
+    }
+
+    static boolean coincide(CloudflareManager.DnsRecordInfo t, boolean srv, String bersaglio, int porta) {
         String c = t.content == null ? "" : t.content.trim();
         if (!srv) return RegoleDns.stessoNome(c, bersaglio);
+        // Per un SRV si guardano i campi STRUTTURATI di Cloudflare, non la stringa "content".
+        //
+        // In "content" Cloudflare mette tre valori — peso, porta, destinazione — mentre
+        // analizzaSrv ne pretende quattro perche' e' scritta per l'uscita di dig, dove la
+        // priorita' c'e'. Con tre campi tornava null, cioe' "non lo riconosco", e il record
+        // finiva per sbagliato: la sequenza lo riscriveva a ogni esecuzione e annunciava
+        // "puntava a X invece che a Y" confrontando due formati diversi della stessa cosa.
+        // Una scrittura in produzione fatta per niente, ripetuta a ogni passaggio.
+        if (t.srvPorta != null && t.srvDestinazione != null)
+            return t.srvPorta == porta && RegoleDns.stessoNome(t.srvDestinazione, bersaglio);
+        // Solo se Cloudflare non desse i campi strutturati si torna alla stringa, e si
+        // accettano ENTRAMBE le forme in cui quella stringa puo' arrivare.
         RegoleDns.Srv s = RegoleDns.analizzaSrv(c);
-        return s != null && s.porta == porta && RegoleDns.stessoNome(s.destinazione, bersaglio);
+        if (s != null) return s.porta == porta && RegoleDns.stessoNome(s.destinazione, bersaglio);
+        // Quattro campi non ce n'erano: proviamo la forma a tre, "peso porta destinazione",
+        // che e' quella osservata in produzione nel content di Cloudflare. Non serve la
+        // priorita': qui si confrontano porta e destinazione, e la priorita' non e' mai
+        // stata parte della domanda.
+        String[] pezzi = c.split("\\s+");
+        if (pezzi.length == 3) {
+            try {
+                return Integer.parseInt(pezzi[1]) == porta
+                    && RegoleDns.stessoNome(pezzi[2], bersaglio);
+            } catch (NumberFormatException ignora) {
+                return false;
+            }
+        }
+        return false;
     }
 
     /**

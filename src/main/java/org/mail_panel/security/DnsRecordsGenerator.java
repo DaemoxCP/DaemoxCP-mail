@@ -64,6 +64,9 @@ public class DnsRecordsGenerator {
             dkimPlaceholder.ttl = DEFAULT_TTL;
             dkimPlaceholder.dnsZone = domain;
             dkimPlaceholder.description = "DKIM - Firma digitale email (da configurare)";
+            // Anche il segnaposto dichiara la sua verifica: senza, sarebbe l'unico record a
+            // ripiegare sull'appaiamento per nome, cioe' proprio sul difetto appena corretto.
+            dkimPlaceholder.checkType = "DKIM";
             dkimPlaceholder.required = true;
             dkimPlaceholder.configured = false;
             dkimPlaceholder.explanation = """
@@ -111,6 +114,7 @@ public class DnsRecordsGenerator {
         record.priority = DEFAULT_MX_PRIORITY;
         record.dnsZone = domain;
         record.description = "Mail Exchange - Indica quale server gestisce la posta per " + domain;
+        record.checkType = "MX";
         record.required = true;
         record.copyValue = mailServer;
         record.explanation = """
@@ -147,6 +151,7 @@ public class DnsRecordsGenerator {
         record.ttl = DEFAULT_TTL;
         record.dnsZone = parentDomain;
         record.description = "Indirizzo IP del server mail (" + hostname + ")";
+        record.checkType = "A";
         record.required = true;
         record.explanation = """
             <div class="alert alert-primary mb-2">
@@ -180,6 +185,7 @@ public class DnsRecordsGenerator {
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
         record.description = "SPF - Definisce quali server possono inviare email per " + domain;
+        record.checkType = "SPF";
         record.required = true;
         record.explanation = """
             <div class="alert alert-primary mb-2">
@@ -216,6 +222,7 @@ public class DnsRecordsGenerator {
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
         record.description = "DKIM - Firma digitale per autenticare le email";
+        record.checkType = "DKIM";
         record.required = true;
         record.configured = true;
         record.explanation = """
@@ -248,6 +255,7 @@ public class DnsRecordsGenerator {
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
         record.description = "DMARC - Policy per email non autenticate";
+        record.checkType = "DMARC";
         record.required = true;
         record.explanation = """
             <div class="alert alert-primary mb-2">
@@ -289,6 +297,7 @@ public class DnsRecordsGenerator {
         autoconfig.ttl = DEFAULT_TTL;
         autoconfig.dnsZone = domain;
         autoconfig.description = "Autoconfig per Thunderbird (autoconfig." + domain + ")";
+        autoconfig.checkType = "Autoconfig";
         autoconfig.required = false;
         autoconfig.explanation = """
             <div class="alert alert-primary mb-2">
@@ -314,6 +323,7 @@ public class DnsRecordsGenerator {
         srvImap.ttl = DEFAULT_TTL;
         srvImap.dnsZone = domain;
         srvImap.description = "SRV per IMAP SSL (_imaps._tcp." + domain + ")";
+        srvImap.checkType = "SRV (_imaps)";
         srvImap.required = false;
         srvImap.explanation = """
             <div class="alert alert-primary mb-2">
@@ -339,6 +349,7 @@ public class DnsRecordsGenerator {
         srvSmtp.ttl = DEFAULT_TTL;
         srvSmtp.dnsZone = domain;
         srvSmtp.description = "SRV per SMTP submission (_submission._tcp." + domain + ")";
+        srvSmtp.checkType = "SRV (_submission)";
         srvSmtp.required = false;
         srvSmtp.explanation = """
             <div class="alert alert-primary mb-2">
@@ -370,6 +381,7 @@ public class DnsRecordsGenerator {
         record.ttl = DEFAULT_TTL;
         record.dnsZone = "(Provider Hosting)";
         record.description = "PTR - Reverse DNS (NON si configura su Cloudflare)";
+        record.checkType = "PTR";
         record.required = true;
         record.explanation = """
             <div class="alert alert-danger mb-3">
@@ -571,6 +583,7 @@ public class DnsRecordsGenerator {
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
         record.description = "MTA-STS (avanzato, opzionale)";
+        record.checkType = "MTA-STS";
         record.required = false;
         record.explanation = """
             <div class="alert alert-secondary mb-2">
@@ -1246,6 +1259,17 @@ public class DnsRecordsGenerator {
         public boolean configured;   // Is this record already configured?
         public String copyValue;     // Value to copy (simpler version)
         public String dnsZone;       // Which DNS zone to configure this in (e.g., "domain-d.test" or "example.com")
+        /**
+         * A quale verifica appartiene questa scheda: lo stesso valore di DnsCheck.recordType.
+         *
+         * Prima la pagina appaiava schede e verifiche per NOME. All'apice del dominio ci sono
+         * pero' due record diversi con lo stesso nome — MX e SPF — e il secondo sovrascriveva
+         * il primo nella mappa: la scheda MX finiva per mostrare il verdetto e il valore
+         * dell'SPF ("OK: autorizza esplicitamente 203.0.113.77" sotto "Mail Exchange").
+         * Un accoppiamento indovinato dal nome e' un accoppiamento che prima o poi sbaglia:
+         * qui viaggia esplicito.
+         */
+        public String checkType;
     }
 
     public static class DnsVerificationResult {

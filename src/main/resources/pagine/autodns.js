@@ -218,7 +218,10 @@
             const r = await autoDnsApi('alias_create', { confirm: 'CREA', verso: verso });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + adEsc(r.nota || r.error) + '</div>';
-            if (r.success) setTimeout(autoDnsCarica, 1000);
+            // Si ricarica anche quando il pannello si RIFIUTA: il rifiuto "esiste gia'" vuol
+            // dire che lo stato a schermo era vecchio, ed e' proprio quello da rileggere.
+            // Lasciare l'invito dov'e' inviterebbe a premere di nuovo.
+            setTimeout(autoDnsCarica, 1000);
         }
 
         async function autoDnsCreaCasella() {
@@ -460,19 +463,37 @@
             if (s.success && s.job) {
                 if (pre) { pre.textContent = s.job.consoleLog || ''; pre.scrollTop = pre.scrollHeight; }
                 if (s.job.status === 'completed' || s.job.status === 'error') {
-                    const box = el.querySelector('.alert');
-                    if (box) {
-                        box.className = 'alert alert-' + (s.job.status === 'completed' ? 'success' : 'warning')
-                                      + ' py-2 small mb-2';
-                        box.innerHTML = (s.job.status === 'completed'
-                                ? '<i class="fas fa-check-circle me-1"></i>Configurazione completata in '
-                                  + adEsc(s.job.elapsedSeconds) + 's.'
-                                : '<i class="fas fa-triangle-exclamation me-1"></i>Configurazione interrotta: '
-                                  + adEsc(s.job.errorMessage) + ' Il registro qui sotto dice a che punto.')
-                            // Non si ricarica la scheda da soli: cancellerebbe il registro, che e'
-                            // l'unico posto dove si legge cosa non e' andato.
-                            + ' <button class="btn btn-sm btn-outline-secondary ms-2" onclick="autoDnsCarica()">'
-                            + '<i class="fas fa-rotate me-1"></i>Aggiorna la scheda</button>';
+                    // La scheda VA ricaricata, e il registro NON va perso: sono due esigenze
+                    // vere e prima ne era soddisfatta una sola.
+                    //
+                    // Lasciandola ferma, restava a schermo la fotografia di prima del lavoro. E'
+                    // cosi' che il pannello ha continuato a scrivere "Manca la cassetta dei
+                    // rapporti, scegli una delle due strade" venti secondi dopo aver creato lui
+                    // stesso quell'alias — e chi premeva si sentiva rispondere "esiste gia'".
+                    // Chiedere un'azione gia' compiuta, e dirlo solo dopo che e' stata tentata,
+                    // e' peggio di non dire niente: fa sembrare rotto cio' che ha funzionato.
+                    //
+                    // Il registro sta dentro il contenitore che si ridisegna, quindi lo si tiene
+                    // da parte e lo si rimette nella scheda nuova.
+                    const riga = (s.job.status === 'completed'
+                            ? '<i class="fas fa-check-circle me-1"></i>Configurazione completata in '
+                              + adEsc(s.job.elapsedSeconds) + 's.'
+                              + ' Lo stato qui sopra e\' stato riletto dopo il lavoro.'
+                            : '<i class="fas fa-triangle-exclamation me-1"></i>Configurazione interrotta: '
+                              + adEsc(s.job.errorMessage) + ' Il registro qui sotto dice a che punto.');
+                    const registro = pre ? pre.textContent : '';
+                    await autoDnsCarica();
+                    const fresco = document.getElementById('autoDnsEsito');
+                    if (fresco) {
+                        const p = document.createElement('pre');
+                        p.className = 'small p-2 border rounded mb-0';
+                        p.style.maxHeight = '26rem';
+                        p.style.overflow = 'auto';
+                        p.textContent = registro;
+                        fresco.innerHTML = '<div class="alert alert-'
+                            + (s.job.status === 'completed' ? 'success' : 'warning')
+                            + ' py-2 small mb-2">' + riga + '</div>';
+                        fresco.appendChild(p);
                     }
                     return;
                 }
