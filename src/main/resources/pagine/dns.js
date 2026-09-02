@@ -541,6 +541,23 @@
         }
 
         // Aggiorna i due box prominenti "Ultima/Prossima rotazione"
+        // Com'e' messa la prossima rotazione, decisa in un posto solo.
+        //
+        // Esiste perche' la stessa domanda veniva risposta due volte nella stessa scheda: il
+        // riquadro in alto e la riga di riepilogo qui sotto. Corretto il primo, il secondo ha
+        // continuato ad annunciare "prossima rotazione prevista" una data del 13 agosto mentre
+        // una rotazione era gia' in corso. Due risposte alla stessa domanda divergono sempre:
+        // quella che si guarda meno resta indietro.
+        //
+        // Ritorna: 'in_corso' | 'dovuta' | 'programmata' | 'disattivata' | 'mai'
+        function statoProssimaRotazione(data) {
+            if (data.rotation_state) return 'in_corso';
+            if (!(data.interval_days > 0)) return 'disattivata';
+            const t = pickTs(data, 'next_rotation_at');
+            if (!t) return 'mai';
+            return t.getTime() <= Date.now() ? 'dovuta' : 'programmata';
+        }
+
         function renderRotationTimeline(data, hasDkim) {
             const wrap = document.getElementById('dkimRotationTimeline');
             const lastEl = document.getElementById('dkimLastRotationText');
@@ -597,16 +614,46 @@
             // Prossima rotazione (calcolata se schedule attivo)
             const nextTs = pickTs(data, 'next_rotation_at');
             const interval = data.interval_days || 0;
-            if (interval === 0) {
+            // Una rotazione GIA' in corso ha la precedenza su qualunque data calcolata: dire
+            // "dovuta, parte al prossimo controllo" mentre la chiave nuova e' gia' pubblicata
+            // e' promettere al futuro una cosa gia' accaduta — ed e' esattamente cio' che
+            // questo riquadro faceva. La data prossima tornera' ad avere senso a rotazione
+            // conclusa, quando "ultima rotazione" sara' quella nuova.
+            const quando = statoProssimaRotazione(data);
+            if (quando === 'in_corso') {
+                const passi = {
+                    'pending_dns': 'chiave nuova generata e record pubblicato: si attende la propagazione',
+                    'propagated':  'record propagato: la firma sta per passare alla chiave nuova',
+                    'active_grace':'firma gia\' passata alla chiave nuova: la vecchia resta in DNS per il periodo di grazia'
+                };
+                nextEl.innerHTML = '<strong>Rotazione in corso</strong> '
+                    + '<span class="badge bg-info text-dark ms-1">' + escapeHtmlBl(data.rotation_state) + '</span>'
+                    + '<div class="small text-muted">'
+                    + (passi[data.rotation_state] || 'in corso')
+                    + (data.rotation_pending_selector
+                        ? ' &mdash; nuovo selector <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>' : '')
+                    + '. I passi sono qui sotto; la prossima scadenza si ricalcola quando questa si chiude.</div>';
+            } else if (quando === 'disattivata') {
                 nextEl.innerHTML = '<span class="text-muted"><i class="fas fa-pause-circle me-1"></i>Non programmata</span>' +
                     '<div class="small text-muted">La rotazione automatica è disattivata. Avviala manualmente quando vuoi.</div>';
             } else if (nextTs) {
-                const isOverdue = nextTs.getTime() <= Date.now();
-                const badge = isOverdue
-                    ? '<span class="badge bg-danger ms-1">in ritardo</span>'
-                    : '';
-                nextEl.innerHTML = '<strong>' + formatItalianDate(nextTs) + '</strong> ' + badge +
-                    '<div class="small text-muted">' + formatRelativeTime(nextTs) + ' (ogni ' + interval + ' giorni)</div>';
+                if (quando === 'dovuta') {
+                    // Una data passata sotto l'etichetta "Prossima rotazione", con un bollino
+                    // rosso e nient'altro, si legge come "il pannello sa di essere in ritardo e
+                    // non fa niente". Non e' cosi': lo scheduler confronta (adesso - ultima)
+                    // con l'intervallo, quindi una scadenza passata e' gia' "dovuta" e parte al
+                    // primo controllo. Quello che mancava non era il meccanismo, era dirlo.
+                    nextEl.innerHTML = '<strong>Dovuta</strong> '
+                        + '<span class="badge bg-warning text-dark ms-1">parte al prossimo controllo</span>'
+                        + '<div class="small text-muted">Era prevista per ' + formatItalianDate(nextTs)
+                        + ' (' + formatRelativeTime(nextTs) + ', ogni ' + interval + ' giorni). '
+                        + 'Lo scheduler controlla ogni ora e la avvia da s&eacute;: crea la chiave nuova, '
+                        + 'pubblica il record, attende la propagazione, attiva la firma e dopo 7 giorni '
+                        + 'rimuove la vecchia. Gira solo mentre il server web del pannello &egrave; acceso.</div>';
+                } else {
+                    nextEl.innerHTML = '<strong>' + formatItalianDate(nextTs) + '</strong>' +
+                        '<div class="small text-muted">' + formatRelativeTime(nextTs) + ' (ogni ' + interval + ' giorni)</div>';
+                }
             } else {
                 nextEl.innerHTML = '<strong>Al prossimo check</strong> <span class="badge bg-warning text-dark ms-1">subito</span>' +
                     '<div class="small text-muted">Schedule attivo ogni ' + interval + ' giorni, ma nessuna rotazione ancora registrata.</div>';
@@ -657,15 +704,44 @@
                     html = '<span class="text-muted"><i class="fas fa-info-circle me-1"></i>Rotazione automatica programmata: <strong>disattivata</strong>. Devi avviare la rotazione manualmente quando vuoi.</span>';
                 } else {
                     html = '<i class="fas fa-clock text-primary me-1"></i>Rotazione automatica ogni <strong>' + cur + ' giorni</strong>. ';
-                    if (data.last_rotation_at) {
+                    // Le date qui si formattano come nei due riquadri sopra.
+                    //
+                    // Prima questa riga stampava il timestamp grezzo in UTC mentre i riquadri
+                    // mostravano l'ora locale: lo STESSO istante appariva come "14 ago 2026
+                    // 00:13" sopra e "2026-08-13T22:13:41Z" sotto. Non e' un errore di calcolo,
+                    // ma chi legge vede due date diverse a due righe di distanza e comincia a
+                    // non fidarsi — e ha ragione a non fidarsi, perche' non ha modo di sapere
+                    // che una delle due e' UTC.
+                    const lastQui = pickTs(data, 'last_rotation_at');
+                    const nextQui = pickTs(data, 'next_rotation_at');
+                    if (lastQui) {
+                        html += 'Ultima rotazione: <strong>' + formatItalianDate(lastQui) + '</strong>. ';
+                    } else if (data.last_rotation_at) {
                         html += 'Ultima rotazione: <strong>' + escapeHtmlBl(data.last_rotation_at) + '</strong>. ';
                     } else {
                         html += '<span class="text-warning">Nessuna rotazione ancora effettuata.</span> ';
                     }
-                    if (data.next_rotation_at) {
-                        html += 'Prossima rotazione prevista: <strong>' + escapeHtmlBl(data.next_rotation_at) + '</strong>.';
+                    // Stessa domanda, stessa risposta del riquadro qui sopra.
+                    const quandoQui = statoProssimaRotazione(data);
+                    if (quandoQui === 'in_corso') {
+                        html += 'Una rotazione &egrave; <strong>gi&agrave; in corso</strong>'
+                             + (data.rotation_pending_selector
+                                 ? ' (nuovo selector <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>)' : '')
+                             + ': la prossima scadenza si ricalcola quando questa si chiude.';
+                    } else if (quandoQui === 'dovuta') {
+                        html += 'La rotazione era prevista per <strong>'
+                             + (nextQui ? formatItalianDate(nextQui) : escapeHtmlBl(data.next_rotation_at))
+                             + '</strong> ed &egrave; <strong>dovuta</strong>: parte al prossimo controllo.';
+                    } else if (data.next_rotation_at) {
+                        html += 'Prossima rotazione prevista: <strong>'
+                             + (nextQui ? formatItalianDate(nextQui) : escapeHtmlBl(data.next_rotation_at))
+                             + '</strong>.';
                     }
-                    if (!cloudflareConfigured) {
+                    // Il flag arriva con la risposta; la globale resta solo come ripiego per
+                    // non cambiare comportamento se il campo mancasse.
+                    const cfQui = (data.cloudflare_configured !== undefined)
+                        ? !!data.cloudflare_configured : cloudflareConfigured;
+                    if (!cfQui) {
                         html += '<br><span class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i><strong>Attenzione:</strong> per attivare lo schedule in automatico è necessario un account Cloudflare assegnato a questo dominio. Senza CF, lo schedule resta inattivo.</span>';
                     } else {
                         html += '<br><small class="text-muted">Lo scheduler creerà la nuova chiave, pubblicherà il record TXT, attenderà ' + (data.auto_activate_after_hours || 24) + 'h di propagazione, attiverà la firma, poi dopo ' + (data.grace_period_days || 7) + ' giorni di grace period rimuoverà la vecchia chiave. Tutto automatico.</small>';

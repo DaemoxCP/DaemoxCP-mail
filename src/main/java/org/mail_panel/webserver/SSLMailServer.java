@@ -2895,6 +2895,15 @@ public class SSLMailServer {
                         }
                         response.put("current_selector", info.currentSelector);
                         response.put("rotation_state", info.rotationState == null ? "" : info.rotationState);
+                        // Le due durate arrivano SEMPRE, non solo nel ramo del grace period:
+                        // la scheda le mostra gia' allo stato "propagated" per dire quando
+                        // scatta l'attivazione automatica. Senza, ripiegherebbe su 24 e 7
+                        // scritti nella pagina — numeri giusti oggi e silenziosamente falsi
+                        // il giorno in cui qualcuno cambia le costanti.
+                        response.put("auto_activate_after_hours",
+                            org.mail_panel.security.DkimRotationScheduler.AUTO_ACTIVATE_AFTER_HOURS);
+                        response.put("grace_period_days",
+                            org.mail_panel.security.DkimRotationScheduler.GRACE_PERIOD_DAYS);
                         putTs(response, "started_at", info.startedAt);
                         if (info.activatedAt != null) {
                             putTs(response, "activated_at", info.activatedAt);
@@ -3013,8 +3022,36 @@ public class SSLMailServer {
                         putTs(response, "next_rotation_at", s.nextRotationAt);
                         // Clock del server in epoch ms (per diagnosi disallineamenti vs browser)
                         response.put("server_now_ms", System.currentTimeMillis());
+                        // Se una rotazione e' GIA' in corso, il riquadro "Prossima rotazione"
+                        // deve saperlo: senza questo campo continuava a scrivere "Dovuta, parte
+                        // al prossimo controllo" mentre la chiave nuova era gia' stata generata
+                        // e pubblicata. Una promessa al futuro su una cosa gia' accaduta.
+                        try {
+                            DkimManager.RotationInfo ri = dkimManager.getRotationInfo(domainId);
+                            if (ri != null && ri.rotationState != null && !ri.rotationState.isBlank()) {
+                                response.put("rotation_state", ri.rotationState);
+                                if (ri.pendingSelector != null)
+                                    response.put("rotation_pending_selector", ri.pendingSelector);
+                            }
+                        } catch (Exception ignora) {
+                            // Nessuno stato: il riquadro torna a dire la cosa prudente.
+                        }
                         response.put("auto_activate_after_hours", org.mail_panel.security.DkimRotationScheduler.AUTO_ACTIVATE_AFTER_HOURS);
                         response.put("grace_period_days", org.mail_panel.security.DkimRotationScheduler.GRACE_PERIOD_DAYS);
+                        // Se il dominio ha un account Cloudflare, lo dice QUESTA risposta.
+                        //
+                        // La scheda lo leggeva da una variabile globale che veniva impostata da
+                        // un ALTRO caricatore, quello dello stato rotazione. Se questo arrivava
+                        // prima, la globale valeva ancora false e compariva l'avviso "senza CF
+                        // lo schedule resta inattivo" — proprio sotto al riquadro che diceva
+                        // "account collegato: Pietro". Un dato che si legge dall'aria dipende
+                        // dall'ordine di due richieste, e prima o poi quell'ordine cambia.
+                        try {
+                            response.put("cloudflare_configured",
+                                dkimManager.getRotationInfo(domainId) != null
+                                && Main.mailDatabase.getDomain(domainId) != null
+                                && Main.mailDatabase.getDomain(domainId).cloudflareAccountId > 0);
+                        } catch (Exception ignora) { }
                         // Preset consigliati (per la UI)
                         JSONArray presets = new JSONArray();
                         presets.put(new JSONObject().put("days", 0).put("label", "Disattivato"));

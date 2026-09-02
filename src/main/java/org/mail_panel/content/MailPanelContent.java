@@ -3791,13 +3791,28 @@ public class MailPanelContent {
                 let html = '';
 
                 if (state === 'pending_dns' || state === 'propagated') {
-                    html += '<div class="alert alert-warning">';
-                    html += '<strong><i class="fas fa-edit me-1"></i>Aggiungi questo record TXT al tuo DNS:</strong>';
+                    // Con un account Cloudflare il record lo pubblica il pannello: chiedere di
+                    // aggiungerlo a mano, per giunta in un riquadro giallo, e' un compito
+                    // inventato — e due righe piu' sotto la stessa scheda scriveva "il record
+                    // DNS e' stato pubblicato correttamente". I valori restano a schermo, ma
+                    // come riferimento, non come istruzione.
+                    html += '<div class="alert alert-' + (cloudflareConfigured ? 'info' : 'warning') + '">';
+                    html += cloudflareConfigured
+                        ? '<strong><i class="fas fa-cloud me-1"></i>Record della nuova chiave, gi&agrave; pubblicato dal pannello via Cloudflare:</strong>'
+                        : '<strong><i class="fas fa-edit me-1"></i>Aggiungi questo record TXT al tuo DNS:</strong>';
                     html += '<div class="mt-2"><strong>Nome:</strong> <code>' + escapeHtmlBl(data.pending_dns_name || '') + '</code></div>';
                     html += '<div class="mt-1"><strong>Tipo:</strong> <code>TXT</code></div>';
                     html += '<div class="mt-1"><strong>Valore:</strong> <code style="word-break:break-all">' + escapeHtmlBl(data.pending_dns_value || '') + '</code> ';
                     html += '<button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyDkimRotateValue(this)" data-val="' + escapeHtmlBl(data.pending_dns_value || '') + '"><i class="fas fa-copy"></i></button></div>';
-                    html += '<div class="mt-2 small text-muted">Il selector della NUOVA chiave è <code>' + escapeHtmlBl(data.pending_selector || '') + '</code>. La vecchia chiave (<code>' + escapeHtmlBl(data.current_selector || '') + '</code>) continua a firmare finché non attivi.</div>';
+                    // "Finché non attivi" da' per scontato che l'attivazione la faccia tu.
+                    // Con un account Cloudflare non e' cosi': lo scheduler chiama activatePending
+                    // da solo trascorse le ore di propagazione, e piu' avanti completeRotation
+                    // da solo a grazia finita. Dire a qualcuno che deve fare una cosa che
+                    // avviene da se' lo tiene in attesa di un compito inesistente.
+                    const oreAuto = data.auto_activate_after_hours || 24;
+                    html += '<div class="mt-2 small text-muted">Il selector della NUOVA chiave è <code>' + escapeHtmlBl(data.pending_selector || '') + '</code>. La vecchia chiave (<code>' + escapeHtmlBl(data.current_selector || '') + '</code>) continua a firmare ' + (cloudflareConfigured
+                        ? 'finché la nuova non subentra: avviene da sé circa ' + oreAuto + 'h dopo l&rsquo;avvio della rotazione, senza che tu faccia niente.'
+                        : 'finché non attivi.') + '</div>';
                     html += '</div>';
 
                     if (state === 'pending_dns') {
@@ -3805,10 +3820,14 @@ public class MailPanelContent {
                         html += '<button class="btn btn-primary" onclick="rotateDkimCheck()"><i class="fas fa-search me-1"></i>Verifica propagazione DNS</button>';
                         html += '<button class="btn btn-outline-danger" onclick="rotateDkimCancel()"><i class="fas fa-times me-1"></i>Annulla rotazione</button>';
                         html += '</div>';
-                        html += '<div class="small text-muted mt-2">Tip: dopo aver aggiunto il record TXT al DNS, attendi 1-5 minuti e poi premi "Verifica". Lo stato passerà automaticamente al passo successivo.</div>';
+                        html += '<div class="small text-muted mt-2">' + (cloudflareConfigured
+                            ? 'Il record è già in Cloudflare: la propagazione richiede di norma 1-5 minuti. Lo scheduler verifica da sé e passa al punto successivo; il bottone serve solo se non vuoi aspettare il prossimo controllo.'
+                            : 'Tip: dopo aver aggiunto il record TXT al DNS, attendi 1-5 minuti e poi premi "Verifica". Lo stato passerà automaticamente al passo successivo.') + '</div>';
                     } else {
                         // propagated
-                        html += '<div class="alert alert-info"><i class="fas fa-check-circle me-1"></i>Il record DNS è stato pubblicato correttamente. Ora puoi attivare la nuova chiave: da quel momento le mail in uscita verranno firmate con il nuovo selector.</div>';
+                        html += '<div class="alert alert-info"><i class="fas fa-check-circle me-1"></i>Il record DNS è stato pubblicato correttamente. ' + (cloudflareConfigured
+                            ? 'L&rsquo;attivazione avviene <strong>da sé</strong> circa ' + (data.auto_activate_after_hours || 24) + 'h dopo l&rsquo;avvio: da quel momento le mail in uscita verranno firmate con il nuovo selector, e dopo altri ' + (data.grace_period_days || 7) + ' giorni la vecchia chiave viene rimossa. Il bottone qui sotto serve solo se non vuoi aspettare. Lo scheduler gira mentre il server web del pannello è acceso.'
+                            : 'Ora puoi attivare la nuova chiave: da quel momento le mail in uscita verranno firmate con il nuovo selector.') + '</div>';
                         html += '<div class="d-flex gap-2 flex-wrap">';
                         html += '<button class="btn btn-success" onclick="rotateDkimActivate(false)"><i class="fas fa-bolt me-1"></i>Attiva nuova chiave</button>';
                         html += '<button class="btn btn-outline-primary" onclick="rotateDkimCheck()"><i class="fas fa-sync me-1"></i>Ricontrolla DNS</button>';
@@ -5705,8 +5724,17 @@ public class MailPanelContent {
                         <div id="dkimRotationBody"></div>
                     </div>
 
-                    <!-- Vecchi record DKIM (orphan cleanup) -->
-                    <details class="mt-4">
+                    <!-- Vecchi record DKIM (orphan cleanup)
+
+                         Si rilegge a ogni apertura. Un pannello a scomparsa carica una volta
+                         sola e poi mostra la fotografia di quel momento: riaperto piu' tardi
+                         racconta un passato che sembra il presente. E' successo due volte in
+                         due giorni — la cassetta dei rapporti dichiarata mancante venti secondi
+                         dopo che il pannello l'aveva creata, e lo storico DKIM senza la
+                         rotazione appena avviata. Chi apre un elenco si aspetta di vedere
+                         adesso, non l'ultima volta che ci ha guardato. -->
+                    <details class="mt-4"
+                             ontoggle="if (this.open &amp;&amp; typeof scanDkimOrphans === 'function' &amp;&amp; currentDomainId) scanDkimOrphans();">
                         <summary class="text-primary" style="cursor:pointer"><i class="fas fa-broom me-1"></i>Vecchi record DKIM in DNS (clicca per scansionare Cloudflare)</summary>
                         <div class="mt-3">
                             <p class="small text-muted mb-2">Trova tutti i record TXT <code>*._domainkey.&lt;dominio&gt;</code> presenti in Cloudflare e ti permette di rimuovere quelli orfani (rotazioni vecchie non pulite). I record attivi (current/pending/previous) sono protetti.</p>
@@ -5715,8 +5743,9 @@ public class MailPanelContent {
                         </div>
                     </details>
 
-                    <!-- Storico rotazioni -->
-                    <details class="mt-4" id="dkimHistoryDetails">
+                    <!-- Storico rotazioni: riletto a ogni apertura, stessa ragione. -->
+                    <details class="mt-4" id="dkimHistoryDetails"
+                             ontoggle="if (this.open &amp;&amp; typeof loadDkimHistory === 'function' &amp;&amp; currentDomainId) loadDkimHistory(currentDomainId);">
                         <summary class="text-primary" style="cursor:pointer"><i class="fas fa-history me-1"></i>Storico rotazioni DKIM (clicca per espandere)</summary>
                         <div id="dkimHistoryBody" class="mt-3">
                             <p class="text-muted small mb-0">Seleziona un dominio per vedere lo storico.</p>
