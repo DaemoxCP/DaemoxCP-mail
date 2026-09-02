@@ -157,20 +157,32 @@
                    : '')
                + '</td></tr>';
 
+            // Due conteggi diversi, e vanno etichettati come tali.
+            //
+            // "Da aggiornare" viene da pkg version: pacchetti con una versione piu' recente
+            // nel catalogo. "Vulnerabili" viene da pkg audit: pacchetti con CVE note. Non
+            // sono lo stesso insieme e spesso non si somigliano nemmeno — un pacchetto puo'
+            // essere vulnerabile SENZA che esista una correzione, e aggiornabile senza avere
+            // nessuna vulnerabilita'. Messi uno sotto l'altro con due numeri diversi si
+            // leggono come una contraddizione, e chi guarda pensa che uno dei due sia rotto.
             const n = r.daAggiornare || 0;
-            h += '<tr><td><strong>Pacchetti da aggiornare</strong></td><td>'
+            h += '<tr><td><strong>Pacchetti con una versione pi&ugrave; recente</strong></td><td>'
                + (n === 0 ? '<span class="badge bg-success">nessuno</span>'
                           : '<span class="badge bg-warning text-dark">' + n + '</span>')
                + eta(r.catalogoGiorni, 'catalogo')
-               + '<div class="small text-muted">Conteggio dal catalogo gi&agrave; scaricato, senza '
-               + 'toccare la rete. La simulazione vera &egrave; in '
+               + '<div class="small text-muted">Confronto delle versioni col catalogo gi&agrave; '
+               + 'scaricato, senza toccare la rete. La simulazione vera &egrave; in '
                + '<a href="/updates">Aggiornamenti</a>.</div></td></tr>';
 
             const v = r.vulnerabili || 0;
-            h += '<tr><td><strong>Pacchetti vulnerabili</strong></td><td>'
+            h += '<tr><td><strong>Pacchetti con vulnerabilit&agrave; note</strong></td><td>'
                + (v === 0 ? '<span class="badge bg-success">nessuno</span>'
                           : '<span class="badge bg-danger">' + v + '</span>')
                + eta(r.vulnDbGiorni, 'database')
+               + '<div class="small text-muted">&Egrave; un&rsquo;altra domanda, non un '
+               + 'sottoinsieme della riga sopra: un pacchetto pu&ograve; avere una vulnerabilit&agrave; '
+               + '<strong>senza che esista una correzione</strong>, e averne una pi&ugrave; recente '
+               + 'senza avere vulnerabilit&agrave;. I due numeri non devono coincidere.</div>'
                + '</td></tr>';
 
             if (so.cePronti)

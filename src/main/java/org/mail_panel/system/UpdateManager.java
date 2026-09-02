@@ -458,15 +458,42 @@ public final class UpdateManager {
         // e' uno stato in cui restare per sempre, e chi lo mette deve poterlo vedere.
         JSONArray vulnerabili = new JSONArray();
         String lock = sh("pkg lock -l 2>/dev/null");
+
+        // Quali pacchetti hanno una versione piu' recente nel catalogo, PROTETTI COMPRESI.
+        //
+        // Serve perche' "pkg upgrade -n" i protetti li salta: dalla simulazione non si puo'
+        // sapere se per un pacchetto protetto esista una correzione. "pkg version" invece
+        // confronta le versioni e del lock non si occupa, quindi risponde anche per quelli.
+        Set<String> aggiornabili = new java.util.LinkedHashSet<>();
+        for (String riga : sh("pkg version -vRL= 2>/dev/null", 60).split("\n")) {
+            String t = riga.trim();
+            if (t.isEmpty()) continue;
+            // "nome-1.2.3    <   needs updating (index has 1.2.4)"
+            int sp = t.indexOf(' ');
+            String pv = sp > 0 ? t.substring(0, sp) : t;
+            int trattino = pv.lastIndexOf('-');
+            if (trattino > 0) aggiornabili.add(pv.substring(0, trattino));
+        }
         Matcher m = Pattern.compile("(?m)^(\\S+?)-[0-9][^\\s]* is vulnerable:").matcher(audit);
         Set<String> visti = new java.util.LinkedHashSet<>();
         while (m.find()) visti.add(m.group(1));
         for (String nome : visti) {
             boolean lk = bloccato(lock, nome);
             String ruolo = ruoloDi(nome);
+            // Esiste una versione piu' recente? E' una domanda diversa da "l'aggiornamento
+            // la applicherebbe", e va tenuta separata: per un pacchetto protetto la seconda
+            // e' sempre no, ma la prima puo' essere si'.
+            boolean cEAggiornamento = aggiornabili.contains(nome);
             JSONObject v = new JSONObject().put("name", nome).put("locked", lk)
                     .put("mailPackage", ruolo != null).put("role", ruolo == null ? "" : ruolo)
-                    .put("fixedByUpgrade", !lk && simulazioneCompleta.contains(nome + ":"));
+                    .put("aggiornamentoDisponibile", cEAggiornamento)
+                    // Prima qui c'era "!lk && simulazione.contains(nome)", e per un pacchetto
+                    // protetto veniva sempre falso — mentre la scheda scriveva "protetto,
+                    // quindi NON riceve la correzione", cioe' affermava che una correzione
+                    // esistesse. Nessuno l'aveva verificato: la simulazione i protetti li
+                    // salta, quindi da li' quell'informazione non si ricava proprio.
+                    .put("fixedByUpgrade", !lk && (cEAggiornamento
+                            || simulazioneCompleta.contains(nome + ":")));
             // Il dettaglio serve per decidere: "ha una vulnerabilita'" non dice se e' una
             // esecuzione di codice da remoto o un rifiuto di servizio che non ti riguarda.
             JSONObject d = dettaglioVulnerabilita(audit, nome);

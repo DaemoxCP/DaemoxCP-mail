@@ -15100,8 +15100,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     h += '<li class="mb-2"><code>' + updEsc(v.name) + '</code>'
                        + (v.role ? ' <span class="text-muted">(' + updEsc(v.role) + ')</span>' : '')
                        + (v.locked
-                            ? ' &mdash; <strong>protetto, quindi NON riceve la correzione</strong>'
-                            : (v.fixedByUpgrade ? ' &mdash; si risolve aggiornando' : ' &mdash; nessun aggiornamento disponibile'));
+                            ? (v.aggiornamentoDisponibile
+                                ? ' &mdash; <strong>c&rsquo;&egrave; una versione più recente, ma il pacchetto è protetto: <code>pkg upgrade</code> lo salta e la correzione non viene applicata.</strong>'
+                                : ' &mdash; <strong>protetto</strong>, quindi <code>pkg upgrade</code> lo salterebbe; per ora comunque nel catalogo <strong>non risulta una versione più recente</strong>, quindi non c&rsquo;è una correzione da perdere.')
+                            : (v.fixedByUpgrade ? ' &mdash; si risolve aggiornando' : ' &mdash; nessun aggiornamento disponibile nel catalogo'));
                     if ((v.cve || []).length) {
                         h += '<br><span class="badge bg-dark me-1">'
                            + v.cve.map(c => updEsc(c)).join('</span><span class="badge bg-dark me-1">')
