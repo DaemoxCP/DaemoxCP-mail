@@ -3050,6 +3050,12 @@ public class SSLMailServer {
                         response.put("events", arr);
                     }
 
+                } else if ("riepilogo_domini".equals(action)) {
+                    // Interroga il DNS una volta per dominio: e' lento come una verifica
+                    // singola moltiplicata per il numero di domini, ed e' il prezzo di una
+                    // risposta vera invece di una lettura del database.
+                    response = dkimManager.riepilogoTuttiIDomini();
+
                 } else if ("verify_active_dns".equals(action)) {
                     int domainId = req.optInt("domain_id", 0);
                     DkimManager.ActiveKeyVerifyResult vr = dkimManager.verifyActiveKeyInDns(domainId);

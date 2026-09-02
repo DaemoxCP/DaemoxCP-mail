@@ -358,6 +358,92 @@ public class DkimManager {
         }
     }
 
+    /**
+     * Come stanno messi TUTTI i domini, in un colpo solo.
+     *
+     * Perche' esiste: il pannello sapeva rispondere "com'e' messo QUESTO dominio", e per
+     * sapere come stanno tutti bisognava selezionarli uno per uno e ricordarsi i numeri.
+     * Cosi' non si vede la cosa che conta — che uno dei domini abbia la chiave scaduta da
+     * mesi, o non ce l'abbia affatto — perche' quella si vede solo confrontando.
+     *
+     * Non c'e' nessuna logica nuova qui dentro: si chiamano le stesse funzioni che alimentano
+     * la scheda di un dominio solo. Una seconda implementazione della stessa verifica
+     * divergerebbe, e le due risposte finirebbero per contraddirsi.
+     */
+    public org.json.JSONObject riepilogoTuttiIDomini() {
+        org.json.JSONObject r = new org.json.JSONObject().put("success", true);
+        org.json.JSONArray righe = new org.json.JSONArray();
+        int senzaChiave = 0, nonVerificabili = 0, senzaRotazione = 0;
+        try {
+            for (MailDatabase.Domain d : database.getDomains()) {
+                org.json.JSONObject j = new org.json.JSONObject().put("dominio", d.domain);
+                try {
+                    DkimInfo info = getDkimInfo(d.id);
+                    boolean haChiave = info != null && info.configured;
+                    j.put("haChiave", haChiave);
+                    j.put("selettore", info == null || info.selector == null ? "" : info.selector);
+                    if (!haChiave) {
+                        senzaChiave++;
+                        // Niente chiave vuol dire niente firma: e' il caso piu' grave e non
+                        // deve nascondersi in mezzo a righe che parlano di rotazioni.
+                        j.put("stato", "assente");
+                        j.put("nota", "Nel pannello non esiste una chiave DKIM per questo dominio: "
+                                + "la posta parte senza firma.");
+                        righe.put(j);
+                        continue;
+                    }
+
+                    // La verifica vera: la chiave pubblicata coincide con quella del pannello?
+                    ActiveKeyVerifyResult v = verifyActiveKeyInDns(d.id);
+                    j.put("verificaRiuscita", v != null && v.success);
+                    j.put("corrisponde", v != null && v.match);
+                    j.put("messaggio", v == null ? "" : (v.message == null ? "" : v.message));
+                    if (v == null || !v.success) {
+                        nonVerificabili++;
+                        j.put("stato", "incerto");
+                    } else if (!v.match) {
+                        j.put("stato", "non_corrisponde");
+                    } else {
+                        j.put("stato", "ok");
+                    }
+
+                    // Eta' della chiave e rotazione programmata.
+                    ScheduleResult sc = getRotationSchedule(d.id);
+                    if (sc != null) {
+                        j.put("intervalloGiorni", sc.intervalDays);
+                        if (sc.lastRotationAt != null) {
+                            j.put("ultimaRotazione", sc.lastRotationAt.toString());
+                            long giorni = (System.currentTimeMillis() - sc.lastRotationAt.getTime())
+                                        / 86400000L;
+                            j.put("giorniDallUltima", giorni);
+                        }
+                        if (sc.nextRotationAt != null)
+                            j.put("prossimaRotazione", sc.nextRotationAt.toString());
+                        if (sc.intervalDays <= 0) senzaRotazione++;
+                    }
+
+                    RotationInfo ri = getRotationInfo(d.id);
+                    if (ri != null && ri.rotationState != null && !ri.rotationState.isBlank()) {
+                        j.put("rotazioneInCorso", ri.rotationState);
+                        j.put("selettorePrecedente",
+                                ri.previousSelector == null ? "" : ri.previousSelector);
+                    }
+                } catch (Exception e) {
+                    nonVerificabili++;
+                    j.put("stato", "incerto").put("messaggio", "errore: " + e.getMessage());
+                }
+                righe.put(j);
+            }
+        } catch (Exception e) {
+            return new org.json.JSONObject().put("success", false)
+                    .put("error", "non riesco a leggere l'elenco dei domini: " + e.getMessage());
+        }
+        r.put("domini", righe);
+        r.put("senzaChiave", senzaChiave).put("nonVerificabili", nonVerificabili)
+         .put("senzaRotazione", senzaRotazione);
+        return r;
+    }
+
     public static class ActiveKeyVerifyResult {
         public boolean success;     // verifica eseguita senza errori
         public boolean match;       // chiave DB == chiave DNS

@@ -5610,6 +5610,7 @@ public class MailPanelContent {
                 </div>
             </div>
 
+""" + risorsa("pagine/dkim-riepilogo-card.html") + """
             <!-- DKIM Section -->
             <div class="card mt-4">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">

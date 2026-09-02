@@ -740,3 +740,100 @@
             }).catch(e => alert('Errore rete: ' + e.message));
         }
 
+
+        // ---------- DKIM: come stanno tutti i domini ----------
+        // Esiste perche' la scheda per singolo dominio non risponde alla domanda "come
+        // stanno messi tutti?": per saperlo si dovevano selezionare i domini uno per uno e
+        // tenere a mente i numeri. Le cose che contano — un dominio senza chiave, uno fermo
+        // da mesi mentre gli altri ruotano — si vedono solo mettendoli in fila.
+        async function dkRiepilogo() {
+            const el = document.getElementById('dkRiepilogoBody');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Interrogo il DNS per ogni dominio...';
+            let r;
+            try {
+                const resp = await fetch('/api/dkim', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'riepilogo_domini' })
+                });
+                r = await resp.json();
+            } catch (e) {
+                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">Non sono riuscito a chiedere: '
+                             + escapeHtmlBl(String(e)) + '</div>';
+                return;
+            }
+            if (!r || !r.success) {
+                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">'
+                             + escapeHtmlBl((r && r.error) || 'richiesta non riuscita') + '</div>';
+                return;
+            }
+
+            const righe = r.domini || [];
+            // Il titolo dice la cosa peggiore per prima: un dominio senza chiave non deve
+            // finire in fondo a un elenco che comincia con "tutto bene".
+            let cls = 'success', testo = 'Tutti i domini hanno una chiave DKIM che corrisponde a quella pubblicata.';
+            if (r.senzaChiave > 0) {
+                cls = 'danger';
+                testo = r.senzaChiave + (r.senzaChiave === 1 ? ' dominio non ha' : ' domini non hanno')
+                      + ' nessuna chiave DKIM: la posta parte senza firma.';
+            } else if (righe.some(d => d.stato === 'non_corrisponde')) {
+                cls = 'danger';
+                testo = 'Su almeno un dominio la chiave pubblicata NON e\' quella del pannello: '
+                      + 'le firme non si verificano.';
+            } else if (r.nonVerificabili > 0) {
+                cls = 'warning';
+                testo = r.nonVerificabili + ' domini non ho potuto verificarli: non e\' "va tutto bene".';
+            }
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + escapeHtmlBl(testo) + '</div>';
+
+            h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
+               + '<th>Dominio</th><th>Selettore</th><th>La firma si verifica</th>'
+               + '<th>Et&agrave; della chiave</th><th>Rotazione</th></tr></thead><tbody>';
+            righe.forEach(d => {
+                let stato;
+                if (d.stato === 'assente')
+                    stato = '<span class="badge bg-danger">nessuna chiave</span>';
+                else if (d.stato === 'ok')
+                    stato = '<span class="badge bg-success">s&igrave;</span>';
+                else if (d.stato === 'non_corrisponde')
+                    stato = '<span class="badge bg-danger">no: la chiave in DNS &egrave; un&rsquo;altra</span>';
+                else
+                    // "Non ho potuto controllare" non e' "va bene", e non e' nemmeno "e' rotto".
+                    stato = '<span class="badge bg-secondary">non verificabile</span>';
+
+                let eta = '<span class="text-muted">&mdash;</span>';
+                if (d.giorniDallUltima !== undefined && d.giorniDallUltima !== null) {
+                    const g = d.giorniDallUltima;
+                    // Oltre l'intervallo scelto la chiave e' in ritardo; senza intervallo il
+                    // riferimento e' 90 giorni, la cadenza che il pannello consiglia.
+                    const limite = (d.intervalloGiorni && d.intervalloGiorni > 0) ? d.intervalloGiorni : 90;
+                    eta = g + ' giorni'
+                        + (g > limite ? ' <span class="badge bg-warning text-dark">oltre i ' + limite + '</span>' : '');
+                }
+
+                let rot;
+                if (d.stato === 'assente') rot = '<span class="text-muted">&mdash;</span>';
+                else if (d.intervalloGiorni && d.intervalloGiorni > 0)
+                    rot = 'ogni ' + d.intervalloGiorni + ' giorni'
+                        + (d.prossimaRotazione ? '<div class="small text-muted">prossima: '
+                            + escapeHtmlBl(String(d.prossimaRotazione).substring(0, 10)) + '</div>' : '');
+                else
+                    rot = '<span class="badge bg-warning text-dark">disattivata</span>';
+
+                h += '<tr class="upd-cell"><td><code class="small">' + escapeHtmlBl(d.dominio) + '</code></td>'
+                   + '<td><code class="small">' + escapeHtmlBl(d.selettore || '') + '</code>'
+                   + (d.rotazioneInCorso ? '<div class="small text-muted">rotazione in corso: '
+                        + escapeHtmlBl(d.rotazioneInCorso) + '</div>' : '')
+                   + '</td>'
+                   + '<td>' + stato
+                   + (d.stato === 'ok' ? '' : '<div class="small text-muted">'
+                        + escapeHtmlBl(d.nota || d.messaggio || '') + '</div>')
+                   + '</td>'
+                   + '<td>' + eta + '</td><td>' + rot + '</td></tr>';
+            });
+            h += '</tbody></table></div>'
+               + '<div class="small text-muted">La colonna &laquo;la firma si verifica&raquo; non legge il database: '
+               + 'interroga il DNS pubblico e confronta la chiave trovata con quella del pannello. '
+               + '&Egrave; la stessa verifica della scheda qui sotto, chiamata per ogni dominio.</div>';
+            el.innerHTML = h;
+        }

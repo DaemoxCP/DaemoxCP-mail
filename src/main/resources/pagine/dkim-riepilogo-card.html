@@ -1,0 +1,23 @@
+            <!-- DKIM: come stanno TUTTI i domini, in una tabella sola -->
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-key me-2"></i><strong>DKIM su tutti i domini</strong>
+                        <span class="small text-muted ms-2">una riga per dominio, confrontabili</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="dkRiepilogo()">
+                        <i class="fas fa-list-check me-1"></i>Controlla tutti</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        La scheda qui sopra risponde &laquo;com&rsquo;&egrave; messo <em>questo</em> dominio&raquo;. Per sapere come
+                        stanno tutti bisognava selezionarli uno per uno e ricordarsi i numeri &mdash; e cos&igrave; la cosa
+                        che conta non si vede, perch&eacute; si vede solo <strong>confrontando</strong>: un dominio senza chiave,
+                        o con una chiave ferma da mesi mentre gli altri ruotano.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        Ogni riga interroga il <strong>DNS pubblico</strong> e confronta la chiave trovata con quella del
+                        pannello: sono le stesse verifiche della scheda sopra, non una seconda versione. Per questo
+                        richiede qualche secondo, uno per dominio.
+                    </p>
+                    <div id="dkRiepilogoBody"><span class="text-muted small">Premi &laquo;Controlla tutti&raquo;: legge e basta.</span></div>
+                </div>
+            </div>
