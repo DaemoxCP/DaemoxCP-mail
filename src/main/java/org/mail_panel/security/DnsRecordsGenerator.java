@@ -115,6 +115,7 @@ public class DnsRecordsGenerator {
         record.dnsZone = domain;
         record.description = "Mail Exchange - Indica quale server gestisce la posta per " + domain;
         record.checkType = "MX";
+        record.valoreCompleto = DEFAULT_MX_PRIORITY + " " + mailServer;
         record.required = true;
         record.copyValue = mailServer;
         record.explanation = """
@@ -324,6 +325,8 @@ public class DnsRecordsGenerator {
         srvImap.dnsZone = domain;
         srvImap.description = "SRV per IMAP SSL (_imaps._tcp." + domain + ")";
         srvImap.checkType = "SRV (_imaps)";
+        // Un SRV non e' scrivibile senza priorita', peso e porta: qui c'e' il record intero.
+        srvImap.valoreCompleto = "0 1 993 " + mailServer;
         srvImap.required = false;
         srvImap.explanation = """
             <div class="alert alert-primary mb-2">
@@ -350,6 +353,7 @@ public class DnsRecordsGenerator {
         srvSmtp.dnsZone = domain;
         srvSmtp.description = "SRV per SMTP submission (_submission._tcp." + domain + ")";
         srvSmtp.checkType = "SRV (_submission)";
+        srvSmtp.valoreCompleto = "0 1 587 " + mailServer;
         srvSmtp.required = false;
         srvSmtp.explanation = """
             <div class="alert alert-primary mb-2">
@@ -1270,6 +1274,17 @@ public class DnsRecordsGenerator {
          * qui viaggia esplicito.
          */
         public String checkType;
+        /**
+         * Il valore per intero, quando "value" da solo non basta a scrivere il record.
+         *
+         * Per un MX serve anche la priorita', per un SRV anche priorita', peso e porta: in
+         * "value" c'e' la sola destinazione, perche' gli altri campi vivono altrove. La
+         * pagina pero' lo mostrava sotto l'etichetta "Valore consigliato dal pannello", cioe'
+         * prometteva qualcosa da copiare nel proprio provider DNS — e chi lo avesse copiato
+         * avrebbe scritto un MX senza priorita' e un SRV senza porta. Un valore incompleto
+         * presentato come completo e' peggio di nessun valore.
+         */
+        public String valoreCompleto;
     }
 
     public static class DnsVerificationResult {

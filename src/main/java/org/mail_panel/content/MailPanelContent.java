@@ -5531,7 +5531,7 @@ public class MailPanelContent {
 
             <div class="alert alert-info">
                 <i class="fas fa-info-circle me-2"></i>
-                <strong>Come funziona:</strong> seleziona un dominio nel banner sopra. Record DNS, DKIM, schedule e storico vengono caricati automaticamente. Copia i record nel tuo provider DNS (Cloudflare, Route53, etc.) e clicca "Verifica" per controllare che siano configurati correttamente.
+                <strong>Come funziona:</strong> seleziona un dominio nel banner sopra. Record DNS, DKIM, schedule e storico vengono caricati automaticamente. Se il dominio &egrave; su un account Cloudflare collegato, <strong>&laquo;Configura tutto&raquo;</strong> scrive da s&eacute; quello che manca e non tocca quello che c&rsquo;&egrave; gi&agrave;: non serve copiare niente a mano. I valori qui sotto servono quando il DNS sta altrove (Route53, il pannello del registrar) e vanno inseriti a mano; poi &laquo;Verifica&raquo; controlla che siano arrivati.
             </div>
 
             <!-- Verification Results -->

@@ -3127,6 +3127,7 @@ public class SSLMailServer {
                         recordJson.put("description", record.description);
                         recordJson.put("required", record.required);
                         if (record.checkType != null) recordJson.put("checkType", record.checkType);
+                        if (record.valoreCompleto != null) recordJson.put("valoreCompleto", record.valoreCompleto);
                         if (record.dnsZone != null) {
                             recordJson.put("dnsZone", record.dnsZone);
                         }

@@ -257,7 +257,10 @@
                     html += '<i class="fas fa-copy copy-btn" onclick="copyToClipboard(this.parentElement.parentElement)" title="Copia"></i>';
                     html += '</div>';
                     html += '<div class="mt-2"><strong>Nome:</strong> <code>' + r.name + '</code></div>';
-                    html += '<div class="mt-1"><strong>Valore consigliato dal pannello:</strong> <code style="word-break:break-all">' + r.value + '</code></div>';
+                    // Si mostra il valore COMPLETO quando esiste: per MX e SRV "value" contiene
+                    // la sola destinazione, e sotto un'etichetta che dice "consigliato" quello
+                    // sarebbe un record da copiare a cui mancano dei campi.
+                    html += '<div class="mt-1"><strong>Valore consigliato dal pannello:</strong> <code style="word-break:break-all">' + (r.valoreCompleto || r.value) + '</code></div>';
                     html += '<small class="text-muted">' + r.description + '</small>';
                     // Area dettagli verifica (popolata dopo verifyDnsAuto)
                     html += '<div class="record-verify-detail mt-2" data-detail-key="' + recordKey + '"></div>';
