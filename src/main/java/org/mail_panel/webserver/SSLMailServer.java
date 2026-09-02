@@ -2910,6 +2910,21 @@ public class SSLMailServer {
                         if (info.previousSelector != null) {
                             response.put("previous_selector", info.previousSelector);
                             response.put("previous_dns_name", info.previousDnsName);
+                            // La scheda dichiarava "la vecchia chiave deve restare nel DNS per
+                            // 7 giorni" senza guardare se ci fosse. Su domain-b.test non c'era
+                            // gia' prima della rotazione — il pannello lo aveva verificato tre
+                            // volte e scritto nel registro — e lo dichiarava lo stesso.
+                            // Un'istruzione da seguire su una cosa che non esiste fa cercare
+                            // un guasto dove non c'e', e nasconde quello vero: che quella
+                            // chiave non e' mai stata pubblicata.
+                            try {
+                                DkimManager.DkimVerifyResult pv =
+                                    dkimManager.verifyDkimDns(info.domain, info.previousSelector);
+                                response.put("previous_in_dns", pv != null && pv.valid);
+                            } catch (Exception e) {
+                                // Non sapere non e' ne' si' ne' no: si omette il campo e la
+                                // scheda torna a dire la cosa prudente.
+                            }
                         }
                     }
 

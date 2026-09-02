@@ -3821,7 +3821,15 @@ public class MailPanelContent {
                     html += '<div class="alert ' + (isOver ? 'alert-success' : 'alert-info') + '">';
                     html += '<strong><i class="fas fa-check-circle me-1"></i>Nuova chiave attiva.</strong> Le email vengono ora firmate con il selector <code>' + escapeHtmlBl(data.current_selector || '') + '</code>.';
                     if (data.previous_selector) {
-                        html += '<div class="mt-2 small">La vecchia chiave <code>' + escapeHtmlBl(data.previous_selector) + '</code> deve restare nel DNS per ' + graceDays + ' giorni, così le mail già spedite continuano a validarsi presso i destinatari.</div>';
+                        if (data.previous_in_dns === false) {
+                            // Il periodo di grazia serve a proteggere un record che esiste. Se
+                            // quel record non c'e', non c'e' niente da proteggere — e la cosa
+                            // da dire e' un'altra: quella chiave non era pubblicata, quindi le
+                            // firme fatte con lei non erano verificabili da nessuno.
+                            html += '<div class="mt-2 small">La vecchia chiave <code>' + escapeHtmlBl(data.previous_selector) + '</code> <strong>non è in DNS</strong> (verificato ora): non c\\'è nessun record da conservare, e il periodo di grazia qui non protegge nulla. Vuol dire che le firme fatte con quella chiave <strong>non erano verificabili</strong> dai destinatari. La chiave nuova invece è pubblicata: da adesso lo sono.</div>';
+                        } else {
+                            html += '<div class="mt-2 small">La vecchia chiave <code>' + escapeHtmlBl(data.previous_selector) + '</code> deve restare nel DNS per ' + graceDays + ' giorni, così le mail già spedite continuano a validarsi presso i destinatari.' + (data.previous_in_dns === true ? ' <span class="text-muted">(verificato: il record c\\'è)</span>' : '') + '</div>';
+                        }
                     }
                     if (data.activated_at) {
                         html += '<div class="mt-1 small text-muted">Attivata: ' + escapeHtmlBl(data.activated_at) + '</div>';
@@ -4260,7 +4268,16 @@ public class MailPanelContent {
                 const graceProtCount   = records.filter(r => r.is_orphan && r.in_grace_period).length;
                 const activeCount = records.length - orphanCount;
                 const graceDays = data.grace_period_days || 7;
-                let html = '<div class="alert ' + (removableCount > 0 ? 'alert-warning' : 'alert-success') + ' py-2 mb-2"><i class="fas fa-info-circle me-1"></i>Trovati <strong>' + records.length + '</strong> record DKIM totali (' + activeCount + ' attivi, ' + graceProtCount + ' in grace, <strong>' + removableCount + ' rimovibili</strong>) nell\\'account <strong>' + escapeHtmlBl(data.cloudflare_account_label || '?') + '</strong>.</div>';
+                // La scansione guarda UNA zona, quella del dominio selezionato: scanDkimRecords
+                // riceve un domainId, ne trova la zona e tiene solo i record che finiscono con
+                // quel dominio esatto. Le altre zone dello stesso account non le apre mai.
+                //
+                // Diceva pero' "record DKIM totali nell'account". Con cinque domini sullo stesso
+                // account, leggere "trovati 1 record DKIM totali nell'account Pietro" porta a
+                // concludere che gli altri quattro non hanno DKIM — mentre ce l'hanno. Un
+                // conteggio giusto sotto un'etichetta che promette un perimetro piu' largo di
+                // quello misurato e' un numero falso.
+                let html = '<div class="alert ' + (removableCount > 0 ? 'alert-warning' : 'alert-success') + ' py-2 mb-2"><i class="fas fa-info-circle me-1"></i>Nella zona <strong>' + escapeHtmlBl(data.domain || '?') + '</strong>: <strong>' + records.length + '</strong> record DKIM (' + activeCount + ' attivi, ' + graceProtCount + ' in grace, <strong>' + removableCount + ' rimovibili</strong>). Token dell\\'account <strong>' + escapeHtmlBl(data.cloudflare_account_label || '?') + '</strong>. <span class="text-muted">Gli altri domini non sono compresi: questa scansione guarda una zona sola. Per il quadro completo usa &laquo;DKIM su tutti i domini&raquo;.</span></div>';
                 html += '<div class="table-responsive"><table class="table table-sm align-middle mb-0">';
                 html += '<thead class="table-light"><tr><th>Selector</th><th>Stato</th><th>Contenuto (anteprima)</th><th class="text-end">Azione</th></tr></thead><tbody>';
                 records.forEach(r => {
