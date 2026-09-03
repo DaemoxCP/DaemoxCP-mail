@@ -9002,7 +9002,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <span><i class="fas fa-lock me-2"></i>Jail Attive <span class="badge bg-secondary ms-1" id="jailsCount">-</span></span>
                             <div class="d-flex align-items-center gap-2">
-                                <small class="text-muted d-none d-md-inline"><i class="fas fa-info-circle me-1"></i>Per aggiungere usa "Risolvi tutto"</small>
+                                <small class="text-muted d-none d-md-inline"><i class="fas fa-info-circle me-1"></i>Si aggiungono e si riparano da "Stato Fail2ban", in cima alla pagina</small>
                                 <button class="btn btn-outline-primary btn-sm" id="btnRefreshJails" onclick="refreshJails(true)" title="Aggiorna lista jail">
                                     <i class="fas fa-sync" id="iconRefreshJails"></i>
                                 </button>
@@ -9062,6 +9062,8 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                             </div>
                         </div>
                     </div>
+
+""" + risorsa("pagine/confronto-pf-card.html") + """
 
                     <!-- Permaban list (via pf, independent from Fail2ban) -->
                     <div class="card">
@@ -9367,7 +9369,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
 """ + getJailConfigurationJs() + """
-""" + risorsa("pagine/security-jail.js") + """
+""" + risorsa("pagine/security-jail.js") + risorsa("pagine/confronto-pf.js") + """
 """;
         String jsPart2 = """
 """ + risorsa("pagine/security-health.js") + """

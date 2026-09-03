@@ -4880,6 +4880,28 @@ public class SSLMailServer {
                                 .put("righe_log", c.righeLog).put("messaggio", c.messaggio)
                                 .put("uscita", c.uscita);
                     }
+                    // Legge e basta: mette a confronto gli indirizzi che Fail2ban crede
+                    // bannati con quelli che pf blocca davvero. "Currently banned" dice che il
+                    // comando di ban e' stato eseguito, non che l'indirizzo sia bloccato.
+                    case "confronto_pf" -> {
+                        Fail2banManager.ConfrontoPf c = fail2banManager.confrontaBanConPf();
+                        JSONArray jj = new JSONArray();
+                        for (Fail2banManager.JailPf j : c.jails) {
+                            jj.put(new JSONObject()
+                                .put("jail", j.jail).put("ancora", j.ancora).put("tabella", j.tabella)
+                                .put("letta", j.letta).put("tabella_mancante", j.tabellaMancante)
+                                .put("nota", j.nota)
+                                .put("creduti_bannati", new JSONArray(j.credutiBannati))
+                                .put("nel_firewall", new JSONArray(j.nelFirewall))
+                                .put("solo_in_fail2ban", new JSONArray(j.soloInFail2ban))
+                                .put("solo_in_pf", new JSONArray(j.soloInPf))
+                                .put("comandi_ban", new JSONArray(j.comandiBan)));
+                        }
+                        response.put("success", true).put("jails", jj)
+                                .put("non_applicati", c.totaleNonApplicati())
+                                .put("non_misurate", c.totaleNonMisurate())
+                                .put("ban_non_verificati", c.banNonVerificati());
+                    }
                     case "ban" -> {
                         String ip = json.getString("ip");
                         String jail = json.getString("jail");
@@ -7956,6 +7978,66 @@ public class SSLMailServer {
             fixAction,
             fixDesc));
 
+        // ========== Le jail guardano file capaci di dirgli qualcosa? ==========
+        // Il controllo qui sopra chiede "la jail e' caricata". roundcube-auth lo era, e la
+        // pagina dava verde mentre sorvegliava "userlogins" invece di "userlogins.log" scritto
+        // accanto: non avrebbe bannato nessuno, e proprio perche' la diagnosi non vedeva niente
+        // di storto il pulsante "Risolvi tutto" restava nascosto. Questa e' la seconda domanda.
+        // Il verde di questo controllo deve dire "ho guardato N jail e stanno bene", mai
+        // "non ho trovato problemi" quando il motivo e' che non ho guardato niente: una lista
+        // vuota per esito e una lista vuota per fallimento sono indistinguibili, e quella
+        // ambiguita' e' esattamente la forma del difetto che questo controllo esiste per
+        // scoprire. Quindi si conta, e il conteggio finisce a schermo.
+        Fail2banManager.EsameLog esame = null;
+        String erroreEsame = null;
+        try {
+            if (f2bRunning) esame = fail2banManager.esaminaLogSorvegliati();
+        } catch (Exception e) { erroreEsame = e.getMessage(); }
+
+        boolean logOk;
+        StringBuilder logDettaglio = new StringBuilder();
+        if (!f2bRunning) {
+            logOk = false;
+            logDettaglio.append("Fail2ban non e' in esecuzione: non ho potuto guardare nessuna jail, "
+                              + "quindi di questi file non so dire niente");
+        } else if (esame == null) {
+            logOk = false;
+            logDettaglio.append("Non sono riuscito a esaminare i log delle jail")
+                        .append(erroreEsame != null ? (": " + erroreEsame) : "")
+                        .append(" — questo controllo non ha guardato niente, e il suo silenzio non "
+                              + "va letto come un via libera");
+        } else if (esame.esaminate.isEmpty()) {
+            logOk = false;
+            logDettaglio.append("Fail2ban gira ma non sono riuscito a farmi dire quali file sorvegli "
+                              + "nessuna jail: questo controllo non ha guardato niente");
+        } else if (esame.problemi.isEmpty()) {
+            logOk = true;
+            logDettaglio.append("Guardate ").append(esame.esaminate.size())
+                        .append(" jail (").append(String.join(", ", esame.esaminate))
+                        .append("): ognuna sorveglia un file che esiste e viene scritto");
+            if (!esame.senzaLog.isEmpty())
+                logDettaglio.append(". Senza file di log da sorvegliare, quindi fuori da questo controllo: ")
+                            .append(String.join(", ", esame.senzaLog));
+        } else {
+            logOk = false;
+            logDettaglio.append("Su ").append(esame.esaminate.size()).append(" jail guardate, ")
+                        .append(esame.problemi.size()).append(" non vedra' mai niente — ");
+            boolean primo = true;
+            for (Fail2banManager.LogSbagliato sb : esame.problemi) {
+                if (!primo) logDettaglio.append(" | ");
+                logDettaglio.append(sb.jail).append(": ").append(sb.motivo);
+                primo = false;
+            }
+        }
+        checks.put(makeCheck("mail-jails-logpath",
+            "Le jail sorvegliano i file di log giusti",
+            logOk,
+            logDettaglio.toString(),
+            logOk ? null
+                  : "Una jail che guarda il file sbagliato non bannera' mai nessuno e resta a zero tentativi: e' peggio di una jail spenta, perche' la pagina la mostra attiva e nessuno va a controllare.",
+            (logOk || !f2bInstalled) ? null : "install_mail_jails",
+            "Rigenera le jail rileggendo dai servizi il percorso reale dei log, crea i file mancanti e ricarica Fail2ban"));
+
         // ========== Verifica pf (firewall FreeBSD) ==========
         boolean pfEnabledAtBoot = isPfEnabledAtBoot();
         boolean pfRunning = isPfRunning();
@@ -8024,11 +8106,21 @@ public class SSLMailServer {
             (pfAnchorPresent || !pfConfExists) ? null : "add_pf_anchor",
             "Aggiunge una sola riga ad /etc/pf.conf:  anchor \"f2b/*\""));
 
-        boolean pfStackOk = pfModuleLoaded && pfConfExists && pfRunning && pfEnabledAtBoot && pfAnchorPresent;
-        boolean allOk = f2bInstalled && enabledAtBoot && f2bRunning && panelSetupOk && mailJailsActive && pfStackOk;
-        r.put("can_fix_all", !allOk && (
-            !f2bInstalled || !enabledAtBoot || !f2bRunning || !panelSetupOk || !mailJailsActive || !pfConfExists || !pfRunning || !pfEnabledAtBoot || !pfAnchorPresent
-        ));
+        // Il verdetto complessivo si legge dai controlli, non da un elenco di booleani scritto
+        // a mano. Quell'elenco era una seconda versione della stessa verita', e le due
+        // divergevano appena se ne aggiungeva uno: il controllo nuovo compariva rosso nella
+        // lista mentre in cima restava "Tutto OK" e il pulsante per rimediare restava nascosto,
+        // perche' nessuno si era ricordato di nominarlo anche qui. Contando le righe rosse la
+        // dimenticanza non e' piu' possibile.
+        boolean allOk = true;
+        boolean qualcosaDaRiparare = false;
+        for (int i = 0; i < checks.length(); i++) {
+            JSONObject c = checks.getJSONObject(i);
+            if (c.optBoolean("ok", false)) continue;
+            allOk = false;
+            if (c.has("fix_action")) qualcosaDaRiparare = true;
+        }
+        r.put("can_fix_all", qualcosaDaRiparare);
         r.put("success", true);
         r.put("all_ok", allOk);
         r.put("checks", checks);
@@ -8444,7 +8536,16 @@ public class SSLMailServer {
             }
             boolean allActive = activeJailsNow.contains("dovecot") && activeJailsNow.contains("postfix-auth");
 
-            if (f2bInstalled && (!mailFileOk || !allActive)) {
+            // "Il file nomina le jail" e "le jail sono accese" non dicono che stiano guardando
+            // qualcosa. Con roundcube-auth erano entrambe vere mentre la jail sorvegliava un
+            // file vuoto accanto a quello scritto: qui il passo veniva saltato con la motivazione
+            // "gia' configurate e attive", e il percorso sbagliato sarebbe rimasto per sempre.
+            boolean logSbagliati = false;
+            try {
+                logSbagliati = !fail2banManager.esaminaLogSorvegliati(activeJailsNow).problemi.isEmpty();
+            } catch (Exception ignored) { }
+
+            if (f2bInstalled && (!mailFileOk || !allActive || logSbagliati)) {
                 // File mancante O runtime non allineato → install (rigenera tutto: path
                 // corretti dall'auto-detect, log file mancanti, filter aggiornati, reload).
                 // install_mail_jails è idempotente: safe da chiamare anche se quasi tutto è OK.
@@ -8455,7 +8556,8 @@ public class SSLMailServer {
                     "Configura jail Postfix/Dovecot/Roundcube/Rspamd (rigenera path corretti, crea log file, reload)", jres));
                 if (!res.success) anyFailed = true;
             } else if (mailFileOk) {
-                steps.put(buildSkipStep("install_mail_jails", "Jail mail già configurate e attive"));
+                steps.put(buildSkipStep("install_mail_jails",
+                    "Jail mail già configurate, attive, e ognuna sorveglia un file che viene scritto"));
             }
         } catch (Exception e) {
             steps.put(buildErrorStep("install_mail_jails", "Errore: " + e.getMessage()));

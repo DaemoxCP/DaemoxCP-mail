@@ -1,0 +1,12 @@
+            <!-- Ban di Fail2ban confrontati con le tabelle pf -->
+            <div class="card mb-4 border-warning">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="fas fa-scale-balanced me-2"></i><strong>I ban sono davvero applicati?</strong> <small class="ms-2" id="cpfBadge"></small></span>
+                    <button class="btn btn-sm btn-outline-primary" id="btnCpf" onclick="caricaConfrontoPf()">
+                        <i class="fas fa-sync me-1"></i>Confronta con pf
+                    </button>
+                </div>
+                <div class="card-body" id="cpfBody">
+                    <p class="small text-muted mb-0">"Currently banned" e' la contabilita' che Fail2ban tiene su se stesso: dice che ha eseguito il comando di ban, non che l'indirizzo sia bloccato. Qui si leggono le tabelle di pf e si confrontano i due elenchi.</p>
+                </div>
+            </div>

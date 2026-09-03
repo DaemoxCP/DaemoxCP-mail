@@ -1672,6 +1672,327 @@ public class Fail2banManager {
         return null;
     }
 
+    /**
+     * I nomi delle jail caricate adesso in Fail2ban.
+     *
+     * La stessa riga "Jail list:" veniva letta gia' in due punti con due espressioni diverse.
+     * Una lettura sola, qui, cosi' chi controlla e chi mostra guardano lo stesso elenco.
+     */
+    public java.util.List<String> nomiJailAttive() {
+        java.util.List<String> out = new ArrayList<>();
+        try {
+            java.util.regex.Matcher m =
+                Pattern.compile("Jail list:\\s*(.+)").matcher(executeCommand(FAIL2BAN_CLIENT + " status"));
+            if (m.find())
+                for (String n : m.group(1).split(","))
+                    if (!n.trim().isEmpty()) out.add(n.trim());
+        } catch (Exception ignora) { }
+        return out;
+    }
+
+    /**
+     * Le jail che sorvegliano un file incapace di dirgli qualcosa.
+     *
+     * Perche' e' un controllo a se'. La diagnosi della pagina chiedeva "la jail e' caricata nel
+     * runtime?", e per roundcube-auth la risposta era si': la jail c'era, accesa, e la pagina
+     * dava verde. Sorvegliava pero' "userlogins" mentre Roundcube scriveva "userlogins.log"
+     * nella stessa cartella, e in quella condizione non avrebbe bannato nessuno mai. Caricata e
+     * capace di vedere sono due domande diverse: finche' se ne faceva una sola, il verde della
+     * prima copriva la seconda, e non c'era nemmeno il pulsante per rimediare perche' secondo la
+     * diagnosi non c'era niente da rimediare.
+     *
+     * Qui si guardano i file, non i nomi. Si segnalano i due casi che non hanno una seconda
+     * lettura possibile:
+     *   - il file sorvegliato non esiste
+     *   - e' vuoto, ma accanto c'e' lo stesso nome a un'estensione di distanza, gia' scritto
+     * Il log vuoto senza fratelli scritti resta fuori di proposito: puo' davvero voler dire che
+     * nessuno ha ancora attaccato quel servizio, e segnalarlo renderebbe la diagnosi rumore.
+     *
+     * Costa una lettura di cartella per jail: nessun processo, nessun fail2ban-regex. Puo'
+     * quindi stare nel controllo di salute che parte all'apertura della pagina.
+     */
+    public EsameLog esaminaLogSorvegliati(java.util.Collection<String> jails) {
+        EsameLog e = new EsameLog();
+        for (String jail : jails) {
+            if (!isValidJailName(jail)) { e.saltate.add(jail); continue; }
+            java.util.List<String> logs = logPathDi(jail);
+            if (logs.isEmpty()) { e.senzaLog.add(jail); continue; }
+            e.esaminate.add(jail);
+            for (String log : logs) {
+                java.io.File f = new java.io.File(log);
+                if (!f.exists()) {
+                    e.problemi.add(new LogSbagliato(jail, log, null,
+                        "sorveglia " + log + ", che non esiste: non potra' vedere niente"));
+                    continue;
+                }
+                if (f.length() > 0) continue;
+                String vicino = vicinoScritto(f);
+                if (vicino != null)
+                    e.problemi.add(new LogSbagliato(jail, log, vicino,
+                        "sorveglia " + log + ", vuoto, mentre accanto c'e' " + vicino
+                        + " che viene scritto: sta guardando il file sbagliato"));
+            }
+        }
+        return e;
+    }
+
+    /** Tutte le jail caricate adesso, non solo quelle di posta. */
+    public EsameLog esaminaLogSorvegliati() {
+        return esaminaLogSorvegliati(nomiJailAttive());
+    }
+
+    /**
+     * L'esito dell'esame, con quante jail sono state davvero guardate.
+     *
+     * Il conteggio non e' un dettaglio: senza, "nessun problema trovato" e "non ho guardato
+     * niente" producono la stessa lista vuota e quindi lo stesso verde. Un controllo che
+     * diventa verde quando fallisce e' peggio di un controllo che non c'e', perche' invita a
+     * non guardare piu'. Chi legge questo esito deve poter distinguere i due casi, e per farlo
+     * deve poter contare.
+     */
+    public static class EsameLog {
+        /** Jail per cui abbiamo ottenuto almeno un percorso e lo abbiamo guardato. */
+        public final java.util.List<String> esaminate = new ArrayList<>();
+        /** Jail che non hanno un file di log da sorvegliare, o che non ce lo hanno detto. */
+        public final java.util.List<String> senzaLog = new ArrayList<>();
+        /** Nomi che non passano la validazione: non ci si costruisce un comando sopra. */
+        public final java.util.List<String> saltate = new ArrayList<>();
+        public final java.util.List<LogSbagliato> problemi = new ArrayList<>();
+    }
+
+    /** Una jail e il log che non puo' dirle niente. */
+    public static class LogSbagliato {
+        public final String jail, log, vicino, motivo;
+        LogSbagliato(String jail, String log, String vicino, String motivo) {
+            this.jail = jail; this.log = log; this.vicino = vicino; this.motivo = motivo;
+        }
+    }
+
+    /**
+     * Gli indirizzi che Fail2ban crede bannati, e quelli che pf blocca davvero.
+     *
+     * Perche' serve. "Currently banned: 1" e' la contabilita' che Fail2ban tiene su se stesso:
+     * dice che ha eseguito il comando di ban, non che l'indirizzo sia bloccato. Se l'ancora non
+     * fosse caricata, o la tabella avesse un altro nome, o pfctl fallisse in silenzio, quella
+     * riga sarebbe identica a com'e' adesso. E' la stessa distanza fra "l'ho fatto" e "e'
+     * successo" che rendeva cieca roundcube-auth mentre la pagina la dava attiva.
+     *
+     * Come si misura. Il bersaglio pf non si indovina dal nome della jail: si legge dal comando
+     * di ban vero, chiesto a Fail2ban, perche' ancora e tabella sono configurabili e una
+     * convenzione data per scontata e' gia' un'ipotesi. Da li' si legge la tabella con pfctl e
+     * si confrontano i due insiemi.
+     *
+     * Le differenze hanno letture opposte e vanno tenute separate:
+     *   - solo in Fail2ban -> il ban NON e' applicato: quell'indirizzo passa
+     *   - solo in pf       -> resta bloccato uno che Fail2ban ha gia' sbannato
+     * Una tabella che non esiste non e' un errore di lettura ma il difetto stesso, e viene
+     * detta cosi'.
+     *
+     * Legge e basta: nessun pfctl che modifichi qualcosa.
+     */
+    public ConfrontoPf confrontaBanConPf() {
+        ConfrontoPf c = new ConfrontoPf();
+        for (String jail : nomiJailAttive()) {
+            if (!isValidJailName(jail)) continue;
+            JailPf j = new JailPf();
+            j.jail = jail;
+            j.credutiBannati.addAll(ipBannatiSecondoFail2ban(jail));
+
+            j.comandiBan.addAll(comandiBanDi(jail));
+            PfBersaglio b = null;
+            for (String cmd : j.comandiBan) {
+                b = bersaglioDaComando(cmd);
+                if (b != null) break;
+            }
+            if (b == null) {
+                // Non si conclude "non banna via pf": non e' stato misurato. Si dice cosa
+                // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
+                // quel comando su questo sistema non fa niente.
+                j.nota = j.comandiBan.isEmpty()
+                    ? "non sono riuscito a farmi dire quale comando esegue per bannare: di questa "
+                      + "jail non posso dire se i ban siano applicati"
+                    : "il suo comando di ban non nomina una tabella pf, quindi non posso "
+                      + "confrontarlo con il firewall. Esegue: " + String.join(" ; ", j.comandiBan);
+                c.jails.add(j);
+                continue;
+            }
+            j.ancora = b.ancora == null ? "(nessuna)" : b.ancora;
+            j.tabella = b.tabella;
+
+            LetturaTabella t = indirizziInTabellaPf(b.ancora, b.tabella);
+            if (!t.letta) {
+                j.nota = "non sono riuscito a leggere la tabella " + b.tabella + ": di questa jail "
+                       + "non posso dire se i ban siano applicati davvero" + (t.errore.isEmpty() ? "" : " (" + t.errore + ")");
+                c.jails.add(j);
+                continue;
+            }
+            j.letta = true;
+            j.tabellaMancante = t.mancante;
+            j.nelFirewall.addAll(t.indirizzi);
+            for (String ip : j.credutiBannati) if (!j.nelFirewall.contains(ip)) j.soloInFail2ban.add(ip);
+            for (String ip : j.nelFirewall) if (!j.credutiBannati.contains(ip)) j.soloInPf.add(ip);
+            c.jails.add(j);
+        }
+        return c;
+    }
+
+    /** Gli indirizzi che Fail2ban elenca come bannati adesso per quella jail. */
+    private java.util.List<String> ipBannatiSecondoFail2ban(String jail) {
+        java.util.List<String> out = new ArrayList<>();
+        try {
+            java.util.regex.Matcher m = Pattern.compile("Banned IP list:\\s*(.*)")
+                .matcher(executeCommand(FAIL2BAN_CLIENT + " status " + jail));
+            if (m.find())
+                for (String ip : m.group(1).trim().split("\\s+"))
+                    if (!ip.trim().isEmpty()) out.add(normalizzaIndirizzo(ip));
+        } catch (Exception ignora) { }
+        return out;
+    }
+
+    /**
+     * I comandi che una jail esegue davvero per bannare, uno per azione.
+     *
+     * Si prendono tutti, non solo quello che sembra parlare di pf: quando nessuno nomina una
+     * tabella, la risposta giusta non e' "questa jail non usa pf" — che sarebbe una conclusione
+     * tratta dal non aver trovato — ma mostrare cosa esegue, e lasciare che si veda.
+     */
+    private java.util.List<String> comandiBanDi(String jail) {
+        java.util.List<String> out = new ArrayList<>();
+        try {
+            String azioni = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " actions");
+            String coda = azioni.contains(":") ? azioni.substring(azioni.lastIndexOf(':') + 1) : azioni;
+            for (String az : coda.split(",")) {
+                String a = az.trim();
+                if (a.isEmpty() || !isValidJailName(a)) continue;
+                String cmd = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " action " + a + " actionban");
+                if (cmd == null) continue;
+                cmd = cmd.trim();
+                if (cmd.isEmpty() || cmd.toLowerCase().contains("error")) continue;
+                out.add(cmd.replace("\n", " "));
+            }
+        } catch (Exception ignora) { }
+        return out;
+    }
+
+    /** Il contenuto di una tabella pf. Una tabella assente non e' un errore: e' una risposta. */
+    private LetturaTabella indirizziInTabellaPf(String ancora, String tabella) {
+        LetturaTabella t = new LetturaTabella();
+        try {
+            java.util.List<String> argv = new ArrayList<>();
+            argv.add("/sbin/pfctl");
+            if (ancora != null) { argv.add("-a"); argv.add(ancora); }
+            argv.add("-t"); argv.add(tabella);
+            argv.add("-T"); argv.add("show");
+            org.mail_panel.util.Shell.Result r = org.mail_panel.util.Shell.run(
+                java.time.Duration.ofSeconds(20), argv.toArray(new String[0]));
+            String out = r.output() == null ? "" : r.output();
+            if (!r.success()) {
+                // Tabella inesistente: e' precisamente il guasto che questo controllo cerca,
+                // non un fallimento della misura. Si prosegue con l'insieme vuoto.
+                if (out.toLowerCase().contains("does not exist") || out.toLowerCase().contains("no such")) {
+                    t.letta = true;
+                    t.mancante = true;
+                    return t;
+                }
+                t.errore = out.trim();
+                return t;
+            }
+            for (String riga : out.split("\n")) {
+                String v = riga.trim();
+                if (v.isEmpty() || !v.matches("^[0-9a-fA-F:].*")) continue;
+                t.indirizzi.add(normalizzaIndirizzo(v));
+            }
+            t.letta = true;
+        } catch (Exception e) {
+            t.errore = e.getMessage() == null ? "errore di lettura" : e.getMessage();
+        }
+        return t;
+    }
+
+    /**
+     * Stessa forma per i due insiemi prima di confrontarli.
+     *
+     * pfctl stampa gli indirizzi con la maschera ("213.209.159.175/32"), Fail2ban li elenca
+     * nudi. Confrontati cosi' com'erano, ogni indirizzo bannato sarebbe risultato presente in
+     * uno solo dei due: il controllo avrebbe segnalato un guasto ovunque, e un controllo che
+     * grida sempre non viene piu' letto.
+     */
+    static String normalizzaIndirizzo(String v) {
+        String s = v.trim();
+        int sp = s.indexOf(' ');
+        if (sp > 0) s = s.substring(0, sp);
+        if (s.endsWith("/32")) s = s.substring(0, s.length() - 3);
+        if (s.endsWith("/128")) s = s.substring(0, s.length() - 4);
+        return s;
+    }
+
+    /**
+     * Ancora e tabella lette da un comando di ban. Separata dall'esecuzione per poter essere
+     * provata: e' l'unico punto del confronto dove un'espressione sbagliata non si vedrebbe —
+     * darebbe "questa jail non usa pf" e il confronto sparirebbe in silenzio invece di fallire.
+     */
+    static PfBersaglio bersaglioDaComando(String cmd) {
+        if (cmd == null || !cmd.contains("pfctl")) return null;
+        java.util.regex.Matcher mt = Pattern.compile("-t\\s+(\\S+)").matcher(cmd);
+        if (!mt.find()) return null;
+        PfBersaglio b = new PfBersaglio();
+        b.tabella = mt.group(1);
+        java.util.regex.Matcher ma = Pattern.compile("-a\\s+(\\S+)").matcher(cmd);
+        if (ma.find()) b.ancora = ma.group(1);
+        return b;
+    }
+
+    static class PfBersaglio { String ancora; String tabella; }
+
+    private static class LetturaTabella {
+        boolean letta, mancante;
+        String errore = "";
+        final java.util.List<String> indirizzi = new ArrayList<>();
+    }
+
+    /** Il confronto, jail per jail. */
+    public static class ConfrontoPf {
+        public final java.util.List<JailPf> jails = new ArrayList<>();
+        /** Indirizzi che Fail2ban crede bannati e che pf non blocca: passano. */
+        public int totaleNonApplicati() {
+            int n = 0;
+            for (JailPf j : jails) n += j.soloInFail2ban.size();
+            return n;
+        }
+        /**
+         * Jail di cui non si e' potuto misurare niente: il loro silenzio non e' un via libera.
+         *
+         * Ci finiscono TUTTE quelle non lette, qualunque ne sia il motivo. La prima versione
+         * contava solo gli errori di lettura e lasciava fuori le jail per cui non si trovava
+         * una tabella pf: mailpanel-pubblico aveva un indirizzo bannato, nessuna verifica, e
+         * il riepilogo diceva "Coerenti". Un verde che nasce da cio' che non si e' guardato e'
+         * il difetto che questa scheda esiste per scoprire, e ce l'aveva dentro.
+         */
+        public int totaleNonMisurate() {
+            int n = 0;
+            for (JailPf j : jails) if (!j.letta) n++;
+            return n;
+        }
+
+        /** Ban dichiarati da Fail2ban per jail che non siamo riusciti a verificare. */
+        public int banNonVerificati() {
+            int n = 0;
+            for (JailPf j : jails) if (!j.letta) n += j.credutiBannati.size();
+            return n;
+        }
+    }
+
+    public static class JailPf {
+        public String jail = "", ancora = "", tabella = "", nota = "";
+        public boolean letta, tabellaMancante;
+        public final java.util.List<String> credutiBannati = new ArrayList<>();
+        public final java.util.List<String> nelFirewall = new ArrayList<>();
+        public final java.util.List<String> soloInFail2ban = new ArrayList<>();
+        public final java.util.List<String> soloInPf = new ArrayList<>();
+        /** Cosa esegue davvero per bannare. Si mostra quando non si e' potuto verificare. */
+        public final java.util.List<String> comandiBan = new ArrayList<>();
+    }
+
     public static class FiltroCheck {
         public String jail = "", log = "", messaggio = "", uscita = "";
         public boolean verificato;
