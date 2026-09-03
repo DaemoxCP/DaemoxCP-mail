@@ -1819,6 +1819,7 @@ public class Fail2banManager {
                 // vede fail2ban", che non e' la stessa domanda di "cosa ho scritto io".
                 j.logFail2ban = RiparaAzioneBan.erroriLogPer(jail);
                 j.sezioni = RiparaAzioneBan.sezioniCheDefiniscono(jail);
+                j.dump = RiparaAzioneBan.configurazioneLetta(jail);
                 // Non si conclude "non banna via pf": non e' stato misurato. Si dice cosa
                 // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
                 // quel comando su questo sistema non fa niente.
@@ -2113,7 +2114,7 @@ public class Fail2banManager {
         public final java.util.List<String> azioniViste = new ArrayList<>();
         public final java.util.List<String> azioniScartate = new ArrayList<>();
         /** Le righe di fail2ban.log e le sezioni che definiscono la jail: l'evidenza da leggere. */
-        public String logFail2ban = "", sezioni = "";
+        public String logFail2ban = "", sezioni = "", dump = "";
     }
 
     public static class FiltroCheck {

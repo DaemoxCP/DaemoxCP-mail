@@ -60,7 +60,8 @@ public final class RiparaAzioneBan {
                     .put("perche", "non sono riuscito a farmi dire quale comando esegue")
                     .put("uscita", uscitaAzioni(jail))
                     .put("log", erroriLogPer(jail))
-                    .put("sezioni", sezioniCheDefiniscono(jail)));
+                    .put("sezioni", sezioniCheDefiniscono(jail))
+                    .put("dump", configurazioneLetta(jail)));
                 continue;
             }
             String eseguibile = primoEseguibile(cmd);
@@ -185,7 +186,28 @@ public final class RiparaAzioneBan {
                 return r.put("success", false).put("passi", passi)
                         .put("message", "Riparazione annullata: i file sono tornati come prima.");
             }
-            passi.put(passo("reload", true, "fail2ban ha accettato la configurazione"));
+            passi.put(passo("reload", true,
+                "fail2ban ha accettato la configurazione (fail2ban-client reload)"));
+
+            // Il reload semplice puo' non bastare. fail2ban-client(1): "reload ... reloads the
+            // configuration without restarting of the server, the option '--restart' activates
+            // completely restarting of affected jails". Se dopo il reload l'azione non risulta,
+            // la configurazione e' giusta ma non e' stata applicata: si ricrea la jail. Senza
+            // "--unban", che il manuale indica come l'opzione che invece toglierebbe i ban.
+            java.util.List<String> ancoraMute = new ArrayList<>();
+            for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
+                String c = comandoBan(jail);
+                if (c == null || c.isEmpty()) ancoraMute.add(jail);
+            }
+            if (!ancoraMute.isEmpty()) {
+                Shell.Result rs = Shell.run(Duration.ofSeconds(60), CLIENT, "reload", "--restart");
+                passi.put(passo("reload --restart", rs.success(),
+                    "Dopo il reload " + String.join(", ", ancoraMute) + " non riportava ancora la "
+                    + "propria azione: la configurazione era letta ma non applicata, quindi ho "
+                    + "ricreato le jail con \"fail2ban-client reload --restart\" (senza --unban, "
+                    + "che e' l'opzione che toglierebbe i ban). Uscita: "
+                    + (rs.output() == null || rs.output().isBlank() ? "(nessuna)" : rs.output().trim())));
+            }
 
             // 4. La verifica che conta: cosa esegue ADESSO, chiesto a fail2ban.
             JSONArray verifica = new JSONArray();
@@ -210,7 +232,8 @@ public final class RiparaAzioneBan {
                                    + "reload. Alla richiesta delle azioni fail2ban risponde: "
                                    + uscitaAzioni(jail))
                         .put("log", erroriLogPer(jail))
-                        .put("sezioni", sezioniCheDefiniscono(jail)));
+                        .put("sezioni", sezioniCheDefiniscono(jail))
+                        .put("dump", configurazioneLetta(jail)));
                     continue;
                 }
                 if (!ok) tutteOk = false;
@@ -483,6 +506,31 @@ public final class RiparaAzioneBan {
         return out.length() == 0
             ? "(nessun file sotto /usr/local/etc/fail2ban definisce [" + jail + "])"
             : out.toString();
+    }
+
+    /**
+     * Cosa fail2ban ha INTERPRETATO dai file per questa jail.
+     *
+     * fail2ban-client(1): "-d  dump configuration. For debugging". E' l'unica fonte che risponde
+     * a "cosa legge fail2ban", che non e' ne' "cosa ho scritto io" ne' "cosa e' caricato adesso":
+     * sono tre cose diverse, e per mezza giornata ho confuso la prima con la terza. Se qui
+     * compare "addaction" la configurazione e' letta bene e il problema e' nell'applicarla; se
+     * non compare, il problema e' nel file.
+     *
+     * Legge e basta.
+     */
+    static String configurazioneLetta(String jail) {
+        Shell.Result r = Shell.run(Duration.ofSeconds(20), CLIENT, "--dp");
+        if (!r.success() || r.output() == null || r.output().isBlank())
+            r = Shell.run(Duration.ofSeconds(20), CLIENT, "-d");
+        if (!r.success() || r.output() == null || r.output().isBlank())
+            return "(fail2ban-client non ha prodotto un dump della configurazione)";
+        java.util.List<String> sue = new ArrayList<>();
+        for (String riga : r.output().split("\n"))
+            if (riga.contains("'" + jail + "'") || riga.contains("\"" + jail + "\"")) sue.add(riga);
+        return sue.isEmpty()
+            ? "(il dump non contiene nessuna riga per " + jail + ")"
+            : String.join("\n", sue);
     }
 
     /** Cosa risponde fail2ban quando gli si chiedono le azioni di una jail, testuale. */

@@ -4899,7 +4899,8 @@ public class SSLMailServer {
                                 .put("comandi_ban", new JSONArray(j.comandiBan))
                                 .put("uscita_azioni", j.uscitaAzioni)
                                 .put("log", j.logFail2ban)
-                                .put("sezioni", j.sezioni));
+                                .put("sezioni", j.sezioni)
+                                .put("dump", j.dump));
                         }
                         response.put("success", true).put("jails", jj)
                                 .put("non_applicati", c.totaleNonApplicati())

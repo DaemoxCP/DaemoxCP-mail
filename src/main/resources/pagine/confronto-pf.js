@@ -70,6 +70,7 @@
                         if (j.uscita_azioni) pezzi.push('$ fail2ban-client get ' + j.jail + ' actions\n' + j.uscita_azioni);
                         if (j.log) pezzi.push('/var/log/fail2ban.log\n' + j.log);
                         if (j.sezioni) pezzi.push('Sezioni [' + j.jail + '] nei file di configurazione\n' + j.sezioni);
+                        if (j.dump) pezzi.push('$ fail2ban-client --dp   (cosa fail2ban ha INTERPRETATO dai file)\n' + j.dump);
                         if (pezzi.length)
                             // Aperto, non richiuso dietro un click: questa riga esiste perche' la
                             // misura NON e' riuscita, e l'evidenza che serve a capire perche' e'
