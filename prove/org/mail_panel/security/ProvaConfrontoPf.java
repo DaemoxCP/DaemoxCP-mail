@@ -29,7 +29,24 @@ public class ProvaConfrontoPf {
         Fail2banManager.PfBersaglio g = Fail2banManager.bersaglioDaComando("pfctl -t permaban -T add <ip>");
         vero("senza ancora: riconosciuto", g != null);
         uguale("senza ancora: tabella", "permaban", g == null ? null : g.tabella);
-        vero("senza ancora: ancora nulla", g != null && g.ancora == null);
+        vero("senza ancora: nessuna ancora certa", g != null && g.ancora == null);
+
+        // --- Il caso vero, ed e' quello che mi era sfuggito ---
+        // fail2ban restituisce il comando con i segnaposto NON espansi, e il file dell'azione
+        // definisce "pfctl = pfctl -a f2b/<name>": l'ancora e' dentro <pfctl>, invisibile qui.
+        // Cercarla nel testo non la trova mai, e leggere la tabella nel ruleset principale
+        // avrebbe dato "non esiste" per ogni jail sana. Va ricavata dalla tabella.
+        Fail2banManager.PfBersaglio v = Fail2banManager.bersaglioDaComando("<pfctl> -t f2b-dovecot -T add <ip>");
+        vero("segnaposto <pfctl>: riconosciuto come pf", v != null);
+        uguale("segnaposto: tabella", "f2b-dovecot", v == null ? null : v.tabella);
+        vero("segnaposto: nessuna ancora certa nel testo", v != null && v.ancora == null);
+        uguale("segnaposto: ancora ricavata dalle definizioni", "f2b/dovecot",
+            v == null ? null : v.ancoraProbabile);
+        // Il nome puo' contenere trattini: si divide al PRIMO, che separa il prefisso f2b.
+        uguale("nome con trattini", "f2b/mailpanel-pubblico",
+            Fail2banManager.bersaglioDaComando("<pfctl> -t f2b-mailpanel-pubblico -T add <ip>").ancoraProbabile);
+        // Una tabella senza trattino non lascia ricavare niente, e non si inventa.
+        vero("niente da ricavare", Fail2banManager.bersaglioDaComando("pfctl -t permaban -T add <ip>").ancoraProbabile == null);
 
         // Chi non banna via pf non deve produrre un bersaglio inventato.
         vero("ipfw non e' pf", Fail2banManager.bersaglioDaComando("ipfw table 1 add <ip>") == null);

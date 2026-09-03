@@ -4890,6 +4890,7 @@ public class SSLMailServer {
                             jj.put(new JSONObject()
                                 .put("jail", j.jail).put("ancora", j.ancora).put("tabella", j.tabella)
                                 .put("letta", j.letta).put("tabella_mancante", j.tabellaMancante)
+                                .put("regola_presente", j.regolaPresente)
                                 .put("nota", j.nota)
                                 .put("creduti_bannati", new JSONArray(j.credutiBannati))
                                 .put("nel_firewall", new JSONArray(j.nelFirewall))
@@ -4900,7 +4901,8 @@ public class SSLMailServer {
                         response.put("success", true).put("jails", jj)
                                 .put("non_applicati", c.totaleNonApplicati())
                                 .put("non_misurate", c.totaleNonMisurate())
-                                .put("ban_non_verificati", c.banNonVerificati());
+                                .put("ban_non_verificati", c.banNonVerificati())
+                                .put("senza_regola", c.totaleSenzaRegola());
                     }
                     case "ban" -> {
                         String ip = json.getString("ip");
@@ -7616,6 +7618,13 @@ public class SSLMailServer {
                         logAudit(res.success ? "FAIL2BAN_MAIL_JAILS_INSTALLED" : "FAIL2BAN_MAIL_JAILS_FAILED",
                             clientIp, res.success ? res.configPath : (res.error != null ? res.error : ""));
                     }
+                    case "ripara_azione_ban" -> {
+                        JSONObject rr = org.mail_panel.security.RiparaAzioneBan.ripara();
+                        response = rr;
+                        logAudit(rr.optBoolean("success", false) ? "FAIL2BAN_BANACTION_RIPARATA"
+                                                                 : "FAIL2BAN_BANACTION_RIPARAZIONE_FALLITA",
+                            clientIp, rr.optString("message", ""));
+                    }
                     case "start_pf" -> {
                         JSONObject r = startPfService();
                         response = r;
@@ -8029,6 +8038,47 @@ public class SSLMailServer {
                 primo = false;
             }
         }
+        // ========== Il comando che banna esiste su questo sistema? ==========
+        // La causa vera del guasto piu' grave trovato finora. Cinque jail dichiaravano
+        // "action = pf[...]", due no: non dichiarandola ereditavano il valore predefinito di
+        // jail.conf, costruito su iptables, che su FreeBSD non esiste. Quelle due rilevavano,
+        // contavano i tentativi e incrementavano i ban — 14.370 e 46 su mailpanel-pubblico —
+        // senza bloccare niente, e nessuna schermata poteva accorgersene perche' nessuna
+        // guardava se il comando di ban fosse un comando. Questo lo guarda.
+        JSONObject diagBan = new JSONObject().put("rotte", new JSONArray());
+        boolean banEseguibile = true;
+        String banDettaglio;
+        try {
+            if (f2bRunning) diagBan = org.mail_panel.security.RiparaAzioneBan.diagnosi();
+        } catch (Exception ignored) { }
+        JSONArray rotte = diagBan.optJSONArray("rotte");
+        if (rotte == null) rotte = new JSONArray();
+        if (!f2bRunning) {
+            banEseguibile = false;
+            banDettaglio = "Fail2ban non e' in esecuzione: non ho potuto chiedere a nessuna jail "
+                         + "quale comando esegua per bannare";
+        } else if (rotte.length() == 0) {
+            banDettaglio = "Ogni jail attiva banna con un comando che esiste su questo sistema";
+        } else {
+            banEseguibile = false;
+            StringBuilder b = new StringBuilder();
+            for (int i = 0; i < rotte.length(); i++) {
+                JSONObject x = rotte.getJSONObject(i);
+                if (b.length() > 0) b.append(" | ");
+                b.append(x.optString("jail")).append(": banna con \"")
+                 .append(x.optString("eseguibile")).append("\", che su questo sistema non esiste");
+            }
+            banDettaglio = b.toString();
+        }
+        checks.put(makeCheck("ban-eseguibile",
+            "Il comando di ban esiste su questo sistema",
+            banEseguibile,
+            banDettaglio,
+            banEseguibile ? null
+                : "Queste jail rilevano gli attacchi e contano i ban, ma il comando che dovrebbe applicarli fallisce ogni volta: nessun indirizzo viene bloccato davvero. A schermo sono indistinguibili da jail che funzionano.",
+            (banEseguibile || !f2bRunning) ? null : "ripara_azione_ban",
+            "Dichiara l'azione pf sulle jail del pannello, ricarica, e poi richiede a Fail2ban quale comando esegue per verificare che la correzione abbia preso"));
+
         checks.put(makeCheck("mail-jails-logpath",
             "Le jail sorvegliano i file di log giusti",
             logOk,
@@ -8064,6 +8114,94 @@ public class SSLMailServer {
                           : "Senza il modulo pf caricato, l'intero stack firewall non funziona: nessun comando pfctl può girare."),
             (pfModuleLoaded || inJail) ? null : "load_pf_module",
             "Esegue: kldload pf + aggiunge pf_load=\"YES\" a /boot/loader.conf"));
+
+        // ========== L'anchor di Fail2ban viene raggiunta? ==========
+        // pf valuta le regole in ordine e "quick" ferma la valutazione alla prima che
+        // corrisponde. Le regole di Fail2ban sono "block quick", ma un "pass ... quick" che
+        // stia PRIMA dell'anchor f2b vince: da quelle sorgenti non si viene bannati, e i ban
+        // risultano eseguiti. Il pannello scrive il proprio anchor panel-fw in fondo a pf.conf,
+        // e quell'anchor contiene "pass in quick from <panel_wl_cidrs>" e la lista geografica:
+        // se finisce prima di f2b, la whitelist non e' piu' una precedenza voluta ma una
+        // esenzione dai ban di cui nessuno sa. Qui si guarda l'ordine reale del file.
+        boolean ordineOk = true;
+        String ordineDettaglio;
+        java.util.List<String> primaDiF2b = new java.util.ArrayList<>();
+        int rigaF2b = -1;
+        try {
+            if (pfConfExists && pfAnchorPresent) {
+                String[] righe = java.nio.file.Files.readString(
+                    java.nio.file.Paths.get("/etc/pf.conf")).split("\n", -1);
+                for (int i = 0; i < righe.length; i++) {
+                    String t = righe[i].trim();
+                    if (t.isEmpty() || t.startsWith("#")) continue;
+                    if (rigaF2b < 0 && (t.contains("anchor \"f2b/*\"") || t.contains("anchor f2b/*"))) {
+                        rigaF2b = i;
+                        break;
+                    }
+                    // Solo cio' che puo' davvero far saltare un ban in entrata.
+                    // "pass out ... quick" riguarda il traffico in uscita e non c'entra:
+                    // segnalarlo farebbe diventare rossa una pf.conf sana, e un controllo che
+                    // grida a vuoto smette di essere letto.
+                    if (t.startsWith("pass") && t.contains("quick")
+                            && !t.matches("^pass\\s+out\\b.*")) {
+                        primaDiF2b.add("riga " + (i + 1) + ": " + t);
+                        continue;
+                    }
+                    // Un anchor precedente conta solo se contiene davvero un pass quick: lo si
+                    // chiede a pf invece di presumerlo dal nome. Se non si riesce a leggerlo,
+                    // lo si dice — non lo si assolve.
+                    if (t.startsWith("anchor ")) {
+                        String nome = t.substring(7).trim().replace("\"", "");
+                        int sp = nome.indexOf(' ');
+                        if (sp > 0) nome = nome.substring(0, sp);
+                        if (nome.isEmpty() || nome.equals("f2b/*")) continue;
+                        var reg = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
+                            "/sbin/pfctl", "-a", nome.replace("/*", ""), "-sr");
+                        if (!reg.success()) {
+                            primaDiF2b.add("riga " + (i + 1) + ": anchor " + nome
+                                + " (non sono riuscito a leggerne le regole, quindi non posso "
+                                + "escludere che ne contenga una che chiude la valutazione)");
+                            continue;
+                        }
+                        for (String rr : reg.output().split("\n")) {
+                            String u = rr.trim();
+                            if (u.startsWith("pass") && u.contains("quick")
+                                    && !u.matches("^pass\\s+out\\b.*")) {
+                                primaDiF2b.add("riga " + (i + 1) + ": anchor " + nome
+                                    + " contiene \"" + u + "\"");
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) { }
+
+        if (!pfConfExists || !pfAnchorPresent) {
+            ordineDettaglio = "L'anchor f2b non e' in pf.conf: l'ordine si valuta quando c'e'";
+            ordineOk = pfAnchorPresent;
+        } else if (rigaF2b < 0) {
+            ordineOk = false;
+            ordineDettaglio = "Non sono riuscito a trovare la riga dell'anchor f2b leggendo pf.conf: "
+                            + "non posso dire in che ordine venga valutata";
+        } else if (primaDiF2b.isEmpty()) {
+            ordineDettaglio = "L'anchor f2b (riga " + (rigaF2b + 1) + ") viene valutata prima di "
+                            + "qualunque regola pass quick e di ogni altro anchor: niente puo' "
+                            + "chiudere la valutazione prima che i ban vengano applicati";
+        } else {
+            ordineOk = false;
+            ordineDettaglio = "Prima dell'anchor f2b (riga " + (rigaF2b + 1) + ") ci sono "
+                            + primaDiF2b.size() + " regole o anchor che possono chiudere la "
+                            + "valutazione: " + String.join(" | ", primaDiF2b);
+        }
+        checks.put(makeCheck("pf-ordine-anchor",
+            "L'anchor Fail2ban viene valutata prima delle regole pass quick",
+            ordineOk,
+            ordineDettaglio,
+            ordineOk ? null
+                : "pf si ferma alla prima regola quick che corrisponde. Chi rientra in una di queste regole non arrivera' mai alle regole di ban di Fail2ban: i ban su quelle sorgenti risultano eseguiti e non bloccano niente. Riguarda in particolare la whitelist e la lista geografica del firewall del pannello, che sono pass quick.",
+            null,
+            null));
 
         // Check separato per esistenza pf.conf (deve venire prima)
         checks.put(makeCheck("pf-conf-exists",
@@ -8561,6 +8699,26 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             steps.put(buildErrorStep("install_mail_jails", "Errore: " + e.getMessage()));
+            anyFailed = true;
+        }
+
+        // Step 4b: le jail bannano con un comando che esiste su questo sistema?
+        // Installarle non basta: due di loro ereditavano un'azione basata su iptables, che su
+        // FreeBSD non esiste, e bannavano nel vuoto contando i ban come riusciti.
+        try {
+            JSONObject diag = org.mail_panel.security.RiparaAzioneBan.diagnosi();
+            JSONArray rotte = diag.optJSONArray("rotte");
+            if (rotte != null && rotte.length() > 0) {
+                JSONObject rr = org.mail_panel.security.RiparaAzioneBan.ripara();
+                steps.put(buildStep("ripara_azione_ban",
+                    "Dichiara l'azione pf sulle jail che bannavano con un comando inesistente, e verifica dopo il reload", rr));
+                if (!rr.optBoolean("success", false)) anyFailed = true;
+            } else {
+                steps.put(buildSkipStep("ripara_azione_ban",
+                    "Ogni jail banna con un comando che esiste su questo sistema"));
+            }
+        } catch (Exception e) {
+            steps.put(buildErrorStep("ripara_azione_ban", "Errore: " + e.getMessage()));
             anyFailed = true;
         }
 

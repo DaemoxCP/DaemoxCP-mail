@@ -388,6 +388,15 @@
                     'Prima di confermare, verifica di avere accesso fisico/console al server (KVM, IPMI, console seriale) per recuperare in caso di problemi.\n\n' +
                     'Vuoi procedere?';
             }
+            if (action === 'ripara_azione_ban') {
+                confirmMsg = 'Correggere il comando di ban delle jail del pannello?\n\n' +
+                    'Queste jail bannano con un comando che su FreeBSD non esiste: rilevano gli attacchi, ' +
+                    'contano i ban, e non bloccano nessuno.\n\n' +
+                    'Il pannello dichiara l\'azione pf, copia i file prima di toccarli, ricarica fail2ban, ' +
+                    'e poi richiede a fail2ban quale comando esegue per verificare che la correzione abbia preso. ' +
+                    'Se fail2ban rifiuta la configurazione, i file tornano come prima.\n\n' +
+                    'Non tocca pf ne\' le regole del firewall.\n\nProcedo?';
+            }
             if (!confirm(confirmMsg)) return;
             const original = btn.innerHTML;
             btn.disabled = true;
@@ -402,10 +411,36 @@
             }).then(r => r.json()).then(data => {
                 btn.disabled = false;
                 btn.innerHTML = original;
+                // Una riparazione che scrive file e poi si verifica ha un racconto da fare:
+                // ricaricare la diagnosi e basta butterebbe via il passo che conta, cioe' cosa
+                // ha risposto fail2ban DOPO il reload.
+                if (data.passi) {
+                    const rep = document.getElementById('fhcFixAllReport');
+                    const el = document.getElementById('fhcFixAllSteps');
+                    let hh = '';
+                    (data.passi || []).forEach(pz => {
+                        hh += '<div class="d-flex align-items-start gap-2 mb-2">' +
+                              (pz.ok ? '<i class="fas fa-check-circle text-success"></i>'
+                                     : '<i class="fas fa-times-circle text-danger"></i>') +
+                              '<div class="flex-grow-1"><strong>' + escapeHtml(pz.passo) + '</strong>' +
+                              '<div class="small text-muted">' + escapeHtml(pz.testo) + '</div></div></div>';
+                    });
+                    (data.verifica || []).forEach(v => {
+                        hh += '<div class="small ' + (v.ok ? 'text-success' : 'text-danger') + '">' +
+                              '<i class="fas fa-' + (v.ok ? 'check' : 'times') + ' me-1"></i>' +
+                              escapeHtml(v.jail) + ': ' +
+                              escapeHtml(v.comando || v.nota || '') + '</div>';
+                    });
+                    if (data.message) hh += '<div class="mt-2">' + escapeHtml(data.message) + '</div>';
+                    if (el) { el.innerHTML = hh; }
+                    if (rep) rep.classList.remove('d-none');
+                }
                 if (data.success) {
                     // ricarica la diagnosi
                     loadFail2banHealth();
                     loadStatus();
+                } else if (data.passi) {
+                    loadFail2banHealth();
                 } else {
                     alert('Errore: ' + (data.message || data.error || 'sconosciuto') +
                         (data.output ? '\n\nOutput:\n' + data.output : ''));

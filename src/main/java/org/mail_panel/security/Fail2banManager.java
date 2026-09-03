@@ -1816,10 +1816,23 @@ public class Fail2banManager {
                 c.jails.add(j);
                 continue;
             }
-            j.ancora = b.ancora == null ? "(nessuna)" : b.ancora;
             j.tabella = b.tabella;
 
-            LetturaTabella t = indirizziInTabellaPf(b.ancora, b.tabella);
+            // Si prova dove la tabella puo' stare, e si tiene il posto dove ha risposto. Cosi'
+            // "non esiste" lo si dice solo dopo aver guardato in tutti i posti sensati.
+            java.util.List<String> candidati = new ArrayList<>();
+            if (b.ancora != null) candidati.add(b.ancora);
+            if (b.ancoraProbabile != null && !b.ancoraProbabile.equals(b.ancora)) candidati.add(b.ancoraProbabile);
+            candidati.add(null);
+
+            LetturaTabella t = null;
+            String ancoraUsata = null;
+            for (String cand : candidati) {
+                LetturaTabella prova = indirizziInTabellaPf(cand, b.tabella);
+                if (prova.letta && !prova.mancante) { t = prova; ancoraUsata = cand; break; }
+                if (t == null) { t = prova; ancoraUsata = cand; }   // il primo esito, se nessuno trova
+            }
+            j.ancora = ancoraUsata == null ? "(ruleset principale)" : ancoraUsata;
             if (!t.letta) {
                 j.nota = "non sono riuscito a leggere la tabella " + b.tabella + ": di questa jail "
                        + "non posso dire se i ban siano applicati davvero" + (t.errore.isEmpty() ? "" : " (" + t.errore + ")");
@@ -1828,12 +1841,48 @@ public class Fail2banManager {
             }
             j.letta = true;
             j.tabellaMancante = t.mancante;
+            // Una tabella piena non blocca niente da sola: serve la regola che la legge. E' la
+            // verifica che fail2ban stesso fa ("pfctl -sr | grep -q <tabella>"), ed e' l'unico
+            // modo per accorgersi che actionstart abbia creato la tabella e poi fallito sulla
+            // regola — che e' esattamente cio' che succede quando la porta e' vuota.
+            String regole = regoleDi(ancoraUsata, c);
+            if (regole == null) {
+                // pfctl non ha risposto. Dire "nessuna regola" sarebbe una conclusione tratta
+                // dal non aver letto, e accuserebbe di guasto cinque jail sane.
+                j.regolaVerificata = false;
+            } else {
+                j.regolaVerificata = true;
+                j.regolaPresente = regole.contains(b.tabella);
+            }
             j.nelFirewall.addAll(t.indirizzi);
             for (String ip : j.credutiBannati) if (!j.nelFirewall.contains(ip)) j.soloInFail2ban.add(ip);
             for (String ip : j.nelFirewall) if (!j.credutiBannati.contains(ip)) j.soloInPf.add(ip);
             c.jails.add(j);
         }
         return c;
+    }
+
+    /**
+     * Le regole pf caricate, per ancora. Lette una volta sola e tenute per la durata del
+     * confronto: sono identiche per tutte le jail che condividono l'ancora, e rileggerle a ogni
+     * jail vorrebbe dire eseguire pfctl sette volte per avere sette volte lo stesso testo.
+     */
+    private String regoleDi(String ancora, ConfrontoPf memoria) {
+        String chiave = ancora == null ? "" : ancora;
+        String gia = memoria.regole.get(chiave);
+        if (gia != null) return gia;
+        String testo = null;   // null = non letto. Diverso da "letto e non contiene niente".
+        try {
+            java.util.List<String> argv = new ArrayList<>();
+            argv.add("/sbin/pfctl");
+            if (ancora != null) { argv.add("-a"); argv.add(ancora); }
+            argv.add("-sr");
+            org.mail_panel.util.Shell.Result r = org.mail_panel.util.Shell.run(
+                java.time.Duration.ofSeconds(20), argv.toArray(new String[0]));
+            if (r.success() && r.output() != null) testo = r.output();
+        } catch (Exception ignora) { }
+        if (testo != null) memoria.regole.put(chiave, testo);
+        return testo;
     }
 
     /** Gli indirizzi che Fail2ban elenca come bannati adesso per quella jail. */
@@ -1937,12 +1986,32 @@ public class Fail2banManager {
         if (!mt.find()) return null;
         PfBersaglio b = new PfBersaglio();
         b.tabella = mt.group(1);
+
         java.util.regex.Matcher ma = Pattern.compile("-a\\s+(\\S+)").matcher(cmd);
-        if (ma.find()) b.ancora = ma.group(1);
+        if (ma.find()) { b.ancora = ma.group(1); return b; }
+
+        // Nessun "-a" nel testo non vuol dire nessuna ancora. Il file dell'azione definisce
+        //     pfctl = pfctl -a f2b/<name>
+        // e fail2ban restituisce i comandi con i segnaposto NON espansi — si vede bene in
+        // "<iptables> -I ..." — quindi l'ancora e' nascosta dentro <pfctl> e cercarla nel testo
+        // non la trova mai. Cercare la tabella senza ancora significa guardare nel ruleset
+        // principale, dove non c'e': si concluderebbe "tabella inesistente" per ogni jail sana.
+        //
+        // L'ancora si ricava dalle stesse definizioni: la tabella e' "<tablename>-<name>" e
+        // l'ancora "f2b/<name>", quindi condividono <name>. Non e' una convenzione indovinata,
+        // e' la lettura delle due righe che la compongono. Resta comunque un candidato da
+        // provare, non una certezza: chi legge prova e guarda se la tabella risponde.
+        int trattino = b.tabella.indexOf('-');
+        if (trattino > 0 && trattino < b.tabella.length() - 1)
+            b.ancoraProbabile = "f2b/" + b.tabella.substring(trattino + 1);
         return b;
     }
 
-    static class PfBersaglio { String ancora; String tabella; }
+    static class PfBersaglio {
+        String ancora;          // scritta nel comando: certa
+        String ancoraProbabile; // ricavata dalle definizioni dell'azione: da provare
+        String tabella;
+    }
 
     private static class LetturaTabella {
         boolean letta, mancante;
@@ -1953,10 +2022,28 @@ public class Fail2banManager {
     /** Il confronto, jail per jail. */
     public static class ConfrontoPf {
         public final java.util.List<JailPf> jails = new ArrayList<>();
-        /** Indirizzi che Fail2ban crede bannati e che pf non blocca: passano. */
+        final java.util.Map<String, String> regole = new java.util.HashMap<>();
+        /**
+         * Indirizzi che Fail2ban crede bannati e che pf non blocca: passano.
+         *
+         * Ci finiscono anche quelli presenti nella tabella quando nessuna regola la legge:
+         * essere nella tabella e' una condizione necessaria, non sufficiente, e contarli come
+         * bloccati sarebbe lo stesso errore di leggere "Currently banned" come una prova.
+         */
         public int totaleNonApplicati() {
             int n = 0;
-            for (JailPf j : jails) n += j.soloInFail2ban.size();
+            for (JailPf j : jails) {
+                if (!j.letta) continue;
+                n += (!j.regolaVerificata || j.regolaPresente)
+                        ? j.soloInFail2ban.size() : j.credutiBannati.size();
+            }
+            return n;
+        }
+
+        /** Jail la cui tabella non e' letta da nessuna regola pf: bannano nel vuoto. */
+        public int totaleSenzaRegola() {
+            int n = 0;
+            for (JailPf j : jails) if (j.letta && j.regolaVerificata && !j.regolaPresente) n++;
             return n;
         }
         /**
@@ -1985,6 +2072,10 @@ public class Fail2banManager {
     public static class JailPf {
         public String jail = "", ancora = "", tabella = "", nota = "";
         public boolean letta, tabellaMancante;
+        /** Esiste una regola pf che legge questa tabella? Senza, la tabella non blocca nulla. */
+        public boolean regolaPresente;
+        /** Il ruleset e' stato letto davvero. Senza questo, regolaPresente non vuol dire niente. */
+        public boolean regolaVerificata;
         public final java.util.List<String> credutiBannati = new ArrayList<>();
         public final java.util.List<String> nelFirewall = new ArrayList<>();
         public final java.util.List<String> soloInFail2ban = new ArrayList<>();

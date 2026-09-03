@@ -482,6 +482,20 @@ public class ProtezioneWeb {
             maxretry = 10
             findtime = 600
             bantime  = 3600
+            # L'azione si dichiara, non si eredita. Senza questa riga la jail prendeva il valore
+            # predefinito di jail.conf, che e' basato su iptables: un comando che su FreeBSD non
+            # esiste. La jail rilevava e contava i ban regolarmente — 14.370 tentativi e 46 ban —
+            # e non ne bloccava nessuno, perche' il comando falliva ogni volta e nessuno lo
+            # guardava. Qui si usa pf, come tutte le altre jail scritte dal pannello.
+            #
+            # actiontype=<allports> non e' un dettaglio: l'azione pf costruisce la regola come
+            # "block quick proto tcp from <tabella> to <actiontype>", e il valore predefinito e'
+            # "any port $port". Senza una porta quella riga finisce con "port " e pf la rifiuta:
+            # la tabella verrebbe creata lo stesso — e' il comando prima — ma la regola che la
+            # usa no, e gli indirizzi bannati finirebbero in una tabella che nessuna regola
+            # legge. Sarebbe stato lo stesso guasto di prima con un nome diverso. "allports"
+            # e' la forma che il file dell'azione documenta per bloccare l'indirizzo intero.
+            action   = pf[name=mailpanel-pubblico, actiontype=<allports>]
             """.formatted(LOG_ACCESSI);
     }
 

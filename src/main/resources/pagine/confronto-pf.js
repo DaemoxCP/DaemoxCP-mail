@@ -27,10 +27,12 @@
                 const cieche = d.non_misurate || 0;
 
                 const banCiechi = d.ban_non_verificati || 0;
+                const senzaRegola = d.senza_regola || 0;
                 // Un ban dichiarato e non verificato pesa piu' di una jail ferma non verificata:
                 // c'e' un indirizzo che qualcuno crede bloccato e nessuno ha controllato.
                 if (buchi > 0) badge.innerHTML = '<span class="badge bg-danger">' + buchi + ' ban non applicati</span>';
                 else if (banCiechi > 0) badge.innerHTML = '<span class="badge bg-danger">' + banCiechi + ' ban non verificati</span>';
+                else if (senzaRegola > 0) badge.innerHTML = '<span class="badge bg-danger">' + senzaRegola + ' tabelle senza regola</span>';
                 else if (cieche > 0) badge.innerHTML = '<span class="badge bg-warning text-dark">' + cieche + ' jail non misurate</span>';
                 else badge.innerHTML = '<span class="badge bg-success">Coerenti</span>';
 
@@ -39,6 +41,8 @@
                     h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1"></i><strong>' + buchi + ' indirizzi risultano bannati ma pf non li blocca.</strong> Fail2ban li conta fra i suoi ban e la pagina li mostra bannati: in realtà passano.</div>';
                 } else if (banCiechi > 0) {
                     h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1"></i><strong>' + banCiechi + ' indirizzi sono dichiarati bannati senza che io possa verificarlo.</strong> Non sto dicendo che passino: sto dicendo che nessuno ha controllato, e il comando che quelle jail eseguono è scritto qui sotto perché si possa guardare.</div>';
+                } else if (senzaRegola > 0) {
+                    h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1"></i><strong>' + senzaRegola + ' jail hanno una tabella che nessuna regola pf legge.</strong> Fail2ban ci scrive dentro gli indirizzi e pf non li guarda: il ban risulta eseguito e non blocca. È il controllo che fa fail2ban stesso (<code>pfctl -sr</code>), e la causa tipica è una regola rifiutata all\'avvio dell\'azione.</div>';
                 } else if (cieche > 0) {
                     h += '<div class="alert alert-warning py-2"><i class="fas fa-circle-question me-1"></i>Di ' + cieche + ' jail non ho potuto leggere la tabella: per quelle non sto dicendo che vada bene, sto dicendo che non lo so.</div>';
                 }
@@ -59,14 +63,16 @@
                               + escapeHtml(j.nota || 'non misurata') + '</span>';
                         if ((j.comandi_ban || []).length > 0)
                             esito += '<div class="small text-muted mt-1"><code>' + j.comandi_ban.map(escapeHtml).join('</code><br><code>') + '</code></div>';
-                    } else if (j.tabella_mancante && f2b > 0) {
-                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>La tabella non esiste: nessuno di questi ' + f2b + ' ban blocca niente</span>';
+                    } else if (j.tabella_mancante) {
+                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>La tabella non esiste: ' + (f2b > 0 ? 'nessuno di questi ' + f2b + ' ban blocca niente' : 'il primo ban non bloccherebbe niente') + '</span>';
+                    } else if (!j.regola_presente) {
+                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>Nessuna regola pf legge questa tabella: gli indirizzi ci finiscono dentro e passano lo stesso' + (f2b > 0 ? ' (' + f2b + ' adesso)' : '') + '</span>';
                     } else if (mancanti.length > 0) {
                         esito = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>Non bloccati: ' + mancanti.map(escapeHtml).join(', ') + '</span>';
                     } else if (residui.length > 0) {
                         esito = '<span class="text-warning"><i class="fas fa-broom me-1"></i>Rimasti in pf dopo lo sban: ' + residui.map(escapeHtml).join(', ') + '</span>';
                     } else if (f2b === 0 && inPf === 0) {
-                        esito = '<span class="text-success"><i class="fas fa-check me-1"></i>Nessun ban attivo, e pf è d’accordo</span>';
+                        esito = '<span class="text-success"><i class="fas fa-check me-1"></i>Nessun ban attivo; tabella e regola pf sono al loro posto</span>';
                     } else {
                         esito = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Tutti applicati davvero</span>';
                     }
