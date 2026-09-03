@@ -71,7 +71,10 @@
                         if (j.log) pezzi.push('/var/log/fail2ban.log\n' + j.log);
                         if (j.sezioni) pezzi.push('Sezioni [' + j.jail + '] nei file di configurazione\n' + j.sezioni);
                         if (pezzi.length)
-                            esito += '<details class="small mt-2"><summary>Cosa vede fail2ban (da incollare)</summary>' +
+                            // Aperto, non richiuso dietro un click: questa riga esiste perche' la
+                            // misura NON e' riuscita, e l'evidenza che serve a capire perche' e'
+                            // esattamente cio' che chi guarda deve avere sotto gli occhi.
+                            esito += '<details class="small mt-2" open><summary>Cosa vede fail2ban (da incollare)</summary>' +
                                      '<pre class="mt-1 mb-0" style="white-space:pre-wrap;max-height:400px;overflow:auto">' +
                                      escapeHtml(pezzi.join('\n\n')) + '</pre></details>';
                     } else if (j.tabella_mancante) {

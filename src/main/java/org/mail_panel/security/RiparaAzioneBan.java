@@ -408,31 +408,35 @@ public final class RiparaAzioneBan {
             out.append("— Ultime righe che nominano ").append(jail).append(":\n")
                .append(sue.isEmpty() ? "(nessuna)" : String.join("\n", sue));
 
-            // 2. Tutto cio' che e' andato storto DOPO l'ultimo reload, senza filtrare per nome.
-            //    Un'azione che non si carica lascia un errore o un traceback che il nome della
-            //    jail spesso non lo contiene: cercarlo per nome significa non trovarlo mai, ed
-            //    e' il motivo per cui questo riquadro prima taceva.
-            int ultimoReload = -1;
-            for (int i = tutte.size() - 1; i >= 0; i--) {
-                String b = tutte.get(i).toLowerCase();
-                if (b.contains("reload") || b.contains("start") && b.contains("fail2ban v")) { ultimoReload = i; break; }
-            }
-            out.append("\n\n— Dopo l'ultimo reload");
-            if (ultimoReload < 0) {
-                out.append(" (nessun reload trovato nel log): nessuna riga da mostrare");
+            // 2. TUTTA la finestra dell'ultimo reload, senza filtri di nessun tipo.
+            //
+            // Le due versioni precedenti di questo riquadro hanno nascosto la risposta, ognuna a
+            // modo suo: la prima filtrava per nome della jail, e un errore di caricamento il nome
+            // spesso non ce l'ha; la seconda partiva dall'ultima riga contenente "reload", che e'
+            // "Reload finished", mostrando solo cio' che viene DOPO — mentre la spiegazione sta
+            // dentro il reload. Due filtri, due volte la stessa risposta buttata via.
+            //
+            // Quindi qui non si filtra: si prende la finestra e la si mostra intera. Un riquadro
+            // che mostra troppo si legge; uno che mostra la cosa sbagliata fa perdere giornate.
+            int fine = -1;
+            for (int i = tutte.size() - 1; i >= 0; i--)
+                if (tutte.get(i).contains("Reload finished")) { fine = i; break; }
+            if (fine < 0)
+                for (int i = tutte.size() - 1; i >= 0; i--)
+                    if (tutte.get(i).contains("Reload jail")) { fine = i; break; }
+
+            out.append("\n\n— L'ultimo reload per intero, senza filtri");
+            if (fine < 0) {
+                out.append(": nessun reload trovato nel log");
             } else {
-                out.append(" (").append(tutte.get(ultimoReload).trim()).append("):\n");
-                java.util.List<String> dopo = new ArrayList<>();
-                for (int i = ultimoReload; i < tutte.size() && dopo.size() < 25; i++) {
-                    String b = tutte.get(i).toLowerCase();
-                    if (b.contains("error") || b.contains("traceback") || b.contains("failed")
-                        || b.contains("no actions") || b.contains("not found")
-                        || b.contains("unable") || b.contains("invalid"))
-                        dopo.add(tutte.get(i));
-                }
-                out.append(dopo.isEmpty()
-                    ? "(nessun errore: fail2ban non si e' lamentato di niente dopo il reload)"
-                    : String.join("\n", dopo));
+                int inizio = Math.max(0, fine - 80);
+                // Si risale fino all'inizio vero del reload, se lo si trova nella finestra.
+                for (int i = fine; i >= inizio; i--)
+                    if (tutte.get(i).contains("Reload jail") || tutte.get(i).contains("Stopping all jails")
+                        || tutte.get(i).contains("Reloading")) { inizio = i; break; }
+                int ultimo = Math.min(tutte.size() - 1, fine + 20);
+                out.append(" (righe ").append(inizio + 1).append("-").append(ultimo + 1).append("):\n");
+                for (int i = inizio; i <= ultimo; i++) out.append(tutte.get(i)).append("\n");
             }
             return out.toString();
         } catch (Exception e) {
@@ -502,19 +506,35 @@ public final class RiparaAzioneBan {
         return null;
     }
 
+    private static final String CARTELLA_COPIE = "/var/db/mail-panel/copie-fail2ban";
+
+    /**
+     * La copia di sicurezza va FUORI da jail.d.
+     *
+     * Fail2ban carica i file di quella cartella, e una copia lasciata li' dentro e' un secondo
+     * file che definisce la stessa jail a un passo dall'essere letto: basta un nome che finisca
+     * per .conf. Le prime copie di oggi sono finite proprio li', e nella diagnosi comparivano
+     * accanto al file vero come se fossero configurazioni attive — ambiguita' che in un file che
+     * decide chi entra non ci deve essere.
+     */
     private static Path copia(Path f) throws Exception {
-        Path c = Paths.get(f.toString() + ".prima-di-pf-"
+        Path dir = Paths.get(CARTELLA_COPIE);
+        Files.createDirectories(dir);
+        Path c = dir.resolve(f.getFileName().toString() + ".prima-di-pf-"
             + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")));
         Files.copy(f, c);
+        copie.put(c, f);
         return c;
     }
 
-    private static void ripristina(List<Path> copie) {
-        for (Path c : copie) {
+    /** Dove ripristinare ciascuna copia: il nome del file non basta piu' a dirlo. */
+    private static final java.util.Map<Path, Path> copie = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static void ripristina(List<Path> fatte) {
+        for (Path c : fatte) {
             try {
-                String s = c.toString();
-                Path orig = Paths.get(s.substring(0, s.indexOf(".prima-di-pf-")));
-                Files.copy(c, orig, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                Path orig = RiparaAzioneBan.copie.get(c);
+                if (orig != null) Files.copy(c, orig, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception ignora) { }
         }
     }
