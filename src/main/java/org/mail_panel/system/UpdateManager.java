@@ -469,8 +469,14 @@ public final class UpdateManager {
             String t = riga.trim();
             if (t.isEmpty()) continue;
             // "nome-1.2.3    <   needs updating (index has 1.2.4)"
-            int sp = t.indexOf(' ');
-            String pv = sp > 0 ? t.substring(0, sp) : t;
+            //
+            // Solo "<" vuol dire che esiste una versione piu' recente. ">" (installato piu'
+            // nuovo del catalogo), "?" (non nel catalogo) e "!" (confronto fallito) sono
+            // differenze, non aggiornamenti: prenderle per tali direbbe a chi legge che per
+            // un pacchetto vulnerabile esiste una correzione che non esiste.
+            String[] campi = t.split("\\s+");
+            if (campi.length < 2 || !"<".equals(campi[1])) continue;
+            String pv = campi[0];
             int trattino = pv.lastIndexOf('-');
             if (trattino > 0) aggiornabili.add(pv.substring(0, trattino));
         }
@@ -7585,12 +7591,36 @@ public final class UpdateManager {
         try {
             r.put("so", sistemaOperativo());
 
-            // Quanti pacchetti differiscono dal catalogo locale. "-R" usa il catalogo del
-            // repository gia' scaricato: non va in rete.
+            // Quanti pacchetti differiscono dal catalogo locale, DIVISI PER MOTIVO.
+            //
+            // "pkg version -L=" mostra tutto cio' che non e' "=" , e il manuale (pkg-version(8))
+            // elenca quattro casi diversi: "<" installato piu' vecchio, ">" installato piu'
+            // recente del catalogo, "?" non presente nel catalogo, "!" confronto non riuscito.
+            // Solo il primo vuol dire "c'e' un aggiornamento".
+            //
+            // Contarli tutti insieme e chiamarli "versione piu' recente disponibile" dava un
+            // numero che non corrispondeva a niente: qui diceva 5 mentre "pkg upgrade -n"
+            // rispondeva "Your packages are up to date", cioe' zero. Un numero che nessuna
+            // altra schermata conferma fa dubitare di tutte le altre.
             String elenco = sh("pkg version -vRL= 2>/dev/null", 60);
-            int quanti = 0;
-            for (String riga : elenco.split("\n")) if (!riga.trim().isEmpty()) quanti++;
-            r.put("daAggiornare", quanti);
+            int daAggiornare = 0, piuRecenti = 0, fuoriCatalogo = 0, nonConfrontabili = 0;
+            for (String riga : elenco.split("\n")) {
+                String t = riga.trim();
+                if (t.isEmpty()) continue;
+                String[] campi = t.split("\\s+");
+                String stato = campi.length > 1 ? campi[1] : "";
+                switch (stato) {
+                    case "<" -> daAggiornare++;
+                    case ">" -> piuRecenti++;
+                    case "?" -> fuoriCatalogo++;
+                    case "!" -> nonConfrontabili++;
+                    default -> { }
+                }
+            }
+            r.put("daAggiornare", daAggiornare)
+             .put("piuRecentiDelCatalogo", piuRecenti)
+             .put("fuoriCatalogo", fuoriCatalogo)
+             .put("nonConfrontabili", nonConfrontabili);
 
             // L'eta' del catalogo: senza, il numero qui sopra sembra piu' preciso di quanto sia.
             r.put("catalogoGiorni", giorniDa("/var/db/pkg/repo-FreeBSD.sqlite"));

@@ -188,17 +188,83 @@ public class DiagnosiWeb {
             r.put("pfLetto", false);
         }
 
-        // fail2ban: c'e' una jail che guarda nginx?
+        // fail2ban: c'e' una jail che guarda un log di nginx?
+        //
+        // Prima la domanda era posta al NOME: "l'elenco delle jail contiene la parola nginx?".
+        // Sbagliava in tutte e due le direzioni. Su questo server la jail che protegge la 443
+        // si chiama "mailpanel-pubblico" e guarda /var/log/nginx/mailpanel-pubblico-access.log:
+        // un log di nginx a tutti gli effetti, ma senza quella parola nel nome — e la diagnosi
+        // annunciava che nessuno viene bannato sulle porte web, mentre veniva bannato. Al
+        // contrario, una jail chiamata "nginx-qualcosa" ma puntata altrove sarebbe passata per
+        // buona. Il nome di una cosa non e' la cosa: adesso si chiede a fail2ban QUALI FILE
+        // ogni jail sorveglia.
         Ris f2b = esegui("sh", "-c", "fail2ban-client status 2>/dev/null");
         if (f2b.codice == 0) {
             r.put("fail2banLetto", true).put("jail", f2b.uscita.trim());
-            r.put("jailNginx", f2b.uscita.toLowerCase(Locale.ROOT).contains("nginx"));
+
+            List<String> nomi = new ArrayList<>();
+            for (String riga : f2b.uscita.split("\n")) {
+                int i = riga.toLowerCase(Locale.ROOT).indexOf("jail list:");
+                if (i < 0) continue;
+                for (String x : riga.substring(i + "jail list:".length()).split(","))
+                    if (!x.trim().isEmpty()) nomi.add(x.trim());
+            }
+
+            JSONArray sorveglianza = new JSONArray();
+            boolean guardaNginx = false;
+            boolean tutteLette = true;
+            for (String nome : nomi) {
+                Ris lp = esegui("sh", "-c", "fail2ban-client get "
+                        + nome.replace("\"", "") + " logpath 2>/dev/null");
+                if (lp.codice != 0) { tutteLette = false; continue; }
+                boolean suNginx = lp.uscita.contains("/nginx/") || lp.uscita.contains("nginx-");
+                if (suNginx) guardaNginx = true;
+
+                // Quale porta protegge. Non e' una proprieta' della jail ma dell'AZIONE
+                // (fail2ban-client(1): "get <JAIL> actions", poi "get <JAIL> action <ACT>
+                // <proprieta'>"), quindi si passa di li'. Una jail puo' avere piu' azioni e
+                // ognuna la sua porta.
+                String azioni = "";
+                Ris ac = esegui("sh", "-c", "fail2ban-client get " + sicuro(nome) + " actions 2>/dev/null");
+                if (ac.codice == 0) azioni = ac.uscita.trim();
+                java.util.LinkedHashSet<String> porte = new java.util.LinkedHashSet<>();
+                boolean porteLette = false;
+                for (String az : azioni.replaceAll("(?s).*?:", "").split(",")) {
+                    String a = az.trim();
+                    if (a.isEmpty()) continue;
+                    Ris pr = esegui("sh", "-c", "fail2ban-client get " + sicuro(nome)
+                            + " action " + sicuro(a) + " port 2>/dev/null");
+                    if (pr.codice != 0) continue;
+                    String v = pr.uscita.trim();
+                    if (!v.isEmpty() && !v.toLowerCase(Locale.ROOT).contains("not ")) {
+                        porte.add(v); porteLette = true;
+                    }
+                }
+                sorveglianza.put(new JSONObject().put("jail", nome)
+                        .put("log", lp.uscita.trim()).put("suNginx", suNginx)
+                        .put("azioni", azioni)
+                        .put("porte", String.join(", ", porte))
+                        // "Non dichiarata" non e' "nessuna": con l'azione predefinita di pf il
+                        // ban vale per l'indirizzo, non per una porta sola. Dirlo invece di
+                        // lasciare la casella vuota, che si legge come "non protegge niente".
+                        .put("portaDichiarata", porteLette));
+            }
+            r.put("jailSorveglianza", sorveglianza);
+            r.put("jailNginx", guardaNginx);
+            // "Non sono riuscito a chiedere a tutte" non e' "nessuna guarda nginx".
+            r.put("jailTutteLette", tutteLette);
         } else {
             r.put("fail2banLetto", false);
         }
 
         r.put("verdetto", verdetto(r));
         return r;
+    }
+
+    /** Un nome che finisce dentro una riga di shell: si accettano solo i caratteri di un
+     *  nome di jail o di azione. Non si costruisce un comando con quello che arriva da fuori. */
+    private static String sicuro(String s) {
+        return s == null ? "" : s.replaceAll("[^A-Za-z0-9._-]", "");
     }
 
     /** Il riassunto, costruito solo su cio' che si e' potuto misurare. */
@@ -228,9 +294,28 @@ public class DiagnosiWeb {
                 p.add("Non c'e' nessun limite di frequenza ne' di connessioni: un singolo indirizzo puo' "
                     + "aprire richieste finche' nginx smette di accettarne.");
         }
-        if (r.optBoolean("fail2banLetto", false) && !r.optBoolean("jailNginx", false))
-            p.add("fail2ban funziona ma non ha una jail che guardi i log di nginx: chi insiste sulle "
-                + "porte web non viene bannato.");
+        if (r.optBoolean("fail2banLetto", false)) {
+            if (r.optBoolean("jailNginx", false)) {
+                // Si dice QUALE, cosi' l'affermazione e' verificabile da chi legge.
+                StringBuilder quali = new StringBuilder();
+                JSONArray sv = r.optJSONArray("jailSorveglianza");
+                for (int i = 0; sv != null && i < sv.length(); i++) {
+                    JSONObject j = sv.optJSONObject(i);
+                    if (j == null || !j.optBoolean("suNginx", false)) continue;
+                    if (quali.length() > 0) quali.append(", ");
+                    quali.append(j.optString("jail", "?"));
+                }
+                p.add("Una jail di fail2ban sorveglia un log di nginx (" + quali + "): su quel log chi "
+                    + "insiste viene bannato. Attenzione pero': una jail guarda UN log, non tutto "
+                    + "nginx — gli altri siti serviti restano scoperti se nessuna jail legge il loro.");
+            } else if (!r.optBoolean("jailTutteLette", true)) {
+                p.add("fail2ban funziona ma non sono riuscito a chiedere a tutte le jail quali log "
+                    + "sorveglino: non posso dire se le porte web siano coperte.");
+            } else {
+                p.add("fail2ban funziona ma nessuna delle sue jail sorveglia un log di nginx: chi "
+                    + "insiste sulle porte web non viene bannato.");
+            }
+        }
         if (!r.optBoolean("pfLetto", false))
             p.add("Non ho potuto leggere le regole di pf: non so se le porte web siano filtrate.");
         return String.join(" ", p);

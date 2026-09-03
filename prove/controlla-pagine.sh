@@ -8,6 +8,15 @@
 #
 # Da eseguire dalla radice del progetto, PRIMA di consegnare un jar.
 set -e
+
+# Si RICOSTRUISCE il jar prima di guardarlo.
+#
+# Senza questa riga, se la compilazione fallisce il controllo gira sul jar VECCHIO e
+# annuncia "tutte valide" mentre il sorgente e' rotto. E' successo il 03/09/2026: il
+# messaggio verde arrivava da un jar di venti minuti prima. Un controllo che misura una
+# cosa diversa da quella che sembra misurare e' peggio di nessun controllo.
+mvn -o -q package -DskipTests
+
 DIR=$(mktemp -d)
 javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/content/GeneraPagine.java
 java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.GeneraPagine "$DIR" >/dev/null

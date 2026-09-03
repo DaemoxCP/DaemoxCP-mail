@@ -4693,6 +4693,11 @@ public class SSLMailServer {
                         jailJson.put("total_banned", jail.totalBanned);
                         jailJson.put("currently_failed", jail.currentlyFailed);
                         jailJson.put("total_failed", jail.totalFailed);
+                        jailJson.put("porte", jail.porte);
+                        jailJson.put("porta_dichiarata", jail.portaDichiarata);
+                        jailJson.put("ban_usa_la_porta", jail.banUsaLaPorta);
+                        jailJson.put("comando_ban", jail.comandoBan);
+                        if (jail.logFile != null) jailJson.put("log", jail.logFile);
 
                         JSONArray bannedIps = new JSONArray();
                         for (String ip : jail.bannedIps) {
@@ -4863,6 +4868,18 @@ public class SSLMailServer {
                 String action = json.optString("action", "");
 
                 switch (action) {
+                    // Legge e basta: fa girare fail2ban-regex sul log della jail e dice se il
+                    // filtro aggancia qualcosa. Serve a distinguere "nessuno ha attaccato" da
+                    // "la jail non vede niente", che a schermo sono lo stesso zero.
+                    case "verifica_filtro" -> {
+                        String jail = json.optString("jail", "");
+                        Fail2banManager.FiltroCheck c = fail2banManager.verificaFiltro(jail);
+                        response.put("success", true)
+                                .put("jail", c.jail).put("log", c.log)
+                                .put("verificato", c.verificato).put("agganci", c.agganci)
+                                .put("righe_log", c.righeLog).put("messaggio", c.messaggio)
+                                .put("uscita", c.uscita);
+                    }
                     case "ban" -> {
                         String ip = json.getString("ip");
                         String jail = json.getString("jail");

@@ -144,6 +144,48 @@ public class Fail2banManager {
             jail.exists = true;
             jail.enabled = true;
 
+            // Quale porta protegge.
+            //
+            // Non e' una proprieta' della jail ma dell'AZIONE: fail2ban-client(1) espone
+            // "get <JAIL> actions" e poi "get <JAIL> action <ACT> <proprieta'>". Una jail puo'
+            // avere piu' azioni, ognuna con la sua porta.
+            //
+            // Quando nessuna la dichiara, la casella NON resta vuota: vuoto si legge come
+            // "non protegge niente", mentre con l'azione predefinita il ban vale per
+            // l'indirizzo e non per una porta sola. Si scrive che non e' dichiarata.
+            try {
+                String azioni = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " actions");
+                java.util.LinkedHashSet<String> porte = new java.util.LinkedHashSet<>();
+                String coda = azioni.contains(":") ? azioni.substring(azioni.lastIndexOf(':') + 1) : azioni;
+                for (String az : coda.split(",")) {
+                    String a = az.trim();
+                    if (a.isEmpty() || !isValidJailName(a)) continue;
+                    String v = executeCommand(FAIL2BAN_CLIENT + " get " + jailName
+                            + " action " + a + " port").trim();
+                    if (!v.isEmpty() && !v.toLowerCase().contains("not ") && !v.toLowerCase().contains("error"))
+                        porte.add(v);
+                }
+                jail.porte = String.join(", ", porte);
+                jail.portaDichiarata = !porte.isEmpty();
+
+                // Il comando di ban nomina la porta? E' l'unica cosa che dice se quell'elenco
+                // conti qualcosa. Si guarda il comando vero, non il nome dell'azione.
+                for (String az : coda.split(",")) {
+                    String a = az.trim();
+                    if (a.isEmpty() || !isValidJailName(a)) continue;
+                    String cmd = executeCommand(FAIL2BAN_CLIENT + " get " + jailName
+                            + " action " + a + " actionban").trim();
+                    if (cmd.isEmpty() || cmd.toLowerCase().contains("error")) continue;
+                    if (jail.comandoBan.isEmpty()) jail.comandoBan = cmd;
+                    if (cmd.contains("<port>") || cmd.contains("$port") || cmd.contains("port=")) {
+                        jail.banUsaLaPorta = true;
+                        jail.comandoBan = cmd;
+                    }
+                }
+            } catch (Exception ignora) {
+                jail.portaDichiarata = false;
+            }
+
             // Parse currently banned
             Pattern currentPattern = Pattern.compile("Currently banned:\\s*(\\d+)");
             java.util.regex.Matcher currentMatcher = currentPattern.matcher(output);
@@ -182,12 +224,10 @@ public class Fail2banManager {
                 }
             }
 
-            // Parse filter file
-            Pattern filterPattern = Pattern.compile("File list:\\s*(.+)");
-            java.util.regex.Matcher filterMatcher = filterPattern.matcher(output);
-            if (filterMatcher.find()) {
-                jail.logFile = filterMatcher.group(1).trim();
-            }
+            // Il log sorvegliato: stessa funzione che usa la verifica del filtro, cosi' le
+            // due non possono contraddirsi come e' successo con roundcube-auth.
+            java.util.List<String> lp = logPathDi(jailName);
+            if (!lp.isEmpty()) jail.logFile = String.join(", ", lp);
 
         } catch (Exception e) {
             jail.error = e.getMessage();
@@ -537,13 +577,47 @@ public class Fail2banManager {
     }
 
     /**
-     * Ritorna il path al file userlogins di Roundcube basato sull'auto-detect.
-     * Ritorna null se Roundcube non è stato trovato.
+     * Il file su cui Roundcube scrive DAVVERO i login. null se Roundcube non c'e'.
+     *
+     * Qui c'era scritto "userlogins", senza estensione, e la jail roundcube-auth sorvegliava
+     * quello. Ma rcube::write_log() costruisce il nome cosi':
+     *
+     *     $name .= $config->get('log_file_ext', '.log');
+     *
+     * cioe' aggiunge SEMPRE un'estensione, ".log" quando non e' configurata altrimenti. Il
+     * pannello creava e sorvegliava un file che Roundcube non scrive mai: la jail si caricava
+     * senza errori, restava a zero tentativi per sempre, e ogni schermata la dava per attiva.
+     * Un attacco alla webmail non sarebbe mai stato rilevato.
+     *
+     * Adesso: si legge l'estensione dalla configurazione, e se uno dei due file esiste ed e'
+     * gia' scritto vince quello — la prova batte la deduzione.
      */
     public String getRoundcubeUserloginsPath() {
         String base = detectRoundcubeInstallPath();
         if (base == null) return null;
-        return base + "/logs/userlogins";
+        String dir = base + "/logs";
+        Path conEstensione = Paths.get(dir, "userlogins" + estensioneLogRoundcube(base));
+        Path senzaEstensione = Paths.get(dir, "userlogins");
+        try {
+            if (Files.exists(conEstensione) && Files.size(conEstensione) > 0) return conEstensione.toString();
+            if (Files.exists(senzaEstensione) && Files.size(senzaEstensione) > 0) return senzaEstensione.toString();
+        } catch (Exception ignora) { }
+        // Nessuno dei due e' scritto: si usa il nome che Roundcube userebbe.
+        return conEstensione.toString();
+    }
+
+    /** L'estensione dei log di Roundcube: "log_file_ext" se impostata, altrimenti ".log". */
+    public String estensioneLogRoundcube(String installPath) {
+        try {
+            Path cfg = Paths.get(installPath + "/config/config.inc.php");
+            if (Files.exists(cfg)) {
+                String t = Files.readString(cfg, java.nio.charset.StandardCharsets.UTF_8);
+                java.util.regex.Matcher m = Pattern.compile(
+                        "\\$config\\[['\"]log_file_ext['\"]\\]\\s*=\\s*['\"]([^'\"]*)['\"]").matcher(t);
+                if (m.find()) return m.group(1);
+            }
+        } catch (Exception ignora) { }
+        return ".log";
     }
 
     public void ensureRoundcubeLoggingEnabled() {
@@ -589,7 +663,8 @@ public class Fail2banManager {
             // Crea il file userlogins vuoto se non esiste, perms www:www 640
             Path logsDir = Paths.get(installPath + "/logs");
             if (!Files.isDirectory(logsDir)) Files.createDirectories(logsDir);
-            Path userlogins = logsDir.resolve("userlogins");
+            // Lo stesso nome che usa la jail e che Roundcube scrivera': una funzione sola.
+            Path userlogins = Paths.get(getRoundcubeUserloginsPath());
             if (!Files.exists(userlogins)) {
                 Files.createFile(userlogins);
                 System.out.println("[Fail2banManager] Creato " + userlogins);
@@ -651,8 +726,10 @@ public class Fail2banManager {
             action = pf[name=postfix, port="smtp,465,submission"]
 
             # Roundcube webmail authentication failures
-            # NOTE: il log standard dei login Roundcube è 'userlogins' (no estensione)
-            # nel directory di installazione su FreeBSD
+            # Il nome del file NON si presume: rcube::write_log() aggiunge sempre
+            # l'estensione ('.log' se log_file_ext non e' impostata), quindi il percorso
+            # arriva da getRoundcubeUserloginsPath(), che la legge dalla configurazione e
+            # preferisce comunque il file gia' scritto, se ce n'e' uno.
             [roundcube-auth]
             enabled = true
             port = http,https
@@ -1432,6 +1509,211 @@ public class Fail2banManager {
         return defaultValue;
     }
 
+    /**
+     * La jail aggancia davvero quel log, oppure gira a vuoto?
+     *
+     * Perche' serve. "0 ban, 0 tentativi falliti" ha due letture opposte: nessuno ha mai
+     * attaccato quel servizio, oppure il filtro non corrisponde a nessuna riga e la jail e'
+     * accesa senza vedere niente. La scheda mostrava lo zero e basta, e uno zero che puo'
+     * voler dire due cose contrarie non e' un'informazione.
+     *
+     * Si risponde con fail2ban-regex(1), che prende un log e un filtro e dice quante righe
+     * combaciano. Confrontando con quante righe ha il log si distinguono i due casi:
+     *   - log vuoto            -> non si puo' dire niente, e si dice cosi'
+     *   - log pieno, 0 agganci -> il filtro non vede quel formato: la jail e' cieca
+     *   - agganci > 0          -> la jail funziona, e semplicemente non ci sono stati attacchi
+     *
+     * Legge e basta. La regex NON passa da una shell: si costruisce la riga di comando come
+     * lista di argomenti, altrimenti i suoi metacaratteri verrebbero interpretati due volte.
+     */
+    public FiltroCheck verificaFiltro(String jailName) {
+        FiltroCheck c = new FiltroCheck();
+        c.jail = jailName;
+        try {
+            if (!isValidJailName(jailName)) { c.messaggio = "nome di jail non valido"; return c; }
+
+            java.util.List<String> logs = logPathDi(jailName);
+            if (logs.isEmpty()) { c.messaggio = "questa jail non sorveglia un file di log"; return c; }
+            String log = logs.get(0);
+            c.log = log;
+
+            java.io.File f = new java.io.File(log);
+            if (!f.canRead()) { c.messaggio = "il log non e' leggibile dal pannello: " + log; return c; }
+            c.righeLog = contaRighe(f);
+            if (c.righeLog == 0) {
+                // Un log vuoto ha una terza spiegazione, ed e' la piu' insidiosa: il file
+                // giusto e' un altro, a un'estensione di distanza. Prima di dire "non lo so"
+                // si guarda accanto — e' un controllo che costa una lettura di cartella e
+                // trasforma un dubbio in una diagnosi.
+                String vicino = vicinoScritto(new java.io.File(log));
+                if (vicino != null) {
+                    c.messaggio = "il log sorvegliato e' VUOTO, ma nella stessa cartella c'e' "
+                                + vicino + ", che invece e' scritto. Quasi certamente la jail "
+                                + "sorveglia il file sbagliato: cosi' non vedra' mai niente, e "
+                                + "resterebbe a zero tentativi per sempre sembrando a posto.";
+                    return c;
+                }
+                c.messaggio = "il log e' vuoto e nella stessa cartella non c'e' un file simile gia' "
+                            + "scritto: non c'e' niente su cui il filtro possa corrispondere, quindi "
+                            + "lo zero di questa jail non dice ne' che funziona ne' che non funziona.";
+                return c;
+            }
+
+            // Il secondo argomento di fail2ban-regex puo' essere il NOME di un filtro. Si prova
+            // con quello della jail, che e' la convenzione; se non esiste si ripiega sulla
+            // failregex vera, chiesta a fail2ban.
+            String uscita = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, jailName));
+            if (uscita == null || !uscita.contains("Lines:")) {
+                String fr = primaFailregex(jailName);
+                if (fr == null) {
+                    c.messaggio = "non sono riuscito a ottenere ne' il filtro ne' la failregex: "
+                                + "non posso dire se la jail agganci qualcosa.";
+                    return c;
+                }
+                uscita = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, fr));
+            }
+            if (uscita == null || !uscita.contains("Lines:")) {
+                c.messaggio = "fail2ban-regex non ha risposto in modo leggibile: non posso dire "
+                            + "se la jail agganci qualcosa.";
+                return c;
+            }
+            c.uscita = uscita.length() > 3000 ? uscita.substring(uscita.length() - 3000) : uscita;
+
+            java.util.regex.Matcher m = Pattern.compile("(\\d+)\\s+matched").matcher(uscita);
+            c.agganci = m.find() ? Integer.parseInt(m.group(1)) : 0;
+            c.verificato = true;
+            c.messaggio = c.agganci > 0
+                ? "Il filtro aggancia " + c.agganci + " righe di questo log: la jail vede, e lo zero "
+                  + "dei ban vuol dire che non ci sono stati abbastanza tentativi, non che sia cieca."
+                : "Il log ha " + c.righeLog + " righe e il filtro non ne aggancia NESSUNA. La jail e' "
+                  + "accesa ma non vede niente: o quel log non contiene tentativi falliti, o il filtro "
+                  + "non corrisponde al formato che ci viene scritto. In questo secondo caso i ban non "
+                  + "scatterebbero mai, e lo zero a schermo sembrerebbe una buona notizia.";
+            return c;
+        } catch (Exception e) {
+            c.messaggio = "errore durante la verifica: " + e.getMessage();
+            return c;
+        }
+    }
+
+    /**
+     * I file di log che una jail sorveglia. Una funzione sola, usata da chi mostra e da chi
+     * verifica.
+     *
+     * Ce n'erano due che leggevano la stessa cosa in modi diversi: la scheda prendeva la riga
+     * "File list:" dall'uscita di "status", il controllo del filtro chiedeva "get <jail>
+     * logpath" e pretendeva una riga che COMINCIASSE con "/". Quell'uscita elenca i percorsi
+     * preceduti da un carattere di albero, quindi nessuna riga comincia con "/": il controllo
+     * annunciava "questa jail non sorveglia un file di log" mentre due righe piu' sotto la
+     * stessa scheda mostrava il log. Due letture della stessa cosa divergono sempre.
+     *
+     * Qui si cerca un percorso assoluto ovunque nella riga, e si prova la seconda fonte se la
+     * prima non da' niente.
+     */
+    private java.util.List<String> logPathDi(String jailName) {
+        java.util.List<String> out = new ArrayList<>();
+        for (String comando : new String[] {
+                FAIL2BAN_CLIENT + " get " + jailName + " logpath",
+                FAIL2BAN_CLIENT + " status " + jailName }) {
+            try {
+                for (String v : percorsiIn(executeCommand(comando)))
+                    if (!out.contains(v)) out.add(v);
+                if (!out.isEmpty()) return out;
+            } catch (Exception ignora) { }
+        }
+        return out;
+    }
+
+    /**
+     * I percorsi assoluti contenuti in un'uscita di fail2ban-client.
+     *
+     * Sta in un metodo suo per poter essere provato: le due uscite da cui va estratto hanno
+     * forme diverse — "get <jail> logpath" elenca i file preceduti da caratteri di albero
+     * ("`-", "|-"), "status <jail>" li mette dopo "File list:" — e una lettura che funziona
+     * su una sola delle due e' esattamente il difetto che si sta correggendo.
+     */
+    static java.util.List<String> percorsiIn(String uscita) {
+        java.util.List<String> out = new ArrayList<>();
+        if (uscita == null) return out;
+        java.util.regex.Matcher m = Pattern.compile("(/[^\\s,]+)").matcher(uscita);
+        while (m.find()) {
+            String v = m.group(1).trim();
+            // L'uscita nomina anche il comando invocato: non e' un log sorvegliato.
+            if (v.length() <= 1 || v.contains("fail2ban-client") || v.contains("fail2ban-regex")) continue;
+            if (!out.contains(v)) out.add(v);
+        }
+        return out;
+    }
+
+    /**
+     * Un file "fratello" nella stessa cartella, con lo stesso nome a meno dell'estensione, che
+     * a differenza di quello sorvegliato contiene qualcosa. Descrizione leggibile, o null.
+     *
+     * Serve a distinguere il caso peggiore fra quelli che producono un log vuoto: non "nessuno
+     * ha attaccato", ma "stiamo guardando il file sbagliato di un'estensione". E' successo con
+     * roundcube-auth: la jail sorvegliava "userlogins" mentre Roundcube scrive "userlogins.log".
+     */
+    private String vicinoScritto(java.io.File sorvegliato) {
+        try {
+            java.io.File dir = sorvegliato.getParentFile();
+            if (dir == null || !dir.isDirectory()) return null;
+            String nome = sorvegliato.getName();
+            String radice = nome.contains(".") ? nome.substring(0, nome.indexOf('.')) : nome;
+            java.io.File[] tutti = dir.listFiles();
+            if (tutti == null) return null;
+            for (java.io.File f : tutti) {
+                if (f.equals(sorvegliato) || !f.isFile()) continue;
+                String n = f.getName();
+                if (!n.equals(radice) && !n.startsWith(radice + ".")) continue;
+                if (f.length() <= 0) continue;
+                return "\"" + n + "\" (" + f.length() + " byte)";
+            }
+        } catch (Exception ignora) { }
+        return null;
+    }
+
+    public static class FiltroCheck {
+        public String jail = "", log = "", messaggio = "", uscita = "";
+        public boolean verificato;
+        public int agganci;
+        public long righeLog;
+    }
+
+    private static final String FAIL2BAN_REGEX = "/usr/local/bin/fail2ban-regex";
+
+    private long contaRighe(java.io.File f) {
+        try (BufferedReader r = new BufferedReader(new java.io.FileReader(f))) {
+            long n = 0;
+            while (r.readLine() != null) { n++; if (n > 200000) break; }
+            return n;
+        } catch (Exception e) { return 0; }
+    }
+
+    private String primaFailregex(String jail) {
+        try {
+            String out = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " failregex");
+            java.util.regex.Matcher m = Pattern.compile("'(.+?)'", Pattern.DOTALL).matcher(out);
+            return m.find() ? m.group(1) : null;
+        } catch (Exception e) { return null; }
+    }
+
+    /** Esegue senza shell: gli argomenti restano argomenti, i metacaratteri non si interpretano. */
+    private String eseguiArgv(java.util.List<String> argv) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(argv);
+            org.mail_panel.util.Shell.applicaPath(pb);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String l;
+                while ((l = r.readLine()) != null) sb.append(l).append('\n');
+            }
+            if (!p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)) { p.destroyForcibly(); return null; }
+            return sb.toString();
+        } catch (Exception e) { return null; }
+    }
+
     private String executeCommand(String command) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
@@ -1642,6 +1924,21 @@ public class Fail2banManager {
         public int totalFailed;
         public List<String> bannedIps = new ArrayList<>();
         public String logFile;
+        /** Le porte che la jail protegge, come le dichiara fail2ban. Vuoto = non dichiarata. */
+        public String porte = "";
+        /** false quando fail2ban non ha saputo dirle: "non dichiarata" non e' "nessuna". */
+        public boolean portaDichiarata;
+        /**
+         * Il comando di ban usa davvero la porta, oppure blocca l'indirizzo e basta?
+         *
+         * Senza questa distinzione l'elenco delle porte non si sa come leggere. Se il comando
+         * NON le nomina — il caso tipico di una tabella di pf — allora il ban vale per
+         * l'indirizzo su tutte le porte, e una lista che non corrisponde ai servizi veri non
+         * fa alcun danno: e' decorativa. Se invece le nomina, una lista sbagliata e' un buco,
+         * perche' l'attaccante viene bloccato su porte che non sta usando.
+         */
+        public boolean banUsaLaPorta;
+        public String comandoBan = "";
         public String error;
     }
 

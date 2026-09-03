@@ -40,10 +40,15 @@
                 return;
             }
             const ok = r.attivo === true;
+            // Il testo lo scrive il server, in "motivo": qui non se ne compone un secondo.
+            //
+            // Prima questa riga anteponeva un titolo ("Dopo un riavvio del server il pannello
+            // torna su da solo") e poi accodava motivo, che diceva la stessa cosa con altre
+            // parole: a schermo la frase compariva due volte di fila. Due punti che scrivono
+            // la stessa frase sono due punti che un giorno la scriveranno diversa.
             el.innerHTML = '<div class="alert alert-' + (ok ? 'success' : 'warning') + ' py-2 small mb-0">'
                 + '<i class="fas fa-' + (ok ? 'check-circle' : 'triangle-exclamation') + ' me-1"></i>'
-                + '<strong>Dopo un riavvio del server il pannello ' + (ok ? 'torna su da solo' : 'resta spento') + '.</strong> '
-                + homeEsc(r.motivo || '')
+                + '<strong>' + homeEsc(r.motivo || (ok ? 'Il pannello riparte da solo.' : 'Il pannello non riparte da solo.')) + '</strong>'
                 + (ok ? '' : ' <a href="/updates" class="alert-link">Vai alla scheda Sistema operativo</a>')
                 + '</div>';
         }
@@ -166,13 +171,28 @@
             // nessuna vulnerabilita'. Messi uno sotto l'altro con due numeri diversi si
             // leggono come una contraddizione, e chi guarda pensa che uno dei due sia rotto.
             const n = r.daAggiornare || 0;
-            h += '<tr><td><strong>Pacchetti con una versione pi&ugrave; recente</strong></td><td>'
+            // Le altre tre categorie NON sono aggiornamenti, e vanno separate: contarle insieme
+            // dava un numero che nessun'altra schermata confermava.
+            const altre = [];
+            if (r.piuRecentiDelCatalogo) altre.push(r.piuRecentiDelCatalogo
+                + ' installati in versione <strong>pi&ugrave; recente</strong> di quella nel catalogo');
+            if (r.fuoriCatalogo) altre.push(r.fuoriCatalogo
+                + ' <strong>non presenti</strong> nel catalogo (compilati a mano, o da un altro repository)');
+            if (r.nonConfrontabili) altre.push(r.nonConfrontabili
+                + ' con le versioni <strong>non confrontabili</strong>');
+            h += '<tr><td><strong>Pacchetti da aggiornare</strong></td><td>'
                + (n === 0 ? '<span class="badge bg-success">nessuno</span>'
                           : '<span class="badge bg-warning text-dark">' + n + '</span>')
                + eta(r.catalogoGiorni, 'catalogo')
-               + '<div class="small text-muted">Confronto delle versioni col catalogo gi&agrave; '
-               + 'scaricato, senza toccare la rete. La simulazione vera &egrave; in '
-               + '<a href="/updates">Aggiornamenti</a>.</div></td></tr>';
+               + '<div class="small text-muted">Sono i pacchetti la cui versione installata &egrave; '
+               + '<strong>pi&ugrave; vecchia</strong> di quella nel catalogo gi&agrave; scaricato: '
+               + 'l&rsquo;unico caso in cui esiste davvero un aggiornamento. La simulazione vera '
+               + '&egrave; in <a href="/updates">Aggiornamenti</a>.</div>'
+               + (altre.length
+                   ? '<div class="small text-muted mt-1">Diversi dal catalogo per altri motivi, che '
+                     + '<strong>non</strong> sono aggiornamenti: ' + altre.join('; ') + '.</div>'
+                   : '')
+               + '</td></tr>';
 
             const v = r.vulnerabili || 0;
             h += '<tr><td><strong>Pacchetti con vulnerabilit&agrave; note</strong></td><td>'
