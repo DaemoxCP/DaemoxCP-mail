@@ -63,6 +63,17 @@
                               + escapeHtml(j.nota || 'non misurata') + '</span>';
                         if ((j.comandi_ban || []).length > 0)
                             esito += '<div class="small text-muted mt-1"><code>' + j.comandi_ban.map(escapeHtml).join('</code><br><code>') + '</code></div>';
+                        // L'evidenza grezza, aperta a richiesta: cosa risponde fail2ban, cosa ha
+                        // scritto nel log, e quali file definiscono questa jail. Serve a poterla
+                        // leggere e a poterla incollare a qualcun altro senza passare da ssh.
+                        const pezzi = [];
+                        if (j.uscita_azioni) pezzi.push('$ fail2ban-client get ' + j.jail + ' actions\n' + j.uscita_azioni);
+                        if (j.log) pezzi.push('/var/log/fail2ban.log\n' + j.log);
+                        if (j.sezioni) pezzi.push('Sezioni [' + j.jail + '] nei file di configurazione\n' + j.sezioni);
+                        if (pezzi.length)
+                            esito += '<details class="small mt-2"><summary>Cosa vede fail2ban (da incollare)</summary>' +
+                                     '<pre class="mt-1 mb-0" style="white-space:pre-wrap;max-height:400px;overflow:auto">' +
+                                     escapeHtml(pezzi.join('\n\n')) + '</pre></details>';
                     } else if (j.tabella_mancante) {
                         esito = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>La tabella non esiste: ' + (f2b > 0 ? 'nessuno di questi ' + f2b + ' ban blocca niente' : 'il primo ban non bloccherebbe niente') + '</span>';
                     } else if (!j.regola_presente) {

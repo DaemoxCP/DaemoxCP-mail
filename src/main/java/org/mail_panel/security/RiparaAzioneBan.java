@@ -48,16 +48,39 @@ public final class RiparaAzioneBan {
     public static JSONObject diagnosi() {
         JSONObject r = new JSONObject();
         JSONArray rotte = new JSONArray();
+        JSONArray nonGiudicate = new JSONArray();
+        int esaminate = 0;
         for (String jail : jailAttive()) {
             String cmd = comandoBan(jail);
-            if (cmd == null || cmd.isEmpty()) continue;
+            if (cmd == null || cmd.isEmpty()) {
+                // Senza l'uscita cruda questa riga e' un vicolo cieco: dice che non si sa, e non
+                // lascia a chi legge nessun modo di sapere. Con l'uscita, il passo successivo lo
+                // puo' fare chiunque guardi la pagina.
+                nonGiudicate.put(new JSONObject().put("jail", jail)
+                    .put("perche", "non sono riuscito a farmi dire quale comando esegue")
+                    .put("uscita", uscitaAzioni(jail))
+                    .put("log", erroriLogPer(jail))
+                    .put("sezioni", sezioniCheDefiniscono(jail)));
+                continue;
+            }
             String eseguibile = primoEseguibile(cmd);
-            if (eseguibile == null) continue;
+            if (eseguibile == null) {
+                // Salto deliberato: la riga non nomina chiaramente un programma. Va DETTO, non
+                // taciuto — una jail saltata in silenzio fa diventare verde un controllo che
+                // semplicemente non l'ha guardata, che e' il difetto che qui si sta cercando.
+                nonGiudicate.put(new JSONObject().put("jail", jail)
+                    .put("perche", "il comando non nomina un programma che io possa cercare")
+                    .put("comando", cmd));
+                continue;
+            }
+            esaminate++;
             if (esiste(eseguibile)) continue;
             rotte.put(new JSONObject()
                 .put("jail", jail).put("comando", cmd).put("eseguibile", eseguibile));
         }
         return r.put("success", true).put("rotte", rotte)
+                .put("esaminate", esaminate)
+                .put("non_giudicate", nonGiudicate)
                 .put("riparabili", rotte.length() > 0);
     }
 
@@ -81,7 +104,7 @@ public final class RiparaAzioneBan {
                 if (!prima.contains("Scritto dal pannello")) {
                     passi.put(passo("mailpanel-pubblico", false,
                         JAIL_PUBBLICO + " non e' il file scritto dal pannello: non lo tocco. "
-                        + "Aggiungi a mano  action = pf[name=mailpanel-pubblico, actiontype=<allports>]  "
+                        + "Aggiungi a mano  action = pf[name=mailpanel-pubblico, port=\"http,https\"]  "
                         + "nella sezione [mailpanel-pubblico]."));
                     daGuardareAMano = true;
                 } else if (!prima.equals(dopo)) {
@@ -89,7 +112,8 @@ public final class RiparaAzioneBan {
                     Files.writeString(pub, dopo, StandardCharsets.UTF_8);
                     toccato = true;
                     passi.put(passo("mailpanel-pubblico", true,
-                        "Riscritto " + JAIL_PUBBLICO + " con action = pf[name=mailpanel-pubblico]"));
+                        "Riscritto " + JAIL_PUBBLICO + ". Riga scritta: "
+                        + rigaAzioneDi(dopo)));
                 } else {
                     passi.put(passo("mailpanel-pubblico", true, "Gia' corretto, non toccato"));
                 }
@@ -117,18 +141,38 @@ public final class RiparaAzioneBan {
                         Files.writeString(loc, e.contenuto, StandardCharsets.UTF_8);
                         toccato = true;
                         passi.put(passo("mail-panel-auth", true,
-                            "Aggiornata la sola riga dell'azione in " + JAIL_LOCAL));
+                            "Aggiornata la sola riga dell'azione in " + JAIL_LOCAL
+                            + ". Riga scritta: " + rigaAzioneDi(e.contenuto)));
                     }
                 }
             } else {
                 passi.put(passo("mail-panel-auth", true, "jail.local non esiste: niente da riparare"));
             }
 
+            if (!toccato && !daGuardareAMano) {
+                // I file possono essere gia' corretti mentre il processo in esecuzione ha ancora
+                // in memoria la configurazione di prima: sono due cose diverse, e fermarsi qui
+                // direbbe "non serviva" guardando solo il disco. Se il runtime non riporta
+                // l'azione di qualche jail, il lavoro non e' finito — si ricarica e si riguarda.
+                java.util.List<String> mute = new ArrayList<>();
+                for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
+                    String c = comandoBan(jail);
+                    if (c == null || c.isEmpty()) mute.add(jail);
+                }
+                if (mute.isEmpty())
+                    return r.put("success", true).put("passi", passi)
+                            .put("message", "Nessuna delle due jail aveva bisogno di essere corretta, "
+                                          + "e a runtime entrambe riportano la propria azione.");
+
+                passi.put(passo("configurazione", true,
+                    "I file su disco sono gia' corretti, ma a runtime queste jail non riportano la "
+                    + "propria azione: " + String.join(", ", mute) + ". Disco e memoria non "
+                    + "coincidono, quindi ricarico e riguardo."));
+                toccato = true;
+            }
             if (!toccato)
-                return r.put("success", !daGuardareAMano).put("passi", passi)
-                        .put("message", daGuardareAMano
-                            ? "Non ho toccato niente: una sezione va guardata a mano, il dettaglio dice quale e perche'."
-                            : "Nessuna delle due jail aveva bisogno di essere corretta.");
+                return r.put("success", false).put("passi", passi)
+                        .put("message", "Non ho toccato niente: una sezione va guardata a mano, il dettaglio dice quale e perche'.");
 
             // 3. Ricarica.
             Shell.Result rel = Shell.run(Duration.ofSeconds(30), CLIENT, "reload");
@@ -149,10 +193,24 @@ public final class RiparaAzioneBan {
             for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
                 String cmd = comandoBan(jail);
                 boolean ok = cmd != null && cmd.contains("pfctl");
-                if (cmd == null) {
-                    // La jail puo' semplicemente non essere installata: non e' un fallimento.
-                    verifica.put(new JSONObject().put("jail", jail).put("ok", true)
-                        .put("nota", "non attiva su questo sistema"));
+                if (cmd == null || cmd.isEmpty()) {
+                    // Distinguere "non c'e'" da "c'e' e non parla": la prima non e' un guasto,
+                    // la seconda si', e confonderle assolverebbe proprio il caso che stiamo
+                    // inseguendo. Lo si decide chiedendo se la jail esiste, non presumendolo.
+                    Shell.Result st = Shell.run(Duration.ofSeconds(10), CLIENT, "status", jail);
+                    boolean esisteJail = st.success() && !st.output().contains("does not exist");
+                    if (!esisteJail) {
+                        verifica.put(new JSONObject().put("jail", jail).put("ok", true)
+                            .put("nota", "non attiva su questo sistema"));
+                        continue;
+                    }
+                    tutteOk = false;
+                    verifica.put(new JSONObject().put("jail", jail).put("ok", false)
+                        .put("nota", "la jail esiste ma non riporta nessuna azione nemmeno dopo il "
+                                   + "reload. Alla richiesta delle azioni fail2ban risponde: "
+                                   + uscitaAzioni(jail))
+                        .put("log", erroriLogPer(jail))
+                        .put("sezioni", sezioniCheDefiniscono(jail)));
                     continue;
                 }
                 if (!ok) tutteOk = false;
@@ -213,8 +271,18 @@ public final class RiparaAzioneBan {
         if (rigaAzione >= 0) {
             String t = righe[rigaAzione].trim();
             String valore = t.substring(t.indexOf('=') + 1).trim();
-            if (valore.equals("pf") || valore.startsWith("pf[") || valore.startsWith("pf "))
-                return Esito.giaAPosto();
+            // "Comincia con pf" non basta per dire che va bene, e nemmeno "non contiene
+            // segnaposto". Va riconosciuta la forma INTERA che si sa funzionare qui:
+            // pf[name=..., port="..."]. Lo dico dopo averlo sbagliato due volte con lo stesso
+            // meccanismo — prima "actiontype=<allports>", poi "actiontype=any" — ed entrambe
+            // sarebbero state promosse da un controllo piu' permissivo e lasciate li' per
+            // sempre, mentre fail2ban rispondeva "No actions for jail ...", cioe' quella jail
+            // non bannava niente. Una porta dichiarata e' la condizione che distingue le
+            // quattro jail con tabella E regola da quelle senza.
+            boolean pf = valore.equals("pf") || valore.startsWith("pf[") || valore.startsWith("pf ");
+            boolean formaBuona = pf && !valore.contains("<")
+                              && valore.contains("port=") && valore.contains("name=");
+            if (formaBuona) return Esito.giaAPosto();
             int seg = rigaAzione + 1;
             if (seg < fine && !righe[seg].trim().isEmpty()
                 && (righe[seg].startsWith(" ") || righe[seg].startsWith("\t")))
@@ -225,7 +293,7 @@ public final class RiparaAzioneBan {
 
         // allports, non la porta: l'azione pf costruisce "... to any port $port" e senza porta
         // pf rifiuta la regola, lasciando la tabella senza nessuno che la legga.
-        String azione = "action   = pf[name=" + jail + ", actiontype=<allports>]";
+        String azione = "action   = pf[name=" + jail + ", port=\"0:65535\"]";
         java.util.List<String> out = new ArrayList<>(java.util.Arrays.asList(righe));
         if (rigaAzione >= 0) {
             out.set(rigaAzione, azione);
@@ -305,6 +373,119 @@ public final class RiparaAzioneBan {
             for (String n : m.group(1).split(","))
                 if (!n.trim().isEmpty()) out.add(n.trim());
         return out;
+    }
+
+    /** La riga dell'azione dentro un testo di configurazione: si mostra cio' che si e' scritto. */
+    private static String rigaAzioneDi(String contenuto) {
+        for (String r : contenuto.split("\n")) {
+            String t = r.trim();
+            if (t.startsWith("action") && t.contains("=")) return t;
+        }
+        return "(nessuna riga action trovata)";
+    }
+
+    /**
+     * Le righe di /var/log/fail2ban.log che parlano di questa jail e di errori.
+     *
+     * Quando fail2ban dice "No actions for jail X" non spiega perche' li', ma lo ha gia' scritto
+     * nel proprio log al momento del caricamento. Mostrarlo e' l'unico modo perche' chi guarda
+     * la pagina — e chi legge il suo racconto — possa sapere la causa invece di ipotizzarla.
+     */
+    static String erroriLogPer(String jail) {
+        try {
+            Path log = Paths.get("/var/log/fail2ban.log");
+            if (!Files.exists(log)) return "(/var/log/fail2ban.log non esiste)";
+            java.util.List<String> tutte = Files.readAllLines(log, StandardCharsets.UTF_8);
+            StringBuilder out = new StringBuilder();
+
+            // 1. Le ultime righe che nominano questa jail, di qualunque livello. Il livello non
+            //    si filtra: la riga piu' informativa finora e' stata una WARNING di routine
+            //    ("already banned") che, venendo dal modulo delle azioni, ha dimostrato che la
+            //    jail le azioni ce le ha — l'opposto di quello che sospettavo.
+            java.util.List<String> sue = new ArrayList<>();
+            for (int i = tutte.size() - 1; i >= 0 && sue.size() < 8; i--)
+                if (tutte.get(i).contains(jail)) sue.add(0, tutte.get(i));
+            out.append("— Ultime righe che nominano ").append(jail).append(":\n")
+               .append(sue.isEmpty() ? "(nessuna)" : String.join("\n", sue));
+
+            // 2. Tutto cio' che e' andato storto DOPO l'ultimo reload, senza filtrare per nome.
+            //    Un'azione che non si carica lascia un errore o un traceback che il nome della
+            //    jail spesso non lo contiene: cercarlo per nome significa non trovarlo mai, ed
+            //    e' il motivo per cui questo riquadro prima taceva.
+            int ultimoReload = -1;
+            for (int i = tutte.size() - 1; i >= 0; i--) {
+                String b = tutte.get(i).toLowerCase();
+                if (b.contains("reload") || b.contains("start") && b.contains("fail2ban v")) { ultimoReload = i; break; }
+            }
+            out.append("\n\n— Dopo l'ultimo reload");
+            if (ultimoReload < 0) {
+                out.append(" (nessun reload trovato nel log): nessuna riga da mostrare");
+            } else {
+                out.append(" (").append(tutte.get(ultimoReload).trim()).append("):\n");
+                java.util.List<String> dopo = new ArrayList<>();
+                for (int i = ultimoReload; i < tutte.size() && dopo.size() < 25; i++) {
+                    String b = tutte.get(i).toLowerCase();
+                    if (b.contains("error") || b.contains("traceback") || b.contains("failed")
+                        || b.contains("no actions") || b.contains("not found")
+                        || b.contains("unable") || b.contains("invalid"))
+                        dopo.add(tutte.get(i));
+                }
+                out.append(dopo.isEmpty()
+                    ? "(nessun errore: fail2ban non si e' lamentato di niente dopo il reload)"
+                    : String.join("\n", dopo));
+            }
+            return out.toString();
+        } catch (Exception e) {
+            return "(non sono riuscito a leggere fail2ban.log: " + e.getMessage() + ")";
+        }
+    }
+
+    /**
+     * Ogni file di configurazione che definisce questa jail, con la sezione per intero.
+     *
+     * Serve a rispondere a "cosa vede fail2ban", che non e' la stessa domanda di "cosa ho
+     * scritto". Fail2ban legge jail.conf, poi jail.local, poi tutto jail.d in ordine, e l'ultima
+     * definizione vince: una seconda sezione con lo stesso nome, in un file che nessuno guarda,
+     * spiegherebbe da sola perche' l'azione appena scritta non ha nessun effetto. Finche' non si
+     * guarda, resta un'ipotesi fra le tante.
+     */
+    static String sezioniCheDefiniscono(String jail) {
+        StringBuilder out = new StringBuilder();
+        try {
+            java.util.List<Path> file = new ArrayList<>();
+            file.add(Paths.get("/usr/local/etc/fail2ban/jail.conf"));
+            file.add(Paths.get(JAIL_LOCAL));
+            Path d = Paths.get("/usr/local/etc/fail2ban/jail.d");
+            if (Files.isDirectory(d))
+                try (var s2 = Files.list(d)) { s2.sorted().forEach(file::add); }
+
+            for (Path f : file) {
+                if (!Files.isRegularFile(f)) continue;
+                java.util.List<String> righe = Files.readAllLines(f, StandardCharsets.UTF_8);
+                for (int i = 0; i < righe.size(); i++) {
+                    if (!righe.get(i).trim().equals("[" + jail + "]")) continue;
+                    out.append(out.length() > 0 ? "\n\n" : "")
+                       .append(f).append(" (riga ").append(i + 1).append("):\n");
+                    for (int j = i; j < righe.size(); j++) {
+                        String t = righe.get(j).trim();
+                        if (j > i && t.startsWith("[") && t.endsWith("]")) break;
+                        out.append("  ").append(righe.get(j)).append("\n");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return "(non sono riuscito a leggere i file di configurazione: " + e.getMessage() + ")";
+        }
+        return out.length() == 0
+            ? "(nessun file sotto /usr/local/etc/fail2ban definisce [" + jail + "])"
+            : out.toString();
+    }
+
+    /** Cosa risponde fail2ban quando gli si chiedono le azioni di una jail, testuale. */
+    private static String uscitaAzioni(String jail) {
+        Shell.Result a = Shell.run(Duration.ofSeconds(10), CLIENT, "get", jail, "actions");
+        String u = a.output() == null ? "" : a.output().trim();
+        return u.isEmpty() ? "(nessuna risposta)" : u;
     }
 
     private static String comandoBan(String jail) {

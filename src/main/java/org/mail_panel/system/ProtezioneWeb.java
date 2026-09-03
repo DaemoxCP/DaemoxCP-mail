@@ -488,14 +488,26 @@ public class ProtezioneWeb {
             # e non ne bloccava nessuno, perche' il comando falliva ogni volta e nessuno lo
             # guardava. Qui si usa pf, come tutte le altre jail scritte dal pannello.
             #
-            # actiontype=<allports> non e' un dettaglio: l'azione pf costruisce la regola come
+            # actiontype=any non e' un dettaglio: l'azione pf costruisce la regola come
             # "block quick proto tcp from <tabella> to <actiontype>", e il valore predefinito e'
             # "any port $port". Senza una porta quella riga finisce con "port " e pf la rifiuta:
             # la tabella verrebbe creata lo stesso — e' il comando prima — ma la regola che la
             # usa no, e gli indirizzi bannati finirebbero in una tabella che nessuna regola
-            # legge. Sarebbe stato lo stesso guasto di prima con un nome diverso. "allports"
-            # e' la forma che il file dell'azione documenta per bloccare l'indirizzo intero.
-            action   = pf[name=mailpanel-pubblico, actiontype=<allports>]
+            # legge. Sarebbe stato lo stesso guasto di prima con un nome diverso.
+            #
+            # Si dichiara una PORTA, non un actiontype. Ci sono arrivato per esclusione, e la
+            # strada sbagliata merita di restare scritta: "actiontype=<allports>" e poi
+            # "actiontype=any" sono la forma che la documentazione dell'azione mostra, ma fail2ban
+            # su questo sistema non li accetta come parametro di una jail — la risposta a
+            # "get <jail> actions" diventa "No actions for jail ...", cioe' la jail viene caricata
+            # SENZA nessuna azione e non banna affatto. Peggio del difetto di partenza, dove
+            # almeno un'azione c'era, per quanto inservibile.
+            #
+            # Questa forma invece e' dimostrata funzionare proprio qui: e' identica a quella delle
+            # quattro jail di posta, che il confronto con pf mostra avere tabella E regola. Fra
+            # cio' che la documentazione lascia intendere e cio' che il server fa vedere, vince
+            # il server.
+            action   = pf[name=mailpanel-pubblico, port="http,https"]
             """.formatted(LOG_ACCESSI);
     }
 

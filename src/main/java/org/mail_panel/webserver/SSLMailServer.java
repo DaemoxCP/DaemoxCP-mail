@@ -4896,7 +4896,10 @@ public class SSLMailServer {
                                 .put("nel_firewall", new JSONArray(j.nelFirewall))
                                 .put("solo_in_fail2ban", new JSONArray(j.soloInFail2ban))
                                 .put("solo_in_pf", new JSONArray(j.soloInPf))
-                                .put("comandi_ban", new JSONArray(j.comandiBan)));
+                                .put("comandi_ban", new JSONArray(j.comandiBan))
+                                .put("uscita_azioni", j.uscitaAzioni)
+                                .put("log", j.logFail2ban)
+                                .put("sezioni", j.sezioni));
                         }
                         response.put("success", true).put("jails", jj)
                                 .put("non_applicati", c.totaleNonApplicati())
@@ -7863,7 +7866,8 @@ public class SSLMailServer {
         checks.put(makeCheck("fail2ban-installed",
             "Fail2ban installato",
             f2bInstalled,
-            f2bInstalled ? "Pacchetto py311-fail2ban presente sul sistema" : "Il pacchetto Fail2ban non è installato",
+            f2bInstalled ? ("Pacchetto py311-fail2ban presente sul sistema. " + versioneFail2ban())
+                         : "Il pacchetto Fail2ban non è installato",
             f2bInstalled ? null : "Senza Fail2ban gli IP che falliscono il login non vengono bannati a livello firewall.",
             f2bInstalled ? null : "install_fail2ban",
             f2bInstalled ? null : "Esegue: pkg install -y py311-fail2ban"));
@@ -8058,7 +8062,38 @@ public class SSLMailServer {
             banDettaglio = "Fail2ban non e' in esecuzione: non ho potuto chiedere a nessuna jail "
                          + "quale comando esegua per bannare";
         } else if (rotte.length() == 0) {
-            banDettaglio = "Ogni jail attiva banna con un comando che esiste su questo sistema";
+            int esaminateBan = diagBan.optInt("esaminate", 0);
+            JSONArray nonGiud = diagBan.optJSONArray("non_giudicate");
+            if (esaminateBan == 0) {
+                banEseguibile = false;
+                banDettaglio = "Non sono riuscito a giudicare il comando di nessuna jail: questo "
+                             + "controllo non ha guardato niente";
+            } else {
+                banDettaglio = "Guardate " + esaminateBan + " jail: ognuna banna con un comando che "
+                             + "esiste su questo sistema";
+                if (nonGiud != null && nonGiud.length() > 0) {
+                    // Non giudicata non e' promossa. Se una jail non riporta la propria azione,
+                    // il piu' delle volte e' perche' quell'azione non si e' caricata — cioe' non
+                    // banna affatto — e lasciare verde il controllo per le altre nasconderebbe
+                    // esattamente il caso peggiore dietro la maggioranza sana.
+                    banEseguibile = false;
+                    StringBuilder ng = new StringBuilder();
+                    for (int i = 0; i < nonGiud.length(); i++) {
+                        JSONObject x = nonGiud.getJSONObject(i);
+                        if (ng.length() > 0) ng.append(" | ");
+                        ng.append(x.optString("jail")).append(": ").append(x.optString("perche"));
+                        // L'evidenza accanto al verdetto: cosa ha risposto fail2ban, e cosa ha
+                        // scritto nel proprio log. Senza, la riga dice solo che non si sa.
+                        String u = x.optString("uscita", "");
+                        if (!u.isEmpty()) ng.append(" [fail2ban risponde: ").append(u).append("]");
+                        String lg = x.optString("log", "");
+                        if (!lg.isEmpty()) ng.append(" [fail2ban.log: ").append(lg.replace("\n", " ⏎ ")).append("]");
+                    }
+                    banDettaglio += ". NON giudicate, e quindi non promosse — " + ng
+                                 + ". Una jail che non riporta la propria azione con ogni probabilita' "
+                                 + "non l'ha caricata, e quindi non banna";
+                }
+            }
         } else {
             banEseguibile = false;
             StringBuilder b = new StringBuilder();
@@ -8267,6 +8302,33 @@ public class SSLMailServer {
             // riusiamo il sessionCode dell'exchange — si ottiene fuori. Qui generichiamo il check.
         } catch (Exception ignored) {}
         return r;
+    }
+
+    /**
+     * Versione esatta di Fail2ban e del pacchetto, testuali.
+     *
+     * Serve a leggere la documentazione giusta. Le opzioni di un'azione cambiano fra versioni, e
+     * una pagina letta per la versione sbagliata porta a scrivere una configurazione che il
+     * sistema rifiuta — con l'aggravante che il rifiuto puo' essere silenzioso, come quando una
+     * jail viene caricata senza nessuna azione e continua a contare i tentativi.
+     */
+    private String versioneFail2ban() {
+        StringBuilder b = new StringBuilder();
+        try {
+            var v = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
+                "/usr/local/bin/fail2ban-client", "--version");
+            if (v.success() && v.output() != null && !v.output().isBlank())
+                b.append("Versione: ").append(v.output().trim().split("\n")[0]);
+        } catch (Exception ignored) { }
+        try {
+            var p2 = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
+                "/usr/sbin/pkg", "query", "%n-%v", "py311-fail2ban");
+            if (p2.success() && p2.output() != null && !p2.output().isBlank()) {
+                if (b.length() > 0) b.append(" — ");
+                b.append("Pacchetto: ").append(p2.output().trim().split("\n")[0]);
+            }
+        } catch (Exception ignored) { }
+        return b.length() == 0 ? "(non sono riuscito a leggerne la versione)" : b.toString();
     }
 
     private JSONObject makeCheck(String id, String label, boolean ok, String statusText,
@@ -8708,7 +8770,10 @@ public class SSLMailServer {
         try {
             JSONObject diag = org.mail_panel.security.RiparaAzioneBan.diagnosi();
             JSONArray rotte = diag.optJSONArray("rotte");
-            if (rotte != null && rotte.length() > 0) {
+            JSONArray nonGiudicate = diag.optJSONArray("non_giudicate");
+            boolean daRiparare = (rotte != null && rotte.length() > 0)
+                              || (nonGiudicate != null && nonGiudicate.length() > 0);
+            if (daRiparare) {
                 JSONObject rr = org.mail_panel.security.RiparaAzioneBan.ripara();
                 steps.put(buildStep("ripara_azione_ban",
                     "Dichiara l'azione pf sulle jail che bannavano con un comando inesistente, e verifica dopo il reload", rr));

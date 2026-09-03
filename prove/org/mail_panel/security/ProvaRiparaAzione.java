@@ -28,19 +28,27 @@ public class ProvaRiparaAzione {
         // --- Il caso vero: sezione senza azione, come sul server ---
         RiparaAzioneBan.Esito e = RiparaAzioneBan.conAzionePf(REALE, "mail-panel-auth");
         vero("sezione senza azione: modificata", e.tipo == RiparaAzioneBan.Esito.Tipo.MODIFICATO);
-        vero("azione pf inserita", e.contenuto.contains("action   = pf[name=mail-panel-auth, actiontype=<allports>]"));
-        // Non basta che ci sia "pf": senza actiontype l'azione userebbe il valore predefinito
-        // "any port $port", e con la porta vuota pf rifiuta la regola lasciando la tabella
-        // senza nessuno che la legga. La forma senza actiontype e' un guasto, non una variante.
-        vero("actiontype dichiarato, non lasciato al valore predefinito",
+        vero("azione pf inserita", e.contenuto.contains("action   = pf[name=mail-panel-auth, port=\"0:65535\"]"));
+        // Non basta che ci sia "pf": senza una porta l'azione usa il valore predefinito
+        // "any port $port", e con la porta vuota pf rifiuta la regola lasciando la tabella senza
+        // nessuno che la legga — e' cio' che e' successo a recidive. La porta si dichiara.
+        //
+        // La prima correzione usava "actiontype", che e' la forma mostrata dalla documentazione
+        // dell'azione: su questo sistema fail2ban non l'accetta come parametro di jail e carica
+        // la jail SENZA nessuna azione ("No actions for jail ..."), cioe' senza bannare affatto.
+        // Qui si prova la forma dichiarata con la porta, che e' quella con cui le quattro jail
+        // di posta hanno tabella e regola verificate.
+        vero("porta dichiarata, non lasciata al valore predefinito",
             !e.contenuto.contains("pf[name=mail-panel-auth]"));
+        vero("nessun actiontype: fail2ban qui lo rifiuta",
+            !e.contenuto.contains("actiontype"));
         // Va dopo l'ultima riga di configurazione, non in fondo al file dopo il ritorno a capo.
         uguale("inserita al posto giusto",
-            "backend  = auto\naction   = pf[name=mail-panel-auth, actiontype=<allports>]\n",
+            "backend  = auto\naction   = pf[name=mail-panel-auth, port=\"0:65535\"]\n",
             e.contenuto.substring(e.contenuto.indexOf("backend  = auto")));
         // Niente altro e' cambiato.
         uguale("il resto del file e' intatto", REALE.replace("backend  = auto\n", ""),
-            e.contenuto.replace("backend  = auto\n", "").replace("action   = pf[name=mail-panel-auth, actiontype=<allports>]\n", ""));
+            e.contenuto.replace("backend  = auto\n", "").replace("action   = pf[name=mail-panel-auth, port=\"0:65535\"]\n", ""));
 
         // --- Applicarlo due volte non deve aggiungerne due ---
         RiparaAzioneBan.Esito bis = RiparaAzioneBan.conAzionePf(e.contenuto, "mail-panel-auth");
@@ -58,6 +66,36 @@ public class ProvaRiparaAzione {
             REALE + "banaction = iptables-allports\n", "mail-panel-auth");
         vero("banaction: sostituita", ba.tipo == RiparaAzioneBan.Esito.Tipo.MODIFICATO);
         vero("banaction: iptables sparito", !ba.contenuto.contains("iptables"));
+
+        // --- Un segnaposto non risolto non e' "gia' a posto" ---
+        // E' la forma che ha fatto smettere alle due jail del pannello di riportare la propria
+        // azione: comincia con "pf[", quindi un controllo ingenuo la promuove e la lascia li'.
+        RiparaAzioneBan.Esito ph = RiparaAzioneBan.conAzionePf(
+            REALE + "action   = pf[name=mail-panel-auth, actiontype=<allports>]\n", "mail-panel-auth");
+        vero("segnaposto nel valore: da riscrivere",
+            ph.tipo == RiparaAzioneBan.Esito.Tipo.MODIFICATO);
+        vero("segnaposto sostituito col valore letterale",
+            ph.contenuto.contains("port=\"0:65535\"") && !ph.contenuto.contains("<allports>"));
+        // Ma la forma gia' corretta non si tocca: riscriverla a ogni passaggio farebbe ricaricare
+        // fail2ban senza motivo, e un rimedio che agisce sempre non si distingue da un difetto.
+        vero("forma corretta lasciata stare",
+            RiparaAzioneBan.conAzionePf(REALE + "action   = pf[name=mail-panel-auth, port=\"0:65535\"]\n",
+                "mail-panel-auth").tipo == RiparaAzioneBan.Esito.Tipo.GIA_A_POSTO);
+
+        // --- La forma che fail2ban rifiuta va riscritta, non promossa ---
+        // "pf[name=x, actiontype=any]" comincia con "pf[" e non contiene segnaposto: un
+        // controllo che si accontenta di quello la lascia, e la jail resta senza azioni. E'
+        // successo davvero, due volte di fila con due varianti. La condizione e' la porta.
+        RiparaAzioneBan.Esito at = RiparaAzioneBan.conAzionePf(
+            REALE + "action   = pf[name=mail-panel-auth, actiontype=any]\n", "mail-panel-auth");
+        vero("actiontype senza porta: da riscrivere",
+            at.tipo == RiparaAzioneBan.Esito.Tipo.MODIFICATO);
+        vero("riscritta con la porta e senza actiontype",
+            at.contenuto.contains("port=\"0:65535\"") && !at.contenuto.contains("actiontype"));
+        // Una porta scelta da chi amministra NON si tocca: e' una configurazione, non un guasto.
+        vero("porta personalizzata rispettata",
+            RiparaAzioneBan.conAzionePf(REALE + "action   = pf[name=mail-panel-auth, port=\"smtp,imaps\"]\n",
+                "mail-panel-auth").tipo == RiparaAzioneBan.Esito.Tipo.GIA_A_POSTO);
 
         // --- Il caso che NON si deve provare a riparare ---
         String multi = REALE + "action   = iptables-multiport[name=x]\n         sendmail[dest=root]\n";

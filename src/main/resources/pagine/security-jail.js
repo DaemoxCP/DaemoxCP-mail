@@ -430,6 +430,7 @@
                               '<i class="fas fa-' + (v.ok ? 'check' : 'times') + ' me-1"></i>' +
                               escapeHtml(v.jail) + ': ' +
                               escapeHtml(v.comando || v.nota || '') + '</div>';
+                        if (v.log) hh += '<pre class="small mb-2 mt-1" style="white-space:pre-wrap;max-height:220px;overflow:auto">' + escapeHtml(v.log) + '</pre>';
                     });
                     if (data.message) hh += '<div class="mt-2">' + escapeHtml(data.message) + '</div>';
                     if (el) { el.innerHTML = hh; }

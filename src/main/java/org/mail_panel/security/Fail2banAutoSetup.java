@@ -309,5 +309,5 @@ public final class Fail2banAutoSetup {
         + "findtime = 600\n"
         + "bantime  = 3600\n"
         + "backend  = auto\n"
-        + "action   = pf[name=mail-panel-auth, actiontype=<allports>]\n";
+        + "action   = pf[name=mail-panel-auth, port=\"0:65535\"]\n";
 }

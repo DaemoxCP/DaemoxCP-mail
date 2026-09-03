@@ -760,7 +760,15 @@ public class Fail2banManager {
             maxretry = 3
             findtime = 86400
             bantime = 604800
-            action = pf[name=recidive]
+            # actiontype dichiarato, non ereditato. Le altre jail qui sopra passano una porta
+            # esplicita, quindi la regola che pf costruisce e' completa. Questa no: senza porta
+            # e senza actiontype prenderebbe il valore predefinito "any port $port", con la
+            # porta ereditata dal [DEFAULT] di jail.conf — un file che il pannello non scrive e
+            # non controlla. Se li' la porta e' vuota, pf rifiuta la regola: la tabella viene
+            # creata lo stesso e i ban ci finiscono dentro senza che niente li legga. Per chi
+            # banna i recidivi sette giorni e' il posto peggiore dove avere un dubbio, e
+            # "allports" e' anche cio' che si vuole davvero: il recidivo si blocca su tutto.
+            action = pf[name=recidive, port="0:65535"]
             """);
     }
 
@@ -1798,19 +1806,28 @@ public class Fail2banManager {
             j.jail = jail;
             j.credutiBannati.addAll(ipBannatiSecondoFail2ban(jail));
 
-            j.comandiBan.addAll(comandiBanDi(jail));
+            comandiBanDi(jail, j);
             PfBersaglio b = null;
             for (String cmd : j.comandiBan) {
                 b = bersaglioDaComando(cmd);
                 if (b != null) break;
             }
             if (b == null) {
+                // Quando non si e' capito, si mette a disposizione tutto cio' che serve a
+                // capire: cosa risponde fail2ban, cosa ha scritto nel log dopo l'ultimo reload,
+                // e quali file definiscono questa jail. Le tre cose insieme rispondono a "cosa
+                // vede fail2ban", che non e' la stessa domanda di "cosa ho scritto io".
+                j.logFail2ban = RiparaAzioneBan.erroriLogPer(jail);
+                j.sezioni = RiparaAzioneBan.sezioniCheDefiniscono(jail);
                 // Non si conclude "non banna via pf": non e' stato misurato. Si dice cosa
                 // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
                 // quel comando su questo sistema non fa niente.
                 j.nota = j.comandiBan.isEmpty()
                     ? "non sono riuscito a farmi dire quale comando esegue per bannare: di questa "
-                      + "jail non posso dire se i ban siano applicati"
+                      + "jail non posso dire se i ban siano applicati."
+                      + (j.azioniViste.isEmpty() ? "" : " Azioni lette: " + String.join(", ", j.azioniViste) + ".")
+                      + (j.azioniScartate.isEmpty() ? "" : " Scartate: " + String.join(", ", j.azioniScartate) + ".")
+                      + " Alla richiesta delle azioni fail2ban ha risposto: " + j.uscitaAzioni
                     : "il suo comando di ban non nomina una tabella pf, quindi non posso "
                       + "confrontarlo con il firewall. Esegue: " + String.join(" ; ", j.comandiBan);
                 c.jails.add(j);
@@ -1905,22 +1922,31 @@ public class Fail2banManager {
      * tabella, la risposta giusta non e' "questa jail non usa pf" — che sarebbe una conclusione
      * tratta dal non aver trovato — ma mostrare cosa esegue, e lasciare che si veda.
      */
-    private java.util.List<String> comandiBanDi(String jail) {
-        java.util.List<String> out = new ArrayList<>();
+    private void comandiBanDi(String jail, JailPf j) {
         try {
             String azioni = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " actions");
+            // Si conserva l'uscita cruda. Quando non se ne ricava niente, "non sono riuscito" e'
+            // un vicolo cieco: chi legge la scheda non puo' fare un passo avanti, e chi la
+            // scrive finisce a indovinare. Mostrare cosa ha risposto fail2ban trasforma un
+            // fallimento muto in un indizio, e costa niente perche' l'uscita l'abbiamo gia'.
+            j.uscitaAzioni = azioni == null ? "" : azioni.trim();
+            if (azioni == null) return;
             String coda = azioni.contains(":") ? azioni.substring(azioni.lastIndexOf(':') + 1) : azioni;
-            for (String az : coda.split(",")) {
-                String a = az.trim();
-                if (a.isEmpty() || !isValidJailName(a)) continue;
+            for (String az : coda.split("[,\\n]")) {
+                String a = az.trim().replaceAll("^[`|'-]+", "").trim();
+                if (a.isEmpty()) continue;
+                if (!isValidJailName(a)) { j.azioniScartate.add(a); continue; }
+                j.azioniViste.add(a);
                 String cmd = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " action " + a + " actionban");
                 if (cmd == null) continue;
                 cmd = cmd.trim();
-                if (cmd.isEmpty() || cmd.toLowerCase().contains("error")) continue;
-                out.add(cmd.replace("\n", " "));
+                if (cmd.isEmpty()) continue;
+                if (cmd.toLowerCase().contains("error")) { j.azioniScartate.add(a + " (" + cmd + ")"); continue; }
+                j.comandiBan.add(cmd.replace("\n", " "));
             }
-        } catch (Exception ignora) { }
-        return out;
+        } catch (Exception e) {
+            j.uscitaAzioni = "errore leggendo le azioni: " + e.getMessage();
+        }
     }
 
     /** Il contenuto di una tabella pf. Una tabella assente non e' un errore: e' una risposta. */
@@ -2082,6 +2108,12 @@ public class Fail2banManager {
         public final java.util.List<String> soloInPf = new ArrayList<>();
         /** Cosa esegue davvero per bannare. Si mostra quando non si e' potuto verificare. */
         public final java.util.List<String> comandiBan = new ArrayList<>();
+        /** L'uscita cruda di "get <jail> actions": l'indizio quando non se ne ricava niente. */
+        public String uscitaAzioni = "";
+        public final java.util.List<String> azioniViste = new ArrayList<>();
+        public final java.util.List<String> azioniScartate = new ArrayList<>();
+        /** Le righe di fail2ban.log e le sezioni che definiscono la jail: l'evidenza da leggere. */
+        public String logFail2ban = "", sezioni = "";
     }
 
     public static class FiltroCheck {
