@@ -8803,10 +8803,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 if (!data.success) { alert(data.error || data.message || 'Errore'); return; }
                 if (!data.quanti) { alert(data.message); return; }
                 const righe = (data.messaggi || []).slice(0, 15)
-                    .map(m => '\u2022 ' + m.destinatario + '  \u2014  ' + (m.errore || '')).join('\n');
-                const extra = data.quanti > 15 ? '\n... e altri ' + (data.quanti - 15) : '';
-                if (prompt(data.message + '\n\n' + righe + extra
-                         + '\n\nScrivi ELIMINA per cancellarli definitivamente.') !== 'ELIMINA') return;
+                    .map(m => '\u2022 ' + m.destinatario + '  \u2014  ' + (m.errore || '')).join('\\n');
+                const extra = data.quanti > 15 ? '\\n... e altri ' + (data.quanti - 15) : '';
+                if (prompt(data.message + '\\n\\n' + righe + extra
+                         + '\\n\\nScrivi ELIMINA per cancellarli definitivamente.') !== 'ELIMINA') return;
                 fetch('/api/queue', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -9823,14 +9823,22 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         // Avvio di fail2ban dal pannello. Esiste gia' l'azione start_service: quello che
         // mancava era il modo di premerla dalla pagina dove il problema si vede.
         function avviaFail2banDalPannello() {
-            if (!confirm('Avviare fail2ban adesso?\n\nEsegue: service fail2ban start')) return;
+            // La barra rovesciata va DOPPIA qui dentro. Dentro un text block Java la sequenza
+            // barra-n e' un a capo VERO: arriva al browser come un ritorno a capo dentro una
+            // stringa JavaScript, la stringa non si chiude, il parser si ferma e l'INTERO blocco
+            // di script non viene eseguito. La pagina resta con tutti gli indicatori che girano,
+            // e sembra che le chiamate non finiscano mentre non sono nemmeno partite.
+            //
+            // Questo commento stesso, scritto la prima volta con la sequenza singola per
+            // spiegarla, ha rotto la pagina allo stesso modo: qui non si nomina, si descrive.
+            if (!confirm('Avviare fail2ban adesso?\\n\\nEsegue: service fail2ban start')) return;
             fetch('/api/fail2ban_health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'start_service', csrf_token: ensureFhcCsrfToken() })
             }).then(r => r.json()).then(data => {
                 alert((data.success ? '✅ ' : '❌ ') + (data.message || 'fatto') +
-                    (data.output ? '\n\nOutput:\n' + data.output : ''));
+                    (data.output ? '\\n\\nOutput:\\n' + data.output : ''));
                 if (typeof loadFail2banHealth === 'function') loadFail2banHealth();
                 if (typeof loadJailLiveState === 'function') loadJailLiveState();
             }).catch(e => alert('Errore rete: ' + e.message));
@@ -10797,9 +10805,20 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         // Dentro onclick="..." il testo attraversa DUE interpreti: prima l'HTML, poi
         // JavaScript. Sfuggire solo per l'uno lascia scoperto l'altro.
         function escAdmJs(t) {
+            // Le barre rovesciate qui vanno RADDOPPIATE rispetto a quello che deve arrivare al
+            // browser: dentro un text block Java ogni coppia diventa una barra sola. Scritte
+            // come si scriverebbero in un file .js, al browser arrivava un'espressione regolare
+            // mai chiusa: il parser si fermava e con lui TUTTO lo script della pagina
+            // Amministratori, che restava senza JavaScript.
+            //
+            // Il secondo caso invece nessun parser lo avrebbe segnalato: la sostituzione degli
+            // apici arrivava al browser come apice-per-apice, cioe' una riga che sostituiva un
+            // apice con se' stesso. Sembrava funzionare e lasciava scoperto proprio cio' che
+            // doveva proteggere. Qui le sequenze non si nominano, si descrivono a parole: e'
+            // gia' successo tre volte stasera che il commento sulla trappola ci cadesse dentro.
             return String(t === null || t === undefined ? '' : t)
-                .replace(/\\/g, '\\\\')
-                .replace(/'/g, "\\'")
+                .replace(/\\\\/g, '\\\\\\\\')
+                .replace(/'/g, "\\\\'")
                 .replace(/"/g, '&quot;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
