@@ -155,18 +155,21 @@ public class Fail2banManager {
             // l'indirizzo e non per una porta sola. Si scrive che non e' dichiarata.
             try {
                 String azioni = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " actions");
-                java.util.LinkedHashSet<String> porte = new java.util.LinkedHashSet<>();
                 String coda = azioni.contains(":") ? azioni.substring(azioni.lastIndexOf(':') + 1) : azioni;
-                for (String az : coda.split(",")) {
-                    String a = az.trim();
-                    if (a.isEmpty() || !isValidJailName(a)) continue;
-                    String v = executeCommand(FAIL2BAN_CLIENT + " get " + jailName
-                            + " action " + a + " port").trim();
-                    if (!v.isEmpty() && !v.toLowerCase().contains("not ") && !v.toLowerCase().contains("error"))
-                        porte.add(v);
-                }
-                jail.porte = String.join(", ", porte);
-                jail.portaDichiarata = !porte.isEmpty();
+
+                // La porta si legge dalla configurazione, non la si chiede a fail2ban.
+                //
+                // Il comando "get <jail> action <a> port" NON e' innocuo: l'azione pf non
+                // definisce un'opzione "port" (il suo [Init] ha tablename, block, protocol,
+                // actiontype, allports, multiport e basta), quindi fail2ban solleva
+                // AttributeError e SCRIVE UN ERRORE nel proprio log. Ogni apertura della pagina
+                // ne produceva diversi, e finivano in /var/log/fail2ban.log — che e' il file
+                // sorvegliato dalla jail recidive. Un pannello che per mostrare un dato sporca
+                // il log che un'altra sua parte deve leggere sta creando il problema che poi
+                // dovrebbe diagnosticare.
+                String porta = portaDaConfigurazione(jailName);
+                jail.porte = porta;
+                jail.portaDichiarata = !porta.isEmpty();
 
                 // Il comando di ban nomina la porta? E' l'unica cosa che dice se quell'elenco
                 // conti qualcosa. Si guarda il comando vero, non il nome dell'azione.
@@ -522,8 +525,38 @@ public class Fail2banManager {
             // Reload fail2ban
             reload();
 
+            // Scrivere la configurazione e ricaricare non e' finire il lavoro: si guarda l'esito.
+            //
+            // Il reload rilegge i file ma NON riavvia le jail — fail2ban-client(1): "reloads the
+            // configuration without restarting of the server, the option '--restart' activates
+            // completely restarting of affected jails". Una jail la cui azione era FALLITA
+            // all'avvio, come recidive con la regola pf rifiutata da pfctl, non la riprova: resta
+            // con la sua tabella e senza regola, e il rapporto direbbe "installate correttamente"
+            // mentre nulla e' cambiato. E' successo esattamente cosi'.
+            //
+            // Quindi si misura la cosa che conta — ogni jail ha in pf una regola che legge la sua
+            // tabella? — e solo se manca si sale di un gradino. Senza "--unban", che il manuale
+            // indica come l'opzione che invece toglierebbe i ban attivi.
+            String esitoRiavvio = "";
+            try {
+                int senzaRegola = confrontaBanConPf().totaleSenzaRegola();
+                if (senzaRegola > 0) {
+                    org.mail_panel.util.Shell.Result rs = org.mail_panel.util.Shell.run(
+                        java.time.Duration.ofSeconds(60), FAIL2BAN_CLIENT, "reload", "--restart");
+                    int dopo = confrontaBanConPf().totaleSenzaRegola();
+                    esitoRiavvio = " Dopo il reload " + senzaRegola + " jail avevano una tabella pf "
+                        + "che nessuna regola legge, quindi ho ricreato le jail con "
+                        + "\"fail2ban-client reload --restart\" (senza --unban): adesso "
+                        + (dopo == 0 ? "ognuna ha la sua regola."
+                                     : "ne restano " + dopo + " senza regola — la causa e' nel log di fail2ban.")
+                        + (rs.success() ? "" : " Il comando ha riportato: " + rs.output().trim());
+                }
+            } catch (Exception e) {
+                esitoRiavvio = " Non sono riuscito a verificare le regole pf dopo il reload: " + e.getMessage();
+            }
+
             result.success = true;
-            result.message = "Mail jails installed successfully";
+            result.message = "Mail jails installed successfully." + esitoRiavvio;
             result.configPath = mailJailsPath.toString();
 
         } catch (Exception e) {
@@ -650,7 +683,7 @@ public class Fail2banManager {
 
             if (additions.length() > 0) {
                 // Backup
-                Path bak = Paths.get(configPath.toString() + ".bak." + System.currentTimeMillis());
+                Path bak = copiaDiSicurezza(configPath);
                 Files.copy(configPath, bak);
                 Files.writeString(configPath,
                     config + (config.endsWith("\n") ? "" : "\n")
@@ -1100,7 +1133,7 @@ public class Fail2banManager {
 
                 // Backup prima di scrivere
                 java.nio.file.Files.copy(path,
-                    java.nio.file.Paths.get(path.toString() + ".bak." + System.currentTimeMillis()));
+                    copiaDiSicurezza(path));
 
                 String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
                 java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
@@ -1245,7 +1278,7 @@ public class Fail2banManager {
             }
             // Backup
             java.nio.file.Files.copy(path,
-                java.nio.file.Paths.get(path.toString() + ".bak." + System.currentTimeMillis()));
+                copiaDiSicurezza(path));
             String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
             java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
@@ -1279,7 +1312,7 @@ public class Fail2banManager {
                     : indent + "ignoreip = " + newVal));
             // Backup
             java.nio.file.Files.copy(path,
-                java.nio.file.Paths.get(path.toString() + ".bak." + System.currentTimeMillis()));
+                copiaDiSicurezza(path));
             String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
             java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
@@ -1605,6 +1638,69 @@ public class Fail2banManager {
     }
 
     /**
+     * Dove mettere la copia di sicurezza di un file di configurazione: MAI accanto all'originale.
+     *
+     * Fail2ban legge /usr/local/etc/fail2ban/jail.d, e finora le copie finivano proprio li'
+     * dentro: sul server ce ne sono sei di mail.local, ognuna con la sua sezione [recidive] e
+     * [dovecot]. Non finiscono in .conf, quindi oggi non vengono caricate — ma sono sei file che
+     * definiscono le stesse jail dentro la cartella che fail2ban scandaglia, e la diagnosi le
+     * mostrava accanto a quello vero. In un file che decide chi entra, "oggi non viene letto"
+     * non e' una garanzia sufficiente.
+     */
+    private Path copiaDiSicurezza(Path originale) throws Exception {
+        Path dir = Paths.get("/var/db/mail-panel/copie-fail2ban");
+        Files.createDirectories(dir);
+        return dir.resolve(originale.getFileName().toString() + ".bak."
+            + java.time.LocalDateTime.now().format(
+                java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")));
+    }
+
+    /**
+     * La porta che una jail dichiara, letta dai file di configurazione.
+     *
+     * Si guarda prima il parametro dell'azione — "pf[name=x, port=\"http,https\"]" — perche' e'
+     * quello che finisce nella regola pf; se manca si ripiega sulla riga "port =" della sezione,
+     * che e' cio' che l'azione userebbe. Stringa vuota quando nessuno dei due c'e': e' il caso
+     * di recidive, e quel vuoto non e' un dettaglio estetico ma la ragione per cui la sua regola
+     * pf non si carica.
+     */
+    private String portaDaConfigurazione(String jailName) {
+        try {
+            java.util.List<Path> file = new ArrayList<>();
+            file.add(Paths.get("/usr/local/etc/fail2ban/jail.local"));
+            Path d = Paths.get(JAIL_D);
+            if (Files.isDirectory(d))
+                try (var el = Files.list(d)) {
+                    el.filter(f -> f.getFileName().toString().endsWith(".conf")
+                                || f.getFileName().toString().endsWith(".local"))
+                      .sorted().forEach(file::add);
+                }
+            String daAzione = "", daSezione = "";
+            for (Path f : file) {
+                if (!Files.isRegularFile(f)) continue;
+                boolean dentro = false;
+                for (String riga : Files.readAllLines(f, java.nio.charset.StandardCharsets.UTF_8)) {
+                    String t = riga.trim();
+                    if (t.startsWith("[") && t.endsWith("]")) { dentro = t.equals("[" + jailName + "]"); continue; }
+                    if (!dentro || t.startsWith("#") || !t.contains("=")) continue;
+                    String chiave = t.substring(0, t.indexOf('=')).trim().toLowerCase();
+                    String valore = t.substring(t.indexOf('=') + 1).trim();
+                    if (chiave.equals("action") || chiave.equals("banaction")) {
+                        java.util.regex.Matcher m =
+                            Pattern.compile("port\\s*=\\s*\"?([^\",\\]]+)").matcher(valore);
+                        if (m.find()) daAzione = m.group(1).trim();
+                    } else if (chiave.equals("port")) {
+                        daSezione = valore;
+                    }
+                }
+            }
+            return !daAzione.isEmpty() ? daAzione : daSezione;
+        } catch (Exception ignora) {
+            return "";
+        }
+    }
+
+    /**
      * I file di log che una jail sorveglia. Una funzione sola, usata da chi mostra e da chi
      * verifica.
      *
@@ -1823,7 +1919,10 @@ public class Fail2banManager {
                 // Non si conclude "non banna via pf": non e' stato misurato. Si dice cosa
                 // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
                 // quel comando su questo sistema non fa niente.
-                j.nota = j.comandiBan.isEmpty()
+                j.nota = j.nonRaggiungibile
+                    ? "fail2ban non ha risposto: si sta riavviando. Riprova fra qualche secondo — "
+                      + "non e' un difetto di questa jail"
+                    : j.comandiBan.isEmpty()
                     ? "non sono riuscito a farmi dire quale comando esegue per bannare: di questa "
                       + "jail non posso dire se i ban siano applicati."
                       + (j.azioniViste.isEmpty() ? "" : " Azioni lette: " + String.join(", ", j.azioniViste) + ".")
@@ -1932,6 +2031,14 @@ public class Fail2banManager {
             // fallimento muto in un indizio, e costa niente perche' l'uscita l'abbiamo gia'.
             j.uscitaAzioni = azioni == null ? "" : azioni.trim();
             if (azioni == null) return;
+            // Durante un "reload --restart" il server non risponde per qualche istante. E' una
+            // condizione del pannello, non un difetto della jail: attribuirgliela farebbe
+            // comparire un guasto inventato proprio mentre si sta riparando qualcos'altro.
+            if (j.uscitaAzioni.contains("Unable to contact server")
+                || j.uscitaAzioni.contains("Connection refused")) {
+                j.nonRaggiungibile = true;
+                return;
+            }
             String coda = azioni.contains(":") ? azioni.substring(azioni.lastIndexOf(':') + 1) : azioni;
             for (String az : coda.split("[,\\n]")) {
                 String a = az.trim().replaceAll("^[`|'-]+", "").trim();
@@ -2115,6 +2222,8 @@ public class Fail2banManager {
         public final java.util.List<String> azioniScartate = new ArrayList<>();
         /** Le righe di fail2ban.log e le sezioni che definiscono la jail: l'evidenza da leggere. */
         public String logFail2ban = "", sezioni = "", dump = "";
+        /** Fail2ban non ha risposto: si sta riavviando. Non e' un guasto di questa jail. */
+        public boolean nonRaggiungibile;
     }
 
     public static class FiltroCheck {

@@ -8115,6 +8115,63 @@ public class SSLMailServer {
             (banEseguibile || !f2bRunning) ? null : "ripara_azione_ban",
             "Dichiara l'azione pf sulle jail del pannello, ricarica, e poi richiede a Fail2ban quale comando esegue per verificare che la correzione abbia preso"));
 
+        // ========== I ban arrivano davvero a pf? ==========
+        // E' il controllo piu' profondo che il pannello sappia fare, e finora viveva soltanto
+        // nella scheda del confronto: il verdetto in cima diceva "Tutto OK" mentre recidive
+        // aveva una tabella che nessuna regola legge. Un riepilogo che non comprende il
+        // controllo piu' severo non e' un riepilogo: e' la stessa mezza verita' che ha tenuto
+        // nascoste per mesi una jail cieca e due che bannavano nel vuoto.
+        boolean banApplicati = true;
+        String banApplicatiDettaglio;
+        try {
+            if (!f2bRunning) {
+                banApplicati = false;
+                banApplicatiDettaglio = "Fail2ban non e' in esecuzione: non ho potuto confrontare niente";
+            } else {
+                Fail2banManager.ConfrontoPf cf = fail2banManager.confrontaBanConPf();
+                int senzaRegola = cf.totaleSenzaRegola();
+                int nonApplicati = cf.totaleNonApplicati();
+                int nonMisurate = cf.totaleNonMisurate();
+                int ok = 0;
+                for (Fail2banManager.JailPf j : cf.jails)
+                    if (j.letta && j.regolaVerificata && j.regolaPresente && !j.tabellaMancante) ok++;
+
+                StringBuilder d = new StringBuilder();
+                if (senzaRegola == 0 && nonApplicati == 0 && nonMisurate == 0) {
+                    d.append("Tutte le ").append(ok).append(" jail hanno tabella e regola pf al loro ")
+                     .append("posto, e ogni indirizzo che Fail2ban dichiara bannato risulta nel firewall");
+                } else {
+                    banApplicati = false;
+                    d.append(ok).append(" jail su ").append(cf.jails.size()).append(" verificate a posto");
+                    for (Fail2banManager.JailPf j : cf.jails) {
+                        if (!j.letta) { d.append(" | ").append(j.jail).append(": non misurata"); continue; }
+                        if (j.tabellaMancante) { d.append(" | ").append(j.jail).append(": la tabella pf non esiste"); continue; }
+                        if (j.regolaVerificata && !j.regolaPresente) {
+                            d.append(" | ").append(j.jail).append(": nessuna regola pf legge ")
+                             .append(j.tabella).append(", i ban non bloccano");
+                            continue;
+                        }
+                        if (!j.soloInFail2ban.isEmpty())
+                            d.append(" | ").append(j.jail).append(": bannati ma non nel firewall — ")
+                             .append(String.join(", ", j.soloInFail2ban));
+                    }
+                }
+                banApplicatiDettaglio = d.toString();
+            }
+        } catch (Exception e) {
+            banApplicati = false;
+            banApplicatiDettaglio = "Non sono riuscito a fare il confronto con pf: " + e.getMessage()
+                                  + " — quindi di questo non so dire niente";
+        }
+        checks.put(makeCheck("ban-applicati-in-pf",
+            "I ban risultano davvero nel firewall (tabella e regola pf)",
+            banApplicati,
+            banApplicatiDettaglio,
+            banApplicati ? null
+                : "Una tabella senza regola, o un indirizzo che Fail2ban dichiara bannato e pf non blocca, valgono zero protezione: il ban risulta eseguito e l'attaccante passa. E' il controllo che fa Fail2ban stesso con pfctl -sr.",
+            (banApplicati || !f2bInstalled) ? null : "install_mail_jails",
+            "Rigenera le jail di posta con l'azione pf completa di porta, ricarica e ricrea le jail interessate"));
+
         checks.put(makeCheck("mail-jails-logpath",
             "Le jail sorvegliano i file di log giusti",
             logOk,
@@ -8746,7 +8803,16 @@ public class SSLMailServer {
                 logSbagliati = !fail2banManager.esaminaLogSorvegliati(activeJailsNow).problemi.isEmpty();
             } catch (Exception ignored) { }
 
-            if (f2bInstalled && (!mailFileOk || !allActive || logSbagliati)) {
+            // E nemmeno "le jail ci sono e guardano il file giusto" basta: recidive aveva la
+            // tabella pf e nessuna regola che la legge, quindi bannava nel vuoto, e questo passo
+            // veniva saltato perche' il file la nominava ed era attiva. Ogni volta che il
+            // cancello ha guardato una cosa piu' facile di quella che conta, il guasto e' passato.
+            boolean senzaRegola = false;
+            try {
+                senzaRegola = fail2banManager.confrontaBanConPf().totaleSenzaRegola() > 0;
+            } catch (Exception ignored) { }
+
+            if (f2bInstalled && (!mailFileOk || !allActive || logSbagliati || senzaRegola)) {
                 // File mancante O runtime non allineato → install (rigenera tutto: path
                 // corretti dall'auto-detect, log file mancanti, filter aggiornati, reload).
                 // install_mail_jails è idempotente: safe da chiamare anche se quasi tutto è OK.
@@ -8758,7 +8824,8 @@ public class SSLMailServer {
                 if (!res.success) anyFailed = true;
             } else if (mailFileOk) {
                 steps.put(buildSkipStep("install_mail_jails",
-                    "Jail mail già configurate, attive, e ognuna sorveglia un file che viene scritto"));
+                    "Jail mail già configurate, attive, ognuna sorveglia un file che viene scritto, "
+                    + "e ognuna ha in pf una regola che legge la propria tabella"));
             }
         } catch (Exception e) {
             steps.put(buildErrorStep("install_mail_jails", "Errore: " + e.getMessage()));
