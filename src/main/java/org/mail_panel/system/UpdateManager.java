@@ -392,7 +392,7 @@ public final class UpdateManager {
      * quindi da solo lascerebbe credere che non abbiano aggiornamenti.
      */
     public static JSONArray aggiornamentiBloccati() {
-        String v = sh("pkg version -vRL= 2>/dev/null", 60);
+        String v = sh("pkg version -U -vRL= 2>/dev/null", 60);
         String lock = sh("pkg lock -l 2>/dev/null");
         JSONArray arr = new JSONArray();
         Pattern p = Pattern.compile("^(\\S+)-([^\\s-]+)\\s+<\\s+.*\\(.*has ([^)]+)\\)");
@@ -465,7 +465,7 @@ public final class UpdateManager {
         // sapere se per un pacchetto protetto esista una correzione. "pkg version" invece
         // confronta le versioni e del lock non si occupa, quindi risponde anche per quelli.
         Set<String> aggiornabili = new java.util.LinkedHashSet<>();
-        for (String riga : sh("pkg version -vRL= 2>/dev/null", 60).split("\n")) {
+        for (String riga : sh("pkg version -U -vRL= 2>/dev/null", 60).split("\n")) {
             String t = riga.trim();
             if (t.isEmpty()) continue;
             // "nome-1.2.3    <   needs updating (index has 1.2.4)"
@@ -720,8 +720,8 @@ public final class UpdateManager {
         if (installata.isEmpty()) {
             installata = sh("dovecot --version 2>/dev/null | awk '{print $1}'", 20);
         }
-        String disponibile = sh("pkg rquery -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 30);
-        if (disponibile.isEmpty()) disponibile = sh("pkg rquery %v dovecot 2>/dev/null", 30);
+        String disponibile = sh("pkg rquery -U -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 30);
+        if (disponibile.isEmpty()) disponibile = sh("pkg rquery -U %v dovecot 2>/dev/null", 30);
         r.put("installed", installata).put("available", disponibile);
 
         // Quali pacchetti Dovecot offre il repository. Non e' curiosita': se la 2.4 fosse un
@@ -729,7 +729,7 @@ public final class UpdateManager {
         // portarci, e il rischio non sarebbe "un aggiornamento rompe la posta" ma "una
         // migrazione deliberata". Sono due scenari opposti e cambiano cosa va costruito.
         JSONArray offerti = new JSONArray();
-        for (String riga : sh("pkg rquery -g '%n %v' 'dovecot*' 2>/dev/null", 30).split("\n")) {
+        for (String riga : sh("pkg rquery -U -g '%n %v' 'dovecot*' 2>/dev/null", 30).split("\n")) {
             String t = riga.trim();
             if (t.isEmpty()) continue;
             int sp = t.indexOf(' ');
@@ -997,7 +997,7 @@ public final class UpdateManager {
             return r.put("present", false).put("note", "Nessun pacchetto postfix installato.");
         r.put("present", true).put("package", pkg)
          .put("version", sh("pkg query %v " + pkg, 20))
-         .put("repoVersion", sh("pkg rquery %v " + pkg + " 2>/dev/null", 30));
+         .put("repoVersion", sh("pkg rquery -U %v " + pkg + " 2>/dev/null", 30));
 
         if (!ok("command -v postconf >/dev/null 2>&1", 15))
             return r.put("leggibile", false)
@@ -1377,7 +1377,7 @@ public final class UpdateManager {
             return r.put("present", false).put("note", "rspamd non e' installato.");
         r.put("present", true)
          .put("version", sh("pkg query %v rspamd", 20))
-         .put("repoVersion", sh("pkg rquery %v rspamd 2>/dev/null", 30));
+         .put("repoVersion", sh("pkg rquery -U %v rspamd 2>/dev/null", 30));
 
         String etc = "/usr/local/etc/rspamd";
         boolean c = ok("test -d " + etc, 15);
@@ -1974,7 +1974,7 @@ public final class UpdateManager {
         // trappola di postfix, con la differenza che qui nessuno la vedrebbe arrivare.
         for (String membro : membriFamiglia(nome)) {
             if (!nomeValido(membro)) continue;
-            String deps = sh("pkg rquery %dn " + membro + " 2>/dev/null", 30);
+            String deps = sh("pkg rquery -U %dn " + membro + " 2>/dev/null", 30);
             Matcher m = Pattern.compile("mysql([0-9]+)-client").matcher(deps);
             if (!m.find()) continue;
             String richiesto = "mysql" + m.group(1) + "-client";
@@ -2026,8 +2026,8 @@ public final class UpdateManager {
         }
 
         // --- 2. La destinazione esiste ---
-        String srv84 = sh("pkg rquery %v mysql84-server 2>/dev/null", 30);
-        String cli84 = sh("pkg rquery %v mysql84-client 2>/dev/null", 30);
+        String srv84 = sh("pkg rquery -U %v mysql84-server 2>/dev/null", 30);
+        String cli84 = sh("pkg rquery -U %v mysql84-client 2>/dev/null", 30);
         r.put("target", srv84);
         if (srv84.isEmpty() || cli84.isEmpty()) {
             aggiungiCheck(checks, "target", "Disponibilita' della 8.4", "block",
@@ -2047,7 +2047,7 @@ public final class UpdateManager {
                 if (!nomeValido(d) || d.equals(srvPkg)) continue;
                 // Cosa pretende la versione del repository di questo dipendente: se nomina
                 // ancora mysql80-client, la 8.4 non lo soddisfa e il pacchetto va ricostruito.
-                String deps = sh("pkg rquery %dn " + d + " 2>/dev/null", 30);
+                String deps = sh("pkg rquery -U %dn " + d + " 2>/dev/null", 30);
                 boolean vuole80 = deps.contains(cliPkg);
                 boolean vuole84 = deps.contains("mysql84-client");
                 if (vuole80 && !vuole84) conflitto = true;
@@ -2649,7 +2649,7 @@ public final class UpdateManager {
 
         String pkg = sh("pkg query %n 2>/dev/null | grep -E '^roundcube' | head -1", 20);
         String ver = pkg.isEmpty() ? "" : sh("pkg query %v " + pkg, 20);
-        String disp = pkg.isEmpty() ? "" : sh("pkg rquery %v " + pkg, 30);
+        String disp = pkg.isEmpty() ? "" : sh("pkg rquery -U %v " + pkg, 30);
         r.put("pkg", pkg).put("current", ver).put("available", disp);
         if (pkg.isEmpty()) {
             aggiungiCheck(checks, "pkg", "Roundcube installato", "block", "Nessun pacchetto roundcube installato.");
@@ -3903,7 +3903,7 @@ public final class UpdateManager {
             }
             r.put("pkg", pkg);
             String vIns = sh("pkg query %v " + pkg + " 2>/dev/null").trim();
-            String vRepo = sh("pkg rquery %v " + pkg + " 2>/dev/null").trim();
+            String vRepo = sh("pkg rquery -U %v " + pkg + " 2>/dev/null").trim();
             r.put("current", vIns).put("available", vRepo).put("home", home);
             aggiungiCheck(checks, "pkg", "JVM in uso", "ok",
                     pkg + " " + vIns + "  (" + home + ") — e' proprio quella che esegue il pannello");
@@ -4257,7 +4257,7 @@ public final class UpdateManager {
             for (String v : leaf) {
                 String n = "py" + nuovo + "-" + v.substring(("py" + vecchio + "-").length());
                 if (!nomeValido(n)) continue;
-                if (sh("pkg rquery %n " + n + " 2>/dev/null").trim().isEmpty()) mancanti.add(n);
+                if (sh("pkg rquery -U %n " + n + " 2>/dev/null").trim().isEmpty()) mancanti.add(n);
                 else nuovi.add(n);
             }
             r.put("nuovi", new JSONArray(nuovi));
@@ -4815,7 +4815,7 @@ public final class UpdateManager {
             if (ruoloDi(nome) == null) continue;              // non e' dello stack di posta
             if (coperto.test(nome)) continue;                 // ha gia' la sua fase dedicata
             String cur = sh("pkg query %v " + nome + " 2>/dev/null", 20);
-            String av  = sh("pkg rquery %v " + nome + " 2>/dev/null", 20);
+            String av  = sh("pkg rquery -U %v " + nome + " 2>/dev/null", 20);
             if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // nessuna correzione disponibile
             boolean maggiore = saltoSignificativo(nome, cur, av);
             JSONObject avv = avvertenzaPer(nome, maggiore);
@@ -4862,7 +4862,7 @@ public final class UpdateManager {
         String srvMysql = sh("pkg query %n 2>/dev/null | grep -E '^mysql[0-9]+-server$' | head -1", 20);
         if (!srvMysql.isEmpty()) {
             boolean gia84 = srvMysql.startsWith("mysql84");
-            String disp84 = gia84 ? "" : sh("pkg rquery %v mysql84-server 2>/dev/null", 30);
+            String disp84 = gia84 ? "" : sh("pkg rquery -U %v mysql84-server 2>/dev/null", 30);
             if (gia84) {
                 passi.put(passo("fase-mysql84", "fase", "Migrare MySQL alla 8.4", "fatto",
                         srvMysql + ": la migrazione e' gia' avvenuta.",
@@ -4891,7 +4891,7 @@ public final class UpdateManager {
             String chiave = fam == null ? nome : fam;
             if (!famiglieViste.add(chiave)) continue;         // gia' coperto dalla sua famiglia
             String cur = p.optString("version", "");
-            String av = sh("pkg rquery %v " + nome + " 2>/dev/null", 20);
+            String av = sh("pkg rquery -U %v " + nome + " 2>/dev/null", 20);
             if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;
             boolean maggiore = saltoSignificativo(nome, cur, av);
             JSONObject avv = avvertenzaPer(nome, maggiore);
@@ -4988,7 +4988,7 @@ public final class UpdateManager {
         // cambia lo SCHEMA del database, e senza bin/updatedb.sh la webmail non funziona.
         if (!rcPkg.isEmpty() && nomeValido(rcPkg)) {
             String cur = sh("pkg query %v " + rcPkg + " 2>/dev/null", 20);
-            String av  = sh("pkg rquery %v " + rcPkg + " 2>/dev/null", 20);
+            String av  = sh("pkg rquery -U %v " + rcPkg + " 2>/dev/null", 20);
             boolean rcIgnoto = cur.isEmpty() || av.isEmpty();
             boolean daFareRc = !rcIgnoto && !av.equals(cur);
             // Una webmail gia' sulla 1.7 con la radice vecchia e' guasta ADESSO: se il piano
@@ -5051,7 +5051,7 @@ public final class UpdateManager {
         // JVM: il pannello ci gira sopra, quindi non puo' aggiornarla restando acceso.
         if (!jvmPkg.isEmpty()) {
             String cur = sh("pkg query %v " + jvmPkg + " 2>/dev/null", 20);
-            String av  = sh("pkg rquery %v " + jvmPkg + " 2>/dev/null", 20);
+            String av  = sh("pkg rquery -U %v " + jvmPkg + " 2>/dev/null", 20);
             // Tre stati, non due. Il repository che non risponde NON vuol dire "sei a posto":
             // vuol dire che non lo so, e dirlo e' l'unica risposta onesta.
             boolean jvIgnoto = cur.isEmpty() || av.isEmpty();
@@ -5083,7 +5083,7 @@ public final class UpdateManager {
         JSONArray senzaRimedio = new JSONArray();
         for (String nome : visti) {
             String cur = sh("pkg query %v " + nome + " 2>/dev/null", 20);
-            String av  = sh("pkg rquery %v " + nome + " 2>/dev/null", 20);
+            String av  = sh("pkg rquery -U %v " + nome + " 2>/dev/null", 20);
             if (!cur.isEmpty() && (av.isEmpty() || av.equals(cur))) senzaRimedio.put(nome);
         }
 
@@ -5357,7 +5357,7 @@ public final class UpdateManager {
         }
         r.put("name", nome).put("current", versione).put("role", ruoloDi(nome) == null ? "" : ruoloDi(nome));
 
-        String disponibile = sh("pkg rquery %v " + nome + " 2>/dev/null", 30);
+        String disponibile = sh("pkg rquery -U %v " + nome + " 2>/dev/null", 30);
         r.put("available", disponibile);
         boolean maggiore = !versione.isEmpty() && !disponibile.isEmpty()
                 && saltoSignificativo(nome, versione, disponibile);
@@ -5394,7 +5394,7 @@ public final class UpdateManager {
                 StringBuilder chi = new StringBuilder();
                 for (String membro : famiglia) {
                     if (!nomeValido(membro)) continue;
-                    if (sh("pkg rquery %dn " + membro + " 2>/dev/null", 30).contains(richiesto)) {
+                    if (sh("pkg rquery -U %dn " + membro + " 2>/dev/null", 30).contains(richiesto)) {
                         if (chi.length() > 0) chi.append(", ");
                         chi.append(membro);
                     }
@@ -6389,9 +6389,32 @@ public final class UpdateManager {
      * e anche quello va detto, altrimenti un'email che arriva ogni settimana diventa rumore
      * che si smette di leggere.
      */
-    public static JSONObject datiPerRapporto() {
+    /**
+     * Con aggiornaDatabase = false non tocca la rete: e' la forma per l'anteprima.
+     *
+     * "pkg audit -F" scarica il database delle vulnerabilita'. L'anteprima lo chiamava, quindi
+     * premere "guarda il rapporto" poteva restare appeso su una rete lenta mentre la scheda
+     * prometteva una lettura. Chi guarda vede il numero e, accanto, quanto e' vecchio il
+     * database: cosi' sa cosa sta guardando invece di crederlo aggiornato.
+     */
+    public static JSONObject datiPerRapporto() { return datiPerRapporto(true); }
+
+    public static JSONObject datiPerRapporto(boolean aggiornaDatabase) {
         JSONObject r = new JSONObject();
         JSONArray daFare = new JSONArray();
+
+        // L'invio automatico aggiorna il catalogo, l'anteprima no.
+        //
+        // Tutte le interrogazioni al repository ora hanno "-U", cioe' NON scaricano il catalogo
+        // da sole: e' giusto, perche' una lettura non deve andare in rete a sorpresa. Ma senza
+        // qualcuno che lo aggiorni, la riga "N pacchetti hanno una versione piu' recente" viene
+        // calcolata su un catalogo fermo a chissa' quando, e un rapporto che dice "niente da
+        // aggiornare" perche' guarda dati vecchi e' peggio di un rapporto che non arriva.
+        //
+        // Quindi l'aggiornamento del catalogo sta QUI, esplicito, e solo nell'invio vero — dove
+        // andare in rete e' previsto. L'anteprima resta una lettura, e la sua riga sull'eta' del
+        // catalogo dice a chi guarda quanto sono vecchi i dati che sta vedendo.
+        if (aggiornaDatabase) ok("pkg update -q", 120);
 
         // --- sistema ---
         JSONObject so = sistemaOperativo();
@@ -6439,20 +6462,65 @@ public final class UpdateManager {
                     .put("dove", "Aggiornamenti -> Piano di manutenzione"));
 
         // --- vulnerabilita', separando quelle a cui si puo' rimediare ---
-        String audit = sh("pkg audit -F 2>&1 | tail -40", 180);
+        //
+        // Niente "tail": c'era, ed era una perdita silenziosa. Ogni blocco di pkg audit occupa
+        // quattro o cinque righe, quindi oltre le ~8 vulnerabilita' le prime uscivano dalla
+        // finestra e sparivano da ENTRAMBE le liste — quella con rimedio e quella senza. Il
+        // rapporto risultava piu' tranquillo di com'era il server, e niente lo segnalava.
+        //
+        // "-F" scarica il database delle vulnerabilita' dalla rete, quindi lo fa solo l'invio
+        // vero: l'anteprima promette una lettura e deve restare una lettura.
+        String audit = sh("pkg audit" + (aggiornaDatabase ? " -F" : "") + " 2>&1", 180);
         r.put("audit", audit);
+        r.put("vulnDbGiorni", giorniDa("/var/db/pkg/vuln.xml"));
+        r.put("vulnDbAggiornatoOra", aggiornaDatabase);
+        // Con "-U" le interrogazioni al repository leggono il catalogo che c'e': la sua eta'
+        // fa parte del risultato, altrimenti "nel repository c'e' la versione X" suona come
+        // una verifica appena fatta sui server di pkg, che non e'.
+        r.put("catalogoGiorni", giorniDa("/var/db/pkg/repo-FreeBSD.sqlite"));
+
         JSONArray conRimedio = new JSONArray(), senzaRimedio = new JSONArray();
+        JSONArray nonCapiti = new JSONArray();
+        int trovati = 0;
         for (String riga : audit.split("\n")) {
             Matcher m = Pattern.compile("^([A-Za-z0-9._+-]+)-([0-9][^\\s]*) is vulnerable").matcher(riga.trim());
             if (!m.find()) continue;
+            trovati++;
             String nome = m.group(1), installata = m.group(2);
-            if (!nomeValido(nome)) continue;
-            String nelRepo = sh("pkg rquery %v " + nome + " 2>/dev/null", 30).trim();
+            if (!nomeValido(nome)) {
+                // Un nome che il filtro non accetta non deve sparire: sparendo non finirebbe
+                // ne' fra quelli con rimedio ne' fra quelli senza, e il conto tornerebbe lo
+                // stesso. Oggi i nomi di pkg stanno tutti dentro il filtro e questo ramo non
+                // scatta mai — ma un elemento che il programma non capisce si conta e si dice.
+                nonCapiti.put(riga.trim());
+                continue;
+            }
+            String nelRepo = sh("pkg rquery -U %v " + nome + " 2>/dev/null", 30).trim();
             if (!nelRepo.isEmpty() && !nelRepo.equals(installata))
                 conRimedio.put(nome + ": " + installata + " -> " + nelRepo);
             else
                 senzaRimedio.put(nome + " " + installata);
         }
+
+        // Il controllo incrociato che pkg audit regala: in fondo stampa "N problem(s) in M
+        // package(s) found.". Se cio' che abbiamo letto non combacia con quei totali, il
+        // risultato non si mostra come se fosse completo — si dice che non torna. Un elenco
+        // parziale spacciato per intero e' peggio di nessun elenco.
+        Matcher tot = Pattern.compile("(\\d+)\\s+problem\\(s\\)\\s+in\\s+(\\d+)\\s+[^\\n]*package\\(s\\)\\s+found")
+                .matcher(audit);
+        if (tot.find()) {
+            int pacchettiDichiarati = Integer.parseInt(tot.group(2));
+            r.put("vulnPacchettiDichiarati", pacchettiDichiarati);
+            if (pacchettiDichiarati != trovati)
+                r.put("vulnConteggioNonTorna", "pkg audit dichiara " + pacchettiDichiarati
+                        + " pacchetti vulnerabili, io ne ho riconosciuti " + trovati
+                        + ": l'elenco qui sotto non e' completo e non va letto come tale.");
+        } else {
+            r.put("vulnConteggioNonTorna", "pkg audit non ha stampato la riga dei totali: "
+                    + "non posso verificare che l'elenco sia completo.");
+        }
+        if (nonCapiti.length() > 0) r.put("vulnNonCapiti", nonCapiti);
+
         r.put("vulnConRimedio", conRimedio).put("vulnSenzaRimedio", senzaRimedio);
         if (conRimedio.length() > 0)
             daFare.put(new JSONObject().put("urgenza", 1)
@@ -6938,7 +7006,7 @@ public final class UpdateManager {
             dip.put(new JSONObject().put("name", pk)
                     .put("versione", sh("pkg query %v " + pk, 20))
                     .put("dipendenzeInstallato", sh("pkg query %dn " + pk + " 2>/dev/null | tr '\n' ' '", 30))
-                    .put("dipendenzeRepository", sh("pkg rquery %dn " + pk + " 2>/dev/null | tr '\n' ' '", 30))
+                    .put("dipendenzeRepository", sh("pkg rquery -U %dn " + pk + " 2>/dev/null | tr '\n' ' '", 30))
                     .put("librerieRichieste", sh("pkg query %B " + pk + " 2>/dev/null | tr '\n' ' '", 30)));
         }
         r.put("dipendenti", dip);
@@ -7014,7 +7082,7 @@ public final class UpdateManager {
      *
      * Due scelte deliberate:
      *  - le versioni installate e quelle del repository si leggono con DUE interrogazioni sole
-     *    (pkg query e pkg rquery su tutto) e si uniscono qui: interrogare pkg 41 volte per 41
+     *    (pkg query e pkg rquery -U su tutto) e si uniscono qui: interrogare pkg 41 volte per 41
      *    pacchetti ci metterebbe minuti per la stessa informazione.
      *  - non entra NIENTE di segreto: nomi, versioni, stati e avvisi. Nessun file di
      *    configurazione, nessuna password, nessuna chiave. Un rapporto fatto per essere
@@ -7602,7 +7670,7 @@ public final class UpdateManager {
             // numero che non corrispondeva a niente: qui diceva 5 mentre "pkg upgrade -n"
             // rispondeva "Your packages are up to date", cioe' zero. Un numero che nessuna
             // altra schermata conferma fa dubitare di tutte le altre.
-            String elenco = sh("pkg version -vRL= 2>/dev/null", 60);
+            String elenco = sh("pkg version -U -vRL= 2>/dev/null", 60);
             int daAggiornare = 0, piuRecenti = 0, fuoriCatalogo = 0, nonConfrontabili = 0;
             for (String riga : elenco.split("\n")) {
                 String t = riga.trim();
@@ -8871,7 +8939,7 @@ public final class UpdateManager {
                 String[] c = r2.trim().split("\\s+");
                 if (c.length == 2) inst.put(c[0], c[1]);
             }
-            for (String r2 : sh("pkg rquery '%n %v' 2>/dev/null", 180).split("\n")) {
+            for (String r2 : sh("pkg rquery -U '%n %v' 2>/dev/null", 180).split("\n")) {
                 String[] c = r2.trim().split("\\s+");
                 if (c.length == 2) repo.put(c[0], c[1]);
             }

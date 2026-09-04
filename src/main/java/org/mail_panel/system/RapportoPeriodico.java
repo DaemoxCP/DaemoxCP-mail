@@ -182,7 +182,8 @@ public final class RapportoPeriodico {
     /** Il testo che verrebbe inviato, senza inviarlo. */
     public static JSONObject anteprima() {
         try {
-            JSONObject dati = UpdateManager.datiPerRapporto();
+            // L'anteprima non tocca la rete: la scheda promette una lettura, e deve restarlo.
+            JSONObject dati = UpdateManager.datiPerRapporto(false);
             JSONObject cert = avvisoCertificato();
             if (cert != null) {
                 JSONArray df = dati.optJSONArray("daFare");
@@ -404,11 +405,36 @@ public final class RapportoPeriodico {
      * calendario: cosi' un pannello spento per due giorni manda il rapporto quando torna su,
      * invece di saltarlo perche' "il giorno giusto e' passato".
      */
-    static boolean eIlMomento(String frequenza, String oraTesto, String ultimoIso, LocalDateTime adesso) {
+    static boolean eIlMomento(String frequenza, String oraTesto, String ultimoIso,
+                              String ultimoTentativoIso, String ultimoEsito, LocalDateTime adesso) {
         int ora;
         try { ora = Integer.parseInt(oraTesto.trim()); } catch (Exception e) { ora = 8; }
         if (ora < 0 || ora > 23) ora = 8;
         if (adesso.getHour() < ora) return false;
+
+        // Un invio fallito non deve essere ritentato ogni quarto d'ora per sempre.
+        //
+        // "report_last" viene scritto solo quando l'invio RIESCE, ed e' l'unica data che questo
+        // metodo guardava: dopo un fallimento restava vecchia, la condizione "sono passati sei
+        // giorni" restava vera, e lo scheduler riprovava al tick successivo. Con credenziali
+        // sbagliate fanno 96 tentativi al giorno verso il server SMTP di qualcun altro, che e' il
+        // modo di farsi bloccare l'indirizzo. Il difetto non si vedeva perche' ciascun tentativo,
+        // preso da solo, era legittimo.
+        //
+        // Quindi si guarda anche l'ULTIMO TENTATIVO, riuscito o no. La data del tentativo viene
+        // scritta PRIMA di provare, non dopo: se il processo muore a meta' invio, al riavvio non
+        // deve ricominciare subito.
+        if (ultimoEsito != null && ultimoEsito.startsWith("fallito")
+                && ultimoTentativoIso != null && !ultimoTentativoIso.isBlank()) {
+            try {
+                long dalTentativo = java.time.temporal.ChronoUnit.HOURS.between(
+                        LocalDateTime.parse(ultimoTentativoIso, ISO), adesso);
+                if (dalTentativo >= 0 && dalTentativo < ORE_DOPO_FALLIMENTO) return false;
+            } catch (Exception ignora) {
+                // Data illeggibile: non si blocca l'invio per un dato che non si sa leggere.
+            }
+        }
+
         if (ultimoIso == null || ultimoIso.isBlank()) return true;      // mai inviato
         LocalDateTime ultimo;
         try { ultimo = LocalDateTime.parse(ultimoIso, ISO); }
@@ -422,9 +448,13 @@ public final class RapportoPeriodico {
         }
     }
 
+    /** Ore da aspettare prima di riprovare dopo un invio fallito. */
+    static final int ORE_DOPO_FALLIMENTO = 6;
+
     private boolean eIlMomento() {
         return eIlMomento(imp("report_freq", "settimanale"), imp("report_hour", "8"),
-                imp("report_last", ""), LocalDateTime.now());
+                imp("report_last", ""), imp("report_last_try", ""), imp("report_last_result", ""),
+                LocalDateTime.now());
     }
 
     // ===================== invio =====================
@@ -466,6 +496,10 @@ public final class RapportoPeriodico {
                 + (quante == 0 ? "tutto a posto" : quante + (quante == 1 ? " cosa da fare" : " cose da fare"))
                 + " - " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
         String corpo = componi(dati, host, mittente, destinatario);
+
+        // Prima di provare, non dopo: se il pannello muore durante l'invio, al riavvio questa
+        // data c'e' gia' e la pausa dopo un fallimento vale lo stesso.
+        impSet("report_last_try", LocalDateTime.now().format(ISO));
 
         JSONObject esito = consegna(mittente, destinatario, oggetto, corpo);
         r.put("oggetto", oggetto).put("corpo", corpo).put("mittente", mittente)
@@ -646,6 +680,30 @@ public final class RapportoPeriodico {
 
         // --- vulnerabilita' ---
         t.append("VULNERABILITA' NOTE\n").append(riga("-", 60)).append("\n");
+
+        // Di che dati stiamo parlando. I numeri qui sotto escono dal database delle
+        // vulnerabilita' e dal catalogo dei pacchetti GIA' presenti sul server: dire quanto
+        // sono vecchi e' l'unica cosa che distingue una misura da un numero che sembra una
+        // misura. L'anteprima non scarica niente, l'invio automatico si.
+        long gv = d.optLong("vulnDbGiorni", -1), gc = d.optLong("catalogoGiorni", -1);
+        t.append("Database delle vulnerabilita': ")
+         .append(gv < 0 ? "eta' sconosciuta" : (gv == 0 ? "aggiornato oggi" : "di " + gv + " giorni fa"))
+         .append(d.optBoolean("vulnDbAggiornatoOra", false) ? " (scaricato adesso)" : " (non scaricato adesso)")
+         .append(". Catalogo dei pacchetti: ")
+         .append(gc < 0 ? "eta' sconosciuta" : (gc == 0 ? "aggiornato oggi" : "di " + gc + " giorni fa"))
+         .append(".\n");
+
+        // Se il conto non torna, lo si dice PRIMA dell'elenco: un elenco parziale letto come
+        // completo e' peggio di nessun elenco, e chi legge deve saperlo prima di rassicurarsi.
+        String nonTorna = d.optString("vulnConteggioNonTorna", "");
+        if (!nonTorna.isEmpty()) t.append("ATTENZIONE: ").append(nonTorna).append("\n");
+        JSONArray nc = d.optJSONArray("vulnNonCapiti");
+        if (nc != null && nc.length() > 0) {
+            t.append("Righe che non ho saputo interpretare, e che quindi non sono in nessuno dei "
+                   + "due elenchi qui sotto:\n");
+            for (int i = 0; i < nc.length(); i++) t.append("  ? ").append(nc.getString(i)).append("\n");
+        }
+
         JSONArray cr = d.optJSONArray("vulnConRimedio"), sr = d.optJSONArray("vulnSenzaRimedio");
         if ((cr == null || cr.length() == 0) && (sr == null || sr.length() == 0)) {
             t.append("Nessuna segnalata da pkg audit.\n");
