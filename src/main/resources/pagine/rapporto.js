@@ -131,9 +131,12 @@
             if (prompt('Inviare adesso un rapporto a "' + a + '"?\n\n'
                      + 'Scrivi INVIA per confermare.') !== 'INVIA') return;
             const el = document.getElementById('rep-esito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Raccolgo i dati e invio: ci vuole un minuto...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Raccolgo i dati, invio e aspetto che Postfix dica com&rsquo;&egrave; andata: ci vuole un minuto...';
             const r = await repApi('send', { confirm: 'INVIA', destinatario: a });
-            let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
+            // Giallo quando Postfix l'ha preso ma non e' ancora arrivato, o non si sa: non e'
+            // un errore, ma nemmeno la conferma che il verde prometterebbe.
+            const cls = !r.success ? 'danger' : (r.avviso ? 'warning' : 'success');
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-1">'
                   + repEsc(r.nota || r.error) + '</div>';
             if (r.oggetto) h += '<div class="small text-muted">Oggetto: <code>' + repEsc(r.oggetto) + '</code></div>';
             if (r.uscita) h += '<pre class="upd-log mt-1">' + repEsc(r.uscita) + '</pre>';

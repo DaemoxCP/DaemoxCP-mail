@@ -27,12 +27,16 @@ import java.util.concurrent.TimeUnit;
  *  1. IN CIMA CI VA COSA C'E' DA FARE, non lo stato. Se non c'e' niente da fare, l'email lo
  *     dice in una riga: un rapporto che sembra sempre uguale smette di essere letto, e il
  *     giorno in cui contiene qualcosa nessuno se ne accorge.
- *  2. L'INVIO PASSA DA POSTFIX, con sendmail(1). Il pannello gira SUL server di posta:
- *     nessuna credenziale SMTP da custodire, nessuna configurazione che possa divergere, e
- *     il messaggio esce firmato DKIM come qualunque altro.
+ *  2. L'INVIO PASSA DA POSTFIX, con il SUO sendmail(1): non con il primo sendmail del PATH,
+ *     che su FreeBSD e' mailwrapper e passa a dma (vedi sendmailDiPostfix). Il pannello
+ *     gira SUL server di posta: nessuna credenziale SMTP da custodire, nessuna
+ *     configurazione che possa divergere, e il messaggio esce firmato DKIM come qualunque
+ *     altro.
  *  3. L'ESITO SI VERIFICA. sendmail accetta il messaggio e restituisce 0 anche quando la
- *     consegna fallira' piu' tardi: si registra cosa ha risposto e quando, e il pannello
- *     mostra la data dell'ultimo invio riuscito, non "dovrebbe aver funzionato".
+ *     consegna fallira' piu' tardi, e restituiva 0 anche quando il messaggio non passava
+ *     affatto da Postfix. Quindi il pannello segue il messaggio nel log della posta, per il
+ *     suo Message-ID, e registra cosa ha risposto il server del destinatario: non "sendmail
+ *     ha detto 0", che non vuol dire niente.
  */
 public final class RapportoPeriodico {
 
@@ -507,28 +511,34 @@ public final class RapportoPeriodico {
         if (esito.optBoolean("success")) {
             String ora = LocalDateTime.now().format(ISO);
             impSet("report_last", ora);
-            impSet("report_last_result", "riuscito");
+            impSet("report_last_result", esito.optString("esito", "riuscito"));
             return r.put("success", true).put("quando", ora)
-                    .put("nota", "Messaggio consegnato a Postfix. Se non arriva, il motivo sara' nel "
-                            + "log della posta: sendmail accetta il messaggio, la consegna avviene dopo.");
+                    .put("avviso", esito.optBoolean("avviso", false))
+                    .put("nota", esito.optString("nota", ""));
         }
         impSet("report_last_result", "fallito: " + esito.optString("error", "?"));
         return r.put("success", false).put("error", esito.optString("error", "invio non riuscito"));
     }
 
     /**
-     * Consegna a Postfix con sendmail(1). L'oggetto viene codificato secondo RFC 2047 perche'
-     * un'intestazione non puo' contenere caratteri non ASCII, e il corpo dichiara UTF-8:
-     * senza, le lettere accentate arriverebbero storte.
+     * Consegna a Postfix con il suo sendmail(1), poi segue il messaggio nel log della posta.
+     * L'oggetto viene codificato secondo RFC 2047 perche' un'intestazione non puo' contenere
+     * caratteri non ASCII, e il corpo dichiara UTF-8: senza, le lettere accentate
+     * arriverebbero storte. Il Message-ID lo sceglie il pannello: e' il filo che lega il
+     * messaggio alle righe che Postfix scrive nel log.
      */
     private static JSONObject consegna(String da, String a, String oggetto, String corpo) {
-        String sendmail = Shell.risolvi("sendmail");
-        if (sendmail == null) sendmail = "/usr/local/sbin/sendmail";
         JSONObject r = new JSONObject();
+        JSONObject scelto = sendmailDiPostfix();
+        if (!scelto.optBoolean("success")) return r.put("success", false).put("error", scelto.optString("error"));
+        String sendmail = scelto.getString("percorso");
+
+        String messageId = nuovoMessageId(da);
         StringBuilder messaggio = new StringBuilder();
         messaggio.append("From: Pannello di controllo <").append(da).append(">\r\n")
                  .append("To: ").append(a).append("\r\n")
                  .append("Subject: ").append(oggetto2047(oggetto)).append("\r\n")
+                 .append("Message-ID: <").append(messageId).append(">\r\n")
                  .append("MIME-Version: 1.0\r\n")
                  .append("Content-Type: text/plain; charset=UTF-8\r\n")
                  .append("Content-Transfer-Encoding: 8bit\r\n")
@@ -536,6 +546,12 @@ public final class RapportoPeriodico {
                  .append("X-Mailer: FreeBSD Mail Panel\r\n")
                  .append("\r\n")
                  .append(corpo.replace("\n", "\r\n"));
+        StringBuilder uscita = new StringBuilder()
+                .append("* sendmail di Postfix: ").append(sendmail).append('\n')
+                .append("* Message-ID: <").append(messageId).append(">\n");
+
+        // Dove finisce il log adesso: le righe di questo messaggio stanno tutte dopo.
+        long inizioLog = dimensioneLog();
         try {
             ProcessBuilder pb = new ProcessBuilder(sendmail, "-t", "-i", "-f", da);
             Shell.applicaPath(pb);
@@ -544,17 +560,307 @@ public final class RapportoPeriodico {
             try (OutputStream os = p.getOutputStream()) {
                 os.write(messaggio.toString().getBytes(StandardCharsets.UTF_8));
             }
-            String uscita = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            String detto = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            if (!detto.isEmpty()) uscita.append(detto).append('\n');
+            r.put("uscita", uscita.toString());
             boolean finito = p.waitFor(60, TimeUnit.SECONDS);
             if (!finito) { p.destroyForcibly(); return r.put("success", false).put("error", "sendmail non ha risposto entro 60 secondi"); }
             int codice = p.exitValue();
-            r.put("uscita", uscita).put("codice", codice);
-            return codice == 0 ? r.put("success", true)
-                               : r.put("success", false).put("error", "sendmail e' uscito con codice " + codice
-                                       + (uscita.isEmpty() ? "" : ": " + uscita));
+            r.put("codice", codice);
+            if (codice != 0)
+                return r.put("success", false).put("error", "sendmail e' uscito con codice " + codice
+                        + (detto.isEmpty() ? "" : ": " + detto));
         } catch (Exception e) {
-            return r.put("success", false).put("error", "non riesco a eseguire " + sendmail + ": " + e.getMessage());
+            return r.put("uscita", uscita.toString()).put("success", false)
+                    .put("error", "non riesco a eseguire " + sendmail + ": " + e.getMessage());
         }
+
+        // Il codice 0 dice soltanto che il messaggio e' nella coda di ingresso di Postfix.
+        // Dove e' andato a finire lo dice il log.
+        JSONObject log = seguiNelLog(inizioLog, messageId, a);
+        JSONArray righe = log.optJSONArray("righe");
+        if (righe != null && righe.length() > 0) {
+            uscita.append("* dal log della posta (").append(org.mail_panel.monitoring.LogManager.MAILLOG).append("):\n");
+            for (int i = 0; i < righe.length(); i++) uscita.append(righe.getString(i)).append('\n');
+        } else {
+            uscita.append("* nel log della posta nessuna riga di Postfix con questo Message-ID\n");
+        }
+        return verdetto(log).put("uscita", uscita.toString());
+    }
+
+    // ===================== quale sendmail =====================
+
+    /** Il sendmail installato dal port di Postfix: si prova quando postconf non risponde. */
+    static final String SENDMAIL_DEL_PORT = "/usr/local/sbin/sendmail";
+
+    /** mailwrapper(8). Su FreeBSD /usr/sbin/sendmail e' lui, non Postfix. */
+    static final String MAILWRAPPER = "/usr/sbin/mailwrapper";
+
+    /**
+     * Il sendmail DI POSTFIX, non "il primo sendmail che si trova nel PATH".
+     *
+     * Fino al 25/09/2026 lo si cercava nel PATH, dove /usr/sbin viene prima di /usr/local/sbin.
+     * Si trovava /usr/sbin/sendmail, che su FreeBSD e' mailwrapper(8): passa il messaggio a chi
+     * dice mailer.conf, e se nessuno l'ha cambiato — il pacchetto di Postfix non lo cambia da
+     * solo — da FreeBSD 14 e' dma(8). dma accettava, restituiva 0, e consegnava da solo
+     * all'MX del destinatario: senza passare dal milter, quindi senza firma DKIM, e senza
+     * STARTTLS. Il pannello scriveva "riuscito"; Gmail riceveva un messaggio in chiaro e non
+     * firmato, altri destinatari non lo mostravano affatto.
+     *
+     * Dov'e' il suo sendmail lo sa Postfix: e' sendmail_path. Se postconf non risponde si prova
+     * il percorso del port. Un candidato che sia mailwrapper viene scartato, e se non resta
+     * niente NON si ripiega su un altro sendmail: un errore che dice cosa manca e' meglio di
+     * un invio che esce dalla porta sbagliata e si dichiara riuscito.
+     */
+    static JSONObject sendmailDiPostfix() {
+        String dichiarato = Shell.runShell(java.time.Duration.ofSeconds(10),
+                "postconf -h sendmail_path 2>/dev/null").outputTrim();
+        return sceltaSendmail(dichiarato, SENDMAIL_DEL_PORT, MAILWRAPPER);
+    }
+
+    /** La scelta vera e propria, separata da postconf e dai percorsi reali per poterla provare. */
+    static JSONObject sceltaSendmail(String dichiarato, String delPort, String mailwrapper) {
+        java.util.LinkedHashSet<String> candidati = new java.util.LinkedHashSet<>();
+        if (dichiarato != null && dichiarato.startsWith("/") && dichiarato.indexOf('\n') < 0)
+            candidati.add(dichiarato);
+        candidati.add(delPort);
+        java.util.List<String> scartati = new java.util.ArrayList<>();
+        for (String c : candidati) {
+            String no = nonEPostfix(c, mailwrapper);
+            if (no == null) return new JSONObject().put("success", true).put("percorso", c);
+            scartati.add(no);
+        }
+        return new JSONObject().put("success", false)
+                .put("error", "non trovo il sendmail di Postfix (" + String.join("; ", scartati) + "). "
+                        + "Non ripiego su un altro sendmail: su FreeBSD /usr/sbin/sendmail passa a dma, "
+                        + "e il rapporto uscirebbe in chiaro e senza firma DKIM.");
+    }
+
+    /** null se il percorso puo' essere il sendmail di Postfix, altrimenti il motivo per cui non lo e'. */
+    static String nonEPostfix(String percorso, String mailwrapper) {
+        java.nio.file.Path p = java.nio.file.Path.of(percorso);
+        if (!java.nio.file.Files.isRegularFile(p) || !java.nio.file.Files.isExecutable(p))
+            return percorso + " non c'e' o non e' eseguibile";
+        try {
+            // Stesso file, che sia un collegamento simbolico o un hard link: e' mailwrapper.
+            java.nio.file.Path mw = java.nio.file.Path.of(mailwrapper);
+            if (java.nio.file.Files.exists(mw) && java.nio.file.Files.isSameFile(p, mw))
+                return percorso + " e' mailwrapper(8), non Postfix";
+        } catch (java.io.IOException e) {
+            return "non riesco a controllare " + percorso + ": " + e.getMessage();
+        }
+        return null;
+    }
+
+    /** Un Message-ID che nessun altro messaggio ha: ora UTC, 16 byte casuali, dominio del mittente. */
+    static String nuovoMessageId(String mittente) {
+        byte[] caso = new byte[16];
+        new java.security.SecureRandom().nextBytes(caso);
+        return "rapporto." + LocalDateTime.now(java.time.ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+                + "." + java.util.HexFormat.of().formatHex(caso)
+                + "@" + mittente.substring(mittente.indexOf('@') + 1);
+    }
+
+    // ===================== com'e' andata =====================
+
+    /** Per quanto si segue il messaggio nel log, prima di smettere di guardare. */
+    static final int SECONDI_NEL_LOG = 30;
+
+    /** Di log nuovo se ne leggono al massimo 4 MB: un server sotto carico ne scrive tanto. */
+    private static final int LOG_MASSIMO = 4 << 20;
+
+    private static long dimensioneLog() {
+        try { return java.nio.file.Files.size(java.nio.file.Path.of(org.mail_panel.monitoring.LogManager.MAILLOG)); }
+        catch (Exception e) { return -1; }
+    }
+
+    /** Le righe scritte nel log della posta da 'da' in poi. Se nel frattempo e' stato ruotato, dall'inizio. */
+    private static java.util.List<String> righeDelLog(long da) {
+        try (java.io.RandomAccessFile f = new java.io.RandomAccessFile(org.mail_panel.monitoring.LogManager.MAILLOG, "r")) {
+            long fine = f.length();
+            long inizio = da < 0 || da > fine ? 0 : da;
+            inizio = Math.max(inizio, fine - LOG_MASSIMO);
+            byte[] b = new byte[(int) (fine - inizio)];
+            f.seek(inizio);
+            f.readFully(b);
+            return new String(b, StandardCharsets.UTF_8).lines().toList();
+        } catch (Exception e) {
+            return java.util.List.of();
+        }
+    }
+
+    /**
+     * Guarda il log finche' Postfix non dice com'e' andata, per al massimo SECONDI_NEL_LOG.
+     * Una consegna normale si conclude in un paio di secondi; se il server del destinatario non
+     * risponde, Postfix aspetta i suoi tempi e l'esito resta "in coda".
+     */
+    private static JSONObject seguiNelLog(long da, String messageId, String destinatario) {
+        long scadenza = System.nanoTime() + TimeUnit.SECONDS.toNanos(SECONDI_NEL_LOG);
+        while (true) {
+            JSONObject e = esitoNelLog(righeDelLog(da), messageId, destinatario);
+            String stato = e.optString("stato", "");
+            if ((!stato.isEmpty() && !"in coda".equals(stato)) || System.nanoTime() >= scadenza) return e;
+            try { Thread.sleep(1000); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); return e; }
+        }
+    }
+
+    /**
+     * Cosa dice il log di Postfix del messaggio con questo Message-ID. Riceve le righe invece di
+     * leggere il file, cosi' si prova con righe vere.
+     *
+     * cleanup scrive il Message-ID accanto al numero di coda ("4hB2Kq3Xz9: message-id=<...>"),
+     * e ogni riga successiva sullo stesso messaggio porta quel numero. dma e gli altri MTA quella
+     * riga non la scrivono: se manca, Postfix il messaggio non l'ha visto, e lo "stato" resta
+     * vuoto invece di diventare "riuscito".
+     *
+     * Stati: "" (Postfix non l'ha visto), "in coda" (visto, esito non ancora scritto),
+     * "consegnato", "rimandato" (Postfix riprovera' da solo), "respinto" (dal server del
+     * destinatario), "rifiutato" (da Postfix stesso, prima di partire: milter o controlli).
+     */
+    static JSONObject esitoNelLog(java.util.List<String> righe, String messageId, String destinatario) {
+        JSONObject r = new JSONObject().put("stato", "").put("righe", new JSONArray());
+        java.util.regex.Pattern conId = java.util.regex.Pattern.compile(
+                "(?:^|\\s)([0-9A-Za-z]+): message-id=<" + java.util.regex.Pattern.quote(messageId) + ">");
+        String coda = null;
+        for (String riga : righe) {
+            java.util.regex.Matcher m = conId.matcher(riga);
+            if (m.find()) { coda = m.group(1); break; }
+        }
+        if (coda == null) return r;
+        r.put("coda", coda).put("stato", "in coda");
+
+        // Le righe di QUESTO messaggio: il numero di coda come parola intera, seguito da ": ".
+        java.util.regex.Pattern sue = java.util.regex.Pattern.compile(
+                "(?:^|\\s)" + java.util.regex.Pattern.quote(coda) + ": (.*)$");
+        java.util.regex.Pattern stato = java.util.regex.Pattern.compile(", status=([a-z]+) \\((.*)\\)\\s*$");
+        java.util.List<Integer> indici = new java.util.ArrayList<>();
+        int consegna = -1;              // la riga "to=<...> ... status=" che decide
+        boolean perIlDestinatario = false;
+        String rifiuto = null;
+        for (int i = 0; i < righe.size(); i++) {
+            java.util.regex.Matcher m = sue.matcher(righe.get(i));
+            if (!m.find()) continue;
+            indici.add(i);
+            String resto = m.group(1);
+            for (String tipo : new String[]{"milter-reject: ", "reject: ", "milter-discard: ", "discard: "})
+                if (resto.startsWith(tipo)) rifiuto = resto.substring(tipo.length());
+            if (!resto.startsWith("to=<") || !stato.matcher(resto).find()) continue;
+            // Con piu' destinatari (un alias, una copia nascosta) conta la riga del destinatario
+            // del rapporto; fra quelle, l'ultima, perche' un "rimandato" puo' essere seguito da
+            // un "consegnato".
+            boolean suo = destinatario.equalsIgnoreCase(fra(resto, "to=<", ">"))
+                       || destinatario.equalsIgnoreCase(fra(resto, "orig_to=<", ">"));
+            if (suo || !perIlDestinatario) { consegna = i; perIlDestinatario = suo; }
+        }
+
+        if (consegna >= 0) {
+            java.util.regex.Matcher m = sue.matcher(righe.get(consegna));
+            m.find();
+            String resto = m.group(1);
+            java.util.regex.Matcher s = stato.matcher(resto);
+            s.find();
+            String relay = fra(resto, "relay=", ",");
+            r.put("relay", relay).put("risposta", s.group(2)).put("stato", switch (s.group(1)) {
+                case "sent" -> "consegnato";
+                case "deferred" -> "rimandato";
+                case "bounced", "expired" -> "respinto";
+                default -> "in coda";
+            });
+            // Se la connessione era cifrata, smtp lo scrive prima della consegna (con
+            // smtp_tls_loglevel >= 1). E' quello che Gmail chiama "crittografia standard".
+            // Se la riga non c'e' non si afferma niente: la sua assenza non prova il contrario.
+            String tls = "TLS connection established to " + relay + ": ";
+            for (int i = consegna - 1; i >= 0 && !relay.isEmpty(); i--) {
+                String riga = righe.get(i);
+                int k = riga.indexOf(tls);
+                if (k < 0) continue;
+                java.util.regex.Matcher t = java.util.regex.Pattern.compile("^(\\S+) with cipher (\\S+)")
+                        .matcher(riga.substring(k + tls.length()));
+                if (t.find()) r.put("tls", t.group(1) + " (" + t.group(2) + ")");
+                indici.add(i);
+                break;
+            }
+        } else if (rifiuto != null) {
+            // Un rifiuto temporaneo (4.x.x) non e' la fine: Postfix riprova.
+            boolean temporaneo = java.util.regex.Pattern.compile("(?:^|\\s)4\\.\\d{1,3}\\.\\d{1,3}(?:\\s|$)")
+                    .matcher(rifiuto).find();
+            r.put("stato", temporaneo ? "rimandato" : "rifiutato").put("risposta", rifiuto);
+        }
+
+        java.util.Collections.sort(indici);
+        JSONArray testo = new JSONArray();
+        for (int i : indici) if (testo.length() < 30) testo.put(righe.get(i));
+        return r.put("righe", testo);
+    }
+
+    /** Il testo fra 'dopo' e il primo 'fino' che lo segue; "" se 'dopo' non c'e'. */
+    private static String fra(String s, String dopo, String fino) {
+        int i = s.indexOf(dopo);
+        if (i < 0) return "";
+        i += dopo.length();
+        int j = s.indexOf(fino, i);
+        return (j < 0 ? s.substring(i) : s.substring(i, j)).trim();
+    }
+
+    /**
+     * Dal log al verdetto: cosa si registra come esito e cosa si dice a chi ha premuto il
+     * pulsante.
+     *
+     * "success" vuol dire che il pannello non deve rimandarlo. Vale anche per un messaggio che
+     * Postfix tiene in coda e riprovera' da solo: rimandarlo farebbe arrivare due rapporti. E'
+     * false solo quando il messaggio di sicuro non arrivera'. "avviso" vuol dire che non e'
+     * ancora arrivato, o che non si sa.
+     */
+    static JSONObject verdetto(JSONObject log) {
+        String coda = log.optString("coda", "");
+        String relay = log.optString("relay", "");
+        String risposta = log.optString("risposta", "");
+        String tls = log.optString("tls", "");
+        JSONObject v = new JSONObject();
+        switch (log.optString("stato", "")) {
+            case "consegnato" -> {
+                String dove = relay + (tls.isEmpty() ? "" : " con " + tls);
+                return v.put("success", true).put("avviso", false)
+                        .put("esito", corto("consegnato a " + dove + ": " + risposta))
+                        .put("nota", "Consegnato. Postfix lo ha passato a " + dove + ", che ha risposto: " + risposta);
+            }
+            case "rimandato" -> {
+                return v.put("success", true).put("avviso", true)
+                        .put("esito", corto("in coda, Postfix riprovera' da solo: " + risposta))
+                        .put("nota", "Postfix non e' riuscito a consegnarlo al primo tentativo. Il messaggio resta "
+                                + "nella sua coda (" + coda + ") e Postfix riprovera' da solo: il pannello non lo "
+                                + "rimanda. Motivo: " + risposta);
+            }
+            case "respinto" -> {
+                String chi = relay.isEmpty() || "none".equals(relay) ? "" : " da " + relay;
+                return v.put("success", false).put("error", corto("respinto" + chi + ": " + risposta));
+            }
+            case "rifiutato" -> {
+                return v.put("success", false).put("error", corto("rifiutato da Postfix prima di partire: " + risposta));
+            }
+            case "in coda" -> {
+                return v.put("success", true).put("avviso", true)
+                        .put("esito", "accettato da Postfix (coda " + coda + "), consegna non ancora conclusa")
+                        .put("nota", "Postfix lo ha preso in carico (coda " + coda + "), ma dopo " + SECONDI_NEL_LOG
+                                + " secondi la consegna non era ancora conclusa. Com'e' finita lo dice il log: "
+                                + "grep " + coda + " " + org.mail_panel.monitoring.LogManager.MAILLOG);
+            }
+            default -> {
+                return v.put("success", true).put("avviso", true)
+                        .put("esito", "accettato dal sendmail di Postfix, ma nel log della posta non compare")
+                        .put("nota", "Il sendmail di Postfix l'ha accettato, ma in " + SECONDI_NEL_LOG + " secondi nel "
+                                + "log della posta non e' comparsa nessuna riga con il suo Message-ID. Se Postfix e' "
+                                + "fermo (service postfix status), il messaggio aspetta nella coda di ingresso e parte "
+                                + "quando riparte; se Postfix gira, il log non e' in "
+                                + org.mail_panel.monitoring.LogManager.MAILLOG + ".");
+            }
+        }
+    }
+
+    /** L'esito finisce in una riga della scheda: una risposta lunga del server si accorcia. */
+    private static String corto(String s) {
+        return s.length() <= 300 ? s : s.substring(0, 297) + "...";
     }
 
     /** Oggetto con lettere accentate: RFC 2047, altrimenti l'intestazione non e' valida. */

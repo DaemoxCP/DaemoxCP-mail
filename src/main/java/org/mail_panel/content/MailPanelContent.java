@@ -7283,8 +7283,9 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         <strong>cosa c&rsquo;&egrave; da fare</strong>, non lo stato: se non c&rsquo;&egrave;
                         niente da fare, lo dice in una riga. Sotto ci sono versione del sistema, pacchetti,
                         vulnerabilit&agrave; distinte fra quelle rimediabili e quelle no, certificato, servizi,
-                        spazio e vie di ritorno. Parte da <code>sendmail</code> di Postfix, su questo stesso
-                        server: nessuna credenziale da custodire.
+                        spazio e vie di ritorno. Parte dal <code>sendmail</code> di Postfix, su questo stesso
+                        server: nessuna credenziale da custodire. Dopo l&rsquo;invio il pannello segue il
+                        messaggio nel log della posta e ti dice a chi &egrave; stato consegnato, e se con TLS.
                     </p>
                     <div id="rep-body"><span class="text-muted">Premi "Aggiorna": legge e basta.</span></div>
                 </div>

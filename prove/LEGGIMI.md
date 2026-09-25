@@ -11,6 +11,7 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaAutoconfig
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaVecchia
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.ProvaSrv
+    java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaConsegnaRapporto
 
 ## Cosa provano
 
@@ -40,6 +41,14 @@ e' scritta per l'uscita di `dig`, quindi tornava `null` — "non lo riconosco" �
 risultava sbagliato. La prova copre tutte e tre le forme e finisce riproducendo il difetto
 sulla logica vecchia: se un giorno quell'ultimo controllo passa, la prova non verifica piu'
 niente.
+
+**ProvaConsegnaRapporto** — da quale sendmail parte il rapporto periodico e come il pannello
+capisce com'e' andata. Il 25/09/2026 il rapporto partiva da /usr/sbin/sendmail, cioe'
+mailwrapper, cioe' dma: arrivava in chiaro e senza firma DKIM, e il pannello scriveva
+"riuscito". La prova verifica che mailwrapper non venga mai scelto (collegamento simbolico o
+hard link che sia), e legge righe vere del log: consegnato con TLS, rimandato, respinto per
+DMARC, rifiutato dal milter, formato RFC 5424, e le righe di dma, con le quali l'esito NON
+deve diventare "consegnato" perche' Postfix quel messaggio non l'ha visto.
 
 **ProvaVecchia** — la logica di classificazione com'era prima della correzione, messa
 davanti agli stessi due casi. Serve a dimostrare che i controlli di ProvaMtaSts non sono
