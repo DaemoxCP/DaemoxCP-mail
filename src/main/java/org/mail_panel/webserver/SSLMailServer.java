@@ -6860,7 +6860,7 @@ public class SSLMailServer {
                                 .put("error", "Per confermare scrivi esattamente il nome del pacchetto.");
                         break;
                     }
-                    response = UpdateManager.avviaAggiornamentoGuidato(pk);
+                    response = UpdateManager.avviaAggiornamentoGuidato(pk, req.optString("firma", ""));
                     logAudit("GUIDED_UPDATE_STARTED", ip, pk + " -> " + response.optString("jobId", ""));
                 }
                 case "packages_lock" -> {
@@ -6885,7 +6885,7 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", "Conferma mancante");
                         break;
                     }
-                    response = UpdateManager.avviaManutenzione();
+                    response = UpdateManager.avviaManutenzione(req.optString("firma", ""));
                     logAudit("MAINTENANCE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));

@@ -12,6 +12,8 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaVecchia
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.ProvaSrv
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaConsegnaRapporto
+    java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaPianoPacchetti
+    sh prove/prova-simulazione.sh
 
 ## Cosa provano
 
@@ -49,6 +51,18 @@ mailwrapper, cioe' dma: arrivava in chiaro e senza firma DKIM, e il pannello scr
 hard link che sia), e legge righe vere del log: consegnato con TLS, rimandato, respinto per
 DMARC, rifiutato dal milter, formato RFC 5424, e le righe di dma, con le quali l'esito NON
 deve diventare "consegnato" perche' Postfix quel messaggio non l'ha visto.
+
+**ProvaPianoPacchetti** — il piano esatto di un aggiornamento e la risposta a "la patch c'e'?".
+Legge uscite di `pkg upgrade -n` e di `pkg audit -Rjson` con la forma che il sorgente di pkg
+stampa (sezioni, totali in fondo, `(vulnerable!)`, intervalli di VuXML come ">= a : < b"), e
+rifiuta di chiamare completo un piano con una riga che non capisce o con i conti che non tornano.
+Dentro c'e' il caso che l'ha motivata: nginx 1.30.4,3 con il catalogo fermo alla stessa e VuXML
+"< 1.30.5,3" — la correzione esiste, il ramo non ce l'ha, e il lock non c'entra.
+
+**prova-simulazione.sh** — la simulazione su COPIA del database di pkg, contro un pkg finto che
+tiene i "lock" come file. Dimostra che lo sblocco avviene nella copia e non nel database vero,
+che le dipendenze protette nominate da pkg vengono aggiunte solo se si possono sbloccare, e che
+la copia sparisce alla fine.
 
 **ProvaVecchia** — la logica di classificazione com'era prima della correzione, messa
 davanti agli stessi due casi. Serve a dimostrare che i controlli di ProvaMtaSts non sono

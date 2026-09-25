@@ -14060,6 +14060,55 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         }
 
         // ---------- aggiornamento guidato ----------
+        // L'impronta del piano che ogni scheda ha mostrato: parte con la conferma, e il pannello
+        // aggiorna solo se il piano ricalcolato e' ancora quello.
+        const guidFirme = {};
+        let updFirmaManutenzione = '';
+
+        /* Il piano esatto di pkg: ogni pacchetto che cambia, da quale versione a quale. */
+        function updPianoHtml(pn, firma) {
+            if (!pn) return '';
+            if (!pn.misurato) {
+                return '<div class="alert alert-danger py-2 small mb-2">Piano esatto non disponibile: '
+                     + updEsc(pn.error || pn.errore || '?') + '</div>';
+            }
+            const tipoNome = { aggiorna: 'aggiorna', installa: 'installa', reinstalla: 'reinstalla',
+                               rimuove: 'rimuove', retrocede: 'torna indietro' };
+            const tipoCls = { aggiorna: 'bg-primary', installa: 'bg-info text-dark', reinstalla: 'bg-secondary',
+                              rimuove: 'bg-danger', retrocede: 'bg-danger' };
+            let h = '';
+            if ((pn.cambi || []).length) {
+                h += '<div class="small fw-bold mb-1">Il piano esatto di pkg: ' + pn.cambi.length + ' pacchetti</div>'
+                   + '<div class="table-responsive" style="max-height:24rem;overflow:auto"><table class="table table-sm align-middle mb-1"><thead><tr>'
+                   + '<th style="width:8rem"></th><th>Pacchetto</th><th>Da</th><th>A</th><th>Nota</th></tr></thead><tbody>';
+                pn.cambi.forEach(c => {
+                    h += '<tr class="upd-cell"><td><span class="badge ' + (tipoCls[c.tipo] || 'bg-secondary') + '">'
+                       + updEsc(tipoNome[c.tipo] || c.tipo) + '</span></td>'
+                       + '<td><code>' + updEsc(c.nome) + '</code></td>'
+                       + '<td class="small">' + updEsc(c.da || '-') + '</td>'
+                       + '<td class="small">' + updEsc(c.a || '-') + '</td>'
+                       + '<td class="small">' + updEsc(c.motivo || '')
+                       + (c.ancoraVulnerabile ? ' <span class="badge bg-danger">ancora vulnerabile</span>' : '')
+                       + (c.repo ? ' <span class="text-muted">[' + updEsc(c.repo) + ']</span>' : '') + '</td></tr>';
+                });
+                h += '</tbody></table></div>';
+            } else {
+                h += '<div class="small text-muted mb-1">Nel piano di pkg non cambia nessun pacchetto.</div>';
+            }
+            (pn.impedimenti || []).forEach(x => {
+                h += '<div class="small text-warning-emphasis"><i class="fas fa-lock me-1"></i><code>' + updEsc(x.nome)
+                   + '</code>: ' + updEsc(x.motivo) + '</div>';
+            });
+            h += '<div class="small text-muted mb-2">Calcolato con <code>' + updEsc(pn.comando || '') + '</code>'
+               + (pn.sullaCopia
+                    ? ' su una copia del database di pkg, con ' + updEsc((pn.sbloccati || []).join(', '))
+                      + ' sbloccati solo l&igrave;: il database vero non &egrave; stato toccato.'
+                    : '.')
+               + (firma ? ' Impronta <code>' + updEsc(firma) + '</code>: si esegue solo se il piano ricalcolato '
+                          + '&egrave; ancora questo.' : '') + '</div>';
+            return h;
+        }
+
         async function guidList() {
             const el = document.getElementById('guid-list');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Cerco i pacchetti protetti con un aggiornamento...';
@@ -14111,6 +14160,8 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + r.services.map(s => updEsc(s.name) + (s.running ? '' : ' (fermo, non verra\\' avviato)')).join(', ')
                    + '</div>';
             }
+            h += updPianoHtml(r.piano, r.firma);
+            guidFirme[r.name] = r.firma || '';
             if (r.blocked) {
                 h += '<div class="alert alert-danger py-2 small mb-0">Non avviabile: risolvi le righe rosse qui sopra.</div>';
             } else {
@@ -14124,7 +14175,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             if (prompt('Per confermare scrivi esattamente il nome del pacchetto: ' + nome) !== nome) return;
             const el = document.getElementById('guid-detail');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('package_update', { package: nome, confirm: nome });
+            const r = await updApi('package_update', { package: nome, confirm: nome, firma: guidFirme[nome] || '' });
             if (!r.success) { alert(r.error || 'operazione fallita'); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Aggiornamento di '
                          + updEsc(nome) + ' in corso: non chiudere la pagina.</span>';
@@ -14206,6 +14257,23 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     if (v.descrizione) {
                         h += '<br><span class="text-muted">' + updEsc(v.descrizione) + '</span>';
                     }
+                    // La domanda vera: la correzione c'e'? La dicono gli intervalli di VuXML
+                    // messi accanto alla versione che il catalogo offre.
+                    if (v.correzione) {
+                        const vc = v.correzione;
+                        const vcls = vc.verdetto === 'si-risolve-aggiornando' ? 'bg-success'
+                                   : (vc.verdetto === 'correzione-fuori-dal-ramo' || vc.verdetto === 'aggiornamento-non-basta')
+                                     ? 'bg-warning text-dark'
+                                   : vc.verdetto === 'nessuna-correzione' ? 'bg-danger' : 'bg-secondary';
+                        const veti = { 'si-risolve-aggiornando': 'si corregge aggiornando',
+                                       'aggiornamento-non-basta': 'aggiornare non basta',
+                                       'correzione-fuori-dal-ramo': 'corretta, ma non nel tuo ramo',
+                                       'correzione-non-indicata': 'correzione non indicata',
+                                       'nessuna-correzione': 'nessuna versione corretta',
+                                       'non-so': 'non so dirlo' };
+                        h += '<br><span class="badge ' + vcls + ' me-1">' + updEsc(veti[vc.verdetto] || vc.verdetto) + '</span>'
+                           + '<span>' + updEsc(vc.spiegazione || '') + '</span>';
+                    }
                     (v.riferimenti || []).forEach(u => {
                         h += '<br><a href="' + updEsc(u) + '" target="_blank" rel="noopener noreferrer" class="small">'
                            + updEsc(u) + '</a>';
@@ -14213,6 +14281,10 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     h += '</li>';
                 });
                 h += '</ul>';
+                if (r.correzioniErrore) {
+                    h += '<div class="small text-muted">Non ho potuto stabilire se esistano versioni corrette: '
+                       + updEsc(r.correzioniErrore) + '</div>';
+                }
                 if (r.notaRiavvio) {
                     h += '<div class="mt-2 pt-2 border-top small"><i class="fas fa-triangle-exclamation me-1"></i>'
                        + '<strong>' + updEsc(r.notaRiavvio) + '</strong></div>';
@@ -14295,7 +14367,14 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                    + ' pacchetti resteranno protetti</strong> perché la loro avvertenza dice di attendere. '
                    + 'La manutenzione non li sblocca: l&rsquo;avvertenza agisce, non si limita a comparire.</div>';
             }
-            h += '<button class="btn btn-sm btn-danger" onclick="updMaintRun()"><i class="fas fa-play me-1"></i>Esegui manutenzione completa</button>';
+            h += updPianoHtml(r.piano, r.firma);
+            updFirmaManutenzione = r.firma || '';
+            if (r.piano && r.piano.eseguibile) {
+                h += '<button class="btn btn-sm btn-danger" onclick="updMaintRun()"><i class="fas fa-play me-1"></i>Esegui manutenzione completa</button>';
+            } else {
+                h += '<div class="alert alert-secondary py-2 small mb-0">Niente da eseguire: il piano qui sopra non '
+                   + '&egrave; completo o non cambia niente.</div>';
+            }
             el.innerHTML = h;
         }
 
@@ -14304,7 +14383,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             if (prompt('Conferma: scrivi MANUTENZIONE per procedere.') !== 'MANUTENZIONE') return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('maintenance_run', { confirm: 'MANUTENZIONE' });
+            const r = await updApi('maintenance_run', { confirm: 'MANUTENZIONE', firma: updFirmaManutenzione });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Manutenzione in corso: non chiudere la pagina e non riavviare il pannello.</span>';
             pre.style.display = 'block';

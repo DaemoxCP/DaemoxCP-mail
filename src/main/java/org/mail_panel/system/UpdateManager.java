@@ -508,6 +508,21 @@ public final class UpdateManager {
             v.put("riferimenti", d.getJSONArray("riferimenti"));
             vulnerabili.put(v);
         }
+        // "C'e' una versione piu' recente" non risponde a "la correzione c'e'?": la versione
+        // piu' recente puo' essere ancora vulnerabile, e la correzione puo' esistere in una
+        // versione che il tuo catalogo non ha. Lo dicono gli intervalli di VuXML.
+        if (vulnerabili.length() > 0) {
+            JSONObject corr = PianoPacchetti.correzioni();
+            if (corr.optBoolean("success")) {
+                JSONObject per = corr.getJSONObject("pacchetti");
+                for (int i = 0; i < vulnerabili.length(); i++) {
+                    JSONObject v = vulnerabili.getJSONObject(i);
+                    if (per.has(v.getString("name"))) v.put("correzione", per.getJSONObject(v.getString("name")));
+                }
+            } else {
+                r.put("correzioniErrore", corr.optString("error"));
+            }
+        }
         r.put("vulnerable", vulnerabili);
         // Lezione pagata sull'altro server il 30/08: mysql80-server era stato aggiornato a
         // 8.0.46 ma il processo continuava a girare sui binari 8.0.45, quindi la correzione
@@ -576,7 +591,12 @@ public final class UpdateManager {
             if (o.getBoolean("majorJump")) maggiori++;
             if (o.has("advisory") && "attendi".equals(o.getJSONObject("advisory").getString("level"))) attese++;
         }
+        // Il piano esatto dell'intera manutenzione, calcolato su una copia del database di pkg
+        // con gli stessi sblocchi che fara' il lavoro vero. La tabella qui sopra dice i pacchetti
+        // protetti; questo dice TUTTO cio' che cambiera', dipendenze comprese.
+        JSONObject piano = pianoDellaManutenzione(arr).getJSONObject("piano");
         return new JSONObject().put("success", true).put("packages", arr)
+                .put("piano", pianoPerLaScheda(piano)).put("firma", piano.optString("firma", ""))
                 .put("majorCount", maggiori).put("waitCount", attese)
                 .put("generalNote",
                     "Prima di un salto di versione maggiore la domanda non e' se il servizio regge, ma se "
@@ -1618,14 +1638,7 @@ public final class UpdateManager {
 
     /** Insieme dei pacchetti protetti adesso, nomi senza versione. */
     private static Set<String> insiemeProtetti() {
-        Set<String> r = new TreeSet<>();
-        for (String l : sh("pkg lock -l 2>/dev/null").split("\n")) {
-            String n = l.trim();
-            if (n.isEmpty() || n.endsWith(":")) continue;
-            n = n.replaceAll("-[0-9][^\\s]*$", "");
-            if (nomeValido(n)) r.add(n);
-        }
-        return r;
+        return insiemeProtetti(sh("pkg lock -l 2>/dev/null"));
     }
 
     // ===================== i due lavori =====================
@@ -5482,24 +5495,170 @@ public final class UpdateManager {
         for (String m : famiglia) if (bloccato(lockList, m)) protettiOra.add(m);
         r.put("wasLocked", !protettiOra.isEmpty());
         r.put("lockedMembers", new JSONArray(protettiOra));
+
+        // Il piano ESATTO. Fin qui c'era soltanto "nome versione -> versione del catalogo", ma
+        // pkg per aggiornare puo' cambiare anche dipendenze, installarne di nuove, rimuoverne:
+        // si chiede a pkg, su una copia del suo database in cui si tolgono le stesse protezioni
+        // che togliera' l'aggiornamento vero. Il database vero non viene toccato.
+        JSONObject piano = PianoPacchetti.pianoPer(famiglia, insiemeProtetti(lockList), UpdateManager::motivoPerNonSbloccare);
+        if (!piano.optBoolean("success") || !piano.optBoolean("misurato")) {
+            aggiungiCheck(checks, "piano", "Piano esatto di pkg", "block",
+                    "Non ho potuto calcolare cosa farebbe pkg: " + piano.optString("error", piano.optString("errore", "?"))
+                    + " Senza il piano esatto non aggiorno.");
+            block = true;
+        } else {
+            JSONArray cambi = piano.getJSONArray("cambi");
+            java.util.List<String> rimossi = new ArrayList<>(), indietro = new ArrayList<>(),
+                    ancoraVulnerabili = new ArrayList<>(), righe = new ArrayList<>();
+            for (int i = 0; i < cambi.length(); i++) {
+                JSONObject c = cambi.getJSONObject(i);
+                String n = c.getString("nome");
+                switch (c.getString("tipo")) {
+                    case "rimuove" -> rimossi.add(n + " " + c.getString("da"));
+                    case "retrocede" -> indietro.add(n + " " + c.getString("da") + " -> " + c.getString("a"));
+                    default -> { }
+                }
+                if (c.optBoolean("ancoraVulnerabile")) ancoraVulnerabili.add(n + " " + c.getString("a"));
+                righe.add(n + " " + (c.getString("da").isEmpty() ? "(nuovo)" : c.getString("da"))
+                        + (c.getString("a").isEmpty() ? " (rimosso)" : " -> " + c.getString("a")));
+            }
+            JSONArray imp = piano.getJSONArray("impedimenti");
+            for (int i = 0; i < imp.length(); i++) {
+                JSONObject x = imp.getJSONObject(i);
+                aggiungiCheck(checks, "piano-impedimento", "Pacchetto protetto sulla strada", "block",
+                        "Per aggiornare, pkg dovrebbe cambiare anche " + x.getString("nome") + ", che " + x.getString("motivo"));
+                block = true;
+            }
+            JSONArray err = piano.getJSONArray("erroriPkg");
+            if (err.length() > 0 || piano.optBoolean("conflitti")) {
+                aggiungiCheck(checks, "piano-errori", "pkg segnala un problema", "block",
+                        String.join(" | ", jsonArrayToList(err)) + (piano.optBoolean("conflitti") ? " (conflitti fra pacchetti)" : ""));
+                block = true;
+            }
+            if (!rimossi.isEmpty()) {
+                aggiungiCheck(checks, "piano-rimozioni", "Il piano rimuove pacchetti", "block",
+                        "pkg rimuoverebbe: " + String.join(", ", rimossi) + ". Il pannello non esegue aggiornamenti che "
+                        + "tolgono pacchetti dal server: se e' voluto, va fatto a mano sapendo cosa li usa.");
+                block = true;
+            }
+            if (!indietro.isEmpty()) {
+                aggiungiCheck(checks, "piano-retrocede", "Il piano torna indietro di versione", "block",
+                        "pkg porterebbe a una versione PIU' VECCHIA: " + String.join(", ", indietro)
+                        + ". Di solito vuol dire un catalogo di un altro ramo: da qui non lo faccio.");
+                block = true;
+            }
+            if (jsonArrayToList(piano.getJSONArray("nonCambiano")).contains(nome)) {
+                aggiungiCheck(checks, "piano-fermo", "pkg non lo aggiornerebbe", "block",
+                        "Nel piano di pkg " + nome + " non cambia: premere non porterebbe a niente.");
+                block = true;
+            }
+            if (!ancoraVulnerabili.isEmpty()) {
+                aggiungiCheck(checks, "piano-vulnerabili", "Versioni di arrivo ancora vulnerabili", "verifica",
+                        "Secondo pkg restano vulnerabili anche dopo: " + String.join(", ", ancoraVulnerabili)
+                        + ". L'aggiornamento non chiude tutto.");
+            }
+            java.util.List<String> extra = new ArrayList<>(jsonArrayToList(piano.getJSONArray("sbloccati")));
+            extra.removeAll(famiglia);
+            if (!extra.isEmpty()) {
+                aggiungiCheck(checks, "piano-dipendenze", "Protezioni da togliere anche su dipendenze", "verifica",
+                        "pkg deve cambiare anche " + String.join(", ", extra) + ", protetti: verranno sbloccati "
+                        + "insieme agli altri e riprotetti alla fine.");
+            }
+            if (!block) {
+                aggiungiCheck(checks, "piano", "Piano esatto di pkg", "ok",
+                        cambi.length() + (cambi.length() == 1 ? " pacchetto cambia: " : " pacchetti cambiano: ")
+                        + String.join("; ", righe));
+            }
+            // I servizi da riavviare si calcolano su tutto cio' che il piano cambia, non solo
+            // sulla famiglia: una dipendenza come openssl tiene in memoria i suoi utenti.
+            java.util.LinkedHashSet<String> nomiServizi = new java.util.LinkedHashSet<>();
+            for (int i = 0; i < servizi.length(); i++) nomiServizi.add(servizi.getJSONObject(i).getString("name"));
+            java.util.List<String> perDipendenze = new ArrayList<>();
+            for (int i = 0; i < cambi.length(); i++) {
+                JSONObject c = cambi.getJSONObject(i);
+                if ("rimuove".equals(c.getString("tipo")) || famiglia.contains(c.getString("nome"))) continue;
+                for (String logico : serviziDaRiavviare(c.getString("nome"))) {
+                    String reale = nomeServizioReale(logico);
+                    if (reale == null || !nomiServizi.add(reale)) continue;
+                    servizi.put(new JSONObject().put("name", reale)
+                            .put("running", ok("service " + reale + " status", 15))
+                            .put("pid", pidServizio(reale)));
+                    perDipendenze.add(reale + " (per " + c.getString("nome") + ")");
+                }
+            }
+            if (!perDipendenze.isEmpty()) {
+                aggiungiCheck(checks, "piano-servizi", "Servizi da riavviare per le dipendenze", "verifica",
+                        "Il piano cambia anche dipendenze usate da altri servizi, che verranno riavviati: "
+                        + String.join(", ", perDipendenze) + ".");
+            }
+        }
+        r.put("piano", pianoPerLaScheda(piano)).put("firma", piano.optString("firma", ""));
+
+        java.util.List<String> daSbloccare = jsonArrayToList(piano.optJSONArray("sbloccati") == null
+                ? new JSONArray() : piano.getJSONArray("sbloccati"));
         aggiungiCheck(checks, "protezione", "Protezione dei pacchetti", "ok",
-                protettiOra.isEmpty()
+                daSbloccare.isEmpty()
                     ? "Nessuno di questi e' protetto: verranno aggiornati e poi protetti."
-                    : protettiOra.size() + " protetti su " + famiglia.size()
-                      + ": verranno sbloccati per l'aggiornamento e riprotetti subito dopo, "
-                      + "anche se qualcosa andasse storto.");
+                    : "Verranno sbloccati " + String.join(", ", daSbloccare) + " per il tempo dell'aggiornamento, e "
+                      + "riprotetti subito dopo, anche se qualcosa andasse storto.");
 
         r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
         return r;
     }
 
-    public static JSONObject avviaAggiornamentoGuidato(String nome) {
+    /** I pacchetti protetti adesso, per nome, da un'uscita di "pkg lock -l". */
+    static Set<String> insiemeProtetti(String elencoLock) {
+        Set<String> r = new java.util.TreeSet<>();
+        for (String riga : elencoLock.split("\n")) {
+            String t = riga.trim();
+            if (t.isEmpty() || t.endsWith(":")) continue;
+            int d = t.lastIndexOf('-');
+            String n = d > 0 && d + 1 < t.length() && Character.isDigit(t.charAt(d + 1)) ? t.substring(0, d) : t;
+            if (nomeValido(n)) r.add(n);
+        }
+        return r;
+    }
+
+    /**
+     * Si puo' togliere la protezione a un pacchetto che pkg deve cambiare per far posto a quello
+     * scelto? No se la sua avvertenza dice di aspettare: e' la regola che lo tiene fuori dalla
+     * manutenzione completa, e deve valere anche quando entra dalla porta di servizio, come
+     * dipendenza di un altro.
+     */
+    static String motivoPerNonSbloccare(JSONObject protetto) {
+        String n = protetto.optString("nome"), da = protetto.optString("versione"), a = protetto.optString("verso");
+        // Se pkg non dice a che versione andrebbe, si suppone il caso peggiore.
+        boolean maggiore = a.isEmpty() || saltoSignificativo(n, da, a);
+        JSONObject av = avvertenzaPer(n, maggiore);
+        if (av != null && "attendi".equals(av.optString("level")))
+            return "e' protetto e la sua avvertenza dice di aspettare: " + av.optString("text");
+        return null;
+    }
+
+    /** Il piano come lo mostra la scheda: l'uscita di pkg si accorcia, il resto resta com'e'. */
+    private static JSONObject pianoPerLaScheda(JSONObject piano) {
+        JSONObject p = new JSONObject(piano.toString());
+        String u = p.optString("uscita", "");
+        if (u.length() > 6000) p.put("uscita", "...\n" + u.substring(u.length() - 6000));
+        return p;
+    }
+
+    /**
+     * @param firmaApprovata l'impronta del piano che chi preme ha letto nella scheda. Il job
+     *                       ricalcola il piano e parte solo se e' lo stesso: fra la lettura e il
+     *                       click il catalogo puo' essere cambiato, e allora si eseguirebbe un
+     *                       piano che nessuno ha visto.
+     */
+    public static JSONObject avviaAggiornamentoGuidato(String nome, String firmaApprovata) {
         if (!nomeValido(nome)) return new JSONObject().put("success", false).put("error", "nome pacchetto non valido");
+        if (firmaApprovata == null || !firmaApprovata.matches("[0-9a-f]{16}"))
+            return new JSONObject().put("success", false)
+                    .put("error", "Manca l'impronta del piano letto: premi di nuovo \"Prepara\" e poi aggiorna.");
         String id = "guid-" + System.currentTimeMillis();
         Job j = new Job(id, "guided_update");
         JOBS.put(id, j);
         final String pkgNome = nome;
-        Thread t = new Thread(() -> runAggiornamentoGuidato(j, pkgNome), "guided-update");
+        Thread t = new Thread(() -> runAggiornamentoGuidato(j, pkgNome, firmaApprovata), "guided-update");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -5514,9 +5673,11 @@ public final class UpdateManager {
      * aggiornato con il processo ancora sui file vecchi e' una vulnerabilita' aperta che
      * risulta chiusa: il modo peggiore di stare fermi.
      */
-    private static void runAggiornamentoGuidato(Job job, String nome) {
+    private static void runAggiornamentoGuidato(Job job, String nome, String firmaApprovata) {
         job.status = "running";
         final int TOT = 6;
+        boolean pianoNonRispettato = false;
+        JSONObject piano;
         java.util.List<String> daRiproteggere = new ArrayList<>();
         java.util.List<String> famiglia = new ArrayList<>();
         java.util.List<String> messaggiAzione = new ArrayList<>();
@@ -5548,8 +5709,30 @@ public final class UpdateManager {
             String attesa = pf.optString("available", "");
             famiglia = jsonArrayToList(pf.optJSONArray("family") == null
                     ? new JSONArray().put(nome) : pf.getJSONArray("family"));
-            java.util.List<String> protetti = jsonArrayToList(pf.optJSONArray("lockedMembers") == null
-                    ? new JSONArray() : pf.getJSONArray("lockedMembers"));
+
+            // Si esegue il piano che e' stato letto, o niente. Il preflight qui sopra l'ha appena
+            // ricalcolato: se l'impronta non e' quella approvata, qualcosa e' cambiato nel
+            // frattempo (di solito il catalogo) e il piano che partirebbe non l'ha visto nessuno.
+            piano = pf.getJSONObject("piano");
+            String firmaOra = pf.optString("firma", "");
+            if (!firmaOra.equals(firmaApprovata)) {
+                job.status = "error";
+                job.errorMessage = "Il piano e' cambiato da quando l'hai letto: premi di nuovo \"Prepara\".";
+                job.scrivi("  impronta approvata " + firmaApprovata + ", impronta adesso " + firmaOra);
+                job.scrivi("RIFIUTO DI PARTIRE: non eseguo un piano diverso da quello che hai letto.");
+                return;
+            }
+            job.scrivi("  piano esatto (impronta " + firmaOra + "):");
+            JSONArray cambiPiano = piano.getJSONArray("cambi");
+            for (int i = 0; i < cambiPiano.length(); i++) {
+                JSONObject c = cambiPiano.getJSONObject(i);
+                job.scrivi("    " + c.getString("tipo") + " " + c.getString("nome") + " "
+                        + (c.getString("da").isEmpty() ? "" : c.getString("da"))
+                        + (c.getString("a").isEmpty() || c.getString("a").equals(c.getString("da")) ? "" : " -> " + c.getString("a")));
+            }
+            // Si sblocca esattamente cio' che il piano ha sbloccato nella copia: ne' uno in meno
+            // (pkg si fermerebbe), ne' uno in piu' (resterebbe scoperto senza motivo).
+            java.util.List<String> protetti = jsonArrayToList(piano.getJSONArray("sbloccati"));
             JSONArray sv = pf.optJSONArray("services");
             for (int i = 0; sv != null && i < sv.length(); i++) {
                 JSONObject o = sv.getJSONObject(i);
@@ -5592,7 +5775,15 @@ public final class UpdateManager {
             // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
             // ripescare i messaggi che chiedono un'azione.
             StringBuilder catturato = new StringBuilder();
-            int code = eseguiConLog(job, "pkg upgrade -y" + elenco + " 2>&1", 1800, catturato);
+            // -U: stesso catalogo su cui e' stato calcolato il piano. Riscaricarlo adesso potrebbe
+            // portare versioni diverse da quelle approvate.
+            int code = eseguiConLog(job, "pkg upgrade -y -U" + elenco + " 2>&1", 1800, catturato);
+            // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
+            // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
+            if (code == 4) {
+                job.scrivi("  pkg ha aggiornato se stesso: rilancio lo stesso comando per il resto");
+                code = eseguiConLog(job, "pkg upgrade -y -U" + elenco + " 2>&1", 1800, catturato);
+            }
             messaggiAzione = messaggiCheChiedonoAzione(catturato.toString());
             if (code != 0) throw new IllegalStateException("pkg upgrade uscito con codice " + code);
 
@@ -5601,6 +5792,17 @@ public final class UpdateManager {
             if (versioneDopo.equals(versionePrima)) {
                 throw new IllegalStateException("la versione non e' cambiata: l'aggiornamento non ha avuto effetto");
             }
+            // Ogni riga del piano, controllata: non "pkg e' uscito con 0", ma "ogni pacchetto e'
+            // alla versione che il piano diceva".
+            job.scrivi("  confronto con il piano:");
+            JSONArray verifica = PianoPacchetti.verificaEsito(piano);
+            for (int i = 0; i < verifica.length(); i++) {
+                JSONObject v = verifica.getJSONObject(i);
+                job.scrivi("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + v.getString("nome")
+                        + ": atteso " + v.getString("atteso") + ", trovato " + v.getString("trovato"));
+                if (!v.getBoolean("ok")) pianoNonRispettato = true;
+            }
+            if (pianoNonRispettato) job.scrivi("  ATTENZIONE: il risultato non coincide con il piano approvato.");
 
             job.avanza(4, TOT);
             job.scrivi("");
@@ -5703,7 +5905,10 @@ public final class UpdateManager {
                 if (!e.getValue()) caduto = true;
             }
 
-            if (problemaServizi || caduto) {
+            if (pianoNonRispettato) {
+                job.status = "error";
+                job.errorMessage = "Aggiornamento eseguito, ma il risultato non coincide con il piano approvato: leggi il log.";
+            } else if (problemaServizi || caduto) {
                 job.status = "error";
                 job.errorMessage = "Aggiornamento eseguito, ma un servizio non e' ripartito come doveva: leggi il log.";
             } else if (ricontrolloManuale) {
@@ -9342,11 +9547,15 @@ public final class UpdateManager {
         }
     }
 
-    public static JSONObject avviaManutenzione() {
+    /** @param firmaApprovata l'impronta del piano mostrato dall'anteprima: si esegue quello o niente. */
+    public static JSONObject avviaManutenzione(String firmaApprovata) {
+        if (firmaApprovata == null || !firmaApprovata.matches("[0-9a-f]{16}"))
+            return new JSONObject().put("success", false)
+                    .put("error", "Manca l'impronta del piano: rileggi l'anteprima della manutenzione e poi conferma.");
         String id = "maint-" + System.currentTimeMillis();
         Job j = new Job(id, "maintenance");
         JOBS.put(id, j);
-        Thread t = new Thread(() -> runMaintenanceJob(j), "update-maintenance");
+        Thread t = new Thread(() -> runMaintenanceJob(j, firmaApprovata), "update-maintenance");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -9371,6 +9580,12 @@ public final class UpdateManager {
         job.scrivi("");
         try {
             int code = eseguiConLog(job, "pkg upgrade -y 2>&1", 3600);
+            // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
+            // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
+            if (code == 4) {
+                job.scrivi("pkg ha aggiornato se stesso: rilancio lo stesso comando per il resto");
+                code = eseguiConLog(job, "pkg upgrade -y 2>&1", 3600);
+            }
             job.avanza(2, 2);
             job.scrivi("");
             job.scrivi("pkg upgrade terminato con codice " + code);
@@ -9399,9 +9614,52 @@ public final class UpdateManager {
      * peggiore, perche' nessuno se ne accorge finche' un upgrade successivo non porta via
      * un servizio.
      */
-    private static void runMaintenanceJob(Job job) {
+    /**
+     * Chi resta protetto durante la manutenzione completa, e perche'; e il piano esatto che ne
+     * risulta. L'anteprima e il lavoro vero chiamano QUESTA funzione: se la decisione fosse
+     * scritta due volte, prima o poi diventerebbe due decisioni diverse, e l'anteprima
+     * mostrerebbe un piano che il lavoro non esegue.
+     */
+    private static JSONObject pianoDellaManutenzione(JSONArray bloccati) {
+        Map<String, String> perche = new LinkedHashMap<>();
+        for (int i = 0; i < bloccati.length(); i++) {
+            JSONObject o = bloccati.getJSONObject(i);
+            if (o.has("advisory") && "attendi".equals(o.getJSONObject("advisory").getString("level")))
+                perche.put(o.getString("name"), "avvertenza di livello ATTENDI su un salto di versione maggiore");
+        }
+        // La prova sul campo batte l'avvertenza generica: se la configurazione Dovecot
+        // VIVA contiene costrutti che la versione nuova non accetta, quel pacchetto non
+        // si sblocca, punto. Non e' un'ipotesi sulla versione, e' cio' che c'e' sul disco.
+        JSONObject dc = compatibilitaDovecot();
+        if (dc.optBoolean("scanned", false) && !dc.optBoolean("compatible24", true)) {
+            for (String n : sh("pkg query %n 2>/dev/null | grep -E '^dovecot' ", 20).split("\n")) {
+                String t = n.trim();
+                if (nomeValido(t))
+                    perche.put(t, "la configurazione sul disco usa " + dc.optJSONArray("issues").length()
+                            + " costrutti che la versione nuova non accetta");
+            }
+        }
+        Set<String> protetti = insiemeProtetti();
+        Set<String> daSbloccare = new TreeSet<>(protetti);
+        daSbloccare.removeAll(perche.keySet());
+        JSONObject piano = PianoPacchetti.pianoTotale(daSbloccare, protetti,
+                b -> perche.containsKey(b.optString("nome"))
+                        ? "resta protetto (" + perche.get(b.optString("nome")) + "): pkg lo salta"
+                        : motivoPerNonSbloccare(b));
+        return new JSONObject().put("piano", piano).put("trattenuti", new JSONObject(perche))
+                .put("protetti", new JSONArray(new ArrayList<>(protetti)));
+    }
+
+    private static void runMaintenanceJob(Job job, String firmaApprovata) {
         job.status = "running";
         List<String> daRibloccare = new ArrayList<>();
+        JSONObject piano = null;
+        boolean pianoNonRispettato = false;
+        // Il file di stato si cancella solo se l'ha scritto QUESTA esecuzione. Prima si cancellava
+        // quando "tutti i pacchetti da riproteggere" erano riprotetti — e con l'elenco vuoto di un
+        // rifiuto a partire lo erano sempre: una manutenzione che si rifiutava perche' ne esisteva
+        // una interrotta ne cancellava lo stato, cioe' l'elenco che l'avvio usa per riproteggere.
+        boolean statoScritto = false;
         Set<String> protettiPrima = new TreeSet<>();
         Map<String, Boolean> serviziPrima = new LinkedHashMap<>();
         try {
@@ -9424,50 +9682,47 @@ public final class UpdateManager {
                     .filter(Map.Entry::getValue).map(Map.Entry::getKey)
                     .collect(java.util.stream.Collectors.joining(", ")));
             job.scrivi("");
-            job.scrivi("[1/4] Decido cosa si puo' aggiornare e cosa no...");
+            job.scrivi("[1/4] Decido cosa si puo' aggiornare e cosa no, e ricalcolo il piano...");
 
-            // --- Chi resta protetto, e perche' ---
-            Set<String> trattieni = new TreeSet<>();
-            Map<String, String> perche = new LinkedHashMap<>();
+            // --- Chi resta protetto, e perche': la stessa funzione dell'anteprima ---
+            JSONObject decisione = pianoDellaManutenzione(aggiornamentiBloccati());
+            piano = decisione.getJSONObject("piano");
+            JSONObject perche = decisione.getJSONObject("trattenuti");
+            for (String n : new TreeSet<>(perche.keySet()))
+                job.scrivi("    " + n + "  -> TRATTENUTO: " + perche.getString(n));
 
-            JSONArray bloccati = aggiornamentiBloccati();
-            for (int i = 0; i < bloccati.length(); i++) {
-                JSONObject o = bloccati.getJSONObject(i);
-                if (o.has("advisory") && "attendi".equals(o.getJSONObject("advisory").getString("level"))) {
-                    trattieni.add(o.getString("name"));
-                    perche.put(o.getString("name"), "avvertenza di livello ATTENDI su un salto di versione maggiore");
-                }
+            // Si esegue il piano che e' stato letto, o niente.
+            if (!piano.optBoolean("misurato")) {
+                throw new IllegalStateException("non ho potuto calcolare il piano esatto: "
+                        + piano.optString("error", piano.optString("errore", "?")));
             }
-
-            // La prova sul campo batte l'avvertenza generica: se la configurazione Dovecot
-            // VIVA contiene costrutti che la versione nuova non accetta, quel pacchetto non
-            // si sblocca, punto. Non e' un'ipotesi sulla versione, e' cio' che c'e' sul disco.
-            JSONObject dc = compatibilitaDovecot();
-            if (dc.optBoolean("scanned", false) && !dc.optBoolean("compatible24", true)) {
-                for (String n : sh("pkg query %n 2>/dev/null | grep -E '^dovecot' ", 20).split("\n")) {
-                    String t = n.trim();
-                    if (nomeValido(t)) {
-                        trattieni.add(t);
-                        perche.put(t, "la configurazione sul disco usa " + dc.optJSONArray("issues").length()
-                                + " costrutti che la versione nuova non accetta");
-                    }
-                }
+            if (!piano.optString("firma", "").equals(firmaApprovata)) {
+                job.status = "error";
+                job.errorMessage = "Il piano e' cambiato da quando l'hai letto: rileggi l'anteprima.";
+                job.scrivi("  impronta approvata " + firmaApprovata + ", impronta adesso " + piano.optString("firma"));
+                job.scrivi("RIFIUTO DI PARTIRE: non eseguo un piano diverso da quello che hai letto. Non ho toccato niente.");
+                job.fine = System.currentTimeMillis();
+                return;
             }
-
-            for (String l : sh("pkg lock -l 2>/dev/null").split("\n")) {
-                String n = l.trim();
-                if (n.isEmpty() || n.endsWith(":")) continue;
-                n = n.replaceAll("-[0-9][^\\s]*$", "");
-                if (!nomeValido(n)) continue;
-                if (trattieni.contains(n)) {
-                    job.scrivi("    " + n + "  -> TRATTENUTO: " + perche.getOrDefault(n, "avvertenza attiva"));
-                    continue;
-                }
-                daRibloccare.add(n);
+            if (!piano.optBoolean("eseguibile")) {
+                job.status = "error";
+                job.errorMessage = "Il piano non e' eseguibile: " + String.join(" | ", jsonArrayToList(piano.getJSONArray("erroriPkg")))
+                        + (piano.getJSONArray("cambi").isEmpty() ? " niente da aggiornare." : "");
+                job.scrivi("RIFIUTO DI PARTIRE: " + job.errorMessage + " Non ho toccato niente.");
+                job.fine = System.currentTimeMillis();
+                return;
             }
-            job.scrivi("  " + daRibloccare.size() + " pacchetti verranno aggiornati e riprotetti");
-            if (!trattieni.isEmpty()) {
-                job.scrivi("  " + trattieni.size() + " trattenuti: restano protetti e pkg li salta.");
+            daRibloccare.addAll(jsonArrayToList(piano.getJSONArray("sbloccati")));
+            job.scrivi("  piano esatto (impronta " + piano.getString("firma") + "):");
+            JSONArray cambiPiano = piano.getJSONArray("cambi");
+            for (int i = 0; i < cambiPiano.length(); i++) {
+                JSONObject c = cambiPiano.getJSONObject(i);
+                job.scrivi("    " + c.getString("tipo") + " " + c.getString("nome") + " " + c.getString("da")
+                        + (c.getString("a").isEmpty() || c.getString("a").equals(c.getString("da")) ? "" : " -> " + c.getString("a")));
+            }
+            job.scrivi("  " + daRibloccare.size() + " pacchetti protetti verranno sbloccati e riprotetti");
+            if (perche.length() > 0) {
+                job.scrivi("  " + perche.length() + " trattenuti: restano protetti e pkg li salta.");
                 job.scrivi("  Vanno aggiornati con la procedura dedicata, non da qui.");
             }
 
@@ -9477,16 +9732,57 @@ public final class UpdateManager {
             // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il ripristino
             // all'avvio sa cosa riproteggere.
             scriviStato(daRibloccare);
+            statoScritto = true;
             job.scrivi("  elenco salvato in " + STATO_MANUTENZIONE + " per il ripristino automatico");
             for (String n : daRibloccare) ok("pkg unlock -y " + n, 30);
 
             job.avanza(3, 4);
             job.scrivi("");
             job.scrivi("[3/4] Aggiornamento...");
-            int code = eseguiConLog(job, "pkg upgrade -y 2>&1", 3600);
+            // -U: lo stesso catalogo su cui e' stato calcolato il piano.
+            int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
+            // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
+            // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
+            if (code == 4) {
+                job.scrivi("pkg ha aggiornato se stesso: rilancio lo stesso comando per il resto");
+                code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
+            }
             job.scrivi("pkg upgrade terminato con codice " + code);
             if (code != 0) { job.status = "error"; job.errorMessage = "pkg upgrade uscito con codice " + code; }
             else job.status = "completed";
+
+            job.scrivi("");
+            job.scrivi("Confronto con il piano:");
+            JSONArray verifica = PianoPacchetti.verificaEsito(piano);
+            for (int i = 0; i < verifica.length(); i++) {
+                JSONObject v = verifica.getJSONObject(i);
+                job.scrivi("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + v.getString("nome")
+                        + ": atteso " + v.getString("atteso") + ", trovato " + v.getString("trovato"));
+                if (!v.getBoolean("ok")) pianoNonRispettato = true;
+            }
+            if (pianoNonRispettato) {
+                job.status = "error";
+                job.errorMessage = "Il risultato non coincide con il piano approvato: leggi il log.";
+            }
+
+            // Aggiornare un pacchetto non aggiorna il processo che lo usa: finche' non riparte gira
+            // sui file vecchi, e la correzione risulta installata senza essere in servizio. La
+            // manutenzione completa non riavvia niente da sola (lo fa l'aggiornamento guidato, un
+            // pacchetto alla volta), ma dice esattamente chi va riavviato.
+            java.util.LinkedHashSet<String> daRiavviare = new java.util.LinkedHashSet<>();
+            for (int i = 0; i < cambiPiano.length(); i++) {
+                JSONObject c = cambiPiano.getJSONObject(i);
+                if ("rimuove".equals(c.getString("tipo"))) continue;
+                for (String logico : serviziDaRiavviare(c.getString("nome"))) {
+                    String reale = nomeServizioReale(logico);
+                    if (reale != null) daRiavviare.add(reale);
+                }
+            }
+            if (!daRiavviare.isEmpty()) {
+                job.scrivi("");
+                job.scrivi("DA RIAVVIARE, perche' i loro pacchetti sono cambiati: " + String.join(", ", daRiavviare));
+                job.scrivi("Finche' non li riavvii girano sui file vecchi: le correzioni sono installate ma non in servizio.");
+            }
 
         } catch (Exception e) {
             job.status = "error"; job.errorMessage = e.getMessage();
@@ -9502,7 +9798,7 @@ public final class UpdateManager {
                 else job.scrivi("    ATTENZIONE: non sono riuscito a riproteggere " + n);
             }
             job.scrivi("  " + fatti + "/" + daRibloccare.size() + " pacchetti riprotetti");
-            if (fatti == daRibloccare.size()) pulisciStato();
+            if (fatti == daRibloccare.size()) { if (statoScritto) pulisciStato(); }
             else {
                 job.scrivi("  CONTROLLA A MANO lo stato delle protezioni prima di considerare chiusa l'operazione.");
                 job.scrivi("  Lo stato resta in " + STATO_MANUTENZIONE + ": il pannello riprovera' al prossimo avvio.");
