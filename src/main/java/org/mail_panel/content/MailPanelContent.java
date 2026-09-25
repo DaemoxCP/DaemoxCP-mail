@@ -13722,8 +13722,20 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 if (prompt('Conferma: scrivi AGGIORNA per procedere.') !== 'AGGIORNA') return;
                 r = await updApi('updates_apply', { confirm: 'AGGIORNA' });
             } else if (azione.tipo === 'package_update') {
-                if (prompt('Per confermare scrivi esattamente il nome del pacchetto: ' + azione.package) !== azione.package) return;
-                r = await updApi('package_update', { package: azione.package, confirm: azione.package });
+                // Il server esegue solo il piano che si e' visto: prima il piano esatto, con la sua
+                // impronta, poi la conferma. Senza impronta l'aggiornamento viene rifiutato.
+                const pf = await updApi('package_preflight', { package: azione.package });
+                if (!pf.success) { alert(pf.error || 'piano non calcolabile'); return; }
+                if (pf.blocked) {
+                    alert('Non avviabile:\\n' + (pf.checks || []).filter(c => c.level === 'block')
+                          .map(c => '- ' + c.label + ': ' + c.detail).join('\\n'));
+                    return;
+                }
+                const cambi = ((pf.piano && pf.piano.cambi) || []).map(c => '  ' + c.tipo + ' ' + c.nome + ' ' + c.da
+                              + (c.a && c.a !== c.da ? ' -> ' + c.a : ''));
+                if (prompt('Piano esatto di pkg (impronta ' + (pf.firma || '?') + '):\\n' + cambi.join('\\n')
+                           + '\\n\\nPer confermare scrivi esattamente il nome del pacchetto: ' + azione.package) !== azione.package) return;
+                r = await updApi('package_update', { package: azione.package, confirm: azione.package, firma: pf.firma || '' });
             } else if (azione.tipo === 'rspamd_clean_cache') {
                 if (prompt('Conferma: scrivi ELIMINA CACHE per procedere.') !== 'ELIMINA CACHE') return;
                 r = await updApi('rspamd_clean_cache', { confirm: 'ELIMINA CACHE' });

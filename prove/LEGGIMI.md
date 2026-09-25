@@ -13,6 +13,7 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.ProvaSrv
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaConsegnaRapporto
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaPianoPacchetti
+    java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaTurnoPacchetti
     sh prove/prova-simulazione.sh
 
 ## Cosa provano
@@ -50,7 +51,11 @@ mailwrapper, cioe' dma: arrivava in chiaro e senza firma DKIM, e il pannello scr
 "riuscito". La prova verifica che mailwrapper non venga mai scelto (collegamento simbolico o
 hard link che sia), e legge righe vere del log: consegnato con TLS, rimandato, respinto per
 DMARC, rifiutato dal milter, formato RFC 5424, e le righe di dma, con le quali l'esito NON
-deve diventare "consegnato" perche' Postfix quel messaggio non l'ha visto.
+deve diventare "consegnato" perche' Postfix quel messaggio non l'ha visto. Il TLS si prende solo
+dalla riga del processo smtp che ha consegnato (stesso pid) e della connessione su cui e' partito:
+un altro processo che apre una connessione cifrata verso lo stesso server, una connessione
+precedente dello stesso processo, una riusata (conn_use) o il ripiego in chiaro dopo un TLS
+caduto non devono far scrivere "con TLS" a un rapporto partito in chiaro.
 
 **ProvaPianoPacchetti** — il piano esatto di un aggiornamento e la risposta a "la patch c'e'?".
 Legge uscite di `pkg upgrade -n` e di `pkg audit -Rjson` con la forma che il sorgente di pkg
@@ -58,6 +63,15 @@ stampa (sezioni, totali in fondo, `(vulnerable!)`, intervalli di VuXML come ">= 
 rifiuta di chiamare completo un piano con una riga che non capisce o con i conti che non tornano.
 Dentro c'e' il caso che l'ha motivata: nginx 1.30.4,3 con il catalogo fermo alla stessa e VuXML
 "< 1.30.5,3" — la correzione esiste, il ramo non ce l'ha, e il lock non c'entra.
+
+**ProvaTurnoPacchetti** — un lavoro alla volta sui pacchetti, e l'elenco per riproteggerli
+scritto davvero prima di sbloccarli. Nasce da una revisione sul pannello web, e il
+difetto qui era lo stesso: due lavori partivano insieme e si sovrascrivevano l'elenco su disco, e
+se l'elenco non si poteva scrivere il lavoro sbloccava lo stesso. La prova mette 64 thread a
+chiedere il turno nello stesso istante (lo prende uno solo), controlla che il turno si liberi anche
+quando il lavoro fallisce, che l'elenco di un lavoro interrotto non venga sovrascritto, che un
+elenco non scritto venga detto, e che con quell'elenco su disco non parta nessun lavoro che
+installa o aggiorna, mentre rimettere le protezioni resta possibile.
 
 **prova-simulazione.sh** — la simulazione su COPIA del database di pkg, contro un pkg finto che
 tiene i "lock" come file. Dimostra che lo sblocco avviene nella copia e non nel database vero,

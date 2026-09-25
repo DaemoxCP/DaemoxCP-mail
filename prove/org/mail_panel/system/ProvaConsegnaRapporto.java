@@ -49,6 +49,106 @@ public class ProvaConsegnaRapporto {
         vero("gmail: l'esito registrato dice dove e con quale TLS",
             v.optString("esito").startsWith("consegnato a gmail-smtp-in.l.google.com") && v.optString("esito").contains("TLSv1.3"));
 
+        // --- Il TLS si prende solo dal processo smtp che ha consegnato ---
+        // Revisione: con il solo relay, la riga TLS di un ALTRO processo smtp verso lo
+        // stesso server veniva attribuita al rapporto, e un rapporto partito in chiaro risultava
+        // "con TLS". Qui il processo 501 consegna in chiaro mentre il 500 apre una sua connessione
+        // cifrata verso lo stesso Gmail per un altro messaggio.
+        String R = "gmail-smtp-in.l.google.com[142.250.102.27]:25";
+        String apertura13 = "Trusted TLS connection established to " + R + ": TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits) key-exchange X25519 server-signature ECDSA (P-256) server-digest SHA256";
+        String apertura12 = "Untrusted TLS connection established to " + R + ": TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits)";
+        String cleanup = "Sep 25 19:00:00 mail postfix/cleanup[1]: 4TLS00001: message-id=<" + ID + ">";
+        String consegnato = "4TLS00001: to=<owner@example.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)";
+        List<String> altroProcesso = List.of(
+            cleanup,
+            "Sep 25 19:00:01 mail postfix/smtp[500]: " + apertura13,
+            "Sep 25 19:00:02 mail postfix/smtp[501]: " + consegnato,
+            "Sep 25 19:00:02 mail postfix/smtp[500]: 4ALTRO0001: to=<altro@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)");
+        vero("tls: la prova contiene davvero un'apertura TLS verso lo stesso relay",
+            altroProcesso.get(1).contains("TLS connection established to " + R + ": "));
+        e = RapportoPeriodico.esitoNelLog(altroProcesso, ID, A);
+        vero("tls di un altro processo: consegnato", "consegnato".equals(e.optString("stato")));
+        vero("tls di un altro processo: NON attribuito al rapporto", !e.has("tls"));
+        v = RapportoPeriodico.verdetto(e);
+        vero("tls di un altro processo: l'esito non dice TLS", !v.optString("esito").contains("TLS"));
+        vero("tls di un altro processo: la sua riga resta fuori dall'estratto",
+            !e.getJSONArray("righe").toString().contains("smtp[500]"));
+
+        // Le due aperture si intrecciano: vale quella del processo che ha consegnato.
+        List<String> intrecciate = List.of(
+            cleanup,
+            "Sep 25 19:00:01 mail postfix/smtp[81242]: " + apertura13,
+            "Sep 25 19:00:01 mail postfix/smtp[81243]: " + apertura12,
+            "Sep 25 19:00:02 mail postfix/smtp[81242]: " + consegnato);
+        vero("tls intrecciati: vale quello del processo che ha consegnato",
+            "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(RapportoPeriodico.esitoNelLog(intrecciate, ID, A).optString("tls")));
+        List<String> intrecciateAlContrario = List.of(
+            cleanup,
+            "Sep 25 19:00:01 mail postfix/smtp[81243]: " + apertura12,
+            "Sep 25 19:00:01 mail postfix/smtp[81242]: " + apertura13,
+            "Sep 25 19:00:02 mail postfix/smtp[81243]: " + consegnato);
+        vero("tls intrecciati, al contrario: vale ancora quello di chi ha consegnato",
+            "TLSv1.2 (ECDHE-RSA-AES128-GCM-SHA256)".equals(RapportoPeriodico.esitoNelLog(intrecciateAlContrario, ID, A).optString("tls")));
+
+        // Stesso processo: prima un altro messaggio su una connessione cifrata, poi il rapporto su
+        // una connessione nuova, in chiaro (senza conn_use). L'apertura e' della connessione di prima.
+        List<String> connessionePrima = List.of(
+            cleanup,
+            "Sep 25 19:00:01 mail postfix/smtp[600]: " + apertura13,
+            "Sep 25 19:00:01 mail postfix/smtp[600]: 4ALTRO0002: to=<altro@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
+            "Sep 25 19:00:02 mail postfix/smtp[600]: " + consegnato);
+        vero("stesso processo, connessione precedente: niente TLS", !RapportoPeriodico.esitoNelLog(connessionePrima, ID, A).has("tls"));
+
+        // Connessione riusata: e' stata aperta prima, per un altro messaggio.
+        List<String> riusata = List.of(
+            cleanup,
+            "Sep 25 19:00:01 mail postfix/smtp[700]: " + apertura13,
+            "Sep 25 19:00:02 mail postfix/smtp[700]: " + consegnato.replace(", delay=1,", ", conn_use=2, delay=1,"));
+        vero("connessione riusata (conn_use): niente TLS", !RapportoPeriodico.esitoNelLog(riusata, ID, A).has("tls"));
+
+        // TLS caduto a meta' e ripiego in chiaro verso lo STESSO server (smtp_tls_security_level=may):
+        // l'apertura c'e', il relay e' lo stesso, ma il messaggio e' partito sulla connessione dopo.
+        List<String> ripiego = List.of(
+            cleanup,
+            "Sep 25 19:00:01 mail postfix/smtp[800]: " + apertura13,
+            "Sep 25 19:00:02 mail postfix/smtp[800]: 4TLS00001: lost connection with " + R.substring(0, R.lastIndexOf(':')) + " while sending end of data -- message may be sent more than once",
+            "Sep 25 19:00:03 mail postfix/smtp[800]: " + consegnato);
+        vero("ripiego in chiaro dopo un TLS caduto: niente TLS", !RapportoPeriodico.esitoNelLog(ripiego, ID, A).has("tls"));
+
+        // Primo MX cifrato che rifiuta, secondo MX in chiaro: l'apertura e' verso un altro relay.
+        List<String> altroMx = List.of(
+            cleanup,
+            "Sep 25 19:00:01 mail postfix/smtp[900]: Trusted TLS connection established to alt1.gmail-smtp-in.l.google.com[142.250.150.27]:25: TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)",
+            "Sep 25 19:00:01 mail postfix/smtp[900]: 4TLS00001: host alt1.gmail-smtp-in.l.google.com[142.250.150.27] said: 421 4.7.0 Try again later (in reply to MAIL FROM command)",
+            "Sep 25 19:00:02 mail postfix/smtp[900]: " + consegnato);
+        vero("apertura verso un altro MX: niente TLS", !RapportoPeriodico.esitoNelLog(altroMx, ID, A).has("tls"));
+
+        // smtp_tls_loglevel 2: dopo l'apertura il processo scrive righe della sessione TLS, e il
+        // messaggio va anche a un secondo destinatario sulla stessa connessione. La prova regge.
+        List<String> loglevel2 = List.of(
+            cleanup,
+            "Sep 25 19:00:01 mail postfix/smtp[1000]: " + apertura13,
+            "Sep 25 19:00:01 mail postfix/smtp[1000]: SSL_connect:SSL negotiation finished successfully",
+            "Sep 25 19:00:01 mail postfix/smtp[1000]: save session smtp&gmail.com&gmail-smtp-in.l.google.com&142.250.102.27&&3C7A5B to smtp cache",
+            "Sep 25 19:00:02 mail postfix/smtp[1000]: 4TLS00001: to=<altro@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
+            "Sep 25 19:00:02 mail postfix/smtp[1000]: " + consegnato);
+        e = RapportoPeriodico.esitoNelLog(loglevel2, ID, A);
+        vero("loglevel 2 e due destinatari: TLS riconosciuto", "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(e.optString("tls")));
+        vero("loglevel 2: l'apertura e' nell'estratto", e.getJSONArray("righe").toString().contains("TLS connection established"));
+
+        // RFC 5424: il pid e' un campo a se'. Stesso pid, TLS; pid diverso, niente.
+        String t5424 = "<22>1 2026-09-25T19:00:01.000001+02:00 mail postfix/smtp ";
+        List<String> tls5424 = List.of(
+            "<22>1 2026-09-25T19:00:00.000001+02:00 mail postfix/cleanup 1 - - 4TLS00001: message-id=<" + ID + ">",
+            t5424 + "81242 - - " + apertura13,
+            t5424 + "81242 - - " + consegnato);
+        vero("rfc 5424, stesso pid: TLS", "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(RapportoPeriodico.esitoNelLog(tls5424, ID, A).optString("tls")));
+        List<String> tls5424altro = List.of(tls5424.get(0), t5424 + "81243 - - " + apertura13, tls5424.get(2));
+        vero("rfc 5424, pid diverso: niente TLS", !RapportoPeriodico.esitoNelLog(tls5424altro, ID, A).has("tls"));
+        RapportoPeriodico.Riga rr = RapportoPeriodico.riga("Sep  5 07:02:11 mail postfix/smtp[81242]: " + consegnato);
+        vero("riga classica con il giorno a una cifra: processo e testo",
+            rr != null && "postfix/smtp[81242]".equals(rr.processo()) && consegnato.equals(rr.testo()));
+
         // --- Il caso di produzione: il messaggio e' passato da dma, non da Postfix ---
         // Il vecchio codice qui diceva "riuscito". Il nuovo non deve dire "consegnato".
         List<String> dma = List.of(

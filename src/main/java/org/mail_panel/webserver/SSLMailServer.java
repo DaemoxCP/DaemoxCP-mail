@@ -1108,16 +1108,18 @@ public class SSLMailServer {
 
         switch (action) {
             case "install_mysql" -> {
-                // Install MySQL
-                try {
-                    String scriptContent = new MySQLMailScript().getScriptContent();
-                    String output = executeScript(scriptContent, "mysql");
-                    response.put("success", true);
-                    response.put("output", output);
-                } catch (Exception e) {
-                    response.put("success", false);
-                    response.put("error", e.getMessage());
-                }
+                // Install MySQL: lo script toglie e rimette pacchetti, quindi aspetta il turno.
+                JSONObject esito = sulTurnoPacchetti("installazione di MySQL", () -> {
+                    JSONObject r = new JSONObject();
+                    try {
+                        String scriptContent = new MySQLMailScript().getScriptContent();
+                        r.put("success", true).put("output", executeScript(scriptContent, "mysql"));
+                    } catch (Exception e) {
+                        r.put("success", false).put("error", e.getMessage());
+                    }
+                    return r;
+                });
+                for (String k : esito.keySet()) response.put(k, esito.get(k));
             }
             case "auto_setup" -> {
                 // Automatic setup - only requires admin credentials
@@ -2034,6 +2036,19 @@ public class SSLMailServer {
         }
     }
 
+    /**
+     * Esegue un'installazione di pacchetti sul turno dei lavori sui pacchetti (vedi
+     * TurnoPacchetti): uno alla volta. Se un altro lavoro sta cambiando i pacchetti, o c'e'
+     * l'elenco di uno che non si e' chiuso, non parte e la risposta dice perche'.
+     */
+    private static JSONObject sulTurnoPacchetti(String descrizione, java.util.function.Supplier<JSONObject> lavoro) {
+        String id = "installa-" + System.nanoTime();
+        String rifiuto = org.mail_panel.system.TurnoPacchetti.prendi(id, descrizione);
+        if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto).put("message", rifiuto);
+        try { return lavoro.get(); }
+        finally { org.mail_panel.system.TurnoPacchetti.rilascia(id); }
+    }
+
     private void handleApiInstall(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
             sendJsonError(exchange, 401, "Unauthorized");
@@ -2072,15 +2087,22 @@ public class SSLMailServer {
             response.put("success", false);
             response.put("error", "Componente sconosciuto");
         } else {
-            try {
-                String output = executeScript(scriptContent, component);
-                Main.mailDatabase.markComponentInstalled(component, "latest");
-                response.put("success", true);
-                response.put("output", output);
-            } catch (Exception e) {
-                response.put("success", false);
-                response.put("error", e.getMessage());
-            }
+            // Gli script dei componenti tolgono e rimettono pacchetti: aspettano il turno dei
+            // lavori sui pacchetti. Il fuso orario no.
+            final String script = scriptContent;
+            java.util.function.Supplier<JSONObject> installa = () -> {
+                JSONObject r = new JSONObject();
+                try {
+                    String output = executeScript(script, component);
+                    Main.mailDatabase.markComponentInstalled(component, "latest");
+                    r.put("success", true).put("output", output);
+                } catch (Exception e) {
+                    r.put("success", false).put("error", e.getMessage());
+                }
+                return r;
+            };
+            response = "timezone".equals(component) ? installa.get()
+                     : sulTurnoPacchetti("installazione di " + component, installa);
         }
 
         sendJsonResponse(exchange, response);
@@ -3874,12 +3896,14 @@ public class SSLMailServer {
                             response.put("success", false);
                             response.put("error", "Email valida richiesta");
                         } else {
-                            AcmeManager.InstallResult result = acmeManager.installAcme(email);
-                            response.put("success", result.success);
-                            response.put("message", result.message);
-                            if (result.output != null) {
-                                response.put("output", result.output);
-                            }
+                            // installAcme fa "pkg install curl socat": aspetta il turno dei lavori sui pacchetti.
+                            JSONObject esito = sulTurnoPacchetti("installazione di acme.sh", () -> {
+                                AcmeManager.InstallResult result = acmeManager.installAcme(email);
+                                JSONObject r = new JSONObject().put("success", result.success).put("message", result.message);
+                                if (result.output != null) r.put("output", result.output);
+                                return r;
+                            });
+                            for (String k : esito.keySet()) response.put(k, esito.get(k));
                         }
                     }
                     case "issue" -> {
@@ -5901,6 +5925,10 @@ public class SSLMailServer {
     }
 
     private JSONObject installUnbound() {
+        return sulTurnoPacchetti("installazione di unbound", this::eseguiInstallUnbound);
+    }
+
+    private JSONObject eseguiInstallUnbound() {
         JSONObject r = new JSONObject();
         try {
             // TODO: migrate to Shell.run when touched
@@ -6593,7 +6621,11 @@ public class SSLMailServer {
                     response = UpdateManager.avviaRigenerazioneDovecot();
                     logAudit("DOVECOT_CONFIG_REGEN", ip, response.optString("jobId", ""));
                 }
-                case "maintenance_preview" -> response = UpdateManager.maintenancePreview();
+                case "maintenance_preview" -> {
+                    String adesso = org.mail_panel.system.TurnoPacchetti.pianoNonAdesso();
+                    response = adesso != null ? new JSONObject().put("success", false).put("error", adesso)
+                             : UpdateManager.maintenancePreview();
+                }
                 case "plan" -> response = UpdateManager.pianoManutenzione();
                 case "mysql84_preflight" -> response = UpdateManager.mysql84Preflight();
                 case "broken_libs" -> response = UpdateManager.pacchettiConLibrerieMancanti();
@@ -6849,7 +6881,11 @@ public class SSLMailServer {
                     response = UpdateManager.avviaMigrazione84();
                     logAudit("MYSQL84_MIGRATION_STARTED", ip, response.optString("jobId", ""));
                 }
-                case "package_preflight" -> response = UpdateManager.preflightPacchetto(req.optString("package", ""));
+                case "package_preflight" -> {
+                    String adesso = org.mail_panel.system.TurnoPacchetti.pianoNonAdesso();
+                    response = adesso != null ? new JSONObject().put("success", false).put("error", adesso)
+                             : UpdateManager.preflightPacchetto(req.optString("package", ""));
+                }
                 case "package_update" -> {
                     // La conferma e' il NOME DEL PACCHETTO scritto a mano: cosi' non si puo'
                     // aggiornare per sbaglio quello sbagliato dopo aver letto il referto di
@@ -7308,6 +7344,10 @@ public class SSLMailServer {
     }
 
     private JSONObject installClamav() {
+        return sulTurnoPacchetti("installazione di ClamAV", this::eseguiInstallClamav);
+    }
+
+    private JSONObject eseguiInstallClamav() {
         JSONObject r = new JSONObject();
         try {
             // TODO: migrate to Shell.run when touched
@@ -8435,6 +8475,10 @@ public class SSLMailServer {
     }
 
     private JSONObject installFail2ban() {
+        return sulTurnoPacchetti("installazione di fail2ban", this::eseguiInstallFail2ban);
+    }
+
+    private JSONObject eseguiInstallFail2ban() {
         JSONObject r = new JSONObject();
         try {
             // TODO: migrate to Shell.run when touched

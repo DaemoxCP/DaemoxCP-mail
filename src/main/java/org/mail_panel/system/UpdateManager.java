@@ -42,7 +42,7 @@ public final class UpdateManager {
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
 
     /** Elenco dei pacchetti sbloccati durante una manutenzione, per rimetterli a posto dopo un crash. */
-    private static final String STATO_MANUTENZIONE = "/var/db/mail-panel-maintenance-locks";
+    private static final String STATO_MANUTENZIONE = TurnoPacchetti.STATO;
 
     private UpdateManager() {}
 
@@ -210,7 +210,21 @@ public final class UpdateManager {
         return r;
     }
 
+    /**
+     * Protegge o sblocca i pacchetti. Aspetta il turno dei lavori sui pacchetti: cambiare le
+     * protezioni mentre un lavoro le ha tolte e le deve rimettere falserebbe il suo ripristino.
+     * Con l'elenco di un lavoro interrotto su disco invece si puo': rimettere le protezioni e'
+     * proprio il rimedio.
+     */
     public static JSONObject packagesLock(boolean blocca, String soloQuesto) {
+        String id = "lock-" + System.nanoTime();
+        String rifiuto = TurnoPacchetti.prendiPerLeProtezioni(id, "protezione dei pacchetti");
+        if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
+        try { return cambiaProtezioni(blocca, soloQuesto); }
+        finally { TurnoPacchetti.rilascia(id); }
+    }
+
+    private static JSONObject cambiaProtezioni(boolean blocca, String soloQuesto) {
         if (!soloQuesto.isEmpty() && !nomeValido(soloQuesto)) {
             return new JSONObject().put("success", false).put("error", "nome pacchetto non valido");
         }
@@ -1591,18 +1605,13 @@ public final class UpdateManager {
      * (riavvio del pannello, kill, crash della JVM): i pacchetti resterebbero sbloccati e
      * nessuno se ne accorgerebbe finche' un aggiornamento successivo non porta via un
      * servizio. Questo file e' l'unica cosa che sopravvive.
+     *
+     * Si scrive con TurnoPacchetti.scriviStato, che dice se c'e' riuscito: prima un errore di
+     * scrittura finiva in un avviso e il lavoro sbloccava lo stesso. Chi non riesce a scriverlo
+     * non sblocca niente.
      */
-    private static void scriviStato(List<String> pacchetti) {
-        try {
-            Files.writeString(Paths.get(STATO_MANUTENZIONE), String.join("\n", pacchetti) + "\n");
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Impossibile scrivere lo stato manutenzione", e);
-        }
-    }
-
     private static void pulisciStato() {
-        try { Files.deleteIfExists(Paths.get(STATO_MANUTENZIONE)); }
-        catch (Exception e) { LOGGER.log(Level.WARNING, "Impossibile rimuovere lo stato manutenzione", e); }
+        TurnoPacchetti.cancellaStato();
     }
 
     /**
@@ -2232,14 +2241,23 @@ public final class UpdateManager {
         return new long[]{file, byteLogici};
     }
 
+    /**
+     * Avvia un lavoro sui pacchetti nel suo thread, dopo aver preso il turno: uno alla volta
+     * (vedi TurnoPacchetti). Se il turno e' di un altro, o c'e' l'elenco di un lavoro che non si
+     * e' chiuso, il lavoro non parte e la risposta dice perche'.
+     */
+    private static JSONObject avviaSulTurno(String id, Job j, String descrizione, String nomeThread, Runnable lavoro) {
+        String rifiuto = TurnoPacchetti.prendi(id, descrizione);
+        if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
+        JOBS.put(id, j);
+        TurnoPacchetti.avvia(id, nomeThread, lavoro);
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
     public static JSONObject avviaMigrazione84() {
         String id = "my84-" + System.currentTimeMillis();
         Job j = new Job(id, "mysql84_migration");
-        JOBS.put(id, j);
-        Thread t = new Thread(() -> runMigrazione84(j), "mysql84-migration");
-        t.setDaemon(true);
-        t.start();
-        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+        return avviaSulTurno(id, j, "migrazione MySQL 8.0 -> 8.4", "mysql84-migration", () -> runMigrazione84(j));
     }
 
     /**
@@ -3538,11 +3556,7 @@ public final class UpdateManager {
     public static JSONObject avviaAggiornamentoRoundcube() {
         String id = "rc-" + System.currentTimeMillis();
         Job j = new Job(id, "roundcube");
-        JOBS.put(id, j);
-        Thread t = new Thread(() -> runAggiornamentoRoundcube(j), "roundcube-update");
-        t.setDaemon(true);
-        t.start();
-        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+        return avviaSulTurno(id, j, "aggiornamento di Roundcube", "roundcube-update", () -> runAggiornamentoRoundcube(j));
     }
 
     /**
@@ -3610,8 +3624,13 @@ public final class UpdateManager {
             job.scrivi("");
             job.scrivi("[3/" + TOT + "] Aggiorno il pacchetto...");
             if (bloccato(sh("pkg lock -l 2>/dev/null"), pkg)) {
-                scriviStato(java.util.List.of(pkg));
-                sbloccato = ok("pkg unlock -y " + pkg, 30);
+                // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
+                String errStato = TurnoPacchetti.scriviStato(java.util.List.of(pkg));
+                if (errStato != null)
+                    throw new IllegalStateException("non ho potuto salvare l'elenco per il ripristino, quindi non sblocco " + pkg + ": " + errStato);
+                // Da qui il finally riprotegge e chiude l'elenco, anche se lo sblocco fallisse a meta'.
+                sbloccato = true;
+                if (!ok("pkg unlock -y " + pkg, 30)) throw new IllegalStateException("non sono riuscito a sbloccare " + pkg);
                 job.scrivi("    sbloccato temporaneamente");
             }
             String sim = sh("pkg upgrade -n " + pkg + " 2>&1", 300);
@@ -3987,6 +4006,17 @@ public final class UpdateManager {
      * momento in poi l'unico testimone e' il file di log, che si rilegge alla riaccensione.
      */
     public static JSONObject avviaAggiornamentoJava() {
+        // Il turno vale per la preparazione e il lancio. Poi lo script lavora fuori dal pannello:
+        // da li' in avanti lo copre l'elenco su disco, che ferma ogni altro lavoro sui pacchetti
+        // finche' il pannello riacceso non lo chiude.
+        String id = "jdk-" + System.nanoTime();
+        String rifiuto = TurnoPacchetti.prendi(id, "aggiornamento della JVM");
+        if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
+        try { return avviaAggiornamentoJavaOra(); }
+        finally { TurnoPacchetti.rilascia(id); }
+    }
+
+    private static JSONObject avviaAggiornamentoJavaOra() {
         try {
             JSONObject pf = javaPreflight();
             if (!pf.optBoolean("canProceed", false))
@@ -4020,9 +4050,18 @@ public final class UpdateManager {
                         .put("error", "lo script generato non e' valido, non lo lancio: " + sint.trim());
 
             // Il pannello segna i pacchetti sbloccati: se lo script morisse a meta', al prossimo
-            // avvio ripristinaLockDopoCrash() li riprotegge da solo.
-            scriviStato(java.util.List.of(pkg));
-            ok("/usr/sbin/daemon -f -- /bin/sh " + path, 30);
+            // avvio ripristinaLockDopoCrash() li riprotegge da solo. Se l'elenco non si scrive,
+            // lo script non parte. Finche' l'elenco c'e', nessun altro lavoro sui pacchetti parte:
+            // lo script lavora fuori dal pannello, e il turno del pannello non lo vede.
+            String errStato = TurnoPacchetti.scriviStato(java.util.List.of(pkg));
+            if (errStato != null)
+                return new JSONObject().put("success", false)
+                        .put("error", "non ho potuto salvare l'elenco per il ripristino, quindi non lancio l'aggiornamento: " + errStato);
+            if (!ok("/usr/sbin/daemon -f -- /bin/sh " + path, 30)) {
+                pulisciStato();
+                return new JSONObject().put("success", false)
+                        .put("error", "non sono riuscito a lanciare " + path + " con daemon(8): non e' cambiato niente");
+            }
             return new JSONObject().put("success", true).put("log", log)
                     .put("nota", st.getString("nota"));
         } catch (Exception e) {
@@ -4475,7 +4514,17 @@ public final class UpdateManager {
                 .put("citazioni", citazioni).put("comando", cmd);
     }
 
+    /** I resti del vecchio Python; con esegui, li toglie, sul turno dei lavori sui pacchetti. */
     public static JSONObject restiPython(boolean esegui) {
+        if (!esegui) return restiPythonOra(false);
+        String id = "restipy-" + System.nanoTime();
+        String rifiuto = TurnoPacchetti.prendi(id, "rimozione dei resti di Python");
+        if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
+        try { return restiPythonOra(true); }
+        finally { TurnoPacchetti.rilascia(id); }
+    }
+
+    private static JSONObject restiPythonOra(boolean esegui) {
         JSONObject r = new JSONObject();
         try {
             String nuovo = pyPredefinito();
@@ -4567,11 +4616,7 @@ public final class UpdateManager {
     public static JSONObject avviaPassaggioPython() {
         String id = "py-" + System.currentTimeMillis();
         Job j = new Job(id, "python");
-        JOBS.put(id, j);
-        Thread t = new Thread(() -> runPassaggioPython(j), "python-move");
-        t.setDaemon(true);
-        t.start();
-        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+        return avviaSulTurno(id, j, "passaggio dei pacchetti Python", "python-move", () -> runPassaggioPython(j));
     }
 
     private static void runPassaggioPython(Job job) {
@@ -4579,6 +4624,8 @@ public final class UpdateManager {
         final int TOT = 7;
         java.util.List<String> sbloccati = new ArrayList<>();
         java.util.List<String> daRibloccare = new ArrayList<>();
+        // L'elenco scritto su disco da questa esecuzione: vuoto finche' non e' scritto.
+        java.util.List<String> elencoSuDisco = new ArrayList<>();
         try {
             job.avanza(1, TOT);
             job.scrivi("=== Passaggio dei pacchetti Python alla versione predefinita ===");
@@ -4639,11 +4686,20 @@ public final class UpdateManager {
             job.scrivi("");
             job.scrivi("[4/" + TOT + "] Rimuovo i py" + vecchio + " e installo i py" + nuovo + "...");
             String elenco = sh("pkg lock -l 2>/dev/null");
-            for (String v : leaf) if (bloccato(elenco, v)) { ok("pkg unlock -y " + v, 30); sbloccati.add(v); }
-            if (!sbloccati.isEmpty()) {
-                scriviStato(sbloccati);
-                job.scrivi("    sbloccati: " + String.join(", ", sbloccati));
-            }
+            java.util.List<String> daSbloccare = new ArrayList<>();
+            for (String v : leaf) if (bloccato(elenco, v)) daSbloccare.add(v);
+            // L'elenco su disco PRIMA di sbloccare (prima lo si scriveva dopo): i vecchi, che vanno
+            // riprotetti se restano, e i nuovi, che alla fine vanno protetti. Se il pannello muore
+            // in mezzo, l'avvio protegge quelli che trova installati. Se l'elenco non si scrive,
+            // non si tocca niente.
+            java.util.List<String> daElencare = new ArrayList<>(daSbloccare);
+            for (String n : nuovi) if (nomeValido(n) && !daElencare.contains(n)) daElencare.add(n);
+            String errStato = TurnoPacchetti.scriviStato(daElencare);
+            if (errStato != null)
+                throw new IllegalStateException("non ho potuto salvare l'elenco per il ripristino, quindi non ho toccato niente: " + errStato);
+            elencoSuDisco.addAll(daElencare);
+            for (String v : daSbloccare) { ok("pkg unlock -y " + v, 30); sbloccati.add(v); }
+            if (!sbloccati.isEmpty()) job.scrivi("    sbloccati: " + String.join(", ", sbloccati));
             // L'ordine conta: prima togliere, poi installare. Cosi' nessun file va forzato,
             // ed e' esattamente l'errore che ha rotto il client MySQL.
             StringBuilder catDel = new StringBuilder();
@@ -4740,19 +4796,26 @@ public final class UpdateManager {
             job.errorMessage = e.getMessage();
             job.scrivi("ERRORE: " + e.getMessage());
         } finally {
-            if (!daRibloccare.isEmpty()) {
+            // Si protegge ogni pacchetto dell'elenco che e' installato adesso: i nuovi arrivati e,
+            // se il passaggio si e' fermato prima di toglierli, i vecchi. Prima, con un pkg delete
+            // fallito, i vecchi restavano installati e sbloccati, con solo un avviso.
+            if (!elencoSuDisco.isEmpty()) {
                 java.util.List<String> falliti = new ArrayList<>();
-                for (String n : daRibloccare)
-                    if (!(ok("pkg info -e " + n, 15) && ok("pkg lock -y " + n, 30))) falliti.add(n);
+                int fatti = 0;
+                for (String n : elencoSuDisco) {
+                    if (!ok("pkg info -e " + n, 15)) continue;   // tolto, o mai arrivato
+                    if (ok("pkg lock -y " + n, 30)) fatti++; else falliti.add(n);
+                }
                 job.scrivi("");
                 job.scrivi("Riprotezione: " + (falliti.isEmpty()
-                        ? "fatta su " + daRibloccare.size() + " pacchetti"
+                        ? "fatta su " + fatti + " pacchetti"
                         : "FALLITA su " + String.join(", ", falliti)));
                 if (falliti.isEmpty()) pulisciStato();
-            } else if (!sbloccati.isEmpty()) {
-                job.scrivi("");
-                job.scrivi("ATTENZIONE: erano stati sbloccati " + String.join(", ", sbloccati)
-                        + " ma non sono stati sostituiti: controlla la scheda Protezione pacchetti.");
+                else job.scrivi("  Lo stato resta in " + STATO_MANUTENZIONE + ": il pannello riprovera' al prossimo avvio.");
+                if (daRibloccare.isEmpty() && !sbloccati.isEmpty()) {
+                    job.scrivi("ATTENZIONE: erano stati sbloccati " + String.join(", ", sbloccati)
+                            + " ma non sono stati sostituiti: controlla la scheda Protezione pacchetti.");
+                }
             }
             job.fine = System.currentTimeMillis();
         }
@@ -5656,12 +5719,11 @@ public final class UpdateManager {
                     .put("error", "Manca l'impronta del piano letto: premi di nuovo \"Prepara\" e poi aggiorna.");
         String id = "guid-" + System.currentTimeMillis();
         Job j = new Job(id, "guided_update");
-        JOBS.put(id, j);
+        // Il turno si prende qui, prima dei controlli e di ogni sblocco: due aggiornamenti
+        // approvati da due schede non possono partire insieme.
         final String pkgNome = nome;
-        Thread t = new Thread(() -> runAggiornamentoGuidato(j, pkgNome, firmaApprovata), "guided-update");
-        t.setDaemon(true);
-        t.start();
-        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+        return avviaSulTurno(id, j, "aggiornamento di " + nome, "guided-update",
+                () -> runAggiornamentoGuidato(j, pkgNome, firmaApprovata));
     }
 
     /**
@@ -5755,15 +5817,22 @@ public final class UpdateManager {
                 job.scrivi("  nessuno di questi era protetto: niente da sbloccare");
             } else {
                 // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il
-                // ripristino all'avvio sa cosa riproteggere.
-                scriviStato(protetti);
+                // ripristino all'avvio sa cosa riproteggere. Se non si scrive, non si sblocca
+                // niente: un'interruzione li lascerebbe sbloccati senza traccia.
+                for (String m : protetti)
+                    if (!nomeValido(m)) throw new IllegalStateException("nome di pacchetto non valido nel piano: " + m);
+                String errStato = TurnoPacchetti.scriviStato(protetti);
+                if (errStato != null)
+                    throw new IllegalStateException("non ho potuto salvare l'elenco per il ripristino, quindi non ho sbloccato niente: " + errStato);
                 job.scrivi("  elenco salvato in " + STATO_MANUTENZIONE + " per il ripristino automatico");
+                // Da riproteggere tutti, anche uno sblocco fallito o scaduto a meta': pkg lock su un
+                // pacchetto gia' protetto non cambia niente, e cosi' l'elenco su disco si chiude
+                // solo quando tutti risultano protetti.
+                daRiproteggere.addAll(protetti);
                 for (String m : protetti) {
-                    if (!nomeValido(m)) continue;
                     boolean u = ok("pkg unlock -y " + m, 30);
                     job.scrivi("    " + m + ": " + (u ? "sbloccato" : "SBLOCCO FALLITO"));
                     if (!u) throw new IllegalStateException("non sono riuscito a sbloccare " + m);
-                    daRiproteggere.add(m);
                 }
             }
 
@@ -6367,8 +6436,18 @@ public final class UpdateManager {
      * potuto stabilire che non ne farebbe — che e' la stessa cosa. Poi verifica l'esito
      * guardando il sistema, non il codice di uscita di pkg: il pacchetto e' sparito davvero,
      * nessun altro pacchetto e' rimasto senza una libreria, i servizi sono ancora su.
+     *
+     * Aspetta il turno dei lavori sui pacchetti (vedi TurnoPacchetti).
      */
     public static JSONObject rimuoviPacchetto(String nome) {
+        String id = "rimuovi-" + System.nanoTime();
+        String rifiuto = TurnoPacchetti.prendi(id, "rimozione di " + nome);
+        if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
+        try { return rimuoviPacchettoOra(nome); }
+        finally { TurnoPacchetti.rilascia(id); }
+    }
+
+    private static JSONObject rimuoviPacchettoOra(String nome) {
         if (!nomeValido(nome))
             return new JSONObject().put("success", false).put("error", "nome di pacchetto non valido");
         StringBuilder log = new StringBuilder();
@@ -9333,8 +9412,7 @@ public final class UpdateManager {
         }
         String id = "cleanclient-" + System.currentTimeMillis();
         Job j = new Job(id, "clean_client");
-        JOBS.put(id, j);
-        Thread t = new Thread(() -> {
+        return avviaSulTurno(id, j, "pulizia del client MySQL", "clean-client", () -> {
             j.status = "running";
             boolean sbloccato = false;
             try {
@@ -9365,8 +9443,13 @@ public final class UpdateManager {
                 j.scrivi("");
                 j.scrivi("[3/5] Ripristino i file di " + corretto + "...");
                 if (bloccato(sh("pkg lock -l 2>/dev/null"), corretto)) {
-                    scriviStato(java.util.List.of(corretto));
-                    sbloccato = ok("pkg unlock -y " + corretto, 30);
+                    // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
+                    String errStato = TurnoPacchetti.scriviStato(java.util.List.of(corretto));
+                    if (errStato != null)
+                        throw new IllegalStateException("non ho potuto salvare l'elenco per il ripristino, quindi non sblocco " + corretto + ": " + errStato);
+                    // Da qui il finally riprotegge e chiude l'elenco, anche se lo sblocco fallisse a meta'.
+                    sbloccato = true;
+                    if (!ok("pkg unlock -y " + corretto, 30)) throw new IllegalStateException("non sono riuscito a sbloccare " + corretto);
                     j.scrivi("    sbloccato temporaneamente");
                 }
                 int code = eseguiConLog(j, "pkg install -f -y " + corretto + " 2>&1", 900);
@@ -9420,20 +9503,13 @@ public final class UpdateManager {
                 }
                 j.fine = System.currentTimeMillis();
             }
-        }, "clean-client");
-        t.setDaemon(true);
-        t.start();
-        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+        });
     }
 
     public static JSONObject avviaRicollegamento() {
         String id = "relink-" + System.currentTimeMillis();
         Job j = new Job(id, "relink");
-        JOBS.put(id, j);
-        Thread t = new Thread(() -> runRicollegamento(j), "relink");
-        t.setDaemon(true);
-        t.start();
-        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+        return avviaSulTurno(id, j, "ricollegamento delle librerie", "relink", () -> runRicollegamento(j));
     }
 
     /**
@@ -9469,10 +9545,14 @@ public final class UpdateManager {
             java.util.List<String> daSbloccare = new ArrayList<>();
             for (String n : nomi) if (bloccato(lock, n)) daSbloccare.add(n);
             if (!daSbloccare.isEmpty()) {
-                scriviStato(daSbloccare);
-                for (String n : daSbloccare) {
-                    if (ok("pkg unlock -y " + n, 30)) { sbloccati.add(n); job.scrivi("    " + n + ": sbloccato"); }
-                }
+                // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
+                String errStato = TurnoPacchetti.scriviStato(daSbloccare);
+                if (errStato != null)
+                    throw new IllegalStateException("non ho potuto salvare l'elenco per il ripristino, quindi non ho sbloccato niente: " + errStato);
+                // Da riproteggere tutti, anche uno sblocco fallito: cosi' l'elenco su disco si chiude.
+                sbloccati.addAll(daSbloccare);
+                for (String n : daSbloccare)
+                    job.scrivi("    " + n + ": " + (ok("pkg unlock -y " + n, 30) ? "sbloccato" : "SBLOCCO FALLITO, resta protetto"));
             } else job.scrivi("    nessuno era protetto");
 
             job.avanza(3, 5);
@@ -9554,21 +9634,13 @@ public final class UpdateManager {
                     .put("error", "Manca l'impronta del piano: rileggi l'anteprima della manutenzione e poi conferma.");
         String id = "maint-" + System.currentTimeMillis();
         Job j = new Job(id, "maintenance");
-        JOBS.put(id, j);
-        Thread t = new Thread(() -> runMaintenanceJob(j, firmaApprovata), "update-maintenance");
-        t.setDaemon(true);
-        t.start();
-        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+        return avviaSulTurno(id, j, "manutenzione", "update-maintenance", () -> runMaintenanceJob(j, firmaApprovata));
     }
 
     public static JSONObject avviaAggiornamentoNonProtetti() {
         String id = "upd-" + System.currentTimeMillis();
         Job j = new Job(id, "update");
-        JOBS.put(id, j);
-        Thread t = new Thread(() -> runUpdateJob(j), "update-plain");
-        t.setDaemon(true);
-        t.start();
-        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+        return avviaSulTurno(id, j, "aggiornamento dei pacchetti non protetti", "update-plain", () -> runUpdateJob(j));
     }
 
     /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti bloccati. */
@@ -9730,10 +9802,19 @@ public final class UpdateManager {
             job.scrivi("");
             job.scrivi("[2/4] Sblocco temporaneo...");
             // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il ripristino
-            // all'avvio sa cosa riproteggere.
-            scriviStato(daRibloccare);
-            statoScritto = true;
-            job.scrivi("  elenco salvato in " + STATO_MANUTENZIONE + " per il ripristino automatico");
+            // all'avvio sa cosa riproteggere. Se non si scrive, non si sblocca niente.
+            if (!daRibloccare.isEmpty()) {
+                String errStato = TurnoPacchetti.scriviStato(daRibloccare);
+                if (errStato != null) {
+                    daRibloccare.clear();   // non si e' sbloccato niente: niente da riproteggere
+                    job.status = "error";
+                    job.errorMessage = "Non ho potuto salvare l'elenco per il ripristino: " + errStato;
+                    job.scrivi("RIFIUTO DI PROSEGUIRE: " + job.errorMessage + ". Non ho sbloccato niente.");
+                    return;
+                }
+                statoScritto = true;
+                job.scrivi("  elenco salvato in " + STATO_MANUTENZIONE + " per il ripristino automatico");
+            }
             for (String n : daRibloccare) ok("pkg unlock -y " + n, 30);
 
             job.avanza(3, 4);

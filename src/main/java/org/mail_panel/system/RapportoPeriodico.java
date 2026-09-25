@@ -767,19 +767,17 @@ public final class RapportoPeriodico {
                 case "bounced", "expired" -> "respinto";
                 default -> "in coda";
             });
-            // Se la connessione era cifrata, smtp lo scrive prima della consegna (con
-            // smtp_tls_loglevel >= 1). E' quello che Gmail chiama "crittografia standard".
-            // Se la riga non c'e' non si afferma niente: la sua assenza non prova il contrario.
-            String tls = "TLS connection established to " + relay + ": ";
-            for (int i = consegna - 1; i >= 0 && !relay.isEmpty(); i--) {
-                String riga = righe.get(i);
-                int k = riga.indexOf(tls);
-                if (k < 0) continue;
+            // Se la connessione era cifrata, il processo smtp che ha consegnato lo scrive quando la
+            // apre (con smtp_tls_loglevel >= 1). E' quello che Gmail chiama "crittografia standard".
+            // Se la prova non c'e' non si afferma niente: la sua assenza non prova il contrario.
+            int apertura = aperturaTls(righe, consegna, coda, relay);
+            if (apertura >= 0) {
+                String riga = righe.get(apertura);
+                String tls = "TLS connection established to " + relay + ": ";
                 java.util.regex.Matcher t = java.util.regex.Pattern.compile("^(\\S+) with cipher (\\S+)")
-                        .matcher(riga.substring(k + tls.length()));
+                        .matcher(riga.substring(riga.indexOf(tls) + tls.length()));
                 if (t.find()) r.put("tls", t.group(1) + " (" + t.group(2) + ")");
-                indici.add(i);
-                break;
+                indici.add(apertura);
             }
         } else if (rifiuto != null) {
             // Un rifiuto temporaneo (4.x.x) non e' la fine: Postfix riprova.
@@ -792,6 +790,60 @@ public final class RapportoPeriodico {
         JSONArray testo = new JSONArray();
         for (int i : indici) if (testo.length() < 30) testo.put(righe.get(i));
         return r.put("righe", testo);
+    }
+
+    /** Chi ha scritto una riga del log (programma e pid: "postfix/smtp[81242]") e che cosa. */
+    record Riga(String processo, String testo) {}
+
+    private static final java.util.regex.Pattern RIGA_5424 = java.util.regex.Pattern.compile(
+            "^<\\d{1,3}>1 \\S+ \\S+ (\\S+) ([0-9]+) \\S+ (?:-|(?:\\[[^\\]]*\\])+) ?(.*)$");
+    private static final java.util.regex.Pattern RIGA_CLASSICA = java.util.regex.Pattern.compile(
+            "(?:^|\\s)([^\\s\\[\\]]+)\\[([0-9]+)\\]: (.*)$");
+
+    /** La riga scomposta, nel formato classico di syslog o in RFC 5424; null se non e' nessuno dei due. */
+    static Riga riga(String r) {
+        java.util.regex.Matcher m = RIGA_5424.matcher(r);
+        if (!m.find()) {
+            m = RIGA_CLASSICA.matcher(r);
+            if (!m.find()) return null;
+        }
+        return new Riga(m.group(1) + "[" + m.group(2) + "]", m.group(3));
+    }
+
+    /**
+     * La riga in cui il processo smtp che ha consegnato ha aperto la connessione cifrata su cui
+     * e' partito il messaggio, o -1 se non la si puo' indicare con certezza.
+     *
+     * Il relay da solo non basta: un altro processo smtp puo' aprire nello stesso momento una
+     * sua connessione verso lo stesso server, cifrata mentre questa no. Contano quindi solo le
+     * righe del processo che ha scritto la consegna (stesso programma, stesso pid), risalendo
+     * il log. Si saltano le consegne dello stesso messaggio agli altri destinatari (stessa
+     * connessione) e le righe della sessione TLS che smtp scrive dopo l'apertura con
+     * smtp_tls_loglevel 2 o piu'. La prima riga diversa decide: se e' l'apertura TLS verso lo
+     * stesso relay, e' questa connessione. Qualunque altra cosa (un altro messaggio, una
+     * connessione caduta, il ripiego in chiaro dopo un TLS fallito) vuol dire che un'apertura
+     * scritta piu' su era di un'altra connessione.
+     *
+     * Una connessione riusata (conn_use= nella consegna) e' stata aperta prima, per un altro
+     * messaggio e magari da un altro processo: la sua apertura non si lega a questa consegna.
+     */
+    static int aperturaTls(java.util.List<String> righe, int consegna, String coda, String relay) {
+        Riga chi = riga(righe.get(consegna));
+        if (chi == null || relay.isEmpty() || "none".equals(relay) || chi.testo().contains(", conn_use=")) return -1;
+        java.util.regex.Pattern apertura = java.util.regex.Pattern.compile(
+                "^(?:Anonymous|Untrusted|Trusted|Verified) TLS connection established to "
+                + java.util.regex.Pattern.quote(relay) + ": \\S+ with cipher ");
+        java.util.regex.Pattern consegnaSua = java.util.regex.Pattern.compile(
+                "^" + java.util.regex.Pattern.quote(coda) + ": to=<.*, status=[a-z]+ \\(");
+        for (int i = consegna - 1; i >= 0; i--) {
+            Riga r = riga(righe.get(i));
+            if (r == null || !chi.processo().equals(r.processo())) continue;
+            String t = r.testo();
+            if (consegnaSua.matcher(t).find() || t.startsWith("SSL_connect:")
+                    || t.startsWith("save session ") || t.startsWith("remove session ")) continue;
+            return apertura.matcher(t).find() ? i : -1;
+        }
+        return -1;
     }
 
     /** Il testo fra 'dopo' e il primo 'fino' che lo segue; "" se 'dopo' non c'e'. */
