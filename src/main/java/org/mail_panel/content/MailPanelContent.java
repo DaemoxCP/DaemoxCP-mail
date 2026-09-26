@@ -3736,6 +3736,31 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
+
+    <!-- Edit Alias Modal -->
+    <div class="modal fade" id="editAliasModal" tabindex="-1" aria-labelledby="editAliasTitle">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title" id="editAliasTitle">Modifica Alias</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button></div>
+                <div class="modal-body">
+                    <form id="editAliasForm" onsubmit="saveAlias(); return false;">
+                        <input type="hidden" id="edAliasId">
+                        <label class="form-label" for="edSource">Sorgente</label>
+                        <input type="text" class="form-control mb-1" id="edSource" readonly>
+                        <small class="d-block text-muted mb-3">La sorgente non si cambia: per un altro indirizzo crea un nuovo alias.</small>
+                        <label class="form-label" for="edDest">Destinazione</label>
+                        <input type="email" class="form-control mb-1" id="edDest" maxlength="254" autocomplete="off" required>
+                        <small class="d-block text-muted">Il cambio vale dal prossimo messaggio in arrivo: Postfix legge gli alias dal database per ogni messaggio.</small>
+                        <div id="edErr" class="text-danger small mt-2" role="alert"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-mail" onclick="saveAlias()">Salva</button>
+                </div>
+            </div>
+        </div>
+    </div>
 """ + getFooter() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
@@ -3763,6 +3788,8 @@ public class MailPanelContent {
             });
         }
 
+        let currentAliases = [];
+
         function loadAliases() {
             fetch('/api/aliases').then(r => r.json()).then(data => {
                 const tbody = document.getElementById('aliasesTable');
@@ -3770,15 +3797,71 @@ public class MailPanelContent {
                     tbody.innerHTML = '<tr><td colspan="3" class="text-danger">' + escAl(data.error || 'Errore nel caricamento') + '</td></tr>';
                     return;
                 }
-                if (!data.aliases || data.aliases.length === 0) {
+                currentAliases = data.aliases || [];
+                if (currentAliases.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="3">Nessun alias configurato.</td></tr>';
                     return;
                 }
-                tbody.innerHTML = data.aliases.map(a => '<tr><td>' + escAl(a.source) + '</td><td>' + escAl(a.destination)
-                    + (a.active ? '' : ' <span class="badge bg-secondary ms-1">Disattivo</span>') + '</td>'
-                    + '<td><button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + parseInt(a.id) + ')"'
-                    + ' aria-label="Elimina alias ' + escAl(a.source) + ' verso ' + escAl(a.destination) + '">Elimina</button></td></tr>').join('');
+                tbody.innerHTML = currentAliases.map(a => {
+                    const id = parseInt(a.id);
+                    const chi = escAl(a.source) + ' verso ' + escAl(a.destination);
+                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td>' + escAl(a.source) + '</td><td>' + escAl(a.destination)
+                        + (a.active ? '' : ' <span class="badge bg-secondary ms-1">Disattivo</span>') + '</td>'
+                        + '<td class="text-nowrap">'
+                        + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="Modifica alias ' + chi + '">Modifica</button>'
+                        + '<button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="toggleAlias(' + id + ', ' + (a.active ? 'false' : 'true') + ')"'
+                        + ' aria-label="' + (a.active ? 'Disattiva' : 'Riattiva') + ' alias ' + chi + '">' + (a.active ? 'Disattiva' : 'Riattiva') + '</button>'
+                        + '<button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + id + ')" aria-label="Elimina alias ' + chi + '">Elimina</button>'
+                        + '</td></tr>';
+                }).join('');
             });
+        }
+
+        function openEditAlias(id) {
+            const a = currentAliases.find(x => parseInt(x.id) === id);
+            if (!a) return;
+            document.getElementById('edAliasId').value = id;
+            document.getElementById('edSource').value = a.source;
+            document.getElementById('edDest').value = a.destination;
+            document.getElementById('edErr').textContent = '';
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('editAliasModal')).show();
+        }
+
+        function saveAlias() {
+            const err = document.getElementById('edErr');
+            err.textContent = '';
+            const id = parseInt(document.getElementById('edAliasId').value);
+            const source = document.getElementById('edSource').value;
+            const dest = document.getElementById('edDest').value.trim().toLowerCase();
+            if (!dest) { err.textContent = 'Inserisci la destinazione.'; return; }
+            fetch('/api/aliases', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, destination: dest, csrf_token: csrfToken })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('editAliasModal')).hide();
+                    aliasMsg(data.nota || ('Alias aggiornato: ' + source + ' -> ' + dest), data.nota ? 'warning' : 'success');
+                    loadAliases();
+                } else {
+                    err.textContent = data.error || 'Errore sconosciuto';
+                }
+            }).catch(() => { err.textContent = 'Il pannello non ha risposto.'; });
+        }
+
+        function toggleAlias(id, attiva) {
+            const a = currentAliases.find(x => parseInt(x.id) === id);
+            if (!a) return;
+            if (!attiva && !confirm('Disattivare ' + a.source + ' -> ' + a.destination + '?\\n\\nL\\'alias resta nell\\'elenco e si puo\\' riattivare, ma intanto la posta non viene inoltrata a questa destinazione.')) return;
+            fetch('/api/aliases', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, active: attiva, csrf_token: csrfToken })
+            }).then(r => r.json()).then(data => {
+                if (data.success) aliasMsg(data.nota || ((attiva ? 'Alias riattivato: ' : 'Alias disattivato: ') + a.source + ' -> ' + a.destination), data.nota ? 'warning' : 'success');
+                else aliasMsg(data.error || 'Operazione non riuscita.', 'danger');
+                loadAliases();
+            }).catch(() => aliasMsg('Il pannello non ha risposto.', 'danger'));
         }
 
         function addAlias() {
@@ -3788,8 +3871,9 @@ public class MailPanelContent {
             const domain = document.getElementById('alDomain').value;
             const dest = document.getElementById('alDest').value.trim().toLowerCase();
             if (!local || !domain || !dest) { err.textContent = 'Compila sorgente e destinazione.'; return; }
+            // Sorgente = destinazione e' ammessa solo su una casella (serve a tenerne una copia):
+            // lo decide il server, che sa quali indirizzi sono caselle.
             const source = local + '@' + domain;
-            if (source === dest) { err.textContent = 'Sorgente e destinazione coincidono.'; return; }
             fetch('/api/aliases', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -3814,7 +3898,8 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
-                aliasMsg(data.success ? 'Alias eliminato.' : (data.error || 'Eliminazione non riuscita.'), data.success ? 'success' : 'danger');
+                if (data.success) aliasMsg(data.nota || 'Alias eliminato.', data.nota ? 'warning' : 'success');
+                else aliasMsg(data.error || 'Eliminazione non riuscita.', 'danger');
                 loadAliases();
             }).catch(() => aliasMsg('Il pannello non ha risposto.', 'danger'));
         }

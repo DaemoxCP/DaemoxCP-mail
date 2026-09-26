@@ -1844,9 +1844,109 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
+    /**
+     * Perche' un alias "indirizzo -> se stesso" viene rifiutato quando l'indirizzo non e' una casella.
+     * Su una casella e' permesso: e' proprio il modo di tenerne una copia (revisione:
+     * la nota lo consigliava e il controllo lo rifiutava).
+     */
+    private static String aliasSuSeStesso(String indirizzo) {
+        return "Sorgente e destinazione coincidono: ha senso solo se " + indirizzo + " e' una casella, "
+             + "per tenerne una copia quando la posta e' inoltrata anche altrove.";
+    }
+
+    /**
+     * Che cosa succede ora alla posta per {@code indirizzo}, quando c'e' da saperlo; null altrimenti.
+     *
+     * Postfix legge solo gli alias con active=1, e li applica prima delle caselle: una casella con
+     * alias attivi ma senza "se stessa -> se stessa" attivo non riceve piu' niente, e un indirizzo
+     * che non e' una casella esiste solo finche' ha un alias attivo (o il dominio un catch-all).
+     * Serve dopo ogni cambio: creare, modificare, disattivare, eliminare.
+     */
+    private static String dopoGliAlias(String indirizzo, int domainId) throws java.sql.SQLException {
+        return dopoGliAlias(indirizzo, Main.mailDatabase.getMailboxByEmail(indirizzo) != null,
+                Main.mailDatabase.getAliases(domainId));
+    }
+
+    /** La decisione di {@link #dopoGliAlias(String, int)} senza database: la esercita prove/.../ProvaAlias. */
+    static String dopoGliAlias(String indirizzo, boolean casella, List<MailDatabase.Alias> delDominio) {
+        int at = indirizzo.indexOf('@');
+        String catchAll = at >= 0 ? indirizzo.substring(at) : null;
+        List<String> altrove = new ArrayList<>();
+        boolean copia = false, copiaSpenta = false, raccolta = false;
+        for (MailDatabase.Alias a : delDominio) {
+            if (a.active && a.source.equals(catchAll)) raccolta = true;
+            if (!a.source.equals(indirizzo)) continue;
+            if (a.destination.equals(indirizzo)) {
+                if (a.active) copia = true; else copiaSpenta = true;
+            } else if (a.active) {
+                altrove.add(a.destination);
+            }
+        }
+        if (casella) {
+            if (copia || altrove.isEmpty()) return null;
+            return "Attenzione: " + indirizzo + " e' anche una casella, e la sua posta va solo a " + String.join(", ", altrove)
+                 + ". Per tenerne una copia nella casella " + (copiaSpenta ? "riattiva" : "aggiungi")
+                 + " l'alias " + indirizzo + " -> " + indirizzo + ".";
+        }
+        if (copia || !altrove.isEmpty() || raccolta) return null;
+        return indirizzo + " non e' una casella e non ha alias attivi: da ora la posta per questo indirizzo viene rifiutata.";
+    }
+
     /** Un indirizzo per un alias: i caratteri ammessi da isValidEmail e i limiti della RFC 5321 (254 in tutto, 64 prima della @). */
     private static boolean indirizzoAliasValido(String email) {
         return email != null && email.length() <= 254 && SecurityUtils.isValidEmail(email) && email.indexOf('@') <= 64;
+    }
+
+    /**
+     * Modifica un alias: la destinazione ({@code destination}) e/o se e' attivo ({@code active}).
+     *
+     * Prima la pagina non lo permetteva: l'unico modo era eliminare e ricreare, e fra le due
+     * operazioni la sorgente restava senza alias. Qui e' un solo UPDATE, e Postfix, che legge la
+     * tabella a ogni messaggio, segue la nuova regola dal messaggio successivo. Disattivare
+     * lascia la riga dov'e': Postfix considera solo gli alias con active=1.
+     */
+    private JSONObject modificaAlias(JSONObject req, String ip) throws java.sql.SQLException {
+        JSONObject r = new JSONObject();
+        int id = req.optInt("id", 0);
+        MailDatabase.Alias alias = id > 0 ? Main.mailDatabase.getAliasById(id) : null;
+        if (alias == null) return r.put("success", false).put("error", "Alias non trovato");
+
+        boolean cambiaDestinazione = req.has("destination");
+        Object stato = req.opt("active");
+        if (!cambiaDestinazione && stato == null) return r.put("success", false).put("error", "Niente da modificare");
+        if (stato != null && !(stato instanceof Boolean)) return r.put("success", false).put("error", "Stato non valido");
+
+        String destinazione = cambiaDestinazione ? req.optString("destination", "").toLowerCase().trim() : alias.destination;
+        if (cambiaDestinazione && !indirizzoAliasValido(destinazione))
+            return r.put("success", false).put("error", "Email non valida");
+        if (cambiaDestinazione && destinazione.equals(alias.source) && Main.mailDatabase.getMailboxByEmail(alias.source) == null)
+            return r.put("success", false).put("error", aliasSuSeStesso(alias.source));
+
+        boolean nuovaDestinazione = !destinazione.equals(alias.destination);
+        if (nuovaDestinazione) {
+            try {
+                if (!Main.mailDatabase.updateAliasDestination(id, destinazione))
+                    return r.put("success", false).put("error", "Alias non trovato");
+            } catch (java.sql.SQLIntegrityConstraintViolationException dup) {
+                return r.put("success", false).put("error", "Esiste gia' un alias " + alias.source + " -> " + destinazione);
+            }
+            logAudit("ALIAS_UPDATED", ip, alias.source + ": " + alias.destination + " -> " + destinazione);
+        }
+
+        boolean attivo = stato == null ? alias.active : (Boolean) stato;
+        boolean nuovoStato = attivo != alias.active;
+        if (nuovoStato) {
+            if (!Main.mailDatabase.updateAliasStatus(id, attivo))
+                return r.put("success", false).put("error", "Alias non trovato");
+            logAudit(attivo ? "ALIAS_ENABLED" : "ALIAS_DISABLED", ip, alias.source + " -> " + destinazione);
+        }
+        if (!nuovaDestinazione && !nuovoStato) return r.put("success", true);
+
+        regenerateMailConfigs();
+        String nota = dopoGliAlias(alias.source, alias.domainId);
+        if (nota != null)
+            r.put("nota", (nuovoStato ? (attivo ? "Alias riattivato. " : "Alias disattivato. ") : "Alias modificato. ") + nota);
+        return r.put("success", true);
     }
 
     private void handleApiAliases(HttpExchange exchange) throws IOException {
@@ -1894,9 +1994,11 @@ public class SSLMailServer {
                     if (!indirizzoAliasValido(source) || !indirizzoAliasValido(destination)) {
                         response.put("success", false);
                         response.put("error", "Email non valida");
-                    } else if (source.equals(destination)) {
+                    } else if (source.equals(destination) && Main.mailDatabase.getMailboxByEmail(source) == null) {
+                        // "casella -> se stessa" e' il modo di tenerne una copia quando la posta e'
+                        // inoltrata altrove; su un indirizzo che non e' una casella non porta da nessuna parte.
                         response.put("success", false);
-                        response.put("error", "Sorgente e destinazione coincidono");
+                        response.put("error", aliasSuSeStesso(source));
                     } else {
                         String domainName = source.substring(source.indexOf("@") + 1);
                         MailDatabase.Domain domain = Main.mailDatabase.getDomainByName(domainName);
@@ -1917,23 +2019,29 @@ public class SSLMailServer {
                                 response.put("id", id);
                                 logAudit("ALIAS_CREATED", getClientIp(exchange), source + " -> " + destination);
                                 regenerateMailConfigs();
-                                // Postfix applica gli alias prima delle caselle: se la sorgente e'
-                                // anche una casella, da ora la sua posta va solo alle destinazioni.
-                                boolean eCasella = Main.mailDatabase.getMailboxByEmail(source) != null;
-                                boolean copiaInCasella = false;
-                                for (MailDatabase.Alias a : Main.mailDatabase.getAliases(domain.id))
-                                    if (a.source.equals(source) && a.destination.equals(source)) copiaInCasella = true;
-                                if (eCasella && !copiaInCasella) {
-                                    response.put("nota", "Alias creato. Attenzione: " + source + " e' anche una casella, e da ora "
-                                            + "la sua posta va solo a " + destination + ". Per tenerne una copia nella casella, "
-                                            + "aggiungi un alias " + source + " -> " + source + ".");
-                                }
+                                // Se la sorgente e' anche una casella, da ora la sua posta va solo alle destinazioni.
+                                String nota = dopoGliAlias(source, domain.id);
+                                if (nota != null) response.put("nota", "Alias creato. " + nota);
                             } else {
                                 response.put("success", false);
                                 response.put("error", "Alias gia' esistente");
                             }
                         }
                     }
+                }
+                case "PUT" -> {
+                    // Modifica: nuova destinazione e/o attivo si'/no, stesso controllo CSRF.
+                    String body = readRequestBodyWithLimit(exchange);
+                    if (body == null) {
+                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        return;
+                    }
+                    JSONObject req = new JSONObject(body);
+                    if (!validateCsrfForRequest(exchange, req)) {
+                        sendCsrfError(exchange);
+                        return;
+                    }
+                    response = modificaAlias(req, getClientIp(exchange));
                 }
                 case "DELETE" -> {
                     // Anche l'eliminazione cambia lo stato: stesso controllo CSRF della creazione.
@@ -1949,11 +2057,16 @@ public class SSLMailServer {
                     String query = exchange.getRequestURI().getQuery();
                     int id = extractIdFromQuery(query);
                     if (id > 0) {
+                        // Letto prima: dopo non c'e' piu', e serve a dire che cosa resta alla sorgente.
+                        MailDatabase.Alias via = Main.mailDatabase.getAliasById(id);
                         boolean deleted = Main.mailDatabase.deleteAlias(id);
                         response.put("success", deleted);
                         if (deleted) {
-                            logAudit("ALIAS_DELETED", getClientIp(exchange), "Alias ID: " + id);
+                            logAudit("ALIAS_DELETED", getClientIp(exchange),
+                                    via != null ? via.source + " -> " + via.destination + " (ID " + id + ")" : "Alias ID: " + id);
                             regenerateMailConfigs();
+                            String nota = via != null ? dopoGliAlias(via.source, via.domainId) : null;
+                            if (nota != null) response.put("nota", "Alias eliminato. " + nota);
                         }
                     } else {
                         response.put("success", false);

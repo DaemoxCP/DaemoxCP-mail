@@ -2258,6 +2258,31 @@ public class MailDatabase {
         }
     }
 
+    /**
+     * Cambia la destinazione di un alias con un solo UPDATE: nessun momento in cui la sorgente
+     * resta senza alias, come succederebbe eliminando e ricreando. Una coppia sorgente ->
+     * destinazione gia' esistente fa scattare il vincolo UNIQUE (SQLIntegrityConstraintViolationException).
+     */
+    public boolean updateAliasDestination(int aliasId, String destination) throws SQLException {
+        String sql = "UPDATE aliases SET destination = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, destination.toLowerCase());
+            stmt.setInt(2, aliasId);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    /** Un alias per id, o null se non c'e'. */
+    public Alias getAliasById(int aliasId) throws SQLException {
+        String sql = "SELECT * FROM aliases WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setInt(1, aliasId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? mapAlias(rs) : null;
+            }
+        }
+    }
+
     public boolean updateAliasStatus(int aliasId, boolean active) throws SQLException {
         String sql = "UPDATE aliases SET active = ? WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {

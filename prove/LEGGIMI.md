@@ -5,6 +5,7 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
 
     mvn -o -q package -DskipTests
     javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/system/*.java
+    javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/webserver/*.java
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaMtaSts
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaAttesa
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaUnificazione
@@ -14,6 +15,7 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaConsegnaRapporto
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaPianoPacchetti
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaTurnoPacchetti
+    java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.ProvaAlias
     sh prove/prova-simulazione.sh
 
 ## Cosa provano
@@ -72,6 +74,14 @@ chiedere il turno nello stesso istante (lo prende uno solo), controlla che il tu
 quando il lavoro fallisce, che l'elenco di un lavoro interrotto non venga sovrascritto, che un
 elenco non scritto venga detto, e che con quell'elenco su disco non parta nessun lavoro che
 installa o aggiorna, mentre rimettere le protezioni resta possibile.
+
+**ProvaAlias** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
+un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un
+inoltro attivo e senza "se stessa -> se stessa" attivo non riceve piu' niente, e un indirizzo che
+non e' una casella esiste solo finche' ha un alias attivo (o il dominio un catch-all attivo). Da
+quando un alias si puo' disattivare, la riga della copia puo' esserci ed essere spenta: la logica
+di prima guardava la riga e non lo stato, e taceva proprio li'. La prova finisce riproducendo quel
+silenzio sulla logica vecchia.
 
 **prova-simulazione.sh** — la simulazione su COPIA del database di pkg, contro un pkg finto che
 tiene i "lock" come file. Dimostra che lo sblocco avviene nella copia e non nel database vero,
