@@ -3683,12 +3683,18 @@ public class MailPanelContent {
     }
 
     // ============== ALIASES.HTML ==============
+    // La pagina mostrava solo l'elenco: non c'era modo di creare un alias, e "Elimina" non era
+    // collegato a niente, mentre /api/aliases sapeva gia' fare entrambe le cose.
     public static String getAliasesHtml() {
         return getHead("Alias", "") + getNavbar("aliases") + """
     <div class="content container mt-4">
         <div class="content-container">
-            <h2><i class="fas fa-share me-2"></i>Alias Email</h2>
-            <p>Gestione alias e forward email.</p>
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                <h2><i class="fas fa-share me-2"></i>Alias Email</h2>
+                <button class="btn btn-mail" data-bs-toggle="modal" data-bs-target="#addAliasModal"><i class="fas fa-plus me-1"></i>Aggiungi Alias</button>
+            </div>
+            <p>Gestione alias e forward email: la posta per la sorgente viene consegnata alla destinazione.</p>
+            <div id="aliasMsg" role="status" aria-live="polite"></div>
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead><tr><th>Sorgente</th><th>Destinazione</th><th>Azioni</th></tr></thead>
@@ -3697,17 +3703,124 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
+
+    <!-- Add Alias Modal -->
+    <div class="modal fade" id="addAliasModal" tabindex="-1" aria-labelledby="addAliasTitle">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title" id="addAliasTitle">Aggiungi Alias</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button></div>
+                <div class="modal-body">
+                    <form id="addAliasForm" onsubmit="addAlias(); return false;">
+                        <label class="form-label" for="alLocal">Sorgente</label>
+                        <div class="input-group mb-1">
+                            <input type="text" class="form-control" id="alLocal" placeholder="info" maxlength="64" autocomplete="off" required>
+                            <span class="input-group-text">@</span>
+                            <select class="form-select" id="alDomain" aria-label="Dominio della sorgente" required></select>
+                        </div>
+                        <small class="d-block text-muted mb-3">L'indirizzo che riceve: deve stare su uno dei tuoi domini.</small>
+                        <label class="form-label" for="alDest">Destinazione</label>
+                        <input type="email" class="form-control mb-1" id="alDest" placeholder="nome@esempio.com" maxlength="254" autocomplete="off" required>
+                        <small class="d-block text-muted mb-3">Dove arriva la posta: una tua casella o un indirizzo esterno.</small>
+                        <div class="alert alert-info py-2 small mb-0">
+                            Se la sorgente e' anche una casella, la posta va <strong>solo</strong> alla destinazione.
+                            Per tenerne una copia nella casella, aggiungi un secondo alias con la casella stessa come destinazione.
+                            Per inoltrare a piu' indirizzi, aggiungi un alias per ciascuno.
+                        </div>
+                        <div id="alErr" class="text-danger small mt-2" role="alert"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-mail" onclick="addAlias()">Crea Alias</button>
+                </div>
+            </div>
+        </div>
+    </div>
 """ + getFooter() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
-        fetch('/api/aliases').then(r => r.json()).then(data => {
-            const tbody = document.getElementById('aliasesTable');
-            if (!data.aliases || data.aliases.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3">Nessun alias configurato.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.aliases.map(a => '<tr><td>' + a.source + '</td><td>' + a.destination + '</td><td><button class="btn btn-sm btn-danger">Elimina</button></td></tr>').join('');
-        });
+
+        function escAl(t) {
+            const d = document.createElement('div');
+            d.textContent = t === null || t === undefined ? '' : String(t);
+            return d.innerHTML;
+        }
+
+        function aliasMsg(testo, tipo) {
+            document.getElementById('aliasMsg').innerHTML = testo
+                ? '<div class="alert alert-' + tipo + ' py-2 small">' + escAl(testo) + '</div>' : '';
+        }
+
+        function loadAliasDomains() {
+            fetch('/api/domains').then(r => r.json()).then(data => {
+                const domini = data.domains || [];
+                const select = document.getElementById('alDomain');
+                select.innerHTML = domini.map(d => '<option value="' + escAl(d.domain) + '">' + escAl(d.domain) + '</option>').join('');
+                if (domini.length === 0) {
+                    select.innerHTML = '<option value="">nessun dominio</option>';
+                    document.getElementById('alErr').textContent = 'Aggiungi prima un dominio: la sorgente deve stare su uno dei tuoi domini.';
+                }
+            });
+        }
+
+        function loadAliases() {
+            fetch('/api/aliases').then(r => r.json()).then(data => {
+                const tbody = document.getElementById('aliasesTable');
+                if (!data.success) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-danger">' + escAl(data.error || 'Errore nel caricamento') + '</td></tr>';
+                    return;
+                }
+                if (!data.aliases || data.aliases.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3">Nessun alias configurato.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.aliases.map(a => '<tr><td>' + escAl(a.source) + '</td><td>' + escAl(a.destination)
+                    + (a.active ? '' : ' <span class="badge bg-secondary ms-1">Disattivo</span>') + '</td>'
+                    + '<td><button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + parseInt(a.id) + ')"'
+                    + ' aria-label="Elimina alias ' + escAl(a.source) + ' verso ' + escAl(a.destination) + '">Elimina</button></td></tr>').join('');
+            });
+        }
+
+        function addAlias() {
+            const err = document.getElementById('alErr');
+            err.textContent = '';
+            const local = document.getElementById('alLocal').value.trim().toLowerCase();
+            const domain = document.getElementById('alDomain').value;
+            const dest = document.getElementById('alDest').value.trim().toLowerCase();
+            if (!local || !domain || !dest) { err.textContent = 'Compila sorgente e destinazione.'; return; }
+            const source = local + '@' + domain;
+            if (source === dest) { err.textContent = 'Sorgente e destinazione coincidono.'; return; }
+            fetch('/api/aliases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: source, destination: dest, csrf_token: csrfToken })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('addAliasModal')).hide();
+                    document.getElementById('alLocal').value = '';
+                    document.getElementById('alDest').value = '';
+                    aliasMsg(data.nota || ('Alias creato: ' + source + ' -> ' + dest), data.nota ? 'warning' : 'success');
+                    loadAliases();
+                } else {
+                    err.textContent = data.error || 'Errore sconosciuto';
+                }
+            }).catch(() => { err.textContent = 'Il pannello non ha risposto.'; });
+        }
+
+        function deleteAlias(id) {
+            if (!confirm('Eliminare questo alias? La posta per la sorgente non verra\\' piu\\' inoltrata a questa destinazione.')) return;
+            fetch('/api/aliases?id=' + id, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csrf_token: csrfToken })
+            }).then(r => r.json()).then(data => {
+                aliasMsg(data.success ? 'Alias eliminato.' : (data.error || 'Eliminazione non riuscita.'), data.success ? 'success' : 'danger');
+                loadAliases();
+            }).catch(() => aliasMsg('Il pannello non ha risposto.', 'danger'));
+        }
+
+        loadAliasDomains();
+        loadAliases();
 """ + getLogoutScript() + """
     </script>
 </body>

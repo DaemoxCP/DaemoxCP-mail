@@ -1844,6 +1844,11 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
+    /** Un indirizzo per un alias: i caratteri ammessi da isValidEmail e i limiti della RFC 5321 (254 in tutto, 64 prima della @). */
+    private static boolean indirizzoAliasValido(String email) {
+        return email != null && email.length() <= 254 && SecurityUtils.isValidEmail(email) && email.indexOf('@') <= 64;
+    }
+
     private void handleApiAliases(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
             sendJsonError(exchange, 401, "Unauthorized");
@@ -1886,9 +1891,12 @@ public class SSLMailServer {
                     String source = req.optString("source", "").toLowerCase().trim();
                     String destination = req.optString("destination", "").toLowerCase().trim();
 
-                    if (!SecurityUtils.isValidEmail(source) || !SecurityUtils.isValidEmail(destination)) {
+                    if (!indirizzoAliasValido(source) || !indirizzoAliasValido(destination)) {
                         response.put("success", false);
                         response.put("error", "Email non valida");
+                    } else if (source.equals(destination)) {
+                        response.put("success", false);
+                        response.put("error", "Sorgente e destinazione coincidono");
                     } else {
                         String domainName = source.substring(source.indexOf("@") + 1);
                         MailDatabase.Domain domain = Main.mailDatabase.getDomainByName(domainName);
@@ -1897,12 +1905,29 @@ public class SSLMailServer {
                             response.put("success", false);
                             response.put("error", "Dominio non esistente: " + domainName);
                         } else {
-                            int id = Main.mailDatabase.addAlias(domain.id, source, destination);
+                            int id;
+                            try {
+                                id = Main.mailDatabase.addAlias(domain.id, source, destination);
+                            } catch (java.sql.SQLIntegrityConstraintViolationException dup) {
+                                // Vincolo UNIQUE (source, destination): prima tornava il testo di MySQL.
+                                id = -1;
+                            }
                             if (id > 0) {
                                 response.put("success", true);
                                 response.put("id", id);
                                 logAudit("ALIAS_CREATED", getClientIp(exchange), source + " -> " + destination);
                                 regenerateMailConfigs();
+                                // Postfix applica gli alias prima delle caselle: se la sorgente e'
+                                // anche una casella, da ora la sua posta va solo alle destinazioni.
+                                boolean eCasella = Main.mailDatabase.getMailboxByEmail(source) != null;
+                                boolean copiaInCasella = false;
+                                for (MailDatabase.Alias a : Main.mailDatabase.getAliases(domain.id))
+                                    if (a.source.equals(source) && a.destination.equals(source)) copiaInCasella = true;
+                                if (eCasella && !copiaInCasella) {
+                                    response.put("nota", "Alias creato. Attenzione: " + source + " e' anche una casella, e da ora "
+                                            + "la sua posta va solo a " + destination + ". Per tenerne una copia nella casella, "
+                                            + "aggiungi un alias " + source + " -> " + source + ".");
+                                }
                             } else {
                                 response.put("success", false);
                                 response.put("error", "Alias gia' esistente");
@@ -1911,6 +1936,16 @@ public class SSLMailServer {
                     }
                 }
                 case "DELETE" -> {
+                    // Anche l'eliminazione cambia lo stato: stesso controllo CSRF della creazione.
+                    String body = readRequestBodyWithLimit(exchange);
+                    if (body == null) {
+                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        return;
+                    }
+                    if (!validateCsrfForRequest(exchange, body.isBlank() ? new JSONObject() : new JSONObject(body))) {
+                        sendCsrfError(exchange);
+                        return;
+                    }
                     String query = exchange.getRequestURI().getQuery();
                     int id = extractIdFromQuery(query);
                     if (id > 0) {
