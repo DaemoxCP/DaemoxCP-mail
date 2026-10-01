@@ -249,6 +249,18 @@ public class MailPanelContent {
         .table-responsive { overflow: visible; }
         .dropdown-menu { z-index: 1050; }
         #nav-placeholder, #footer-placeholder { display: contents; }
+        /* Menu in alto fra 992 e 1699px: solo icone. Tredici voci col nome chiedono circa 1680px: sotto i
+           1334 Logout finiva fuori e la pagina scorreva in orizzontale, fra 1334 e 1699 i nomi andavano a
+           capo su due righe. Il nome resta per i lettori di schermo e nel title; la pagina in cui ti trovi
+           lo tiene anche a vista. Da 1700px tornano tutti i nomi. */
+        @media (min-width: 992px) and (max-width: 1699.98px) {
+            .navbar-mail .nav-link:not(.active) .nav-testo, .navbar-mail #logoutButton .nav-testo {
+                position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important;
+                margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important;
+                white-space: nowrap !important; border: 0 !important;
+            }
+            .navbar-mail .nav-link:not(.active) i, .navbar-mail #logoutButton i { margin-right: 0 !important; }
+        }
         /* Tabelle che su un telefono diventano schede: classe tabella-schede sulla <table> e
            data-label su ogni cella. Cinque colonne in 375px non ci stanno, e una tabella piu' larga
            della pagina la faceva scorrere tutta in orizzontale (.table-responsive qui sopra lascia
@@ -308,45 +320,51 @@ public class MailPanelContent {
     }
 
     /**
-     * Generates the navbar HTML with the active page highlighted
+     * Le voci del menu in alto: pagina (per evidenziarla), indirizzo, icona, nome. Un solo elenco
+     * invece di tredici righe copiate a mano.
+     */
+    private static final String[][] VOCI_MENU = {
+        {"home", "/home", "fa-home", "Dashboard"},
+        {"domains", "/domains", "fa-globe", "Domini"},
+        {"mailboxes", "/mailboxes", "fa-inbox", "Caselle"},
+        {"aliases", "/aliases", "fa-share", "Alias"},
+        {"dns", "/dns", "fa-server", "DNS"},
+        {"ssl", "/ssl", "fa-lock", "SSL"},
+        {"security", "/security", "fa-shield-alt", "Sicurezza"},
+        {"firewall", "/firewall", "fa-fire", "Firewall"},
+        {"cloudflare", "/cloudflare", "fa-cloud", "Cloudflare"},
+        {"paths", "/paths", "fa-folder-tree", "Path"},
+        {"updates", "/updates", "fa-arrow-up-right-dots", "Aggiornamenti"},
+        {"logs", "/logs", "fa-file-alt", "Logs"},
+        {"settings", "/settings", "fa-cog", "Impostazioni"}
+    };
+
+    /**
+     * Il menu in alto, con la pagina corrente evidenziata.
+     *
+     * Ogni nome sta in uno span .nav-testo: fra 992 e 1699px gli stili comuni lo nascondono alla vista
+     * (resta per i lettori di schermo, e il title lo mostra al passaggio del mouse), perche' tredici
+     * voci col nome non ci stanno: Logout finiva fuori e la pagina scorreva in orizzontale.
      */
     private static String getNavbarHtml(String activePage) {
+        StringBuilder voci = new StringBuilder();
+        for (String[] v : VOCI_MENU) {
+            boolean attiva = v[0].equals(activePage);
+            voci.append("                <li class=\"nav-item\"><a class=\"nav-link").append(attiva ? " active\" aria-current=\"page" : "")
+                .append("\" href=\"").append(v[1]).append("\" title=\"").append(v[3]).append("\"><i class=\"fas ").append(v[2])
+                .append(" me-1\" aria-hidden=\"true\"></i><span class=\"nav-testo\">").append(v[3]).append("</span></a></li>\n");
+        }
         return """
 <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
     <div class="container-fluid">
-        <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2"></i>Mail Control Panel</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
+        <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2" aria-hidden="true"></i>Mail Control Panel</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Apri il menu"><span class="navbar-toggler-icon"></span></button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto">
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("home") ? " active" : "") + """
-" href="/home"><i class="fas fa-home me-1"></i>Dashboard</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("domains") ? " active" : "") + """
-" href="/domains"><i class="fas fa-globe me-1"></i>Domini</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("mailboxes") ? " active" : "") + """
-" href="/mailboxes"><i class="fas fa-inbox me-1"></i>Caselle</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("aliases") ? " active" : "") + """
-" href="/aliases"><i class="fas fa-share me-1"></i>Alias</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("dns") ? " active" : "") + """
-" href="/dns"><i class="fas fa-server me-1"></i>DNS</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("ssl") ? " active" : "") + """
-" href="/ssl"><i class="fas fa-lock me-1"></i>SSL</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("security") ? " active" : "") + """
-" href="/security"><i class="fas fa-shield-alt me-1"></i>Sicurezza</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("firewall") ? " active" : "") + """
-" href="/firewall"><i class="fas fa-fire me-1"></i>Firewall</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("cloudflare") ? " active" : "") + """
-" href="/cloudflare"><i class="fas fa-cloud me-1"></i>Cloudflare</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("paths") ? " active" : "") + """
-" href="/paths"><i class="fas fa-folder-tree me-1"></i>Path</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("updates") ? " active" : "") + """
-" href="/updates"><i class="fas fa-arrow-up-right-dots me-1"></i>Aggiornamenti</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("logs") ? " active" : "") + """
-" href="/logs"><i class="fas fa-file-alt me-1"></i>Logs</a></li>
-                <li class="nav-item"><a class="nav-link""" + (activePage.equals("settings") ? " active" : "") + """
-" href="/settings"><i class="fas fa-cog me-1"></i>Impostazioni</a></li>
+""" + voci + """
             </ul>
             <ul class="navbar-nav">
-                <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
+                <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton" title="Logout"><i class="fas fa-sign-out-alt me-1" aria-hidden="true"></i><span class="nav-testo">Logout</span></a></li>
             </ul>
         </div>
     </div>
