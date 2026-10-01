@@ -897,6 +897,10 @@ public class SSLMailServer {
                 html = readHtmlFile("home.html");
             }
             html = html.replace("{{CSRF_TOKEN}}", csrfToken != null ? csrfToken : "");
+            // Il tema scelto dall'admin, dentro la pagina: la <head> lo applica prima del primo
+            // disegno, invece di scoprirlo dopo con /api/theme (era il lampo bianco).
+            String tema = temaSalvato(exchange);
+            html = html.replace("{{THEME}}", tema).replace("{{COLOR_SCHEME}}", "auto".equals(tema) ? "light dark" : tema);
             // Replace system info placeholders
             html = html.replace("{{JAVA_VERSION}}", "Java " + System.getProperty("java.version") + " (OpenJDK)");
             html = html.replace("{{PLATFORM}}", System.getProperty("os.name") + " " + System.getProperty("os.version"));
@@ -11054,6 +11058,16 @@ public class SSLMailServer {
 
     // ============== THEME API ==============
 
+    /** La preferenza di tema dell'admin di questa sessione, da scrivere nella pagina: auto, light o dark, mai altro. */
+    private String temaSalvato(HttpExchange exchange) {
+        try {
+            String tema = Main.mailDatabase != null ? Main.mailDatabase.getAdminTheme(getSessionUsername(exchange)) : null;
+            return "light".equals(tema) || "dark".equals(tema) ? tema : "auto";
+        } catch (Exception e) {
+            return "auto";
+        }
+    }
+
     private void handleApiTheme(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
             sendJsonError(exchange, 401, "Unauthorized");
@@ -11084,6 +11098,11 @@ public class SSLMailServer {
                     return;
                 }
                 JSONObject req = new JSONObject(body);
+                // Cambia una preferenza salvata: stesso controllo CSRF di ogni altra modifica.
+                if (!validateCsrfForRequest(exchange, req)) {
+                    sendCsrfError(exchange);
+                    return;
+                }
 
                 String theme = req.optString("theme", "auto");
                 boolean saved = Main.mailDatabase.setAdminTheme(username, theme);

@@ -150,6 +150,7 @@ public class MailPanelContent {
         return """
         /* ===== THEME VARIABLES ===== */
         :root {
+            color-scheme: light;
             --bg-body: #f5f5f5;
             --bg-card: #ffffff;
             --bg-input: #ffffff;
@@ -166,6 +167,7 @@ public class MailPanelContent {
             --alert-bg: #f8f9fa;
         }
         [data-theme="dark"] {
+            color-scheme: dark;
             --bg-body: #1a1d21;
             --bg-card: #2d3238;
             --bg-input: #3d4249;
@@ -257,13 +259,27 @@ public class MailPanelContent {
      * @param extraStyles Additional page-specific CSS (can be empty)
      */
     private static String getHead(String title, String pageName, String extraStyles) {
+        // {{THEME}} e {{COLOR_SCHEME}} li scrive il server a ogni richiesta (handleProtectedPage):
+        // la preferenza dell'admin arriva dentro la pagina, e il tema si applica qui nella <head>,
+        // prima del primo disegno. Prima lo applicava lo script in fondo alla pagina, e solo dopo
+        // una chiamata a /api/theme: fino ad allora il browser disegnava la pagina chiara, cioe'
+        // il lampo bianco a ogni cambio di pagina. La meta color-scheme copre l'attimo prima che
+        // arrivi il CSS: e' lei a dire al browser di che colore e' la pagina vuota.
         return String.format("""
 <!DOCTYPE html>
-<html lang="it">
+<html lang="it" data-theme-pref="{{THEME}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="{{COLOR_SCHEME}}">
     <title>%s - Mail Control Panel</title>
+    <script>
+        (function () {
+            var d = document.documentElement, t = d.getAttribute('data-theme-pref');
+            if (t !== 'light' && t !== 'dark') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            d.setAttribute('data-theme', t);
+        })();
+    </script>
     <link href="/vendor/bootstrap.min.css" rel="stylesheet">
     <link href="/fa/css/all.min.css" rel="stylesheet">
     <style>
@@ -338,8 +354,12 @@ public class MailPanelContent {
     <script src="/vendor/bootstrap.bundle.min.js"></script>
     <script>
         // ===== THEME MANAGEMENT =====
+        // Il tema e' gia' applicato dalla <head>, con la preferenza che il server ha scritto nella
+        // pagina (data-theme-pref). Qui resta il contorno: icona, pulsante, e "auto" che segue il sistema.
         (function() {
-            let savedTheme = 'auto';
+            let savedTheme = document.documentElement.getAttribute('data-theme-pref');
+            const scrittoDalServer = savedTheme === 'auto' || savedTheme === 'light' || savedTheme === 'dark';
+            if (!scrittoDalServer) savedTheme = 'auto';
 
             // Get browser preference
             function getBrowserTheme() {
@@ -361,14 +381,15 @@ public class MailPanelContent {
                 }
             }
 
-            // Load theme from server
+            // Chiede la preferenza al server. Serve solo se la pagina non l'aveva scritta, o se il
+            // browser la ripresenta dalla cache di indietro/avanti con il tema di allora.
             function loadTheme() {
                 fetch('/api/theme').then(r => r.json()).then(data => {
                     if (data.success) {
                         savedTheme = data.theme || 'auto';
                         applyTheme(savedTheme);
                     }
-                }).catch(() => applyTheme('auto'));
+                }).catch(() => {});
             }
 
             // Save theme to server
@@ -376,7 +397,7 @@ public class MailPanelContent {
                 fetch('/api/theme', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ theme: theme })
+                    body: JSON.stringify({ theme: theme, csrf_token: document.getElementById('csrf_token').value })
                 });
             }
 
@@ -396,15 +417,18 @@ public class MailPanelContent {
 
             // Initialize theme toggle
             document.addEventListener('DOMContentLoaded', function() {
-                loadTheme();
+                if (!scrittoDalServer) loadTheme();
                 const toggle = document.getElementById('themeToggle');
                 if (toggle) {
                     toggle.addEventListener('click', cycleTheme);
                 }
             });
+            window.addEventListener('pageshow', function(e) { if (e.persisted) loadTheme(); });
 
-            // Apply immediately (before DOM ready) to prevent flash
-            applyTheme(getBrowserTheme());
+            // Lo stesso tema della <head>: qui serve solo a mettere l'icona giusta. Prima c'era
+            // applyTheme(getBrowserTheme()), che rimetteva il tema del SISTEMA sopra quello scelto
+            // fino alla risposta di /api/theme: sistema chiaro e pannello scuro davano il lampo bianco.
+            applyTheme(savedTheme);
         })();
 
         // Logout handler
@@ -10592,7 +10616,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             padding: 10px 12px; border-radius: 4px;
         }
         """;
-        return getHead("Firewall", extraStyles) + getNavbar("firewall") + """
+        return getHead("Firewall", "firewall", extraStyles) + """
     <div class="content container-fluid mt-4" style="max-width: 1200px">
 
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -10847,7 +10871,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 - Per la geo-whitelist, <b>scarica prima i range</b> con "Sincronizza GeoIP" — senza i range, le tabelle pf sono vuote.
             </span>
         </div>
-
+    </div>
 """ + getFooter() + """
     <script>
 """ + getFirewallJs() + """
@@ -11884,7 +11908,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         [data-theme="dark"] .copy-btn:hover { background: var(--table-hover); }
         .copy-btn.copied { background: #198754; color: white; border-color: #198754; }
         """;
-        return getHead("Path di Sistema", extraStyles) + getNavbar("paths") + """
+        return getHead("Path di Sistema", "paths", extraStyles) + """
     <div class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-3">
