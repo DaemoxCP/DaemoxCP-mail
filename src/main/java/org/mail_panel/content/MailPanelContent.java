@@ -1810,7 +1810,7 @@ public class MailPanelContent {
             </div>
 
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover tabella-schede">
                     <thead class="table-light">
                         <tr><th>Dominio</th><th>Descrizione</th><th>Caselle</th><th>Alias</th><th>DKIM</th><th>Azioni</th></tr>
                     </thead>
@@ -1887,12 +1887,12 @@ public class MailPanelContent {
                 currentDomains = data.domains;
                 tbody.innerHTML = data.domains.map(d => `
                     <tr>
-                        <td class="testo-lungo"><strong>${escDom(d.domain)}</strong></td>
-                        <td>${escDom(d.description || '-')}</td>
-                        <td><span class="badge bg-info">${d.mailbox_count || 0}</span></td>
-                        <td><span class="badge bg-info">${d.alias_count || 0}</span></td>
-                        <td>${d.has_dkim ? '<span class="badge bg-success">Attivo</span>' : '<span class="badge bg-warning">Non configurato</span>'}</td>
-                        <td>
+                        <td data-label="Dominio" class="testo-lungo"><strong>${escDom(d.domain)}</strong></td>
+                        <td data-label="Descrizione">${escDom(d.description || '-')}</td>
+                        <td data-label="Caselle"><span class="badge bg-info">${d.mailbox_count || 0}</span></td>
+                        <td data-label="Alias"><span class="badge bg-info">${d.alias_count || 0}</span></td>
+                        <td data-label="DKIM">${d.has_dkim ? '<span class="badge bg-success">Attivo</span>' : '<span class="badge bg-warning">Non configurato</span>'}</td>
+                        <td data-label="Azioni">
                             <button class="btn btn-sm btn-secondary" onclick="editDomain(${d.id})"><i class="fas fa-edit"></i></button>
                             <button class="btn btn-sm btn-primary" onclick="viewDnsById(${d.id})"><i class="fas fa-server"></i> DNS</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteDomain(${d.id})"><i class="fas fa-trash"></i></button>
@@ -8981,7 +8981,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover" id="queueTable">
+                        <table class="table table-hover tabella-schede" id="queueTable">
                             <thead>
                                 <tr>
                                     <th>ID</th>
@@ -9051,14 +9051,14 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     tbody.innerHTML = data.messages.map(msg => {
                         const stateClass = 'state-' + msg.state.toLowerCase();
                         return `<tr>
-                            <td><code>${msg.envelope_id || msg.message_id || '-'}</code></td>
-                            <td><span class="queue-state ${stateClass}">${msg.state}</span></td>
-                            <td class="testo-lungo">${msg.sender || '-'}</td>
-                            <td class="testo-lungo">${msg.recipient || '-'}</td>
-                            <td>${formatSize(msg.size)}</td>
-                            <td>${msg.created ? new Date(msg.created).toLocaleString('it-IT') : '-'}</td>
-                            <td class="text-danger testo-lungo">${msg.error_reason || ''}</td>
-                            <td>
+                            <td data-label="ID"><code>${msg.envelope_id || msg.message_id || '-'}</code></td>
+                            <td data-label="Stato"><span class="queue-state ${stateClass}">${msg.state}</span></td>
+                            <td data-label="Da" class="testo-lungo">${msg.sender || '-'}</td>
+                            <td data-label="A" class="testo-lungo">${msg.recipient || '-'}</td>
+                            <td data-label="Dimensione">${formatSize(msg.size)}</td>
+                            <td data-label="Data">${msg.created ? new Date(msg.created).toLocaleString('it-IT') : '-'}</td>
+                            <td data-label="Errore" class="text-danger testo-lungo">${msg.error_reason || ''}</td>
+                            <td data-label="Azioni">
                                 <button class="btn btn-sm btn-outline-info" onclick="viewMessage('${msg.message_id}', '${msg.envelope_id}')">
                                     <i class="fas fa-eye"></i>
                                 </button>
@@ -10148,7 +10148,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             <div class="card">
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover">
+                        <table class="table table-hover tabella-schede">
                             <thead class="table-light">
                                 <tr>
                                     <th>Username</th>
@@ -10297,19 +10297,19 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                     // dove un solo apice basterebbe a uscire dalle virgolette.
                     tbody.innerHTML = data.admins.map(admin => `
                         <tr>
-                            <td>
+                            <td data-label="Username" class="testo-lungo">
                                 <i class="fas fa-user me-1"></i>${escAdm(admin.username)}
                                 ${admin.is_current ? '<span class="badge bg-info ms-1">Tu</span>' : ''}
                             </td>
-                            <td><span class="badge role-badge ${admin.role}">${admin.role}</span></td>
-                            <td>
+                            <td data-label="Ruolo"><span class="badge role-badge ${admin.role}">${admin.role}</span></td>
+                            <td data-label="2FA">
                                 ${admin.totp_enabled
-                                    ? '<i class="fas fa-shield-alt totp-enabled" title="2FA Attivo"></i>'
-                                    : '<i class="fas fa-shield-alt totp-disabled" title="2FA Non Attivo"></i>'}
+                                    ? '<i class="fas fa-shield-alt totp-enabled" aria-hidden="true"></i> <small>Attivo</small>'
+                                    : '<i class="fas fa-shield-alt totp-disabled" aria-hidden="true"></i> <small>Non attivo</small>'}
                             </td>
-                            <td><small>${admin.last_login || 'Mai'}</small></td>
-                            <td><small>${admin.created_at}</small></td>
-                            <td>
+                            <td data-label="Ultimo accesso"><small>${admin.last_login || 'Mai'}</small></td>
+                            <td data-label="Creato"><small>${admin.created_at}</small></td>
+                            <td data-label="Azioni">
                                 <button class="btn btn-sm btn-outline-primary" onclick="editAdmin(${Number(admin.id)}, '${escAdmJs(admin.username)}', '${escAdmJs(admin.role)}')"
                                         ${admin.is_current ? 'disabled' : ''}>
                                     <i class="fas fa-edit"></i>
