@@ -249,6 +249,33 @@ public class MailPanelContent {
         .table-responsive { overflow: visible; }
         .dropdown-menu { z-index: 1050; }
         #nav-placeholder, #footer-placeholder { display: contents; }
+        /* Celle con "parole" lunghissime: indirizzi, domini, host, errori di consegna (classe testo-lungo).
+           Vanno a capo anche a meta' parola, quando serve, invece di allargare la tabella e con lei la
+           pagina: su computer le tabelle non scorrono nel loro riquadro, perche' i menu a tendina delle
+           righe devono poter uscire. Solo su queste celle: una regola su tutte spezzava anche le parole
+           corte nelle colonne strette ("deferre-d", le date a meta' numero). */
+        .table td.testo-lungo { overflow-wrap: anywhere; }
+        /* ===== Telefono e tablet: sotto i 992px niente deve allargare la pagina =====
+           Una pagina piu' larga della finestra scorre tutta in orizzontale. Regole per i casi che si
+           ripetono, invece di una pezza per pagina (agiscono solo quando il contenuto non ci sta):
+           - una tabella scorre dentro il suo riquadro (.table-responsive qui sopra la lascia uscire,
+             per i menu a tendina nelle righe: sul telefono restano solo nelle tabelle a schede), e in
+             una tabella senza riquadro i testi lunghi vanno a capo nella cella;
+           - le righe "titolo a sinistra, comandi a destra" (intestazioni di pagina e di riquadro)
+             vanno a capo, compresi i gruppi di pulsanti marcati text-nowrap;
+           - i testi lunghi senza spazi (chiavi, record DNS, percorsi, nomi di parametri come
+             innodb_flush_log_at_trx_commit nelle etichette) vanno a capo. */
+        @media (max-width: 991.98px) {
+            .table-responsive { overflow-x: auto; }
+            .table-responsive:has(> .tabella-schede) { overflow-x: visible; }
+            /* Tabelle senza riquadro che scorre: un indirizzo o un dominio lungo va a capo nella cella. */
+            table.table:not(.table-responsive table) td { overflow-wrap: anywhere; }
+            .d-flex.justify-content-between { flex-wrap: wrap; gap: .5rem; }
+            .d-flex.justify-content-between > .d-flex { flex-wrap: wrap; }
+            .d-flex.justify-content-between > .text-nowrap { white-space: normal !important; }
+            pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+            code, .form-label { overflow-wrap: anywhere; }
+        }
         /* Menu in alto fra 992 e 1699px: solo icone. Tredici voci col nome chiedono circa 1680px: sotto i
            1334 Logout finiva fuori e la pagina scorreva in orizzontale, fra 1334 e 1699 i nomi andavano a
            capo su due righe. Il nome resta per i lettori di schermo e nel title; la pagina in cui ti trovi
@@ -261,11 +288,11 @@ public class MailPanelContent {
             }
             .navbar-mail .nav-link:not(.active) i, .navbar-mail #logoutButton i { margin-right: 0 !important; }
         }
-        /* Tabelle che su un telefono diventano schede: classe tabella-schede sulla <table> e
-           data-label su ogni cella. Cinque colonne in 375px non ci stanno, e una tabella piu' larga
-           della pagina la faceva scorrere tutta in orizzontale (.table-responsive qui sopra lascia
-           uscire il contenuto, perche' i menu a tendina nelle righe non vengano tagliati). */
-        @media (max-width: 767.98px) {
+        /* Tabelle che su telefono e tablet (sotto i 992px, come il menu a tendina) diventano schede:
+           classe tabella-schede sulla <table> e data-label su ogni cella. Cinque colonne in 375px non
+           ci stanno, e una tabella piu' larga della pagina la faceva scorrere tutta in orizzontale; il
+           suo riquadro non scorre, perche' i menu a tendina nelle righe non vengano tagliati. */
+        @media (max-width: 991.98px) {
             .tabella-schede thead { display: none; }
             .tabella-schede, .tabella-schede tbody, .tabella-schede tr, .tabella-schede td { display: block; width: 100%; }
             .tabella-schede tr { border: 1px solid var(--border-color); border-radius: 8px; padding: .5rem .75rem; margin-bottom: .75rem; }
@@ -1860,7 +1887,7 @@ public class MailPanelContent {
                 currentDomains = data.domains;
                 tbody.innerHTML = data.domains.map(d => `
                     <tr>
-                        <td><strong>${escDom(d.domain)}</strong></td>
+                        <td class="testo-lungo"><strong>${escDom(d.domain)}</strong></td>
                         <td>${escDom(d.description || '-')}</td>
                         <td><span class="badge bg-info">${d.mailbox_count || 0}</span></td>
                         <td><span class="badge bg-info">${d.alias_count || 0}</span></td>
@@ -3067,7 +3094,7 @@ public class MailPanelContent {
                 }
                 tbody.innerHTML = currentMailboxes.map(m => `
                     <tr>
-                        <td data-label="Email">
+                        <td data-label="Email" class="testo-lungo">
                             <strong>${m.email}</strong>
                             ${!m.receive_enabled ? '<span class="badge bg-secondary ms-1" title="Solo invio (No-Reply)"><i class="fas fa-ban"></i> No-Reply</span>' : ''}
                             ${!m.active ? '<span class="badge bg-danger ms-1">Disattivo</span>' : ''}
@@ -3961,7 +3988,7 @@ public class MailPanelContent {
                 tbody.innerHTML = currentAliases.map(a => {
                     const id = parseInt(a.id);
                     const chi = escAl(a.source) + ' verso ' + escAl(a.destination);
-                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td>' + escAl(a.source) + '</td><td>' + escAl(a.destination)
+                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="testo-lungo">' + escAl(a.source) + '</td><td class="testo-lungo">' + escAl(a.destination)
                         + (a.active ? '' : ' <span class="badge bg-secondary ms-1">Disattivo</span>') + '</td>'
                         + '<td class="text-nowrap">'
                         + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="Modifica alias ' + chi + '">Modifica</button>'
@@ -9026,11 +9053,11 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         return `<tr>
                             <td><code>${msg.envelope_id || msg.message_id || '-'}</code></td>
                             <td><span class="queue-state ${stateClass}">${msg.state}</span></td>
-                            <td>${msg.sender || '-'}</td>
-                            <td>${msg.recipient || '-'}</td>
+                            <td class="testo-lungo">${msg.sender || '-'}</td>
+                            <td class="testo-lungo">${msg.recipient || '-'}</td>
                             <td>${formatSize(msg.size)}</td>
                             <td>${msg.created ? new Date(msg.created).toLocaleString('it-IT') : '-'}</td>
-                            <td class="text-danger">${msg.error_reason || ''}</td>
+                            <td class="text-danger testo-lungo">${msg.error_reason || ''}</td>
                             <td>
                                 <button class="btn btn-sm btn-outline-info" onclick="viewMessage('${msg.message_id}', '${msg.envelope_id}')">
                                     <i class="fas fa-eye"></i>
@@ -10034,7 +10061,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
 
             tbody.innerHTML = domains.map(d => `
                 <tr>
-                    <td><i class="fas fa-globe me-1"></i>${d.domain}</td>
+                    <td class="testo-lungo"><i class="fas fa-globe me-1"></i>${d.domain}</td>
                     <td class="text-end">${formatNumber(d.sent)}</td>
                     <td class="text-end">${formatNumber(d.received)}</td>
                     <td class="text-end text-danger">${formatNumber(d.spam)}</td>
@@ -10051,7 +10078,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             sendersBody.innerHTML = senders.length ? senders.map((s, i) => `
                 <tr>
                     <td><span class="badge bg-secondary">${i+1}</span></td>
-                    <td>${s.email}</td>
+                    <td class="testo-lungo">${s.email}</td>
                     <td class="text-end">${formatNumber(s.count)}</td>
                 </tr>
             `).join('') : '<tr><td colspan="3" class="text-muted">Nessun dato</td></tr>';
@@ -10059,7 +10086,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
             recipientsBody.innerHTML = recipients.length ? recipients.map((r, i) => `
                 <tr>
                     <td><span class="badge bg-secondary">${i+1}</span></td>
-                    <td>${r.email}</td>
+                    <td class="testo-lungo">${r.email}</td>
                     <td class="text-end">${formatNumber(r.count)}</td>
                 </tr>
             `).join('') : '<tr><td colspan="3" class="text-muted">Nessun dato</td></tr>';
@@ -10545,7 +10572,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                         // c'e' un dato che esiste davvero, il numero massimo di destinatari.
                         return `
                         <tr class="${!limit.enabled ? 'table-secondary' : ''}">
-                            <td><i class="fas fa-envelope me-1"></i>${escLim(limit.email)}</td>
+                            <td class="testo-lungo"><i class="fas fa-envelope me-1"></i>${escLim(limit.email)}</td>
                             <td class="text-center">${limit.hourly_limit}</td>
                             <td class="text-center">${limit.daily_limit}</td>
                             <td class="text-center">${limit.max_recipients}</td>
