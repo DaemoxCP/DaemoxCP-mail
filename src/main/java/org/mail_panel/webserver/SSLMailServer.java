@@ -1638,9 +1638,9 @@ public class SSLMailServer {
                     if (!SecurityUtils.isValidEmail(email)) {
                         response.put("success", false);
                         response.put("error", "Email non valida");
-                    } else if (!SecurityUtils.isValidPassword(password)) {
+                    } else if (!SecurityUtils.isValidMailboxPassword(password)) {
                         response.put("success", false);
-                        response.put("error", "Password non valida");
+                        response.put("error", "Password non valida: " + SecurityUtils.PASSWORD_CASELLA_REGOLA + ".");
                     } else {
                         // Extract domain from email
                         String domainName = email.substring(email.indexOf("@") + 1);
@@ -1693,10 +1693,11 @@ public class SSLMailServer {
 
                         // If password provided, update it too
                         if (updated && !newPassword.isEmpty()) {
-                            if (SecurityUtils.isValidPassword(newPassword)) {
+                            if (SecurityUtils.isValidMailboxPassword(newPassword)) {
                                 Main.mailDatabase.updateMailboxPassword(id, newPassword);
                             } else {
-                                response.put("warning", "Password non valida, non aggiornata");
+                                response.put("warning", "Password non aggiornata: " + SecurityUtils.PASSWORD_CASELLA_REGOLA
+                                        + ". Il resto delle modifiche e' salvato.");
                             }
                         }
 

@@ -249,6 +249,18 @@ public class MailPanelContent {
         .table-responsive { overflow: visible; }
         .dropdown-menu { z-index: 1050; }
         #nav-placeholder, #footer-placeholder { display: contents; }
+        /* Tabelle che su un telefono diventano schede: classe tabella-schede sulla <table> e
+           data-label su ogni cella. Cinque colonne in 375px non ci stanno, e una tabella piu' larga
+           della pagina la faceva scorrere tutta in orizzontale (.table-responsive qui sopra lascia
+           uscire il contenuto, perche' i menu a tendina nelle righe non vengano tagliati). */
+        @media (max-width: 767.98px) {
+            .tabella-schede thead { display: none; }
+            .tabella-schede, .tabella-schede tbody, .tabella-schede tr, .tabella-schede td { display: block; width: 100%; }
+            .tabella-schede tr { border: 1px solid var(--border-color); border-radius: 8px; padding: .5rem .75rem; margin-bottom: .75rem; }
+            .tabella-schede td { border: 0; padding: .2rem 0; overflow-wrap: anywhere; }
+            .tabella-schede td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--text-secondary); }
+            .tabella-schede td:empty { display: none; }
+        }
         /* Campo password (campoPassword): su un telefono, accanto ai tre pulsanti, una password di
            20 caratteri deve vedersi tutta. */
         @media (max-width: 575.98px) { .campo-password { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
@@ -2140,12 +2152,12 @@ public class MailPanelContent {
                             <label class="form-label small fw-bold mb-1">Lunghezza</label>
                             <div class="input-group">
                                 <button class="btn btn-outline-secondary" type="button" onclick="pwgenLengthDelta(-1)"><i class="fas fa-minus"></i></button>
-                                <input type="number" class="form-control text-center" id="pwgenLength" value="20" min="8" max="128">
+                                <input type="number" class="form-control text-center" id="pwgenLength" value="20" min="{{PW_MIN}}" max="128">
                                 <button class="btn btn-outline-secondary" type="button" onclick="pwgenLengthDelta(1)"><i class="fas fa-plus"></i></button>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <input type="range" class="form-range mt-3" id="pwgenLengthRange" min="8" max="64" value="20" oninput="document.getElementById('pwgenLength').value = this.value">
+                            <input type="range" class="form-range mt-3" id="pwgenLengthRange" min="{{PW_MIN}}" max="64" value="20" oninput="document.getElementById('pwgenLength').value = this.value">
                         </div>
                     </div>
 
@@ -2194,7 +2206,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""";
+""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN));
     }
 
     /**
@@ -2225,7 +2237,7 @@ public class MailPanelContent {
     private static String getCampoPasswordJs() {
         // Righe normali, non text block: un text block comincia sempre a capo, e la regex si spezzerebbe.
         String regola = "        const PW_CARATTERE = /^" + org.mail_panel.webserver.SecurityUtils.PASSWORD_CARATTERI + "$/;\n"
-                + "        const PW_MIN = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_MIN
+                + "        const PW_MIN = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN
                 + ", PW_MAX = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX + ";\n"
                 + "        const PW_SIMBOLI = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SIMBOLI
                         .replace("\\", "\\\\").replace("'", "\\'") + "';\n";
@@ -2356,7 +2368,7 @@ public class MailPanelContent {
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1">Lunghezza</label>
-                                    <input type="number" min="8" max="128" class="form-control form-control-sm" id="bulkRotateLength" value="20">
+                                    <input type="number" min="{{PW_MIN}}" max="128" class="form-control form-control-sm" id="bulkRotateLength" value="20">
                                 </div>
                                 <div class="col-md-3 d-flex align-items-end">
                                     <span class="text-muted small" id="bulkRotateSelectedCount">0 selezionate</span>
@@ -2433,7 +2445,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""";
+""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN));
     }
 
     /**
@@ -2701,9 +2713,9 @@ public class MailPanelContent {
             </div>
 
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover tabella-schede">
                     <thead class="table-light">
-                        <tr><th>Email</th><th>Nome</th><th>Quota</th><th>Funzionalita</th><th>Azioni</th></tr>
+                        <tr><th>Email</th><th>Nome</th><th>Quota</th><th>Funzionalità</th><th>Azioni</th></tr>
                     </thead>
                     <tbody id="mailboxesTable">
                         <tr><td colspan="5" class="text-center">Caricamento...</td></tr>
@@ -3037,19 +3049,19 @@ public class MailPanelContent {
                 }
                 tbody.innerHTML = currentMailboxes.map(m => `
                     <tr>
-                        <td>
+                        <td data-label="Email">
                             <strong>${m.email}</strong>
                             ${!m.receive_enabled ? '<span class="badge bg-secondary ms-1" title="Solo invio (No-Reply)"><i class="fas fa-ban"></i> No-Reply</span>' : ''}
                             ${!m.active ? '<span class="badge bg-danger ms-1">Disattivo</span>' : ''}
                         </td>
-                        <td>${escMbx(m.name || '-')}</td>
-                        <td>${m.quota_mb === 0 ? '<span class="text-success"><i class="fas fa-infinity"></i> Illimitato</span>' : m.quota_mb + ' MB'}</td>
-                        <td>
-                            ${m.autoresponder_enabled ? '<span class="badge bg-info feature-badge" title="Auto-Responder Attivo"><i class="fas fa-reply-all"></i></span>' : ''}
-                            ${m.forwarding_count > 0 ? '<span class="badge bg-warning feature-badge" title="Inoltro Attivo"><i class="fas fa-share"></i> ' + m.forwarding_count + '</span>' : ''}
-                            ${m.filters_count > 0 ? '<span class="badge bg-primary feature-badge" title="Filtri Attivi"><i class="fas fa-filter"></i> ' + m.filters_count + '</span>' : ''}
-                        </td>
-                        <td>
+                        <td data-label="Nome">${escMbx(m.name || '-')}</td>
+                        <td data-label="Quota">${m.quota_mb === 0 ? '<span class="text-success"><i class="fas fa-infinity"></i> Illimitato</span>' : m.quota_mb + ' MB'}</td>
+                        <td data-label="Funzionalità">${[
+                            m.autoresponder_enabled ? '<span class="badge bg-info feature-badge" title="Auto-Responder Attivo"><i class="fas fa-reply-all"></i></span>' : '',
+                            m.forwarding_count > 0 ? '<span class="badge bg-warning feature-badge" title="Inoltro Attivo"><i class="fas fa-share"></i> ' + m.forwarding_count + '</span>' : '',
+                            m.filters_count > 0 ? '<span class="badge bg-primary feature-badge" title="Filtri Attivi"><i class="fas fa-filter"></i> ' + m.filters_count + '</span>' : ''
+                        ].join(' ').trim()}</td>
+                        <td data-label="Azioni">
                             <div class="btn-group">
                                 <button class="btn btn-sm btn-webmail text-white" onclick="openWebmail('${m.email}')" title="Apri Webmail">
                                     <i class="fas fa-envelope-open"></i>
@@ -3186,8 +3198,8 @@ public class MailPanelContent {
         function pwgenLengthDelta(delta) {
             const input = document.getElementById('pwgenLength');
             let v = parseInt(input.value) + delta;
-            if (v < 8) v = 8;
-            if (v > 128) v = 128;
+            if (v < PW_MIN) v = PW_MIN;
+            if (v > PW_MAX) v = PW_MAX;
             input.value = v;
             const range = document.getElementById('pwgenLengthRange');
             if (v <= 64) range.value = v;
@@ -3216,7 +3228,9 @@ public class MailPanelContent {
         });
 
         function pwgenGenerate() {
-            const length = parseInt(document.getElementById('pwgenLength').value) || 20;
+            // Dentro i limiti delle caselle anche se nel campo si scrive altro (il server li applica comunque).
+            const length = Math.min(PW_MAX, Math.max(PW_MIN, parseInt(document.getElementById('pwgenLength').value) || 20));
+            document.getElementById('pwgenLength').value = length;
             const type = document.querySelector('input.pwgen-type:checked').value;
             const lo = document.getElementById('pwgenIncludeLower').checked;
             const up = document.getElementById('pwgenIncludeUpper').checked;

@@ -195,7 +195,7 @@ public class PasswordVault {
 
     /**
      * Genera una password sicura: 20 caratteri da tutti gli insiemi ("all_chars"), cioe' lettere,
-     * cifre e i simboli che SecurityUtils.isValidPassword accetta.
+     * cifre e i simboli che SecurityUtils.isValidMailboxPassword accetta.
      */
     public String generatePassword() {
         return generatePassword(20);
@@ -265,7 +265,8 @@ public class PasswordVault {
     /**
      * Generatore password configurabile.
      *
-     * @param length      lunghezza desiderata (clamped 8..128)
+     * @param length      lunghezza desiderata, riportata dentro SecurityUtils.PASSWORD_CASELLA_MIN..128: il
+     *                    generatore serve alle caselle, e una password piu' corta il pannello non la accetterebbe
      * @param type        "easy_to_say"  → solo lettere (lowercase+uppercase), no numeri/simboli — facile da dettare a voce
      *                    "easy_to_read" → caratteri "safe" (no ambigui 0/O/1/l/I, no simboli problematici)
      *                    "all_chars"    → tutte le lettere e cifre e tutti i simboli che il pannello accetta
@@ -277,8 +278,9 @@ public class PasswordVault {
      */
     public String generatePassword(int length, String type, boolean includeLower, boolean includeUpper,
                                     boolean includeDigits, boolean includeSymbols) {
-        if (length < 8) length = 8;
-        if (length > 128) length = 128;
+        if (length < org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN)
+            length = org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN;
+        if (length > org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX) length = org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX;
 
         // Insiemi attivi (almeno uno, garantito da insiemi()) e pool completo
         java.util.List<String> activeSets = insiemi(type, includeLower, includeUpper, includeDigits, includeSymbols);

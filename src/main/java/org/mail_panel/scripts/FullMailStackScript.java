@@ -663,6 +663,9 @@ PHPFPMCONF
 \\$config['password_db_dsn'] = 'mysql://mailpanel:${MAILSERVER_PASS}@127.0.0.1/mailpanel';
 \\$config['password_query'] = 'UPDATE mailboxes SET password=%P WHERE email=%u';
 \\$config['password_crypt_hash'] = 'blowfish';
+// Stesso minimo del pannello per le password delle caselle (SecurityUtils.PASSWORD_CASELLA_MIN):
+// senza questa riga, dalla webmail vale la regola del plugin e non quella del pannello.
+\\$config['password_minimum_length'] = 12;
 
 // Managesieve plugin (Dovecot Sieve filters)
 \\$config['managesieve_host'] = '127.0.0.1';

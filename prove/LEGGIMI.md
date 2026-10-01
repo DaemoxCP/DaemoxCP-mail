@@ -90,8 +90,9 @@ password delle caselle. Con "Tutti i caratteri" il generatore metteva anche < > 
 inverso, che la regola rifiuta: la password proposta dal pannello veniva respinta dal pannello
 stesso, sette volte su dieci. La prova genera migliaia di password per ogni tipo e combinazione e
 pretende che passino tutte, controlla che la stima dell'entropia usi gli stessi insiemi, che la
-regola sia rimasta quella di prima carattere per carattere, e finisce riproducendo il rifiuto con i
-simboli vecchi.
+regola sia rimasta quella di prima carattere per carattere, che le password delle caselle ne
+vogliano almeno 12 (il login dell'admin resta com'era: alzarlo avrebbe chiuso fuori chi ha una
+password piu' corta), e finisce riproducendo il rifiuto con i simboli vecchi.
 
 **prova-simulazione.sh** — la simulazione su COPIA del database di pkg, contro un pkg finto che
 tiene i "lock" come file. Dimostra che lo sblocco avviene nella copia e non nel database vero,

@@ -33,7 +33,7 @@ public class ProvaGeneratorePassword {
 
         System.out.println("\n== ogni password generata passa la regola del pannello ==");
         String[] tipi = { "easy_to_say", "easy_to_read", "all_chars", "sconosciuto", null };
-        int[] lunghezze = { 8, 20, 64, 128 };
+        int[] lunghezze = { 12, 20, 64, 128 };
         for (String tipo : tipi) {
             int generate = 0, respinte = 0, lunghezzaSbagliata = 0, insiemeMancante = 0;
             for (int combo = 0; combo < 16; combo++) {
@@ -43,7 +43,7 @@ public class ProvaGeneratorePassword {
                     for (int i = 0; i < 150; i++) {
                         String pw = vault.generatePassword(len, tipo, lo, up, nu, sy);
                         generate++;
-                        if (!SecurityUtils.isValidPassword(pw)) respinte++;
+                        if (!SecurityUtils.isValidMailboxPassword(pw) || !SecurityUtils.isValidPassword(pw)) respinte++;
                         if (pw.length() != len) lunghezzaSbagliata++;
                         for (String insieme : attivi) {
                             boolean c = false;
@@ -58,8 +58,9 @@ public class ProvaGeneratorePassword {
                     respinte == 0 && lunghezzaSbagliata == 0 && insiemeMancante == 0);
         }
 
-        System.out.println("\n== lunghezza fuori dai limiti: si riporta dentro ==");
-        esigi("3 diventa 8", vault.generatePassword(3, "all_chars", true, true, true, true).length() == 8);
+        System.out.println("\n== lunghezza fuori dai limiti: si riporta dentro (minimo delle caselle: 12) ==");
+        esigi("3 diventa 12", vault.generatePassword(3, "all_chars", true, true, true, true).length() == 12);
+        esigi("8 (il vecchio minimo del generatore) diventa 12", vault.generatePassword(8, "easy_to_read", true, true, true, true).length() == 12);
         esigi("500 diventa 128", vault.generatePassword(500, "all_chars", true, true, true, true).length() == 128);
 
         System.out.println("\n== la stima dell'entropia usa gli stessi insiemi del generatore ==");
@@ -84,6 +85,18 @@ public class ProvaGeneratorePassword {
         esigi("128 caratteri si', 129 no", SecurityUtils.isValidPassword("a".repeat(128)) && !SecurityUtils.isValidPassword("a".repeat(129)));
         esigi("la classe per la pagina e' quella attesa",
                 SecurityUtils.PASSWORD_CARATTERI.equals("[a-zA-Z0-9!@#$%\\^&*()_+\\-=\\[\\]{}|;:,.?]"));
+
+        System.out.println("\n== password delle caselle: almeno 12 caratteri, stessi caratteri dell'admin ==");
+        esigi("11 caratteri no, 12 si'", !SecurityUtils.isValidMailboxPassword("Ab1!Ab1!Ab1") && SecurityUtils.isValidMailboxPassword("Ab1!Ab1!Ab1!"));
+        esigi("128 si', 129 no", SecurityUtils.isValidMailboxPassword("a".repeat(128)) && !SecurityUtils.isValidMailboxPassword("a".repeat(129)));
+        esigi("null no", !SecurityUtils.isValidMailboxPassword(null));
+        int diverseCasella = 0;
+        for (char c = 0x20; c < 0x7F; c++) {
+            String s = String.valueOf(c).repeat(12);
+            if (vecchia.matcher(s).matches() != SecurityUtils.isValidMailboxPassword(s)) diverseCasella++;
+        }
+        esigi("a 12 caratteri accetta esattamente i caratteri di prima: " + diverseCasella + " differenze", diverseCasella == 0);
+        esigi("il login dell'admin non cambia: 4 caratteri restano validi", SecurityUtils.isValidPassword("Ab1!"));
 
         System.out.println("\n== e con i simboli di prima il pannello rifiutava la propria proposta ==");
         String vecchiSimboli = "!@#$%^&*()_-+=[]{}|;:,.<>?/~`";
