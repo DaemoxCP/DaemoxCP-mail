@@ -14,8 +14,28 @@ public class SecurityUtils {
     // Username: letters, numbers, underscore, hyphen (3-50 chars)
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]{3,50}$");
 
-    // Password: letters, numbers, and safe special chars (4-128 chars)
-    private static final Pattern PASSWORD_PATTERN = Pattern.compile("^[a-zA-Z0-9!@#$%^&*()_+\\-=\\[\\]{}|;:,.?]{4,128}$");
+    // Password: lettere senza accenti, cifre e i simboli qui sotto, da 4 a 128 caratteri.
+    //
+    // E' l'unica fonte della regola: la usano isValidPassword, il generatore (PasswordVault, per i
+    // simboli di "Tutti i caratteri") e la pagina delle caselle, che avvisa mentre si scrive o si
+    // incolla. Prima il generatore aveva simboli suoi, e produceva password che qui non passavano.
+    /** I simboli ammessi in una password di casella, oltre a lettere (senza accenti) e cifre. */
+    public static final String PASSWORD_SIMBOLI = "!@#$%^&*()_+-=[]{}|;:,.?";
+    /** La stessa regola come classe di caratteri, valida sia in Java sia in JavaScript. */
+    public static final String PASSWORD_CARATTERI = classeDiCaratteri(PASSWORD_SIMBOLI);
+    public static final int PASSWORD_MIN = 4, PASSWORD_MAX = 128;
+    private static final Pattern PASSWORD_PATTERN =
+            Pattern.compile("^" + PASSWORD_CARATTERI + "{" + PASSWORD_MIN + "," + PASSWORD_MAX + "}$");
+
+    /** [a-zA-Z0-9 + simboli], con i soli caratteri che dentro una classe vanno protetti: \ [ ] ^ - */
+    private static String classeDiCaratteri(String simboli) {
+        StringBuilder sb = new StringBuilder("[a-zA-Z0-9");
+        for (char c : simboli.toCharArray()) {
+            if ("\\[]^-".indexOf(c) >= 0) sb.append('\\');
+            sb.append(c);
+        }
+        return sb.append(']').toString();
+    }
 
     // Domain: valid domain name format
     private static final Pattern DOMAIN_PATTERN = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9.-]{1,253}[a-zA-Z0-9]$");

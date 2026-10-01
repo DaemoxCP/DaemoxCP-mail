@@ -194,9 +194,8 @@ public class PasswordVault {
     }
 
     /**
-     * Genera una password sicura: 20 caratteri, mix di maiuscole/minuscole/cifre/simboli
-     * (esclusi caratteri facilmente confondibili come 0/O, 1/l/I, e simboli problematici
-     * per shell/url come " ' ` $ \ ` & |).
+     * Genera una password sicura: 20 caratteri da tutti gli insiemi ("all_chars"), cioe' lettere,
+     * cifre e i simboli che SecurityUtils.isValidPassword accetta.
      */
     public String generatePassword() {
         return generatePassword(20);
@@ -206,13 +205,70 @@ public class PasswordVault {
         return generatePassword(length, "all_chars", true, true, true, true);
     }
 
+    // Gli insiemi di caratteri del generatore. I simboli di "all_chars" sono quelli che
+    // SecurityUtils.isValidPassword accetta, presi da li'. Prima erano scritti qui, con in piu'
+    // < > / ~ e l'apice inverso: una password generata con "Tutti i caratteri" il pannello stesso
+    // la rifiutava in creazione ("Password non valida") o la scartava in modifica, in media sette
+    // volte su dieci. prove/.../ProvaGeneratorePassword lo verifica per ogni tipo e combinazione.
+    private static final String MINUSCOLE = "abcdefghijklmnopqrstuvwxyz";
+    private static final String MAIUSCOLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private static final String CIFRE = "0123456789";
+    private static final String SIMBOLI = org.mail_panel.webserver.SecurityUtils.PASSWORD_SIMBOLI;
+    // "easy_to_read": niente caratteri che si confondono (0/O, 1/l/I), simboli comodi per shell/JSON/CSV.
+    private static final String MINUSCOLE_CHIARE = "abcdefghijkmnpqrstuvwxyz";    // no l, o
+    private static final String MAIUSCOLE_CHIARE = "ABCDEFGHJKLMNPQRSTUVWXYZ";    // no I, O
+    private static final String CIFRE_CHIARE = "23456789";                        // no 0, 1
+    private static final String SIMBOLI_CHIARI = "!@#%^*()_-+=[]{}:;,.?";
+
+    /**
+     * Gli insiemi di caratteri attivi per un tipo e delle scelte, nell'ordine in cui il generatore
+     * ne garantisce almeno uno ciascuno. Lo usano sia il generatore sia la stima dell'entropia,
+     * cosi' i due non possono piu' raccontare insiemi diversi.
+     *
+     * @param type "easy_to_say" (solo lettere: cifre e simboli ignorati), "easy_to_read"
+     *             (niente caratteri ambigui) o "all_chars"; qualsiasi altro valore vale "easy_to_read"
+     */
+    static java.util.List<String> insiemi(String type, boolean includeLower, boolean includeUpper,
+                                          boolean includeDigits, boolean includeSymbols) {
+        if (type == null) type = "easy_to_read";
+        String lower, upper, digits, symbols;
+        switch (type) {
+            case "easy_to_say" -> {
+                lower = MINUSCOLE; upper = MAIUSCOLE; digits = ""; symbols = "";
+                includeDigits = false;
+                includeSymbols = false;
+            }
+            case "all_chars" -> { lower = MINUSCOLE; upper = MAIUSCOLE; digits = CIFRE; symbols = SIMBOLI; }
+            default -> { lower = MINUSCOLE_CHIARE; upper = MAIUSCOLE_CHIARE; digits = CIFRE_CHIARE; symbols = SIMBOLI_CHIARI; }
+        }
+        // Nessuna categoria scelta: ripiego ragionevole, tutte quelle che il tipo ammette.
+        if (!includeLower && !includeUpper && !includeDigits && !includeSymbols) {
+            includeLower = includeUpper = true;
+            if (!"easy_to_say".equals(type)) { includeDigits = includeSymbols = true; }
+        }
+        java.util.List<String> attivi = new java.util.ArrayList<>();
+        if (includeLower)   attivi.add(lower);
+        if (includeUpper)   attivi.add(upper);
+        if (includeDigits)  attivi.add(digits);
+        if (includeSymbols) attivi.add(symbols);
+        return attivi;
+    }
+
+    /** Quanti caratteri diversi puo' contenere una password con queste scelte (per la stima dell'entropia). */
+    public static int dimensionePool(String type, boolean includeLower, boolean includeUpper,
+                                     boolean includeDigits, boolean includeSymbols) {
+        int n = 0;
+        for (String s : insiemi(type, includeLower, includeUpper, includeDigits, includeSymbols)) n += s.length();
+        return n;
+    }
+
     /**
      * Generatore password configurabile.
      *
      * @param length      lunghezza desiderata (clamped 8..128)
      * @param type        "easy_to_say"  → solo lettere (lowercase+uppercase), no numeri/simboli — facile da dettare a voce
      *                    "easy_to_read" → caratteri "safe" (no ambigui 0/O/1/l/I, no simboli problematici)
-     *                    "all_chars"    → set completo, anche simboli "rischiosi" come ?/=/&/$ → max entropia
+     *                    "all_chars"    → tutte le lettere e cifre e tutti i simboli che il pannello accetta
      *                    (qualsiasi altro valore viene trattato come "easy_to_read")
      * @param includeLower include caratteri minuscoli
      * @param includeUpper include caratteri maiuscoli
@@ -223,58 +279,10 @@ public class PasswordVault {
                                     boolean includeDigits, boolean includeSymbols) {
         if (length < 8) length = 8;
         if (length > 128) length = 128;
-        if (type == null) type = "easy_to_read";
 
-        // Set di caratteri in base al type
-        String lower, upper, digits, symbols;
-        switch (type) {
-            case "easy_to_say":
-                // Solo lettere; ignora digits/symbols anche se richiesti
-                lower  = "abcdefghijklmnopqrstuvwxyz";
-                upper  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-                digits = "";
-                symbols = "";
-                includeDigits = false;
-                includeSymbols = false;
-                break;
-            case "all_chars":
-                // Set completo, massima entropia (anche simboli "rischiosi")
-                lower   = "abcdefghijklmnopqrstuvwxyz";
-                upper   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-                digits  = "0123456789";
-                symbols = "!@#$%^&*()_-+=[]{}|;:,.<>?/~`";
-                break;
-            case "easy_to_read":
-            default:
-                // No ambigui (0/O, 1/l/I) + simboli "safe" per shell/JSON/CSV
-                lower   = "abcdefghijkmnpqrstuvwxyz";          // no l, o
-                upper   = "ABCDEFGHJKLMNPQRSTUVWXYZ";           // no I, O
-                digits  = "23456789";                            // no 0, 1
-                symbols = "!@#%^*()_-+=[]{}:;,.?";              // safe per shell/JSON
-                break;
-        }
-
-        // Almeno una categoria deve essere selezionata
-        if (!includeLower && !includeUpper && !includeDigits && !includeSymbols) {
-            // Fallback ragionevole: tutto attivo
-            includeLower = includeUpper = true;
-            if (!"easy_to_say".equals(type)) { includeDigits = includeSymbols = true; }
-        }
-
-        // Costruisci il pool effettivo e la lista di sets attivi (per garantire almeno 1 di ogni)
-        StringBuilder pool = new StringBuilder();
-        java.util.List<String> activeSets = new java.util.ArrayList<>();
-        if (includeLower)   { pool.append(lower);   activeSets.add(lower); }
-        if (includeUpper)   { pool.append(upper);   activeSets.add(upper); }
-        if (includeDigits)  { pool.append(digits);  activeSets.add(digits); }
-        if (includeSymbols) { pool.append(symbols); activeSets.add(symbols); }
-        String allPool = pool.toString();
-
-        if (allPool.isEmpty()) {
-            // Edge case impossibile dopo il fallback sopra, ma defensive
-            allPool = "abcdefghijklmnopqrstuvwxyz";
-            activeSets.add(allPool);
-        }
+        // Insiemi attivi (almeno uno, garantito da insiemi()) e pool completo
+        java.util.List<String> activeSets = insiemi(type, includeLower, includeUpper, includeDigits, includeSymbols);
+        String allPool = String.join("", activeSets);
 
         char[] chars = new char[length];
         // Garantisci almeno 1 di ogni categoria attiva

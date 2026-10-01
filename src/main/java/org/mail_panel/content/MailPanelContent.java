@@ -249,6 +249,9 @@ public class MailPanelContent {
         .table-responsive { overflow: visible; }
         .dropdown-menu { z-index: 1050; }
         #nav-placeholder, #footer-placeholder { display: contents; }
+        /* Campo password (campoPassword): su un telefono, accanto ai tre pulsanti, una password di
+           20 caratteri deve vedersi tutta. */
+        @media (max-width: 575.98px) { .campo-password { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
         """;
     }
 
@@ -2195,6 +2198,131 @@ public class MailPanelContent {
     }
 
     /**
+     * Campo password di una casella, con i suoi strumenti: mostra/nascondi, Genera (apre il
+     * Generatore Password), Copia, e l'avviso se un carattere non e' ammesso.
+     *
+     * Lo stesso componente per "Aggiungi Casella" e "Modifica Casella". Prima la seconda aveva gli
+     * strumenti e la prima no: la password di una casella nuova si digitava alla cieca, senza poterla
+     * generare ne' copiare per chi l'avrebbe usata. Il codice del componente e' getCampoPasswordJs().
+     */
+    private static String campoPassword(String id, String segnaposto) {
+        return """
+                        <div class="input-group has-validation">
+                            <input type="password" class="form-control font-monospace campo-password" id="%1$s" placeholder="%2$s" maxlength="128"
+                                   autocomplete="new-password" autocapitalize="off" spellcheck="false" oninput="pwControlla('%1$s')" aria-describedby="%1$sErr">
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sMostra" onclick="pwMostra('%1$s')" title="Mostra o nascondi la password" aria-label="Mostra la password"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-outline-primary" type="button" onclick="pwGenera('%1$s')" title="Genera una password sicura" aria-label="Genera una password sicura"><i class="fas fa-magic"></i><span class="d-none d-sm-inline ms-1">Genera</span></button>
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopia" onclick="pwCopia('%1$s')" title="Copia la password negli appunti" aria-label="Copia la password"><i class="fas fa-copy"></i></button>
+                            <div class="invalid-feedback" id="%1$sErr" role="alert"></div>
+                        </div>
+""".formatted(id, segnaposto);
+    }
+
+    /**
+     * Il codice del campo password (campoPassword). La regola dei caratteri arriva da SecurityUtils
+     * quando si genera la pagina: e' la stessa che applica il server, che resta l'unico a decidere.
+     */
+    private static String getCampoPasswordJs() {
+        // Righe normali, non text block: un text block comincia sempre a capo, e la regex si spezzerebbe.
+        String regola = "        const PW_CARATTERE = /^" + org.mail_panel.webserver.SecurityUtils.PASSWORD_CARATTERI + "$/;\n"
+                + "        const PW_MIN = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_MIN
+                + ", PW_MAX = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX + ";\n"
+                + "        const PW_SIMBOLI = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SIMBOLI
+                        .replace("\\", "\\\\").replace("'", "\\'") + "';\n";
+        return """
+        // ===== Campo password (componente condiviso, vedi campoPassword) =====
+""" + regola + """
+
+        function pwMostra(id, mostra) {
+            const input = document.getElementById(id);
+            const btn = document.getElementById(id + 'Mostra');
+            const visibile = mostra === undefined ? input.type === 'password' : mostra;
+            input.type = visibile ? 'text' : 'password';
+            btn.innerHTML = visibile ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+            btn.setAttribute('aria-label', visibile ? 'Nascondi la password' : 'Mostra la password');
+        }
+
+        // Vuoto va bene (in Modifica vuol dire "non cambiare"): l'obbligo lo controlla chi salva.
+        function pwControlla(id) {
+            const input = document.getElementById(id);
+            const v = input.value;
+            let msg = '';
+            if (v) {
+                const vietati = [...new Set([...v].filter(c => !PW_CARATTERE.test(c)))];
+                if (vietati.length) {
+                    msg = 'Carattere non ammesso: ' + vietati.map(c => c === ' ' ? 'spazio' : c.trim() === '' ? 'spazio speciale' : c).join(' ')
+                        + '. Ammessi: lettere senza accenti, cifre e ' + PW_SIMBOLI.split('').join(' ');
+                } else if (v.length < PW_MIN) {
+                    msg = 'Servono almeno ' + PW_MIN + ' caratteri.';
+                } else if (v.length > PW_MAX) {
+                    msg = 'Al massimo ' + PW_MAX + ' caratteri.';
+                }
+            }
+            document.getElementById(id + 'Err').textContent = msg;
+            input.classList.toggle('is-invalid', !!msg);
+            return !msg;
+        }
+
+        function pwMettiPassword(id, pw) {
+            const input = document.getElementById(id);
+            input.value = pw;
+            pwMostra(id, true);
+            pwControlla(id);
+        }
+
+        // Il generatore completo, con le sue opzioni: la scelta torna nel campo da cui e' partito.
+        function pwGenera(id) {
+            window.__pwGenCallback = function (pw) {
+                pwMettiPassword(id, pw);
+                const input = document.getElementById(id);
+                input.focus();
+                input.select();
+            };
+            openPasswordGeneratorModal();
+        }
+
+        // Una password proposta subito, con le impostazioni di default del generatore (sul server).
+        // Se nel frattempo nel campo e' stato scritto o incollato qualcosa, la proposta si scarta.
+        function pwProponi(id) {
+            fetch('/api/mailboxes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'generate_password', csrf_token: csrfToken })
+            }).then(r => r.json()).then(data => {
+                if (data.success && data.password && !document.getElementById(id).value) pwMettiPassword(id, data.password);
+            }).catch(() => {});
+        }
+
+        function pwCopia(id) {
+            const input = document.getElementById(id);
+            if (!input.value) { document.getElementById(id + 'Err').textContent = 'Il campo e\\' vuoto: genera o scrivi una password.'; input.classList.add('is-invalid'); return; }
+            const fatto = () => {
+                const btn = document.getElementById(id + 'Copia');
+                btn.innerHTML = '<i class="fas fa-check"></i>';
+                btn.setAttribute('aria-label', 'Password copiata');
+                setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i>'; btn.setAttribute('aria-label', 'Copia la password'); }, 1500);
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(input.value).then(fatto).catch(() => { if (pwCopiaVecchioModo(input)) fatto(); });
+            } else if (pwCopiaVecchioModo(input)) {
+                fatto();
+            }
+        }
+
+        // execCommand('copy') non copia da un campo password: lo si rende leggibile per l'istante della copia.
+        function pwCopiaVecchioModo(input) {
+            const tipo = input.type;
+            input.type = 'text';
+            input.select();
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { }
+            input.type = tipo;
+            return ok;
+        }
+""";
+    }
+
+    /**
      * Modal "Cambia password massivo" della pagina /mailboxes.
      * Estratto come metodo per non gonfiare il text block constante della pagina.
      */
@@ -2597,15 +2725,14 @@ public class MailPanelContent {
                             <label class="form-label">Dominio</label>
                             <select class="form-select" id="mbDomain" required></select>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Username</label>
-                                <input type="text" class="form-control" id="mbUser" placeholder="mario" required>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Password</label>
-                                <input type="password" class="form-control" id="mbPass" required>
-                            </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="mbUser">Username</label>
+                            <input type="text" class="form-control" id="mbUser" placeholder="mario" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="mbPass">Password</label>
+""" + campoPassword("mbPass", "") + """
+                            <small class="d-block text-muted mt-1">Proposta dal generatore: copiala per chi userà la casella, incollane un'altra o generane una nuova. Viene cifrata nel vault del pannello, e da Modifica potrai rivederla.</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Nome Completo</label>
@@ -2657,13 +2784,8 @@ public class MailPanelContent {
                         <input type="text" class="form-control" id="editMbName" placeholder="Mario Rossi">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Nuova Password <small class="text-muted">(lascia vuoto per non cambiare)</small></label>
-                        <div class="input-group">
-                            <input type="password" class="form-control" id="editMbPass" placeholder="Nuova password..." autocomplete="new-password">
-                            <button class="btn btn-outline-secondary" type="button" id="editMbPassToggleBtn" onclick="toggleEditMbPassVisibility()" title="Mostra/nascondi password nel campo"><i class="fas fa-eye"></i></button>
-                            <button class="btn btn-outline-primary" type="button" onclick="generateEditMbPass()" title="Genera nuova password sicura"><i class="fas fa-magic me-1"></i>Genera</button>
-                            <button class="btn btn-outline-secondary" type="button" onclick="copyEditMbPass()" title="Copia password negli appunti"><i class="fas fa-copy"></i></button>
-                        </div>
+                        <label class="form-label" for="editMbPass">Nuova Password <small class="text-muted">(lascia vuoto per non cambiare)</small></label>
+""" + campoPassword("editMbPass", "Nuova password...") + """
                         <small class="text-muted">Quando salvi, la password viene cifrata (AES-256-GCM) nel vault del pannello — potrai rivederla in seguito.</small>
 
                         <!-- Riquadro per password archiviata: rivelabile con click -->
@@ -2964,6 +3086,13 @@ public class MailPanelContent {
         }
 
         function addMailbox() {
+            const passInput = document.getElementById('mbPass');
+            if (!passInput.value) {
+                document.getElementById('mbPassErr').textContent = 'Serve una password: generane una o scrivila.';
+                passInput.classList.add('is-invalid');
+                return;
+            }
+            if (!pwControlla('mbPass')) return;
             const domainId = document.getElementById('mbDomain').value;
             const domainName = document.getElementById('mbDomain').selectedOptions[0].dataset.domain;
             const user = document.getElementById('mbUser').value;
@@ -2986,6 +3115,7 @@ public class MailPanelContent {
                     // Reset form
                     document.getElementById('mbUser').value = '';
                     document.getElementById('mbPass').value = '';
+                    pwControlla('mbPass');
                     document.getElementById('mbName').value = '';
                     document.getElementById('mbQuota').value = '1024';
                     document.getElementById('mbReceive').checked = true;
@@ -3012,8 +3142,8 @@ public class MailPanelContent {
                     document.getElementById('editMbActive').checked = m.active;
                     document.getElementById('editMbReceive').checked = m.receive_enabled;
                     // Reset stato del campo password (sempre nascosto all'apertura)
-                    document.getElementById('editMbPass').type = 'password';
-                    document.getElementById('editMbPassToggleBtn').innerHTML = '<i class="fas fa-eye"></i>';
+                    pwMostra('editMbPass', false);
+                    pwControlla('editMbPass');
                     // Reset stato del riquadro vault
                     const vaultBox = document.getElementById('editMbVaultBox');
                     const revealedBox = document.getElementById('editMbRevealedBox');
@@ -3032,31 +3162,11 @@ public class MailPanelContent {
             });
         }
 
-        // ===== Password vault helpers =====
-        function toggleEditMbPassVisibility() {
-            const input = document.getElementById('editMbPass');
-            const btn = document.getElementById('editMbPassToggleBtn');
-            if (input.type === 'password') {
-                input.type = 'text';
-                btn.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            } else {
-                input.type = 'password';
-                btn.innerHTML = '<i class="fas fa-eye"></i>';
-            }
-        }
-
-        function generateEditMbPass() {
-            // Apri il modal Generatore Password e registra un callback che riempie il campo della casella
-            window.__pwGenCallback = function(pw) {
-                const input = document.getElementById('editMbPass');
-                input.value = pw;
-                input.type = 'text';
-                document.getElementById('editMbPassToggleBtn').innerHTML = '<i class="fas fa-eye-slash"></i>';
-                input.focus();
-                input.select();
-            };
-            openPasswordGeneratorModal();
-        }
+""" + getCampoPasswordJs() + """
+        // Una casella nuova parte con una password gia' proposta, in chiaro (vedi pwProponi).
+        document.getElementById('addMailboxModal').addEventListener('show.bs.modal', function () {
+            if (!document.getElementById('mbPass').value) pwProponi('mbPass');
+        });
 
         // ===== Password Generator (modal riusabile) =====
         function openPasswordGeneratorModal() {
@@ -3171,17 +3281,6 @@ public class MailPanelContent {
             window.__pwGenCallback = null;
         }
 
-        function copyEditMbPass() {
-            const input = document.getElementById('editMbPass');
-            if (!input.value) { alert('Il campo è vuoto. Genera o digita una password prima.'); return; }
-            navigator.clipboard.writeText(input.value).then(() => {
-                // Feedback breve sull'icona
-                // (non uso alert per non interrompere il flusso)
-            }).catch(() => {
-                input.select(); document.execCommand('copy');
-            });
-        }
-
         function revealMailboxStoredPassword() {
             const id = parseInt(document.getElementById('editMbId').value);
             if (!id) return;
@@ -3220,6 +3319,7 @@ public class MailPanelContent {
 
 """ + getBulkRotateMailboxesJs() + """
         function saveMailbox() {
+            if (!pwControlla('editMbPass')) return;
             const id = parseInt(document.getElementById('editMbId').value);
             const data = {
                 id: id,

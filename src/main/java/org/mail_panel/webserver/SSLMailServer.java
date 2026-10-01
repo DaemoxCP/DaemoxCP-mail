@@ -1567,22 +1567,9 @@ public class SSLMailServer {
                         response.put("password", pw);
                         response.put("length", pw.length());
                         response.put("type", type);
-                        // Stima entropia approssimata (per UI: "strong/very strong/weak")
-                        int poolSize = 0;
-                        if ("easy_to_say".equals(type)) {
-                            if (lo) poolSize += 26;
-                            if (up) poolSize += 26;
-                        } else if ("all_chars".equals(type)) {
-                            if (lo) poolSize += 26;
-                            if (up) poolSize += 26;
-                            if (nu) poolSize += 10;
-                            if (sy) poolSize += 30; // approx
-                        } else { // easy_to_read
-                            if (lo) poolSize += 24; // no l, o
-                            if (up) poolSize += 24; // no I, O
-                            if (nu) poolSize += 8;  // no 0, 1
-                            if (sy) poolSize += 18; // safe set
-                        }
+                        // Stima dell'entropia (per UI: "Debole/Discreta/Forte/Molto forte"), sugli stessi
+                        // insiemi che il generatore ha appena usato.
+                        int poolSize = org.mail_panel.security.PasswordVault.dimensionePool(type, lo, up, nu, sy);
                         double entropy = org.mail_panel.security.PasswordVault.estimateEntropy(pw.length(), poolSize);
                         response.put("entropy_bits", Math.round(entropy * 10.0) / 10.0);
                         String strengthLabel;

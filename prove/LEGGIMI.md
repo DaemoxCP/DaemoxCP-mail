@@ -6,6 +6,7 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     mvn -o -q package -DskipTests
     javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/system/*.java
     javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/webserver/*.java
+    javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/security/ProvaGeneratorePassword.java
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaMtaSts
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaAttesa
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaUnificazione
@@ -16,6 +17,7 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaPianoPacchetti
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaTurnoPacchetti
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.ProvaAlias
+    java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.ProvaGeneratorePassword
     sh prove/prova-simulazione.sh
 
 ## Cosa provano
@@ -82,6 +84,14 @@ non e' una casella esiste solo finche' ha un alias attivo (o il dominio un catch
 quando un alias si puo' disattivare, la riga della copia puo' esserci ed essere spenta: la logica
 di prima guardava la riga e non lo stato, e taceva proprio li'. La prova finisce riproducendo quel
 silenzio sulla logica vecchia.
+
+**ProvaGeneratorePassword** — il generatore di password e la regola che il pannello applica alle
+password delle caselle. Con "Tutti i caratteri" il generatore metteva anche < > / ~ e l'apice
+inverso, che la regola rifiuta: la password proposta dal pannello veniva respinta dal pannello
+stesso, sette volte su dieci. La prova genera migliaia di password per ogni tipo e combinazione e
+pretende che passino tutte, controlla che la stima dell'entropia usi gli stessi insiemi, che la
+regola sia rimasta quella di prima carattere per carattere, e finisce riproducendo il rifiuto con i
+simboli vecchi.
 
 **prova-simulazione.sh** — la simulazione su COPIA del database di pkg, contro un pkg finto che
 tiene i "lock" come file. Dimostra che lo sblocco avviene nella copia e non nel database vero,
