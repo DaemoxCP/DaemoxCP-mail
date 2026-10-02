@@ -891,35 +891,10 @@ public class DnsRecordsGenerator {
 
         // 9. Check MTA-STS (optional but recommended)
         // Note: MTA-STS ID is just a version timestamp, doesn't need to match exactly
-        DnsCheck mtaStsCheck = verifyTxtRecord("_mta-sts." + domain, "v=STSv1");
-        mtaStsCheck.recordType = "MTA-STS";
+        DnsCheck mtaStsCheck = controlloMtaSts(domain,
+                org.mail_panel.system.AttivaMtaSts.leggiTxt(domain),
+                org.mail_panel.system.MtaSts::provaPubblica);
         mtaStsCheck.expectedValue = org.mail_panel.system.MtaSts.recordTxtCorrente();
-        if (mtaStsCheck.passed && mtaStsCheck.currentValue != null) {
-            // Il record c'e': ora si va a CHIEDERE la politica. Guardare solo il TXT diceva
-            // "fatto" su domini che dichiarano pubblicamente una protezione e poi non la
-            // servono. E' una promessa non mantenuta, e il pannello la mostrava come esito
-            // positivo — misurare il cartello invece della cosa.
-            org.json.JSONObject prova = org.mail_panel.system.MtaSts.provaPubblica(domain);
-            if (prova.optBoolean("ok", false)) {
-                mtaStsCheck.message = "Attivo: il record c'e' e la politica risponde.";
-            } else {
-                mtaStsCheck.passed = false;
-                mtaStsCheck.message = "IL RECORD C'E' MA LA POLITICA NON RISPONDE. Stai dichiarando "
-                        + "pubblicamente di avere MTA-STS, e chi va a leggerlo su https://mta-sts."
-                        + domain + "/.well-known/mta-sts.txt non trova niente: "
-                        + prova.optString("errore", "irraggiungibile")
-                        + " I mittenti proseguono come se non l'avessi (RFC 8461 §3.3), quindi non "
-                        + "rompe la posta — ma e' una dichiarazione che non mantieni. O la si serve, "
-                        + "o si toglie il record.";
-            }
-        } else {
-            mtaStsCheck.passed = false;
-            mtaStsCheck.informativo = true;
-            mtaStsCheck.message = "Non attivo. Non e' una dimenticanza: MTA-STS richiede che la politica "
-                    + "sia raggiungibile da tutto il mondo su https://mta-sts." + domain + " (porta 443), "
-                    + "perche' la leggono i server mittenti. Su un server chiuso agli IP esterni non "
-                    + "puo' funzionare, e pubblicare il solo record dichiarerebbe una protezione assente.";
-        }
         result.checks.add(mtaStsCheck);
         // Don't fail overall for optional records
         // if (!mtaStsCheck.passed) result.allPassed = false;
@@ -1109,6 +1084,62 @@ public class DnsRecordsGenerator {
                     + ": i client proverebbero a collegarsi dove non risponde nessuno.";
     }
 
+    /**
+     * La riga MTA-STS della pagina DNS, da cio' che dice il DNS del record e da come risponde
+     * la politica.
+     *
+     * Il record si legge con la stessa funzione del piano MTA-STS (AttivaMtaSts.leggiTxt).
+     * Prima qui bastava che "v=STSv1" comparisse nell'uscita di "dig +short": due record, che
+     * per i mittenti valgono zero (RFC 8461 §3.1), davano "Attivo", e un SERVFAIL dava "Non
+     * attivo". Sta da sola perche' le prove la verifichino senza DNS e senza la politica vera.
+     */
+    static DnsCheck controlloMtaSts(String domain, org.mail_panel.system.AttivaMtaSts.LetturaTxt txtSts,
+                                    java.util.function.Function<String, org.json.JSONObject> provaPubblica) {
+        DnsCheck mtaStsCheck = new DnsCheck();
+        mtaStsCheck.recordName = "_mta-sts." + domain;
+        mtaStsCheck.recordType = "MTA-STS";
+        if (!txtSts.valori.isEmpty()) mtaStsCheck.currentValue = String.join("  ||  ", txtSts.valori);
+        if (txtSts.esito == org.mail_panel.system.AttivaMtaSts.EsitoTxt.PRESENTE) {
+            // Il record c'e': ora si va a CHIEDERE la politica. Guardare solo il TXT diceva
+            // "fatto" su domini che dichiarano pubblicamente una protezione e poi non la
+            // servono. E' una promessa non mantenuta, e il pannello la mostrava come esito
+            // positivo — misurare il cartello invece della cosa.
+            org.json.JSONObject prova = provaPubblica.apply(domain);
+            if (prova.optBoolean("ok", false)) {
+                mtaStsCheck.passed = true;
+                mtaStsCheck.message = "Attivo: il record c'e' e la politica risponde.";
+            } else {
+                mtaStsCheck.passed = false;
+                mtaStsCheck.message = "IL RECORD C'E' MA LA POLITICA NON RISPONDE. Stai dichiarando "
+                        + "pubblicamente di avere MTA-STS, e chi va a leggerlo su https://mta-sts."
+                        + domain + "/.well-known/mta-sts.txt non trova niente: "
+                        + prova.optString("errore", "irraggiungibile")
+                        + " I mittenti proseguono come se non l'avessi (RFC 8461 §3.3), quindi non "
+                        + "rompe la posta — ma e' una dichiarazione che non mantieni. O la si serve, "
+                        + "o si toglie il record.";
+            }
+        } else if (txtSts.esito == org.mail_panel.system.AttivaMtaSts.EsitoTxt.TROPPI) {
+            mtaStsCheck.passed = false;
+            mtaStsCheck.message = "Ci sono " + txtSts.valori.size() + " record v=STSv1 su _mta-sts." + domain
+                    + ": per i mittenti e' come non averne nessuno (RFC 8461 §3.1), quindi MTA-STS non e' "
+                    + "attivo. Ne deve restare uno solo: quando la politica risponde, la sequenza "
+                    + "\"Attiva MTA-STS\" lascia quello con l'id giusto e toglie gli altri.";
+        } else if (txtSts.esito == org.mail_panel.system.AttivaMtaSts.EsitoTxt.NON_CHIESTO) {
+            // NON si scrive "non attivo" su una domanda rimasta senza risposta: sono due guasti
+            // diversi e mandano a cercare in posti opposti (come per autoconfig, in verifyAllRecords).
+            mtaStsCheck.passed = false;
+            mtaStsCheck.message = "Non so se il record c'e': " + txtSts.motivo + ".";
+        } else {
+            mtaStsCheck.passed = false;
+            mtaStsCheck.informativo = true;
+            mtaStsCheck.message = "Non attivo. Non e' una dimenticanza: MTA-STS richiede che la politica "
+                    + "sia raggiungibile da tutto il mondo su https://mta-sts." + domain + " (porta 443), "
+                    + "perche' la leggono i server mittenti. Su un server chiuso agli IP esterni non "
+                    + "puo' funzionare, e pubblicare il solo record dichiarerebbe una protezione assente.";
+        }
+        return mtaStsCheck;
+    }
+
     private DnsCheck verifyRecord(String name, String type) {
         DnsCheck check = new DnsCheck();
         check.recordType = type;
@@ -1151,22 +1182,6 @@ public class DnsRecordsGenerator {
                       + "pannello e' stato avviato. Guarda la scheda \"Ambiente del pannello\" "
                       + "negli Aggiornamenti."
                     : "Errore verifica: " + m;
-        }
-
-        return check;
-    }
-
-    /**
-     * Verify a TXT record contains expected content
-     */
-    private DnsCheck verifyTxtRecord(String name, String expectedContent) {
-        DnsCheck check = verifyRecord(name, "TXT");
-
-        if (check.passed && check.currentValue != null) {
-            if (!check.currentValue.contains(expectedContent)) {
-                check.passed = false;
-                check.message = "Record trovato ma contenuto non valido";
-            }
         }
 
         return check;

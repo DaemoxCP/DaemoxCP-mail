@@ -7,7 +7,9 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/system/*.java
     javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/webserver/*.java
     javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/security/ProvaGeneratorePassword.java
+    javac -cp target/freebsd-mail-panel-1.0.jar -d prove prove/org/mail_panel/security/ProvaRecordMtaSts.java
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaMtaSts
+    java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.ProvaRecordMtaSts
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaAttesa
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaUnificazione
     java -cp "prove:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ProvaAutoconfig
@@ -22,10 +24,39 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
 
 ## Cosa provano
 
-**ProvaMtaSts** — `ripartisci()`, cioe' come i domini finiscono nei passi del piano, e
-`leggiTxt()` sull'uscita VERA di `dig` interrogando i domini veri. Copre il caso di
-domain-d.test (nessun record, risponde un jolly proxato) e il caso di un record insieme
-sbagliato e proxato.
+**ProvaMtaSts** — `ripartisci()`, cioe' come i domini finiscono nei passi del piano, e la
+lettura del record `_mta-sts`. Copre il caso di domain-d.test (nessun record, risponde un jolly
+proxato) e il caso di un record insieme sbagliato e proxato. La lettura decide dallo stato
+della risposta DNS: con NOERROR si contano i record v=STSv1 (nessuno e' ASSENTE, uno e'
+PRESENTE, piu' d'uno e' TROPPI); NXDOMAIN e' ASSENTE; un errore (SERVFAIL, REFUSED) o nessuna
+risposta e' NON_CHIESTO, con il motivo che il piano scrive accanto al dominio. Si prova in
+due modi:
+- `interpretaTxt()` con uscite di `dig` vere, registrate il 2/10/2026 (record pubblicato,
+  SERVFAIL di dnssec-failed.org, NXDOMAIN, nome senza TXT, DNS che non risponde), piu'
+  varianti costruite su quelle (record spezzato, accanto ad altri TXT, dietro un CNAME,
+  REFUSED, due record v=STSv1 in varie forme). Vale ovunque, anche senza rete;
+- `leggiTxt()` sul DNS vero. Se da qui `dig` raggiunge un DNS si esigono i fatti veri: su
+  domain-d.test il record c'e', un nome inesistente non ce l'ha, e se il resolver convalida
+  DNSSEC il SERVFAIL di dnssec-failed.org e' NON_CHIESTO. Se non lo raggiunge (`dig` assente
+  o rete chiusa) si esige NON_CHIESTO, mai un ASSENTE inventato.
+Prima la lettura usava `dig +short`, che per un SERVFAIL non stampa niente, come per un nome
+senza record: il piano leggeva "assente" e proponeva di pubblicare un record che forse c'e'
+gia'. Contro quella versione la prova fallisce in cinque punti. E prima ancora la prova dava
+per scontato il DNS e falliva su ogni macchina che non ce l'aveva.
+Prova anche `passiProvaETxt()`, dove il passo del record diventa "fatto": con due record
+v=STSv1 non deve diventarlo, perche' per i mittenti due record valgono zero (RFC 8461 §3.1).
+Prima la lettura prendeva il primo record: se era quello giusto, il passo risultava fatto.
+
+**ProvaRecordMtaSts** — il record `_mta-sts` dal lato di Cloudflare e della pagina DNS, senza
+rete. La regola comune (`RegoleDns.eMtaSts`: conta ogni record che almeno un mittente vero
+conta, anche scritto in maiuscolo). La scrittura, `AutoDns.allineaTxtMtaSts()`, contro un
+Cloudflare finto con la zona in memoria: crea, lascia stare, aggiorna, e con piu' record ne
+lascia uno solo e giusto senza toccare gli altri TXT; con Cloudflare che rifiuta una
+cancellazione o un aggiornamento lo dice; se la prima lettura della zona torna vuota per un
+errore, la rilettura finale si accorge dei due record. La riga MTA-STS della pagina DNS,
+`controlloMtaSts()`: due record non sono mai verdi, un SERVFAIL non e' "Non attivo". In fondo
+rimette la scrittura di prima davanti ai due record, uno gia' giusto: diceva "invariato" e li
+lasciava tutti e due, e la prova lo vede.
 
 **ProvaAttesa** — l'attesa della propagazione, con un orologio finto invece di sei minuti
 veri. Verifica le tre proprieta' che devono valere: non si aspetta se i domini rispondono

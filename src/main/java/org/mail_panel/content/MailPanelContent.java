@@ -276,17 +276,21 @@ public class MailPanelContent {
             pre { white-space: pre-wrap; overflow-wrap: anywhere; }
             code, .form-label { overflow-wrap: anywhere; }
         }
-        /* Menu in alto fra 992 e 1699px: solo icone. Tredici voci col nome chiedono circa 1680px: sotto i
-           1334 Logout finiva fuori e la pagina scorreva in orizzontale, fra 1334 e 1699 i nomi andavano a
-           capo su due righe. Il nome resta per i lettori di schermo e nel title; la pagina in cui ti trovi
-           lo tiene anche a vista. Da 1700px tornano tutti i nomi. */
-        @media (min-width: 992px) and (max-width: 1699.98px) {
-            .navbar-mail .nav-link:not(.active) .nav-testo, .navbar-mail #logoutButton .nav-testo {
+        /* Menu in alto, da 992px (sotto e' a tendina): i nomi non vanno mai a capo. Tredici voci col
+           nome chiedono circa 1680px: sotto Logout finiva fuori e la pagina scorreva di lato, e i nomi
+           andavano a capo su due righe. Lo script del menu (getNavbarHtml) misura, come nel pannello
+           web: se i nomi non ci stanno mette menu-compatto, solo icone tranne la pagina in cui ti
+           trovi; se non basta menu-minimo, solo icone anche li' e niente nome del pannello. Il nome
+           resta nel title e per i lettori di schermo. */
+        @media (min-width: 992px) {
+            .navbar-mail .nav-link, .navbar-mail .navbar-brand { white-space: nowrap; }
+            .navbar-mail.menu-compatto .nav-link:not(.active) .nav-testo, .navbar-mail.menu-minimo .nav-testo {
                 position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important;
                 margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important;
                 white-space: nowrap !important; border: 0 !important;
             }
-            .navbar-mail .nav-link:not(.active) i, .navbar-mail #logoutButton i { margin-right: 0 !important; }
+            .navbar-mail.menu-compatto .nav-link:not(.active) i, .navbar-mail.menu-minimo .nav-link i,
+            .navbar-mail.menu-minimo .navbar-brand i { margin-right: 0 !important; }
         }
         /* Tabelle che su telefono e tablet (sotto i 992px, come il menu a tendina) diventano schede:
            classe tabella-schede sulla <table> e data-label su ogni cella. Cinque colonne in 375px non
@@ -369,9 +373,10 @@ public class MailPanelContent {
     /**
      * Il menu in alto, con la pagina corrente evidenziata.
      *
-     * Ogni nome sta in uno span .nav-testo: fra 992 e 1699px gli stili comuni lo nascondono alla vista
-     * (resta per i lettori di schermo, e il title lo mostra al passaggio del mouse), perche' tredici
-     * voci col nome non ci stanno: Logout finiva fuori e la pagina scorreva in orizzontale.
+     * Ogni nome sta in uno span .nav-testo. Se i nomi non ci stanno su una riga, lo script qui sotto
+     * mette menu-compatto e gli stili comuni lo nascondono alla vista (resta per i lettori di schermo,
+     * e il title lo mostra al passaggio del mouse): tredici voci col nome chiedono circa 1680px, e
+     * sotto Logout finiva fuori e la pagina scorreva in orizzontale. Come nel pannello web.
      */
     private static String getNavbarHtml(String activePage) {
         StringBuilder voci = new StringBuilder();
@@ -384,18 +389,48 @@ public class MailPanelContent {
         return """
 <nav class="navbar navbar-expand-lg navbar-dark navbar-mail">
     <div class="container-fluid">
-        <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2" aria-hidden="true"></i>Mail Control Panel</a>
+        <a class="navbar-brand" href="/home"><i class="fas fa-envelope me-2" aria-hidden="true"></i><span class="nav-testo">Mail Control Panel</span></a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Apri il menu"><span class="navbar-toggler-icon"></span></button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto">
 """ + voci + """
             </ul>
             <ul class="navbar-nav">
+                <li class="nav-item">
+                    <button class="theme-toggle" id="themeToggle" title="Cambia tema" aria-label="Cambia tema">
+                        <i class="fas fa-sun" id="themeIcon" aria-hidden="true"></i>
+                    </button>
+                </li>
                 <li class="nav-item"><a class="nav-link btn btn-logout text-white" href="#" id="logoutButton" title="Logout"><i class="fas fa-sign-out-alt me-1" aria-hidden="true"></i><span class="nav-testo">Logout</span></a></li>
             </ul>
         </div>
     </div>
 </nav>
+<script>
+// Il menu deve stare su una riga, senza far scorrere la pagina di lato: si misura, come nel
+// pannello web. Se i nomi non ci stanno restano solo le icone (il nome resta nel title e per i
+// lettori di schermo, e la pagina in cui ti trovi lo tiene anche a vista); se non basta ancora,
+// via anche quello e il nome del pannello. Si rimisura quando cambia la larghezza della finestra
+// e quando arrivano i caratteri delle icone.
+(function () {
+    const nav = document.querySelector('nav.navbar-mail');
+    if (!nav) return;
+    const riga = nav.querySelector('.container-fluid');
+    const tendina = nav.querySelector('.navbar-toggler');
+    function adatta() {
+        nav.classList.remove('menu-compatto', 'menu-minimo');
+        if (getComputedStyle(tendina).display !== 'none') return;
+        if (riga.scrollWidth <= riga.clientWidth) return;
+        nav.classList.add('menu-compatto');
+        if (riga.scrollWidth <= riga.clientWidth) return;
+        nav.classList.add('menu-minimo');
+    }
+    new MutationObserver(adatta).observe(nav, { subtree: true, attributes: true, attributeFilter: ['style'] });
+    window.addEventListener('resize', adatta);
+    if (document.fonts) document.fonts.ready.then(adatta);
+    adatta();
+})();
+</script>
 """;
     }
 
@@ -430,14 +465,15 @@ public class MailPanelContent {
             function applyTheme(theme) {
                 const effectiveTheme = theme === 'auto' ? getBrowserTheme() : theme;
                 document.documentElement.setAttribute('data-theme', effectiveTheme);
-                updateIcon(effectiveTheme);
+                updateIcon(theme);
             }
 
-            // Update toggle icon
-            function updateIcon(effectiveTheme) {
+            // L'icona del pulsante mostra la scelta, come nel pannello web: mezzo cerchio per
+            // automatico (segue il sistema), sole per chiaro, luna per scuro.
+            function updateIcon(theme) {
                 const icon = document.getElementById('themeIcon');
                 if (icon) {
-                    icon.className = effectiveTheme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+                    icon.className = theme === 'auto' ? 'fas fa-circle-half-stroke' : theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
                 }
             }
 

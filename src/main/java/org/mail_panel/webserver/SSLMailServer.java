@@ -9904,9 +9904,14 @@ public class SSLMailServer {
                     break;
                 }
                 response = auto.creaTxtMtaSts(domainId);
+                // I record MTA-STS in piu' che la scrittura toglie sono cancellazioni nel DNS:
+                // restano scritte anche qui, non solo nella risposta.
+                JSONArray tolti = response.optJSONArray("tolti");
                 logAudit("MTASTS_TXT", ip, "dominio " + domainId
                         + (response.optBoolean("success") ? " - pubblicato" : " - NON pubblicato: "
-                           + response.optString("error", "?")));
+                           + response.optString("error", "?"))
+                        + (tolti == null || tolti.length() == 0 ? ""
+                           : " - tolti " + tolti.length() + " record MTA-STS in piu': " + tolti.join("  ||  ")));
             }
             case "create_optional" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {

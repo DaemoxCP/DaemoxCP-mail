@@ -104,6 +104,8 @@
             const el = document.getElementById('stsEsito');
             if (prompt('Pubblicare il record TXT MTA-STS?\n\n'
                      + 'La politica risponde gia\', quindi la dichiarazione e\' mantenuta da subito.\n'
+                     + 'Se su quel nome ci sono piu\' record MTA-STS, ne resta uno solo, con l\'id giusto:\n'
+                     + 'con due o piu\' record i mittenti fanno come se MTA-STS non ci fosse.\n'
                      + 'Scrivi CREA per confermare.') !== 'CREA') return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Pubblico su Cloudflare...';
             const r = await stsApi('mtasts_txt', { confirm: 'CREA' });

@@ -380,43 +380,116 @@ public class AutoDns {
             CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
             if (!zl.found) return errore("la zona " + d.domain + " non e' visibile: " + zl.error);
 
-            for (CloudflareManager.TxtRecordInfo t : txtAlNome(acct.apiToken, zl.zoneId, nome)) {
-                String c = RegoleDns.contenutoCloudflare(t.content);
-                if (!c.toLowerCase(java.util.Locale.ROOT).startsWith("v=stsv1")) continue;
-                if (c.trim().equals(valore.trim()))
-                    return r.put("success", true).put("invariato", true).put("contenuto", c)
-                            .put("nota", "Il record su " + nome + " e' gia' quello giusto.");
+            return allineaTxtMtaSts(acct.apiToken, zl.zoneId, nome, valore, r);
+        } catch (Exception e) {
+            return errore("errore durante la creazione: " + e.getMessage());
+        }
+    }
 
+    /**
+     * Lascia su quel nome un solo record MTA-STS, con quel valore: lo crea se manca, lo
+     * aggiorna se ha un altro id, toglie quelli in piu'.
+     *
+     * Quelli in piu' contano: con due record v=STSv1 i mittenti fanno come se MTA-STS non ci
+     * fosse (RFC 8461 §3.1). Prima qui si guardava il primo record: se era gia' giusto la
+     * risposta era "invariato", e l'altro restava li' a spegnere tutto.
+     *
+     * Si tolgono senza chiedere altro perche' il nome _mta-sts e' del pannello e il record non
+     * contiene niente di scelto a mano: la versione e l'id, che segue la politica servita.
+     * Quelli tolti restano scritti nella risposta.
+     *
+     * Sta da sola perche' le prove la verifichino con un Cloudflare finto.
+     */
+    JSONObject allineaTxtMtaSts(String token, String zoneId, String nome, String valore, JSONObject r) {
+        List<CloudflareManager.TxtRecordInfo> sts = new ArrayList<>();
+        for (CloudflareManager.TxtRecordInfo t : txtAlNome(token, zoneId, nome))
+            if (RegoleDns.eMtaSts(RegoleDns.contenutoCloudflare(t.content))) sts.add(t);
+
+        List<String> tolti = new ArrayList<>();
+        String prima = null;
+        if (sts.isEmpty()) {
+            CloudflareManager.RecordOp op = cloudflare.createTxtRecord(token, zoneId, nome, valore, 3600);
+            if (op == null || !op.success)
+                return r.put("success", false)
+                        .put("error", "Cloudflare ha rifiutato: " + (op == null ? "nessuna risposta" : op.error));
+            r.put("recordId", op.recordId);
+        } else {
+            // Si tiene quello gia' giusto, se c'e'; se no il primo, da aggiornare.
+            CloudflareManager.TxtRecordInfo tieni = sts.get(0);
+            for (CloudflareManager.TxtRecordInfo t : sts)
+                if (RegoleDns.contenutoCloudflare(t.content).trim().equals(valore.trim())) { tieni = t; break; }
+
+            // Prima si tolgono gli altri, poi si aggiorna. Se l'aggiornamento fallisse resterebbe
+            // un record solo con l'id vecchio: i mittenti lo leggono e scaricano la politica di
+            // adesso. Due record, invece, non li legge nessuno.
+            for (CloudflareManager.TxtRecordInfo t : sts) {
+                if (t == tieni) continue;
+                String c = RegoleDns.contenutoCloudflare(t.content);
+                CloudflareManager.RecordOp del = cloudflare.deleteRecord(token, zoneId, t.id);
+                if (del == null || !del.success)
+                    return r.put("success", false).put("tolti", new JSONArray(tolti))
+                            .put("error", "Su " + nome + " ci sono " + sts.size() + " record MTA-STS, e con "
+                                    + "piu' di uno i mittenti fanno come se MTA-STS non ci fosse (RFC 8461 "
+                                    + "§3.1). Cloudflare ha rifiutato di togliere \"" + c + "\": "
+                                    + (del == null ? "nessuna risposta" : del.error)
+                                    + (tolti.isEmpty() ? "." : ". Tolti fin qui: " + String.join("  ||  ", tolti)));
+                tolti.add(c);
+            }
+
+            String c = RegoleDns.contenutoCloudflare(tieni.content);
+            if (!c.trim().equals(valore.trim())) {
                 // L'id NON e' decorativo: e' il segnale con cui i mittenti si accorgono che la
                 // politica e' cambiata. Un id fermo — per esempio un orologio scritto una volta
                 // sola, com'era nei record suggeriti dal vecchio pannello — fa restare tutti
                 // sulla politica vecchia finche' non scade la loro copia. Quindi si aggiorna.
                 CloudflareManager.RecordOp up = cloudflare.updateTxtRecord(
-                        acct.apiToken, zl.zoneId, t.id, nome, valore, 3600);
+                        token, zoneId, tieni.id, nome, valore, 3600);
                 if (up == null || !up.success)
-                    return r.put("success", false).put("contenuto", c)
+                    return r.put("success", false).put("contenuto", c).put("tolti", new JSONArray(tolti))
                             .put("error", "Su " + nome + " c'e' un record MTA-STS con un id diverso ("
                                     + c + ") e Cloudflare ha rifiutato l'aggiornamento: "
-                                    + (up == null ? "nessuna risposta" : up.error));
-                return r.put("success", true).put("aggiornato", true)
-                        .put("prima", c).put("dopo", valore)
-                        .put("nota", "Record MTA-STS aggiornato su " + nome + ": l'id ora segue il "
-                                + "contenuto della politica, quindi i mittenti si accorgeranno delle "
-                                + "modifiche future invece di restare sulla copia vecchia.");
+                                    + (up == null ? "nessuna risposta" : up.error)
+                                    + (tolti.isEmpty() ? "" : ". Gli altri record MTA-STS sono stati tolti: "
+                                       + String.join("  ||  ", tolti)));
+                prima = c;
+            } else if (tolti.isEmpty()) {
+                return r.put("success", true).put("invariato", true).put("contenuto", c)
+                        .put("nota", "Il record su " + nome + " e' gia' quello giusto.");
             }
-
-            CloudflareManager.RecordOp op =
-                    cloudflare.createTxtRecord(acct.apiToken, zl.zoneId, nome, valore, 3600);
-            if (op == null || !op.success)
-                return r.put("success", false)
-                        .put("error", "Cloudflare ha rifiutato: " + (op == null ? "nessuna risposta" : op.error));
-
-            return r.put("success", true).put("recordId", op.recordId)
-                    .put("nota", "Record MTA-STS pubblicato su " + nome + ". La politica e' gia' "
-                            + "raggiungibile, quindi la dichiarazione e' mantenuta fin da subito.");
-        } catch (Exception e) {
-            return errore("errore durante la creazione: " + e.getMessage());
         }
+
+        // Non basta che l'API abbia detto di si': si rilegge la zona. Lo scopo e' che ne resti
+        // UNO, quindi lo si conta. Serve anche quando si e' creato: se la prima lettura fosse
+        // tornata vuota per un errore di Cloudflare, il record nuovo starebbe accanto a uno
+        // vecchio, e sarebbero due.
+        List<String> restano = new ArrayList<>();
+        for (CloudflareManager.TxtRecordInfo t : txtAlNome(token, zoneId, nome)) {
+            String c = RegoleDns.contenutoCloudflare(t.content);
+            if (RegoleDns.eMtaSts(c)) restano.add(c.trim());
+        }
+        if (!tolti.isEmpty()) r.put("tolti", new JSONArray(tolti));
+        if (prima != null) r.put("aggiornato", true).put("prima", prima).put("dopo", valore);
+        if (restano.size() != 1 || !restano.get(0).equals(valore.trim()))
+            return r.put("success", false).put("riletto", String.join("  ||  ", restano))
+                    .put("error", "Cloudflare ha accettato le modifiche, ma rileggendo la zona su " + nome
+                            + (restano.isEmpty() ? " non c'e' nessun record MTA-STS"
+                               : restano.size() == 1 ? " c'e' \"" + restano.get(0) + "\""
+                               : " ci sono " + restano.size() + " record MTA-STS: " + String.join("  ||  ", restano))
+                            + ". Guardalo in Cloudflare prima di riprovare.");
+
+        String nota;
+        if (!tolti.isEmpty())
+            nota = "Su " + nome + " c'erano " + sts.size() + " record MTA-STS, e con piu' di uno i mittenti "
+                 + "fanno come se MTA-STS non ci fosse (RFC 8461 §3.1). Ora ce n'e' uno solo, con l'id "
+                 + "giusto. Tolti: " + String.join("  ||  ", tolti) + ".";
+        else if (prima != null)
+            nota = "Record MTA-STS aggiornato su " + nome + ": l'id ora segue il contenuto della politica, "
+                 + "quindi i mittenti si accorgeranno delle modifiche future invece di restare sulla "
+                 + "copia vecchia.";
+        else
+            nota = "Record MTA-STS pubblicato su " + nome + ". La politica e' gia' raggiungibile, quindi "
+                 + "la dichiarazione e' mantenuta fin da subito.";
+        return r.put("success", true).put("nota", nota);
     }
 
     /* ===================================================================

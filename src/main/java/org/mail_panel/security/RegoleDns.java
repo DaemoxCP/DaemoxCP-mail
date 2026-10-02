@@ -6,24 +6,29 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Le regole che i record SPF e DMARC devono rispettare, prese dalle specifiche in vigore e
- * scritte come funzioni pure: nessuna rete, nessun processo, nessun database. Cosi' si
- * possono provare con dei valori a mano, che e' l'unico modo di sapere se dicono il vero.
+ * Le regole che i record SPF, DMARC e MTA-STS devono rispettare, prese dalle specifiche in
+ * vigore e scritte come funzioni pure: nessuna rete, nessun processo, nessun database. Cosi'
+ * si possono provare con dei valori a mano, che e' l'unico modo di sapere se dicono il vero.
  *
  * Fonti (verificate, non a memoria):
- *  - SPF:   RFC 7208
- *  - DMARC: RFC 9989 (maggio 2026, sostituisce RFC 7489) e RFC 9990 per i rapporti
+ *  - SPF:     RFC 7208
+ *  - DMARC:   RFC 9989 (maggio 2026, sostituisce RFC 7489) e RFC 9990 per i rapporti
+ *  - MTA-STS: RFC 8461 §3.1, confrontata con due mittenti veri (vedi soloMtaSts)
  *
- * Due regole valgono da sole tutto questo file, perche' descrivono guasti silenziosi:
+ * Tre regole valgono da sole tutto questo file, perche' descrivono guasti silenziosi:
  *
  *  1. SPF, §4.5: se a un nome ci sono DUE record che cominciano per "v=spf1", il risultato
  *     non e' "vince il primo": e' "permerror". SPF smette di funzionare del tutto.
  *  2. DMARC, §4: se a un nome ci sono due record DMARC validi, vengono scartati TUTTI.
  *     La politica sparisce, e nessuno avvisa nessuno.
+ *  3. MTA-STS, §3.1: se su _mta-sts ci sono due record v=STSv1, i mittenti fanno come se
+ *     MTA-STS non ci fosse. La politica resta servita, e non la legge nessuno.
  *
- * In entrambi i casi il dominio continua a spedire e chi guarda non vede niente di rotto,
- * finche' un giorno la posta comincia a finire nello spam. Per questo il pannello deve
- * saperli riconoscere prima di creare un record, non dopo.
+ * In tutti e tre i casi la posta continua a passare e chi guarda non vede niente di rotto:
+ * con SPF e DMARC finche' un giorno comincia a finire nello spam, con MTA-STS mai, perche'
+ * l'unico effetto e' che la posta in arrivo perde la protezione: chi sta in mezzo puo' di
+ * nuovo toglierle il TLS. Per questo il pannello deve saperli riconoscere prima di creare un
+ * record, non dopo.
  */
 public final class RegoleDns {
 
@@ -297,6 +302,36 @@ public final class RegoleDns {
                        + "dominio. E' come non avere SPF, ma con l'aria di averlo.");
 
         return e;
+    }
+
+    /* ===================================================================
+     * MTA-STS - RFC 8461
+     * =================================================================== */
+
+    /**
+     * I record del nome _mta-sts che almeno un mittente conta come MTA-STS.
+     *
+     * §3.1: "records that do not begin with "v=STSv1;" are discarded. If the number of
+     * resulting records is not one [...] senders MUST assume the recipient domain does not
+     * have an available MTA-STS Policy". Con due record non vale il primo: per i mittenti
+     * MTA-STS non c'e', e la politica servita non la legge nessuno. E' lo stesso guasto
+     * silenzioso dei due SPF e dei due DMARC.
+     *
+     * Il filtro e' il piu' largo fra quelli dei mittenti veri, che non contano allo stesso
+     * modo: postfix-mta-sts-resolver tiene i record che cominciano per "v=STSv1" con le
+     * maiuscole esatte; mailauth (Nodemailer) di norma ignora maiuscole e spazi ai bordi e
+     * vuole il ";". Un record che anche uno solo di loro conta, qui conta: se per qualche
+     * mittente i record sono due, il pannello non puo' dire che MTA-STS e' attivo.
+     */
+    public static boolean eMtaSts(String r) {
+        return r != null && r.trim().toLowerCase(Locale.ROOT).startsWith("v=stsv1");
+    }
+
+    public static List<String> soloMtaSts(List<String> record) {
+        List<String> fuori = new ArrayList<>();
+        if (record == null) return fuori;
+        for (String r : record) if (eMtaSts(r)) fuori.add(r.trim());
+        return fuori;
     }
 
     /* ===================================================================

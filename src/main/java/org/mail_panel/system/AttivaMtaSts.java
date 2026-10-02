@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * MTA-STS acceso con un pulsante solo.
@@ -158,9 +160,7 @@ public class AttivaMtaSts {
                     + String.join(", ", esclusi)));
 
         // 6-7: la prova e il record
-        List<String> nonRisponde = new ArrayList<>(), senzaTxt = new ArrayList<>(),
-                     nonMantenuti = new ArrayList<>(), txtIgnoti = new ArrayList<>();
-        String atteso = txtAtteso();
+        List<EsameTxt> esamiTxt = new ArrayList<>();
         for (String d : domini()) {
             boolean risponde = MtaSts.provaPubblica(d).optBoolean("ok", false);
             // Il TXT si legge SEMPRE, e soprattutto quando la politica NON risponde: e' proprio
@@ -169,51 +169,9 @@ public class AttivaMtaSts {
             // arrivava mai: su domain-d.test il pannello scriveva "in attesa dei passi precedenti"
             // mentre il record era pubblicato, con un id vecchio, e la politica dava 526. Cieco
             // esattamente sulla cosa che questa scheda esiste per sorvegliare.
-            LetturaTxt txt = leggiTxt(d);
-            if (!risponde) {
-                nonRisponde.add(d);
-                if (txt.esito == EsitoTxt.PRESENTE) nonMantenuti.add(d + " -> " + txt.contenuto);
-                continue;
-            }
-            switch (txt.esito) {
-                case NON_CHIESTO -> txtIgnoti.add(d);
-                case ASSENTE -> senzaTxt.add(d);
-                case PRESENTE -> {
-                    if (!atteso.equals(txt.contenuto)) senzaTxt.add(d + " (id da aggiornare)");
-                }
-            }
+            esamiTxt.add(new EsameTxt(d, risponde, leggiTxt(d)));
         }
-        passi.add(passo("prova", "La politica risponde davvero sul nome pubblico",
-                nonRisponde.isEmpty()
-                    ? "risponde per tutti (richiesta HTTPS vera: prova DNS, certificato e cio' che "
-                    + "viene servito; parte pero' da questo server, quindi non dimostra la "
-                    + "raggiungibilita' da altre reti)"
-                    : "non risponde per: " + String.join(", ", nonRisponde),
-                nonRisponde.isEmpty() ? "fatto" : "da fare", null));
-
-        String dettTxt, statoTxt, motivoTxt = null;
-        if (!nonMantenuti.isEmpty()) {
-            dettTxt = "pubblicato ma NON mantenuto: " + String.join("; ", nonMantenuti);
-            statoTxt = "da fare";
-            motivoTxt = "Su questi domini il record c'e' gia' e dice a tutti i mittenti di andare a "
-                      + "leggere la politica — che pero' non risponde. E' esattamente la "
-                      + "dichiarazione non mantenuta per cui questa sequenza pubblica il TXT per "
-                      + "ultimo. Non si perde posta (senza una politica leggibile i mittenti "
-                      + "proseguono senza MTA-STS, RFC 8461), ma va chiusa: sistemati i passi qui "
-                      + "sopra, la sequenza riscrive il record con l'id giusto. Se la politica non "
-                      + "si puo' far rispondere, allora il record va tolto.";
-        } else if (!txtIgnoti.isEmpty()) {
-            dettTxt = "non sono riuscito a interrogare il DNS per: " + String.join(", ", txtIgnoti);
-            statoTxt = "incerto";
-            motivoTxt = "\"Non ho potuto controllare\" non e' \"va tutto bene\": non lo segno come fatto.";
-        } else if (!nonRisponde.isEmpty()) {
-            dettTxt = "in attesa dei passi precedenti"; statoTxt = "da fare";
-        } else if (!senzaTxt.isEmpty()) {
-            dettTxt = "mancano: " + String.join(", ", senzaTxt); statoTxt = "da fare";
-        } else {
-            dettTxt = "tutti pubblicati"; statoTxt = "fatto";
-        }
-        passi.add(passo("txt", "Il record _mta-sts e' pubblicato", dettTxt, statoTxt, motivoTxt));
+        passi.addAll(passiProvaETxt(esamiTxt, txtAtteso()));
 
         JSONArray a = new JSONArray();
         int daFare = 0, incerti = 0;
@@ -239,6 +197,86 @@ public class AttivaMtaSts {
                     + (incerti > 0 ? ", piu' " + quantiIncerti + " che non e' stato possibile verificare" : "")
                     + ". Il pulsante li esegue nell'ordine e si ferma al primo che non riesce.");
         return r;
+    }
+
+    /** Cosa si e' visto di un dominio per i passi della prova e del record. */
+    static final class EsameTxt {
+        final String dominio; final boolean risponde; final LetturaTxt txt;
+        EsameTxt(String dominio, boolean risponde, LetturaTxt txt) {
+            this.dominio = dominio; this.risponde = risponde; this.txt = txt;
+        }
+    }
+
+    /**
+     * I passi "prova" e "txt" del piano, da cio' che si e' visto dominio per dominio. E' qui
+     * che il passo del record diventa "fatto", e sta da solo perche' le prove lo verifichino
+     * con letture costruite, senza DNS e senza la politica vera: due record v=STSv1 non
+     * devono poterlo far diventare "fatto".
+     */
+    static List<Passo> passiProvaETxt(List<EsameTxt> esami, String atteso) {
+        List<String> nonRisponde = new ArrayList<>(), senzaTxt = new ArrayList<>(),
+                     nonMantenuti = new ArrayList<>(), txtIgnoti = new ArrayList<>(),
+                     troppi = new ArrayList<>();
+        for (EsameTxt e : esami) {
+            String d = e.dominio;
+            LetturaTxt txt = e.txt;
+            if (!e.risponde) {
+                nonRisponde.add(d);
+                // Anche con piu' record: se uno e' scritto male, i mittenti che lo scartano
+                // contano solo l'altro, e quello li manda contro la politica che non risponde.
+                if (txt.esito == EsitoTxt.PRESENTE || txt.esito == EsitoTxt.TROPPI)
+                    nonMantenuti.add(d + " -> " + String.join("  ||  ", txt.valori));
+                continue;
+            }
+            switch (txt.esito) {
+                case NON_CHIESTO -> txtIgnoti.add(d + " (" + txt.motivo + ")");
+                case ASSENTE -> senzaTxt.add(d);
+                case TROPPI -> troppi.add(d + " (" + txt.valori.size() + " record: "
+                        + String.join("  ||  ", txt.valori) + ")");
+                case PRESENTE -> {
+                    if (!atteso.equals(txt.contenuto)) senzaTxt.add(d + " (id da aggiornare)");
+                }
+            }
+        }
+        List<Passo> passi = new ArrayList<>();
+        passi.add(passo("prova", "La politica risponde davvero sul nome pubblico",
+                nonRisponde.isEmpty()
+                    ? "risponde per tutti (richiesta HTTPS vera: prova DNS, certificato e cio' che "
+                    + "viene servito; parte pero' da questo server, quindi non dimostra la "
+                    + "raggiungibilita' da altre reti)"
+                    : "non risponde per: " + String.join(", ", nonRisponde),
+                nonRisponde.isEmpty() ? "fatto" : "da fare", null));
+
+        String dettTxt, statoTxt, motivoTxt = null;
+        if (!nonMantenuti.isEmpty()) {
+            dettTxt = "pubblicato ma NON mantenuto: " + String.join("; ", nonMantenuti);
+            statoTxt = "da fare";
+            motivoTxt = "Su questi domini il record c'e' gia' e dice a tutti i mittenti di andare a "
+                      + "leggere la politica — che pero' non risponde. E' esattamente la "
+                      + "dichiarazione non mantenuta per cui questa sequenza pubblica il TXT per "
+                      + "ultimo. Non si perde posta (senza una politica leggibile i mittenti "
+                      + "proseguono senza MTA-STS, RFC 8461), ma va chiusa: sistemati i passi qui "
+                      + "sopra, la sequenza riscrive il record con l'id giusto. Se la politica non "
+                      + "si puo' far rispondere, allora il record va tolto.";
+        } else if (!troppi.isEmpty()) {
+            dettTxt = "piu' di un record v=STSv1: " + String.join(", ", troppi);
+            statoTxt = "da fare";
+            motivoTxt = "Con piu' di un record v=STSv1 sullo stesso nome i mittenti fanno come se "
+                      + "MTA-STS non ci fosse (RFC 8461 §3.1): la politica risponde, ma nessuno la "
+                      + "legge. La sequenza lascia un record solo, con l'id giusto, e toglie gli altri.";
+        } else if (!txtIgnoti.isEmpty()) {
+            dettTxt = "non so se c'e' per: " + String.join(", ", txtIgnoti);
+            statoTxt = "incerto";
+            motivoTxt = "\"Non ho potuto controllare\" non e' \"va tutto bene\": non lo segno come fatto.";
+        } else if (!nonRisponde.isEmpty()) {
+            dettTxt = "in attesa dei passi precedenti"; statoTxt = "da fare";
+        } else if (!senzaTxt.isEmpty()) {
+            dettTxt = "mancano: " + String.join(", ", senzaTxt); statoTxt = "da fare";
+        } else {
+            dettTxt = "tutti pubblicati"; statoTxt = "fatto";
+        }
+        passi.add(passo("txt", "Il record _mta-sts e' pubblicato", dettTxt, statoTxt, motivoTxt));
+        return passi;
     }
 
     /**
@@ -933,33 +971,108 @@ public class AttivaMtaSts {
      * vecchio, e interrogazione DNS fallita. Il piano non poteva distinguerli, e infatti il
      * secondo caso — l'unico pericoloso, perche' e' una dichiarazione pubblica gia' in aria —
      * spariva. Tre risposte diverse vogliono tre valori diversi.
+     *
+     * NON_CHIESTO vuol dire "non lo so": dig che non parte, un DNS che non risponde, oppure un
+     * DNS che risponde con un errore (SERVFAIL, REFUSED) invece che con il contenuto del nome.
+     *
+     * TROPPI vuol dire piu' di un record v=STSv1 sullo stesso nome: per i mittenti e' come non
+     * averne nessuno (RFC 8461 §3.1, vedi RegoleDns.soloMtaSts). Prima si leggeva il primo e si
+     * diceva PRESENTE, e il passo poteva risultare fatto su un MTA-STS che nessuno usa.
+     *
+     * E' pubblica perche' la stessa lettura serve alla pagina DNS: due letture dello stesso
+     * record sono due letture che un giorno rispondono in modo diverso.
      */
-    private enum EsitoTxt { PRESENTE, ASSENTE, NON_CHIESTO }
+    public enum EsitoTxt { PRESENTE, ASSENTE, TROPPI, NON_CHIESTO }
 
-    private static final class LetturaTxt {
-        final EsitoTxt esito; final String contenuto;
-        LetturaTxt(EsitoTxt e, String c) { esito = e; contenuto = c; }
+    public static final class LetturaTxt {
+        public final EsitoTxt esito;
+        /** Con PRESENTE, il record. Altrimenti vuoto, anche con TROPPI: li' "il" record non c'e'. */
+        public final String contenuto;
+        /** Tutti i record v=STSv1 trovati: uno con PRESENTE, piu' d'uno con TROPPI. */
+        public final List<String> valori;
+        /**
+         * Con NON_CHIESTO, il perche': "il DNS risponde SERVFAIL" e "nessun DNS risponde"
+         * portano a cercare il guasto in posti diversi.
+         */
+        public final String motivo;
+
+        private LetturaTxt(EsitoTxt esito, List<String> valori, String motivo) {
+            this.esito = esito;
+            this.valori = List.copyOf(valori);
+            this.contenuto = esito == EsitoTxt.PRESENTE ? valori.get(0) : "";
+            this.motivo = motivo;
+        }
     }
 
-    private static LetturaTxt leggiTxt(String dominio) {
+    /** Dai record v=STSv1 del nome: nessuno, uno solo, o troppi. */
+    private static LetturaTxt trovati(List<String> sts) {
+        EsitoTxt e = sts.isEmpty() ? EsitoTxt.ASSENTE
+                   : sts.size() == 1 ? EsitoTxt.PRESENTE : EsitoTxt.TROPPI;
+        return new LetturaTxt(e, sts, "");
+    }
+
+    private static LetturaTxt ignoto(String motivo) {
+        return new LetturaTxt(EsitoTxt.NON_CHIESTO, List.of(), motivo);
+    }
+
+    public static LetturaTxt leggiTxt(String dominio) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("dig", "+short", "TXT", "_mta-sts." + dominio);
+            // Senza +short: serve lo stato della risposta. Con +short un SERVFAIL (una zona
+            // rotta, un DNSSEC che non torna) esce con 0 e non stampa niente, esattamente come un
+            // nome senza record: il piano leggeva "assente" e proponeva di pubblicare un record
+            // che forse c'e' gia'.
+            ProcessBuilder pb = new ProcessBuilder("dig", "+noall", "+comments", "+answer",
+                    "TXT", "_mta-sts." + dominio);
             Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            // dig torna 0 anche quando il nome non esiste: un'uscita diversa da zero vuol dire
-            // che non ho CHIESTO, non che la risposta sia "niente". Sono cose opposte.
-            if (p.waitFor() != 0) return new LetturaTxt(EsitoTxt.NON_CHIESTO, "");
-            for (String riga : RegoleDns.recordTxt(out)) {
-                String c = riga.trim();
-                if (c.toLowerCase(Locale.ROOT).startsWith("v=stsv1"))
-                    return new LetturaTxt(EsitoTxt.PRESENTE, c);
-            }
-            return new LetturaTxt(EsitoTxt.ASSENTE, "");
+            return interpretaTxt(p.waitFor(), out);
         } catch (Exception e) {
-            return new LetturaTxt(EsitoTxt.NON_CHIESTO, "");
+            // dig che non c'e' o non parte: non ho chiesto niente a nessuno.
+            return ignoto("dig non parte");
         }
+    }
+
+    // ";; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 55131"
+    private static final Pattern STATO_DIG = Pattern.compile("->>HEADER<<-.*\\bstatus:\\s*([A-Z]+)");
+    // "_mta-sts.domain-d.test.  3600  IN  TXT  "v=STSv1; id=..."": nome, TTL e classe, poi il tipo
+    private static final Pattern RIGA_TXT = Pattern.compile("^\\S+\\s+(?:\\d+\\s+)?(?:IN\\s+)?TXT\\s+(.+)$",
+            Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Cosa vuol dire l'uscita di "dig +noall +comments +answer TXT _mta-sts.<dominio>": il
+     * codice con cui dig e' uscito e cio' che ha stampato. Sta da sola perche' le prove la
+     * verifichino con uscite di dig registrate, senza bisogno di un DNS raggiungibile; e'
+     * pubblica perche' la usano anche le prove della pagina DNS, che stanno in un altro pacchetto.
+     *
+     * Lo stato della risposta decide prima del contenuto:
+     *   NOERROR  -> il nome c'e': si contano i suoi record v=STSv1. Nessuno e' ASSENTE, uno
+     *               e' PRESENTE, piu' d'uno e' TROPPI;
+     *   NXDOMAIN -> il nome non esiste: ASSENTE;
+     *   un altro stato (SERVFAIL, REFUSED...) o nessuno -> il DNS non ha detto che cosa c'e':
+     *   NON_CHIESTO.
+     */
+    public static LetturaTxt interpretaTxt(int uscitaDig, String stampato) {
+        // dig torna 0 anche quando il nome non esiste: un'uscita diversa da zero vuol dire
+        // che non ho CHIESTO, non che la risposta sia "niente". Sono cose opposte.
+        if (uscitaDig == 9) return ignoto("nessun DNS risponde");
+        if (uscitaDig != 0 || stampato == null) return ignoto("dig esce con " + uscitaDig);
+        Matcher stato = STATO_DIG.matcher(stampato);
+        String s = stato.find() ? stato.group(1) : "";
+        if (s.equals("NXDOMAIN")) return trovati(List.of());
+        if (s.isEmpty()) return ignoto("dig non dice lo stato della risposta");
+        if (!s.equals("NOERROR")) return ignoto("il DNS risponde " + s);
+        // Tutti i TXT del nome, non il primo che va bene: il conto dei record v=STSv1 e' parte
+        // della risposta.
+        List<String> txt = new ArrayList<>();
+        for (String riga : stampato.split("\n")) {
+            String t = riga.trim();
+            if (t.isEmpty() || t.startsWith(";")) continue;
+            Matcher m = RIGA_TXT.matcher(t);          // un CNAME davanti al TXT si salta
+            if (m.matches()) txt.addAll(RegoleDns.recordTxt(m.group(1)));
+        }
+        return trovati(RegoleDns.soloMtaSts(txt));
     }
 
     /**
