@@ -1047,9 +1047,24 @@ public final class RapportoPeriodico {
         t.append("Database delle vulnerabilita': ")
          .append(gv < 0 ? "eta' sconosciuta" : (gv == 0 ? "aggiornato oggi" : "di " + gv + " giorni fa"))
          .append(d.optBoolean("vulnDbAggiornatoOra", false) ? " (scaricato adesso)" : " (non scaricato adesso)")
+         // Del catalogo si dice quando e' stato PUBBLICATO sul server di pkg: e' la data che pkg
+         // da' al file (vedi CatalogoPkg), e non cambia se il server non ha niente di nuovo.
          .append(". Catalogo dei pacchetti: ")
-         .append(gc < 0 ? "eta' sconosciuta" : (gc == 0 ? "aggiornato oggi" : "di " + gc + " giorni fa"))
+         .append(gc < 0 ? "non so di quando sia"
+                        : "pubblicato " + CatalogoPkg.quanto(gc) + " (" + d.optString("catalogoData") + ")")
+         .append(d.optBoolean("catalogoRinfrescato", false) ? ", controllato adesso" : "")
          .append(".\n");
+        // Piu' repository, uno senza catalogo, o nessuna data: la frase intera, che dice quale e perche'.
+        JSONObject cat = d.optJSONObject("catalogo");
+        if (cat != null) {
+            int trovati = 0;
+            JSONArray rep = cat.optJSONArray("repository");
+            for (int i = 0; rep != null && i < rep.length(); i++)
+                if (rep.getJSONObject(i).optBoolean("trovato")) trovati++;
+            JSONArray manc = cat.optJSONArray("mancanti");
+            if (gc < 0 || trovati > 1 || (manc != null && manc.length() > 0))
+                t.append(cat.optString("nota")).append("\n");
+        }
 
         // Se il conto non torna, lo si dice PRIMA dell'elenco: un elenco parziale letto come
         // completo e' peggio di nessun elenco, e chi legge deve saperlo prima di rassicurarsi.

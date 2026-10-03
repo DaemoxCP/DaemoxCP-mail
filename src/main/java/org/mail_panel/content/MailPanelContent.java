@@ -255,6 +255,17 @@ public class MailPanelContent {
            righe devono poter uscire. Solo su queste celle: una regola su tutte spezzava anche le parole
            corte nelle colonne strette ("deferre-d", le date a meta' numero). */
         .table td.testo-lungo { overflow-wrap: anywhere; }
+        /* Fuori dalle tabelle (finestre, messaggi): un indirizzo lungo va a capo invece di allargare. */
+        .modal .testo-lungo, .alert.testo-lungo, code.testo-lungo { overflow-wrap: anywhere; }
+        /* Testo che dice com'e' andata: verde, giallo, rosso leggibili in tutti e due i temi.
+           text-success, text-warning e text-danger di Bootstrap sul fondo scuro stanno sotto
+           il contrasto minimo di 4.5:1 (gli stessi colori del pannello web). */
+        .testo-ok { color: #146c43; }
+        .testo-avviso { color: #7a4e00; }
+        .testo-rischio { color: #b02a37; }
+        [data-theme="dark"] .testo-ok { color: #75d9a3; }
+        [data-theme="dark"] .testo-avviso { color: #ffcf5c; }
+        [data-theme="dark"] .testo-rischio { color: #f1aeb5; }
         /* ===== Telefono e tablet: sotto i 992px niente deve allargare la pagina =====
            Una pagina piu' larga della finestra scorre tutta in orizzontale. Regole per i casi che si
            ripetono, invece di una pezza per pagina (agiscono solo quando il contenuto non ci sta):
@@ -1494,72 +1505,52 @@ public class MailPanelContent {
                 </div>
             </div>
 
-            <h3 class="mt-4"><i class="fas fa-server me-2"></i>Servizi Mail</h3>
+            <div class="d-flex justify-content-between align-items-center mt-4 mb-1">
+                <h3 class="mb-0"><i class="fas fa-server me-2" aria-hidden="true"></i>Servizi Mail</h3>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="versioniRileggi" onclick="caricaVersioni(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>Rileggi le versioni</button>
+            </div>
+            <p class="small text-muted mb-2" id="versioniStato" role="status">Leggo le versioni dal server...</p>
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead class="table-light"><tr><th>Servizio</th><th>Stato</th><th>Azioni</th></tr></thead>
+                <table class="table table-hover tabella-schede" aria-label="Servizi mail: versione, stato e comandi">
+                    <thead class="table-light"><tr><th scope="col">Servizio</th><th scope="col">Versione</th><th scope="col">Stato</th><th scope="col">Azioni</th></tr></thead>
                     <tbody>
-                        <tr>
-                            <td><i class="fas fa-paper-plane me-2"></i>Postfix (SMTP)</td>
-                            <td><span class="badge bg-secondary" id="postfix-status">-</span></td>
-                            <td>
-                                <button class="btn btn-success action-btn" onclick="serviceAction('postfix','start')"><i class="fas fa-play"></i></button>
-                                <button class="btn btn-warning action-btn" onclick="serviceAction('postfix','restart')"><i class="fas fa-redo"></i></button>
-                                <button class="btn btn-danger action-btn" onclick="serviceAction('postfix','stop')"><i class="fas fa-stop"></i></button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><i class="fas fa-inbox me-2"></i>Dovecot (IMAP/POP3)</td>
-                            <td><span class="badge bg-secondary" id="dovecot-status">-</span></td>
-                            <td>
-                                <button class="btn btn-success action-btn" onclick="serviceAction('dovecot','start')"><i class="fas fa-play"></i></button>
-                                <button class="btn btn-warning action-btn" onclick="serviceAction('dovecot','restart')"><i class="fas fa-redo"></i></button>
-                                <button class="btn btn-danger action-btn" onclick="serviceAction('dovecot','stop')"><i class="fas fa-stop"></i></button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><i class="fas fa-shield-alt me-2"></i>Rspamd (Anti-Spam)</td>
-                            <td><span class="badge bg-secondary" id="rspamd-status">-</span></td>
-                            <td>
-                                <button class="btn btn-success action-btn" onclick="serviceAction('rspamd','start')"><i class="fas fa-play"></i></button>
-                                <button class="btn btn-warning action-btn" onclick="serviceAction('rspamd','restart')"><i class="fas fa-redo"></i></button>
-                                <button class="btn btn-danger action-btn" onclick="serviceAction('rspamd','stop')"><i class="fas fa-stop"></i></button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><i class="fas fa-bug me-2"></i>ClamAV (Antivirus)</td>
-                            <td><span class="badge bg-secondary" id="clamav-status">-</span></td>
-                            <td>
-                                <button class="btn btn-success action-btn" onclick="serviceAction('clamav','start')"><i class="fas fa-play"></i></button>
-                                <button class="btn btn-warning action-btn" onclick="serviceAction('clamav','restart')"><i class="fas fa-redo"></i></button>
-                                <button class="btn btn-danger action-btn" onclick="serviceAction('clamav','stop')"><i class="fas fa-stop"></i></button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><i class="fas fa-envelope-open-text me-2"></i>Roundcube (Webmail)</td>
-                            <td><span class="badge bg-secondary" id="roundcube-status">-</span></td>
-                            <td>
-                                <button class="btn btn-success action-btn" onclick="serviceAction('roundcube','start')"><i class="fas fa-play"></i></button>
-                                <button class="btn btn-warning action-btn" onclick="serviceAction('roundcube','restart')"><i class="fas fa-redo"></i></button>
-                                <button class="btn btn-danger action-btn" onclick="serviceAction('roundcube','stop')"><i class="fas fa-stop"></i></button>
-                            </td>
-                        </tr>
+""" + rigaServizio("postfix", "postfix", "fa-paper-plane", "Postfix (SMTP)", "Postfix")
+    + rigaServizio("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP/POP3)", "Dovecot")
+    + rigaServizio("mysql", "mysql-server", "fa-database", "MySQL (Database)", "MySQL")
+    + rigaServizio("rspamd", "rspamd", "fa-shield-alt", "Rspamd (Anti-Spam)", "Rspamd")
+    + rigaServizio("redis", "redis", "fa-memory", "Redis (dati di Rspamd)", "Redis")
+    + rigaServizio("clamav", "clamav", "fa-bug", "ClamAV (Antivirus)", "ClamAV")
+    + rigaServizio("roundcube", "roundcube", "fa-envelope-open-text", "Roundcube (Webmail)", "la webmail") + """
                     </tbody>
                 </table>
             </div>
 
-            <h3 class="mt-4"><i class="fas fa-check-circle me-2"></i>Componenti Installati</h3>
-            <div class="row" id="installedComponents">
-                <div class="col-md-3 mb-2"><span class="badge bg-secondary w-100 p-2" id="comp-postfix">Postfix: -</span></div>
-                <div class="col-md-3 mb-2"><span class="badge bg-secondary w-100 p-2" id="comp-dovecot">Dovecot: -</span></div>
-                <div class="col-md-3 mb-2"><span class="badge bg-secondary w-100 p-2" id="comp-rspamd">Rspamd: -</span></div>
-                <div class="col-md-3 mb-2"><span class="badge bg-secondary w-100 p-2" id="comp-roundcube">Roundcube: -</span></div>
+            <h3 class="mt-4"><i class="fas fa-cubes me-2" aria-hidden="true"></i>Altro software</h3>
+            <div class="table-responsive">
+                <table class="table table-hover tabella-schede" aria-label="Altro software del server e versioni">
+                    <thead class="table-light"><tr><th scope="col">Software</th><th scope="col">A cosa serve</th><th scope="col">Versione</th></tr></thead>
+                    <tbody id="altroSoftware"><tr><td colspan="3" class="text-muted small">Leggo le versioni dal server...</td></tr></tbody>
+                </table>
             </div>
 """ + risorsa("pagine/home-stato-card.html") + """
         </div>
     </div>
 """ + getFooterSection() + getScriptStart() + """
+        // Fermare un servizio (e riavviare MySQL) tocca tutta la posta: prima si chiede, dicendo cosa succede.
+        const domandeServizi = {
+            'postfix:stop': "Fermare Postfix? Il server smette di ricevere e di spedire posta finche' non lo riavvii: chi ti scrive riprovera' piu' tardi, la posta in uscita resta ferma.",
+            'dovecot:stop': "Fermare Dovecot? Nessuno potra' leggere la posta (IMAP e POP3) e la consegna nelle caselle si ferma: i messaggi aspettano nella coda di Postfix.",
+            'mysql-server:stop': "Fermare MySQL? Postfix e Dovecot non trovano piu' domini, caselle e alias: la posta aspetta in coda e nessuno puo' accedere. Anche il pannello resta senza i suoi dati finche' MySQL non riparte.",
+            'mysql-server:restart': "Riavviare MySQL? Per qualche secondo Postfix e Dovecot non trovano le caselle (la posta aspetta in coda, gli accessi falliscono); il pannello si ricollega da solo.",
+            'rspamd:stop': "Fermare Rspamd? La posta passa senza filtro antispam e quella in uscita parte senza firma DKIM.",
+            'redis:stop': "Fermare Redis? Rspamd non puo' usare i dati che tiene li' (antispam bayesiano, reputazione, limiti) finche' Redis non riparte.",
+            'clamav:stop': "Fermare ClamAV? La posta non viene piu' controllata contro i virus.",
+            'roundcube:stop': "Fermare la webmail? Si fermano nginx e PHP-FPM: Roundcube non si apre, e senza nginx non rispondono nemmeno il criterio MTA-STS e la configurazione automatica dei client."
+        };
+
         function serviceAction(service, action) {
+            const domanda = domandeServizi[service + ':' + action];
+            if (domanda && !confirm(domanda)) return;
             fetch('/api/service', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1568,27 +1559,21 @@ public class MailPanelContent {
             .then(r => r.json())
             .then(data => {
                 if (data.csrf_token) csrfToken = data.csrf_token;
-                alert(data.success ? 'Operazione completata' : 'Errore: ' + (data.message || 'sconosciuto'));
+                alert(data.success ? 'Operazione completata' : 'Errore: ' + (data.error || data.message || 'sconosciuto'));
                 checkStatus();
-            });
+                caricaVersioni(true);
+            })
+            .catch(() => alert('Il pannello non ha risposto: ricarica la pagina per vedere lo stato dei servizi.'));
         }
 
         function checkStatus() {
             fetch('/api/status').then(r => r.json()).then(data => {
-                ['postfix','dovecot','rspamd','clamav','roundcube'].forEach(svc => {
+                ['postfix','dovecot','mysql','rspamd','redis','clamav','roundcube'].forEach(svc => {
                     const el = document.getElementById(svc + '-status');
                     if (!el) return;
                     const running = data[svc];
                     el.textContent = running ? 'Attivo' : 'Fermo';
                     el.className = 'badge ' + (running ? 'bg-success' : 'bg-danger');
-                });
-
-                // Components
-                ['postfix','dovecot','rspamd','roundcube'].forEach(comp => {
-                    const el = document.getElementById('comp-' + comp);
-                    const installed = data['installed_' + comp];
-                    el.textContent = comp.charAt(0).toUpperCase() + comp.slice(1) + ': ' + (installed ? 'Installato' : 'Non installato');
-                    el.className = 'badge w-100 p-2 ' + (installed ? 'bg-success' : 'bg-warning');
                 });
 
                 // Stats
@@ -1832,7 +1817,118 @@ public class MailPanelContent {
         }
 
         checkStatus();
-""" + risorsa("pagine/home-stato.js") + getScriptEnd();
+""" + getVersioniJs() + risorsa("pagine/home-stato.js") + getScriptEnd();
+    }
+
+    /**
+     * Una riga di "Servizi Mail" nella Home: il nome, la versione (la scrive caricaVersioni), lo
+     * stato (checkStatus) e i tre comandi, con il loro nome per chi usa un lettore di schermo.
+     * Una definizione sola per tutte le righe.
+     */
+    private static String rigaServizio(String chiave, String servizio, String icona, String nome, String chi) {
+        return """
+                        <tr>
+                            <td data-label="Servizio" class="text-nowrap"><i class="fas %s me-2" aria-hidden="true"></i>%s</td>
+                            <td data-label="Versione" id="ver-%s"><span class="small text-muted">lettura in corso</span></td>
+                            <td data-label="Stato"><span class="badge bg-secondary" id="%s-status">-</span></td>
+                            <td data-label="Azioni" class="text-nowrap">
+                                <button type="button" class="btn btn-success action-btn" onclick="serviceAction('%s','start')" aria-label="Avvia %s" title="Avvia"><i class="fas fa-play" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-warning action-btn" onclick="serviceAction('%s','restart')" aria-label="Riavvia %s" title="Riavvia"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-danger action-btn" onclick="serviceAction('%s','stop')" aria-label="Ferma %s" title="Ferma"><i class="fas fa-stop" aria-hidden="true"></i></button>
+                            </td>
+                        </tr>
+""".formatted(icona, nome, chiave, chiave, servizio, chi, servizio, chi, servizio, chi);
+    }
+
+    /**
+     * Le versioni nella Home (VersioniSoftware sul server): la colonna Versione di "Servizi Mail"
+     * e la tabella "Altro software". Tutto con textContent: le versioni arrivano da programmi e
+     * file del server, e non devono poter diventare HTML.
+     */
+    private static String getVersioniJs() {
+        return """
+        // ===== Versioni del software (VersioniSoftware sul server) =====
+        function verCella(cella, v) {
+            cella.textContent = '';
+            if (!v || !v.installato) {
+                const n = document.createElement('span');
+                n.className = 'text-muted';
+                n.textContent = 'non installato';
+                cella.appendChild(n);
+                return;
+            }
+            const riga = document.createElement('div');
+            const num = document.createElement('strong');
+            num.textContent = v.versione || 'non letta';
+            if (v.fonte) num.title = 'Letta con: ' + v.fonte;
+            riga.appendChild(num);
+            if (v.inEsecuzione) {
+                const e = document.createElement('span');
+                e.className = 'small text-muted ms-1';
+                e.textContent = '(in esecuzione)';
+                riga.appendChild(e);
+            }
+            if (v.riavvio) {
+                const b = document.createElement('span');
+                b.className = 'badge bg-warning text-dark ms-1';
+                b.textContent = 'da riavviare';
+                riga.appendChild(b);
+            }
+            cella.appendChild(riga);
+            [[v.dettaglio, 'small text-muted'], [v.pacchetto ? 'pacchetto ' + v.pacchetto : '', 'small text-muted'],
+             [v.notaRiavvio, 'small testo-avviso'], [v.avviso, 'small testo-rischio']].forEach(([testo, classe]) => {
+                if (!testo) return;
+                const d = document.createElement('div');
+                d.className = classe;
+                d.textContent = testo;
+                cella.appendChild(d);
+            });
+        }
+
+        function caricaVersioni(fresco) {
+            const stato = document.getElementById('versioniStato');
+            const btn = document.getElementById('versioniRileggi');
+            btn.disabled = true;
+            stato.textContent = 'Leggo le versioni dal server...';
+            fetch('/api/versioni' + (fresco ? '?fresco=1' : '')).then(r => r.json()).then(d => {
+                btn.disabled = false;
+                if (!d.success) {
+                    stato.textContent = 'Non sono riuscito a leggere le versioni: ' + (d.error || 'errore sconosciuto') + '.';
+                    return;
+                }
+                Object.keys(d.servizi).forEach(k => {
+                    const cella = document.getElementById('ver-' + k);
+                    if (cella) verCella(cella, d.servizi[k]);
+                });
+                const corpo = document.getElementById('altroSoftware');
+                corpo.textContent = '';
+                d.altro.forEach(v => {
+                    const tr = document.createElement('tr');
+                    const nome = document.createElement('td');
+                    nome.setAttribute('data-label', 'Software');
+                    const forte = document.createElement('strong');
+                    forte.textContent = v.nome;
+                    nome.appendChild(forte);
+                    const ruolo = document.createElement('td');
+                    ruolo.setAttribute('data-label', 'A cosa serve');
+                    ruolo.textContent = v.ruolo;
+                    const ver = document.createElement('td');
+                    ver.setAttribute('data-label', 'Versione');
+                    verCella(ver, v);
+                    tr.append(nome, ruolo, ver);
+                    corpo.appendChild(tr);
+                });
+                const daRiavviare = Object.values(d.servizi).concat(d.altro).filter(v => v.riavvio).length;
+                stato.textContent = 'Lette dal server alle ' + d.letteAlle.substring(11, 19) + '.'
+                    + (daRiavviare === 1 ? ' Un programma va riavviato: vedi la nota sotto la sua versione.'
+                       : daRiavviare > 1 ? ' ' + daRiavviare + ' programmi vanno riavviati: vedi le note sotto le versioni.' : '');
+            }).catch(() => {
+                btn.disabled = false;
+                stato.textContent = 'Il pannello non ha risposto: le versioni non sono state lette.';
+            });
+        }
+        caricaVersioni(false);
+""";
     }
 
     // ============== DOMAINS.HTML ==============
@@ -2415,6 +2511,464 @@ public class MailPanelContent {
 """;
     }
 
+    /** Finestra "Trasforma in casella" della pagina Alias (TrasformaIndirizzo sul server). */
+    private static String getAliasACasellaModal() {
+        return """
+    <div class="modal fade" id="aCasellaModal" tabindex="-1" aria-labelledby="aCasellaTitolo" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title testo-lungo" id="aCasellaTitolo">Trasforma in casella</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="acCaricamento" class="mb-0" role="status">Controllo cosa succede...</p>
+                    <div id="acNo" class="alert alert-warning d-none mb-0 testo-lungo" role="alert"></div>
+                    <div id="acSi" class="d-none">
+                        <p><strong id="acIndirizzo" class="testo-lungo"></strong> diventa una casella vera: avra' una password, la sua posta, IMAP e SMTP.</p>
+                        <p id="acDestinazioni" class="mb-2 testo-lungo"></p>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="acTieni">
+                            <label class="form-check-label" for="acTieni">Continua anche a inoltrare alle destinazioni di adesso (la casella ne riceve una copia)</label>
+                        </div>
+                        <p id="acVersoQui" class="small text-muted testo-lungo"></p>
+                        <fieldset id="acPostaBlocco" class="border rounded p-2 mb-3 d-none">
+                            <legend class="fs-6 float-none w-auto px-1 mb-0">Sul disco c'e' gia' della posta per questo indirizzo</legend>
+                            <p class="small mb-2" id="acPostaInfo"></p>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="acPosta" id="acRitrova" value="ritrova">
+                                <label class="form-check-label" for="acRitrova">Ritrovala nella nuova casella</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="acPosta" id="acArchivia" value="archivia">
+                                <label class="form-check-label" for="acArchivia">Mettila da parte (non si cancella) e parti con la casella vuota</label>
+                            </div>
+                        </fieldset>
+                        <div class="mb-3">
+                            <label class="form-label" for="acPass">Password della casella</label>
+""" + campoPassword("acPass", "") + """
+                            <small class="d-block text-muted mt-1">Proposta dal generatore: copiala per chi usera' la casella. Viene cifrata nel vault del pannello, e da Modifica casella potrai rivederla.</small>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-sm-8">
+                                <label class="form-label" for="acNome">Nome <span class="text-muted small">(facoltativo, senza accenti)</span></label>
+                                <input type="text" class="form-control" id="acNome" maxlength="100" autocomplete="off">
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label" for="acQuota">Quota in MB</label>
+                                <input type="number" class="form-control" id="acQuota" min="0" max="1048576" value="1024" aria-describedby="acQuotaAiuto">
+                                <small class="text-muted" id="acQuotaAiuto">0 = illimitata</small>
+                            </div>
+                        </div>
+                        <div id="acErr" class="text-danger small mt-2 testo-lungo" role="alert"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-mail" id="acVia" onclick="trasformaACasella()" disabled><i class="fas fa-inbox me-1" aria-hidden="true"></i>Trasforma in casella</button>
+                </div>
+            </div>
+        </div>
+    </div>
+""";
+    }
+
+    /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua impronta. */
+    private static String getAliasACasellaJs() {
+        return """
+        // ===== Trasforma in casella (decide il server: TrasformaIndirizzo) =====
+        let acDati = null;
+        function acMostra(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
+        function acData(iso) { return iso ? iso.substring(8, 10) + '/' + iso.substring(5, 7) + '/' + iso.substring(0, 4) : ''; }
+
+        function apriACasella(id) {
+            const a = currentAliases.find(x => parseInt(x.id) === id);
+            if (!a) return;
+            acDati = { indirizzo: a.source, impronta: '', posta: false };
+            document.getElementById('aCasellaTitolo').textContent = 'Trasforma in casella: ' + a.source;
+            document.getElementById('acErr').textContent = '';
+            acMostra('acCaricamento', true);
+            acMostra('acNo', false);
+            acMostra('acSi', false);
+            document.getElementById('acVia').disabled = true;
+            document.getElementById('acTieni').checked = false;
+            document.getElementById('acRitrova').checked = false;
+            document.getElementById('acArchivia').checked = false;
+            document.getElementById('acPass').value = '';
+            pwMostra('acPass', false);
+            pwControlla('acPass');
+            document.getElementById('acNome').value = '';
+            document.getElementById('acQuota').value = '1024';
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('aCasellaModal')).show();
+            fetch('/api/aliases?trasforma=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
+                acMostra('acCaricamento', false);
+                if (!d.success || !d.possibile) {
+                    document.getElementById('acNo').textContent = d.motivo || d.error || 'Non si puo\\' trasformare.';
+                    acMostra('acNo', true);
+                    return;
+                }
+                acDati.impronta = d.impronta;
+                acDati.posta = !!(d.posta && d.posta.presente);
+                document.getElementById('acIndirizzo').textContent = d.indirizzo;
+                const box = document.getElementById('acDestinazioni');
+                box.textContent = '';
+                if (d.destinazioni.length) {
+                    box.appendChild(document.createTextNode('Adesso la posta va a: '));
+                    d.destinazioni.forEach((x, k) => {
+                        if (k) box.appendChild(document.createTextNode(', '));
+                        const c = document.createElement('code');
+                        c.textContent = x.destinazione;
+                        box.appendChild(c);
+                        if (!x.attivo) box.appendChild(document.createTextNode(' (disattivo)'));
+                    });
+                    box.appendChild(document.createTextNode(". Senza la spunta qui sotto questi alias se ne vanno, e la posta resta nella casella."));
+                }
+                const vq = (d.versoQui || []).filter(x => x.attivo).map(x => x.sorgente);
+                document.getElementById('acVersoQui').textContent = vq.length
+                    ? 'Arriva qui anche la posta di ' + vq.join(', ') + ': da ora finira\\' nella casella.' : '';
+                if (acDati.posta) {
+                    const p = d.posta;
+                    document.getElementById('acPostaInfo').textContent = "E' la posta di una casella di prima con lo stesso indirizzo: "
+                        + (p.almeno ? 'almeno ' : '') + p.messaggi + (p.messaggi === 1 ? ' messaggio' : ' messaggi') + ', ' + p.dimensione
+                        + (p.ultimo ? ", l'ultimo del " + acData(p.ultimo) : '') + '.'
+                        + (p.filtri ? ' Ci sono anche i suoi filtri: per la nuova casella non varranno.' : '');
+                }
+                acMostra('acPostaBlocco', acDati.posta);
+                acMostra('acSi', true);
+                document.getElementById('acVia').disabled = false;
+                pwProponi('acPass');
+            }).catch(() => {
+                acMostra('acCaricamento', false);
+                document.getElementById('acNo').textContent = 'Il pannello non ha risposto.';
+                acMostra('acNo', true);
+            });
+        }
+
+        function trasformaACasella() {
+            const err = document.getElementById('acErr');
+            err.textContent = '';
+            const pass = document.getElementById('acPass');
+            if (!pass.value) {
+                document.getElementById('acPassErr').textContent = 'Serve una password: generane una o scrivila.';
+                pass.classList.add('is-invalid');
+                return;
+            }
+            if (!pwControlla('acPass')) return;
+            let posta = '';
+            if (acDati.posta) {
+                const scelta = document.querySelector('input[name="acPosta"]:checked');
+                if (!scelta) { err.textContent = "Scegli cosa fare della posta che c'e' gia' sul disco."; return; }
+                posta = scelta.value;
+            }
+            const quota = parseInt(document.getElementById('acQuota').value);
+            const btn = document.getElementById('acVia');
+            btn.disabled = true;
+            fetch('/api/aliases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'trasforma_in_casella', source: acDati.indirizzo, password: pass.value,
+                    name: document.getElementById('acNome').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
+                    tieni_inoltri: document.getElementById('acTieni').checked, posta_vecchia: posta,
+                    impronta: acDati.impronta, csrf_token: csrfToken
+                })
+            }).then(r => r.json()).then(d => {
+                btn.disabled = false;
+                if (d.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('aCasellaModal')).hide();
+                    aliasMsg(d.message, 'success');
+                    loadAliases();
+                } else {
+                    err.textContent = d.error || 'Trasformazione non riuscita.';
+                }
+            }).catch(() => {
+                btn.disabled = false;
+                err.textContent = 'Il pannello non ha risposto: ricarica la pagina prima di riprovare.';
+            });
+        }
+        // Fatta la scelta sulla posta di prima, l'avviso che la chiedeva non serve piu'.
+        document.querySelectorAll('input[name="acPosta"]').forEach(x => x.addEventListener('change', () => {
+            document.getElementById('acErr').textContent = '';
+        }));
+""";
+    }
+
+    /** Finestra "Trasforma in alias" della pagina Caselle (TrasformaIndirizzo sul server). */
+    private static String getCasellaAAliasModal() {
+        return """
+    <div class="modal fade" id="aAliasModal" tabindex="-1" aria-labelledby="aAliasTitolo" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title testo-lungo" id="aAliasTitolo">Trasforma in alias</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="aaCaricamento" class="mb-0" role="status">Controllo cosa succede...</p>
+                    <div id="aaNo" class="alert alert-warning d-none mb-0 testo-lungo" role="alert"></div>
+                    <div id="aaSi" class="d-none">
+                        <p><strong id="aaIndirizzo" class="testo-lungo"></strong> smette di essere una casella e diventa un alias: la posta in arrivo va alle destinazioni che scrivi qui sotto.</p>
+                        <h6 class="testo-rischio"><i class="fas fa-minus-circle me-1" aria-hidden="true"></i>Cosa si perde</h6>
+                        <ul id="aaPerdite" class="small testo-lungo"></ul>
+                        <h6 class="testo-ok"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>Cosa resta</h6>
+                        <ul id="aaResta" class="small testo-lungo"></ul>
+                        <div class="mb-3">
+                            <label class="form-label" for="aaDest">Destinazioni, una per riga</label>
+                            <textarea class="form-control font-monospace" id="aaDest" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="aaDestAiuto"></textarea>
+                            <small class="text-muted" id="aaDestAiuto">Indirizzi esterni, o tuoi che esistono gia' (caselle o alias). Al massimo 20.</small>
+                        </div>
+                        <div class="mb-1">
+                            <label class="form-label" for="aaConferma">Per confermare scrivi l'indirizzo: <code id="aaIndirizzoConferma" class="testo-lungo"></code></label>
+                            <input type="text" class="form-control" id="aaConferma" autocomplete="off" autocapitalize="off" spellcheck="false">
+                        </div>
+                        <div id="aaErr" class="text-danger small mt-2 testo-lungo" role="alert"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-danger" id="aaVia" onclick="trasformaAAlias()" disabled><i class="fas fa-share me-1" aria-hidden="true"></i>Trasforma in alias</button>
+                </div>
+            </div>
+        </div>
+    </div>
+""";
+    }
+
+    /** Lo script di "Trasforma in alias": anteprima di cosa si perde e cosa resta, conferma scritta. */
+    private static String getCasellaAAliasJs() {
+        return """
+        // ===== Trasforma in alias (decide il server: TrasformaIndirizzo) =====
+        let aaDati = null;
+        function aaMostra(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
+        function aaVoce(lista, testo) {
+            const li = document.createElement('li');
+            li.textContent = testo;
+            document.getElementById(lista).appendChild(li);
+        }
+        function aaData(iso) { return iso ? iso.substring(8, 10) + '/' + iso.substring(5, 7) + '/' + iso.substring(0, 4) : ''; }
+        function mbMsg(testo, tipo) {
+            const box = document.getElementById('mbMsg');
+            box.textContent = '';
+            if (!testo) return;
+            const div = document.createElement('div');
+            div.className = 'alert alert-' + tipo + ' py-2 small testo-lungo';
+            div.textContent = testo;
+            box.appendChild(div);
+        }
+
+        function apriAAlias(id) {
+            aaDati = { id: id, indirizzo: '', impronta: '' };
+            document.getElementById('aaErr').textContent = '';
+            document.getElementById('aaDest').value = '';
+            document.getElementById('aaConferma').value = '';
+            document.getElementById('aaPerdite').textContent = '';
+            document.getElementById('aaResta').textContent = '';
+            aaMostra('aaCaricamento', true);
+            aaMostra('aaNo', false);
+            aaMostra('aaSi', false);
+            document.getElementById('aaVia').disabled = true;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('aAliasModal')).show();
+            fetch('/api/mailboxes?trasforma=' + id).then(r => r.json()).then(d => {
+                aaMostra('aaCaricamento', false);
+                if (!d.success || !d.possibile) {
+                    document.getElementById('aaNo').textContent = d.motivo || d.error || 'Non si puo\\' trasformare.';
+                    aaMostra('aaNo', true);
+                    return;
+                }
+                aaDati.indirizzo = d.indirizzo;
+                aaDati.impronta = d.impronta;
+                document.getElementById('aAliasTitolo').textContent = 'Trasforma in alias: ' + d.indirizzo;
+                document.getElementById('aaIndirizzo').textContent = d.indirizzo;
+                document.getElementById('aaIndirizzoConferma').textContent = d.indirizzo;
+                const p = d.perdite;
+                aaVoce('aaPerdite', 'Il login con la sua password (IMAP, POP3 e SMTP): telefoni, programmi e siti che la usano per leggere o spedire smettono di funzionare.'
+                    + (p.ultimoAccesso ? ' Ultimo accesso: ' + aaData(p.ultimoAccesso) + '.' : ' Non risulta mai usata.'));
+                if (p.soloInvio) aaVoce('aaPerdite', "E' una casella solo invio (no-reply): probabilmente la usa un'applicazione per spedire, che dopo non potra' piu' autenticarsi.");
+                if (p.rispostaAutomatica) aaVoce('aaPerdite', "La risposta automatica, che adesso e' attiva.");
+                if (p.filtri) aaVoce('aaPerdite', p.filtri + (p.filtri === 1 ? ' filtro' : ' filtri') + ' della casella.');
+                if (p.inoltri.length) aaVoce('aaPerdite', 'Gli inoltri della casella (' + p.inoltri.join(', ') + "): sono gia' fra le destinazioni qui sotto, perche' un alias fa la stessa cosa.");
+                if (d.copia) aaVoce('aaPerdite', "L'alias " + d.indirizzo + ' -> ' + d.indirizzo + " (la copia nella casella): senza la casella non porterebbe da nessuna parte.");
+                const posta = d.posta;
+                aaVoce('aaResta', posta.presente
+                    ? 'La posta gia\\' arrivata: ' + (posta.almeno ? 'almeno ' : '') + posta.messaggi + (posta.messaggi === 1 ? ' messaggio, ' : ' messaggi, ')
+                      + posta.dimensione + ', in ' + d.cartella + ". Non si cancella: se un giorno l'indirizzo torna una casella, si potra' ritrovarla."
+                    : "Sul disco non c'e' posta per questo indirizzo.");
+                const gia = (d.giaInoltrata || []).filter(x => x.attivo).map(x => x.destinazione);
+                if (gia.length) aaVoce('aaResta', 'Gli alias che ha gia\\': la posta continua ad andare anche a ' + gia.join(', ') + '.');
+                const vq = (d.versoQui || []).filter(x => x.attivo).map(x => x.sorgente);
+                if (vq.length) aaVoce('aaResta', 'Gli alias che portano qui (' + vq.join(', ') + '): la loro posta seguira\\' le nuove destinazioni.');
+                document.getElementById('aaDest').value = (d.proposte || []).join(String.fromCharCode(10));
+                aaMostra('aaSi', true);
+                aaControlla();
+            }).catch(() => {
+                aaMostra('aaCaricamento', false);
+                document.getElementById('aaNo').textContent = 'Il pannello non ha risposto.';
+                aaMostra('aaNo', true);
+            });
+        }
+
+        function aaControlla() {
+            document.getElementById('aaVia').disabled = !aaDati || !aaDati.impronta
+                || document.getElementById('aaConferma').value.trim().toLowerCase() !== aaDati.indirizzo;
+        }
+
+        function trasformaAAlias() {
+            const err = document.getElementById('aaErr');
+            err.textContent = '';
+            const dest = document.getElementById('aaDest').value.split(String.fromCharCode(10)).map(x => x.trim()).filter(x => x);
+            if (!dest.length) { err.textContent = 'Scrivi almeno una destinazione.'; return; }
+            const btn = document.getElementById('aaVia');
+            btn.disabled = true;
+            fetch('/api/mailboxes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'trasforma_in_alias', id: aaDati.id, destinazioni: dest,
+                    conferma: document.getElementById('aaConferma').value.trim(), impronta: aaDati.impronta, csrf_token: csrfToken
+                })
+            }).then(r => r.json()).then(d => {
+                if (d.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('aAliasModal')).hide();
+                    mbMsg(d.message, 'success');
+                    loadMailboxes();
+                } else {
+                    err.textContent = d.error || 'Trasformazione non riuscita.';
+                    aaControlla();
+                }
+            }).catch(() => {
+                err.textContent = 'Il pannello non ha risposto: ricarica la pagina prima di riprovare.';
+                aaControlla();
+            });
+        }
+        document.getElementById('aaConferma').addEventListener('input', aaControlla);
+""";
+    }
+
+    /**
+     * Il codice del Generatore Password (getPasswordGeneratorModal): con campoPassword e
+     * getCampoPasswordJs e' il componente condiviso delle password delle caselle, in "Aggiungi
+     * casella", "Modifica casella" e "Trasforma in casella" (pagina Alias).
+     */
+    private static String getPasswordGeneratorJs() {
+        return """
+        // ===== Password Generator (modal riusabile) =====
+        function openPasswordGeneratorModal() {
+            // Reset preview
+            document.getElementById('pwgenPreview').value = '';
+            document.getElementById('pwgenStrengthBadge').textContent = '—';
+            document.getElementById('pwgenStrengthBadge').className = 'badge bg-secondary';
+            document.getElementById('pwgenEntropyText').textContent = 'Entropia: — bit';
+            document.getElementById('pwgenUseBtn').disabled = true;
+            // Aggiorna nota Include in base al type selezionato
+            pwgenUpdateIncludeNote();
+            new bootstrap.Modal(document.getElementById('passwordGeneratorModal')).show();
+            // Genera subito una password con i default così l'utente vede un esempio
+            setTimeout(pwgenGenerate, 100);
+        }
+
+        function pwgenLengthDelta(delta) {
+            const input = document.getElementById('pwgenLength');
+            let v = parseInt(input.value) + delta;
+            if (v < PW_MIN) v = PW_MIN;
+            if (v > PW_MAX) v = PW_MAX;
+            input.value = v;
+            const range = document.getElementById('pwgenLengthRange');
+            if (v <= 64) range.value = v;
+        }
+
+        function pwgenUpdateIncludeNote() {
+            const type = document.querySelector('input.pwgen-type:checked').value;
+            const numbersChk = document.getElementById('pwgenIncludeNumbers');
+            const symbolsChk = document.getElementById('pwgenIncludeSymbols');
+            const note = document.getElementById('pwgenIncludeNote');
+            if (type === 'easy_to_say') {
+                numbersChk.disabled = true; symbolsChk.disabled = true;
+                numbersChk.checked = false; symbolsChk.checked = false;
+                note.textContent = 'Tipo "facile da dettare": numeri e simboli sono disattivati per definizione.';
+            } else {
+                numbersChk.disabled = false; symbolsChk.disabled = false;
+                note.textContent = '';
+            }
+        }
+
+        // Listener per radio type
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.classList && e.target.classList.contains('pwgen-type')) {
+                pwgenUpdateIncludeNote();
+            }
+        });
+
+        function pwgenGenerate() {
+            // Dentro i limiti delle caselle anche se nel campo si scrive altro (il server li applica comunque).
+            const length = Math.min(PW_MAX, Math.max(PW_MIN, parseInt(document.getElementById('pwgenLength').value) || 20));
+            document.getElementById('pwgenLength').value = length;
+            const type = document.querySelector('input.pwgen-type:checked').value;
+            const lo = document.getElementById('pwgenIncludeLower').checked;
+            const up = document.getElementById('pwgenIncludeUpper').checked;
+            const nu = document.getElementById('pwgenIncludeNumbers').checked;
+            const sy = document.getElementById('pwgenIncludeSymbols').checked;
+
+            if (!lo && !up && !nu && !sy) {
+                alert('Seleziona almeno una categoria di caratteri.');
+                return;
+            }
+
+            fetch('/api/mailboxes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'generate_password',
+                    length: length,
+                    type: type,
+                    include_lowercase: lo,
+                    include_uppercase: up,
+                    include_numbers: nu,
+                    include_symbols: sy,
+                    csrf_token: csrfToken
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Errore: ' + (data.error || ''));
+                    return;
+                }
+                document.getElementById('pwgenPreview').value = data.password;
+                const ent = data.entropy_bits || 0;
+                const label = data.strength_label || '—';
+                document.getElementById('pwgenEntropyText').textContent = 'Entropia: ' + ent + ' bit';
+                const badge = document.getElementById('pwgenStrengthBadge');
+                badge.textContent = label;
+                if (label === 'Molto forte')      badge.className = 'badge bg-success';
+                else if (label === 'Forte')       badge.className = 'badge bg-success';
+                else if (label === 'Discreta')    badge.className = 'badge bg-warning text-dark';
+                else                              badge.className = 'badge bg-danger';
+                document.getElementById('pwgenUseBtn').disabled = false;
+            })
+            .catch(e => alert('Errore rete: ' + e.message));
+        }
+
+        function pwgenCopy() {
+            const v = document.getElementById('pwgenPreview').value;
+            if (!v) return;
+            navigator.clipboard.writeText(v).catch(() => {});
+        }
+
+        function pwgenUse() {
+            const v = document.getElementById('pwgenPreview').value;
+            if (!v) return;
+            const cb = window.__pwGenCallback;
+            // Chiudi il modal e invoca la callback
+            const modalEl = document.getElementById('passwordGeneratorModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            if (typeof cb === 'function') cb(v);
+            window.__pwGenCallback = null;
+        }
+
+""";
+    }
+
     /**
      * Modal "Cambia password massivo" della pagina /mailboxes.
      * Estratto come metodo per non gonfiare il text block constante della pagina.
@@ -2793,6 +3347,7 @@ public class MailPanelContent {
                 </div>
             </div>
 
+            <div id="mbMsg" role="status" aria-live="polite"></div>
             <div class="table-responsive">
                 <table class="table table-hover tabella-schede">
                     <thead class="table-light">
@@ -2941,7 +3496,7 @@ public class MailPanelContent {
         </div>
     </div>
 
-""" + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + """
+""" + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + getCasellaAAliasModal() + """
     <!-- Mail Client Config Modal -->
 """ + getMailConfigModal() + """
 
@@ -3166,6 +3721,9 @@ public class MailPanelContent {
                                     <li><a class="dropdown-item" href="#" onclick="openSieveFilters(${m.id}, '${m.email}')">
                                         <i class="fas fa-filter me-2"></i>Filtri
                                     </a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="apriAAlias(${m.id}); return false;">
+                                        <i class="fas fa-share me-2"></i>Trasforma in alias
+                                    </a></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item text-danger" href="#" onclick="deleteMailbox(${m.id})">
                                         <i class="fas fa-trash me-2"></i>Elimina
@@ -3219,8 +3777,18 @@ public class MailPanelContent {
         }
 
         function deleteMailbox(id) {
-            if (!confirm('Eliminare questa casella e tutte le email?')) return;
-            fetch('/api/mailboxes?id=' + id, { method: 'DELETE' }).then(() => loadMailboxes());
+            const m = currentMailboxes.find(x => x.id === id);
+            // La posta non e' nel database: eliminare la casella la lascia sul disco del server (prima diceva "e tutte le email").
+            if (!confirm('Eliminare la casella ' + (m ? m.email : '') + '?\\n\\nSe ne vanno il login, la risposta automatica, i filtri e gli inoltri. '
+                    + "La posta gia' arrivata resta sul disco del server: non si cancella.")) return;
+            fetch('/api/mailboxes?id=' + id, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csrf_token: csrfToken })
+            }).then(r => r.json()).then(d => {
+                if (!d.success) mbMsg(d.error || 'Eliminazione non riuscita.', 'danger');
+                loadMailboxes();
+            }).catch(() => mbMsg('Il pannello non ha risposto.', 'danger'));
         }
 
         function editMailbox(id) {
@@ -3261,121 +3829,7 @@ public class MailPanelContent {
             if (!document.getElementById('mbPass').value) pwProponi('mbPass');
         });
 
-        // ===== Password Generator (modal riusabile) =====
-        function openPasswordGeneratorModal() {
-            // Reset preview
-            document.getElementById('pwgenPreview').value = '';
-            document.getElementById('pwgenStrengthBadge').textContent = '—';
-            document.getElementById('pwgenStrengthBadge').className = 'badge bg-secondary';
-            document.getElementById('pwgenEntropyText').textContent = 'Entropia: — bit';
-            document.getElementById('pwgenUseBtn').disabled = true;
-            // Aggiorna nota Include in base al type selezionato
-            pwgenUpdateIncludeNote();
-            new bootstrap.Modal(document.getElementById('passwordGeneratorModal')).show();
-            // Genera subito una password con i default così l'utente vede un esempio
-            setTimeout(pwgenGenerate, 100);
-        }
-
-        function pwgenLengthDelta(delta) {
-            const input = document.getElementById('pwgenLength');
-            let v = parseInt(input.value) + delta;
-            if (v < PW_MIN) v = PW_MIN;
-            if (v > PW_MAX) v = PW_MAX;
-            input.value = v;
-            const range = document.getElementById('pwgenLengthRange');
-            if (v <= 64) range.value = v;
-        }
-
-        function pwgenUpdateIncludeNote() {
-            const type = document.querySelector('input.pwgen-type:checked').value;
-            const numbersChk = document.getElementById('pwgenIncludeNumbers');
-            const symbolsChk = document.getElementById('pwgenIncludeSymbols');
-            const note = document.getElementById('pwgenIncludeNote');
-            if (type === 'easy_to_say') {
-                numbersChk.disabled = true; symbolsChk.disabled = true;
-                numbersChk.checked = false; symbolsChk.checked = false;
-                note.textContent = 'Tipo "facile da dettare": numeri e simboli sono disattivati per definizione.';
-            } else {
-                numbersChk.disabled = false; symbolsChk.disabled = false;
-                note.textContent = '';
-            }
-        }
-
-        // Listener per radio type
-        document.addEventListener('change', function(e) {
-            if (e.target && e.target.classList && e.target.classList.contains('pwgen-type')) {
-                pwgenUpdateIncludeNote();
-            }
-        });
-
-        function pwgenGenerate() {
-            // Dentro i limiti delle caselle anche se nel campo si scrive altro (il server li applica comunque).
-            const length = Math.min(PW_MAX, Math.max(PW_MIN, parseInt(document.getElementById('pwgenLength').value) || 20));
-            document.getElementById('pwgenLength').value = length;
-            const type = document.querySelector('input.pwgen-type:checked').value;
-            const lo = document.getElementById('pwgenIncludeLower').checked;
-            const up = document.getElementById('pwgenIncludeUpper').checked;
-            const nu = document.getElementById('pwgenIncludeNumbers').checked;
-            const sy = document.getElementById('pwgenIncludeSymbols').checked;
-
-            if (!lo && !up && !nu && !sy) {
-                alert('Seleziona almeno una categoria di caratteri.');
-                return;
-            }
-
-            fetch('/api/mailboxes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'generate_password',
-                    length: length,
-                    type: type,
-                    include_lowercase: lo,
-                    include_uppercase: up,
-                    include_numbers: nu,
-                    include_symbols: sy,
-                    csrf_token: csrfToken
-                })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (!data.success) {
-                    alert('Errore: ' + (data.error || ''));
-                    return;
-                }
-                document.getElementById('pwgenPreview').value = data.password;
-                const ent = data.entropy_bits || 0;
-                const label = data.strength_label || '—';
-                document.getElementById('pwgenEntropyText').textContent = 'Entropia: ' + ent + ' bit';
-                const badge = document.getElementById('pwgenStrengthBadge');
-                badge.textContent = label;
-                if (label === 'Molto forte')      badge.className = 'badge bg-success';
-                else if (label === 'Forte')       badge.className = 'badge bg-success';
-                else if (label === 'Discreta')    badge.className = 'badge bg-warning text-dark';
-                else                              badge.className = 'badge bg-danger';
-                document.getElementById('pwgenUseBtn').disabled = false;
-            })
-            .catch(e => alert('Errore rete: ' + e.message));
-        }
-
-        function pwgenCopy() {
-            const v = document.getElementById('pwgenPreview').value;
-            if (!v) return;
-            navigator.clipboard.writeText(v).catch(() => {});
-        }
-
-        function pwgenUse() {
-            const v = document.getElementById('pwgenPreview').value;
-            if (!v) return;
-            const cb = window.__pwGenCallback;
-            // Chiudi il modal e invoca la callback
-            const modalEl = document.getElementById('passwordGeneratorModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
-            if (typeof cb === 'function') cb(v);
-            window.__pwGenCallback = null;
-        }
-
+""" + getPasswordGeneratorJs() + getCasellaAAliasJs() + """
         function revealMailboxStoredPassword() {
             const id = parseInt(document.getElementById('editMbId').value);
             if (!id) return;
@@ -3980,7 +4434,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""" + getFooter() + """
+""" + getAliasACasellaModal() + getPasswordGeneratorModal() + getFooter() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
 
@@ -4028,6 +4482,8 @@ public class MailPanelContent {
                         + (a.active ? '' : ' <span class="badge bg-secondary ms-1">Disattivo</span>') + '</td>'
                         + '<td class="text-nowrap">'
                         + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="Modifica alias ' + chi + '">Modifica</button>'
+                        + (a.source.startsWith('@') ? '' : '<button type="button" class="btn btn-sm btn-outline-success me-1" onclick="apriACasella(' + id + ')"'
+                            + ' title="Trasforma in una casella vera" aria-label="Trasforma in casella ' + escAl(a.source) + '">In casella</button>')
                         + '<button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="toggleAlias(' + id + ', ' + (a.active ? 'false' : 'true') + ')"'
                         + ' aria-label="' + (a.active ? 'Disattiva' : 'Riattiva') + ' alias ' + chi + '">' + (a.active ? 'Disattiva' : 'Riattiva') + '</button>'
                         + '<button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + id + ')" aria-label="Elimina alias ' + chi + '">Elimina</button>'
@@ -4123,6 +4579,7 @@ public class MailPanelContent {
             }).catch(() => aliasMsg('Il pannello non ha risposto.', 'danger'));
         }
 
+""" + getCampoPasswordJs() + getPasswordGeneratorJs() + getAliasACasellaJs() + """
         loadAliasDomains();
         loadAliases();
 """ + getLogoutScript() + """

@@ -74,11 +74,7 @@ public class MailDatabase {
      */
     public boolean connect() {
         try {
-            String url = String.format(
-                "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&createDatabaseIfNotExist=true&autoReconnect=true",
-                host, port, database
-            );
-            connection = DriverManager.getConnection(url, username, password);
+            connection = DriverManager.getConnection(urlDatabase(), username, password);
             connected = true;
             return true;
         } catch (SQLException e) {
@@ -86,6 +82,22 @@ public class MailDatabase {
             connected = false;
             return false;
         }
+    }
+
+    private String urlDatabase() {
+        return String.format(
+            "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&createDatabaseIfNotExist=true&autoReconnect=true",
+            host, port, database
+        );
+    }
+
+    /**
+     * Una connessione tutta per chi la chiede, che la chiude. Serve alle transazioni: la
+     * connessione condivisa la usano anche i lavori in background (rapporto, DKIM, MTA-STS), e con
+     * l'autocommit spento i loro comandi finirebbero dentro la transazione di un altro.
+     */
+    private Connection connessionePropria() throws SQLException {
+        return DriverManager.getConnection(urlDatabase(), username, password);
     }
 
     /**
@@ -1846,6 +1858,11 @@ public class MailDatabase {
     }
 
     public int addMailbox(int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
+        return inserisciCasella(getConnection(), domainId, email, password, name, quotaMb, receiveEnabled);
+    }
+
+    /** L'INSERT di una casella sulla connessione data: da sola, o dentro una transazione. */
+    private int inserisciCasella(Connection c, int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
         // Hash password with bcrypt (compatible with Dovecot)
         String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
 
@@ -1860,7 +1877,7 @@ public class MailDatabase {
 
         String sql = "INSERT INTO mailboxes (domain_id, email, password, password_encrypted, password_encrypted_at, name, quota_mb, receive_enabled) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement stmt = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, domainId);
             stmt.setString(2, email.toLowerCase());
             stmt.setString(3, hashedPassword);
@@ -2230,6 +2247,125 @@ public class MailDatabase {
         return m;
     }
 
+    // ========== ALIAS <-> CASELLA ==========
+
+    /**
+     * Un indirizzo che oggi e' solo alias diventa una casella, in una transazione: per Postfix,
+     * che legge le tabelle a ogni messaggio, si passa da "alias" a "casella" senza un istante in
+     * mezzo in cui l'indirizzo non esiste o vale in tutti e due i modi.
+     *
+     * @param tieniInoltri false: le righe con questa sorgente se ne vanno e la posta resta nella
+     *                     casella; true: restano, e un alias "indirizzo -> se stesso" attivo fa
+     *                     arrivare una copia anche nella casella
+     * @return l'id della casella nuova
+     */
+    public int trasformaAliasInCasella(int domainId, String email, String password, String name, int quotaMb,
+                                       boolean tieniInoltri) throws SQLException {
+        try (Connection c = connessionePropria()) {
+            c.setAutoCommit(false);
+            try {
+                int id = inserisciCasella(c, domainId, email, password, name, quotaMb, true);
+                if (id <= 0) throw new SQLException("la casella non e' stata creata");
+                if (tieniInoltri) {
+                    try (PreparedStatement p = c.prepareStatement(
+                            "INSERT INTO aliases (domain_id, source, destination, active) VALUES (?, ?, ?, 1) "
+                          + "ON DUPLICATE KEY UPDATE active = 1")) {
+                        p.setInt(1, domainId);
+                        p.setString(2, email.toLowerCase());
+                        p.setString(3, email.toLowerCase());
+                        p.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement p = c.prepareStatement("DELETE FROM aliases WHERE source = ?")) {
+                        p.setString(1, email.toLowerCase());
+                        p.executeUpdate();
+                    }
+                }
+                c.commit();
+                return id;
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Una casella diventa un alias verso le destinazioni date, in una transazione. Se ne vanno la
+     * casella (e con lei, per le chiavi esterne, risposta automatica, filtri, inoltri, token della
+     * webmail), il suo limite di invio e l'alias "se stessa -> se stessa": senza casella porterebbe
+     * a un indirizzo che non esiste. Gli altri alias con questa sorgente restano. La posta gia'
+     * arrivata non e' nel database: resta sul disco.
+     */
+    public void trasformaCasellaInAlias(int mailboxId, int domainId, String email, List<String> destinazioni) throws SQLException {
+        String indirizzo = email.toLowerCase();
+        try (Connection c = connessionePropria()) {
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement p = c.prepareStatement(
+                        "INSERT INTO aliases (domain_id, source, destination, active) VALUES (?, ?, ?, 1) "
+                      + "ON DUPLICATE KEY UPDATE active = 1")) {
+                    for (String d : destinazioni) {
+                        p.setInt(1, domainId);
+                        p.setString(2, indirizzo);
+                        p.setString(3, d.toLowerCase());
+                        p.executeUpdate();
+                    }
+                }
+                try (PreparedStatement p = c.prepareStatement("DELETE FROM aliases WHERE source = ? AND destination = ?")) {
+                    p.setString(1, indirizzo);
+                    p.setString(2, indirizzo);
+                    p.executeUpdate();
+                }
+                try (PreparedStatement p = c.prepareStatement("DELETE FROM rate_limits WHERE target_type = 'mailbox' AND target_id = ?")) {
+                    p.setInt(1, mailboxId);
+                    p.executeUpdate();
+                }
+                try (PreparedStatement p = c.prepareStatement("DELETE FROM mailboxes WHERE id = ? AND email = ?")) {
+                    p.setInt(1, mailboxId);
+                    p.setString(2, indirizzo);
+                    if (p.executeUpdate() != 1) throw new SQLException("la casella non c'e' piu'");
+                }
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            }
+        }
+    }
+
+    /** Gli alias con questa sorgente, attivi o no. */
+    public List<Alias> getAliasesBySource(String source) throws SQLException {
+        try (PreparedStatement stmt = getConnection().prepareStatement(
+                "SELECT a.*, d.domain as domain_name FROM aliases a JOIN domains d ON a.domain_id = d.id "
+              + "WHERE a.source = ? ORDER BY a.destination")) {
+            stmt.setString(1, source.toLowerCase());
+            return aliasConDominio(stmt);
+        }
+    }
+
+    /** Gli alias che portano a questo indirizzo, da qualunque dominio. */
+    public List<Alias> getAliasesByDestination(String destination) throws SQLException {
+        try (PreparedStatement stmt = getConnection().prepareStatement(
+                "SELECT a.*, d.domain as domain_name FROM aliases a JOIN domains d ON a.domain_id = d.id "
+              + "WHERE a.destination = ? ORDER BY a.source")) {
+            stmt.setString(1, destination.toLowerCase());
+            return aliasConDominio(stmt);
+        }
+    }
+
+    private List<Alias> aliasConDominio(PreparedStatement stmt) throws SQLException {
+        List<Alias> aliases = new ArrayList<>();
+        try (ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                Alias a = mapAlias(rs);
+                a.domainName = rs.getString("domain_name");
+                aliases.add(a);
+            }
+        }
+        return aliases;
+    }
+
     // ========== ALIAS MANAGEMENT ==========
 
     public int addAlias(int domainId, String source, String destination) throws SQLException {
@@ -2398,6 +2534,16 @@ public class MailDatabase {
             // ignore
         }
         return 0;
+    }
+
+    /** La versione del server MySQL a cui il pannello e' collegato adesso (SELECT VERSION()), o null. */
+    public String versioneServer() {
+        try (PreparedStatement stmt = getConnection().prepareStatement("SELECT VERSION()");
+             ResultSet rs = stmt.executeQuery()) {
+            return rs.next() ? rs.getString(1) : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ========== UTILITY ==========

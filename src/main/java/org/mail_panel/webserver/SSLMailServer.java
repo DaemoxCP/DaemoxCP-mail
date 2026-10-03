@@ -160,6 +160,7 @@ public class SSLMailServer {
         server.createContext("/api/aliases", this::handleApiAliases);
         server.createContext("/api/webmail", this::handleApiWebmail);
         server.createContext("/api/service", this::handleApiService);
+        server.createContext("/api/versioni", this::handleApiVersioni);
         // /api/install removed - installation is done via terminal GUI only
 
         // API endpoints - DKIM & DNS
@@ -1397,6 +1398,21 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
+                    String trasforma = parametroQuery(exchange.getRequestURI().getRawQuery(), "trasforma");
+                    if (trasforma != null) {
+                        // Anteprima di "casella -> alias": cosa si perde, cosa resta. Non cambia niente.
+                        int tid;
+                        try { tid = Integer.parseInt(trasforma); } catch (NumberFormatException e) { tid = 0; }
+                        MailDatabase.Mailbox tm = tid > 0 ? Main.mailDatabase.getMailbox(tid) : null;
+                        if (tm == null) {
+                            response.put("success", false).put("error", "Casella non trovata");
+                        } else {
+                            response = org.mail_panel.system.TrasformaIndirizzo.anteprimaAAlias(
+                                    org.mail_panel.system.TrasformaIndirizzo.stato(Main.mailDatabase, tm.email.toLowerCase(java.util.Locale.ROOT)),
+                                    java.time.ZoneId.systemDefault()).put("success", true).put("id", tm.id);
+                        }
+                        break;
+                    }
                     // Check if requesting a single mailbox by ID
                     String query = exchange.getRequestURI().getQuery();
                     int singleId = extractIdFromQuery(query);
@@ -1466,6 +1482,11 @@ public class SSLMailServer {
 
                     // Sub-routing per action specifiche (no email/password richieste)
                     String action = req.optString("action", "");
+
+                    if ("trasforma_in_alias".equals(action)) {
+                        sendJsonResponse(exchange, casellaInAlias(req, getClientIp(exchange)));
+                        return;
+                    }
 
                     if ("bulk_rotate_passwords".equals(action)) {
                         // Genera + aggiorna in massa le password di N caselle.
@@ -1712,12 +1733,26 @@ public class SSLMailServer {
                     }
                 }
                 case "DELETE" -> {
+                    // Eliminare cambia lo stato: stesso controllo CSRF di creazione e modifica (prima mancava).
+                    String body = readRequestBodyWithLimit(exchange);
+                    if (body == null) {
+                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        return;
+                    }
+                    if (!validateCsrfForRequest(exchange, body.isBlank() ? new JSONObject() : new JSONObject(body))) {
+                        sendCsrfError(exchange);
+                        return;
+                    }
                     String query = exchange.getRequestURI().getQuery();
                     int id = extractIdFromQuery(query);
                     if (id > 0) {
+                        MailDatabase.Mailbox via = Main.mailDatabase.getMailbox(id);
                         boolean deleted = Main.mailDatabase.deleteMailbox(id);
                         response.put("success", deleted);
-                        if (deleted) regenerateMailConfigs();
+                        if (deleted) {
+                            logAudit("MAILBOX_DELETED", getClientIp(exchange), via != null ? via.email : "Mailbox ID: " + id);
+                            regenerateMailConfigs();
+                        }
                     } else {
                         response.put("success", false);
                         response.put("error", "ID non valido");
@@ -1953,6 +1988,19 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
+                    String trasforma = parametroQuery(exchange.getRequestURI().getRawQuery(), "trasforma");
+                    if (trasforma != null) {
+                        // Anteprima di "alias -> casella": cosa succede, o perche' non si puo'. Non cambia niente.
+                        String indirizzo = trasforma.trim().toLowerCase(java.util.Locale.ROOT);
+                        if (indirizzo.length() > 254) {
+                            response.put("success", false).put("error", "Indirizzo non valido");
+                        } else {
+                            response = org.mail_panel.system.TrasformaIndirizzo.anteprimaACasella(
+                                    org.mail_panel.system.TrasformaIndirizzo.stato(Main.mailDatabase, indirizzo),
+                                    java.time.ZoneId.systemDefault()).put("success", true);
+                        }
+                        break;
+                    }
                     JSONArray aliases = new JSONArray();
                     for (MailDatabase.Alias a : Main.mailDatabase.getAllAliases()) {
                         JSONObject alias = new JSONObject();
@@ -1978,6 +2026,11 @@ public class SSLMailServer {
                     if (!validateCsrfForRequest(exchange, req)) {
                         sendCsrfError(exchange);
                         return;
+                    }
+
+                    if ("trasforma_in_casella".equals(req.optString("action", ""))) {
+                        response = aliasInCasella(req, getClientIp(exchange));
+                        break;
                     }
 
                     String source = req.optString("source", "").toLowerCase().trim();
@@ -2129,6 +2182,12 @@ public class SSLMailServer {
                 return;
             }
             JSONObject req = new JSONObject(body);
+            // Avviare, fermare e riavviare un servizio cambia lo stato del server: senza token
+            // una pagina di un altro sito aperta dall'amministratore potrebbe fermare la posta.
+            if (!validateCsrfForRequest(exchange, req)) {
+                sendCsrfError(exchange);
+                return;
+            }
             String service = req.optString("service", "");
             String action = req.optString("action", "");
 
@@ -2162,6 +2221,11 @@ public class SSLMailServer {
                 success = executeServiceCommand(service, action);
             }
             System.out.println("[SERVICE] Result: " + (success ? "OK" : "FAILED"));
+            logAudit("SERVICE_" + action.toUpperCase(Locale.ROOT), getClientIp(exchange),
+                    "Servizio: " + service + (success ? "" : " (non riuscito)"));
+            // Dopo un riavvio "da riavviare" deve sparire subito, non fra trenta secondi. Senza
+            // prendere il lock delle letture: una lettura in corso non deve trattenere questa risposta.
+            VERSIONI_AZIONI.incrementAndGet();
 
             JSONObject response = new JSONObject();
             response.put("success", success);
@@ -2174,6 +2238,57 @@ public class SSLMailServer {
             e.printStackTrace();
             sendJsonError(exchange, 500, "Errore interno: " + e.getMessage());
         }
+    }
+
+    /**
+     * Ultima lettura delle versioni (VersioniSoftware), quando e' stata fatta e quante azioni sui
+     * servizi c'erano state quando e' partita: un'azione arrivata dopo la rende vecchia.
+     */
+    private static final Object VERSIONI_LOCK = new Object();
+    private static final java.util.concurrent.atomic.AtomicLong VERSIONI_AZIONI = new java.util.concurrent.atomic.AtomicLong();
+    private static JSONObject versioniLette;
+    private static long versioniLetteMs, versioniLetteAzioni;
+
+    /**
+     * Le versioni del software per la Home (colonna Versione di "Servizi Mail" e "Altro software").
+     * Una lettura lancia una quindicina di comandi brevi: si tiene per trenta secondi, cosi' piu'
+     * schede aperte o ricaricate non li rilanciano ogni volta. "?fresco=1" (il pulsante Rileggi)
+     * rilegge subito, ma non piu' di una volta ogni tre secondi; dopo un'azione su un servizio si
+     * rilegge comunque. Le letture vanno una alla volta.
+     */
+    private void handleApiVersioni(HttpExchange exchange) throws IOException {
+        if (!isAuthenticated(exchange)) {
+            sendJsonError(exchange, 401, "Unauthorized");
+            return;
+        }
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, "Method not allowed");
+            return;
+        }
+        String fresco = parametroQuery(exchange.getRequestURI().getRawQuery(), "fresco");
+        if (fresco != null && !fresco.equals("1")) {
+            sendJsonError(exchange, 400, "Parametro non valido");
+            return;
+        }
+        JSONObject r;
+        try {
+            synchronized (VERSIONI_LOCK) {
+                long eta = System.currentTimeMillis() - versioniLetteMs;
+                long azioni = VERSIONI_AZIONI.get();
+                if (versioniLette == null || azioni != versioniLetteAzioni || eta > 30_000 || (fresco != null && eta > 3_000)) {
+                    versioniLette = org.mail_panel.system.VersioniSoftware.leggi(org.mail_panel.system.VersioniSoftware.reale(
+                            () -> Main.mysqlAvailable && Main.mailDatabase != null ? Main.mailDatabase.versioneServer() : null));
+                    versioniLetteMs = System.currentTimeMillis();
+                    versioniLetteAzioni = azioni;
+                }
+                r = versioniLette;
+            }
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Lettura delle versioni non riuscita", e);
+            sendJsonError(exchange, 500, "Lettura delle versioni non riuscita");
+            return;
+        }
+        sendJsonResponse(exchange, r);
     }
 
     /**
@@ -2249,6 +2364,127 @@ public class SSLMailServer {
     }
 
     // ============== HELPER METHODS ==============
+
+    /** Un parametro della query (grezza), decodificato; null se non c'e'. */
+    static String parametroQuery(String rawQuery, String nome) {
+        if (rawQuery == null) return null;
+        for (String coppia : rawQuery.split("&")) {
+            int uguale = coppia.indexOf('=');
+            if (uguale > 0 && coppia.substring(0, uguale).equals(nome)) {
+                try {
+                    return java.net.URLDecoder.decode(coppia.substring(uguale + 1), StandardCharsets.UTF_8);
+                } catch (IllegalArgumentException e) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Alias -> casella (TrasformaIndirizzo): controlli, posta di prima messa da parte se chiesto,
+     * una transazione nel database, i filtri rimasti di una casella di prima riscritti vuoti.
+     * Se qualcosa non riesce, non cambia niente.
+     */
+    private JSONObject aliasInCasella(JSONObject req, String ip) throws Exception {
+        JSONObject r = new JSONObject();
+        String indirizzo = req.optString("source", "").trim().toLowerCase(java.util.Locale.ROOT);
+        if (indirizzo.length() > 254) return r.put("success", false).put("error", "Indirizzo non valido");
+        org.mail_panel.system.TrasformaIndirizzo.Stato s = org.mail_panel.system.TrasformaIndirizzo.stato(Main.mailDatabase, indirizzo);
+        String no = org.mail_panel.system.TrasformaIndirizzo.motivoNoCasella(s);
+        if (no != null) return r.put("success", false).put("error", no);
+        if (!org.mail_panel.system.TrasformaIndirizzo.impronta(s).equals(req.optString("impronta", "")))
+            return r.put("success", false).put("cambiato", true).put("error",
+                    "Dall'anteprima e' cambiato qualcosa (un alias, una casella, la posta sul disco): riapri la finestra e ricontrolla.");
+        String password = req.optString("password", "");
+        if (!SecurityUtils.isValidMailboxPassword(password))
+            return r.put("success", false).put("error", "Password non valida: " + SecurityUtils.PASSWORD_CASELLA_REGOLA + ".");
+        String nome = req.optString("name", "").trim();
+        if (nome.length() > 100 || !org.mail_panel.system.TrasformaIndirizzo.stampabile(nome))
+            return r.put("success", false).put("error", "Il nome e' troppo lungo o ha caratteri non ammessi (solo ASCII, niente lettere accentate).");
+        int quota = req.opt("quota_mb") instanceof Number n ? n.intValue() : 1024;
+        if (quota < 0 || quota > 1_048_576) return r.put("success", false).put("error", "Quota non valida: da 0 (illimitata) a 1048576 MB.");
+        if (!(req.opt("tieni_inoltri") instanceof Boolean tieni))
+            return r.put("success", false).put("error", "Manca la scelta: tenere o no gli inoltri di adesso.");
+        String vecchia = req.optString("posta_vecchia", "");
+        boolean archivia = false;
+        if (s.posta().presente()) {
+            if (!vecchia.equals("ritrova") && !vecchia.equals("archivia"))
+                return r.put("success", false).put("error",
+                        "Sul disco c'e' gia' la posta di una casella di prima con questo indirizzo: scegli se ritrovarla o metterla da parte.");
+            archivia = vecchia.equals("archivia");
+        }
+        MailDatabase.Domain dominio = Main.mailDatabase.getDomainByName(indirizzo.substring(indirizzo.lastIndexOf('@') + 1));
+        if (dominio == null) return r.put("success", false).put("error", "Il dominio non e' fra i domini del pannello.");
+
+        List<java.nio.file.Path[]> spostate = List.of();
+        if (archivia) {
+            try {
+                spostate = org.mail_panel.system.TrasformaIndirizzo.archivia(indirizzo, System.currentTimeMillis());
+            } catch (IOException e) {
+                return r.put("success", false).put("error", "Non sono riuscito a mettere da parte la posta di prima ("
+                        + e.getMessage() + "): non ho cambiato niente.");
+            }
+        }
+        int id;
+        try {
+            id = Main.mailDatabase.trasformaAliasInCasella(dominio.id, indirizzo, password, nome, quota, tieni);
+        } catch (java.sql.SQLException e) {
+            org.mail_panel.system.TrasformaIndirizzo.rimetti(spostate);
+            LOGGER.log(Level.WARNING, "Alias -> casella non riuscito per " + indirizzo, e);
+            return r.put("success", false).put("error", "La trasformazione non e' riuscita, non ho cambiato niente: " + e.getMessage());
+        }
+        logAudit("ALIAS_TO_MAILBOX", ip, indirizzo + (tieni ? " (inoltri tenuti, copia nella casella)" : " (alias tolti)")
+                + (archivia ? ", posta di prima messa da parte" : s.posta().presente() ? ", posta di prima ritrovata" : ""));
+        regenerateMailConfigs();
+        // I filtri compilati di una casella di prima non devono valere per questa: si riscrivono, vuoti.
+        if (!archivia && s.posta().filtri() && sieveGenerator != null)
+            sieveGenerator.saveSieveScript(indirizzo, sieveGenerator.generateSieveScript(id, Main.mailDatabase));
+        StringBuilder msg = new StringBuilder(indirizzo).append(" ora e' una casella.");
+        if (tieni) msg.append(" La posta continua ad andare anche alle destinazioni di prima, e una copia resta nella casella.");
+        if (!spostate.isEmpty()) msg.append(" La posta di prima e' in ").append(spostate.get(0)[1]).append(".");
+        else if (s.posta().presente()) msg.append(" Ritrova la posta che c'era.");
+        return r.put("success", true).put("id", id).put("message", msg.toString());
+    }
+
+    /**
+     * Casella -> alias (TrasformaIndirizzo): l'indirizzo scritto per conferma, destinazioni
+     * controllate (valide, esistenti se sono tue, senza giri), una transazione nel database.
+     * La posta gia' arrivata resta sul disco.
+     */
+    private JSONObject casellaInAlias(JSONObject req, String ip) throws Exception {
+        JSONObject r = new JSONObject();
+        int id = req.optInt("id", 0);
+        MailDatabase.Mailbox m = id > 0 ? Main.mailDatabase.getMailbox(id) : null;
+        if (m == null) return r.put("success", false).put("error", "Casella non trovata");
+        String indirizzo = m.email.toLowerCase(java.util.Locale.ROOT);
+        if (!indirizzo.equals(req.optString("conferma", "").trim().toLowerCase(java.util.Locale.ROOT)))
+            return r.put("success", false).put("error", "Per confermare scrivi l'indirizzo della casella: " + indirizzo);
+        org.mail_panel.system.TrasformaIndirizzo.Stato s = org.mail_panel.system.TrasformaIndirizzo.stato(Main.mailDatabase, indirizzo);
+        if (!org.mail_panel.system.TrasformaIndirizzo.impronta(s).equals(req.optString("impronta", "")))
+            return r.put("success", false).put("cambiato", true).put("error",
+                    "Dall'anteprima e' cambiato qualcosa (un alias, la casella, i suoi filtri o inoltri): riapri la finestra e ricontrolla.");
+        List<String> destinazioni;
+        try {
+            destinazioni = org.mail_panel.system.TrasformaIndirizzo.destinazioni(s, req.optJSONArray("destinazioni"),
+                    org.mail_panel.system.TrasformaIndirizzo.rete(Main.mailDatabase));
+        } catch (IllegalArgumentException e) {
+            return r.put("success", false).put("error", e.getMessage());
+        }
+        try {
+            Main.mailDatabase.trasformaCasellaInAlias(m.id, m.domainId, indirizzo, destinazioni);
+        } catch (java.sql.SQLException e) {
+            LOGGER.log(Level.WARNING, "Casella -> alias non riuscito per " + indirizzo, e);
+            return r.put("success", false).put("error", "La trasformazione non e' riuscita, non ho cambiato niente: " + e.getMessage());
+        }
+        logAudit("MAILBOX_TO_ALIAS", ip, indirizzo + " -> " + String.join(", ", destinazioni));
+        regenerateMailConfigs();
+        String msg = indirizzo + " ora e' un alias verso " + String.join(", ", destinazioni) + ".";
+        if (s.posta().presente())
+            msg += " La posta gia' arrivata resta sul disco, in " + org.mail_panel.system.TrasformaIndirizzo.cartellaPosta(indirizzo)
+                 + ": se un giorno l'indirizzo torna una casella, si potra' ritrovarla.";
+        return r.put("success", true).put("message", msg);
+    }
 
     private int extractIdFromQuery(String query) {
         if (query == null) return -1;

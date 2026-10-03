@@ -183,7 +183,16 @@
             h += '<tr><td><strong>Pacchetti da aggiornare</strong></td><td>'
                + (n === 0 ? '<span class="badge bg-success">nessuno</span>'
                           : '<span class="badge bg-warning text-dark">' + n + '</span>')
-               + eta(r.catalogoGiorni, 'catalogo')
+               // La data del catalogo e' quella di pubblicazione sul server di pkg: la frase
+               // completa (piu' repository, uno senza catalogo) sta nel title.
+               // homeEsc non tocca le virgolette: dentro un attributo servono anche quelle.
+               + (r.catalogoData
+                   ? ' <span class="' + (r.catalogoGiorni > 14 ? 'text-warning' : 'text-muted') + '" title="'
+                     + homeEsc(r.catalogoNota || '').replace(/"/g, '&quot;') + '">(catalogo pubblicato il '
+                     + homeEsc(r.catalogoData) + ')</span>'
+                   : (r.catalogoNota ? ' <span class="text-muted" title="'
+                                       + homeEsc(r.catalogoNota).replace(/"/g, '&quot;')
+                                       + '">(catalogo senza data)</span>' : ''))
                + '<div class="small text-muted">Sono i pacchetti la cui versione installata &egrave; '
                + '<strong>pi&ugrave; vecchia</strong> di quella nel catalogo gi&agrave; scaricato: '
                + 'l&rsquo;unico caso in cui esiste davvero un aggiornamento. La simulazione vera '

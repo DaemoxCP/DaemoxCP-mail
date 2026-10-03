@@ -6698,7 +6698,10 @@ public final class UpdateManager {
         // Quindi l'aggiornamento del catalogo sta QUI, esplicito, e solo nell'invio vero — dove
         // andare in rete e' previsto. L'anteprima resta una lettura, e la sua riga sull'eta' del
         // catalogo dice a chi guarda quanto sono vecchi i dati che sta vedendo.
-        if (aggiornaDatabase) ok("pkg update -q", 120);
+        // L'esito si tiene: un "pkg update" fallito lascia il catalogo di prima, e il rapporto
+        // deve poterlo dire invece di presentare quel catalogo come appena rinfrescato.
+        boolean catalogoRinfrescato = aggiornaDatabase && ok("pkg update -q", 120);
+        r.put("catalogoRinfrescato", catalogoRinfrescato);
 
         // --- sistema ---
         JSONObject so = sistemaOperativo();
@@ -6761,7 +6764,33 @@ public final class UpdateManager {
         // Con "-U" le interrogazioni al repository leggono il catalogo che c'e': la sua eta'
         // fa parte del risultato, altrimenti "nel repository c'e' la versione X" suona come
         // una verifica appena fatta sui server di pkg, che non e'.
-        r.put("catalogoGiorni", giorniDa("/var/db/pkg/repo-FreeBSD.sqlite"));
+        //
+        // La data la da' CatalogoPkg, ed e' quella di pubblicazione sul server. Prima qui si
+        // guardava /var/db/pkg/repo-FreeBSD.sqlite, che su FreeBSD 15 non esiste: ogni
+        // rapporto diceva "eta' sconosciuta".
+        JSONObject cat = CatalogoPkg.leggi();
+        long giorniCat = cat.optLong("giorni", -1);
+        r.put("catalogo", cat).put("catalogoGiorni", giorniCat).put("catalogoData", cat.optString("data"));
+        if (aggiornaDatabase && !catalogoRinfrescato)
+            daFare.put(new JSONObject().put("urgenza", 2)
+                    .put("cosa", "\"pkg update\" non e' riuscito: i conteggi qui sotto vengono dal catalogo di "
+                            + "prima" + (giorniCat < 0 ? "" : ", pubblicato " + CatalogoPkg.quanto(giorniCat)
+                            + " (" + cat.optString("data") + ")") + ".")
+                    .put("dove", "Aggiornamenti"));
+        else if (giorniCat < 0)
+            daFare.put(new JSONObject().put("urgenza", 3)
+                    .put("cosa", cat.optString("nota") + " Senza quella data, il numero dei pacchetti da "
+                            + "aggiornare non dice contro cosa e' stato contato.")
+                    .put("dove", "Aggiornamenti"));
+        else if (giorniCat >= 7 && !catalogoRinfrescato)
+            // Dopo un "pkg update" riuscito, un catalogo vecchio e' l'ultimo che il server offre:
+            // non c'e' niente da fare. Senza (l'anteprima), puo' esserci un catalogo piu' nuovo.
+            daFare.put(new JSONObject().put("urgenza", giorniCat >= 28 ? 2 : 3)
+                    .put("cosa", "Il catalogo dei pacchetti e' stato pubblicato " + CatalogoPkg.quanto(giorniCat)
+                            + " (" + cat.optString("data") + "): se nel frattempo sul server ne e' uscito uno "
+                            + "nuovo, i conteggi non lo vedono. Lo rinfresca la pagina Aggiornamenti, oppure "
+                            + "\"pkg update\".")
+                    .put("dove", "Aggiornamenti"));
 
         JSONArray conRimedio = new JSONArray(), senzaRimedio = new JSONArray();
         JSONArray nonCapiti = new JSONArray();
@@ -7975,7 +8004,10 @@ public final class UpdateManager {
              .put("nonConfrontabili", nonConfrontabili);
 
             // L'eta' del catalogo: senza, il numero qui sopra sembra piu' preciso di quanto sia.
-            r.put("catalogoGiorni", giorniDa("/var/db/pkg/repo-FreeBSD.sqlite"));
+            // E' la data di pubblicazione sul server (vedi CatalogoPkg).
+            JSONObject cat = CatalogoPkg.leggi();
+            r.put("catalogoGiorni", cat.optLong("giorni", -1)).put("catalogoData", cat.optString("data"))
+             .put("catalogoNota", cat.optString("nota"));
 
             // Vulnerabilita' dal database locale: "pkg audit" senza -F non scarica.
             String audit = sh("pkg audit -q 2>/dev/null", 60);
