@@ -1514,6 +1514,8 @@ public final class UpdateManager {
         public final String tipo;
         public volatile String status = "pending";
         public volatile String errorMessage = "";
+        /** Il messaggio finale di un lavoro riuscito, da mostrare cosi' com'e' (es. il cambio di ramo). */
+        public volatile String esito = "";
         public volatile int step, total;
         public final long inizio = System.currentTimeMillis();
         public volatile long fine;
@@ -1538,6 +1540,7 @@ public final class UpdateManager {
                     .put("step", step).put("total", total)
                     .put("percent", total > 0 ? (step * 100 / total) : 0)
                     .put("errorMessage", errorMessage)
+                    .put("result", esito)
                     .put("elapsedSeconds", ((fine > 0 ? fine : System.currentTimeMillis()) - inizio) / 1000)
                     .put("consoleLog", log.toString());
         }
@@ -9337,32 +9340,62 @@ public final class UpdateManager {
         }
     }
 
+    /**
+     * Il ramo per la scheda dei predefiniti: lo legge RamoPkg, come la scheda "Ramo dei pacchetti".
+     * Prima qui si prendeva il primo indirizzo di pkg.FreeBSD.org, che poteva essere quello dei
+     * moduli del kernel, e un ramo misto non si vedeva.
+     */
     public static JSONObject ramoRepository() {
-        JSONObject r = new JSONObject();
+        JSONObject st = RamoPkg.stato(RamoPkg.reale());
+        if (!st.optBoolean("success"))
+            return new JSONObject().put("success", true).put("ramo", "non riconosciuto").put("url", "")
+                    .put("spiegazione", st.optString("error")).put("dove", "");
         String url = "";
-        for (String riga : sh("pkg -vv 2>/dev/null", 60).split("\n")) {
-            Matcher m = Pattern.compile("url\\s*:\\s*\"?([^\",]+)").matcher(riga);
-            if (m.find() && m.group(1).contains("pkg.FreeBSD.org")) { url = m.group(1).trim(); break; }
+        JSONArray repo = st.getJSONArray("repository");
+        for (int i = 0; i < repo.length(); i++) {
+            JSONObject x = repo.getJSONObject(i);
+            if (x.optBoolean("acceso") && "pacchetti".equals(x.optString("tipo"))) { url = x.optString("url"); break; }
         }
-        String ramo = url.contains("/quarterly") ? "quarterly"
-                    : url.contains("/latest") ? "latest" : "non riconosciuto";
-        String spiega;
-        if ("quarterly".equals(ramo))
-            spiega = "Ramo trimestrale: tagliato da HEAD a gennaio, aprile, luglio e ottobre. Riceve "
-                   + "comunque le correzioni di sicurezza, anche come aggiornamento di versione, ma "
-                   + "arrivano dopo che qualcuno le ha portate sul ramo — quindi piu' tardi che su "
-                   + "\"latest\". E' il motivo per cui una correzione gia' pubblicata a monte puo' "
-                   + "non essere ancora qui.";
-        else if ("latest".equals(ramo))
-            spiega = "Ramo continuo: le versioni arrivano appena la modifica al port e' accettata e il "
-                   + "cluster di compilazione ha finito. Se una correzione non c'e' ancora, non e' il "
-                   + "ramo a trattenerla.";
-        else
-            spiega = "Non riesco a stabilire il ramo dalla configurazione efficace di pkg.";
-        return r.put("success", true).put("ramo", ramo).put("url", url).put("spiegazione", spiega)
-                .put("dove", "configurazione efficace letta con \"pkg -vv\"; l'eventuale scelta "
-                        + "personale sta in /usr/local/etc/pkg/repos/FreeBSD.conf, il predefinito "
-                        + "in /etc/pkg/FreeBSD.conf");
+        return new JSONObject().put("success", true).put("ramo", st.getString("ramo")).put("url", url)
+                .put("spiegazione", st.getString("spiegazione"))
+                .put("dove", "Si vede e si cambia nella scheda \"Ramo dei pacchetti\", in cima a questa pagina.");
+    }
+
+    public static JSONObject ramoStato() { return RamoPkg.stato(RamoPkg.reale()); }
+
+    public static JSONObject ramoAnteprima(String verso) {
+        if (!RamoPkg.RAMI.contains(verso)) return new JSONObject().put("success", false).put("error", "Ramo non valido.");
+        return RamoPkg.anteprima(RamoPkg.reale(), verso);
+    }
+
+    /**
+     * Il cambio di ramo, sul turno dei lavori sui pacchetti: riscrivere da dove pkg prende i
+     * pacchetti mentre un altro lavoro li sta installando cambierebbe i pacchetti sotto i suoi piedi.
+     */
+    public static JSONObject avviaCambioRamo(String verso, String impronta) {
+        if (!RamoPkg.RAMI.contains(verso)) return new JSONObject().put("success", false).put("error", "Ramo non valido.");
+        if (impronta == null || !impronta.matches("[0-9a-f]{16}"))
+            return new JSONObject().put("success", false).put("error", "Manca l'impronta dell'anteprima: rileggila prima di confermare.");
+        String id = "ramo-" + System.currentTimeMillis();
+        Job j = new Job(id, "pkg_branch");
+        return avviaSulTurno(id, j, "cambio del ramo dei pacchetti verso " + verso, "pkg-branch", () -> {
+            j.status = "running";
+            try {
+                JSONObject r = RamoPkg.cambia(RamoPkg.reale(), j::scrivi, verso, impronta);
+                if (r.optBoolean("success")) {
+                    j.esito = r.optString("messaggio");
+                    j.status = "completed";
+                } else {
+                    j.errorMessage = r.optString("error");
+                    j.status = "error";
+                }
+            } catch (RuntimeException e) {
+                j.errorMessage = "Errore inatteso: " + e.getMessage();
+                j.status = "error";
+            } finally {
+                j.fine = System.currentTimeMillis();
+            }
+        });
     }
 
     public static JSONObject coerenzaPredefiniti() {

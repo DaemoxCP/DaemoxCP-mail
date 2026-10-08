@@ -209,7 +209,7 @@ public class PasswordVault {
     // SecurityUtils.isValidPassword accetta, presi da li'. Prima erano scritti qui, con in piu'
     // < > / ~ e l'apice inverso: una password generata con "Tutti i caratteri" il pannello stesso
     // la rifiutava in creazione ("Password non valida") o la scartava in modifica, in media sette
-    // volte su dieci. prove/.../ProvaGeneratorePassword lo verifica per ogni tipo e combinazione.
+    // volte su dieci. tests/.../PasswordGeneratorTest lo verifica per ogni tipo e combinazione.
     private static final String MINUSCOLE = "abcdefghijklmnopqrstuvwxyz";
     private static final String MAIUSCOLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final String CIFRE = "0123456789";

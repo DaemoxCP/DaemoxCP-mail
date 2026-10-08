@@ -1894,7 +1894,7 @@ public class SSLMailServer {
                 Main.mailDatabase.getAliases(domainId));
     }
 
-    /** La decisione di {@link #dopoGliAlias(String, int)} senza database: la esercita prove/.../ProvaAlias. */
+    /** La decisione di {@link #dopoGliAlias(String, int)} senza database: la esercita tests/.../AliasMessagesTest. */
     static String dopoGliAlias(String indirizzo, boolean casella, List<MailDatabase.Alias> delDominio) {
         int at = indirizzo.indexOf('@');
         String catchAll = at >= 0 ? indirizzo.substring(at) : null;
@@ -2278,6 +2278,9 @@ public class SSLMailServer {
                 if (versioniLette == null || azioni != versioniLetteAzioni || eta > 30_000 || (fresco != null && eta > 3_000)) {
                     versioniLette = org.mail_panel.system.VersioniSoftware.leggi(org.mail_panel.system.VersioniSoftware.reale(
                             () -> Main.mysqlAvailable && Main.mailDatabase != null ? Main.mailDatabase.versioneServer() : null));
+                    // Il ramo accanto alle versioni: quali versioni arrivano dipende da li'.
+                    JSONObject ramo = org.mail_panel.system.RamoPkg.stato(org.mail_panel.system.RamoPkg.reale());
+                    if (ramo.optBoolean("success")) versioniLette.put("ramo", ramo.getString("ramo"));
                     versioniLetteMs = System.currentTimeMillis();
                     versioniLetteAzioni = azioni;
                 }
@@ -7007,6 +7010,20 @@ public class SSLMailServer {
                 case "broken_libs" -> response = UpdateManager.pacchettiConLibrerieMancanti();
                 case "mysql_client_diag" -> response = UpdateManager.diagnosiClientMysql();
                 case "defaults_check" -> response = UpdateManager.coerenzaPredefiniti();
+                case "ramo_stato" -> response = UpdateManager.ramoStato();
+                case "ramo_anteprima" -> response = UpdateManager.ramoAnteprima(req.optString("verso", ""));
+                case "ramo_cambia" -> {
+                    // La conferma e' il nome del ramo scritto a mano, e l'impronta e' quella
+                    // dell'anteprima: si cambia solo cio' che si e' visto.
+                    String verso = req.optString("verso", "");
+                    if (verso.isEmpty() || !verso.equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", "Per confermare scrivi il nome del ramo.");
+                        break;
+                    }
+                    response = UpdateManager.avviaCambioRamo(verso, req.optString("impronta", ""));
+                    logAudit("PKG_BRANCH_CHANGE", ip, "verso " + verso + (response.optBoolean("success")
+                            ? " (avviato, lavoro " + response.optString("jobId") + ")" : " (non avviato: " + response.optString("error") + ")"));
+                }
                 case "system_report" -> response = UpdateManager.rapportoSistema();
                 case "os_status" -> response = UpdateManager.sistemaOperativo();
                 case "reboot_preview" -> response = UpdateManager.riavviaServer(false, 1);

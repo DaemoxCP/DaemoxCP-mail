@@ -1922,6 +1922,15 @@ public class MailPanelContent {
                 stato.textContent = 'Lette dal server alle ' + d.letteAlle.substring(11, 19) + '.'
                     + (daRiavviare === 1 ? ' Un programma va riavviato: vedi la nota sotto la sua versione.'
                        : daRiavviare > 1 ? ' ' + daRiavviare + ' programmi vanno riavviati: vedi le note sotto le versioni.' : '');
+                if (d.ramo) {
+                    // Da quale ramo arrivano i pacchetti: lo si cambia in Aggiornamenti.
+                    stato.appendChild(document.createTextNode(' Pacchetti dal ramo '));
+                    const a = document.createElement('a');
+                    a.href = '/updates#ramo';
+                    a.textContent = d.ramo === 'misti' ? 'misto' : d.ramo === 'nessuno' ? 'non ufficiale' : d.ramo;
+                    stato.appendChild(a);
+                    stato.appendChild(document.createTextNode('.'));
+                }
             }).catch(() => {
                 btn.disabled = false;
                 stato.textContent = 'Il pannello non ha risposto: le versioni non sono state lette.';
@@ -12733,6 +12742,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
                 </div>
             </div>
 
+""" + risorsa("pagine/ramo-card.html") + """
             <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-arrow-up-right-dots me-2"></i><strong>Passaggio a una nuova release di FreeBSD</strong>
@@ -13185,7 +13195,7 @@ MIIE...   ← (3) opzionale: root CA (di solito non serve)
         // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
-        return getUpdatesScript1() + getUpdatesScript2();
+        return getUpdatesScript1() + getUpdatesScript2() + risorsa("pagine/ramo.js");
     }
 
     private static String getUpdatesScript1() {

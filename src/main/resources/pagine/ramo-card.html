@@ -1,0 +1,16 @@
+            <div class="card mb-4" id="ramo">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-code-branch me-2" aria-hidden="true"></i><strong>Ramo dei pacchetti</strong>
+                        <span class="small text-muted ms-2">da dove pkg prende i pacchetti: quarterly o latest</span></span>
+                    <span>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="ramoStato()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>Rileggi</button>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div id="ramo-body" role="status"><span class="text-muted">Leggo la configurazione di pkg...</span></div>
+                    <div id="ramo-anteprima" class="mt-3"></div>
+                    <div id="ramo-esito" class="mt-2" role="status"></div>
+                    <pre id="ramo-log" class="upd-log mt-2" style="display:none"></pre>
+                </div>
+            </div>
+

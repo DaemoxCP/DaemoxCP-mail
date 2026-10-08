@@ -820,35 +820,63 @@ public class Main {
     }
 
     private static void resetMySQLDatabase() {
+        azzeraDatabase();
+        waitForEnter();
+    }
+
+    /**
+     * Svuota il database del pannello e ricrea le tabelle vuote. Vero solo se non e' rimasta
+     * nessuna tabella di prima: "completato" si scrive solo allora, altrimenti si dice cosa resta.
+     */
+    private static boolean azzeraDatabase() {
         System.out.println(ANSI_RED + "RESETTING MySQL database..." + ANSI_RESET);
 
         try (ResultSet result = dbManager.get_data_config()) {
-            if (result.next()) {
-                String mysqlHost = result.getString("mysql_host");
-                String mysqlPort = result.getString("mysql_port");
-                String mysqlUser = result.getString("mysql_user");
-                String mysqlPassword = result.getString("mysql_password");
-                String mysqlDatabase = result.getString("mysql_database");
-
-                mailDatabase = new MailDatabase();
-                mailDatabase.setCredentials(mysqlUser, mysqlPassword);
-                mailDatabase.setHost(mysqlHost);
-                mailDatabase.setPort(Integer.parseInt(mysqlPort));
-                mailDatabase.setDatabase(mysqlDatabase);
-
-                if (mailDatabase.connect()) {
-                    mailDatabase.dropAllTables();
-                    mailDatabase.createSchema();
-                    System.out.println(ANSI_GREEN + "Database reset completed!" + ANSI_RESET);
-                } else {
-                    System.out.println(ANSI_RED + "Failed to connect to MySQL" + ANSI_RESET);
-                }
+            if (!result.next()) {
+                System.out.println(ANSI_RED + "Nessuna configurazione MySQL: database non toccato." + ANSI_RESET);
+                return false;
             }
-        } catch (Exception e) {
-            System.out.println(ANSI_RED + "ERROR: " + e.getMessage() + ANSI_RESET);
-        }
+            String mysqlHost = result.getString("mysql_host");
+            String mysqlPort = result.getString("mysql_port");
+            String mysqlUser = result.getString("mysql_user");
+            String mysqlPassword = result.getString("mysql_password");
+            String mysqlDatabase = result.getString("mysql_database");
 
-        waitForEnter();
+            mailDatabase = new MailDatabase();
+            mailDatabase.setCredentials(mysqlUser, mysqlPassword);
+            mailDatabase.setHost(mysqlHost);
+            mailDatabase.setPort(Integer.parseInt(mysqlPort));
+            mailDatabase.setDatabase(mysqlDatabase);
+
+            if (!mailDatabase.connect()) {
+                System.out.println(ANSI_RED + "Failed to connect to MySQL: database non toccato." + ANSI_RESET);
+                return false;
+            }
+            String errore = null;
+            java.util.List<String> cancellate = java.util.List.of();
+            try {
+                cancellate = mailDatabase.dropAllTables();
+            } catch (java.sql.SQLException e) {
+                errore = e.getMessage();
+            }
+            try {
+                // Anche dopo un reset non riuscito: il pannello ritrova le tabelle che mancano.
+                mailDatabase.createSchema();
+            } catch (java.sql.SQLException e) {
+                errore = (errore == null ? "" : errore + " ") + "Tabelle non ricreate: " + e.getMessage();
+            }
+            if (errore != null) {
+                System.out.println(ANSI_RED + "Database NON azzerato. " + errore + ANSI_RESET);
+                return false;
+            }
+            System.out.println("Tabelle cancellate: "
+                    + (cancellate.isEmpty() ? "nessuna, il database era gia' vuoto" : String.join(", ", cancellate)));
+            System.out.println(ANSI_GREEN + "Database reset completed!" + ANSI_RESET);
+            return true;
+        } catch (Exception e) {
+            System.out.println(ANSI_RED + "Database NON azzerato: " + e.getMessage() + ANSI_RESET);
+            return false;
+        }
     }
 
     private static void fullReset() {
@@ -872,13 +900,18 @@ public class Main {
         executeCommand("rm -rf /usr/local/etc/rspamd/*");
 
         // Reset database
-        resetMySQLDatabase();
+        boolean databaseAzzerato = azzeraDatabase();
 
         // Reset service status in SQLite
         dbManager.resetAllServices();
 
-        System.out.println(ANSI_GREEN + "Full reset completed!" + ANSI_RESET);
-        System.out.println(ANSI_YELLOW + "You can now reinstall services from the menu." + ANSI_RESET);
+        if (databaseAzzerato) {
+            System.out.println(ANSI_GREEN + "Full reset completed!" + ANSI_RESET);
+            System.out.println(ANSI_YELLOW + "You can now reinstall services from the menu." + ANSI_RESET);
+        } else {
+            System.out.println(ANSI_RED + "Reset NON completo: servizi fermati e configurazioni tolte, "
+                    + "ma il database del pannello non e' stato azzerato (vedi sopra)." + ANSI_RESET);
+        }
 
         waitForEnter();
     }

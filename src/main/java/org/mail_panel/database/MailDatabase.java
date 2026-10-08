@@ -191,45 +191,69 @@ public class MailDatabase {
     }
 
     /**
-     * Drop all tables - used for full reset
+     * Tutte le tabelle che il pannello crea (createSchema e le migrazioni), piu' quelle di versioni
+     * vecchie (virtual_*): le cancella il reset, e nessun'altra del database. Prima le tabelle che
+     * puntano ad altre con una chiave esterna, poi quelle a cui si punta.
      */
-    public void dropAllTables() throws SQLException {
-        if (!connected || connection == null) return;
+    static final List<String> TABELLE_DEL_PANNELLO = List.of(
+        "admin_passkeys", "rspamd_training",                                  // -> panel_admin
+        "roundcube_tokens", "auto_responders", "sieve_filters", "forwarding_rules",
+        "email_statistics",                                                   // -> mailboxes, domains
+        "aliases", "mailboxes",                                               // -> domains
+        "dkim_rotation_history", "domains", "cloudflare_accounts",
+        "audit_log", "rate_limits", "panel_settings", "installed_components", "panel_admin",
+        "virtual_aliases", "virtual_users", "virtual_domains"
+    );
 
-        Statement stmt = getConnection().createStatement();
-
-        // Drop in reverse order of dependencies
-        // Includes both current table names AND legacy names for migration cleanup
-        String[] tables = {
-            "audit_log",
-            "rspamd_training",
-            "email_statistics",
-            "roundcube_tokens",
-            "aliases",              // Current table name
-            "mailboxes",            // Current table name
-            "domains",              // Current table name
-            "virtual_aliases",      // Legacy table name (for cleanup)
-            "virtual_users",        // Legacy table name (for cleanup)
-            "virtual_domains",      // Legacy table name (for cleanup)
-            "rate_limits",
-            "forwarding_rules",
-            "sieve_filters",
-            "auto_responders",
-            "panel_settings",
-            "panel_admin",
-            "installed_components"
-        };
-
-        for (String table : tables) {
-            try {
-                stmt.executeUpdate("DROP TABLE IF EXISTS " + table);
-                System.out.println("Dropped table: " + table);
+    /**
+     * Svuota il database del pannello per il reset: cancella tutte le sue tabelle e torna solo se
+     * non ne resta nessuna. Restituisce quelle che c'erano.
+     *
+     * Un solo DROP con tutte le tabelle: MySQL toglie insieme quelle legate da chiavi esterne senza
+     * spegnere i controlli, e su InnoDB il comando e' atomico, o le cancella tutte o nessuna. Il
+     * vecchio reset le cancellava una alla volta: quelle a cui un'altra puntava (mailboxes, domains,
+     * panel_admin) restavano, con i loro dati, e mancavano admin_passkeys, cloudflare_accounts e
+     * dkim_rotation_history. Su una connessione tutta sua, perche' un DROP chiude la transazione
+     * della connessione su cui gira.
+     */
+    public List<String> dropAllTables() throws SQLException {
+        if (!connected) throw new SQLException("Non collegato a MySQL: il reset non e' partito.");
+        try (Connection c = connessionePropria()) {
+            List<String> prima = tabelleDelPannello(c);
+            try (Statement st = c.createStatement()) {
+                // Nomi fissi, scritti qui sopra, non input: un DROP non prende parametri.
+                st.executeUpdate("DROP TABLE IF EXISTS " + String.join(", ", TABELLE_DEL_PANNELLO));
             } catch (SQLException e) {
-                System.out.println("Warning: Could not drop table " + table + ": " + e.getMessage());
+                String presenti;
+                try {
+                    List<String> t = tabelleDelPannello(c);
+                    presenti = t.isEmpty() ? "nessuna" : String.join(", ", t);
+                } catch (SQLException perse) {
+                    presenti = "non si sa, MySQL non risponde";
+                }
+                throw new SQLException("Reset non riuscito: " + e.getMessage()
+                        + " Tabelle del pannello ancora presenti: " + presenti + ".", e);
+            }
+            List<String> restano = tabelleDelPannello(c);
+            if (!restano.isEmpty()) {
+                throw new SQLException("Reset non completo: restano le tabelle " + String.join(", ", restano) + ".");
+            }
+            return prima;
+        }
+    }
+
+    /** Le tabelle del pannello che ci sono adesso nel database della connessione. */
+    private static List<String> tabelleDelPannello(Connection c) throws SQLException {
+        List<String> trovate = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name");
+             ResultSet r = ps.executeQuery()) {
+            while (r.next()) {
+                String nome = r.getString(1);
+                if (TABELLE_DEL_PANNELLO.contains(nome)) trovate.add(nome);
             }
         }
-
-        stmt.close();
+        return trovate;
     }
 
     /**
