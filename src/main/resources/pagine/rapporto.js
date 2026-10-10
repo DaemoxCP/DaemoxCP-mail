@@ -12,9 +12,15 @@
             return await r.json();
         }
 
-        function repEsc(t) {
+        // Conferma scritta: la parola si mostra nella lingua della pagina, al server va il suo codice.
+        function repConferma(testo, parola) {
+            const typed = prompt(testo + '\n\n' + t('ad.typeToConfirm', { word: parola }));
+            return typed !== null && typed.trim().toUpperCase() === parola.toUpperCase();
+        }
+
+        function repEsc(v) {
             const d = document.createElement('div');
-            d.textContent = t === null || t === undefined ? '' : String(t);
+            d.textContent = v === null || v === undefined ? '' : String(v);
             return d.innerHTML;
         }
 
@@ -26,13 +32,12 @@
             const scelte = (id && id.caselleDisponibili) || [];
             const dom = (id && id.dominioDelPannello) || '';
             if (!id || !id.dominioDelPannelloGestito) {
-                return '<div class="form-control form-control-sm bg-transparent border-warning small">'
-                     + 'Il dominio di questo pannello' + (dom ? ' (' + repEsc(dom) + ')' : '')
-                     + ' non &egrave; fra quelli gestiti: aggiungilo in Domini.</div>';
+                return '<div class="form-control form-control-sm bg-transparent border-warning small" id="repFrom-none">'
+                     + escHtml(dom ? t('rep.domainNotManagedNamed', { domain: dom }) : t('rep.domainNotManaged')) + '</div>';
             }
             if (!scelte.length) {
-                return '<div class="form-control form-control-sm bg-transparent border-warning small">'
-                     + 'Nessuna casella su <code>' + repEsc(dom) + '</code>: creane una qui sopra.</div>';
+                return '<div class="form-control form-control-sm bg-transparent border-warning small" id="repFrom-none">'
+                     + escHtml(t('rep.noMailbox', { domain: dom })) + '</div>';
             }
             return '<select class="form-select form-select-sm" id="repFrom">'
                  + scelte.map(x => '<option value="' + repEsc(x) + '"'
@@ -42,68 +47,65 @@
 
         async function repCarica() {
             const el = document.getElementById('rep-body');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo le impostazioni...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.reading')) + '';
             const [s, id] = await Promise.all([repApi('status'), repApi('identity')]);
             if (!s.success) { el.innerHTML = '<span class="text-danger">' + repEsc(s.error) + '</span>'; return; }
 
             // --- identita' del pannello ---
-            let h = '<h6 class="mb-1">L&rsquo;identit&agrave; del pannello</h6>';
+            let h = '<h6 class="mb-1">' + escHtml(t('rep.identity')) + '</h6>';
             if (!id.success) {
                 h += '<div class="alert alert-warning py-2 small mb-2">' + repEsc(id.error) + '</div>';
             } else {
                 const cls = id.esiste ? 'success' : (id.dominioGestito ? 'warning' : 'danger');
                 h += '<div class="alert alert-' + cls + ' py-2 small mb-2">'
-                   + '<code>' + repEsc(id.mittente || '(da impostare)') + '</code><br>' + repEsc(id.nota) + '</div>';
+                   + '<code>' + repEsc(id.mittente || t('rep.toSet')) + '</code><br>' + repEsc(id.nota) + '</div>';
                 // Il pulsante per creare compare SOLO se l'indirizzo e' libero davvero:
                 // ne' casella ne' alias. Prima guardava solo le caselle.
                 if (id.creabile && !id.esiste && id.mittente) {
-                    h += '<button class="btn btn-sm btn-outline-success mb-2" onclick="repCreaIdentita(\''
-                       + repEsc(id.mittente) + '\')"><i class="fas fa-user-plus me-1"></i>Crea la casella '
-                       + repEsc(id.mittente) + '</button>';
+                    h += '<button class="btn btn-sm btn-outline-success mb-2" data-address="' + escHtml(id.mittente) + '" onclick="repCreaIdentita(this.dataset.address)">'
+                       + '<i class="fas fa-user-plus me-1" aria-hidden="true"></i>' + escHtml(t('rep.createMailbox', { address: id.mittente })) + '</button>';
                 }
                 const dm = id.dominiGestiti || [];
-                if (dm.length) h += '<div class="small text-muted mb-2">Domini gestiti da questo pannello: '
-                    + dm.map(repEsc).join(', ') + '</div>';
+                if (dm.length) h += '<div class="small text-muted mb-2">' + escHtml(t('rep.managedDomains', { domains: dm.join(', ') })) + '</div>';
             }
 
             // --- impostazioni ---
-            const freq = ['giornaliero', 'settimanale', 'mensile'];
+            // I valori restano quelli del server; il nome si mostra nella lingua della pagina.
+            const freq = [['giornaliero', t('rep.daily')], ['settimanale', t('rep.weekly')], ['mensile', t('rep.monthly')]];
             h += '<div id="rep-esito-identita"></div>'
-               + '<hr><h6 class="mb-2">Quando e a chi</h6>'
+               + '<hr><h6 class="mb-2">' + escHtml(t('rep.whenWho')) + '</h6>'
                + '<div class="row g-2 align-items-end">'
-               + '<div class="col-md-4"><label class="form-label small mb-1">Mittente</label>'
+               + '<div class="col-md-4"><label class="form-label small mb-1" for="repFrom">' + escHtml(t('rep.from')) + '</label>'
                + mittenteScelta(s, id) + '</div>'
-               + '<div class="col-md-4"><label class="form-label small mb-1">Destinatario</label>'
-               + '<input type="email" class="form-control form-control-sm" id="repTo" placeholder="tu@esempio.it" value="'
-               + repEsc(s.destinatario || '') + '"></div>'
-               + '<div class="col-md-2"><label class="form-label small mb-1">Ogni</label>'
+               + '<div class="col-md-4"><label class="form-label small mb-1" for="repTo">' + escHtml(t('rep.to')) + '</label>'
+               + '<input type="email" class="form-control form-control-sm" id="repTo" maxlength="254" placeholder="' + escHtml(t('rep.toPlaceholder')) + '" value="'
+               + escHtml(s.destinatario || '') + '"></div>'
+               + '<div class="col-md-2"><label class="form-label small mb-1" for="repFreq">' + escHtml(t('rep.frequency')) + '</label>'
                + '<select class="form-select form-select-sm" id="repFreq">'
-               + freq.map(f => '<option value="' + f + '"' + (s.frequenza === f ? ' selected' : '') + '>' + f + '</option>').join('')
+               + freq.map(f => '<option value="' + f[0] + '"' + (s.frequenza === f[0] ? ' selected' : '') + '>' + escHtml(f[1]) + '</option>').join('')
                + '</select></div>'
-               + '<div class="col-md-2"><label class="form-label small mb-1">Non prima delle</label>'
+               + '<div class="col-md-2"><label class="form-label small mb-1" for="repHour">' + escHtml(t('rep.notBefore')) + '</label>'
                + '<select class="form-select form-select-sm" id="repHour">'
                + Array.from({length: 24}, (_, i) => '<option value="' + i + '"' + (String(s.ora) === String(i) ? ' selected' : '') + '>' + String(i).padStart(2, '0') + ':00</option>').join('')
                + '</select></div>'
                + '</div>'
                + '<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="repOn"'
                + (s.attivo ? ' checked' : '') + '><label class="form-check-label small" for="repOn">'
-               + 'Invia il rapporto automaticamente</label></div>'
+               + escHtml(t('rep.auto')) + '</label></div>'
                + '<div class="mt-2">'
-               + '<button class="btn btn-sm btn-success me-1" onclick="repSalva()"><i class="fas fa-floppy-disk me-1"></i>Salva</button>'
-               + '<button class="btn btn-sm btn-outline-primary" onclick="repProva()"><i class="fas fa-paper-plane me-1"></i>Invia adesso una prova</button>'
+               + '<button class="btn btn-sm btn-success me-1" onclick="repSalva()"><i class="fas fa-floppy-disk me-1" aria-hidden="true"></i>' + escHtml(t('common.save')) + '</button>'
+               + '<button class="btn btn-sm btn-outline-primary" onclick="repProva()"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i>' + escHtml(t('rep.sendTest')) + '</button>'
                + '</div>'
                + '<div id="rep-esito" class="mt-2"></div>'
                + '<div class="small text-muted mt-2">' + repEsc(s.prossimo) + '</div>';
-            if (s.ultimoEsito) h += '<div class="small text-muted">Esito dell&rsquo;ultimo invio: ' + repEsc(s.ultimoEsito) + '</div>';
+            if (s.ultimoEsito) h += '<div class="small text-muted">' + escHtml(t('rep.lastResult', { result: s.ultimoEsito })) + '</div>';
             el.innerHTML = h;
         }
 
         async function repCreaIdentita(indirizzo) {
-            if (prompt('Creare la casella "' + indirizzo + '" su questo server?\n\n'
-                     + 'Serve perch\u00e9 i rapporti partano da un mittente reale.\n'
-                     + 'Scrivi CREA per confermare.') !== 'CREA') return;
+            if (!repConferma(t('rep.confirmCreate', { address: indirizzo }), t('ad.wordCreate'))) return;
             const el = document.getElementById('rep-esito-identita');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
             const r = await repApi('identity_create', { confirm: 'CREA', indirizzo: indirizzo });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small">'
                          + repEsc(r.nota || r.error) + '</div>';
@@ -112,7 +114,7 @@
 
         async function repSalva() {
             const el = document.getElementById('rep-esito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
             const r = await repApi('save', {
                 mittente: (document.getElementById('repFrom') || { value: '' }).value.trim(),
                 destinatario: document.getElementById('repTo').value.trim(),
@@ -127,32 +129,30 @@
 
         async function repProva() {
             const a = document.getElementById('repTo').value.trim();
-            if (!a) { alert('Serve un destinatario.'); return; }
-            if (prompt('Inviare adesso un rapporto a "' + a + '"?\n\n'
-                     + 'Scrivi INVIA per confermare.') !== 'INVIA') return;
+            if (!a) { alert(t('rep.needTo')); return; }
+            if (!repConferma(t('rep.confirmSend', { address: a }), t('rep.wordSend'))) return;
             const el = document.getElementById('rep-esito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Raccolgo i dati, invio e aspetto che Postfix dica com&rsquo;&egrave; andata: ci vuole un minuto...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.sending')) + '';
             const r = await repApi('send', { confirm: 'INVIA', destinatario: a });
             // Giallo quando Postfix l'ha preso ma non e' ancora arrivato, o non si sa: non e'
             // un errore, ma nemmeno la conferma che il verde prometterebbe.
             const cls = !r.success ? 'danger' : (r.avviso ? 'warning' : 'success');
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-1">'
                   + repEsc(r.nota || r.error) + '</div>';
-            if (r.oggetto) h += '<div class="small text-muted">Oggetto: <code>' + repEsc(r.oggetto) + '</code></div>';
+            if (r.oggetto) h += '<div class="small text-muted">' + escHtml(t('rep.subject')) + ' <code>' + repEsc(r.oggetto) + '</code></div>';
             if (r.uscita) h += '<pre class="upd-log mt-1">' + repEsc(r.uscita) + '</pre>';
             el.innerHTML = h;
         }
 
         async function repAnteprima() {
             const el = document.getElementById('rep-body');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Compongo il rapporto senza inviarlo...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.composing')) + '';
             const r = await repApi('preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + repEsc(r.error) + '</span>'; return; }
-            el.innerHTML = '<div class="alert alert-info py-2 small">Questo &egrave; il testo che verrebbe inviato. '
-                         + 'Non &egrave; stato mandato niente.</div>'
+            el.innerHTML = '<div class="alert alert-info py-2 small">' + escHtml(t('rep.previewNote')) + '</div>'
                          + '<pre class="upd-log">' + repEsc(r.testo) + '</pre>'
                          + '<button class="btn btn-sm btn-outline-secondary" onclick="repCarica()">'
-                         + '<i class="fas fa-arrow-left me-1"></i>Torna alle impostazioni</button>';
+                         + '<i class="fas fa-arrow-left me-1" aria-hidden="true"></i>' + escHtml(t('rep.back')) + '</button>';
         }
 
 

@@ -26,14 +26,14 @@
         // così l'utente vede SUBITO se la config è quella che ha impostato.
         function loadJailLiveState() {
             const body = document.getElementById('jailLiveBody');
-            body.innerHTML = '<p class="text-muted small mb-0 p-2"><i class="fas fa-spinner fa-spin me-1"></i>Esecuzione di fail2ban-client su tutte le jail attive...</p>';
+            body.innerHTML = '<p class="text-muted small mb-0 p-2"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.running')) + '</p>';
             fetch('/api/fail2ban?action=live_state_all').then(r => r.json()).then(data => {
                 if (!data.success) {
-                    body.innerHTML = '<div class="alert alert-danger m-2 mb-0">Errore: ' + paliasEscape(data.error || 'sconosciuto') + '</div>';
+                    body.innerHTML = '<div class="alert alert-danger m-2 mb-0">' + escHtml(t('common.error', { message: data.error || t('common.unknownError') })) + '</div>';
                     return;
                 }
                 if (!data.installed) {
-                    body.innerHTML = '<div class="alert alert-warning m-2 mb-0">Fail2ban non risulta installato sul sistema.</div>';
+                    body.innerHTML = '<div class="alert alert-warning m-2 mb-0">' + escHtml(t('sj.notInstalled')) + '</div>';
                     return;
                 }
                 if (!data.running) {
@@ -41,15 +41,14 @@
                     // terminale per una cosa che il pannello fa gia' e' mandare fuori da qui
                     // un lavoro che sta qui dentro.
                     body.innerHTML = '<div class="alert alert-warning m-2 mb-0">'
-                        + '<strong>Fail2ban è installato ma non è in esecuzione.</strong> '
-                        + 'Finché resta fermo, nessun tentativo di accesso viene bloccato.'
+                        + '<strong>' + escHtml(t('sj.notRunning')) + '</strong> ' + escHtml(t('sj.notRunningHint')) + ''
                         + '<button class="btn btn-sm btn-warning ms-2" onclick="avviaFail2banDalPannello()">'
-                        + '<i class="fas fa-play me-1"></i>Avvialo adesso</button></div>';
+                        + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('sj.startNow')) + '</button></div>';
                     return;
                 }
                 const jails = data.jails || [];
                 if (jails.length === 0) {
-                    body.innerHTML = '<div class="alert alert-info m-2 mb-0">Nessuna jail attiva.</div>';
+                    body.innerHTML = '<div class="alert alert-info m-2 mb-0">' + escHtml(t('sec.noJails')) + '</div>';
                     return;
                 }
                 let html = '<div class="p-2">';
@@ -59,7 +58,7 @@
                 html += '</div>';
                 body.innerHTML = html;
             }).catch(e => {
-                body.innerHTML = '<div class="alert alert-danger m-2 mb-0">Errore rete: ' + paliasEscape(e.message) + '</div>';
+                body.innerHTML = '<div class="alert alert-danger m-2 mb-0">' + escHtml(t('common.networkError', { message: e.message })) + '</div>';
             });
         }
 
@@ -67,41 +66,41 @@
             const name = j.name || '?';
             // Tag colorato per "currently banned": 0 = grigio, >0 = giallo
             const cbBadge = j.currently_banned > 0
-                ? '<span class="badge bg-warning text-dark ms-1">' + j.currently_banned + ' bannati ora</span>'
-                : '<span class="badge bg-light text-dark ms-1">0 bannati ora</span>';
+                ? '<span class="badge bg-warning text-dark ms-1">' + escHtml(tn('sj.bannedNow', j.currently_banned)) + '</span>'
+                : '<span class="badge bg-light text-dark ms-1">' + escHtml(tn('sj.bannedNow', 0)) + '</span>';
             const tbBadge = j.total_banned > 0
-                ? '<span class="badge bg-secondary ms-1">' + j.total_banned + ' tot</span>'
+                ? '<span class="badge bg-secondary ms-1">' + escHtml(t('sj.total', { n: j.total_banned })) + '</span>'
                 : '';
 
             let html = '<div class="card mb-3"><div class="card-header py-1 px-2 d-flex justify-content-between align-items-center bg-light">';
             html += '<div><strong><code>' + paliasEscape(name) + '</code></strong>' + cbBadge + tbBadge + '</div>';
-            html += '<button class="btn btn-sm btn-link p-0" onclick="this.parentElement.parentElement.parentElement.querySelector(\'.jail-raw-' + paliasEscape(name) + '\').classList.toggle(\'d-none\')"><i class="fas fa-terminal me-1"></i>raw</button>';
+            html += '<button class="btn btn-sm btn-link p-0" onclick="this.parentElement.parentElement.parentElement.querySelector(\'.jail-raw-' + paliasEscape(name) + '\').classList.toggle(\'d-none\')"><i class="fas fa-terminal me-1" aria-hidden="true"></i>' + escHtml(t('sj.raw')) + '</button>';
             html += '</div>';
             html += '<div class="card-body p-2 small">';
             html += '<table class="table table-sm table-borderless mb-2"><tbody>';
-            html += renderJailGetRow('maxretry',  j.maxretry,  'numero di fallimenti che fa scattare il ban');
-            html += renderJailGetRow('findtime',  j.findtime,  'finestra (in secondi) dentro cui si contano i fallimenti', true);
-            html += renderJailGetRow('bantime',   j.bantime,   'durata del ban (in secondi, -1 = permanente)', true);
-            html += renderJailGetRow('logpath',   j.logpath,   'file di log monitorati');
-            html += renderJailGetRow('filter',    j.filter,    'filtro Fail2ban usato per matchare le righe');
-            html += renderJailGetRow('ignoreip',  j.ignoreip,  'IP/range mai bannati (whitelist)');
+            html += renderJailGetRow('maxretry',  j.maxretry,  t('sj.maxretry'));
+            html += renderJailGetRow('findtime',  j.findtime,  t('sj.findtime'), true);
+            html += renderJailGetRow('bantime',   j.bantime,   t('sj.bantime'), true);
+            html += renderJailGetRow('logpath',   j.logpath,   t('sj.logpath'));
+            html += renderJailGetRow('filter',    j.filter,    t('sj.filter'));
+            html += renderJailGetRow('ignoreip',  j.ignoreip,  t('sj.ignoreip'));
             html += '</tbody></table>';
 
             // Status counters parsati
             html += '<div class="row g-2 mb-2">';
-            html += '<div class="col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">Currently failed</div><strong class="fs-5">' + j.currently_failed + '</strong></div></div>';
-            html += '<div class="col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">Total failed</div><strong class="fs-5">' + j.total_failed + '</strong></div></div>';
-            html += '<div class="col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">Currently banned</div><strong class="fs-5">' + j.currently_banned + '</strong></div></div>';
-            html += '<div class="col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">Total banned</div><strong class="fs-5">' + j.total_banned + '</strong></div></div>';
+            html += '<div class="col-6 col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">' + escHtml(t('sj.curFailed')) + '</div><strong class="fs-5">' + escHtml(j.currently_failed) + '</strong></div></div>';
+            html += '<div class="col-6 col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">' + escHtml(t('sj.totFailed')) + '</div><strong class="fs-5">' + escHtml(j.total_failed) + '</strong></div></div>';
+            html += '<div class="col-6 col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">' + escHtml(t('sj.curBanned')) + '</div><strong class="fs-5">' + escHtml(j.currently_banned) + '</strong></div></div>';
+            html += '<div class="col-6 col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">' + escHtml(t('sj.totBanned')) + '</div><strong class="fs-5">' + escHtml(j.total_banned) + '</strong></div></div>';
             html += '</div>';
 
             if (j.banned_ips_raw) {
-                html += '<div class="mb-2"><strong class="small">Banned IP list:</strong> <code class="small" style="word-break:break-all">' + paliasEscape(j.banned_ips_raw) + '</code></div>';
+                html += '<div class="mb-2"><strong class="small">' + escHtml(t('sj.bannedList')) + '</strong> <code class="small" style="word-break:break-all">' + paliasEscape(j.banned_ips_raw) + '</code></div>';
             }
 
             // Output RAW del comando "fail2ban-client status <jail>" — chiuso di default
             html += '<div class="jail-raw-' + paliasEscape(name) + ' d-none">';
-            html += '<div class="small text-muted mb-1"><i class="fas fa-terminal me-1"></i>Output di <code>fail2ban-client status ' + paliasEscape(name) + '</code></div>';
+            html += '<div class="small text-muted mb-1"><i class="fas fa-terminal me-1" aria-hidden="true"></i>' + escHtml(t('sj.outputOf')) + ' <code>fail2ban-client status ' + paliasEscape(name) + '</code></div>';
             html += '<pre class="bg-dark text-light p-2 small rounded mb-0" style="font-size:0.75rem;white-space:pre-wrap">' + paliasEscape(j.status_raw || '') + '</pre>';
             html += '</div>';
 
@@ -115,19 +114,20 @@
             if (isSeconds && /^-?\d+$/.test((value || '').trim())) {
                 const n = parseInt(value, 10);
                 if (n === -1) {
-                    display += ' <span class="text-muted">(permanente)</span>';
+                    display += ' <span class="text-muted">(' + escHtml(t('jc.permanent')) + ')</span>';
                 } else if (n > 0) {
+                    const fmt = (v, unit) => new Intl.NumberFormat(window.I18N_LANG, { style: 'unit', unit: unit, unitDisplay: 'long', maximumFractionDigits: 1 }).format(v);
                     let human;
-                    if (n >= 86400) human = (n / 86400).toFixed(1).replace(/\.0$/, '') + ' giorni';
-                    else if (n >= 3600) human = (n / 3600).toFixed(1).replace(/\.0$/, '') + ' ore';
-                    else if (n >= 60) human = (n / 60).toFixed(1).replace(/\.0$/, '') + ' min';
-                    else human = n + ' s';
-                    display += ' <span class="text-muted">(' + human + ')</span>';
+                    if (n >= 86400) human = fmt(n / 86400, 'day');
+                    else if (n >= 3600) human = fmt(n / 3600, 'hour');
+                    else if (n >= 60) human = fmt(n / 60, 'minute');
+                    else human = fmt(n, 'second');
+                    display += ' <span class="text-muted">(' + escHtml(human) + ')</span>';
                 }
             }
             return '<tr>' +
-                '<td style="width:130px;vertical-align:top"><code class="text-primary">' + key + '</code></td>' +
-                '<td><strong>' + display + '</strong>' + (descr ? '<br><small class="text-muted">' + descr + '</small>' : '') + '</td>' +
+                '<td style="width:130px;vertical-align:top"><code class="text-primary">' + escHtml(key) + '</code></td>' +
+                '<td><strong>' + display + '</strong>' + (descr ? '<br><small class="text-muted">' + escHtml(descr) + '</small>' : '') + '</td>' +
                 '</tr>';
         }
 
@@ -135,19 +135,19 @@
             const body = document.getElementById('paliasBody');
             const badge = document.getElementById('paliasOverallBadge');
             const fixBtn = document.getElementById('paliasFixBtn');
-            body.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Caricamento...</p>';
+            body.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('common.loading')) + '</p>';
             badge.innerHTML = '';
             fixBtn.classList.add('d-none');
 
             fetch('/api/postfix-aliases-health').then(r => r.json()).then(data => {
                 if (!data.success) {
-                    body.innerHTML = '<div class="alert alert-danger mb-0">Errore: ' + paliasEscape(data.error || 'sconosciuto') + '</div>';
-                    badge.innerHTML = '<span class="badge bg-danger">Errore</span>';
+                    body.innerHTML = '<div class="alert alert-danger mb-0">' + escHtml(t('common.error', { message: data.error || t('common.unknownError') })) + '</div>';
+                    badge.innerHTML = '<span class="badge bg-danger">' + escHtml(t('common.errorShort')) + '</span>';
                     return;
                 }
                 paliasRender(data);
             }).catch(e => {
-                body.innerHTML = '<div class="alert alert-danger mb-0">Errore rete: ' + paliasEscape(e.message) + '</div>';
+                body.innerHTML = '<div class="alert alert-danger mb-0">' + escHtml(t('common.networkError', { message: e.message })) + '</div>';
             });
         }
 
@@ -159,16 +159,16 @@
 
             // Badge nell'header
             if (overall === 'OK') {
-                badge.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>OK</span>';
+                badge.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>OK</span>';
                 fixBtn.classList.add('d-none');
             } else if (overall === 'MISSING_SOURCE') {
-                badge.innerHTML = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>File aliases mancante</span>';
+                badge.innerHTML = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('sj.aliasMissing')) + '</span>';
                 fixBtn.classList.remove('d-none');
             } else if (overall === 'MISSING_DB') {
-                badge.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>aliases.db mancante</span>';
+                badge.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('sj.dbMissing')) + '</span>';
                 fixBtn.classList.remove('d-none');
             } else if (overall === 'STALE_DB') {
-                badge.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>aliases.db obsoleto</span>';
+                badge.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-clock me-1" aria-hidden="true"></i>' + escHtml(t('sj.dbStale')) + '</span>';
                 fixBtn.classList.remove('d-none');
             } else {
                 badge.innerHTML = '<span class="badge bg-secondary">?</span>';
@@ -177,13 +177,14 @@
             // Tabella stato
             let html = '';
             if (overall !== 'OK') {
-                html += '<div class="alert alert-warning small"><i class="fas fa-exclamation-triangle me-1"></i>' + paliasEscape(data.summary || '') + ' Clicca <strong>Risolvi</strong> per riparare automaticamente.</div>';
+                html += '<div class="alert alert-warning small"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + paliasEscape(data.summary || '') + ' ' + escHtml(t('sj.clickFix')) + '</div>';
             } else {
-                html += '<div class="alert alert-success small mb-2"><i class="fas fa-check-circle me-1"></i>' + paliasEscape(data.summary || 'OK') + '</div>';
+                html += '<div class="alert alert-success small mb-2"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + paliasEscape(data.summary || 'OK') + '</div>';
             }
             html += '<table class="table table-sm align-middle mb-0">';
-            html += '<tr><td class="fw-bold" style="width:30%">File sorgente</td><td><code>' + paliasEscape(data.alias_file || '?') + '</code> ' + (data.source_exists ? '<span class="badge bg-success">esiste</span>' : '<span class="badge bg-danger">mancante</span>') + '</td></tr>';
-            html += '<tr><td class="fw-bold">File compilato (.db)</td><td><code>' + paliasEscape(data.alias_db_file || '?') + '</code> ' + (data.db_exists ? '<span class="badge bg-success">esiste</span>' : '<span class="badge bg-danger">mancante</span>') + (data.db_stale_vs_source ? ' <span class="badge bg-warning text-dark">obsoleto</span>' : '') + '</td></tr>';
+            const exists = '<span class="badge bg-success">' + escHtml(t('sj.exists')) + '</span>', missing = '<span class="badge bg-danger">' + escHtml(t('ad.missing')) + '</span>';
+            html += '<tr><td class="fw-bold" style="width:30%">' + escHtml(t('sj.source')) + '</td><td><code>' + paliasEscape(data.alias_file || '?') + '</code> ' + (data.source_exists ? exists : missing) + '</td></tr>';
+            html += '<tr><td class="fw-bold">' + escHtml(t('sj.compiled')) + '</td><td><code>' + paliasEscape(data.alias_db_file || '?') + '</code> ' + (data.db_exists ? exists : missing) + (data.db_stale_vs_source ? ' <span class="badge bg-warning text-dark">' + escHtml(t('sj.stale')) + '</span>' : '') + '</td></tr>';
             if (data.alias_database_raw) {
                 html += '<tr><td class="fw-bold">alias_database (postconf)</td><td><code>' + paliasEscape(data.alias_database_raw) + '</code></td></tr>';
             }
@@ -191,7 +192,7 @@
                 html += '<tr><td class="fw-bold">alias_maps (postconf)</td><td><code>' + paliasEscape(data.alias_maps_raw) + '</code></td></tr>';
             }
             if (data.root_forward) {
-                html += '<tr><td class="fw-bold">root inoltrato a</td><td><code>' + paliasEscape(data.root_forward) + '</code></td></tr>';
+                html += '<tr><td class="fw-bold">' + escHtml(t('sj.rootTo')) + '</td><td><code>' + paliasEscape(data.root_forward) + '</code></td></tr>';
             }
             html += '</table>';
             body.innerHTML = html;
@@ -202,11 +203,11 @@
         }
 
         function paliasFix() {
-            if (!confirm('Procedere con la riparazione automatica?\n\n• Se manca il file sorgente, viene creato con default sicuri.\n• Il file .db viene ricompilato con postalias.\n• Postfix viene ricaricato.\n\nOperazione non distruttiva (rispetta contenuto esistente).')) return;
+            if (!confirm(t('sj.confirmFix'))) return;
             const fixBtn = document.getElementById('paliasFixBtn');
             const origBtn = fixBtn.innerHTML;
             fixBtn.disabled = true;
-            fixBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Risoluzione...';
+            fixBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>' + escHtml(t('sj.fixing')) + '';
             const logEl = document.getElementById('paliasLog');
             logEl.innerHTML = '';
             fetch('/api/postfix-aliases-health', {
@@ -218,7 +219,7 @@
             .then(data => {
                 fixBtn.disabled = false;
                 fixBtn.innerHTML = origBtn;
-                let html = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-2"><i class="fas fa-' + (data.success ? 'check' : 'times') + '-circle me-1"></i>' + paliasEscape(data.message || '') + '</div>';
+                let html = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-2"><i class="fas fa-' + (data.success ? 'check' : 'times') + '-circle me-1" aria-hidden="true"></i>' + paliasEscape(data.message || '') + '</div>';
                 if (data.log) {
                     html += '<pre class="bg-light p-2 rounded small mb-0" style="white-space:pre-wrap">' + paliasEscape(data.log) + '</pre>';
                 }
@@ -228,16 +229,16 @@
             .catch(e => {
                 fixBtn.disabled = false;
                 fixBtn.innerHTML = origBtn;
-                logEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore rete: ' + paliasEscape(e.message) + '</div>';
+                logEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('common.networkError', { message: e.message })) + '</div>';
             });
         }
 
         function paliasSetRootForward() {
             const v = document.getElementById('paliasRootForward').value.trim();
-            if (!v) { alert('Inserisci un indirizzo email o "root".'); return; }
-            if (!confirm('Impostare il forward delle mail di root su:\n\n  ' + v + '\n\nDopo il salvataggio, root, postmaster, mailer-daemon e gli alias di sistema invieranno qui le notifiche.')) return;
+            if (!v) { alert(t('sj.needAddress')); return; }
+            if (!confirm(t('sj.confirmRootFwd', { to: v }))) return;
             const logEl = document.getElementById('paliasLog');
-            logEl.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Salvataggio...</div>';
+            logEl.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('jc.saving')) + '</div>';
             fetch('/api/postfix-aliases-health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -245,7 +246,7 @@
             })
             .then(r => r.json())
             .then(data => {
-                let html = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-2"><i class="fas fa-' + (data.success ? 'check' : 'times') + '-circle me-1"></i>' + paliasEscape(data.message || '') + '</div>';
+                let html = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-2"><i class="fas fa-' + (data.success ? 'check' : 'times') + '-circle me-1" aria-hidden="true"></i>' + paliasEscape(data.message || '') + '</div>';
                 if (data.log) {
                     html += '<pre class="bg-light p-2 rounded small mb-0" style="white-space:pre-wrap">' + paliasEscape(data.log) + '</pre>';
                 }
@@ -253,7 +254,7 @@
                 paliasRender(data);
             })
             .catch(e => {
-                logEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore rete: ' + paliasEscape(e.message) + '</div>';
+                logEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('common.networkError', { message: e.message })) + '</div>';
             });
         }
 
@@ -261,41 +262,41 @@
             const c = document.getElementById('fhcContainer');
             const overall = document.getElementById('fhcOverallStatus');
             const btnFixAll = document.getElementById('btnFixAll');
-            c.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Diagnosi in corso...</p>';
+            c.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sec.diagnosing')) + '</p>';
             fetch('/api/fail2ban_health', { method: 'GET' })
                 .then(r => r.json())
                 .then(data => {
                     if (!data.success) {
-                        c.innerHTML = '<div class="alert alert-danger mb-0">Errore: ' + (data.error || 'sconosciuto') + '</div>';
+                        c.innerHTML = '<div class="alert alert-danger mb-0">' + escHtml(t('common.error', { message: data.error || t('common.unknownError') })) + '</div>';
                         return;
                     }
                     if (data.all_ok) {
-                        overall.innerHTML = '<span class="badge bg-success">Tutto OK</span>';
+                        overall.innerHTML = '<span class="badge bg-success">' + escHtml(t('sj.allOk')) + '</span>';
                         if (btnFixAll) btnFixAll.classList.add('d-none');
                     } else {
-                        overall.innerHTML = '<span class="badge bg-warning text-dark">Azione richiesta</span>';
+                        overall.innerHTML = '<span class="badge bg-warning text-dark">' + escHtml(t('sj.actionNeeded')) + '</span>';
                         if (btnFixAll) btnFixAll.classList.remove('d-none');
                     }
                     let html = '<div class="list-group list-group-flush">';
                     (data.checks || []).forEach((chk, idx) => {
                         const icon = chk.ok
-                            ? '<i class="fas fa-check-circle text-success"></i>'
-                            : '<i class="fas fa-times-circle text-danger"></i>';
+                            ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.succeeded')) + '</span>'
+                            : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.failed')) + '</span>';
                         html += '<div class="list-group-item">';
                         html += '<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">';
                         html += '<div class="flex-grow-1">';
                         html += '<div><strong>' + icon + ' ' + escapeHtml(chk.label) + '</strong></div>';
                         html += '<div class="small text-muted">' + escapeHtml(chk.status || '') + '</div>';
                         if (!chk.ok && chk.impact) {
-                            html += '<div class="small text-danger mt-1"><i class="fas fa-exclamation-triangle me-1"></i>Se non lo risolvi: ' + escapeHtml(chk.impact) + '</div>';
+                            html += '<div class="small text-danger mt-1"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('sj.ifNotFixed', { impact: chk.impact })) + '</div>';
                         }
                         if (!chk.ok && chk.fix_description) {
-                            html += '<div class="small text-info mt-1"><i class="fas fa-magic me-1"></i>' + escapeHtml(chk.fix_description) + '</div>';
+                            html += '<div class="small text-info mt-1"><i class="fas fa-magic me-1" aria-hidden="true"></i>' + escapeHtml(chk.fix_description) + '</div>';
                         }
                         html += '</div>';
                         if (!chk.ok && chk.fix_action) {
-                            html += '<button class="btn btn-warning btn-sm" onclick="runFhcFix(\'' + chk.fix_action + '\', this)">';
-                            html += '<i class="fas fa-wrench me-1"></i>Risolvi';
+                            html += '<button class="btn btn-warning btn-sm" data-action="' + escHtml(chk.fix_action) + '" onclick="runFhcFix(this.dataset.action, this)">';
+                            html += '<i class="fas fa-wrench me-1" aria-hidden="true"></i>' + escHtml(t('sec.fix'));
                             html += '</button>';
                         }
                         html += '</div>';
@@ -303,35 +304,23 @@
                     });
                     html += '</div>';
                     if (data.all_ok) {
-                        html += '<div class="alert alert-success mb-0 mt-3 py-2"><i class="fas fa-shield-alt me-2"></i>Configurazione completa e operativa. Nessuna azione necessaria.</div>';
+                        html += '<div class="alert alert-success mb-0 mt-3 py-2"><i class="fas fa-shield-alt me-2" aria-hidden="true"></i>' + escHtml(t('sj.complete')) + '</div>';
                     }
                     c.innerHTML = html;
                 })
                 .catch(e => {
-                    c.innerHTML = '<div class="alert alert-danger mb-0">Errore rete: ' + e.message + '</div>';
+                    c.innerHTML = '<div class="alert alert-danger mb-0">' + escHtml(t('common.networkError', { message: e.message })) + '</div>';
                 });
         }
 
         function runFhcFixAll() {
-            const confirmMsg = '🪄 RISOLVI TUTTO — esegue in ordine corretto:\n\n' +
-                '1. Installa Fail2ban (se manca)\n' +
-                '2. Abilita Fail2ban al boot\n' +
-                '3. Configura jail mail-panel-auth\n' +
-                '4. Configura jail Postfix/Dovecot/Roundcube/Rspamd\n' +
-                '5. Crea /etc/pf.conf minimo (se manca)\n' +
-                '6. Aggiunge anchor f2b a pf.conf\n' +
-                '7. Abilita pf al boot\n' +
-                '8. Avvia pf (con syntax check pre-flight)\n' +
-                '9. Avvia Fail2ban\n\n' +
-                '⚠️ Tocca anche pf (firewall): se hai una pf.conf custom strana c\'è rischio teorico di lockout, ma il pannello fa backup automatico e syntax check prima di applicare.\n\n' +
-                'Avere accesso fisico/console al server è raccomandato.\n\n' +
-                'Procedo?';
+            const confirmMsg = t('sj.confirmFixAll');
             if (!confirm(confirmMsg)) return;
 
             const btn = document.getElementById('btnFixAll');
             const original = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>In corso...';
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>' + escHtml(t('sj.inProgress')) + '';
 
             fetch('/api/fail2ban_health', {
                 method: 'POST',
@@ -348,19 +337,19 @@
                 (data.steps || []).forEach(s => {
                     let icon, badge;
                     if (s.status === 'skipped') {
-                        icon = '<i class="fas fa-forward text-secondary"></i>';
-                        badge = '<span class="badge bg-secondary">SKIP</span>';
+                        icon = '<i class="fas fa-forward text-secondary" aria-hidden="true"></i>';
+                        badge = '<span class="badge bg-secondary">' + escHtml(t('sj.skipped')) + '</span>';
                     } else if (s.success) {
-                        icon = '<i class="fas fa-check-circle text-success"></i>';
+                        icon = '<i class="fas fa-check-circle text-success" aria-hidden="true"></i>';
                         badge = '<span class="badge bg-success">OK</span>';
                     } else {
-                        icon = '<i class="fas fa-times-circle text-danger"></i>';
-                        badge = '<span class="badge bg-danger">FAIL</span>';
+                        icon = '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i>';
+                        badge = '<span class="badge bg-danger">' + escHtml(t('sj.fail')) + '</span>';
                     }
                     html += '<div class="d-flex align-items-start gap-2 mb-2">' + icon +
                         '<div class="flex-grow-1"><div>' + badge + ' <strong>' + escapeHtml(s.label) + '</strong></div>';
                     if (s.message) html += '<div class="small text-muted">' + escapeHtml(s.message) + '</div>';
-                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>Output</summary><pre class="mb-0 mt-1" style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtml(s.output) + '</pre></details>';
+                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>' + escHtml(t('sj.output')) + '</summary><pre class="mb-0 mt-1" style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtml(s.output) + '</pre></details>';
                     html += '</div></div>';
                 });
                 stepsEl.innerHTML = html;
@@ -372,35 +361,20 @@
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert('Errore rete: ' + e.message);
+                alert(t('common.networkError', { message: e.message }));
             });
         }
 
         function runFhcFix(action, btn) {
             // Warning rafforzato per le azioni pf (rischio lockout SSH)
             const pfActions = { 'start_pf': true, 'enable_pf_at_boot': true, 'add_pf_anchor': true };
-            let confirmMsg = 'Applicare la correzione automatica?\n\nIl pannello eseguirà le operazioni necessarie sul sistema.';
-            if (pfActions[action]) {
-                confirmMsg = 'ATTENZIONE — operazione su pf (firewall di sistema)\n\n' +
-                    'Stai per modificare/avviare il firewall del server.\n\n' +
-                    'RISCHIO: una configurazione pf errata può chiudere completamente l\'accesso al server, INCLUSO SSH e questo pannello.\n\n' +
-                    'Il pannello fa controlli di sintassi e backup automatico, ma il rischio NON è zero.\n\n' +
-                    'Prima di confermare, verifica di avere accesso fisico/console al server (KVM, IPMI, console seriale) per recuperare in caso di problemi.\n\n' +
-                    'Vuoi procedere?';
-            }
-            if (action === 'ripara_azione_ban') {
-                confirmMsg = 'Correggere il comando di ban delle jail del pannello?\n\n' +
-                    'Queste jail bannano con un comando che su FreeBSD non esiste: rilevano gli attacchi, ' +
-                    'contano i ban, e non bloccano nessuno.\n\n' +
-                    'Il pannello dichiara l\'azione pf, copia i file prima di toccarli, ricarica fail2ban, ' +
-                    'e poi richiede a fail2ban quale comando esegue per verificare che la correzione abbia preso. ' +
-                    'Se fail2ban rifiuta la configurazione, i file tornano come prima.\n\n' +
-                    'Non tocca pf ne\' le regole del firewall.\n\nProcedo?';
-            }
+            let confirmMsg = t('sj.confirmOne');
+            if (pfActions[action]) confirmMsg = t('sj.confirmPf');
+            if (action === 'ripara_azione_ban') confirmMsg = t('sj.confirmBanAction');
             if (!confirm(confirmMsg)) return;
             const original = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>In corso...';
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>' + escHtml(t('sj.inProgress')) + '';
             fetch('/api/fail2ban_health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -420,14 +394,14 @@
                     let hh = '';
                     (data.passi || []).forEach(pz => {
                         hh += '<div class="d-flex align-items-start gap-2 mb-2">' +
-                              (pz.ok ? '<i class="fas fa-check-circle text-success"></i>'
-                                     : '<i class="fas fa-times-circle text-danger"></i>') +
+                              (pz.ok ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i>'
+                                     : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i>') +
                               '<div class="flex-grow-1"><strong>' + escapeHtml(pz.passo) + '</strong>' +
                               '<div class="small text-muted">' + escapeHtml(pz.testo) + '</div></div></div>';
                     });
                     (data.verifica || []).forEach(v => {
                         hh += '<div class="small ' + (v.ok ? 'text-success' : 'text-danger') + '">' +
-                              '<i class="fas fa-' + (v.ok ? 'check' : 'times') + ' me-1"></i>' +
+                              '<i class="fas fa-' + (v.ok ? 'check' : 'times') + ' me-1" aria-hidden="true"></i>' +
                               escapeHtml(v.jail) + ': ' +
                               escapeHtml(v.comando || v.nota || '') + '</div>';
                         if (v.log) hh += '<pre class="small mb-2 mt-1" style="white-space:pre-wrap;max-height:220px;overflow:auto">' + escapeHtml(v.log) + '</pre>';
@@ -443,14 +417,14 @@
                 } else if (data.passi) {
                     loadFail2banHealth();
                 } else {
-                    alert('Errore: ' + (data.message || data.error || 'sconosciuto') +
-                        (data.output ? '\n\nOutput:\n' + data.output : ''));
+                    alert(t('common.error', { message: data.message || data.error || t('common.unknownError') }) +
+                        (data.output ? '\n\n' + t('sj.output') + ':\n' + data.output : ''));
                     loadFail2banHealth();
                 }
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert('Errore rete: ' + e.message);
+                alert(t('common.networkError', { message: e.message }));
             });
         }
 
@@ -465,39 +439,32 @@
 
         // Reload morbido (fail2ban-client reload): rilegge i file senza killare il daemon
         function reloadFail2banFromPanel() {
-            if (!confirm('Eseguire RELOAD di fail2ban?\n\nRilegge i file di configurazione senza killare il daemon. Conserva i contatori e gli IP bannati attivi.')) return;
+            if (!confirm(t('sj.confirmReload'))) return;
             fetch('/api/fail2ban_health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'reload_fail2ban', csrf_token: ensureFhcCsrfToken() })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✅ ' : '❌ ') + (data.message || 'fatto') +
-                    (data.output ? '\n\nOutput:\n' + data.output : ''));
+                alert((data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
+                    (data.output ? '\n\n' + t('sj.output') + ':\n' + data.output : ''));
                 loadFail2banHealth();
                 if (typeof loadJailLiveState === 'function') loadJailLiveState();
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         // Restart pulito (service fail2ban restart): killa il daemon e lo riavvia
         function restartFail2banFromPanel() {
-            if (!confirm('⚠️ RESTART di fail2ban (service fail2ban restart)\n\n' +
-                'Killa il daemon e lo riavvia da zero. Utile per uscire da stati confusi (es. dopo molti reload).\n\n' +
-                'COSA SUCCEDE:\n' +
-                '• I contatori "Currently failed" e "Total failed" si AZZERANO\n' +
-                '• Gli IP attualmente bannati a runtime si PERDONO (ma i permaban su pf restano!)\n' +
-                '• La config in jail.local viene RILETTA da zero\n' +
-                '• Pochi secondi di interruzione del monitoring\n\n' +
-                'Procedere?')) return;
+            if (!confirm(t('sj.confirmRestart'))) return;
             fetch('/api/fail2ban_health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'restart_service', csrf_token: ensureFhcCsrfToken() })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✅ ' : '❌ ') + (data.message || 'fatto') +
-                    (data.output ? '\n\nOutput:\n' + data.output : ''));
+                alert((data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
+                    (data.output ? '\n\n' + t('sj.output') + ':\n' + data.output : ''));
                 loadFail2banHealth();
                 if (typeof loadJailLiveState === 'function') loadJailLiveState();
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         // Avvio di fail2ban dal pannello. Esiste gia' l'azione start_service: quello che
@@ -511,17 +478,17 @@
             //
             // Questo commento stesso, scritto la prima volta con la sequenza singola per
             // spiegarla, ha rotto la pagina allo stesso modo: qui non si nomina, si descrive.
-            if (!confirm('Avviare fail2ban adesso?\n\nEsegue: service fail2ban start')) return;
+            if (!confirm(t('sj.confirmStart'))) return;
             fetch('/api/fail2ban_health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'start_service', csrf_token: ensureFhcCsrfToken() })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✅ ' : '❌ ') + (data.message || 'fatto') +
-                    (data.output ? '\n\nOutput:\n' + data.output : ''));
+                alert((data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
+                    (data.output ? '\n\n' + t('sj.output') + ':\n' + data.output : ''));
                 if (typeof loadFail2banHealth === 'function') loadFail2banHealth();
                 if (typeof loadJailLiveState === 'function') loadJailLiveState();
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         // ===== End Health Check =====
@@ -531,7 +498,7 @@
         async function verificaFiltroJail(nome) {
             const box = document.getElementById('filtro-' + nome);
             if (!box) return;
-            box.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Faccio girare fail2ban-regex sul log...</span>';
+            box.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.regexRunning')) + '</span>';
             try {
                 const res = await fetch('/api/fail2ban', {
                     method: 'POST',
@@ -545,10 +512,10 @@
                 box.innerHTML = '<div class="alert alert-' + cls + ' py-1 px-2 mb-0 small">'
                     + escapeHtml(r.messaggio || '')
                     + (r.log ? '<div class="text-muted mt-1">Log: <code>' + escapeHtml(r.log) + '</code>'
-                        + (r.righe_log ? ' &middot; ' + r.righe_log + ' righe' : '') + '</div>' : '')
+                        + (r.righe_log ? ' &middot; ' + escHtml(tn('sj.lines', r.righe_log)) : '') + '</div>' : '')
                     + '</div>';
             } catch (e) {
                 box.innerHTML = '<div class="alert alert-secondary py-1 px-2 mb-0 small">'
-                    + 'Non sono riuscito a chiedere: ' + escapeHtml(String(e)) + '</div>';
+                    + escHtml(t('dns.sumAskFailed', { message: String(e) })) + '</div>';
             }
         }

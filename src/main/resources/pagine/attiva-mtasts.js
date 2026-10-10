@@ -4,14 +4,14 @@
         // pannello, che sa anche a che punto e' e riparte da li'.
         async function amsPiano() {
             const el = document.getElementById('upd-ams');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardo a che punto siamo: nginx, certificato, DNS, il record TXT, e provo la politica sul nome pubblico...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.reading')) + '';
             const r = await updApi('mtasts_piano');
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
                 return;
             }
             let h = '<div class="alert alert-' + (r.completo ? 'success' : 'info') + ' py-2 small mb-2">'
-                  + '<i class="fas fa-' + (r.completo ? 'check-circle' : 'circle-info') + ' me-1"></i>'
+                  + '<i class="fas fa-' + (r.completo ? 'check-circle' : 'circle-info') + ' me-1" aria-hidden="true"></i>'
                   + updEsc(r.nota) + '</div>';
 
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>';
@@ -21,10 +21,10 @@
                 // "incerto" non e' verde: il pannello non ha potuto verificare, e mostrarlo
                 // come fatto sarebbe la bugia che stiamo cercando di togliere dal pannello.
                 h += '<tr class="upd-cell"><td style="width:2rem">'
-                   + (fatto ? '<i class="fas fa-check-circle text-success"></i>'
+                   + (fatto ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('up.pDone')) + '</span>'
                             : incerto
-                              ? '<i class="fas fa-question-circle text-secondary" title="non verificabile"></i>'
-                              : '<i class="fas fa-circle text-warning" style="font-size:.6rem"></i>')
+                              ? '<i class="fas fa-question-circle text-secondary" aria-hidden="true" title="' + escHtml(t('ams.unverifiable')) + '"></i><span class="visually-hidden">' + escHtml(t('ams.unverifiable')) + '</span>'
+                              : '<i class="fas fa-circle text-warning" style="font-size:.6rem" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('up.pTodo')) + '</span>')
                    + '</td><td class="small"><strong>' + (i + 1) + '. ' + updEsc(p.titolo) + '</strong>'
                    + (p.dettaglio ? '<div class="text-muted">' + updEsc(p.dettaglio) + '</div>' : '')
                    + (p.motivo ? '<div class="text-warning">' + updEsc(p.motivo) + '</div>' : '')
@@ -34,36 +34,19 @@
 
             if (!r.completo)
                 h += '<button class="btn btn-sm btn-success" onclick="amsAttiva()">'
-                   + '<i class="fas fa-play me-1"></i>Attiva MTA-STS su tutto</button>';
+                   + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('ams.run')) + '</button>';
             h += '<div id="amsEsito" class="mt-2"></div>';
             el.innerHTML = h;
         }
 
         async function amsAttiva() {
-            if (prompt('Attivare MTA-STS su tutti i domini?\n\n'
-                     + 'Il pannello esegue nell\'ordine: riga di include in nginx, configurazione\n'
-                     + 'della 443, jail fail2ban, un CNAME mta-sts per dominio, il proxy Cloudflare\n'
-                     + 'spento su quei nomi, un certificato che li copre, la prova della politica,\n'
-                     + 'e infine il record TXT.\n\n'
-                     + 'Il record TXT viene pubblicato SOLO per i domini la cui politica risponde\n'
-                     + 'davvero. Al primo passo che fallisce si ferma e spiega.\n\n'
-                     + 'Il certificato NON viene riemesso se copre gia\' tutti i nomi: la\n'
-                     + 'riemissione parte solo se ne manca almeno uno. E\' il passo piu\' delicato,\n'
-                     + 'ed e\' anche il piu\' raro.\n\n'
-                     + 'Non viene toccato nessun record che non sia mta-sts: un eventuale jolly\n'
-                     + '*.dominio resta esattamente com\'e\'.\n\n'
-                     + 'Dove crea o corregge un record, la sequenza aspetta che il DNS propaghi\n'
-                     + 'prima di provare la politica: puo\' quindi durare qualche minuto. Il\n'
-                     + 'lavoro prosegue sul server anche se chiudi la pagina.\n\n'
-                     + 'Scrivi ATTIVA per confermare.') !== 'ATTIVA') return;
+            if (!updConferma(t('ams.confirm'), t('w4.wEnable'))) return;
             const el = document.getElementById('amsEsito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Eseguo la sequenza. '
-                         + 'Se crea o corregge un record DNS, aspetta che propaghi prima di provare '
-                         + 'la politica: possono volerci alcuni minuti.';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.running')) + '';
             const r = await updApi('mtasts_attiva', { confirm: 'ATTIVA' });
             if (!r.success || !r.jobId) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">'
-                             + updEsc(r.error || 'avvio non riuscito') + '</div>';
+                             + updEsc(r.error || t('ams.startFailed')) + '</div>';
                 return;
             }
             // La richiesta torna SUBITO con un identificativo: l'emissione del certificato
@@ -72,8 +55,7 @@
             // continua — lasciando lo stato sconosciuto proprio mentre si tocca il
             // certificato di produzione.
             el.innerHTML = '<div class="alert alert-info py-2 small mb-2">'
-                         + '<i class="fas fa-spinner fa-spin me-1"></i>Sequenza in corso. '
-                         + 'Puoi anche chiudere la pagina: il lavoro prosegue sul server.</div>'
+                         + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.inProgress')) + '</div>'
                          + '<pre id="amsLog" class="small p-2 border rounded mb-0" '
                          + 'style="max-height:26rem;overflow:auto"></pre>';
             amsSegui(r.jobId);
@@ -91,12 +73,10 @@
                         box.className = 'alert alert-' + (s.job.status === 'completed' ? 'success' : 'warning')
                                       + ' py-2 small mb-2';
                         box.innerHTML = (s.job.status === 'completed'
-                                ? '<i class="fas fa-check-circle me-1"></i>Sequenza completata in '
-                                  + updEsc(s.job.elapsedSeconds) + 's.'
-                                : '<i class="fas fa-triangle-exclamation me-1"></i>Sequenza interrotta: '
-                                  + updEsc(s.job.errorMessage) + ' Il registro qui sotto dice a che punto.')
+                                ? '<i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('ams.done', { s: s.job.elapsedSeconds }))
+                                : '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + escHtml(t('ams.stopped', { error: s.job.errorMessage })))
                             + ' <button class="btn btn-sm btn-outline-primary ms-2" onclick="amsPiano()">'
-                            + 'Aggiorna lo stato</button>';
+                            + escHtml(t('ams.refresh')) + '</button>';
                     }
                     return;
                 }

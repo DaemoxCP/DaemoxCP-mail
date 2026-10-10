@@ -1,7 +1,7 @@
         // ---------- Apertura protetta della porta 443 ----------
         async function w443Carica() {
             const el = document.getElementById('upd-443');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo lo stato...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.reading')) + '';
             // UNA ALLA VOLTA: updApi ha un lucchetto (updBusy) che serve a impedire due
             // operazioni contemporanee. Chiamandole in parallelo la seconda tornava subito
             // con "Operazione gia' in corso", e il riquadro restava vuoto senza spiegazione.
@@ -13,40 +13,36 @@
             const c = await updApi('web443_config');
             const inc = s.include || {};
             let h = '<div class="alert alert-' + (s.pronto ? 'success' : 'secondary') + ' py-2 small mb-2">'
-                  + '<i class="fas fa-' + (s.pronto ? 'check-circle' : 'circle-info') + ' me-1"></i>'
-                  + (s.pronto
-                     ? 'La configurazione pubblica sulla 443 &egrave; installata.'
-                     : 'La 443 non &egrave; ancora configurata dal pannello.') + '</div>';
+                  + '<i class="fas fa-' + (s.pronto ? 'check-circle' : 'circle-info') + ' me-1" aria-hidden="true"></i>'
+                  + escHtml(s.pronto ? t('w4.ready') : t('w4.notReady')) + '</div>';
 
             h += '<table class="table table-sm mb-2"><tbody>'
-               + w443Riga('nginx legge la cartella dove scriverei', inc.ok, updEsc(inc.motivo || ''))
-               + w443Riga('Configurazione installata', s.installato,
+               + w443Riga(escHtml(t('w4.nginxReads')), inc.ok, updEsc(inc.motivo || ''))
+               + w443Riga(escHtml(t('w4.installed')), s.installato,
                           '<code>' + updEsc(s.file) + '</code>')
-               + w443Riga('Politica MTA-STS scritta su disco', s.politicaScritta,
-                          '<code>' + updEsc(s.filePolitica) + '</code> &mdash; servita da nginx come file '
-                          + 'statico: una richiesta l&igrave; non raggiunge mai il pannello.')
+               + w443Riga(escHtml(t('w4.policyWritten')), s.politicaScritta,
+                          '<code>' + updEsc(s.filePolitica) + '</code> &mdash; ' + escHtml(t('w4.policyStatic')))
                + '</tbody></table>';
 
             // E se l'anteprima non arriva si DICE perche', invece di mostrare un riquadro
             // vuoto che sembra un difetto grafico.
-            h += '<div class="small text-muted mb-2">Cosa verrebbe installato &mdash; guardalo prima:</div>';
+            h += '<div class="small text-muted mb-2">' + escHtml(t('w4.whatInstalled')) + '</div>';
             if (c && c.success && c.configurazione)
                 h += '<pre class="small p-2 border rounded mb-2" style="max-height:22rem;overflow:auto">'
                    + updEsc(c.configurazione) + '</pre>';
             else
-                h += '<div class="alert alert-warning py-2 small mb-2">Non sono riuscito a generare '
-                   + 'l&rsquo;anteprima: ' + updEsc((c && c.error) || 'motivo sconosciuto') + '</div>';
+                h += '<div class="alert alert-warning py-2 small mb-2">' + escHtml(t('w4.noPreview', { reason: (c && c.error) || t('w4.unknownReason') })) + '</div>';
 
             h += '<div class="d-flex gap-2 flex-wrap">'
                + (inc.ok ? '' : '<button class="btn btn-sm btn-warning" onclick="w443Include()">'
-                              + '<i class="fas fa-plus me-1"></i>Aggiungi la riga di include a nginx</button>')
+                              + '<i class="fas fa-plus me-1" aria-hidden="true"></i>' + escHtml(t('w4.addInclude')) + '</button>')
                + '<button class="btn btn-sm btn-outline-warning"'
-               + (inc.ok ? '' : ' disabled title="Prima serve la riga di include"')
+               + (inc.ok ? '' : ' disabled title="' + escHtml(t('w4.includeFirst')) + '"')
                + ' onclick="w443Installa()">'
-               + '<i class="fas fa-screwdriver-wrench me-1"></i>' + (s.installato ? 'Reinstalla' : 'Apri la 443 protetta')
+               + '<i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>' + escHtml(s.installato ? t('w4.reinstall') : t('w4.open'))
                + '</button>'
                + '<button class="btn btn-sm btn-outline-secondary" onclick="w443Jail()">'
-               + '<i class="fas fa-ban me-1"></i>Attiva la jail fail2ban</button>'
+               + '<i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('w4.enableJail')) + '</button>'
                + '</div><div id="w443Esito" class="mt-2"></div>';
 
             el.innerHTML = h;
@@ -54,9 +50,9 @@
 
         function w443Riga(cosa, stato, nota) {
             const i = stato === null || stato === undefined
-                ? '<i class="fas fa-circle-question text-secondary"></i>'
-                : (stato ? '<i class="fas fa-check-circle text-success"></i>'
-                         : '<i class="fas fa-times-circle text-danger"></i>');
+                ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('wd.unknown')) + '</span>'
+                : (stato ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
+                         : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>');
             return '<tr><td style="width:2rem">' + i + '</td><td class="small">' + cosa
                  + '<div class="text-muted">' + nota + '</div></td></tr>';
         }
@@ -64,49 +60,35 @@
         // Su questo server nginx tiene tutto nel file principale e non include cartelle:
         // senza questa riga, qualunque file aggiuntivo verrebbe ignorato.
         async function w443Include() {
-            if (prompt('Aggiungere la riga di include alla configurazione principale di nginx?\n\n'
-                     + 'Viene inserita in cima al blocco http, con copia di sicurezza.\n'
-                     + 'Poi nginx -t: se boccia, il file di prima viene rimesso e non si ricarica.\n\n'
-                     + 'Scrivi AGGIUNGI per confermare.') !== 'AGGIUNGI') return;
+            if (!updConferma(t('w4.confirmInclude'), t('w4.wAdd'))) return;
             const el = document.getElementById('w443Esito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Modifico, valido e ricarico...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.changing')) + '';
             const r = await updApi('web443_include', { confirm: 'AGGIUNGI' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                   + updEsc(r.nota || r.error) + '</div>';
             if (r.ripristinato)
-                h += '<div class="small text-muted mt-1">La configurazione precedente e&rsquo; stata '
-                   + 'rimessa: nessuna interruzione.</div>';
+                h += '<div class="small text-muted mt-1">' + escHtml(t('w4.restored')) + '</div>';
             el.innerHTML = h;
             if (r.success) setTimeout(w443Carica, 1200);
         }
 
         async function w443Installa() {
-            if (prompt('Installare la configurazione pubblica sulla porta 443?\n\n'
-                     + 'Serve DUE file e nient\'altro: la politica MTA-STS e la configurazione\n'
-                     + 'per Thunderbird. Ogni altro percorso riceve 404.\n\n'
-                     + 'Il pannello fa una copia, esegue nginx -t e solo allora ricarica.\n'
-                     + 'Se la validazione fallisce toglie tutto senza ricaricare: la webmail\n'
-                     + 'sulla 8443 non viene toccata.\n\n'
-                     + 'Scrivi APRI per confermare.') !== 'APRI') return;
+            if (!updConferma(t('w4.confirmInstall'), t('w4.wOpen'))) return;
             const el = document.getElementById('w443Esito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Scrivo, valido e provo la porta...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.writing')) + '';
             const r = await updApi('web443_install', { confirm: 'APRI' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                   + updEsc(r.nota || r.error) + '</div>';
             if (r.ripristinato)
-                h += '<div class="small text-muted mt-1">La configurazione precedente &egrave; stata '
-                   + 'rimessa: nessuna interruzione.</div>';
+                h += '<div class="small text-muted mt-1">' + escHtml(t('w4.restored')) + '</div>';
             el.innerHTML = h;
             if (r.success) setTimeout(w443Carica, 1200);
         }
 
         async function w443Jail() {
-            if (prompt('Attivare la jail fail2ban per la porta 443?\n\n'
-                     + 'Banna per un\'ora chi raccoglie dieci risposte 404, 405 o 429 in dieci minuti.\n'
-                     + 'Guarda solo il log di questo sito, non quello della webmail.\n\n'
-                     + 'Scrivi ATTIVA per confermare.') !== 'ATTIVA') return;
+            if (!updConferma(t('w4.confirmJail'), t('w4.wEnable'))) return;
             const el = document.getElementById('w443Esito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Scrivo filtro e jail, ricarico fail2ban...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.jailWriting')) + '';
             const r = await updApi('web443_jail', { confirm: 'ATTIVA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + updEsc(r.nota || r.error) + '</div>'

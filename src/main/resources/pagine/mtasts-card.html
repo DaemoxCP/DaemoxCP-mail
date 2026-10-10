@@ -1,25 +1,13 @@
             <!-- MTA-STS -->
             <div class="card mt-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-lock me-2"></i><strong>MTA-STS</strong>
-                        <span class="small text-muted ms-2">impedire il declassamento a connessione in chiaro</span></span>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="stsCarica()"><i class="fas fa-rotate me-1"></i>Aggiorna</button>
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="fas fa-lock me-2" aria-hidden="true"></i><strong>MTA-STS</strong>
+                        <span class="small text-muted ms-2">{{t:sts.subtitle}}</span></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="stsCarica()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-2">
-                        Fra due server di posta il TLS &egrave; <strong>opportunistico</strong>: se il destinatario
-                        non offre <code>STARTTLS</code>, il messaggio parte lo stesso, in chiaro. Un attaccante in
-                        mezzo pu&ograve; cancellare quell&rsquo;offerta mentre passa, e il mittente non ha modo di
-                        accorgersene. MTA-STS chiude quella porta: dichiara in anticipo che i tuoi server il TLS
-                        ce l&rsquo;hanno sempre, e che chi non ci riesce <strong>non deve consegnare</strong>.
-                    </p>
-                    <p class="small text-muted mb-2">
-                        Servono <strong>tre pezzi insieme</strong>, ed &egrave; il motivo per cui il record non
-                        si crea da solo: un CNAME <code>mta-sts</code>, la politica servita via HTTPS su quel nome
-                        con un certificato valido <em>per quel nome</em>, e solo alla fine il record TXT che la
-                        dichiara. <strong>Il TXT non si pubblica finch&eacute; la politica non risponde davvero</strong>:
-                        sarebbe una promessa pubblica che non mantieni.
-                    </p>
-                    <div id="stsBody"><span class="text-muted small">Premi "Aggiorna": legge e basta.</span></div>
+                    <p class="small text-muted mb-2">{{t:sts.intro1.html}}</p>
+                    <p class="small text-muted mb-2">{{t:sts.intro2.html}}</p>
+                    <div id="stsBody"><span class="text-muted small">{{t:ad.pressRefresh}}</span></div>
                 </div>
             </div>

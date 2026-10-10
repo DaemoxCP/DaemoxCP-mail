@@ -521,6 +521,19 @@ public final class RapportoPeriodico {
     }
 
     /**
+     * Un messaggio del pannello a un amministratore (il codice di accesso), con lo stesso mittente
+     * e lo stesso sendmail di Postfix del rapporto. Restituisce solo se e' partito: il corpo
+     * contiene un codice monouso e non deve finire in nessun log, quindi l'uscita di sendmail e le
+     * righe del log della posta qui non si restituiscono.
+     */
+    public static boolean inviaMessaggioPannello(String destinatario, String oggetto, String corpo) {
+        String mittente = imp("report_from", "no-reply@" + dominioDelPannello());
+        if (!org.mail_panel.webserver.SecurityUtils.isValidEmail(mittente)
+                || !org.mail_panel.webserver.SecurityUtils.isValidEmail(destinatario)) return false;
+        return consegna(mittente, destinatario, oggetto, corpo).optBoolean("success", false);
+    }
+
+    /**
      * Consegna a Postfix con il suo sendmail(1), poi segue il messaggio nel log della posta.
      * L'oggetto viene codificato secondo RFC 2047 perche' un'intestazione non puo' contenere
      * caratteri non ASCII, e il corpo dichiara UTF-8: senza, le lettere accentate

@@ -21,6 +21,7 @@ import java.util.Arrays;
  * │  3) Edit Roundcube Configuration (REQUIRED before install)                  │
  * │  4) Install/Reinstall Mail Server                                           │
  * │     └─ Installs: Postfix, Dovecot, Rspamd, ClamAV, Roundcube, MySQL         │
+ * │  5) Emergency access code (one-time code; first administrator if none)      │
  * │  >>> Start Mail Panel WebServer <<<                                         │
  * │  Exit                                                                       │
  * └─────────────────────────────────────────────────────────────────────────────┘
@@ -101,6 +102,11 @@ public class Chooser {
                 setOptionAndClose(4);
             }
         });
+
+        // ============== ACCESS ==============
+        // Il codice di accesso di emergenza, per quando passkey ed email non bastano: si genera
+        // solo da qui (o con --access-code), cioe' da chi ha accesso al server.
+        actionListBox.addItem("5) Emergency access code", () -> setOptionAndClose(5));
 
         // ============== START SERVER ==============
         actionListBox.addItem(">>> Start Mail Panel WebServer <<<", () -> {

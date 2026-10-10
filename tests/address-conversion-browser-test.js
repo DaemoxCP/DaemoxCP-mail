@@ -48,6 +48,8 @@ async function servi(route) {
         const html = fs.readFileSync(path.join(pagine, p.substring(1) + '.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-prova');
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
     }
+    // The script dictionary (t() and the texts), as the panel serves it.
+    if (p.startsWith('/i18n/')) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(pagine, p)) });
     if (p.startsWith('/vendor/') || p.startsWith('/fa/')) {
         const f = path.join(risorse, p);
         if (!fs.existsSync(f)) return route.fulfill({ status: 404, body: '' });
@@ -107,7 +109,7 @@ async function servi(route) {
     vero('anteprima: destinazione di adesso e chi arriva qui', (await page.textContent('#acDestinazioni')).includes('owner@example.net')
         && (await page.textContent('#acVersoQui')).includes('postmaster@domain-d.test'));
     vero('la posta di prima: 1234 messaggi, 50,0 MB, ultimo del 12/05/2025, e i filtri',
-        (await page.textContent('#acPostaInfo')).includes('1234 messaggi, 50,0 MB, l\'ultimo del 12/05/2025') && await page.isVisible('#acPostaBlocco'));
+        (await page.textContent('#acPostaInfo')).includes('1234 messaggi, 50,0 MB. L\'ultimo è del 12/05/2025') && await page.isVisible('#acPostaBlocco'));
     await page.waitForFunction(() => document.getElementById('acPass').value === 'Proposta-Dal-Generatore-42');
     vero('la password e\' gia\' proposta dal generatore', true);
     await page.click('#acVia');
@@ -134,7 +136,7 @@ async function servi(route) {
     const perdite = await page.textContent('#aaPerdite');
     vero('cosa si perde: login (con l\'ultimo accesso), risposta automatica, 2 filtri, inoltri, la copia su se stessa',
         perdite.includes('Ultimo accesso: 30/09/2026') && perdite.includes('risposta automatica') && perdite.includes('2 filtri')
-        && perdite.includes('Gli inoltri della casella') && perdite.includes('info@domain-d.test -> info@domain-d.test'));
+        && perdite.includes('Gli inoltri della casella') && perdite.includes('info@domain-d.test → info@domain-d.test'));
     const resta = await page.textContent('#aaResta');
     vero('cosa resta: la posta (87 messaggi, nella sua cartella), gli alias che ha, chi porta qui',
         resta.includes('87 messaggi, 1,0 MB, in /var/vmail/domain-d.test/info') && resta.includes('capo@esterno.it') && resta.includes('vendite@domain-d.test'));

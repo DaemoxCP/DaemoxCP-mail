@@ -185,15 +185,9 @@ SQLEOF
     'password',
 ];
 
-// Password plugin (change password from webmail)
-// NOTE: Uses mailpanel database where mailboxes table resides
-\\$config['password_driver'] = 'sql';
-\\$config['password_db_dsn'] = 'mysql://mailpanel:${MAILPANEL_PASS}@127.0.0.1/mailpanel';
-\\$config['password_query'] = 'UPDATE mailboxes SET password=%P WHERE email=%u';
-\\$config['password_crypt_hash'] = 'blowfish';
-// Stesso minimo del pannello per le password delle caselle (SecurityUtils.PASSWORD_CASELLA_MIN):
-// senza questa riga, dalla webmail vale la regola del plugin e non quella del pannello.
-\\$config['password_minimum_length'] = 12;
+// Password plugin (change password from webmail): the settings are added by the mail panel at
+// startup, in the "mail-panel: webmail password changes" block at the end of this file. The change
+// goes through the panel, which writes the bcrypt hash and the encrypted copy it can show again.
 
 // Managesieve (Dovecot Sieve)
 \\$config['managesieve_host'] = '127.0.0.1';

@@ -171,7 +171,7 @@ Used by Rspamd for caching.
 | `sqlite-jdbc` | 3.47.1.0 | SQLite for panel config |
 | `slf4j-nop` | 2.0.16 | Logging |
 | `json` | 20241224 | JSON parsing |
-| `jbcrypt` | 0.4 | BCrypt password hashing |
+| `jbcrypt` | 0.4 | Mailbox password hashing |
 | `webauthn-server-core` | 2.5.0 | WebAuthn/Passkey support |
 | `yubico-util` | 2.5.0 | Yubico utilities |
 
@@ -305,13 +305,13 @@ CREATE TABLE config (
     mail_panel_host TEXT,           -- Web panel host (0.0.0.0)
     mail_panel_port TEXT,           -- Web panel port (2096)
     mail_panel_ssl_cert TEXT,       -- SSL certificate (PEM)
-    mail_panel_ssl_cert_key TEXT,   -- SSL private key (PEM)
+    mail_panel_ssl_cert_key TEXT,   -- empty: the key is in the panel secrets file
     mail_panel_ssl_chain TEXT,      -- SSL chain (PEM)
     mail_panel_sessions_prefix TEXT,-- Session cookie prefix
     mysql_host TEXT,                -- MySQL host
     mysql_port TEXT,                -- MySQL port
     mysql_user TEXT,                -- MySQL username
-    mysql_password TEXT,            -- MySQL password
+    mysql_password TEXT,            -- empty: the password is in the panel secrets file
     mysql_database TEXT,            -- MySQL database name
     mail_hostname TEXT,             -- Mail server hostname
     postfix_installed INTEGER,      -- Postfix status
@@ -369,19 +369,23 @@ CREATE TABLE aliases (
     UNIQUE KEY unique_alias (source, destination)
 );
 
--- Panel administrators
+-- Panel administrators: no password. They sign in with a passkey or a one-time code.
 CREATE TABLE panel_admin (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,  -- BCrypt hash
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP NULL,
+    email_enc VARCHAR(512) NULL,          -- AES-256-GCM, random nonce
+    email_index CHAR(64) NULL UNIQUE,     -- blind index, HMAC-SHA256
+    user_handle VARCHAR(64) NULL UNIQUE,  -- WebAuthn user handle
+    created_at DATETIME NULL,             -- UTC
+    last_login DATETIME NULL,             -- UTC
     active BOOLEAN DEFAULT TRUE,
-    totp_secret VARCHAR(64) NULL,
-    totp_enabled BOOLEAN DEFAULT FALSE,
-    backup_codes TEXT NULL,
-    role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin'
+    role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin',
+    theme VARCHAR(10) DEFAULT 'auto',
+    language VARCHAR(5) NULL
 );
+-- Also: admin_passkeys, panel_sessions (only the SHA-256 of the session token), and one table
+-- per one-time code flow (login_code_email, login_code_console, stepup_code, email_change_code)
+-- holding only the HMAC of the code.
 
 -- Panel settings
 CREATE TABLE panel_settings (
@@ -653,6 +657,7 @@ esattamente com'era partito.
 ║  2) Edit Panel Configuration                                  ║
 ║  3) Edit Roundcube Configuration                              ║
 ║  4) Install/Reinstall Mail Server                             ║
+║  5) Emergency access code                                     ║
 ║  >>> Start Mail Panel WebServer <<<                           ║
 ║  Exit                                                         ║
 ╚═══════════════════════════════════════════════════════════════╝
@@ -691,11 +696,54 @@ Select "Start Mail Panel WebServer" to start the HTTPS panel on port 2096.
 https://your-server:2096/
 ```
 
-### First Setup
+### First Administrator
 
-1. Navigate to `/setup`
-2. Create admin account
-3. Set mail hostname
+The first administrator is never created from the web page: whoever reached it first would
+become the administrator. Until there is one, the panel shows `/setup` with the command to run
+on the server, from the panel folder:
+
+```bash
+java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>
+```
+
+It creates a superadmin with no password and prints a one-time 8-digit code, valid for 15
+minutes: on the login page choose "Code from the server console", then register a passkey in
+Settings. It refuses when an active administrator already exists; the others are added from the
+Administrators page.
+
+### Signing In
+
+There are no passwords. An administrator signs in with:
+
+- a **passkey** (WebAuthn): no username to type;
+- a **6-digit code** sent to the sign-in email by this server's Postfix, valid for 10 minutes;
+- an **8-digit code** from the server console, when the email does not arrive:
+
+```bash
+java -jar freebsd-mail-panel-1.0.jar --access-code [name]
+```
+
+The same one-time code comes from the terminal menu, option **5) Emergency access code**: it is
+always available from the server, for any active administrator, when passkey and email are not
+enough (and it creates the first administrator if there is none yet).
+
+The panel keys (data encryption, blind index, code HMAC, CSRF, webmail key) and the panel's
+MySQL password and TLS private key are in `/usr/local/etc/mail-panel/panel-secrets.properties`
+(mode 600, folder 700), never in the database. On a server that is already running, the first
+start of this version moves the MySQL password and the TLS key out of `database/mail_panel.db`
+by itself and empties those columns; `database/` becomes 700 and `mail_panel.db` 600.
+
+**Mailbox passwords can always be seen and copied** (Mailboxes → Edit → Reveal): each one is
+stored as the bcrypt hash Dovecot reads and as an AES-256-GCM copy (key in
+`/usr/local/etc/mail-panel/master.key`). If the copy cannot be written, the password is not saved
+at all. Reveal shows the copy only while it matches the hash. Password changes from the webmail
+go through the panel (Roundcube password plugin, `httpapi` driver, to
+`https://127.0.0.1:<panel port>/api/internal/mailbox-password`, loopback only, with the webmail
+key): the panel checks the current password and writes hash and copy together. The panel writes
+these settings in a block at the end of Roundcube's `config.inc.php` at every start, replacing the
+old `sql` driver lines (which stored the new password in clear text, so Dovecot refused it). Rows
+left in clear text by that bug are rewritten as hash + copy at startup. Mailboxes created before
+the vault get their copy the next time someone signs in to the webmail with them.
 
 ### Features
 
@@ -709,8 +757,7 @@ https://your-server:2096/
 - SSL certificate management
 - Roundcube SSO integration
 - Audit logging
-- 2FA (TOTP) support
-- WebAuthn/Passkey support
+- Passwordless sign-in: passkeys (WebAuthn) and one-time codes by email or from the console
 
 ---
 
@@ -780,10 +827,12 @@ The panel supports Cloudflare proxy with:
 ## Security Features
 
 ### Authentication
-- **Panel admin passwords**: BCrypt hashing
+- **Panel administrators**: no password; passkeys (WebAuthn, user verification required) or
+  one-time codes (only their HMAC is stored; 5 attempts; rate limits per IP, subnet and recipient)
+- **Same answer for every address**: asking for a code never tells whether an account exists
+- **Sessions**: in MySQL, only the SHA-256 of the token; `__Host-` cookie; 30 minutes idle, 12 hours at most; revocable
+- **Admin emails**: AES-256-GCM with a blind index; keys outside the database
 - **Mailbox passwords**: BLF-CRYPT (Blowfish)
-- **2FA**: TOTP (Google Authenticator compatible)
-- **WebAuthn**: Passkey/Security key support
 
 ### Protection
 - CSRF protection on all forms
@@ -918,7 +967,7 @@ FreeBSD Mail Panel (Java 24)
 ## Password Hashing
 
 - **Mailbox passwords**: BLF-CRYPT (Blowfish) - for Dovecot compatibility
-- **Panel admin passwords**: BCrypt
+- **Panel administrators**: no password (passkeys and one-time codes)
 
 ---
 

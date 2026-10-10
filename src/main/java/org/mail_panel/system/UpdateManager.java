@@ -1776,7 +1776,7 @@ public final class UpdateManager {
             Map<String, String> amb = new LinkedHashMap<>();
             try (java.sql.ResultSet rs = org.mail_panel.Main.dbManager.get_data_config()) {
                 if (rs.next()) {
-                    String pw = rs.getString("mysql_password");
+                    String pw = org.mail_panel.Main.dbManager.mysqlPassword();
                     if (pw != null && !pw.isEmpty()) amb.put("DB_PASS", pw);
                 }
             } catch (Exception ignored) {}
@@ -1868,7 +1868,7 @@ public final class UpdateManager {
         String user = "mailpanel", pass = "", db = "mailserver", host = "127.0.0.1", port = "3306";
         try (java.sql.ResultSet rs = org.mail_panel.Main.dbManager.get_data_config()) {
             if (rs.next()) {
-                String u = rs.getString("mysql_user"), p2 = rs.getString("mysql_password");
+                String u = rs.getString("mysql_user"), p2 = org.mail_panel.Main.dbManager.mysqlPassword();
                 String d = rs.getString("mysql_database"), h = rs.getString("mysql_host"), po = rs.getString("mysql_port");
                 if (u != null && !u.isBlank()) user = u.trim();
                 if (p2 != null) pass = p2;

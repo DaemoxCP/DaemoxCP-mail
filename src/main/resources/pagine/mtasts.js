@@ -8,21 +8,21 @@
             return await r.json();
         }
 
-        function stsEsc(t) {
+        function stsEsc(v) {
             const d = document.createElement('div');
-            d.textContent = t === null || t === undefined ? '' : String(t);
+            d.textContent = v === null || v === undefined ? '' : String(v);
             return d.innerHTML;
         }
 
         function stsSpunta(v) {
-            return v ? '<i class="fas fa-check-circle text-success"></i>'
-                     : '<i class="fas fa-times-circle text-danger"></i>';
+            return v ? '<i class="fas fa-check-circle text-success" title="' + escHtml(t('dns.yes')) + '"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
+                     : '<i class="fas fa-times-circle text-danger" title="' + escHtml(t('acf.no')) + '"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>';
         }
 
         async function stsCarica() {
             const el = document.getElementById('stsBody');
             if (!el) return;
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Chiedo la politica come farebbe un server mittente...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sts.asking'));
             const r = await stsApi('mtasts_status');
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + stsEsc(r.error) + '</div>';
@@ -30,38 +30,37 @@
             }
 
             const modi = [
-                ['testing', 'testing — segnala i problemi ma consegna (si comincia da qui)'],
-                ['enforce', 'enforce — non consegnare se il TLS non riesce'],
-                ['none',    'none — annulla una politica pubblicata prima']
+                ['testing', 'testing — ' + t('sts.testing')],
+                ['enforce', 'enforce — ' + t('sts.enforce')],
+                ['none',    'none — ' + t('sts.none')]
             ];
             let h = '<div class="d-flex gap-2 align-items-end flex-wrap mb-3">'
-                  + '<div><label class="form-label small mb-1">Modo della politica</label>'
-                  + '<select class="form-select form-select-sm" id="stsModo" style="min-width:26rem">'
+                  + '<div><label class="form-label small mb-1" for="stsModo">' + escHtml(t('sts.mode')) + '</label>'
+                  + '<select class="form-select form-select-sm" id="stsModo" style="min-width:min(26rem,100%)">'
                   + modi.map(m => '<option value="' + m[0] + '"' + (m[0] === r.modo ? ' selected' : '') + '>'
                                 + stsEsc(m[1]) + '</option>').join('')
                   + '</select></div>'
                   + '<button class="btn btn-sm btn-outline-warning" onclick="stsCambiaModo()">'
-                  + '<i class="fas fa-pen me-1"></i>Cambia modo</button></div>';
+                  + '<i class="fas fa-pen me-1" aria-hidden="true"></i>' + escHtml(t('sts.changeMode')) + '</button></div>';
 
-            h += '<div class="small text-muted mb-1">La politica che il pannello serve, con l&rsquo;identificativo '
-               + 'che i mittenti usano per accorgersi che &egrave; cambiata:</div>'
+            h += '<div class="small text-muted mb-1">' + escHtml(t('sts.served')) + '</div>'
                + '<pre class="small p-2 border rounded mb-1">' + stsEsc(r.politica) + '</pre>'
-               + '<div class="small text-muted mb-3">Record TXT corrispondente: <code>' + stsEsc(r.recordTxt)
+               + '<div class="small text-muted mb-3">' + escHtml(t('sts.txt')) + ' <code>' + stsEsc(r.recordTxt)
                + '</code></div>';
 
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-               + '<th>Dominio</th><th>La politica risponde</th><th></th></tr></thead><tbody>';
+               + '<th scope="col">' + escHtml(t('st.colDomain')) + '</th><th scope="col">' + escHtml(t('sts.answers')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('home.colActions')) + '</span></th></tr></thead><tbody>';
             (r.domini || []).forEach(d => {
                 const p = d.politicaRaggiungibile || {};
                 h += '<tr class="upd-cell"><td><code class="small">' + stsEsc(d.nomeWeb) + '</code>'
-                   + '<div class="small text-muted">TXT su <code>' + stsEsc(d.nomeTxt) + '</code></div></td>'
+                   + '<div class="small text-muted">' + escHtml(t('sts.txtOn', { name: d.nomeTxt })) + '</div></td>'
                    + '<td class="small">' + stsSpunta(p.ok)
-                   + (p.ok ? ' risponde correttamente'
+                   + (p.ok ? ' ' + escHtml(t('sts.answersOk'))
                            : '<div class="text-muted">' + stsEsc(p.errore || '') + '</div>') + '</td>'
                    + '<td class="text-end">' + (p.ok
                        ? '<button class="btn btn-sm btn-outline-success" onclick="stsPubblica()">'
-                         + '<i class="fas fa-cloud-arrow-up me-1"></i>Pubblica il TXT</button>'
-                       : '<span class="small text-muted">prima deve rispondere</span>') + '</td></tr>';
+                         + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('sts.publish')) + '</button>'
+                       : '<span class="small text-muted">' + escHtml(t('sts.mustAnswerFirst')) + '</span>') + '</td></tr>';
             });
             h += '</tbody></table></div>';
 
@@ -72,13 +71,8 @@
             // Una sequenza scritta a parole diverge dal codice appena il codice cambia, e
             // continua a insegnare l'ordine di ieri: il posto giusto per l'ordine e' il
             // pulsante che lo esegue.
-            h += '<div class="alert alert-secondary py-2 small mb-0"><i class="fas fa-list-ol me-1"></i>'
-               + '<strong>Non c&rsquo;&egrave; un ordine da seguire a mano.</strong> Il pulsante '
-               + '<em>Attiva MTA-STS</em> (pagina Aggiornamenti) esegue tutta la catena su tutti i domini, '
-               + 'e <em>Configura tutto</em> nella pagina DNS la esegue su un dominio solo: include di nginx, '
-               + '443, jail, CNAME, proxy spento, certificato, attesa della propagazione, prova della politica '
-               + 'e infine il TXT. Al primo passo che fallisce si fermano e spiegano cosa manca. Il pulsante '
-               + 'qui sopra serve solo se vuoi pubblicare il TXT di un singolo dominio a mano.</div>'
+            h += '<div class="alert alert-secondary py-2 small mb-0"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>'
+               + '<strong>' + escHtml(t('sts.noManualOrder')) + '</strong> ' + escHtml(t('sts.noManualOrderHint')) + '</div>'
                + '<div id="stsEsito" class="mt-2"></div>';
 
             el.innerHTML = h;
@@ -89,11 +83,7 @@
             if (!sel) return;
             const modo = sel.value;
             const el = document.getElementById('stsEsito');
-            if (modo === 'enforce' && prompt('Passare a "enforce"?\n\n'
-                     + 'Da quel momento un server mittente che non riesce a stabilire una connessione\n'
-                     + 'TLS valida con il tuo server NON consegna il messaggio.\n\n'
-                     + 'Fallo solo dopo un periodo in "testing" senza problemi.\n'
-                     + 'Scrivi ENFORCE per confermare.') !== 'ENFORCE') return;
+            if (modo === 'enforce' && !adConferma(t('sts.confirmEnforce'), 'ENFORCE')) return;
             const r = await stsApi('mtasts_mode', { modo: modo });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + stsEsc(r.nota || r.error) + '</div>';
@@ -102,12 +92,8 @@
 
         async function stsPubblica() {
             const el = document.getElementById('stsEsito');
-            if (prompt('Pubblicare il record TXT MTA-STS?\n\n'
-                     + 'La politica risponde gia\', quindi la dichiarazione e\' mantenuta da subito.\n'
-                     + 'Se su quel nome ci sono piu\' record MTA-STS, ne resta uno solo, con l\'id giusto:\n'
-                     + 'con due o piu\' record i mittenti fanno come se MTA-STS non ci fosse.\n'
-                     + 'Scrivi CREA per confermare.') !== 'CREA') return;
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Pubblico su Cloudflare...';
+            if (!adConferma(t('sts.confirmPublish'), t('ad.wordCreate'))) return;
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sts.publishing'));
             const r = await stsApi('mtasts_txt', { confirm: 'CREA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + stsEsc(r.nota || r.error) + '</div>';

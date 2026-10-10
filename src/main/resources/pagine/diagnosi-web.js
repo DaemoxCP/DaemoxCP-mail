@@ -1,76 +1,71 @@
         // ---------- Cosa espone il web server ----------
         async function webDiag() {
             const el = document.getElementById('upd-web');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo nginx, le porte in ascolto, pf e fail2ban...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('wd.reading')) + '';
             const r = await updApi('web_diagnosi');
             if (!r.success) {
-                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error || 'diagnosi fallita') + '</div>';
+                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error || t('wd.failed')) + '</div>';
                 return;
             }
 
             const grave = r.contenutiInChiaro;
             let h = '<div class="alert alert-' + (grave ? 'danger' : 'info') + ' py-2 small mb-3">'
-                  + '<i class="fas fa-' + (grave ? 'triangle-exclamation' : 'circle-info') + ' me-1"></i>'
+                  + '<i class="fas fa-' + (grave ? 'triangle-exclamation' : 'circle-info') + ' me-1" aria-hidden="true"></i>'
                   + updEsc(r.verdetto) + '</div>';
 
             if (!r.nginxLeggibile) {
                 h += '<div class="alert alert-warning py-2 small mb-3">' + updEsc(r.nginxProblema) + '</div>';
             } else {
-                h += '<div class="small fw-bold mb-1">I siti che nginx serve davvero</div>'
+                h += '<div class="small fw-bold mb-1">' + escHtml(t('wd.sites')) + '</div>'
                    + '<div class="table-responsive"><table class="table table-sm align-middle mb-3"><thead><tr>'
-                   + '<th>Ascolta</th><th>Nomi</th><th>Cosa serve</th><th>Esito</th></tr></thead><tbody>';
+                   + '<th scope="col">' + escHtml(t('wd.colListen')) + '</th><th scope="col">' + escHtml(t('wd.colNames')) + '</th><th scope="col">' + escHtml(t('wd.colServes')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
                 (r.siti || []).forEach(s => {
                     let cosa = [];
                     if (s.servePhp) cosa.push('PHP');
-                    if (s.serveFile) cosa.push('file da <code>' + updEsc(s.radice) + '</code>');
-                    if (s.soloRedirect) cosa.push('solo un rimando');
-                    if (!cosa.length) cosa.push('niente');
+                    if (s.serveFile) cosa.push(t('wd.filesFrom.html', { root: updEsc(s.radice) }));
+                    if (s.soloRedirect) cosa.push(escHtml(t('wd.redirectOnly')));
+                    if (!cosa.length) cosa.push(escHtml(t('wd.nothing')));
                     h += '<tr class="upd-cell"><td><code class="small">' + updEsc(s.ascolta) + '</code>'
-                       + (s.cifrato ? ' <span class="badge bg-success">cifrato</span>'
-                                    : ' <span class="badge bg-warning text-dark">in chiaro</span>') + '</td>'
-                       + '<td class="small"><code>' + updEsc(s.nomi || '(nessuno)') + '</code></td>'
+                       + (s.cifrato ? ' <span class="badge bg-success">' + escHtml(t('wd.encrypted')) + '</span>'
+                                    : ' <span class="badge bg-warning text-dark">' + escHtml(t('wd.clear')) + '</span>') + '</td>'
+                       + '<td class="small"><code>' + updEsc(s.nomi || t('fw.none')) + '</code></td>'
                        + '<td class="small">' + cosa.join(', ') + '</td>'
                        + '<td class="small">' + (s.inChiaro
-                           ? '<i class="fas fa-times-circle text-danger"></i> <strong>serve contenuti senza '
-                             + 'cifratura</strong>: chi lo usa manda tutto in chiaro'
-                           : '<i class="fas fa-check-circle text-success"></i> a posto') + '</td></tr>';
+                           ? '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i> ' + t('wd.servesClear.html')
+                           : '<i class="fas fa-check-circle text-success" aria-hidden="true"></i> ' + escHtml(t('wd.ok')) + '') + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
 
                 h += '<div class="table-responsive"><table class="table table-sm mb-3"><tbody>'
-                   + webRiga('Limite di frequenza (<code>limit_req</code>)', r.limitReq,
-                             'Senza, un solo indirizzo puo&rsquo; inondare di richieste finch&eacute; nginx cede.')
-                   + webRiga('Limite di connessioni (<code>limit_conn</code>)', r.limitConn,
-                             'Senza, un solo indirizzo puo&rsquo; tenere aperte tutte le connessioni disponibili.')
-                   + webRiga('Jail fail2ban per nginx', r.fail2banLetto ? r.jailNginx : null,
-                             r.fail2banLetto ? 'Chi insiste sulle porte web non viene bannato.'
-                                             : 'Non ho potuto interrogare fail2ban.')
-                   + webRiga('Regole di pf leggibili', r.pfLetto ? true : null,
-                             r.pfLetto ? ('Regole totali: ' + updEsc(r.pfRegole)
-                                        + (r.pfCita443 ? '. La 443 compare.' : '. La 443 non compare fra le regole.'))
-                                       : 'Non ho potuto leggere pfctl: non so se le porte web siano filtrate.')
+                   + webRiga(t('wd.limitReq.html'), r.limitReq, escHtml(t('wd.limitReqNote')))
+                   + webRiga(t('wd.limitConn.html'), r.limitConn, escHtml(t('wd.limitConnNote')))
+                   + webRiga(escHtml(t('wd.jail')), r.fail2banLetto ? r.jailNginx : null,
+                             escHtml(r.fail2banLetto ? t('wd.jailNote') : t('wd.jailUnread')))
+                   + webRiga(escHtml(t('wd.pfReadable')), r.pfLetto ? true : null,
+                             escHtml(r.pfLetto ? t('wd.pfRules', { n: r.pfRegole }) + ' ' + (r.pfCita443 ? t('wd.pf443') : t('wd.pfNo443'))
+                                               : t('wd.pfUnread')))
                    + '</tbody></table></div>';
 
                 if (r.sslProtocols)
-                    h += '<div class="small text-muted mb-1">Protocolli TLS: <code>' + updEsc(r.sslProtocols) + '</code></div>';
+                    h += '<div class="small text-muted mb-1">' + escHtml(t('wd.tlsProtocols')) + ' <code>' + updEsc(r.sslProtocols) + '</code></div>';
                 if (r.workerConnections)
                     h += '<div class="small text-muted mb-2"><code>' + updEsc(r.workerConnections) + '</code></div>';
             }
 
             if (r.inAscoltoLetto && r.inAscolto)
-                h += '<div class="small fw-bold mb-1">In ascolto sulle porte 80 e 443</div>'
+                h += '<div class="small fw-bold mb-1">' + escHtml(t('wd.listening')) + '</div>'
                    + '<pre class="small p-2 border rounded mb-0">' + updEsc(r.inAscolto) + '</pre>';
             else
-                h += '<div class="small text-muted">Non ho potuto elencare le porte in ascolto.</div>';
+                h += '<div class="small text-muted">' + escHtml(t('wd.noListen')) + '</div>';
 
             el.innerHTML = h;
         }
 
         function webRiga(cosa, stato, nota) {
             const icona = stato === null || stato === undefined
-                ? '<i class="fas fa-circle-question text-secondary"></i>'
-                : (stato ? '<i class="fas fa-check-circle text-success"></i>'
-                         : '<i class="fas fa-times-circle text-danger"></i>');
+                ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('wd.unknown')) + '</span>'
+                : (stato ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
+                         : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>');
             return '<tr><td style="width:2rem">' + icona + '</td><td class="small">' + cosa
                  + '<div class="text-muted">' + nota + '</div></td></tr>';
         }

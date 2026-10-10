@@ -1,22 +1,17 @@
             <!-- Profilo di configurazione per Apple Mail -->
             <div class="card mt-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fab fa-apple me-2"></i><strong>Configura Apple Mail</strong>
-                        <span class="small text-muted ms-2">Mac, iPhone e iPad</span></span>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="paCarica()"><i class="fas fa-rotate me-1"></i>Aggiorna</button>
+                    <span><i class="fab fa-apple me-2" aria-hidden="true"></i><strong>{{t:pa.title}}</strong>
+                        <span class="small text-muted ms-2">{{t:pa.devices}}</span></span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="paCarica()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:pa.refresh}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">
-                        Apple Mail <strong>non usa</strong> n&eacute; i record SRV n&eacute; il file XML che cerca
-                        Thunderbird: si appoggia a un elenco interno di provider noti, e per un server proprio
-                        non esiste alcun documento Apple che descriva una scoperta automatica. La strada
-                        documentata da Apple &egrave; un&rsquo;altra: il <strong>profilo di configurazione</strong>.
+                        {{t:pa.intro1.html}}
                     </p>
                     <p class="small text-muted mb-2">
-                        Scarichi il file, lo apri, e la casella viene creata con server, porte e cifratura gi&agrave;
-                        giusti. <strong>La password non &egrave; dentro il file</strong> &mdash; finirebbe nella cartella
-                        Download in chiaro: Mail la chiede una volta sola, la stessa per entrata e uscita.
+                        {{t:pa.intro2.html}}
                     </p>
-                    <div id="paBody"><span class="text-muted small">Premi "Aggiorna".</span></div>
+                    <div id="paBody"><span class="text-muted small">{{t:pa.pressRefresh}}</span></div>
                 </div>
             </div>

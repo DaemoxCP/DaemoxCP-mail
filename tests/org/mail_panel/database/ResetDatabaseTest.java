@@ -78,7 +78,8 @@ public class ResetDatabaseTest {
                 avvisi.equals(List.of("mailboxes", "domains", "panel_admin")));
         List<String> rimaste = tabelle(c);
         vero("restavano " + rimaste, new HashSet<>(rimaste).equals(new HashSet<>(List.of("admin_passkeys",
-                "cloudflare_accounts", "dkim_rotation_history", "domains", "mailboxes", "panel_admin"))));
+                "cloudflare_accounts", "dkim_rotation_history", "domains", "mailboxes", "panel_admin", "panel_sessions",
+                "login_code_email", "login_code_console", "stepup_code", "email_change_code"))));
         db.createSchema();
         vero("e dopo \"Database reset completed!\" c'erano ancora il dominio, la casella e l'amministratore di prima",
                 righe(c, "domains") == 1 && righe(c, "mailboxes") == 1 && righe(c, "panel_admin") == 1
@@ -157,7 +158,7 @@ public class ResetDatabaseTest {
     /** Lo schema come lo prepara il pannello: createSchema e le migrazioni che SSLMailServer fa all'avvio. */
     static void schema(MailDatabase db) throws SQLException {
         db.createSchema();
-        db.ensurePasskeysTable();
+        db.ensurePasswordlessSchema();
         db.ensureMailboxReceiveEnabledColumn();
         db.ensureMailboxPasswordVaultColumns();
         db.ensureThemeColumn();
@@ -171,7 +172,14 @@ public class ResetDatabaseTest {
         int dominio = inserisci(c, "INSERT INTO domains (domain) VALUES (?)", "esempio.test");
         int casella = inserisci(c, "INSERT INTO mailboxes (domain_id, email, password) VALUES (?, ?, ?)",
                 dominio, "posta@esempio.test", "x");
-        int admin = inserisci(c, "INSERT INTO panel_admin (username, password_hash) VALUES (?, ?)", "amministratore", "x");
+        int admin = inserisci(c, "INSERT INTO panel_admin (username) VALUES (?)", "amministratore");
+        inserisci(c, "INSERT INTO panel_sessions (token_hash, admin_id, ua_hash, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+                "a".repeat(64), admin, "b".repeat(64), "2030-01-01 00:00:00", "2030-01-01 00:00:00", "2030-01-01 12:00:00");
+        for (String t : List.of("login_code_email", "login_code_console", "stepup_code"))
+            inserisci(c, "INSERT INTO " + t + " (admin_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                    admin, "c".repeat(64), "2030-01-01 00:00:00", "2030-01-01 00:10:00");
+        inserisci(c, "INSERT INTO email_change_code (admin_id, code_hash, target_enc, target_index, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+                admin, "c".repeat(64), "v1:x", "d".repeat(64), "2030-01-01 00:00:00", "2030-01-01 00:15:00");
         inserisci(c, "INSERT INTO admin_passkeys (admin_id, credential_id, public_key_cose) VALUES (?, ?, ?)",
                 admin, new byte[] {1, 2, 3}, new byte[] {4, 5, 6});
         inserisci(c, "INSERT INTO rspamd_training (message_id, trained_as, trained_by) VALUES (?, ?, ?)",

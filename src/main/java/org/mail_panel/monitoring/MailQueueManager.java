@@ -1,413 +1,290 @@
 package org.mail_panel.monitoring;
 
-import java.io.*;
-import java.time.*;
-import java.time.format.*;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.mail_panel.i18n.I18n;
+import org.mail_panel.util.Shell;
+
+import java.time.Instant;
 import java.util.*;
-import java.util.regex.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Mail Queue Manager for FreeBSD Mail Panel
+ * La coda di Postfix: elenco, contenuto di un messaggio, eliminazione, nuovo tentativo,
+ * messaggi trattenuti e rilasciati, statistiche.
  *
- * Manages the Postfix mail queue:
- * - View queued messages
- * - View message details
- * - Remove/delete messages
- * - Retry/flush messages
- * - Queue statistics
+ * Comandi di Postfix:
+ *  - postqueue -j        l'elenco, un oggetto JSON per messaggio (Postfix 3.1 e successivi)
+ *  - postcat -h -b -q    intestazioni e testo di un messaggio
+ *  - postsuper -d / -r   elimina un messaggio / lo rimette in coda
+ *  - postsuper -h / -H   trattiene / rilascia
+ *  - postqueue -f        riprova subito tutto
  *
- * Uses Postfix commands:
- * - postqueue -p     - List all queued messages
- * - postcat -q       - Show message content
- * - postsuper -d     - Delete message from queue
- * - postsuper -r     - Requeue message for delivery
- * - postqueue -f     - Flush queue (attempt immediate delivery)
- * - postsuper -h/-H  - Hold/release messages
+ * I comandi partono con gli argomenti separati, mai attraverso sh -c, e l'identificativo di
+ * coda si controlla PRIMA di usarlo (isQueueId). Prima l'identificativo arrivava dalla richiesta
+ * dritto in una riga di shell: /api/queue?action=message&id=X;comando eseguiva il comando, e
+ * bastava un link aperto da un amministratore collegato.
+ *
+ * L'elenco si legge da postqueue -j e non dal testo di postqueue -p: il testo mette il motivo
+ * del rinvio fra parentesi su una riga che il vecchio lettore scambiava per il destinatario,
+ * cosi' la colonna Errore restava sempre vuota e "Elimina falliti" non trovava mai niente.
+ *
+ * I messaggi per chi usa il pannello passano da I18n.tr (chiavi server.queue.*), nella lingua
+ * della richiesta; le eccezioni e i log restano in inglese.
  */
 public class MailQueueManager {
 
-    // Commands
     private static final String POSTQUEUE = "/usr/local/sbin/postqueue";
     private static final String POSTCAT = "/usr/local/sbin/postcat";
     private static final String POSTSUPER = "/usr/local/sbin/postsuper";
 
-    // Queue states
+    /**
+     * Gli identificativi di coda di Postfix sono alfanumerici: corti in esadecimale (3A1F2B4C5D)
+     * o lunghi in base 52 (4Nq8Zk1yQPz9Lm2). Qualsiasi altra cosa si rifiuta senza lanciare nulla.
+     */
+    private static final Pattern QUEUE_ID = Pattern.compile("[0-9A-Za-z]{5,32}");
+
+    /** Quanto testo del messaggio si mostra al massimo. */
+    static final int BODY_PREVIEW = 2000;
+
+    /** Chi lancia i comandi: Shell.run, sostituibile nelle prove. */
+    public interface Runner {
+        Shell.Result run(String... cmd);
+    }
+
+    private final Runner runner;
+
+    public MailQueueManager() {
+        this(Shell::run);
+    }
+
+    public MailQueueManager(Runner runner) {
+        this.runner = runner;
+    }
+
     public enum QueueState {
-        ACTIVE,       // Currently being delivered
-        DEFERRED,     // Temporary failure, will retry
-        HOLD,         // On hold
-        INCOMING,     // Just received
-        CORRUPT,      // Corrupted message
+        ACTIVE,       // in consegna adesso
+        DEFERRED,     // rinviato: errore temporaneo, Postfix riprovera'
+        HOLD,         // trattenuto: non parte finche' non viene rilasciato
+        INCOMING,     // appena arrivato (incoming o maildrop)
+        CORRUPT,      // file di coda illeggibile
         UNKNOWN
     }
 
+    /** true se il testo e' un identificativo di coda ammissibile. */
+    public static boolean isQueueId(String id) {
+        return id != null && QUEUE_ID.matcher(id).matches();
+    }
+
+    // ------------------------------------------------------------------ elenco
+
     /**
-     * Get all messages in queue
+     * Tutti i messaggi in coda.
+     *
+     * @throws IllegalStateException se postqueue non risponde come dovrebbe
      */
     public List<QueuedMessage> getQueue() {
-        List<QueuedMessage> messages = new ArrayList<>();
-
-        try {
-            String output = executeCommand(POSTQUEUE + " -p");
-
-            if (output.isEmpty() || output.contains("Mail queue is empty")) {
-                return messages;
-            }
-
-            // Parse queue output
-            // Format:
-            // -Queue ID- --Size-- ----Arrival Time---- -Sender/Recipient-------
-            // ABCD1234567*     1234 Sun Dec 29 10:30:45  sender@example.com
-            //                                          recipient@example.com
-
-            QueuedMessage currentMsg = null;
-            for (String line : output.split("\n")) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("-Queue ID-") || line.startsWith("--")) {
-                    continue;
-                }
-
-                // Check if this is a new message (starts with queue ID)
-                if (line.matches("^[A-F0-9]+[*!]?\\s+.*")) {
-                    if (currentMsg != null) {
-                        messages.add(currentMsg);
-                    }
-                    currentMsg = parseQueueLine(line);
-                } else if (currentMsg != null && line.contains("@")) {
-                    // This is a recipient line
-                    currentMsg.recipient = line.trim();
-                }
-            }
-
-            // Add last message
-            if (currentMsg != null) {
-                messages.add(currentMsg);
-            }
-
-        } catch (Exception e) {
-            System.err.println("Failed to get queue: " + e.getMessage());
+        Shell.Result r = runner.run(POSTQUEUE, "-j");
+        if (!r.success()) {
+            throw new IllegalStateException("postqueue -j failed (exit " + r.exitCode() + "): " + r.outputTrim());
         }
+        return parseJsonQueue(r.output());
+    }
 
+    /**
+     * L'uscita di postqueue -j: un oggetto JSON per riga. Le righe che non sono JSON (un avviso
+     * di Postfix finito nello stesso flusso) si saltano.
+     */
+    public static List<QueuedMessage> parseJsonQueue(String output) {
+        List<QueuedMessage> messages = new ArrayList<>();
+        if (output == null) return messages;
+        for (String line : output.split("\n")) {
+            line = line.trim();
+            if (!line.startsWith("{")) continue;
+            JSONObject o;
+            try {
+                o = new JSONObject(line);
+            } catch (JSONException e) {
+                continue;
+            }
+            QueuedMessage m = new QueuedMessage();
+            m.id = o.optString("queue_id", "");
+            m.state = stateOf(o.optString("queue_name", ""));
+            m.sender = o.optString("sender", "");
+            m.size = o.optLong("message_size", 0);
+            long arrival = o.optLong("arrival_time", 0);
+            m.arrival = arrival > 0 ? Instant.ofEpochSecond(arrival) : null;
+            JSONArray recipients = o.optJSONArray("recipients");
+            if (recipients != null) {
+                for (int i = 0; i < recipients.length(); i++) {
+                    JSONObject rcpt = recipients.optJSONObject(i);
+                    if (rcpt == null) continue;
+                    String reason = rcpt.optString("delay_reason", "");
+                    m.recipients.add(new Recipient(rcpt.optString("address", ""), reason.isBlank() ? null : reason));
+                }
+            }
+            messages.add(m);
+        }
         return messages;
     }
 
-    /**
-     * Parse a queue line into QueuedMessage
-     */
-    private QueuedMessage parseQueueLine(String line) {
-        try {
-            QueuedMessage msg = new QueuedMessage();
-
-            // Format: ABCD1234567*     1234 Sun Dec 29 10:30:45  sender@example.com
-            // The * means active, ! means held
-            Pattern pattern = Pattern.compile(
-                "^([A-F0-9]+)([*!]?)\\s+(\\d+)\\s+(.+?)\\s{2,}(.+)$"
-            );
-
-            Matcher matcher = pattern.matcher(line);
-            if (matcher.matches()) {
-                msg.messageId = matcher.group(1);
-                msg.envelopeId = msg.messageId;
-
-                String stateChar = matcher.group(2);
-                if ("*".equals(stateChar)) {
-                    msg.state = QueueState.ACTIVE;
-                } else if ("!".equals(stateChar)) {
-                    msg.state = QueueState.HOLD;
-                } else {
-                    msg.state = QueueState.DEFERRED;
-                }
-
-                msg.size = Long.parseLong(matcher.group(3));
-
-                String dateStr = matcher.group(4).trim();
-                msg.created = parseDateTime(dateStr);
-
-                msg.sender = matcher.group(5).trim();
-
-                return msg;
-            }
-
-            // Fallback: try simpler parsing
-            String[] parts = line.split("\\s+");
-            if (parts.length >= 2) {
-                msg.messageId = parts[0].replaceAll("[*!]", "");
-                msg.envelopeId = msg.messageId;
-                msg.state = parts[0].contains("*") ? QueueState.ACTIVE :
-                           parts[0].contains("!") ? QueueState.HOLD : QueueState.DEFERRED;
-                msg.rawLine = line;
-                return msg;
-            }
-
-        } catch (Exception e) {
-            System.err.println("Failed to parse queue line: " + line);
-        }
-
-        return null;
+    private static QueueState stateOf(String queueName) {
+        return switch (queueName) {
+            case "active" -> QueueState.ACTIVE;
+            case "deferred" -> QueueState.DEFERRED;
+            case "hold" -> QueueState.HOLD;
+            case "incoming", "maildrop" -> QueueState.INCOMING;
+            case "corrupt" -> QueueState.CORRUPT;
+            default -> QueueState.UNKNOWN;
+        };
     }
 
-    /**
-     * Get message content
-     */
-    public MessageContent getMessage(String messageId) {
+    // ------------------------------------------------------------------ un messaggio
+
+    /** Intestazioni e inizio del testo di un messaggio in coda. */
+    public MessageContent getMessage(String id) {
         MessageContent content = new MessageContent();
-        content.messageId = messageId;
-
-        try {
-            String output = executeCommand(POSTCAT + " -q " + messageId);
-
-            if (output.isEmpty()) {
-                content.error = "Message not found";
-                return content;
-            }
-
-            content.found = true;
-            content.rawContent = output;
-
-            // Parse headers and body
-            StringBuilder headers = new StringBuilder();
-            StringBuilder body = new StringBuilder();
-            boolean inBody = false;
-
-            for (String line : output.split("\n")) {
-                // Skip postcat metadata lines
-                if (line.startsWith("*** ")) {
-                    continue;
-                }
-
-                if (!inBody) {
-                    if (line.isEmpty()) {
-                        inBody = true;
-                    } else {
-                        headers.append(line).append("\n");
-
-                        // Extract common headers
-                        String lowerLine = line.toLowerCase();
-                        if (lowerLine.startsWith("from:")) {
-                            content.fromHeader = line.substring(5).trim();
-                        } else if (lowerLine.startsWith("to:")) {
-                            content.toHeader = line.substring(3).trim();
-                        } else if (lowerLine.startsWith("subject:")) {
-                            content.subject = line.substring(8).trim();
-                        } else if (lowerLine.startsWith("date:")) {
-                            content.dateHeader = line.substring(5).trim();
-                        } else if (lowerLine.startsWith("message-id:")) {
-                            content.messageIdHeader = line.substring(11).trim();
-                        }
-                    }
-                } else {
-                    body.append(line).append("\n");
-                }
-            }
-
-            content.headers = headers.toString();
-            content.body = body.toString();
-
-            // Limit body preview
-            if (content.body.length() > 2000) {
-                content.bodyPreview = content.body.substring(0, 2000) + "\n... [truncated]";
-            } else {
-                content.bodyPreview = content.body;
-            }
-
-        } catch (Exception e) {
-            content.error = e.getMessage();
+        content.id = id;
+        if (!isQueueId(id)) {
+            content.error = I18n.tr("server.queue.badId");
+            return content;
         }
-
+        Shell.Result r = runner.run(POSTCAT, "-h", "-b", "-q", id);
+        if (!r.success() || r.outputTrim().isEmpty()) {
+            content.error = I18n.tr("server.queue.notFound", Map.of("id", id));
+            return content;
+        }
+        parseMessage(r.output(), content);
+        content.found = true;
         return content;
     }
 
-    /**
-     * Remove/delete message from queue
-     */
-    public QueueAction removeMessage(String messageId) {
-        QueueAction action = new QueueAction();
-        action.action = "remove";
-        action.envelopeId = messageId;
-
-        try {
-            String output = executeCommand(POSTSUPER + " -d " + messageId);
-            action.success = !output.toLowerCase().contains("error") &&
-                            !output.toLowerCase().contains("cannot");
-            action.output = output;
-
-            if (action.success) {
-                action.message = "Message removed from queue";
+    /** Le intestazioni fino alla prima riga vuota, poi il testo; le righe "*** ... ***" di postcat no. */
+    static void parseMessage(String output, MessageContent content) {
+        StringBuilder headers = new StringBuilder();
+        StringBuilder body = new StringBuilder();
+        boolean inBody = false;
+        for (String line : output.split("\n")) {
+            if (line.startsWith("*** ") && line.endsWith(" ***")) continue;
+            if (!inBody) {
+                if (line.isEmpty()) {
+                    inBody = true;
+                    continue;
+                }
+                headers.append(line).append("\n");
+                String lower = line.toLowerCase(Locale.ROOT);
+                if (lower.startsWith("from:")) content.fromHeader = line.substring(5).trim();
+                else if (lower.startsWith("to:")) content.toHeader = line.substring(3).trim();
+                else if (lower.startsWith("subject:")) content.subject = line.substring(8).trim();
+                else if (lower.startsWith("date:")) content.dateHeader = line.substring(5).trim();
             } else {
-                action.message = "Failed to remove message: " + output;
+                body.append(line).append("\n");
             }
-
-        } catch (Exception e) {
-            action.success = false;
-            action.message = "Error: " + e.getMessage();
         }
-
-        return action;
+        content.headers = headers.toString();
+        String text = body.toString();
+        content.bodyTruncated = text.length() > BODY_PREVIEW;
+        content.bodyPreview = content.bodyTruncated ? text.substring(0, BODY_PREVIEW) : text;
     }
 
-    /**
-     * Requeue message for delivery
-     */
-    public QueueAction scheduleMessage(String messageId) {
-        QueueAction action = new QueueAction();
-        action.action = "requeue";
-        action.envelopeId = messageId;
+    // ------------------------------------------------------------------ azioni
 
-        try {
-            String output = executeCommand(POSTSUPER + " -r " + messageId);
-            action.success = !output.toLowerCase().contains("error");
-            action.output = output;
-
-            if (action.success) {
-                action.message = "Message requeued for delivery";
-            } else {
-                action.message = "Failed to requeue message: " + output;
-            }
-
-        } catch (Exception e) {
-            action.success = false;
-            action.message = "Error: " + e.getMessage();
+    /** Elimina un messaggio dalla coda. */
+    public QueueAction removeMessage(String id) {
+        if (!isQueueId(id)) return QueueAction.failed(I18n.tr("server.queue.badId"));
+        Shell.Result r = runner.run(POSTSUPER, "-d", id);
+        if (!r.success()) return QueueAction.failed(commandFailed(r));
+        // postsuper scrive "ID: removed" per ogni messaggio eliminato, e niente se non c'era
+        if (!r.output().contains(id + ": removed")) {
+            return QueueAction.failed(I18n.tr("server.queue.notFound", Map.of("id", id)));
         }
-
-        return action;
+        return QueueAction.done(I18n.tr("server.queue.removed", Map.of("id", id)));
     }
 
-    /**
-     * Flush queue - attempt immediate delivery of all messages
-     */
+    /** Rimette un messaggio in coda per un nuovo tentativo. */
+    public QueueAction scheduleMessage(String id) {
+        if (!isQueueId(id)) return QueueAction.failed(I18n.tr("server.queue.badId"));
+        Shell.Result r = runner.run(POSTSUPER, "-r", id);
+        if (!r.success()) return QueueAction.failed(commandFailed(r));
+        if (!r.output().contains(id + ": requeued")) {
+            return QueueAction.failed(I18n.tr("server.queue.notFound", Map.of("id", id)));
+        }
+        return QueueAction.done(I18n.tr("server.queue.requeued", Map.of("id", id)));
+    }
+
+    /** Chiede a Postfix di riprovare subito tutti i messaggi. */
     public QueueAction flushQueue() {
-        QueueAction action = new QueueAction();
-        action.action = "flush";
-
-        try {
-            String output = executeCommand(POSTQUEUE + " -f");
-            action.success = true;  // postqueue -f doesn't output on success
-            action.output = output;
-            action.message = "Queue flush initiated";
-
-        } catch (Exception e) {
-            action.success = false;
-            action.message = "Error: " + e.getMessage();
-        }
-
-        return action;
+        Shell.Result r = runner.run(POSTQUEUE, "-f");
+        if (!r.success()) return QueueAction.failed(commandFailed(r));
+        return QueueAction.done(I18n.tr("server.queue.flushed"));
     }
 
-    /**
-     * Hold all messages in queue
-     */
-    public QueueAction pauseQueue() {
-        QueueAction action = new QueueAction();
-        action.action = "hold";
-
-        try {
-            String output = executeCommand(POSTSUPER + " -h ALL");
-            action.success = true;
-            action.message = "All messages put on hold";
-            action.output = output;
-
-        } catch (Exception e) {
-            action.success = false;
-            action.message = "Error: " + e.getMessage();
-        }
-
-        return action;
+    /** Trattiene tutti i messaggi in coda adesso (quelli che arrivano dopo partono normalmente). */
+    public QueueAction holdAll() {
+        Shell.Result r = runner.run(POSTSUPER, "-h", "ALL");
+        if (!r.success()) return QueueAction.failed(commandFailed(r));
+        return QueueAction.done(I18n.trn("server.queue.held", countIn(r.output(), "Placed on hold"), Map.of()));
     }
 
-    /**
-     * Release all held messages
-     */
-    public QueueAction resumeQueue() {
-        QueueAction action = new QueueAction();
-        action.action = "release";
-
-        try {
-            String output = executeCommand(POSTSUPER + " -H ALL");
-            action.success = true;
-            action.message = "All held messages released";
-            action.output = output;
-
-        } catch (Exception e) {
-            action.success = false;
-            action.message = "Error: " + e.getMessage();
-        }
-
-        return action;
+    /** Rilascia tutti i messaggi trattenuti. */
+    public QueueAction releaseAll() {
+        Shell.Result r = runner.run(POSTSUPER, "-H", "ALL");
+        if (!r.success()) return QueueAction.failed(commandFailed(r));
+        return QueueAction.done(I18n.trn("server.queue.released", countIn(r.output(), "Released from hold"), Map.of()));
     }
 
-    /**
-     * Get queue statistics
-     */
+    /** Il numero nel riepilogo di postsuper ("Placed on hold: 3 messages"); 0 se non c'e'. */
+    static long countIn(String output, String label) {
+        Matcher m = Pattern.compile(Pattern.quote(label) + ":\\s*(\\d{1,9})").matcher(output == null ? "" : output);
+        return m.find() ? Long.parseLong(m.group(1)) : 0;
+    }
+
+    private static String commandFailed(Shell.Result r) {
+        String out = r.outputTrim();
+        if (out.length() > 300) out = out.substring(0, 300) + "...";
+        return I18n.tr("server.queue.commandFailed", Map.of("output", out));
+    }
+
+    // ------------------------------------------------------------------ statistiche
+
+    /** Quanti messaggi per stato, il piu' vecchio, i mittenti e i domini di destinazione piu' presenti. */
     public QueueStats getStats() {
+        return statsOf(getQueue());
+    }
+
+    static QueueStats statsOf(List<QueuedMessage> messages) {
         QueueStats stats = new QueueStats();
-
-        try {
-            List<QueuedMessage> messages = getQueue();
-
-            stats.totalMessages = messages.size();
-
-            for (QueuedMessage msg : messages) {
-                stats.totalSize += msg.size;
-
-                switch (msg.state) {
-                    case ACTIVE -> stats.active++;
-                    case DEFERRED -> stats.deferred++;
-                    case HOLD -> stats.hold++;
-                    case INCOMING -> stats.incoming++;
-                    default -> stats.unknown++;
-                }
-
-                // Track senders
-                if (msg.sender != null) {
-                    stats.topSenders.merge(msg.sender, 1, Integer::sum);
-                }
-
-                // Track recipients/destinations
-                if (msg.recipient != null) {
-                    String domain = extractDomain(msg.recipient);
-                    if (domain != null) {
-                        stats.topDestinations.merge(domain, 1, Integer::sum);
-                    }
-                }
-
-                // Track oldest message
-                if (msg.created != null) {
-                    if (stats.oldestMessage == null || msg.created.isBefore(stats.oldestMessage)) {
-                        stats.oldestMessage = msg.created;
-                    }
+        stats.totalMessages = messages.size();
+        for (QueuedMessage msg : messages) {
+            stats.totalSize += msg.size;
+            switch (msg.state) {
+                case ACTIVE -> stats.active++;
+                case DEFERRED -> stats.deferred++;
+                case HOLD -> stats.hold++;
+                case INCOMING -> stats.incoming++;
+                default -> stats.unknown++;
+            }
+            if (msg.isPermanentFailure()) stats.permanent++;
+            if (msg.sender != null && !msg.sender.isEmpty()) stats.topSenders.merge(msg.sender, 1, Integer::sum);
+            for (Recipient r : msg.recipients) {
+                int at = r.address().lastIndexOf('@');
+                if (at >= 0 && at < r.address().length() - 1) {
+                    stats.topDestinations.merge(r.address().substring(at + 1).toLowerCase(Locale.ROOT), 1, Integer::sum);
                 }
             }
-
-        } catch (Exception e) {
-            stats.error = e.getMessage();
+            if (msg.arrival != null && (stats.oldestMessage == null || msg.arrival.isBefore(stats.oldestMessage))) {
+                stats.oldestMessage = msg.arrival;
+            }
         }
-
         return stats;
     }
 
-    /**
-     * Delete all deferred messages
-     */
-    public QueueAction purgeDeferred() {
-        QueueAction action = new QueueAction();
-        action.action = "purge_deferred";
-
-        try {
-            String output = executeCommand(POSTSUPER + " -d ALL deferred");
-            action.success = true;
-            action.message = "All deferred messages removed";
-            action.output = output;
-
-        } catch (Exception e) {
-            action.success = false;
-            action.message = "Error: " + e.getMessage();
-        }
-
-        return action;
-    }
+    // ------------------------------------------------------------------ errori permanenti
 
     /**
-     * Un messaggio in coda ha fallito in modo PERMANENTE.
+     * Un errore di consegna PERMANENTE.
      *
      * Il criterio non e' "e' in coda da tanto": e' il codice di risposta. SMTP distingue il
      * 4xx (riprova piu' tardi) dal 5xx (non riprovarci), e i secondi in coda non si
@@ -417,185 +294,121 @@ public class MailQueueManager {
      * Il confronto NON e' su sottostringa: cercare "5." dentro il testo troverebbe anche una
      * dimensione "1.5.", un orario o un indirizzo IP, e si cancellerebbe posta buona.
      */
-    public static boolean fallimentoPermanente(String errore) {
-        if (errore == null || errore.isBlank()) return false;
+    public static boolean isPermanentFailure(String error) {
+        if (error == null || error.isBlank()) return false;
         // 1. codice di stato esteso 5.x.y (RFC 3463), isolato: "10.5.0.1" non deve contare
-        if (java.util.regex.Pattern.compile("(?<![0-9.])5\\.[0-9]{1,3}\\.[0-9]{1,3}(?![0-9.])")
-                .matcher(errore).find()) return true;
+        if (Pattern.compile("(?<![0-9.])5\\.[0-9]{1,3}\\.[0-9]{1,3}(?![0-9.])").matcher(error).find()) return true;
         // 2. codice di risposta a tre cifre, ma SOLO dove un codice puo' stare davvero:
         //    dopo "said:" o all'inizio della riga. Accettarlo ovunque farebbe scambiare
         //    "size=550" per un rifiuto definitivo, e si cancellerebbe un messaggio buono.
-        return java.util.regex.Pattern
-                .compile("(?:said:\\s*|^\\s*)5[0-9]{2}(?![0-9])", java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(errore).find();
+        return Pattern.compile("(?:said:\\s*|^\\s*)5[0-9]{2}(?![0-9])", Pattern.CASE_INSENSITIVE).matcher(error).find();
     }
 
     /** I messaggi in coda che hanno fallito in modo permanente. Legge e basta. */
     public List<QueuedMessage> permanentFailures() {
-        List<QueuedMessage> fuori = new java.util.ArrayList<>();
-        for (QueuedMessage m : getQueue())
-            if (fallimentoPermanente(m.errorReason)) fuori.add(m);
-        return fuori;
+        List<QueuedMessage> out = new ArrayList<>();
+        for (QueuedMessage m : getQueue()) if (m.isPermanentFailure()) out.add(m);
+        return out;
     }
 
     /**
-     * Cancella i soli messaggi con errore permanente, uno per uno.
+     * Elimina, fra i messaggi che chi usa il pannello ha visto e confermato (ids), quelli che
+     * hanno ANCORA un errore permanente. Uno per uno.
      *
-     * Non si usa "postsuper -d ALL deferred" come fa purgeDeferred: quello cancella TUTTA la
-     * coda differita, compresi i messaggi con errore temporaneo che sarebbero stati
-     * consegnati al prossimo tentativo. Qui si cancella solo cio' che non partira' mai.
+     * Solo quelli confermati: fra l'anteprima e la conferma la coda cambia, e un messaggio
+     * arrivato nel frattempo non e' stato visto da nessuno. Solo quelli ancora permanenti: uno
+     * che nel frattempo e' stato consegnato o rimesso in coda non si tocca.
+     *
+     * Non si usa "postsuper -d ALL deferred": cancellerebbe TUTTA la coda rinviata, compresi i
+     * messaggi con errore temporaneo che sarebbero partiti al prossimo tentativo.
      */
-    public QueueAction purgePermanentFailures() {
-        QueueAction action = new QueueAction();
-        action.action = "purge_permfails";
-        try {
-            List<QueuedMessage> da = permanentFailures();
-            if (da.isEmpty()) {
-                action.success = true;
-                action.message = "Nessun messaggio con errore permanente: non c'e' niente da eliminare.";
-                return action;
+    public QueueAction purgePermanentFailures(Collection<String> ids) {
+        Set<String> confirmed = new HashSet<>();
+        for (String id : ids) if (isQueueId(id)) confirmed.add(id);
+        int deleted = 0, failed = 0;
+        StringBuilder log = new StringBuilder();
+        for (QueuedMessage m : permanentFailures()) {
+            if (!confirmed.contains(m.id)) continue;
+            Shell.Result r = runner.run(POSTSUPER, "-d", m.id);
+            if (r.success() && r.output().contains(m.id + ": removed")) {
+                deleted++;
+            } else {
+                failed++;
+                log.append(m.id).append(": ").append(r.outputTrim()).append("\n");
             }
-            StringBuilder log = new StringBuilder();
-            int fatti = 0, falliti = 0;
-            for (QueuedMessage m : da) {
-                String id = m.envelopeId != null ? m.envelopeId : m.messageId;
-                // L'identificativo di coda e' alfanumerico: si controlla prima di passarlo a
-                // un comando, invece di fidarsi di come e' stato letto.
-                if (id == null || !id.matches("[A-Za-z0-9]{1,32}")) {
-                    falliti++;
-                    log.append("saltato (identificativo inatteso): ").append(id).append("\n");
-                    continue;
-                }
-                try {
-                    log.append(executeCommand(POSTSUPER + " -d " + id)).append("\n");
-                    fatti++;
-                } catch (Exception e) {
-                    falliti++;
-                    log.append("errore su ").append(id).append(": ").append(e.getMessage()).append("\n");
-                }
-            }
-            action.success = falliti == 0;
-            action.message = fatti + " messaggi con errore permanente eliminati"
-                    + (falliti > 0 ? ", " + falliti + " non eliminati (vedi output)" : "")
-                    + ". La coda differita con errori temporanei non e' stata toccata.";
-            action.output = log.toString();
-        } catch (Exception e) {
-            action.success = false;
-            action.message = "Errore: " + e.getMessage();
         }
+        String message = I18n.trn("server.queue.purged", deleted, Map.of());
+        if (failed > 0) message += " " + I18n.trn("server.queue.purgeFailed", failed, Map.of());
+        message += " " + I18n.tr("server.queue.purgeUntouched");
+        QueueAction action = failed == 0 ? QueueAction.done(message) : QueueAction.failed(message);
+        action.count = deleted;
+        action.output = log.toString();
         return action;
     }
 
-    // Utility methods
+    // ------------------------------------------------------------------ dati
 
-    private String extractDomain(String email) {
-        if (email == null || !email.contains("@")) {
-            return null;
-        }
-        return email.substring(email.lastIndexOf('@') + 1);
-    }
-
-    private LocalDateTime parseDateTime(String dateStr) {
-        if (dateStr == null || dateStr.isEmpty()) {
-            return null;
-        }
-
-        try {
-            // Postfix format: Sun Dec 29 10:30:45
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern(
-                "EEE MMM d HH:mm:ss", Locale.ENGLISH
-            );
-            // Add current year since Postfix doesn't include it
-            int year = LocalDateTime.now().getYear();
-            return LocalDateTime.parse(dateStr.trim(), formatter).withYear(year);
-
-        } catch (Exception e) {
-            // Try other formats
-            try {
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(
-                    "EEE MMM dd HH:mm:ss yyyy", Locale.ENGLISH
-                );
-                return LocalDateTime.parse(dateStr.trim(), formatter);
-            } catch (Exception e2) {
-                // Ignore parse errors
-            }
-        }
-
-        return null;
-    }
-
-    private String executeCommand(String command) throws Exception {
-        // TODO: migrate to Shell.run when touched
-        ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
-        org.mail_panel.util.Shell.applicaPath(pb);
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-
-        StringBuilder output = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
-            }
-        }
-
-        process.waitFor();
-        return output.toString().trim();
-    }
-
-    // Data classes
+    /** Un destinatario e, se Postfix ha gia' provato, il motivo del rinvio. */
+    public record Recipient(String address, String reason) {}
 
     public static class QueuedMessage {
-        public String messageId;
-        public String envelopeId;
+        public String id;
         public QueueState state = QueueState.UNKNOWN;
+        /** Vuoto per gli avvisi di mancata consegna (mittente nullo). */
         public String sender;
-        public String recipient;
+        public final List<Recipient> recipients = new ArrayList<>();
         public long size;
-        public LocalDateTime created;
-        public LocalDateTime lastAttempt;
-        public String errorReason;
-        public String rawLine;
-    }
+        /** Arrivo in coda, in UTC. */
+        public Instant arrival;
 
-    public static class MessageEnvelope {
-        public String envelopeId;
-        public boolean found;
-        public String sender;
-        public String recipient;
-        public String destination;
-        public LocalDateTime created;
-        public LocalDateTime expires;
-        public LocalDateTime lastRetry;
-        public int retryCount;
-        public String flags;
-        public String status;
-        public String errorLine;
-        public String rawContent;
-        public String error;
+        /** Il primo motivo di rinvio fra i destinatari, o null. */
+        public String errorReason() {
+            for (Recipient r : recipients) if (r.reason() != null) return r.reason();
+            return null;
+        }
+
+        /**
+         * Permanente solo se lo e' per OGNI destinatario: eliminare il messaggio lo toglie a
+         * tutti, e uno con un errore temporaneo (o non ancora provato) sarebbe partito.
+         */
+        public boolean isPermanentFailure() {
+            if (recipients.isEmpty()) return false;
+            for (Recipient r : recipients) if (!MailQueueManager.isPermanentFailure(r.reason())) return false;
+            return true;
+        }
     }
 
     public static class MessageContent {
-        public String messageId;
+        public String id;
         public boolean found;
         public String headers;
-        public String body;
         public String bodyPreview;
+        public boolean bodyTruncated;
         public String fromHeader;
         public String toHeader;
         public String subject;
         public String dateHeader;
-        public String messageIdHeader;
-        public String rawContent;
         public String error;
     }
 
     public static class QueueAction {
-        public String action;
-        public String envelopeId;
         public boolean success;
         public String message;
         public String output;
+        public int count;
+
+        static QueueAction done(String message) {
+            QueueAction a = new QueueAction();
+            a.success = true;
+            a.message = message;
+            return a;
+        }
+
+        static QueueAction failed(String message) {
+            QueueAction a = new QueueAction();
+            a.message = message;
+            return a;
+        }
     }
 
     public static class QueueStats {
@@ -606,10 +419,10 @@ public class MailQueueManager {
         public int hold;
         public int incoming;
         public int unknown;
-        public boolean paused;
-        public LocalDateTime oldestMessage;
-        public Map<String, Integer> topSenders = new HashMap<>();
-        public Map<String, Integer> topDestinations = new HashMap<>();
-        public String error;
+        /** Messaggi con un errore permanente per ogni destinatario. */
+        public int permanent;
+        public Instant oldestMessage;
+        public final Map<String, Integer> topSenders = new HashMap<>();
+        public final Map<String, Integer> topDestinations = new HashMap<>();
     }
 }

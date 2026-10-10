@@ -26,6 +26,10 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AddressConversionTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PkgBranchTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
+    javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/monitoring/*.java
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.monitoring.MailQueueTest
+    javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/sqli/*.java
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.sqli.ConfigSecretsTest
     sh tests/pkg-simulation-test.sh
 
 ## Con un MySQL di prova
@@ -47,16 +51,28 @@ senza le opzioni `-Dmysql.*` la saltano dicendolo. Serve il MySQL ufficiale 8.0,
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AddressConversionTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.VersionsApiTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.LanguageRoutesTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.QueueApiTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RateLimitsApiTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.CsrfFilterTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.LoginRoutesTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.MailboxPasswordTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.LoginSecurityTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
 
 **Mai sul database del pannello**: la parte di AddressConversionTest cancella e ricrea tutte le tabelle
-del database che le si indica (VersionsApiTest usa le tabelle che lascia), e ResetDatabaseTest
+del database che le si indica (VersionsApiTest, LanguageRoutesTest, QueueApiTest, RateLimitsApiTest, CsrfFilterTest
+LoginRoutesTest e MailboxPasswordTest usano le tabelle che lascia), LoginSecurityTest le cancella e le ricrea come una
+vecchia installazione con le password, e ResetDatabaseTest
 lo svuota del tutto, tabelle non del pannello comprese. SoftwareVersionsTest invece
 legge soltanto (SELECT VERSION()).
 
 ## Nel browser
 
-Le pagine generate dal pannello in Chromium, con Playwright e il server simulato:
+Le pagine generate dal pannello in Chromium, con Playwright e il server simulato. PageGenerator le
+scrive complete come le manda il server, con la cornice e i testi: nome.html in italiano e
+nome.en.html in inglese, piu' i dizionari degli script in i18n/ (da servire come /i18n/it.js e
+/i18n/en.js):
 
     D=$(mktemp -d)
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java
@@ -64,6 +80,16 @@ Le pagine generate dal pannello in Chromium, con Playwright e il server simulato
     NODE_PATH=$(npm root -g) node tests/address-conversion-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/software-versions-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/pkg-branch-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/layout-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/queue-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/limits-statistics-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [cartella-per-le-foto]
+
+L'accesso senza password invece gira sul server vero (LoginE2EServer), con il MySQL di prova, e
+Chromium con un autenticatore virtuale. Il server parte da una cartella vuota con il jar dentro:
+
+    D=$(mktemp -d) && cp target/freebsd-mail-panel-1.0.jar $D/
+    MYSQL="$P" NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [cartella-per-le-foto]
 
 ## Cosa provano
 
@@ -254,6 +280,134 @@ MySQL e Redis), "Altro software", le note "da riavviare", una versione con dentr
 testo, i nomi dei pulsanti per i lettori di schermo, la domanda prima di fermare un servizio o
 riavviare MySQL (annullata non parte niente), il token CSRF a /api/service, la rilettura dopo
 ogni comando; tema scuro e telefono, dove le tabelle diventano schede.
+
+**I18nTest** — le lingue dell'interfaccia (I18n) e la cornice delle pagine (Layout). I file di
+lingua hanno le stesse chiavi, nessun testo vuoto e gli stessi {valori} in italiano e in inglese;
+ogni {{t:chiave}} e ogni t('chiave') degli script esiste nelle due lingue; nessuno script nasconde
+la funzione t dietro una variabile con lo stesso nome; una pagina completata non ha segnaposti
+rimasti. Poi la lingua di una richiesta (Accept-Language con i pesi, il cookie) e la cornice: le
+quattro sezioni, ogni pagina servita dal pannello nel menu, la pagina in cui ti trovi segnata.
+
+**LanguageRoutesTest** — le lingue sul server vero (SSLMailServer), via HTTPS, con il MySQL di
+prova: il dizionario /i18n/(lingua).js, la lingua della pagina di accesso (cookie prima del
+browser, inglese per un browser che non chiede nessuna delle due), /api/language prima di entrare
+(solo col token della pagina di accesso) e dopo (col token della sessione: si salva nell'account),
+la scelta salvata che vince sul browser e il cookie riallineato, la cornice intorno alle pagine.
+
+**LoginSecurityTest** — l'accesso senza password, con il MySQL di prova. La migrazione di una
+vecchia installazione: via le colonne password_hash, totp_secret, totp_enabled e backup_codes, le
+date in DATETIME convertite in UTC, il piu' vecchio amministratore superadmin se non ce n'era uno,
+le passkey di prima legate al loro user handle e ancora buone per entrare; le chiavi in un file 600
+fuori dal database. La cifratura AES-256-GCM (nonce casuale, un carattere cambiato e non si
+decifra, un'altra chiave non decifra) e l'indice cieco. Le passkey firmate da un autenticatore
+software (SoftAuthenticator): registrazione e login validi, e rifiutati con un'altra sessione,
+un'altra origine, un altro rpId, senza verifica dell'utente, con il contatore all'indietro, con la
+firma rovinata, con la sfida riusata o scaduta, con una chiave di nessuno o di un amministratore
+disattivato; la conferma di un'operazione solo con la propria passkey e la propria sessione. I
+codici monouso: solo l'HMAC nel database, una volta sola, cinque tentativi, dieci minuti, i limiti
+per indirizzo, IP e sottorete, il codice della console, quello di conferma, il cambio dell'email
+che vale solo quando torna il codice, e nel log mai un codice o un indirizzo. Le sessioni: solo
+l'impronta del token, IP e browser cifrati, lo stesso browser, 30 minuti senza richieste e 12 ore
+al massimo, la revoca (una, le altre, all'uscita, con l'amministratore), il token CSRF derivato.
+
+**LoginRoutesTest** — le rotte dell'accesso sul server vero, via HTTPS: la pagina di accesso non
+crea niente sul server e lega il suo token a un cookie; ogni richiesta prima del login vuole token e
+cookie; chiedere un codice per un indirizzo di nessuno risponde come per uno vero (stato, testo,
+tempo), e cosi' un codice sbagliato; codice giusto, codice della console e passkey aprono una
+sessione nel database con il cookie __Host-; /api/account vuole il token della sessione; gli
+amministratori hanno un'email e nessuna password; il vault vuole una conferma recente; l'uscita
+chiude la sessione nel database; le vecchie rotte con password e TOTP non rispondono piu'.
+
+**MailboxPasswordTest** — le password delle caselle si possono sempre rivedere, con il MySQL di
+prova e il server vero. Ogni password e' salvata due volte, hash bcrypt e copia cifrata; se il vault
+non cifra non si salva niente. "Rivela" mostra la copia solo se e' ancora la password (confronto con
+l'hash): copia mancante, vecchia o illeggibile hanno ciascuna il suo messaggio. Le righe rimaste in
+chiaro (il vecchio driver sql della webmail) si riconoscono e all'avvio diventano hash + copia.
+/api/internal/mailbox-password (il cambio dalla webmail): solo da loopback, senza intestazioni di un
+proxy, con la chiave della webmail; password attuale controllata, hash e copia insieme, tentativi
+limitati, nel log nessuna password. /api/internal/mailbox-vault riempie una copia mancante dopo un
+accesso alla webmail. La configurazione di Roundcube: via le righe del driver sql (con la password
+MySQL del pannello), il blocco del pannello una volta sola, file non leggibile dagli altri utenti.
+Con `-Droundcube.dir=<roundcubemail-1.6.x-complete scompattato>` e `php` fa girare anche il codice
+vero di Roundcube (webmail-roundcube-test.php): il driver httpapi con il suo Guzzle e l'hook di
+accesso del plugin mailpanel_sso, contro il pannello.
+
+**ConfigSecretsTest** — la password MySQL e la chiave privata TLS escono dal database SQLite anche su
+un server gia' avviato: al primo avvio passano nel file dei segreti (600, cartella 700) e le colonne
+si svuotano; quello che il pannello salva dopo va nel file; un valore scritto da una versione vecchia
+vince all'avvio dopo; la chiave PEM torna identica; con il file non scrivibile il valore resta in
+SQLite e si legge lo stesso; database/ 700 e mail_panel.db 600.
+
+**login-browser-test.js** — l'accesso in Chromium con un autenticatore virtuale, sul server vero:
+il primo accesso con il codice della console (java ... Main --access-code), la passkey creata nelle
+Impostazioni, l'email di accesso confermata con il suo codice, le sessioni aperte, la chiave del
+vault che chiede la conferma con la passkey, l'uscita e l'ingresso con la sola passkey, un
+amministratore nuovo con l'email, l'ingresso con un codice via email (e uno sbagliato rifiutato),
+la pagina di accesso su un telefono in italiano.
+
+**layout-browser-test.js** — la cornice in Chromium: la barra laterale a quattro sezioni (con le
+pagine Coda, Limiti di invio, Statistiche e Amministratori, che prima nessun link raggiungeva), la
+voce della pagina in cui ti trovi, "Sezione › Pagina" nella barra in alto, "Vai al contenuto" col
+primo Tab, il cambio di lingua (la richiesta col token CSRF, la pagina che torna in inglese, il
+dizionario degli script inglese, e indietro), la scelta della lingua sulle pagine di accesso e di
+installazione, il menu sul telefono (si apre, prende il fuoco, si chiude con Esc e con la X),
+nessuno scorrimento di lato, il tema scuro.
+
+**MailQueueTest** — la coda di Postfix (MailQueueManager) con un esecutore finto che registra i
+comandi invece di lanciarli. L'identificativo di coda non arriva mai a una shell: ogni comando e'
+una lista di argomenti, e un identificativo che non e' alfanumerico viene rifiutato prima di
+lanciare qualsiasi cosa (prima finiva in "sh -c postcat -q <id>", e /api/queue?action=message&id=X;comando
+eseguiva il comando). L'elenco letto da postqueue -j, con il motivo del rinvio per ogni destinatario
+(postqueue -p lo metteva su una riga che il vecchio lettore prendeva per il destinatario: la colonna
+Errore restava vuota e "Elimina falliti" non trovava mai niente); permanente solo un messaggio con
+un 5xx per OGNI destinatario; si eliminano solo i messaggi confermati che hanno ancora un errore
+permanente; i messaggi nella lingua della richiesta, le eccezioni in inglese.
+
+**QueueApiTest** — /api/queue sul server vero, via HTTPS, con il MySQL di prova e l'esecutore finto:
+senza sessione 401; l'elenco con il motivo del rinvio e l'arrivo in UTC; un identificativo con
+caratteri di shell rifiutato senza lanciare niente; ogni POST senza token CSRF o con un token
+sbagliato 403, senza lanciare niente e scritto nel registro di audit; con il token l'eliminazione
+lancia postsuper con l'identificativo come unico argomento e finisce nel registro; l'eliminazione
+dei falliti vuole gli identificativi visti e il loro numero, e tocca solo quelli.
+
+**queue-browser-test.js** — la pagina Coda in Chromium, in italiano e in inglese: i quattro contatori
+dai campi che il server manda davvero (prima leggeva inflight/tempfail/permfail, che il server non
+ha mai mandato), mittente, oggetto, motivo del rinvio e testo con dentro HTML mostrati come testo e
+mai eseguiti, il token CSRF in ogni POST, l'eliminazione di un messaggio dopo la conferma, quella
+dei falliti solo scrivendone il numero, le date nella lingua della pagina, nessuno scorrimento di
+lato sul telefono.
+
+**RateLimitsApiTest** — /api/ratelimits sul server vero, con il MySQL di prova: senza sessione 401;
+ogni POST senza token CSRF 403; zero e un limite giornaliero sotto quello orario rifiutati col
+motivo; salvare di nuovo i limiti globali AGGIORNA l'unica riga globale (con target_id NULL
+l'indice UNIQUE di MySQL lasciava aggiungere una riga a ogni salvataggio) e toglie le righe NULL
+rimaste; il limite di una casella creato, aggiornato sul posto ed eliminato con i nomi e i campi
+che la pagina manda (prima mandava create/update/id, che il server non conosceva); tutto nel
+registro di audit.
+
+**limits-statistics-browser-test.js** — Limiti di invio e Statistiche in Chromium, in italiano e
+in inglese. Limiti: l'avviso che i limiti orari e giornalieri sono salvati ma non applicati, i
+limiti globali salvati col token CSRF, il limite di una casella creato (save_mailbox), modificato
+senza cambiare casella ed eliminato dopo la conferma, un indirizzo con dentro HTML che resta testo.
+Statistiche: l'avviso che i conteggi di invio e ricezione non vengono raccolti, le schede da
+"totals" e la tabella da "domains", i numeri di Rspamd letti dove il server li mette (prima li
+cercava sotto "stats": sempre "-"), il periodo mandato come giorni, numeri e date nella lingua
+della pagina; nessuno scorrimento di lato sul telefono.
+
+**CsrfFilterTest** — il token CSRF controllato una volta per tutte le rotte (il filtro di
+SSLMailServer.context), sul server vero. Venticinque rotte autenticate accettavano POST senza
+chiederlo; la sonda e' una di quelle, /api/timezone-diag, con una richiesta che il gestore rifiuta
+senza toccare niente: senza token 403, con l'intestazione X-CSRF-Token o col campo csrf_token
+arriva al gestore, che legge lo stesso corpo; un'intestazione sbagliata vince su un token giusto
+nel corpo; senza sessione risponde il gestore (401); GET e le rotte usate prima di entrare non si
+toccano; ogni rifiuto nel registro di audit.
+
+**english-pages-browser-test.js** — le pagine tradotte in Chromium, IN INGLESE, con un server
+simulato che risponde a ogni API in modo plausibile (e in inglese). Per ogni pagina: gli script
+girano senza errori, <html lang="en">, e il testo visibile dopo che gli script hanno riempito la
+pagina, piu' title, aria-label e placeholder, non ha parole italiane rimaste. Per la pagina DNS si
+scelgono un dominio, la verifica, la diagnostica dell'orario e le schede di autodns, autoconfig e
+MTA-STS.
 
 **pkg-simulation-test.sh** — la simulazione su COPIA del database di pkg, contro un pkg finto che
 tiene i "lock" come file. Dimostra che lo sblocco avviene nella copia e non nel database vero,

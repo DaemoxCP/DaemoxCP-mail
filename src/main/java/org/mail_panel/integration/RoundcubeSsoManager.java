@@ -52,6 +52,8 @@ public class RoundcubeSsoManager {
     private SecretKey secretKey;
     private String roundcubeUrl = "https://mail.example.com";
     private String masterPassword = null;
+    /** La porta HTTPS del pannello: la webmail ci manda i cambi password e le password di chi entra. */
+    private int panelPort = 0;
 
     public RoundcubeSsoManager(MailDatabase database) {
         this.database = database;
@@ -106,6 +108,10 @@ public class RoundcubeSsoManager {
     /**
      * Set the Roundcube URL
      */
+    public void setPanelPort(int port) {
+        this.panelPort = port;
+    }
+
     public void setRoundcubeUrl(String url) {
         this.roundcubeUrl = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
@@ -385,6 +391,15 @@ public class RoundcubeSsoManager {
             enablePluginInConfig();
             System.out.println("[SSO] Plugin enabled in Roundcube config");
 
+            // Webmail password changes go through the panel (hash + encrypted copy together)
+            if (panelPort > 0) {
+                boolean changed = WebmailPasswordConfig.ensure(Paths.get(ROUNDCUBE_CONFIG), panelPort,
+                        org.mail_panel.security.PanelSecrets.webmailKey());
+                System.out.println("[SSO] Webmail password changes routed through the panel" + (changed ? " (config updated)" : ""));
+                // Con opcache.validate_timestamps=0 PHP-FPM terrebbe la configurazione di prima
+                if (changed) executeCommand("service php_fpm reload >/dev/null 2>&1 || true");
+            }
+
             // Set permissions
             executeCommand("chown -R www:www " + SSO_PLUGIN_PATH);
             executeCommand("chmod 755 " + SSO_PLUGIN_PATH);
@@ -410,7 +425,7 @@ public class RoundcubeSsoManager {
      * Generate Roundcube SSO plugin PHP code
      * Uses master user authentication for admin SSO access
      */
-    private String generatePluginPhp() {
+    public static String generatePluginPhp() {
         return """
 <?php
 /**
@@ -429,6 +444,38 @@ class mailpanel_sso extends rcube_plugin
         $this->load_config();
         $this->add_hook('startup', array($this, 'startup'));
         $this->add_hook('authenticate', array($this, 'authenticate'));
+        $this->add_hook('login_after', array($this, 'login_after'));
+    }
+
+    /**
+     * After a login with the mailbox's own password (not the panel's master-user login), the
+     * panel stores the encrypted copy of that password if it is missing or out of date, so the
+     * password can always be shown in the panel. The panel checks it against the bcrypt hash
+     * first. If the panel does not answer, the login goes on as usual.
+     */
+    function login_after($args)
+    {
+        if ($this->sso_user) {
+            return $args;
+        }
+        $rcmail = rcmail::get_instance();
+        $url = $rcmail->config->get('mailpanel_vault_url');
+        $key = $rcmail->config->get('mailpanel_vault_key');
+        $user = $rcmail->get_user_name();
+        $pass = $rcmail->get_user_password();
+        if (empty($url) || empty($key) || empty($user) || !is_string($pass) || $pass === '' || strpos($user, '*') !== false) {
+            return $args;
+        }
+        try {
+            $client = $rcmail->get_http_client(array('verify' => false, 'timeout' => 5, 'http_errors' => false));
+            $client->request('POST', $url, array(
+                'form_params' => array('user' => $user, 'pass' => $pass),
+                'headers' => array('X-MailPanel-Key' => $key),
+            ));
+        } catch (Exception $e) {
+            rcube::write_log('errors', 'mailpanel_sso: the mail panel did not answer the password copy request');
+        }
+        return $args;
     }
 
     function startup($args)
@@ -538,7 +585,7 @@ class mailpanel_sso extends rcube_plugin
             $data = json_decode($decrypted, true);
 
             if (!$data || !isset($data['email']) || !isset($data['timestamp'])) {
-                error_log('mailpanel_sso: Invalid JSON: ' . $decrypted);
+                error_log('mailpanel_sso: Invalid token content');
                 return array('valid' => false, 'error' => 'Invalid token format');
             }
 
@@ -551,9 +598,6 @@ class mailpanel_sso extends rcube_plugin
             $email = $data['email'];
             $password = isset($data['password']) ? $data['password'] : '';
             $master_user = isset($data['master_user']) ? $data['master_user'] : '';
-
-            // Log for debugging (remove in production)
-            error_log('mailpanel_sso: email=' . $email . ', master_user=' . $master_user . ', pass_len=' . strlen($password));
 
             // If master user is provided, use master authentication
             if (!empty($master_user) && !empty($password)) {
@@ -591,6 +635,10 @@ class mailpanel_sso extends rcube_plugin
      */
     private String generatePluginConfig() {
         String base64Secret = Base64.getEncoder().encodeToString(secretKey.getEncoded());
+        String vault = panelPort > 0
+                ? "$config['mailpanel_vault_url'] = 'https://127.0.0.1:" + panelPort + "/api/internal/mailbox-vault';\n"
+                  + "$config['mailpanel_vault_key'] = '" + org.mail_panel.security.PanelSecrets.webmailKey() + "';\n"
+                : "";
         return String.format("""
 <?php
 // Mail Panel SSO Configuration
@@ -599,7 +647,7 @@ class mailpanel_sso extends rcube_plugin
 $config['mailpanel_sso_secret'] = '%s';
 $config['mailpanel_sso_enabled'] = true;
 $config['mailpanel_sso_token_expiry'] = %d;
-""", base64Secret, TOKEN_EXPIRY_SECONDS);
+""", base64Secret, TOKEN_EXPIRY_SECONDS) + vault;
     }
 
     /**

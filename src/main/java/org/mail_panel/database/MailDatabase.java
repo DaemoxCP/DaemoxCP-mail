@@ -3,6 +3,8 @@ package org.mail_panel.database;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.sql.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +25,8 @@ import java.util.UUID;
  * - roundcube_tokens: Auto-login tokens for webmail
  */
 public class MailDatabase {
+    private static final Logger LOGGER = Logger.getLogger(MailDatabase.class.getName());
+
 
     private Connection connection;
     private String host = "127.0.0.1";
@@ -196,7 +200,8 @@ public class MailDatabase {
      * puntano ad altre con una chiave esterna, poi quelle a cui si punta.
      */
     static final List<String> TABELLE_DEL_PANNELLO = List.of(
-        "admin_passkeys", "rspamd_training",                                  // -> panel_admin
+        "admin_passkeys", "rspamd_training", "panel_sessions",                // -> panel_admin
+        "login_code_email", "login_code_console", "stepup_code", "email_change_code",
         "roundcube_tokens", "auto_responders", "sieve_filters", "forwarding_rules",
         "email_statistics",                                                   // -> mailboxes, domains
         "aliases", "mailboxes",                                               // -> domains
@@ -268,15 +273,17 @@ public class MailDatabase {
             CREATE TABLE IF NOT EXISTS panel_admin (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 username VARCHAR(50) NOT NULL UNIQUE,
-                password_hash VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP NULL,
+                email_enc VARCHAR(512) NULL,
+                email_index CHAR(64) CHARACTER SET ascii NULL,
+                user_handle VARCHAR(64) CHARACTER SET ascii NULL,
+                created_at DATETIME NULL,
+                last_login DATETIME NULL,
                 active BOOLEAN DEFAULT TRUE,
-                totp_secret VARCHAR(64) NULL,
-                totp_enabled BOOLEAN DEFAULT FALSE,
-                backup_codes TEXT NULL,
                 role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin',
-                theme VARCHAR(10) DEFAULT 'auto'
+                theme VARCHAR(10) DEFAULT 'auto',
+                language VARCHAR(5) NULL,
+                UNIQUE KEY uq_admin_email_index (email_index),
+                UNIQUE KEY uq_admin_user_handle (user_handle)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """;
 
@@ -535,8 +542,10 @@ public class MailDatabase {
                 sign_count BIGINT DEFAULT 0,
                 name VARCHAR(100) DEFAULT 'Passkey',
                 aaguid VARBINARY(16) NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_used TIMESTAMP NULL,
+                user_handle VARCHAR(64) CHARACTER SET ascii NULL,
+                rp_id VARCHAR(253) CHARACTER SET ascii NULL,
+                created_at DATETIME NULL,
+                last_used DATETIME NULL,
                 FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE,
                 UNIQUE KEY unique_credential (credential_id(255))
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -560,153 +569,109 @@ public class MailDatabase {
             stmt.execute(createRspamdTraining);
             stmt.execute(createAuditLog);
             stmt.execute(createPasskeys);
-        }
-    }
-
-    // ========== ADMIN AUTHENTICATION ==========
-
-    /**
-     * Create admin user with hashed password
-     */
-    public boolean createAdminUser(String username, String password) {
-        String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
-        String sql = """
-            INSERT INTO panel_admin (username, password_hash) VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)
-            """;
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            stmt.setString(2, hashedPassword);
-            stmt.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            System.err.println("Failed to create admin user: " + e.getMessage());
-            return false;
+            for (String t : AUTH_TABLES) stmt.execute(t);
         }
     }
 
     /**
-     * Validate admin login credentials
+     * Le tabelle dell'accesso senza password: le sessioni e i codici monouso, una tabella per
+     * flusso (accesso via email, accesso dalla console, cambio dell'email, conferma di
+     * un'operazione delicata). Nei codici c'e' solo l'impronta HMAC, mai il codice; della sessione
+     * c'e' solo l'impronta SHA-256 del token. Date in UTC, colonne DATETIME.
      */
-    public boolean validateAdminLogin(String username, String password) {
-        return getAdminIdIfValidLogin(username, password) > 0;
+    private static final List<String> AUTH_TABLES = List.of(
+        """
+        CREATE TABLE IF NOT EXISTS panel_sessions (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            token_hash CHAR(64) CHARACTER SET ascii NOT NULL,
+            admin_id INT NOT NULL,
+            ua_hash CHAR(64) CHARACTER SET ascii NOT NULL,
+            ua_enc VARCHAR(1024) NULL,
+            ip_enc VARCHAR(256) NULL,
+            created_at DATETIME NOT NULL,
+            last_seen_at DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL,
+            reauth_at DATETIME NULL,
+            UNIQUE KEY uq_session_token (token_hash),
+            KEY idx_session_admin (admin_id),
+            KEY idx_session_expires (expires_at),
+            CONSTRAINT fk_session_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """,
+        codeTable("login_code_email", ""),
+        codeTable("login_code_console", ""),
+        codeTable("stepup_code", ""),
+        codeTable("email_change_code",
+            "target_enc VARCHAR(512) NOT NULL, target_index CHAR(64) CHARACTER SET ascii NOT NULL,")
+    );
+
+    private static String codeTable(String name, String extra) {
+        return "CREATE TABLE IF NOT EXISTS " + name + " ("
+             + "id BIGINT AUTO_INCREMENT PRIMARY KEY, admin_id INT NOT NULL,"
+             + " code_hash CHAR(64) CHARACTER SET ascii NOT NULL, " + extra
+             + " attempts INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL,"
+             + " used_at DATETIME NULL, KEY idx_" + name + "_admin (admin_id, expires_at),"
+             + " CONSTRAINT fk_" + name + "_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE"
+             + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
     }
 
     /**
-     * Validate admin login and return admin ID (or 0 if invalid)
+     * Da un'installazione con le password a quella senza. Si puo' ripetere: ogni passo guarda prima
+     * se serve. Su una connessione sua con il fuso UTC, perche' passare da TIMESTAMP a DATETIME
+     * converte con il fuso della sessione, e le date devono restare in UTC.
+     *
+     *  - via password_hash, totp_secret, totp_enabled, backup_codes: nessun hash nel database;
+     *  - email cifrata, indice cieco, user handle delle passkey;
+     *  - le passkey sanno a quale user handle e a quale nome (rpId) appartengono;
+     *  - le date dell'accesso in DATETIME.
      */
-    public int getAdminIdIfValidLogin(String username, String password) {
-        String sql = "SELECT id, password_hash FROM panel_admin WHERE username = ? AND active = TRUE";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                int adminId = rs.getInt("id");
-                String hashedPassword = rs.getString("password_hash");
-                if (BCrypt.checkpw(password, hashedPassword)) {
-                    // Update last login
-                    updateAdminLastLogin(username);
-                    return adminId;
+    public void ensurePasswordlessSchema() throws SQLException {
+        try (Connection c = connessionePropria(); Statement st = c.createStatement()) {
+            st.execute("SET time_zone = '+00:00'");
+            for (String t : AUTH_TABLES) st.execute(t);
+            for (String col : List.of("password_hash", "totp_secret", "totp_enabled", "backup_codes")) {
+                if (columnType(c, "panel_admin", col) != null) {
+                    // Nome fisso, preso dall'elenco qui sopra: un ALTER non prende parametri.
+                    st.executeUpdate("ALTER TABLE panel_admin DROP COLUMN " + col);
+                    LOGGER.info("Removed panel_admin." + col);
                 }
             }
-        } catch (SQLException e) {
-            System.err.println("Login validation error: " + e.getMessage());
-        }
-        return 0;
-    }
-
-    private void updateAdminLastLogin(String username) {
-        String sql = "UPDATE panel_admin SET last_login = CURRENT_TIMESTAMP WHERE username = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            // ignore
-        }
-    }
-
-    /**
-     * Change admin password
-     */
-    public boolean changeAdminPassword(String username, String newPassword) {
-        String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
-        String sql = "UPDATE panel_admin SET password_hash = ? WHERE username = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, hashedPassword);
-            stmt.setString(2, username);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.err.println("Failed to change password: " + e.getMessage());
-            return false;
+            if (columnType(c, "panel_admin", "email_enc") == null)
+                st.executeUpdate("ALTER TABLE panel_admin ADD COLUMN email_enc VARCHAR(512) NULL");
+            if (columnType(c, "panel_admin", "email_index") == null)
+                st.executeUpdate("ALTER TABLE panel_admin ADD COLUMN email_index CHAR(64) CHARACTER SET ascii NULL,"
+                        + " ADD UNIQUE KEY uq_admin_email_index (email_index)");
+            if (columnType(c, "panel_admin", "user_handle") == null)
+                st.executeUpdate("ALTER TABLE panel_admin ADD COLUMN user_handle VARCHAR(64) CHARACTER SET ascii NULL,"
+                        + " ADD UNIQUE KEY uq_admin_user_handle (user_handle)");
+            if ("timestamp".equals(columnType(c, "panel_admin", "created_at")))
+                st.executeUpdate("ALTER TABLE panel_admin MODIFY created_at DATETIME NULL");
+            if ("timestamp".equals(columnType(c, "panel_admin", "last_login")))
+                st.executeUpdate("ALTER TABLE panel_admin MODIFY last_login DATETIME NULL");
+            if (columnType(c, "admin_passkeys", "user_handle") == null)
+                st.executeUpdate("ALTER TABLE admin_passkeys ADD COLUMN user_handle VARCHAR(64) CHARACTER SET ascii NULL");
+            if (columnType(c, "admin_passkeys", "rp_id") == null)
+                st.executeUpdate("ALTER TABLE admin_passkeys ADD COLUMN rp_id VARCHAR(253) CHARACTER SET ascii NULL");
+            if ("timestamp".equals(columnType(c, "admin_passkeys", "created_at")))
+                st.executeUpdate("ALTER TABLE admin_passkeys MODIFY created_at DATETIME NULL");
+            if ("timestamp".equals(columnType(c, "admin_passkeys", "last_used")))
+                st.executeUpdate("ALTER TABLE admin_passkeys MODIFY last_used DATETIME NULL");
         }
     }
 
-    /**
-     * Verify admin password by admin ID
-     */
-    public boolean verifyAdminPassword(int adminId, String password) {
-        String sql = "SELECT password_hash FROM panel_admin WHERE id = ? AND active = TRUE";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                String hashedPassword = rs.getString("password_hash");
-                return BCrypt.checkpw(password, hashedPassword);
+    /** Il tipo di una colonna (minuscolo, "datetime", "varchar"...) o null se la colonna non c'e'. */
+    private static String columnType(Connection c, String table, String column) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("SELECT DATA_TYPE FROM information_schema.columns "
+                + "WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?")) {
+            ps.setString(1, table);
+            ps.setString(2, column);
+            try (ResultSet r = ps.executeQuery()) {
+                return r.next() ? r.getString(1).toLowerCase(java.util.Locale.ROOT) : null;
             }
-        } catch (SQLException e) {
-            System.err.println("Password verification error: " + e.getMessage());
-        }
-        return false;
-    }
-
-    /**
-     * Update admin password by admin ID
-     */
-    public boolean updateAdminPassword(int adminId, String newPassword) {
-        String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
-        String sql = "UPDATE panel_admin SET password_hash = ? WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, hashedPassword);
-            stmt.setInt(2, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.err.println("Failed to update password: " + e.getMessage());
-            return false;
         }
     }
 
-    /** Verifica se uno username è già in uso (case-insensitive per sicurezza). */
-    public boolean adminUsernameExists(String username) {
-        String sql = "SELECT 1 FROM panel_admin WHERE LOWER(username) = LOWER(?) LIMIT 1";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next();
-            }
-        } catch (SQLException e) {
-            System.err.println("Failed to check username existence: " + e.getMessage());
-            // Conservative: in caso di errore restituiamo true per bloccare l'update
-            return true;
-        }
-    }
-
-    /**
-     * Aggiorna lo username di un admin (per ID).
-     * Lo username è UNIQUE in tabella, quindi va verificata la unicità prima della chiamata
-     * (altrimenti la UPDATE fallisce con SQLException duplicate key).
-     * Ritorna true se l'update è andato a buon fine, false altrimenti.
-     */
-    public boolean updateAdminUsername(int adminId, String newUsername) {
-        String sql = "UPDATE panel_admin SET username = ? WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, newUsername);
-            stmt.setInt(2, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.err.println("Failed to update username: " + e.getMessage());
-            return false;
-        }
-    }
+    // ========== ADMIN ==========
 
     /**
      * Check if any admin exists
@@ -758,6 +723,57 @@ public class MailDatabase {
         } catch (SQLException e) {
             System.err.println("Error setting theme: " + e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * La lingua scelta dall'amministratore ("it" o "en"), o null se non l'ha mai scelta: allora
+     * vale quella del browser. Lo segue su ogni browser, come il tema.
+     */
+    public String getAdminLanguage(String username) {
+        if (username == null) return null;
+        String sql = "SELECT language FROM panel_admin WHERE username = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, username);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String lang = rs.getString("language");
+                    return "it".equals(lang) || "en".equals(lang) ? lang : null;
+                }
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Cannot read the admin language", e);
+        }
+        return null;
+    }
+
+    /** Salva la lingua dell'amministratore: solo "it" o "en". */
+    public boolean setAdminLanguage(String username, String lang) {
+        if (username == null || !("it".equals(lang) || "en".equals(lang))) return false;
+        String sql = "UPDATE panel_admin SET language = ? WHERE username = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, lang);
+            stmt.setString(2, username);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Cannot save the admin language", e);
+            return false;
+        }
+    }
+
+    /** La colonna della lingua in panel_admin, per le installazioni di prima (NULL: mai scelta). */
+    public void ensureLanguageColumn() {
+        String check = "SELECT COUNT(*) FROM information_schema.columns "
+                     + "WHERE table_schema = DATABASE() AND table_name = 'panel_admin' AND column_name = 'language'";
+        try (Statement stmt = getConnection().createStatement(); ResultSet rs = stmt.executeQuery(check)) {
+            if (rs.next() && rs.getInt(1) == 0) {
+                try (Statement alter = getConnection().createStatement()) {
+                    alter.executeUpdate("ALTER TABLE panel_admin ADD COLUMN language VARCHAR(5) NULL");
+                }
+                LOGGER.info("Added language column to panel_admin");
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Cannot add the language column", e);
         }
     }
 
@@ -1043,281 +1059,6 @@ public class MailDatabase {
         } catch (SQLException e) {
             System.err.println("Error ensuring theme column: " + e.getMessage());
         }
-    }
-
-    // ========== PASSKEY (WebAuthn) MANAGEMENT ==========
-
-    /**
-     * Ensure the passkeys table exists (for upgrades from older versions)
-     */
-    public void ensurePasskeysTable() {
-        String createPasskeys = """
-            CREATE TABLE IF NOT EXISTS admin_passkeys (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                admin_id INT NOT NULL,
-                credential_id VARBINARY(1024) NOT NULL,
-                public_key_cose VARBINARY(2048) NOT NULL,
-                sign_count BIGINT DEFAULT 0,
-                name VARCHAR(100) DEFAULT 'Passkey',
-                aaguid VARBINARY(16) NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_used TIMESTAMP NULL,
-                FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE,
-                UNIQUE KEY unique_credential (credential_id(255))
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """;
-        try (Statement stmt = getConnection().createStatement()) {
-            stmt.execute(createPasskeys);
-        } catch (SQLException e) {
-            System.out.println("Error ensuring passkeys table: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Passkey record
-     */
-    public static class Passkey {
-        public int id;
-        public int adminId;
-        public byte[] credentialId;
-        public byte[] publicKeyCose;
-        public long signCount;
-        public String name;
-        public byte[] aaguid;
-        public java.sql.Timestamp createdAt;
-        public java.sql.Timestamp lastUsed;
-    }
-
-    /**
-     * Check if admin has any passkeys configured
-     */
-    public boolean hasPasskey(int adminId) {
-        String sql = "SELECT 1 FROM admin_passkeys WHERE admin_id = ? LIMIT 1";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            ResultSet rs = stmt.executeQuery();
-            return rs.next();
-        } catch (SQLException e) {
-            return false;
-        }
-    }
-
-    /**
-     * Check if username has passkey (for login flow)
-     */
-    public boolean usernameHasPasskey(String username) {
-        String sql = """
-            SELECT 1 FROM admin_passkeys ap
-            JOIN panel_admin pa ON ap.admin_id = pa.id
-            WHERE pa.username = ? AND pa.active = TRUE
-            LIMIT 1
-            """;
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            ResultSet rs = stmt.executeQuery();
-            return rs.next();
-        } catch (SQLException e) {
-            return false;
-        }
-    }
-
-    /**
-     * Get all passkeys for an admin
-     */
-    public java.util.List<Passkey> getPasskeys(int adminId) {
-        java.util.List<Passkey> passkeys = new java.util.ArrayList<>();
-        String sql = "SELECT * FROM admin_passkeys WHERE admin_id = ? ORDER BY created_at DESC";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                Passkey p = new Passkey();
-                p.id = rs.getInt("id");
-                p.adminId = rs.getInt("admin_id");
-                p.credentialId = rs.getBytes("credential_id");
-                p.publicKeyCose = rs.getBytes("public_key_cose");
-                p.signCount = rs.getLong("sign_count");
-                p.name = rs.getString("name");
-                p.aaguid = rs.getBytes("aaguid");
-                p.createdAt = rs.getTimestamp("created_at");
-                p.lastUsed = rs.getTimestamp("last_used");
-                passkeys.add(p);
-            }
-        } catch (SQLException e) {
-            System.err.println("Error getting passkeys: " + e.getMessage());
-        }
-        return passkeys;
-    }
-
-    /**
-     * Get passkeys by username (for login)
-     */
-    public java.util.List<Passkey> getPasskeysByUsername(String username) {
-        java.util.List<Passkey> passkeys = new java.util.ArrayList<>();
-        String sql = """
-            SELECT ap.* FROM admin_passkeys ap
-            JOIN panel_admin pa ON ap.admin_id = pa.id
-            WHERE pa.username = ? AND pa.active = TRUE
-            """;
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                Passkey p = new Passkey();
-                p.id = rs.getInt("id");
-                p.adminId = rs.getInt("admin_id");
-                p.credentialId = rs.getBytes("credential_id");
-                p.publicKeyCose = rs.getBytes("public_key_cose");
-                p.signCount = rs.getLong("sign_count");
-                p.name = rs.getString("name");
-                p.aaguid = rs.getBytes("aaguid");
-                p.createdAt = rs.getTimestamp("created_at");
-                p.lastUsed = rs.getTimestamp("last_used");
-                passkeys.add(p);
-            }
-        } catch (SQLException e) {
-            System.err.println("Error getting passkeys by username: " + e.getMessage());
-        }
-        return passkeys;
-    }
-
-    /**
-     * Get passkey by credential ID
-     */
-    public Passkey getPasskeyByCredentialId(byte[] credentialId) {
-        String sql = "SELECT * FROM admin_passkeys WHERE credential_id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setBytes(1, credentialId);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                Passkey p = new Passkey();
-                p.id = rs.getInt("id");
-                p.adminId = rs.getInt("admin_id");
-                p.credentialId = rs.getBytes("credential_id");
-                p.publicKeyCose = rs.getBytes("public_key_cose");
-                p.signCount = rs.getLong("sign_count");
-                p.name = rs.getString("name");
-                p.aaguid = rs.getBytes("aaguid");
-                p.createdAt = rs.getTimestamp("created_at");
-                p.lastUsed = rs.getTimestamp("last_used");
-                return p;
-            }
-        } catch (SQLException e) {
-            System.err.println("Error getting passkey: " + e.getMessage());
-        }
-        return null;
-    }
-
-    /**
-     * Save a new passkey
-     */
-    public boolean savePasskey(int adminId, byte[] credentialId, byte[] publicKeyCose, long signCount, String name, byte[] aaguid) {
-        String sql = "INSERT INTO admin_passkeys (admin_id, credential_id, public_key_cose, sign_count, name, aaguid) VALUES (?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            stmt.setBytes(2, credentialId);
-            stmt.setBytes(3, publicKeyCose);
-            stmt.setLong(4, signCount);
-            stmt.setString(5, name != null ? name : "Passkey");
-            stmt.setBytes(6, aaguid);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.err.println("Error saving passkey: " + e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Update passkey sign count and last used after successful auth
-     */
-    public boolean updatePasskeySignCount(byte[] credentialId, long newSignCount) {
-        String sql = "UPDATE admin_passkeys SET sign_count = ?, last_used = CURRENT_TIMESTAMP WHERE credential_id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setLong(1, newSignCount);
-            stmt.setBytes(2, credentialId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.err.println("Error updating passkey sign count: " + e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Rename a passkey
-     */
-    public boolean renamePasskey(int passkeyId, int adminId, String newName) {
-        String sql = "UPDATE admin_passkeys SET name = ? WHERE id = ? AND admin_id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, newName);
-            stmt.setInt(2, passkeyId);
-            stmt.setInt(3, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.err.println("Error renaming passkey: " + e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Delete a passkey
-     */
-    public boolean deletePasskey(int passkeyId, int adminId) {
-        String sql = "DELETE FROM admin_passkeys WHERE id = ? AND admin_id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, passkeyId);
-            stmt.setInt(2, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.err.println("Error deleting passkey: " + e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Get admin ID by username (for passkey login)
-     */
-    public int getAdminIdByUsername(String username) {
-        String sql = "SELECT id FROM panel_admin WHERE username = ? AND active = TRUE";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                return rs.getInt("id");
-            }
-        } catch (SQLException e) {
-            System.err.println("Error getting admin ID: " + e.getMessage());
-        }
-        return 0;
-    }
-
-    /**
-     * Check what auth methods a user has
-     */
-    public static class AuthMethods {
-        public boolean exists;
-        public boolean hasPassword;
-        public boolean hasPasskey;
-        public boolean has2FA;
-    }
-
-    public AuthMethods getAuthMethods(String username) {
-        ensureConnection();
-        AuthMethods methods = new AuthMethods();
-        String sql = "SELECT id, password_hash, totp_enabled FROM panel_admin WHERE username = ? AND active = TRUE";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                methods.exists = true;
-                methods.hasPassword = rs.getString("password_hash") != null && !rs.getString("password_hash").isEmpty();
-                methods.has2FA = rs.getBoolean("totp_enabled");
-                int adminId = rs.getInt("id");
-                methods.hasPasskey = hasPasskey(adminId);
-            }
-        } catch (SQLException e) {
-            System.err.println("Error getting auth methods: " + e.getMessage());
-        }
-        return methods;
     }
 
     // ========== SETTINGS MANAGEMENT ==========
@@ -1889,15 +1630,8 @@ public class MailDatabase {
     private int inserisciCasella(Connection c, int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
         // Hash password with bcrypt (compatible with Dovecot)
         String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
-
-        // Cifra anche la password con AES-256-GCM (per recovery dal pannello).
-        // Best-effort: se il vault non è disponibile, salviamo NULL (l'hash bcrypt resta come prima).
-        String encryptedPassword = null;
-        try {
-            encryptedPassword = org.mail_panel.security.PasswordVault.getInstance().encrypt(password);
-        } catch (Exception e) {
-            System.err.println("[PasswordVault] Encrypt failed in addMailbox: " + e.getMessage());
-        }
+        // La copia cifrata che il pannello mostra quando serve: senza, la casella non si crea
+        String encryptedPassword = vaultCopy(password);
 
         String sql = "INSERT INTO mailboxes (domain_id, email, password, password_encrypted, password_encrypted_at, name, quota_mb, receive_enabled) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
@@ -1905,13 +1639,8 @@ public class MailDatabase {
             stmt.setInt(1, domainId);
             stmt.setString(2, email.toLowerCase());
             stmt.setString(3, hashedPassword);
-            if (encryptedPassword == null) {
-                stmt.setNull(4, Types.LONGVARCHAR);
-                stmt.setNull(5, Types.TIMESTAMP);
-            } else {
-                stmt.setString(4, encryptedPassword);
-                stmt.setTimestamp(5, java.sql.Timestamp.from(java.time.Instant.now()));
-            }
+            stmt.setString(4, encryptedPassword);
+            stmt.setTimestamp(5, java.sql.Timestamp.from(java.time.Instant.now()));
             stmt.setString(6, name);
             stmt.setInt(7, quotaMb);
             stmt.setBoolean(8, receiveEnabled);
@@ -1937,28 +1666,140 @@ public class MailDatabase {
     public boolean updateMailboxPassword(int mailboxId, String newPassword) throws SQLException {
         // Bcrypt hash (compatible with Dovecot)
         String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
-
-        // Cifra anche con AES per il vault del pannello (best-effort)
-        String encryptedPassword = null;
-        try {
-            encryptedPassword = org.mail_panel.security.PasswordVault.getInstance().encrypt(newPassword);
-        } catch (Exception e) {
-            System.err.println("[PasswordVault] Encrypt failed in updateMailboxPassword: " + e.getMessage());
-        }
+        // Hash e copia cambiano insieme: una copia vecchia accanto a un hash nuovo mostrerebbe la password sbagliata
+        String encryptedPassword = vaultCopy(newPassword);
 
         String sql = "UPDATE mailboxes SET password = ?, password_encrypted = ?, password_encrypted_at = ? WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             stmt.setString(1, hashedPassword);
-            if (encryptedPassword == null) {
-                stmt.setNull(2, Types.LONGVARCHAR);
-                stmt.setNull(3, Types.TIMESTAMP);
-            } else {
-                stmt.setString(2, encryptedPassword);
-                stmt.setTimestamp(3, java.sql.Timestamp.from(java.time.Instant.now()));
-            }
+            stmt.setString(2, encryptedPassword);
+            stmt.setTimestamp(3, java.sql.Timestamp.from(java.time.Instant.now()));
             stmt.setInt(4, mailboxId);
             return stmt.executeUpdate() > 0;
         }
+    }
+
+    /**
+     * La copia cifrata (vault) di una password di casella. Le password delle caselle si devono
+     * poter sempre rivedere dal pannello: se il vault non cifra, la password non si salva affatto,
+     * invece di salvare l'hash da solo e scoprire dopo che la copia manca.
+     */
+    private static String vaultCopy(String password) throws SQLException {
+        try {
+            return org.mail_panel.security.PasswordVault.getInstance().encrypt(password);
+        } catch (RuntimeException e) {
+            throw new SQLException("Mailbox password not saved: the password vault could not encrypt it", e);
+        }
+    }
+
+    /** Un hash bcrypt come lo scrivono il pannello ($2a$) e doveadm pw ($2y$, $2b$, anche con {BLF-CRYPT} davanti). */
+    static String bcryptPart(String stored) {
+        if (stored == null) return null;
+        String s = stored;
+        if (s.startsWith("{BLF-CRYPT}")) s = s.substring("{BLF-CRYPT}".length());
+        else if (s.startsWith("{BLF}")) s = s.substring("{BLF}".length());
+        if (s.length() == 60 && (s.startsWith("$2a$") || s.startsWith("$2b$") || s.startsWith("$2y$"))) {
+            return "$2a$" + s.substring(4);     // jBCrypt 0.4 conosce solo $2a$: per password fino a 72 byte sono lo stesso algoritmo
+        }
+        return null;
+    }
+
+    /**
+     * Il valore della colonna password e' testo in chiaro: niente hash bcrypt e niente schema
+     * {NOME} di Dovecot davanti. Succedeva quando la webmail scriveva da se' nella tabella con
+     * l'algoritmo predefinito del plugin password di Roundcube ('clear').
+     */
+    static boolean isPlaintextPassword(String stored) {
+        return stored != null && !stored.isEmpty() && bcryptPart(stored) == null && !stored.startsWith("{");
+    }
+
+    /**
+     * La password data e' quella della casella adesso? Confronta con l'hash bcrypt della colonna
+     * password (o, per una riga rimasta in chiaro, confronta a tempo costante). Lo schema
+     * sconosciuto risponde false: meglio dire "non so" che mostrare una password sbagliata.
+     */
+    public boolean mailboxPasswordMatches(int mailboxId, String plain) throws SQLException {
+        if (plain == null) return false;
+        String stored = null;
+        try (PreparedStatement stmt = getConnection().prepareStatement("SELECT password FROM mailboxes WHERE id = ?")) {
+            stmt.setInt(1, mailboxId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) stored = rs.getString(1);
+            }
+        }
+        return passwordMatchesStored(stored, plain);
+    }
+
+    static boolean passwordMatchesStored(String stored, String plain) {
+        if (stored == null || plain == null) return false;
+        String bcrypt = bcryptPart(stored);
+        if (bcrypt != null) {
+            try {
+                return BCrypt.checkpw(plain, bcrypt);
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+        }
+        if (isPlaintextPassword(stored)) {
+            return java.security.MessageDigest.isEqual(stored.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    plain.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return false;
+    }
+
+    /**
+     * Il vault ha la copia di una password giusta ma la casella non l'ha (caselle di prima del
+     * vault): la aggiunge, solo se la password corrisponde all'hash di adesso. Serve a chi entra
+     * dalla webmail, che e' l'unico momento in cui la password vera passa dal server.
+     * Ritorna true se ha scritto la copia.
+     */
+    public boolean fillMissingVaultCopy(int mailboxId, String plain) throws SQLException {
+        if (!mailboxPasswordMatches(mailboxId, plain)) return false;
+        String current = getMailboxPasswordEncrypted(mailboxId);
+        if (current != null && !current.isEmpty()) {
+            try {
+                if (plain.equals(org.mail_panel.security.PasswordVault.getInstance().decrypt(current))) return false;
+            } catch (RuntimeException e) {
+                // copia illeggibile (chiave cambiata o blob rovinato): la si riscrive
+            }
+        }
+        String sql = "UPDATE mailboxes SET password_encrypted = ?, password_encrypted_at = ? WHERE id = ?";
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setString(1, vaultCopy(plain));
+            stmt.setTimestamp(2, java.sql.Timestamp.from(java.time.Instant.now()));
+            stmt.setInt(3, mailboxId);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Le righe con la password in chiaro (vedi isPlaintextPassword): l'hash bcrypt al posto del
+     * testo, e la copia nel vault. Dovecot legge BLF-CRYPT: con il testo in chiaro quelle caselle
+     * non entravano piu'. Ritorna quante righe ha sistemato; mai le password nel log.
+     */
+    public int repairPlaintextMailboxPasswords() throws SQLException {
+        java.util.List<Object[]> rows = new java.util.ArrayList<>();
+        try (Statement stmt = getConnection().createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT id, password FROM mailboxes")) {
+            while (rs.next()) {
+                String stored = rs.getString(2);
+                if (isPlaintextPassword(stored)) rows.add(new Object[]{rs.getInt(1), stored});
+            }
+        }
+        int repaired = 0;
+        String sql = "UPDATE mailboxes SET password = ?, password_encrypted = ?, password_encrypted_at = ? WHERE id = ? AND password = ?";
+        for (Object[] row : rows) {
+            String plain = (String) row[1];
+            try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+                stmt.setString(1, BCrypt.hashpw(plain, BCrypt.gensalt(12)));
+                stmt.setString(2, vaultCopy(plain));
+                stmt.setTimestamp(3, java.sql.Timestamp.from(java.time.Instant.now()));
+                stmt.setInt(4, (Integer) row[0]);
+                stmt.setString(5, plain);
+                repaired += stmt.executeUpdate();
+            }
+        }
+        return repaired;
     }
 
     /**
@@ -2687,220 +2528,6 @@ public class MailDatabase {
         public Timestamp createdAt;
     }
 
-    // ========== 2FA / TOTP METHODS ==========
-
-    public boolean enable2FA(int adminId, String totpSecret, String backupCodes) {
-        String sql = "UPDATE panel_admin SET totp_secret = ?, totp_enabled = TRUE, backup_codes = ? WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, totpSecret);
-            stmt.setString(2, backupCodes);
-            stmt.setInt(3, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public boolean disable2FA(int adminId) {
-        String sql = "UPDATE panel_admin SET totp_secret = NULL, totp_enabled = FALSE, backup_codes = NULL WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public String getTotpSecret(int adminId) {
-        String sql = "SELECT totp_secret FROM panel_admin WHERE id = ? AND totp_enabled = TRUE";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("totp_secret");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    public boolean is2FAEnabled(int adminId) {
-        String sql = "SELECT totp_enabled FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                return rs.getBoolean("totp_enabled");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
-
-    public String getBackupCodes(int adminId) {
-        String sql = "SELECT backup_codes FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("backup_codes");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    public boolean updateBackupCodes(int adminId, String backupCodes) {
-        String sql = "UPDATE panel_admin SET backup_codes = ? WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, backupCodes);
-            stmt.setInt(2, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    /**
-     * Try to use a backup code for 2FA. Returns true if valid and removes it.
-     */
-    public boolean useBackupCode(int adminId, String code) {
-        if (code == null || code.isEmpty()) return false;
-
-        String codesJson = getBackupCodes(adminId);
-        if (codesJson == null || codesJson.isEmpty()) return false;
-
-        try {
-            org.json.JSONArray codes = new org.json.JSONArray(codesJson);
-            String hashedInput = org.mail_panel.security.TotpManager.hashBackupCode(code);
-
-            for (int i = 0; i < codes.length(); i++) {
-                if (codes.getString(i).equals(hashedInput)) {
-                    // Found - remove it and save
-                    codes.remove(i);
-                    updateBackupCodes(adminId, codes.toString());
-                    return true;
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
-
-    // ========== MULTI-ADMIN / ROLES ==========
-
-    public static class AdminUser {
-        public int id;
-        public String username;
-        public String role;
-        public boolean active;
-        public boolean totpEnabled;
-        public Timestamp createdAt;
-        public Timestamp lastLogin;
-    }
-
-    public List<AdminUser> getAdminUsers() {
-        List<AdminUser> admins = new ArrayList<>();
-        String sql = "SELECT id, username, role, active, totp_enabled, created_at, last_login FROM panel_admin ORDER BY id";
-        try (Statement stmt = getConnection().createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                AdminUser admin = new AdminUser();
-                admin.id = rs.getInt("id");
-                admin.username = rs.getString("username");
-                admin.role = rs.getString("role");
-                admin.active = rs.getBoolean("active");
-                admin.totpEnabled = rs.getBoolean("totp_enabled");
-                admin.createdAt = rs.getTimestamp("created_at");
-                admin.lastLogin = rs.getTimestamp("last_login");
-                admins.add(admin);
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return admins;
-    }
-
-    public AdminUser getAdminUserById(int adminId) {
-        String sql = "SELECT id, username, role, active, totp_enabled, created_at, last_login FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    AdminUser admin = new AdminUser();
-                    admin.id = rs.getInt("id");
-                    admin.username = rs.getString("username");
-                    admin.role = rs.getString("role");
-                    admin.active = rs.getBoolean("active");
-                    admin.totpEnabled = rs.getBoolean("totp_enabled");
-                    admin.createdAt = rs.getTimestamp("created_at");
-                    admin.lastLogin = rs.getTimestamp("last_login");
-                    return admin;
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    public boolean createAdmin(String username, String password, String role) {
-        String sql = "INSERT INTO panel_admin (username, password_hash, role) VALUES (?, ?, ?)";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, username);
-            stmt.setString(2, BCrypt.hashpw(password, BCrypt.gensalt(12)));
-            stmt.setString(3, role);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public boolean updateAdminRole(int adminId, String role) {
-        String sql = "UPDATE panel_admin SET role = ? WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, role);
-            stmt.setInt(2, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public boolean deleteAdmin(int adminId) {
-        String sql = "DELETE FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public String getAdminRole(int adminId) {
-        String sql = "SELECT role FROM panel_admin WHERE id = ?";
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, adminId);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("role");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
     // ========== AUTO-RESPONDER ==========
 
     public static class AutoResponder {
@@ -3206,30 +2833,49 @@ public class MailDatabase {
         return limits;
     }
 
+    /**
+     * Salva un limite di invio, aggiornando la riga che c'e' gia' per lo stesso obiettivo.
+     *
+     * Il limite globale ha target_id 0 e non NULL: nell'indice UNIQUE (target_type, target_id) di
+     * MySQL due NULL non sono uguali, e ogni salvataggio dei limiti globali aggiungeva una riga
+     * invece di aggiornare quella che c'era. Le righe globali con NULL rimaste da prima si tolgono
+     * nella stessa transazione.
+     */
     public boolean saveRateLimit(String targetType, Integer targetId, int maxPerHour, int maxPerDay, int maxRecipients, boolean enabled) {
+        boolean global = "global".equals(targetType);
+        if (!global && targetId == null) return false;
         String sql = """
             INSERT INTO rate_limits (target_type, target_id, max_per_hour, max_per_day, max_recipients, enabled)
             VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE max_per_hour = ?, max_per_day = ?, max_recipients = ?, enabled = ?
+            ON DUPLICATE KEY UPDATE max_per_hour = VALUES(max_per_hour), max_per_day = VALUES(max_per_day),
+                                    max_recipients = VALUES(max_recipients), enabled = VALUES(enabled)
             """;
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
-            stmt.setString(1, targetType);
-            if (targetId != null) {
-                stmt.setInt(2, targetId);
-            } else {
-                stmt.setNull(2, java.sql.Types.INTEGER);
+        try (Connection c = connessionePropria()) {
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement stmt = c.prepareStatement(sql)) {
+                    stmt.setString(1, targetType);
+                    stmt.setInt(2, global ? 0 : targetId);
+                    stmt.setInt(3, maxPerHour);
+                    stmt.setInt(4, maxPerDay);
+                    stmt.setInt(5, maxRecipients);
+                    stmt.setBoolean(6, enabled);
+                    stmt.executeUpdate();
+                }
+                if (global) {
+                    try (PreparedStatement stmt = c.prepareStatement(
+                            "DELETE FROM rate_limits WHERE target_type = 'global' AND target_id IS NULL")) {
+                        stmt.executeUpdate();
+                    }
+                }
+                c.commit();
+                return true;
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
             }
-            stmt.setInt(3, maxPerHour);
-            stmt.setInt(4, maxPerDay);
-            stmt.setInt(5, maxRecipients);
-            stmt.setBoolean(6, enabled);
-            stmt.setInt(7, maxPerHour);
-            stmt.setInt(8, maxPerDay);
-            stmt.setInt(9, maxRecipients);
-            stmt.setBoolean(10, enabled);
-            return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(java.util.logging.Level.WARNING, "Saving a rate limit failed", e);
             return false;
         }
     }

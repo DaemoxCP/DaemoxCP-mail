@@ -67,7 +67,7 @@ public class ModifyData {
                 setTextSafe(mail_panel_port, result.getString("mail_panel_port"));
                 setTextSafe(mail_panel_host, result.getString("mail_panel_host"));
                 setTextSafe(mail_panel_ssl_cert, result.getString("mail_panel_ssl_cert"));
-                setTextSafe(mail_panel_ssl_cert_key, result.getString("mail_panel_ssl_cert_key"));
+                setTextSafe(mail_panel_ssl_cert_key, database_manager.panelTlsKey());
 
                 // mail_panel_ssl_chain might not exist in older databases
                 try {

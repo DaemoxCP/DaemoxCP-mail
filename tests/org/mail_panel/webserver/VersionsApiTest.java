@@ -101,9 +101,9 @@ public class VersionsApiTest {
         Main.mailDatabase = db;
         Main.mysqlAvailable = true;
         Main.setupRequired = false;
-        Main.sessions = new WebSessions();
-        codice = (String) Main.sessions.Add_Session(UA, "127.0.0.1")[1];
-        String csrf = Main.sessions.getCsrfToken(codice);
+        String[] login = TestSessions.open(db, "versions-test", UA);
+        codice = login[0];
+        String csrf = login[1];
 
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                 "-subj", "/CN=localhost", "-keyout", cartella.resolve("k.pem").toString(), "-out", cartella.resolve("c.pem").toString())
@@ -143,7 +143,9 @@ public class VersionsApiTest {
             vero("\"fresco\" entro tre secondi: la stessa lettura",
                     new JSONObject(chiedi("GET", "/api/versioni?fresco=1", null, true).body()).getString("letteAlle").equals(lette));
             vero("fresco=2: 400", chiedi("GET", "/api/versioni?fresco=2", null, true).statusCode() == 400);
-            vero("POST: 405", chiediAParte("POST", "/api/versioni", "{}", true).statusCode() == 405);
+            // Il token CSRF si guarda prima di tutto (il filtro di ogni rotta): senza, 403; con, il 405 del gestore
+            vero("POST without the CSRF token: 403", chiediAParte("POST", "/api/versioni", "{}", true).statusCode() == 403);
+            vero("POST with the token: 405", chiediAParte("POST", "/api/versioni", "{\"csrf_token\":\"" + csrf + "\"}", true).statusCode() == 405);
 
             System.out.println("\n== /api/service: il token CSRF ==");
             HttpResponse<String> senza = chiedi("POST", "/api/service", "{\"service\":\"redis\",\"action\":\"stop\"}", true);

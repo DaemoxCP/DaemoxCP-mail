@@ -123,11 +123,12 @@ public class Main {
 
     public static dataBaseManager dbManager;         // SQLite for panel config
     public static MailDatabase mailDatabase;         // MySQL for mail data
-    public static WebSessions sessions;
+    public static WebSessions sessions = new WebSessions();
 
     // Status flags for SSLMailServer compatibility
     public static boolean mysqlAvailable = false;
-    public static boolean setupRequired = true;
+    /** Nessun amministratore attivo: il pannello aspetta che lo si crei dalla console (--create-admin). */
+    public static volatile boolean setupRequired = true;
 
     // ANSI color codes
     private static final String ANSI_RESET = "\u001B[0m";
@@ -273,7 +274,6 @@ public class Main {
     }
 
     public static void main(String[] args) throws InterruptedException, IOException {
-        sessions = new WebSessions();
         String directoryPath = "./database/";
         try {
             createDirectoryIfNotExists(directoryPath);
@@ -313,6 +313,29 @@ public class Main {
         if (needsTableCreation) {
             dbManager.create_tables();
             dbManager.insert_data_default();
+        }
+
+        // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
+        //   java -jar freebsd-mail-panel-1.0.jar --create-admin <nome> <email>   il primo amministratore
+        //   java -jar freebsd-mail-panel-1.0.jar --access-code [nome]            un codice di accesso monouso
+        // Il primo amministratore non si crea dal pannello web: chi raggiungesse per primo la
+        // pagina diventerebbe amministratore.
+        for (int i = 0; i < args.length; i++) {
+            if ("--create-admin".equals(args[i])) {
+                if (i + 2 >= args.length) {
+                    System.err.println("Usage: java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>");
+                    System.exit(2);
+                }
+                String notConnected = connectFromConfig();
+                if (notConnected != null) {
+                    System.err.println(notConnected);
+                    System.exit(2);
+                }
+                System.exit(createFirstAdmin(args[i + 1], args[i + 2], System.out, System.err));
+            }
+            if ("--access-code".equals(args[i])) {
+                System.exit(printAccessCode(i + 1 < args.length ? args[i + 1] : null));
+            }
         }
 
         // Modalita' solo-web: nessun menu a schermo.
@@ -411,6 +434,11 @@ public class Main {
                         installMailServer(screen, gui);
                         break;
 
+                    case 5:
+                        // Il codice di accesso di emergenza (o il primo amministratore)
+                        emergencyAccess(gui);
+                        break;
+
                     case 100:
                         // Start Mail Panel WebServer
                         try {
@@ -496,7 +524,7 @@ public class Main {
         System.out.println(ANSI_YELLOW + "[RESET] Resetting service flags for fresh installation..." + ANSI_RESET);
         dbManager.resetAllServices();
 
-        // Read MySQL config INCLUDING password from SQLite
+        // Read MySQL config (the password from the panel secrets file)
         String mysqlHost = "127.0.0.1";
         String mysqlPort = "3306";
         String mysqlUser = "mailpanel";
@@ -508,7 +536,7 @@ public class Main {
                 mysqlHost = result.getString("mysql_host");
                 mysqlPort = result.getString("mysql_port");
                 mysqlUser = result.getString("mysql_user");
-                mysqlPassword = result.getString("mysql_password");
+                mysqlPassword = dbManager.mysqlPassword();
                 mysqlDatabase = result.getString("mysql_database");
             }
         } catch (Exception e) {
@@ -520,9 +548,9 @@ public class Main {
         mysqlPassword = generateRandomPassword(24);
         System.out.println(ANSI_GREEN + "[AUTO] Generated MySQL password" + ANSI_RESET);
 
-        // Save to SQLite (replaces old password if reinstalling)
+        // Save it (replaces old password if reinstalling): the password goes to the panel secrets file, the rest to SQLite
         dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
-        System.out.println(ANSI_GREEN + "[AUTO] MySQL password saved to SQLite" + ANSI_RESET);
+        System.out.println(ANSI_GREEN + "[AUTO] MySQL password saved to the panel secrets file" + ANSI_RESET);
 
         // Read Roundcube configuration
         String roundcubeDomain = dbManager.getRoundcubeDomain();
@@ -539,7 +567,7 @@ public class Main {
                 try (java.sql.ResultSet configResult = dbManager.get_data_config()) {
                     if (configResult.next()) {
                         String panelCert = configResult.getString("mail_panel_ssl_cert");
-                        String panelKey = configResult.getString("mail_panel_ssl_cert_key");
+                        String panelKey = dbManager.panelTlsKey();
                         String panelChain = null;
                         try {
                             panelChain = configResult.getString("mail_panel_ssl_chain");
@@ -657,7 +685,7 @@ public class Main {
         try (ResultSet result = dbManager.get_data_config()) {
             if (result.next()) {
                 String certContent = result.getString("mail_panel_ssl_cert");
-                String keyContent = result.getString("mail_panel_ssl_cert_key");
+                String keyContent = dbManager.panelTlsKey();
                 int port = Integer.parseInt(result.getString("mail_panel_port"));
                 String host = result.getString("mail_panel_host");
 
@@ -694,7 +722,7 @@ public class Main {
                 String mysqlHost = result.getString("mysql_host");
                 String mysqlPort = result.getString("mysql_port");
                 String mysqlUser = result.getString("mysql_user");
-                String mysqlPassword = result.getString("mysql_password");
+                String mysqlPassword = dbManager.mysqlPassword();
                 String mysqlDatabase = result.getString("mysql_database");
 
                 mailDatabase = new MailDatabase();
@@ -705,11 +733,19 @@ public class Main {
 
                 if (mailDatabase.connect()) {
                     mysqlAvailable = true;
+                    // Le tabelle dell'accesso senza password, prima che il server risponda.
+                    try {
+                        if (mailDatabase.hasAdminUser()) {
+                            org.mail_panel.security.AuthStore.migrate();
+                            warnIfNoLogin();
+                        }
+                    } catch (Exception e) {
+                        System.out.println(ANSI_RED + "Login tables not ready: " + e.getMessage() + ANSI_RESET);
+                    }
                     setupRequired = !mailDatabase.hasAdminUser();
-                    // Si annota su disco che l'installazione c'e' gia' stata. Serve a tenere
-                    // chiusa la procedura anche quando MySQL non risponde, e vale anche per
-                    // le installazioni fatte prima che questo controllo esistesse.
-                    if (!setupRequired) org.mail_panel.security.CancelloSetup.segnaCompletata();
+                    if (setupRequired)
+                        System.out.println(ANSI_YELLOW + "No administrator yet. Create the first one from the console:\n"
+                                + "  java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>" + ANSI_RESET);
                     System.out.println(ANSI_GREEN + "Connected to MySQL database" + ANSI_RESET);
                 } else {
                     System.out.println(ANSI_YELLOW + "[WARNING] Could not connect to MySQL database" + ANSI_RESET);
@@ -796,7 +832,7 @@ public class Main {
                 String mysqlHost = result.getString("mysql_host");
                 String mysqlPort = result.getString("mysql_port");
                 String mysqlUser = result.getString("mysql_user");
-                String mysqlPassword = result.getString("mysql_password");
+                String mysqlPassword = dbManager.mysqlPassword();
                 String mysqlDatabase = result.getString("mysql_database");
 
                 mailDatabase = new MailDatabase();
@@ -839,7 +875,7 @@ public class Main {
             String mysqlHost = result.getString("mysql_host");
             String mysqlPort = result.getString("mysql_port");
             String mysqlUser = result.getString("mysql_user");
-            String mysqlPassword = result.getString("mysql_password");
+            String mysqlPassword = dbManager.mysqlPassword();
             String mysqlDatabase = result.getString("mysql_database");
 
             mailDatabase = new MailDatabase();
@@ -930,78 +966,189 @@ public class Main {
     }
 
     /**
-     * Automatic database setup for web setup wizard
+     * java -jar freebsd-mail-panel-1.0.jar --create-admin <nome> <email>: il primo amministratore,
+     * superadmin, senza password. Solo se non ce n'e' nessuno attivo: gli altri si aggiungono
+     * dalla pagina Amministratori, e chi ha perso l'accesso usa --access-code. Stampa un codice
+     * di accesso monouso, perche' l'email del server potrebbe non partire ancora (DNS da fare).
+     * Si aspetta mailDatabase gia' collegato; restituisce il codice di uscita del processo.
      */
-    public static boolean autoSetupDatabase(String adminUsername, String adminPassword, String mailHostname) {
+    public static int createFirstAdmin(String username, String email, java.io.PrintStream out, java.io.PrintStream err) {
+        if (!org.mail_panel.webserver.SecurityUtils.isValidUsername(username)) {
+            err.println("Invalid name: 3 to 50 characters among unaccented letters, digits, hyphen and underscore.");
+            return 2;
+        }
+        if (!org.mail_panel.security.LoginCodes.validEmail(email)) {
+            err.println("Invalid email address: ASCII characters only, at most 254.");
+            return 2;
+        }
         try {
-            if (mailDatabase == null || !mailDatabase.isConnected()) {
-                System.out.println(ANSI_RED + "MySQL not connected" + ANSI_RESET);
-                return false;
-            }
-
-            // Create schema
             mailDatabase.createSchema();
-
-            // Create admin user
-            mailDatabase.createAdminUser(adminUsername, adminPassword);
-
-            // Save mail hostname
-            mailDatabase.setSetting("mail_hostname", mailHostname);
-
-            mysqlAvailable = true;
-            setupRequired = false;
-            // Appena l'installazione e' conclusa la si annota su disco: da questo momento la
-            // procedura resta chiusa anche se il database smette di rispondere.
-            org.mail_panel.security.CancelloSetup.segnaCompletata();
-
-            System.out.println(ANSI_GREEN + "Database setup completed" + ANSI_RESET);
-            return true;
+            org.mail_panel.security.AuthStore.migrate();
         } catch (Exception e) {
-            System.out.println(ANSI_RED + "Database setup failed: " + e.getMessage() + ANSI_RESET);
-            return false;
+            err.println("Cannot prepare the panel tables: " + e.getMessage());
+            return 2;
+        }
+        if (mailDatabase.hasAdminUser()) {
+            err.println("There is already an administrator. Add the others from the Administrators page; "
+                    + "if nobody can sign in, get a one-time code with --access-code [name].");
+            return 2;
+        }
+        org.mail_panel.security.AuthStore.Created created =
+                org.mail_panel.security.AuthStore.createAdmin(username, email, "superadmin");
+        if (created.result() != org.mail_panel.security.AuthStore.CreateResult.CREATED) {
+            err.println(switch (created.result()) {
+                case NAME_TAKEN -> "A deactivated administrator already has this name: choose another one.";
+                case EMAIL_TAKEN -> "A deactivated administrator already has this email: choose another one.";
+                default -> "The administrator was not created: the details are in the panel log.";
+            });
+            return 2;
+        }
+        // Il nome del server di posta, scritto dall'installazione dal menu, anche nelle impostazioni.
+        String hostname = dbManager != null ? dbManager.getMailHostname() : null;
+        if (hostname != null && hostname.trim().contains(".") && mailDatabase.getSetting("mail_hostname", "").isEmpty())
+            mailDatabase.setSetting("mail_hostname", hostname.trim().toLowerCase(java.util.Locale.ROOT));
+        org.mail_panel.security.AuthStore.Admin admin =
+                org.mail_panel.security.AuthStore.adminById(created.id()).orElseThrow();
+        String code = org.mail_panel.security.LoginCodes.issueConsoleCode(admin);
+        out.println("Administrator " + username + " created (superadmin), sign-in email " + email + ".");
+        out.println("One-time access code for " + username + ": " + code.substring(0, 4) + " " + code.substring(4));
+        out.println("Valid for 15 minutes, once. On the login page choose \"Code from the server console\", then register a passkey.");
+        return 0;
+    }
+
+    /**
+     * Il pannello senza amministratore se ne accorge appena lo si crea dalla console: alla prima
+     * richiesta dopo, prepara le tabelle dell'accesso e mostra la pagina di accesso.
+     */
+    public static synchronized void refreshSetupState() {
+        if (!setupRequired || !mysqlAvailable || mailDatabase == null || !mailDatabase.hasAdminUser()) return;
+        try {
+            org.mail_panel.security.AuthStore.migrate();
+            setupRequired = false;
+        } catch (Exception e) {
+            System.out.println(ANSI_RED + "Login tables not ready: " + e.getMessage() + ANSI_RESET);
         }
     }
 
     /**
-     * Manual database setup with root password
+     * Il collegamento a MySQL con i dati della configurazione, per i comandi da console e dal menu.
+     * Null se riesce, altrimenti il perche' (da mostrare a chi l'ha chiesto).
      */
-    public static boolean setupDatabase(String rootPassword, String panelPassword, String adminUsername, String adminPassword) {
-        try {
-            // Connect as root
-            MailDatabase rootDb = new MailDatabase();
-            if (!rootDb.connectAsRoot(rootPassword)) {
-                System.out.println(ANSI_RED + "Cannot connect as root" + ANSI_RESET);
-                return false;
-            }
-
-            // Create database and user
-            rootDb.createDatabaseAndUser(panelPassword);
-            rootDb.close();
-
-            // Connect as panel user
-            mailDatabase = new MailDatabase(panelPassword);
-            if (!mailDatabase.connect()) {
-                System.out.println(ANSI_RED + "Cannot connect as panel user" + ANSI_RESET);
-                return false;
-            }
-
-            // Create schema
-            mailDatabase.createSchema();
-
-            // Create admin user
-            mailDatabase.createAdminUser(adminUsername, adminPassword);
-
-            mysqlAvailable = true;
-            setupRequired = false;
-            // Appena l'installazione e' conclusa la si annota su disco: da questo momento la
-            // procedura resta chiusa anche se il database smette di rispondere.
-            org.mail_panel.security.CancelloSetup.segnaCompletata();
-
-            System.out.println(ANSI_GREEN + "Database setup completed" + ANSI_RESET);
-            return true;
+    static String connectFromConfig() {
+        try (ResultSet result = dbManager.get_data_config()) {
+            if (!result.next())
+                return "The panel is not configured yet: install the mail server from the menu first.";
+            mailDatabase = new MailDatabase();
+            mailDatabase.setCredentials(result.getString("mysql_user"), dbManager.mysqlPassword());
+            mailDatabase.setHost(result.getString("mysql_host"));
+            mailDatabase.setPort(Integer.parseInt(result.getString("mysql_port")));
+            mailDatabase.setDatabase(result.getString("mysql_database"));
         } catch (Exception e) {
-            System.out.println(ANSI_RED + "Database setup failed: " + e.getMessage() + ANSI_RESET);
-            return false;
+            return "Cannot read the panel configuration: " + e.getMessage();
         }
+        if (!mailDatabase.connect()) return "MySQL does not answer: start it and try again.";
+        mysqlAvailable = true;
+        return null;
+    }
+
+    /** L'esito di un comando da console: il testo da mostrare e se e' riuscito. */
+    record ConsoleResult(boolean ok, String text) {}
+
+    /**
+     * Un codice di accesso monouso per un amministratore attivo (quello col nome dato, o l'unico).
+     * Si aspetta mailDatabase gia' collegato.
+     */
+    static ConsoleResult accessCode(String username) {
+        try {
+            org.mail_panel.security.AuthStore.migrate();
+        } catch (Exception e) {
+            return new ConsoleResult(false, "Cannot prepare the login tables: " + e.getMessage());
+        }
+        java.util.List<org.mail_panel.security.AuthStore.Admin> admins = org.mail_panel.security.AuthStore.admins().stream()
+                .filter(org.mail_panel.security.AuthStore.Admin::active).toList();
+        java.util.Optional<org.mail_panel.security.AuthStore.Admin> admin = username != null
+                ? org.mail_panel.security.AuthStore.adminByUsername(username)
+                : admins.size() == 1 ? java.util.Optional.of(admins.get(0)) : java.util.Optional.empty();
+        if (admin.isEmpty()) {
+            return new ConsoleResult(false, username != null ? "No active administrator named " + username + "."
+                    : admins.isEmpty() ? "No administrator yet: create the first one with --create-admin <name> <email>."
+                    : "Specify the administrator: --access-code <name>. Administrators: "
+                      + admins.stream().map(org.mail_panel.security.AuthStore.Admin::username).toList());
+        }
+        String code = org.mail_panel.security.LoginCodes.issueConsoleCode(admin.get());
+        return new ConsoleResult(true, "One-time access code for " + admin.get().username() + ": "
+                + code.substring(0, 4) + " " + code.substring(4) + "\n"
+                + "Valid for 15 minutes, once. On the login page choose \"Code from the server console\".");
+    }
+
+    /**
+     * Dal menu del terminale: il codice di accesso di emergenza, per quando passkey ed email non
+     * bastano. Se non c'e' ancora nessun amministratore, si crea qui il primo.
+     */
+    private static void emergencyAccess(MultiWindowTextGUI gui) {
+        String title = "Emergency access code";
+        String notConnected = connectFromConfig();
+        if (notConnected != null) {
+            message(gui, title, notConnected);
+            return;
+        }
+        try {
+            org.mail_panel.security.AuthStore.migrate();
+        } catch (Exception e) {
+            message(gui, title, "Cannot prepare the login tables: " + e.getMessage());
+            return;
+        }
+        java.util.List<String> names = org.mail_panel.security.AuthStore.admins().stream()
+                .filter(org.mail_panel.security.AuthStore.Admin::active)
+                .map(org.mail_panel.security.AuthStore.Admin::username).toList();
+        if (names.isEmpty()) {
+            String name = showTextInputDialog(gui, "First administrator",
+                    "No administrator yet. Name (3-50: letters, digits, - and _):");
+            if (name == null || name.isBlank()) return;
+            String email = showTextInputDialog(gui, "First administrator", "Sign-in email:");
+            if (email == null || email.isBlank()) return;
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            java.io.ByteArrayOutputStream err = new java.io.ByteArrayOutputStream();
+            int rc = createFirstAdmin(name.trim(), email.trim(), new java.io.PrintStream(out, true, java.nio.charset.StandardCharsets.UTF_8),
+                    new java.io.PrintStream(err, true, java.nio.charset.StandardCharsets.UTF_8));
+            message(gui, "First administrator", (rc == 0 ? out : err).toString(java.nio.charset.StandardCharsets.UTF_8).trim());
+            return;
+        }
+        String chosen = names.size() == 1 ? names.get(0)
+                : new com.googlecode.lanterna.gui2.dialogs.ListSelectDialogBuilder<String>()
+                        .setTitle(title).setDescription("Which administrator?")
+                        .addListItems(names.toArray(new String[0])).build().showDialog(gui);
+        if (chosen == null) return;
+        message(gui, title, accessCode(chosen).text());
+    }
+
+    private static void message(MultiWindowTextGUI gui, String title, String text) {
+        new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle(title).setText(text)
+                .addButton(MessageDialogButton.OK).build().showDialog(gui);
+    }
+
+    /**
+     * java -jar freebsd-mail-panel-1.0.jar --access-code [nome]: un codice monouso di otto cifre
+     * per entrare senza email ne' passkey (primo accesso, email persa). Lo genera solo chi ha una
+     * shell sul server; vale 15 minuti, una volta. Restituisce il codice di uscita del processo.
+     */
+    static int printAccessCode(String username) {
+        String notConnected = connectFromConfig();
+        if (notConnected != null) {
+            System.err.println(notConnected);
+            return 2;
+        }
+        ConsoleResult r = accessCode(username);
+        (r.ok() ? System.out : System.err).println(r.text());
+        return r.ok() ? 0 : 2;
+    }
+
+    /** All'avvio: se nessun amministratore puo' entrare, come si fa. */
+    static void warnIfNoLogin() {
+        boolean someoneCanLogIn = org.mail_panel.security.AuthStore.admins().stream().anyMatch(a -> a.active()
+                && (a.hasEmail() || !org.mail_panel.security.AuthStore.passkeysOf(a.id()).isEmpty()));
+        if (!someoneCanLogIn)
+            System.out.println(ANSI_YELLOW + "No administrator has a login email or a passkey yet. Get a one-time code with:\n"
+                    + "  java -jar freebsd-mail-panel-1.0.jar --access-code" + ANSI_RESET);
     }
 }

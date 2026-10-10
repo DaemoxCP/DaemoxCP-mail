@@ -8,7 +8,7 @@
             const badge = document.getElementById('cpfBadge');
             const btn = document.getElementById('btnCpf');
             if (btn) { btn.disabled = true; }
-            corpo.innerHTML = '<p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Leggo le tabelle di pf...</p>';
+            corpo.innerHTML = '<p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('cpf.reading')) + '</p>';
             badge.innerHTML = '';
             fetch('/api/fail2ban', {
                 method: 'POST',
@@ -19,7 +19,7 @@
             .then(d => {
                 if (btn) btn.disabled = false;
                 if (!d.success) {
-                    corpo.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore: ' + escapeHtml(d.error || d.message || 'sconosciuto') + '</div>';
+                    corpo.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('common.error', { message: d.error || d.message || t('common.unknownError') })) + '</div>';
                     return;
                 }
                 const jails = d.jails || [];
@@ -30,25 +30,25 @@
                 const senzaRegola = d.senza_regola || 0;
                 // Un ban dichiarato e non verificato pesa piu' di una jail ferma non verificata:
                 // c'e' un indirizzo che qualcuno crede bloccato e nessuno ha controllato.
-                if (buchi > 0) badge.innerHTML = '<span class="badge bg-danger">' + buchi + ' ban non applicati</span>';
-                else if (banCiechi > 0) badge.innerHTML = '<span class="badge bg-danger">' + banCiechi + ' ban non verificati</span>';
-                else if (senzaRegola > 0) badge.innerHTML = '<span class="badge bg-danger">' + senzaRegola + ' tabelle senza regola</span>';
-                else if (cieche > 0) badge.innerHTML = '<span class="badge bg-warning text-dark">' + cieche + ' jail non misurate</span>';
-                else badge.innerHTML = '<span class="badge bg-success">Coerenti</span>';
+                if (buchi > 0) badge.innerHTML = '<span class="badge bg-danger">' + escHtml(tn('cpf.notApplied', buchi)) + '</span>';
+                else if (banCiechi > 0) badge.innerHTML = '<span class="badge bg-danger">' + escHtml(tn('cpf.notVerified', banCiechi)) + '</span>';
+                else if (senzaRegola > 0) badge.innerHTML = '<span class="badge bg-danger">' + escHtml(tn('cpf.noRule', senzaRegola)) + '</span>';
+                else if (cieche > 0) badge.innerHTML = '<span class="badge bg-warning text-dark">' + escHtml(tn('cpf.notMeasured', cieche)) + '</span>';
+                else badge.innerHTML = '<span class="badge bg-success">' + escHtml(t('cpf.consistent')) + '</span>';
 
                 let h = '';
                 if (buchi > 0) {
-                    h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1"></i><strong>' + buchi + ' indirizzi risultano bannati ma pf non li blocca.</strong> Fail2ban li conta fra i suoi ban e la pagina li mostra bannati: in realtà passano.</div>';
+                    h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i><strong>' + escHtml(tn('cpf.holes', buchi)) + '</strong> ' + escHtml(t('cpf.holesHint')) + '</div>';
                 } else if (banCiechi > 0) {
-                    h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1"></i><strong>' + banCiechi + ' indirizzi sono dichiarati bannati senza che io possa verificarlo.</strong> Non sto dicendo che passino: sto dicendo che nessuno ha controllato, e il comando che quelle jail eseguono è scritto qui sotto perché si possa guardare.</div>';
+                    h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i><strong>' + escHtml(tn('cpf.blind', banCiechi)) + '</strong> ' + escHtml(t('cpf.blindHint')) + '</div>';
                 } else if (senzaRegola > 0) {
-                    h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1"></i><strong>' + senzaRegola + ' jail hanno una tabella che nessuna regola pf legge.</strong> Fail2ban ci scrive dentro gli indirizzi e pf non li guarda: il ban risulta eseguito e non blocca. È il controllo che fa fail2ban stesso (<code>pfctl -sr</code>), e la causa tipica è una regola rifiutata all\'avvio dell\'azione.</div>';
+                    h += '<div class="alert alert-danger py-2"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i><strong>' + escHtml(tn('cpf.ruleless', senzaRegola)) + '</strong> ' + escHtml(t('cpf.rulelessHint')) + '</div>';
                 } else if (cieche > 0) {
-                    h += '<div class="alert alert-warning py-2"><i class="fas fa-circle-question me-1"></i>Di ' + cieche + ' jail non ho potuto leggere la tabella: per quelle non sto dicendo che vada bene, sto dicendo che non lo so.</div>';
+                    h += '<div class="alert alert-warning py-2"><i class="fas fa-circle-question me-1" aria-hidden="true"></i>' + escHtml(tn('cpf.unread', cieche)) + '</div>';
                 }
 
                 h += '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr>' +
-                     '<th>Jail</th><th>Tabella pf</th><th class="text-end">Fail2ban</th><th class="text-end">In pf</th><th>Esito</th></tr></thead><tbody>';
+                     '<th scope="col">Jail</th><th scope="col">' + escHtml(t('cpf.table')) + '</th><th scope="col" class="text-end">Fail2ban</th><th scope="col" class="text-end">' + escHtml(t('cpf.inPf')) + '</th><th scope="col">' + escHtml(t('dns.colOutcome')) + '</th></tr></thead><tbody>';
                 jails.forEach(j => {
                     const f2b = (j.creduti_bannati || []).length;
                     const inPf = (j.nel_firewall || []).length;
@@ -59,8 +59,8 @@
                         // Non verificata con ban attivi: rosso. Non verificata e ferma: grigio.
                         const grave = f2b > 0;
                         esito = '<span class="' + (grave ? 'text-danger' : 'text-muted') + ' small">'
-                              + (grave ? '<i class="fas fa-circle-question me-1"></i><strong>' + f2b + ' ban non verificati.</strong> ' : '')
-                              + escapeHtml(j.nota || 'non misurata') + '</span>';
+                              + (grave ? '<i class="fas fa-circle-question me-1" aria-hidden="true"></i><strong>' + escHtml(tn('cpf.notVerified', f2b)) + '.</strong> ' : '')
+                              + escapeHtml(j.nota || t('cpf.notMeasuredOne')) + '</span>';
                         if ((j.comandi_ban || []).length > 0)
                             esito += '<div class="small text-muted mt-1"><code>' + j.comandi_ban.map(escapeHtml).join('</code><br><code>') + '</code></div>';
                         // L'evidenza grezza, aperta a richiesta: cosa risponde fail2ban, cosa ha
@@ -69,27 +69,27 @@
                         const pezzi = [];
                         if (j.uscita_azioni) pezzi.push('$ fail2ban-client get ' + j.jail + ' actions\n' + j.uscita_azioni);
                         if (j.log) pezzi.push('/var/log/fail2ban.log\n' + j.log);
-                        if (j.sezioni) pezzi.push('Sezioni [' + j.jail + '] nei file di configurazione\n' + j.sezioni);
-                        if (j.dump) pezzi.push('$ fail2ban-client --dp   (cosa fail2ban ha INTERPRETATO dai file)\n' + j.dump);
+                        if (j.sezioni) pezzi.push(t('cpf.sections', { jail: j.jail }) + '\n' + j.sezioni);
+                        if (j.dump) pezzi.push('$ fail2ban-client --dp   (' + t('cpf.dumpHint') + ')\n' + j.dump);
                         if (pezzi.length)
                             // Aperto, non richiuso dietro un click: questa riga esiste perche' la
                             // misura NON e' riuscita, e l'evidenza che serve a capire perche' e'
                             // esattamente cio' che chi guarda deve avere sotto gli occhi.
-                            esito += '<details class="small mt-2" open><summary>Cosa vede fail2ban (da incollare)</summary>' +
+                            esito += '<details class="small mt-2" open><summary>' + escHtml(t('cpf.whatSees')) + '</summary>' +
                                      '<pre class="mt-1 mb-0" style="white-space:pre-wrap;max-height:400px;overflow:auto">' +
                                      escapeHtml(pezzi.join('\n\n')) + '</pre></details>';
                     } else if (j.tabella_mancante) {
-                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>La tabella non esiste: ' + (f2b > 0 ? 'nessuno di questi ' + f2b + ' ban blocca niente' : 'il primo ban non bloccherebbe niente') + '</span>';
+                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(f2b > 0 ? tn('cpf.noTableBans', f2b) : t('cpf.noTable')) + '</span>';
                     } else if (!j.regola_presente) {
-                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>Nessuna regola pf legge questa tabella: gli indirizzi ci finiscono dentro e passano lo stesso' + (f2b > 0 ? ' (' + f2b + ' adesso)' : '') + '</span>';
+                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(f2b > 0 ? t('cpf.noRuleNow', { n: f2b }) : t('cpf.noRuleText')) + '</span>';
                     } else if (mancanti.length > 0) {
-                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1"></i>Non bloccati: ' + mancanti.map(escapeHtml).join(', ') + '</span>';
+                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('cpf.notBlocked')) + ' ' + mancanti.map(escapeHtml).join(', ') + '</span>';
                     } else if (residui.length > 0) {
-                        esito = '<span class="text-warning"><i class="fas fa-broom me-1"></i>Rimasti in pf dopo lo sban: ' + residui.map(escapeHtml).join(', ') + '</span>';
+                        esito = '<span class="text-warning"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(t('cpf.leftover')) + ' ' + residui.map(escapeHtml).join(', ') + '</span>';
                     } else if (f2b === 0 && inPf === 0) {
-                        esito = '<span class="text-success"><i class="fas fa-check me-1"></i>Nessun ban attivo; tabella e regola pf sono al loro posto</span>';
+                        esito = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('cpf.noneActive')) + '</span>';
                     } else {
-                        esito = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Tutti applicati davvero</span>';
+                        esito = '<span class="text-success"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('cpf.allApplied')) + '</span>';
                     }
                     h += '<tr><td><code>' + escapeHtml(j.jail) + '</code></td>' +
                          '<td class="small text-muted">' + (j.tabella ? escapeHtml(j.tabella) : '—') + '</td>' +
@@ -102,6 +102,6 @@
             })
             .catch(e => {
                 if (btn) btn.disabled = false;
-                corpo.innerHTML = '<div class="alert alert-danger py-2 mb-0">Errore rete: ' + escapeHtml(e.message) + '</div>';
+                corpo.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('common.networkError', { message: e.message })) + '</div>';
             });
         }

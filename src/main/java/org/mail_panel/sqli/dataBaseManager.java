@@ -28,9 +28,114 @@ public class dataBaseManager {
     HashMap<Integer, database> database_;
 
     public dataBaseManager() {
+        restrictFiles();
         this.database_ = new HashMap<Integer, database>();
         database data = new database();
         this.database_.putIfAbsent(1, data);
+        restrictFiles();
+        migrateSecrets();
+    }
+
+    // ========== Segreti: nel file dei segreti, non in SQLite ==========
+
+    /*
+     * La password MySQL del pannello e la chiave privata TLS stanno nel file dei segreti
+     * (PanelSecrets, /usr/local/etc/mail-panel, 600), non nel database SQLite: chi copia
+     * database/mail_panel.db non porta via le chiavi. Le colonne restano (vuote) per le versioni
+     * di prima. Su un server gia' avviato lo spostamento avviene da solo al primo avvio della
+     * nuova versione (anche di un comando da console): se una colonna ha un valore, e' il piu'
+     * recente (le versioni nuove non ci scrivono piu') e va nel file; poi la colonna si svuota.
+     */
+    private static final String[][] SECRET_COLUMNS = {
+            {"mysql_password", org.mail_panel.security.PanelSecrets.MYSQL_PASSWORD},
+            {"mail_panel_ssl_cert_key", org.mail_panel.security.PanelSecrets.PANEL_TLS_KEY}};
+
+    /** Sposta nel file dei segreti quello che e' ancora in SQLite. Ritorna quanti valori ha spostato. */
+    public int migrateSecrets() {
+        int moved = 0;
+        Connection c = this.database_.get(1).connection;
+        if (c == null) return 0;
+        for (String[] col : SECRET_COLUMNS) {
+            String value;
+            try (PreparedStatement ps = c.prepareStatement("SELECT " + col[0] + " FROM config WHERE id = 1");
+                 ResultSet rs = ps.executeQuery()) {
+                value = rs.next() ? rs.getString(1) : null;
+            } catch (SQLException e) {
+                return moved;       // tabella non ancora creata: niente da spostare
+            }
+            if (value == null || value.isEmpty()) continue;
+            try {
+                org.mail_panel.security.PanelSecrets.setText(col[1], value);
+            } catch (RuntimeException e) {
+                System.err.println("Secrets file not writable, " + col[0] + " stays in SQLite for now: " + e.getMessage());
+                continue;
+            }
+            try (PreparedStatement ps = c.prepareStatement("UPDATE config SET " + col[0] + " = '' WHERE id = 1")) {
+                ps.executeUpdate();
+                moved++;
+            } catch (SQLException e) {
+                System.err.println("Could not clear " + col[0] + " in SQLite: " + e.getMessage());
+            }
+        }
+        return moved;
+    }
+
+    /** La password MySQL del pannello: dal file dei segreti (o, se non si e' potuto spostarla, da SQLite). */
+    public String mysqlPassword() {
+        return secret(0);
+    }
+
+    /** La chiave privata TLS (PEM) del pannello: dal file dei segreti (o, se non si e' potuto spostarla, da SQLite). */
+    public String panelTlsKey() {
+        return secret(1);
+    }
+
+    /** Una colonna non vuota e' il valore piu' recente (non ancora spostato): vince sul file. */
+    private String secret(int i) {
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
+                "SELECT " + SECRET_COLUMNS[i][0] + " FROM config WHERE id = 1");
+             ResultSet rs = ps.executeQuery()) {
+            String v = rs.next() ? rs.getString(1) : null;
+            if (v != null && !v.isEmpty()) return v;
+        } catch (SQLException e) {
+            // tabella non ancora creata
+        }
+        try {
+            return org.mail_panel.security.PanelSecrets.text(SECRET_COLUMNS[i][1]);
+        } catch (RuntimeException e) {
+            System.err.println("Secrets file unreadable: " + e.getMessage());
+            return "";
+        }
+    }
+
+    /** Scrive un segreto nel file; se il file non e' scrivibile resta in SQLite come prima. */
+    private String storeSecret(int i, String value) {
+        try {
+            org.mail_panel.security.PanelSecrets.setText(SECRET_COLUMNS[i][1], value);
+            return "";
+        } catch (RuntimeException e) {
+            System.err.println("Secrets file not writable, " + SECRET_COLUMNS[i][0] + " saved in SQLite: " + e.getMessage());
+            return value == null ? "" : value;
+        }
+    }
+
+    /**
+     * La cartella database/ 700 e mail_panel.db 600 (anche i file -journal e -wal di SQLite):
+     * oltre ai segreti spostati, dentro ci sono certificato, impostazioni e stato dei servizi.
+     */
+    static void restrictFiles() {
+        java.nio.file.Path dir = java.nio.file.Paths.get("database");
+        try {
+            if (!java.nio.file.Files.isDirectory(dir)) java.nio.file.Files.createDirectories(dir);
+            java.nio.file.Files.setPosixFilePermissions(dir, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+            for (String f : new String[]{"mail_panel.db", "mail_panel.db-journal", "mail_panel.db-wal", "mail_panel.db-shm"}) {
+                java.nio.file.Path p = dir.resolve(f);
+                if (java.nio.file.Files.exists(p))
+                    java.nio.file.Files.setPosixFilePermissions(p, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            }
+        } catch (java.io.IOException | UnsupportedOperationException e) {
+            // File system senza permessi POSIX, o non nostri: restano come sono
+        }
     }
 
     public Connection get_connection() {
@@ -72,7 +177,7 @@ public class dataBaseManager {
             preparedStatement.setString(1, host);
             preparedStatement.setString(2, port);
             preparedStatement.setString(3, sslCert);
-            preparedStatement.setString(4, sslKey);
+            preparedStatement.setString(4, storeSecret(1, sslKey));     // la chiave va nel file dei segreti
             preparedStatement.setString(5, sslChain);
             preparedStatement.setString(6, sessionPrefix);
 
@@ -102,7 +207,7 @@ public class dataBaseManager {
             preparedStatement.setString(1, mysqlHost);
             preparedStatement.setString(2, mysqlPort);
             preparedStatement.setString(3, mysqlUser);
-            preparedStatement.setString(4, mysqlPassword);
+            preparedStatement.setString(4, storeSecret(0, mysqlPassword));   // la password va nel file dei segreti
             preparedStatement.setString(5, mysqlDatabase);
 
             int res = preparedStatement.executeUpdate();
@@ -226,7 +331,7 @@ public class dataBaseManager {
         try {
             PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(
                     "UPDATE config SET mysql_password = ? WHERE id = 1");
-            preparedStatement.setString(1, newPassword);
+            preparedStatement.setString(1, storeSecret(0, newPassword));
             return preparedStatement.executeUpdate() > 0;
         } catch (SQLException e) {
             System.out.println("Error updating MySQL password: " + e.getMessage());

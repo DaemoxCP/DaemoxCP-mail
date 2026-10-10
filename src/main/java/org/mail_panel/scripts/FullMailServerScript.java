@@ -218,6 +218,7 @@ USE $MYSQL_DATABASE;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS audit_log, rspamd_training, email_statistics, roundcube_tokens;
 DROP TABLE IF EXISTS auto_responders, sieve_filters, forwarding_rules, rate_limits;
+DROP TABLE IF EXISTS admin_passkeys, panel_sessions, login_code_email, login_code_console, stepup_code, email_change_code;
 DROP TABLE IF EXISTS panel_settings, panel_admin, installed_components;
 DROP TABLE IF EXISTS aliases, mailboxes, domains;
 SET FOREIGN_KEY_CHECKS = 1;
@@ -261,17 +262,21 @@ CREATE TABLE aliases (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Panel admin
+-- No password: passkeys and email codes. The panel adds its login tables when it starts.
 CREATE TABLE panel_admin (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP NULL,
+    email_enc VARCHAR(512) NULL,
+    email_index CHAR(64) CHARACTER SET ascii NULL,
+    user_handle VARCHAR(64) CHARACTER SET ascii NULL,
+    created_at DATETIME NULL,
+    last_login DATETIME NULL,
     active BOOLEAN DEFAULT TRUE,
-    totp_secret VARCHAR(64) NULL,
-    totp_enabled BOOLEAN DEFAULT FALSE,
-    backup_codes TEXT NULL,
-    role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin'
+    role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin',
+    theme VARCHAR(10) DEFAULT 'auto',
+    language VARCHAR(5) NULL,
+    UNIQUE KEY uq_admin_email_index (email_index),
+    UNIQUE KEY uq_admin_user_handle (user_handle)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Panel settings

@@ -8,28 +8,26 @@
             return await r.json();
         }
 
-        function acEsc(t) {
+        function acEsc(v) {
             const d = document.createElement('div');
-            d.textContent = t === null || t === undefined ? '' : String(t);
+            d.textContent = v === null || v === undefined ? '' : String(v);
             return d.innerHTML;
         }
 
         async function acCarica() {
             const el = document.getElementById('acBody');
             if (!el) return;
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo la configurazione del server...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.reading'));
             const r = await acApi('status');
             if (!r.success || r.error) {
-                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + acEsc(r.error || 'stato non leggibile') + '</div>';
+                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + acEsc(r.error || t('acf.unreadable')) + '</div>';
                 return;
             }
 
             let h = '';
             h += '<div class="alert alert-' + (r.pronto ? 'success' : 'warning') + ' py-2 small mb-2">'
-               + '<i class="fas fa-' + (r.pronto ? 'check-circle' : 'triangle-exclamation') + ' me-1"></i>'
-               + (r.pronto
-                  ? 'Il file <strong>arriva</strong>: Thunderbird lo trover&agrave; da solo.'
-                  : 'Il file <strong>non arriva</strong>: i client continuano a doversi configurare a mano.')
+               + '<i class="fas fa-' + (r.pronto ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
+               + escHtml(r.pronto ? t('acf.arrives') : t('acf.doesNotArrive'))
                // Il verdetto viene dallo scarico vero, e qui si dice perche'. Prima veniva da
                // una ricerca dentro nginx.conf del marcatore di questa scheda, e siccome la
                // rotta la installa la scheda della 443 in un altro file, la riga diceva "non
@@ -37,26 +35,22 @@
                + (r.perche ? '<div class="mt-1">' + acEsc(r.perche) + '</div>' : '')
                + '</div>';
 
-            h += '<div class="small text-muted mb-2">Configurazione letta da <code>' + acEsc(r.conf) + '</code>'
-               + ' &middot; server di posta <code>' + acEsc(r.hostDiPosta) + '</code></div>';
+            h += '<div class="small text-muted mb-2">' + escHtml(t('acf.readFrom', { conf: r.conf, host: r.hostDiPosta })) + '</div>';
 
             // Queste due righe NON sono il verdetto e non sono requisiti: dicono solo se la
             // rotta sta in QUESTO file. Puo' benissimo stare in un altro — e sta in un altro,
             // quando la scheda della 443 ha installato la sua superficie pubblica. Mostrarle
             // con spunta e croce le faceva sembrare condizioni da soddisfare, e invitava a
             // premere un pulsante per aggiungere una rotta che c'era gia' altrove.
-            h += '<div class="small text-muted mb-2">In questo file: il nome autoconfig '
-               + (r.nomeCoperto ? '&egrave; dichiarato' : 'non &egrave; dichiarato')
-               + ', la rotta ' + (r.rottaPresente ? '&egrave; presente' : 'non &egrave; presente')
-               + '. &Egrave; un&rsquo;informazione, non un requisito: la rotta pu&ograve; stare '
-               + '(e di norma sta) nel file della scheda <em>Porta 443</em>, che serve proprio '
-               + 'questo XML e la politica MTA-STS.</div>';
+            h += '<div class="small text-muted mb-2">'
+               + escHtml((r.nomeCoperto ? t('acf.nameDeclared') : t('acf.nameNotDeclared')) + ' ' + (r.rottaPresente ? t('acf.routePresent') : t('acf.routeMissing')))
+               + ' ' + escHtml(t('acf.infoOnly')) + '</div>';
 
             if (r.domini && r.domini.length) {
-                h += '<div class="small fw-bold mb-1">Dominio per dominio</div>'
+                h += '<div class="small fw-bold mb-1">' + escHtml(t('acf.perDomain')) + '</div>'
                    + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                   + '<th>Nome</th><th>Risolve in DNS</th><th>Certificato</th>'
-                   + '<th>Il file arriva davvero</th></tr></thead><tbody>';
+                   + '<th scope="col">' + escHtml(t('acf.colName')) + '</th><th scope="col">' + escHtml(t('acf.colResolves')) + '</th><th scope="col">' + escHtml(t('acf.colCert')) + '</th>'
+                   + '<th scope="col">' + escHtml(t('acf.colArrives')) + '</th></tr></thead><tbody>';
                 r.domini.forEach(d => {
                     const p = d.prova || {};
                     h += '<tr><td><code class="small">' + acEsc(d.nome) + '</code></td>'
@@ -67,31 +61,22 @@
                        + '</td></tr>';
                 });
                 h += '</tbody></table></div>'
-                   + '<div class="small text-muted mb-2">L&rsquo;ultima colonna &egrave; quella che conta: il '
-                   + 'pannello <strong>chiede il file come lo chiederebbe Thunderbird</strong> e guarda cosa '
-                   + 'torna. Le prime due dicono cosa <em>dovrebbe</em> funzionare, l&rsquo;ultima dice cosa '
-                   + 'funziona &mdash; e quando divergono ha ragione l&rsquo;ultima. Il CNAME lo crea la scheda '
-                   + 'qui sopra; il certificato copre quel nome solo se era incluso all&rsquo;emissione, '
-                   + 'altrimenti va rigenerato dalla sezione SSL.</div>';
+                   + '<div class="small text-muted mb-2">' + escHtml(t('acf.lastColumn')) + '</div>';
             }
 
             h += '<div class="d-flex gap-2 flex-wrap">'
                + '<button class="btn btn-sm btn-outline-secondary" onclick="acAnteprima()">'
-               + '<i class="fas fa-eye me-1"></i>Guarda il file</button>'
+               + '<i class="fas fa-eye me-1" aria-hidden="true"></i>' + escHtml(t('acf.viewFile')) + '</button>'
                + ((r.pronto || r.superficie443) ? ''
                   : '<button class="btn btn-sm btn-outline-success" onclick="acInstalla()">'
-                    + '<i class="fas fa-screwdriver-wrench me-1"></i>Configura nginx</button>')
+                    + '<i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>' + escHtml(t('acf.setUpNginx')) + '</button>')
                + '</div>'
                // Il pulsante sparisce anche quando il file NON arriva, se la superficie sulla
                // 443 e' installata: in quel caso la causa non e' nginx, e modificare nginx.conf
                // toglierebbe autoconfig.* e mta-sts.* al blocco protetto per darli alla webmail.
                + ((!r.pronto && r.superficie443)
                   ? '<div class="alert alert-warning py-2 small mt-2 mb-0">'
-                    + '<i class="fas fa-circle-info me-1"></i>Qui non c&rsquo;&egrave; niente da '
-                    + 'configurare: di <code>autoconfig.&lt;dominio&gt;</code> se ne occupa gi&agrave; '
-                    + 'la scheda <strong>Porta 443</strong>. Se il file non arriva, la causa &egrave; '
-                    + 'altrove &mdash; quasi sempre il server web del pannello, che &egrave; chi genera '
-                    + 'l&rsquo;XML: un <code>502</code> dice esattamente quello.</div>'
+                    + '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>' + escHtml(t('acf.handledBy443')) + '</div>'
                   : '')
                + '<div id="acEsito" class="mt-2"></div>';
 
@@ -99,38 +84,31 @@
         }
 
         function acSpunta(v) {
-            return v ? '<i class="fas fa-check-circle text-success"></i>'
-                     : '<i class="fas fa-times-circle text-danger"></i>';
+            return v ? '<i class="fas fa-check-circle text-success" title="' + escHtml(t('dns.yes')) + '"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
+                     : '<i class="fas fa-times-circle text-danger" title="' + escHtml(t('acf.no')) + '"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>';
         }
 
 
         async function acAnteprima() {
             const el = document.getElementById('acEsito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Genero il file...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.generating'));
             const r = await acApi('preview');
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + acEsc(r.error) + '</div>';
                 return;
             }
-            el.innerHTML = '<div class="small text-muted mb-1">Esempio per <code>' + acEsc(r.dominio)
-                         + '</code>. Il pannello ne genera uno per ciascuno dei ' + acEsc(r.quantiDomini)
-                         + ' domini, con il proprio nome dentro.</div>'
+            el.innerHTML = '<div class="small text-muted mb-1">' + escHtml(t('acf.example', { domain: r.dominio, n: r.quantiDomini })) + '</div>'
                          + '<pre class="small p-2 border rounded" style="max-height:22rem;overflow:auto">'
                          + acEsc(r.xml) + '</pre>';
         }
 
         async function acInstalla() {
-            if (prompt('Modificare la configurazione di nginx?\n\n'
-                     + 'Il pannello fa prima una copia di sicurezza, poi aggiunge i nomi e la rotta,\n'
-                     + 'poi esegue nginx -t. Se la validazione fallisce rimette la configurazione\n'
-                     + 'di prima e NON ricarica niente.\n\n'
-                     + 'Scrivi INSTALLA per confermare.') !== 'INSTALLA') return;
+            if (!adConferma(t('acf.confirmInstall'), t('acf.wordInstall'))) return;
             const el = document.getElementById('acEsito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Modifico e valido...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.installing'));
             const r = await acApi('install', { confirm: 'INSTALLA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + acEsc(r.nota || r.error) + '</div>'
-                         + (r.ripristinato ? '<div class="small text-muted mt-1">La configurazione precedente '
-                            + '&egrave; stata rimessa: il sito non ha subito interruzioni.</div>' : '');
+                         + (r.ripristinato ? '<div class="small text-muted mt-1">' + escHtml(t('acf.restored')) + '</div>' : '');
             if (r.success) setTimeout(acCarica, 1200);
         }

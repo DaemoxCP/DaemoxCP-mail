@@ -32,8 +32,8 @@ import java.util.logging.Logger;
 public class PasswordVault {
     private static final Logger LOGGER = Logger.getLogger(PasswordVault.class.getName());
 
-    /** Dove va a finire la chiave master sul disco. */
-    private static final String KEY_FILE = "/usr/local/etc/mail-panel/master.key";
+    /** Dove va a finire la chiave master sul disco (i test la spostano con -Dmailpanel.vault.key=...). */
+    private static final String KEY_FILE = System.getProperty("mailpanel.vault.key", "/usr/local/etc/mail-panel/master.key");
 
     private static final int KEY_SIZE_BYTES   = 32; // AES-256
     private static final int GCM_IV_LEN       = 12; // standard per GCM

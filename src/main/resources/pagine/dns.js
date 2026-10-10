@@ -13,7 +13,7 @@
             const badge = document.getElementById('cfAccountsCountBadge');
             const list = document.getElementById('cfAccountsList');
             const assign = document.getElementById('cfDomainAssignments');
-            badge.innerHTML = '<span class="badge bg-light text-dark"><i class="fas fa-spinner fa-spin me-1"></i>caricamento</span>';
+            badge.innerHTML = '<span class="badge bg-light text-dark"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('common.loading')) + '</span>';
 
             fetch('/api/cloudflare').then(r => {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -23,15 +23,15 @@
                 cfDomainsCf = data.domains || [];
 
                 badge.innerHTML = cfAccounts.length === 0
-                    ? '<span class="badge bg-secondary">0 account</span>'
-                    : '<span class="badge bg-success">' + cfAccounts.length + ' account configurat' + (cfAccounts.length === 1 ? 'o' : 'i') + '</span>';
+                    ? '<span class="badge bg-secondary">' + escHtml(tn('dns.cfCount', 0)) + '</span>'
+                    : '<span class="badge bg-success">' + escHtml(tn('dns.cfCount', cfAccounts.length)) + '</span>';
 
                 // Lista account
                 if (cfAccounts.length === 0) {
-                    list.innerHTML = '<div class="alert alert-secondary py-2 mb-0 small"><i class="fas fa-info-circle me-1"></i>Nessun account configurato. Aggiungine uno qui sotto per abilitare la rotazione DKIM automatica.</div>';
+                    list.innerHTML = '<div class="alert alert-secondary py-2 mb-0 small"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.cfNone')) + '</div>';
                 } else {
                     let html = '<div class="table-responsive"><table class="table table-sm align-middle mb-0">';
-                    html += '<thead class="table-light"><tr><th>Etichetta</th><th>Email account</th><th>Token</th><th>Domini collegati</th><th class="text-end">Azioni</th></tr></thead><tbody>';
+                    html += '<thead><tr><th scope="col">' + escHtml(t('dns.cfLabel')) + '</th><th scope="col">' + escHtml(t('dns.cfEmail')) + '</th><th scope="col">Token</th><th scope="col">' + escHtml(t('dns.cfLinked')) + '</th><th scope="col" class="text-end">' + escHtml(t('home.colActions')) + '</th></tr></thead><tbody>';
                     cfAccounts.forEach(a => {
                         const linkedDomains = cfDomainsCf.filter(d => d.cloudflare_account_id === a.id).map(d => d.domain);
                         const safeLabel = escapeHtmlCf(a.label).replace(/'/g, "\\'");
@@ -41,22 +41,22 @@
                         html += '<td>' + (a.email ? escapeHtmlCf(a.email) : '<span class="text-muted">—</span>') + '</td>';
                         html += '<td><code>' + escapeHtmlCf(a.token_masked) + '</code></td>';
                         html += '<td>' + (linkedDomains.length === 0
-                            ? '<span class="text-muted small">nessuno</span>'
+                            ? '<span class="text-muted small">' + escHtml(t('dns.none')) + '</span>'
                             : linkedDomains.map(d => '<span class="badge bg-info text-dark me-1">' + escapeHtmlCf(d) + '</span>').join('')) + '</td>';
                         html += '<td class="text-end text-nowrap">';
-                        html += '<button class="btn btn-sm btn-outline-primary me-1" title="Modifica" onclick="cfEditOpen(' + a.id + ')"><i class="fas fa-pen"></i></button>';
-                        html += '<button class="btn btn-sm btn-outline-danger" title="Rimuovi" onclick="cfDeleteAccount(' + a.id + ', \'' + safeLabel + '\')"><i class="fas fa-trash"></i></button>';
+                        html += '<button class="btn btn-sm btn-outline-primary me-1" title="' + escHtml(t('common.edit')) + '" aria-label="' + escHtml(t('common.edit')) + ' ' + escapeHtmlCf(a.label) + '" onclick="cfEditOpen(' + a.id + ')"><i class="fas fa-pen" aria-hidden="true"></i></button>';
+                        html += '<button class="btn btn-sm btn-outline-danger" title="' + escHtml(t('dns.remove')) + '" aria-label="' + escHtml(t('dns.remove')) + ' ' + escapeHtmlCf(a.label) + '" onclick="cfDeleteAccount(' + a.id + ', \'' + safeLabel + '\')"><i class="fas fa-trash" aria-hidden="true"></i></button>';
                         html += '</td>';
                         html += '</tr>';
                         // Riga di edit (nascosta finché non clicchi la matita)
                         html += '<tr id="cfRowEdit-' + a.id + '" class="d-none table-warning"><td colspan="5">';
                         html += '<div class="row g-2 align-items-end">';
-                        html += '  <div class="col-md-3"><label class="form-label small mb-1">Etichetta</label><input type="text" class="form-control form-control-sm" id="cfEditLabel-' + a.id + '" value="' + escapeHtmlCf(a.label) + '"></div>';
-                        html += '  <div class="col-md-3"><label class="form-label small mb-1">Email account</label><input type="email" class="form-control form-control-sm" id="cfEditEmail-' + a.id + '" value="' + escapeHtmlCf(a.email || '') + '" placeholder="opzionale"></div>';
-                        html += '  <div class="col-md-4"><label class="form-label small mb-1">Nuovo token <small class="text-muted">(lascia vuoto per non cambiarlo)</small></label><input type="password" class="form-control form-control-sm" id="cfEditToken-' + a.id + '" placeholder="Incolla un nuovo token solo se vuoi sostituirlo" autocomplete="off"></div>';
+                        html += '  <div class="col-md-3"><label class="form-label small mb-1" for="cfEditLabel-' + a.id + '">' + escHtml(t('dns.cfLabel')) + '</label><input type="text" class="form-control form-control-sm" id="cfEditLabel-' + a.id + '" value="' + escapeHtmlCf(a.label) + '"></div>';
+                        html += '  <div class="col-md-3"><label class="form-label small mb-1" for="cfEditEmail-' + a.id + '">' + escHtml(t('dns.cfEmail')) + '</label><input type="email" class="form-control form-control-sm" id="cfEditEmail-' + a.id + '" value="' + escapeHtmlCf(a.email || '') + '" placeholder="' + escHtml(t('dns.optional')) + '"></div>';
+                        html += '  <div class="col-md-4"><label class="form-label small mb-1" for="cfEditToken-' + a.id + '">' + escHtml(t('dns.cfNewToken')) + ' <small class="text-muted">' + escHtml(t('dns.cfNewTokenHint')) + '</small></label><input type="password" class="form-control form-control-sm" id="cfEditToken-' + a.id + '" placeholder="' + escHtml(t('dns.cfNewTokenPh')) + '" autocomplete="off"></div>';
                         html += '  <div class="col-md-2 text-end">';
-                        html += '    <button class="btn btn-sm btn-primary me-1" onclick="cfEditSave(' + a.id + ')"><i class="fas fa-save"></i> Salva</button>';
-                        html += '    <button class="btn btn-sm btn-secondary" onclick="cfEditClose(' + a.id + ')"><i class="fas fa-times"></i></button>';
+                        html += '    <button class="btn btn-sm btn-primary me-1" onclick="cfEditSave(' + a.id + ')"><i class="fas fa-save" aria-hidden="true"></i> ' + escHtml(t('common.save')) + '</button>';
+                        html += '    <button class="btn btn-sm btn-secondary" onclick="cfEditClose(' + a.id + ')" aria-label="' + escHtml(t('common.cancel')) + '"><i class="fas fa-times" aria-hidden="true"></i></button>';
                         html += '  </div>';
                         html += '</div>';
                         html += '</td></tr>';
@@ -67,16 +67,16 @@
 
                 // Tabella assegnazione domini -> account
                 if (cfDomainsCf.length === 0) {
-                    assign.innerHTML = '<div class="text-muted small">Aggiungi prima un dominio nella sezione Domini per gestirne l\'assegnazione qui.</div>';
+                    assign.innerHTML = '<div class="text-muted small">' + escHtml(t('dns.cfAddDomainFirst')) + '</div>';
                 } else {
                     let html = '<div class="table-responsive"><table class="table table-sm align-middle mb-0">';
-                    html += '<thead class="table-light"><tr><th>Dominio</th><th>Modalità rotazione DKIM</th></tr></thead><tbody>';
+                    html += '<thead><tr><th scope="col">' + escHtml(t('st.colDomain')) + '</th><th scope="col">' + escHtml(t('dns.rotationMode')) + '</th></tr></thead><tbody>';
                     cfDomainsCf.forEach(d => {
                         html += '<tr>';
                         html += '<td><code>' + escapeHtmlCf(d.domain) + '</code></td>';
-                        html += '<td><select class="form-select form-select-sm" onchange="cfAssignDomain(' + d.id + ', this.value)">';
+                        html += '<td><select class="form-select form-select-sm" aria-label="' + escHtml(t('dns.rotationMode')) + ' ' + escapeHtmlCf(d.domain) + '" onchange="cfAssignDomain(' + d.id + ', this.value)">';
                         const cur = d.cloudflare_account_id || 0;
-                        html += '<option value="0"' + (cur === 0 ? ' selected' : '') + '>Manuale (devo aggiungere il record TXT a mano)</option>';
+                        html += '<option value="0"' + (cur === 0 ? ' selected' : '') + '>' + escHtml(t('dns.manualMode')) + '</option>';
                         cfAccounts.forEach(a => {
                             const lbl = a.label + (a.email ? ' — ' + a.email : '');
                             html += '<option value="' + a.id + '"' + (cur === a.id ? ' selected' : '') + '>Cloudflare: ' + escapeHtmlCf(lbl) + '</option>';
@@ -92,8 +92,8 @@
                 if (currentDomainId) loadDkimRotationStatus(currentDomainId);
             }).catch(e => {
                 console.error('cf', e);
-                badge.innerHTML = '<span class="badge bg-danger">Errore</span>';
-                list.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Impossibile leggere gli account (' + e.message + '). Ricarica la pagina.</div>';
+                badge.innerHTML = '<span class="badge bg-danger">' + escHtml(t('common.errorShort')) + '</span>';
+                list.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('dns.cfReadError', { message: e.message })) + '</div>';
                 assign.innerHTML = '';
             });
         }
@@ -101,22 +101,22 @@
 
         function cfTestNewToken() {
             const tok = document.getElementById('cfNewToken').value.trim();
-            if (!tok) { alert('Incolla prima il token'); return; }
+            if (!tok) { alert(t('dns.cfPasteFirst')); return; }
             fetch('/api/cloudflare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'test', token: tok })
             }).then(r => r.json()).then(data => {
                 alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         function cfAddAccount() {
             const label = document.getElementById('cfNewLabel').value.trim();
             const email = document.getElementById('cfNewEmail').value.trim();
             const token = document.getElementById('cfNewToken').value.trim();
-            if (!label) { alert('Etichetta obbligatoria'); return; }
-            if (!token) { alert('Token obbligatorio'); return; }
+            if (!label) { alert(t('dns.cfLabelRequired')); return; }
+            if (!token) { alert(t('dns.cfTokenRequired')); return; }
             fetch('/api/cloudflare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -129,7 +129,7 @@
                     document.getElementById('cfNewToken').value = '';
                     refreshCloudflare();
                 }
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         function cfEditOpen(id) {
@@ -157,7 +157,7 @@
             const label = document.getElementById('cfEditLabel-' + id).value.trim();
             const email = document.getElementById('cfEditEmail-' + id).value.trim();
             const token = document.getElementById('cfEditToken-' + id).value.trim();
-            if (!label) { alert('Etichetta obbligatoria'); return; }
+            if (!label) { alert(t('dns.cfLabelRequired')); return; }
             const payload = { action: 'update', account_id: id, label: label, email: email };
             // Includi il token SOLO se l'utente l'ha effettivamente compilato
             if (token) payload.token = token;
@@ -171,11 +171,11 @@
                     cfEditClose(id);
                     refreshCloudflare();
                 }
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         function cfDeleteAccount(id, label) {
-            if (!confirm('Rimuovere l\'account "' + label + '"?\n\nI domini collegati torneranno in modalità manuale.')) return;
+            if (!confirm(t('dns.cfConfirmDelete', { label: label }))) return;
             fetch('/api/cloudflare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -183,7 +183,7 @@
             }).then(r => r.json()).then(data => {
                 alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) refreshCloudflare();
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         function cfAssignDomain(domainId, accountId) {
@@ -194,18 +194,18 @@
             }).then(r => r.json()).then(data => {
                 if (!data.success) alert('✗ ' + (data.message || data.error || ''));
                 refreshCloudflare();
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         function loadDnsRecords() {
             const domain = document.getElementById('domainSelect').value;
-            if (!domain) { alert('Seleziona un dominio'); return; }
+            if (!domain) { alert(t('dns.chooseDomainFirst')); return; }
 
             currentDomainId = document.getElementById('domainSelect').selectedOptions[0].dataset.id;
             document.getElementById('generateDkimBtn').disabled = false;
 
-            fetch('/api/dns?domain=' + domain).then(r => r.json()).then(data => {
-                if (!data.success) { alert('Errore: ' + data.error); return; }
+            fetch('/api/dns?domain=' + encodeURIComponent(domain)).then(r => r.json()).then(data => {
+                if (!data.success) { alert(t('common.error', { message: data.error })); return; }
 
                 // Extract mail hostname parent domain
                 const mailHostname = data.mail_hostname;
@@ -213,24 +213,22 @@
                 const mailServerParentDomain = mailHostnameParts.slice(1).join('.');
 
                 let html = '<div class="alert alert-info mb-4">';
-                html += '<h5><i class="fas fa-info-circle me-2"></i>Riepilogo Zone DNS</h5>';
+                html += '<h5><i class="fas fa-info-circle me-2" aria-hidden="true"></i>' + escHtml(t('dns.zonesSummary')) + '</h5>';
                 // Le due zone sono diverse solo quando l'hostname di posta sta in un altro
                 // dominio. Quando coincidono — il caso normale — annunciare "2 zone DNS
                 // diverse" ed elencare due volte lo stesso nome manda a cercare una zona che
                 // non esiste.
                 const dueZone = mailServerParentDomain !== domain;
                 html += dueZone
-                    ? '<p class="mb-2">Dovrai configurare record in <strong>2 zone DNS diverse</strong>:</p>'
+                    ? '<p class="mb-2">' + escHtml(t('dns.twoZones')) + '</p>'
                       + '<ul class="mb-0">'
-                      + '<li><strong>' + mailServerParentDomain + '</strong> → per il record A del server mail</li>'
-                      + '<li><strong>' + domain + '</strong> → per MX, SPF, DKIM, DMARC e altri record</li>'
+                      + '<li><strong>' + escHtml(mailServerParentDomain) + '</strong> → ' + escHtml(t('dns.zoneForA')) + '</li>'
+                      + '<li><strong>' + escHtml(domain) + '</strong> → ' + escHtml(t('dns.zoneForMail')) + '</li>'
                       + '</ul>'
-                    : '<p class="mb-0">Tutti i record stanno in <strong>una sola zona DNS</strong>: '
-                      + '<strong>' + domain + '</strong> — sia il record A del server di posta sia MX, '
-                      + 'SPF, DKIM, DMARC e gli altri.</p>';
+                    : '<p class="mb-0">' + escHtml(t('dns.oneZone', { zone: domain })) + '</p>';
                 html += '</div>';
 
-                html += '<div class="mb-3"><strong>Server IP:</strong> <code>' + data.server_ip + '</code> | <strong>Mail Hostname:</strong> <code>' + data.mail_hostname + '</code></div>';
+                html += '<div class="mb-3"><strong>' + escHtml(t('dns.serverIp')) + '</strong> <code>' + escHtml(data.server_ip) + '</code> | <strong>' + escHtml(t('dns.mailHostname')) + '</strong> <code>' + escHtml(data.mail_hostname) + '</code></div>';
 
                 // Group records by zone
                 let currentZone = '';
@@ -238,34 +236,34 @@
                     // Add zone header if changed
                     if (r.dnsZone && r.dnsZone !== currentZone) {
                         currentZone = r.dnsZone;
-                        html += '<div class="mt-4 mb-3 p-2 bg-primary text-white rounded"><strong><i class="fas fa-globe me-2"></i>Zona DNS: ' + currentZone + '</strong></div>';
+                        html += '<div class="mt-4 mb-3 p-2 bg-primary text-white rounded"><strong><i class="fas fa-globe me-2" aria-hidden="true"></i>' + escHtml(t('dns.zone', { zone: currentZone })) + '</strong></div>';
                     }
 
                     const reqClass = r.required ? 'required' : 'optional';
-                    const badge = r.required ? '<span class="badge bg-danger">Richiesto</span>' : '<span class="badge bg-secondary">Opzionale</span>';
+                    const badge = r.required ? '<span class="badge bg-danger">' + escHtml(t('dns.required')) + '</span>' : '<span class="badge bg-secondary">' + escHtml(t('dns.optionalBadge')) + '</span>';
                     // ID univoco basato su name+type per il matching con la verifica
                     const recordKey = (r.name + '|' + r.type).replace(/[^a-zA-Z0-9_|.\-]/g, '_');
-                    html += '<div class="dns-record ' + reqClass + '" data-record-key="' + recordKey + '" data-record-name="' + r.name + '" data-record-type="' + r.type + '" data-check-type="' + (r.checkType || '') + '" data-record-zone="' + (r.dnsZone || '') + '">';
+                    html += '<div class="dns-record ' + reqClass + '" data-record-key="' + recordKey + '" data-record-name="' + escHtml(r.name) + '" data-record-type="' + escHtml(r.type) + '" data-check-type="' + escHtml(r.checkType || '') + '" data-record-zone="' + escHtml(r.dnsZone || '') + '">';
                     html += '<div class="d-flex justify-content-between align-items-start">';
-                    html += '<div><span class="record-type">' + r.type + '</span> ' + badge;
+                    html += '<div><span class="record-type">' + escHtml(r.type) + '</span> ' + badge;
                     // Status badge — placeholder finché non parte la verifica automatica
-                    html += ' <span class="record-status-badge" data-status-key="' + recordKey + '"><span class="badge bg-light text-dark border"><i class="fas fa-spinner fa-spin me-1"></i>Verifica in corso...</span></span>';
+                    html += ' <span class="record-status-badge" data-status-key="' + recordKey + '"><span class="badge bg-light text-dark border"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('dns.checkingRecord')) + '</span></span>';
                     if (r.dnsZone) {
-                        html += ' <small class="text-muted">su ' + r.dnsZone + '</small>';
+                        html += ' <small class="text-muted">' + escHtml(t('dns.onZone', { zone: r.dnsZone })) + '</small>';
                     }
                     html += '</div>';
-                    html += '<i class="fas fa-copy copy-btn" onclick="copyToClipboard(this.parentElement.parentElement)" title="Copia"></i>';
+                    html += '<button type="button" class="btn btn-link p-0 copy-btn" onclick="copyToClipboard(this.parentElement.parentElement)" title="' + escHtml(t('common.copy')) + '" aria-label="' + escHtml(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button>';
                     html += '</div>';
-                    html += '<div class="mt-2"><strong>Nome:</strong> <code>' + r.name + '</code></div>';
+                    html += '<div class="mt-2"><strong>' + escHtml(t('dns.recName')) + '</strong> <code class="record-name">' + escHtml(r.name) + '</code></div>';
                     // Si mostra il valore COMPLETO quando esiste: per MX e SRV "value" contiene
                     // la sola destinazione, e sotto un'etichetta che dice "consigliato" quello
                     // sarebbe un record da copiare a cui mancano dei campi.
-                    html += '<div class="mt-1"><strong>Valore consigliato dal pannello:</strong> <code style="word-break:break-all">' + (r.valoreCompleto || r.value) + '</code></div>';
+                    html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValue')) + '</strong> <code class="record-value" style="word-break:break-all">' + escHtml(r.valoreCompleto || r.value) + '</code></div>';
                     html += '<small class="text-muted">' + r.description + '</small>';
                     // Area dettagli verifica (popolata dopo verifyDnsAuto)
                     html += '<div class="record-verify-detail mt-2" data-detail-key="' + recordKey + '"></div>';
                     if (r.explanation) {
-                        html += '<details class="mt-2"><summary><i class="fas fa-cog me-1"></i>Istruzioni dettagliate Cloudflare</summary><div class="mt-2 p-3 bg-white border rounded" style="font-size:0.9rem">' + r.explanation + '</div></details>';
+                        html += '<details class="mt-2"><summary><i class="fas fa-cog me-1" aria-hidden="true"></i>' + escHtml(t('dns.cfInstructions')) + '</summary><div class="mt-2 p-3 bg-white border rounded" style="font-size:0.9rem">' + r.explanation + '</div></details>';
                     }
                     html += '</div>';
                 });
@@ -309,7 +307,7 @@
             }).then(r => r.json()).then(data => {
                 if (!data.success) {
                     document.querySelectorAll('.record-status-badge').forEach(el => {
-                        el.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i>Verifica non disponibile</span>';
+                        el.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-question-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.checkUnavailable')) + '</span>';
                     });
                     return;
                 }
@@ -348,16 +346,16 @@
                     }
                     if (!check) {
                         // Nessun check per questo record (es. SRV autodiscover, MTA-STS policy, alcuni TXT secondari)
-                        badgeWrap.innerHTML = '<span class="badge bg-light text-dark border"><i class="fas fa-minus-circle me-1"></i>Non verificato</span>';
+                        badgeWrap.innerHTML = '<span class="badge bg-light text-dark border"><i class="fas fa-minus-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.notChecked')) + '</span>';
                         if (detailWrap) detailWrap.innerHTML = '';
                         unkCount++;
                         return;
                     }
 
                     if (check.passed) {
-                        badgeWrap.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Configurato correttamente</span>';
+                        badgeWrap.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.configuredOk')) + '</span>';
                         if (detailWrap) {
-                            let ok = '<div class="alert alert-success py-1 px-2 mb-0 small mt-2"><i class="fas fa-check me-1"></i><strong>Nessuna azione richiesta</strong> — il record DNS risulta già configurato correttamente. ' + (check.message ? escapeHtmlBl(check.message) : '');
+                            let ok = '<div class="alert alert-success py-1 px-2 mb-0 small mt-2"><i class="fas fa-check me-1" aria-hidden="true"></i><strong>' + escHtml(t('dns.noAction')) + '</strong> ' + (check.message ? escapeHtmlBl(check.message) : '');
                             // Il valore vero si mostra anche quando il record PASSA, non solo
                             // quando fallisce: senza, a schermo resta la sola proposta e sembra
                             // che sia quello pubblicato.
@@ -371,7 +369,7 @@
                             const vero = check.current_value;
                             if (vero) {
                                 const corto = vero.length > 140 ? vero.substring(0, 140) + '…' : vero;
-                                ok += '<div class="mt-1"><span class="text-muted">Pubblicato in DNS:</span> '
+                                ok += '<div class="mt-1"><span class="text-muted">' + escHtml(t('dns.published')) + '</span> '
                                     + '<code class="small" style="word-break:break-all">' + escapeHtmlBl(corto) + '</code></div>';
                             }
                             detailWrap.innerHTML = ok + '</div>';
@@ -380,12 +378,12 @@
                         card.style.borderLeft = '4px solid #198754';
                         okCount++;
                     } else {
-                        badgeWrap.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Da configurare</span>';
+                        badgeWrap.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('dns.toDo')) + '</span>';
                         if (detailWrap) {
-                            let html = '<div class="alert alert-warning py-2 px-2 mb-0 small mt-2"><i class="fas fa-exclamation-triangle me-1"></i><strong>Azione richiesta:</strong> ' + escapeHtmlBl(check.message || 'record mancante o errato') + '.';
+                            let html = '<div class="alert alert-warning py-2 px-2 mb-0 small mt-2"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i><strong>' + escHtml(t('dns.actionNeeded')) + '</strong> ' + escapeHtmlBl(check.message || t('dns.missingOrWrong')) + '.';
                             if (check.current_value) {
                                 const shortCur = check.current_value.length > 100 ? check.current_value.substring(0, 100) + '…' : check.current_value;
-                                html += '<div class="mt-1"><span class="text-muted">Trovato in DNS:</span> <code class="small">' + escapeHtmlBl(shortCur) + '</code></div>';
+                                html += '<div class="mt-1"><span class="text-muted">' + escHtml(t('dns.found')) + '</span> <code class="small">' + escapeHtmlBl(shortCur) + '</code></div>';
                             }
                             html += '</div>';
                             detailWrap.innerHTML = html;
@@ -402,16 +400,16 @@
                     let cls, icon, msg;
                     if (koCount === 0 && okCount > 0) {
                         cls = 'alert-success'; icon = 'check-circle';
-                        msg = '<strong>Tutto a posto!</strong> ' + okCount + ' record DNS verificati e configurati correttamente.';
+                        msg = escHtml(tn('dns.sumAllOk', okCount));
                     } else if (koCount > 0) {
                         cls = 'alert-warning'; icon = 'exclamation-triangle';
-                        msg = '<strong>' + koCount + ' record DNS da configurare</strong> e ' + okCount + ' già a posto. Controlla i badge gialli qui sotto.';
+                        msg = '<strong>' + escHtml(tn('dns.sumToDo', koCount)) + '</strong> ' + escHtml(t('dns.sumToDoRest', { ok: okCount }));
                     } else {
                         cls = 'alert-info'; icon = 'info-circle';
-                        msg = 'Verifica completata. ' + unkCount + ' record non sono soggetti a verifica automatica.';
+                        msg = escHtml(tn('dns.sumUnchecked', unkCount));
                     }
                     summary.className = 'alert ' + cls + ' mb-3';
-                    summary.innerHTML = '<i class="fas fa-' + icon + ' me-2"></i>' + msg + ' <span class="ms-2 small text-muted">(' + okCount + ' OK · ' + koCount + ' da fare · ' + unkCount + ' non verificati)</span>';
+                    summary.innerHTML = '<i class="fas fa-' + icon + ' me-2" aria-hidden="true"></i>' + msg + ' <span class="ms-2 small text-muted">' + escHtml(t('dns.sumCounts', { ok: okCount, todo: koCount, unk: unkCount })) + '</span>';
                     // Inserisci prima del primo .dns-record (o all'inizio se non c'è)
                     const firstRecord = container.querySelector('.dns-record');
                     if (firstRecord) container.insertBefore(summary, firstRecord);
@@ -420,7 +418,7 @@
             }).catch(e => {
                 console.error('verifyDnsAuto error', e);
                 document.querySelectorAll('.record-status-badge').forEach(el => {
-                    el.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-times me-1"></i>Verifica fallita</span>';
+                    el.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-times me-1" aria-hidden="true"></i>' + escHtml(t('dns.checkFailed')) + '</span>';
                 });
             });
         }
@@ -432,12 +430,11 @@
                 const verifyBtn = document.getElementById('verifyActiveDkimBtn');
                 const generateBtn = document.getElementById('generateDkimBtn');
                 if (data.configured) {
-                    status.innerHTML = '<div class="alert alert-secondary"><i class="fas fa-database me-2"></i>'
-                        + '<strong>Nel pannello:</strong> esiste una chiave DKIM per questo dominio.<br>'
-                        + 'Selector attivo: <code>' + data.selector + '</code><br>'
-                        + 'Record che deve esistere in DNS: <code>' + data.dns_record_name + '</code>'
-                        + '<div class="small text-muted mt-1">Questo non dice ancora se la firma sia verificabile:'
-                        + ' dipende dal record TXT pubblico, che si controlla qui sotto.</div></div>';
+                    status.innerHTML = '<div class="alert alert-secondary"><i class="fas fa-database me-2" aria-hidden="true"></i>'
+                        + escHtml(t('dns.dkimInPanel')) + '<br>'
+                        + escHtml(t('dns.dkimSelector')) + ' <code>' + escHtml(data.selector) + '</code><br>'
+                        + escHtml(t('dns.dkimRecordName')) + ' <code>' + escHtml(data.dns_record_name) + '</code>'
+                        + '<div class="small text-muted mt-1">' + escHtml(t('dns.dkimNotYetVerified')) + '</div></div>';
                     if (rotateBtn) rotateBtn.disabled = false;
                     if (verifyBtn) verifyBtn.disabled = false;
                     // DKIM già configurato: il bottone "Genera Chiavi DKIM" deve essere NASCOSTO/disabilitato
@@ -448,7 +445,7 @@
                         generateBtn.disabled = true;
                     }
                 } else {
-                    status.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>DKIM non configurato per questo dominio.<br><small class="text-muted">Clicca "Genera Chiavi DKIM" per il setup iniziale.</small></div>';
+                    status.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>' + escHtml(t('dns.dkimMissing')) + '<br><small class="text-muted">' + escHtml(t('dns.dkimMissingHint')) + '</small></div>';
                     if (rotateBtn) rotateBtn.disabled = true;
                     if (verifyBtn) verifyBtn.disabled = true;
                     // DKIM mai configurato: SOLO ora il "Genera Chiavi DKIM" ha senso (setup iniziale)
@@ -504,40 +501,24 @@
             return parseTs(obj[key]);
         }
 
-        // Formatta tempo relativo: "3 ore fa", "tra 27 giorni", ecc.
+        // Tempo relativo nella lingua della pagina: "3 ore fa", "tra 27 giorni", "3 hours ago"
         function formatRelativeTime(date) {
             if (!date) return '';
-            const ms = date.getTime() - Date.now();
-            const past = ms < 0;
-            const abs = Math.abs(ms);
-            const sec = Math.floor(abs / 1000);
-            const min = Math.floor(sec / 60);
-            const hr  = Math.floor(min / 60);
-            const day = Math.floor(hr / 24);
-            const mon = Math.floor(day / 30);
-            const yr  = Math.floor(day / 365);
-            let val, unit;
-            if (yr > 0)        { val = yr;  unit = (yr === 1 ? 'anno' : 'anni'); }
-            else if (mon > 0)  { val = mon; unit = (mon === 1 ? 'mese' : 'mesi'); }
-            else if (day > 0)  { val = day; unit = (day === 1 ? 'giorno' : 'giorni'); }
-            else if (hr  > 0)  { val = hr;  unit = (hr === 1 ? 'ora' : 'ore'); }
-            else if (min > 0)  { val = min; unit = (min === 1 ? 'minuto' : 'minuti'); }
-            else               { val = sec; unit = (sec === 1 ? 'secondo' : 'secondi'); }
-            if (sec < 5 && !past) return 'tra pochi secondi';
-            if (sec < 5 && past)  return 'pochi secondi fa';
-            return past ? (val + ' ' + unit + ' fa') : ('tra ' + val + ' ' + unit);
+            const sec = Math.round((date.getTime() - Date.now()) / 1000);
+            const abs = Math.abs(sec);
+            const rtf = new Intl.RelativeTimeFormat(window.I18N_LANG, { numeric: 'auto' });
+            if (abs < 60) return rtf.format(sec, 'second');
+            if (abs < 3600) return rtf.format(Math.round(sec / 60), 'minute');
+            if (abs < 86400) return rtf.format(Math.round(sec / 3600), 'hour');
+            if (abs < 86400 * 30) return rtf.format(Math.round(sec / 86400), 'day');
+            if (abs < 86400 * 365) return rtf.format(Math.round(sec / (86400 * 30)), 'month');
+            return rtf.format(Math.round(sec / (86400 * 365)), 'year');
         }
 
-        // Formatta data assoluta in italiano: "15 mag 2026 16:08"
-        function formatItalianDate(date) {
+        // Data e ora nella lingua della pagina, nel fuso di chi guarda: "15 mag 2026, 16:08"
+        function formatPanelDate(date) {
             if (!date) return '';
-            const months = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
-            const dd = String(date.getDate()).padStart(2, '0');
-            const mm = months[date.getMonth()];
-            const yyyy = date.getFullYear();
-            const hh = String(date.getHours()).padStart(2, '0');
-            const mi = String(date.getMinutes()).padStart(2, '0');
-            return dd + ' ' + mm + ' ' + yyyy + ' ' + hh + ':' + mi;
+            return date.toLocaleString(window.I18N_LANG, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
         }
 
         // Aggiorna i due box prominenti "Ultima/Prossima rotazione"
@@ -546,16 +527,11 @@
         // a controllare da un'altra parte; il pannello quel dato ce l'ha e puo' dirlo.
         function fraseAvvioAutomatico(data) {
             if (data.avvio_automatico === true)
-                return 'Lo scheduler vive nel server web del pannello, che dopo un riavvio del '
-                     + 'server <strong>si riaccende da s&eacute;</strong>: la sequenza prosegue comunque.';
+                return escHtml(t('dns.autostartYes'));
             if (data.avvio_automatico === false)
-                return '<span class="text-warning"><strong>Attenzione:</strong> lo scheduler vive nel '
-                     + 'server web del pannello, e il pannello <strong>non &egrave; impostato per '
-                     + 'riaccendersi</strong> dopo un riavvio del server. Se lo riavvii, la rotazione '
-                     + 'resta ferma dov&rsquo;&egrave; finch&eacute; non riaccendi il pannello a mano. '
-                     + 'Si sistema con &laquo;Avvio automatico&raquo; nella scheda Sistema operativo.</span>';
+                return '<span class="text-warning">' + escHtml(t('dns.autostartNo')) + '</span>';
             // Il campo non e' arrivato: si dice quel che si sa, senza inventare un verdetto.
-            return 'Lo scheduler gira mentre il server web del pannello &egrave; acceso.';
+            return escHtml(t('dns.autostartUnknown'));
         }
 
         // Com'e' messa la prossima rotazione, decisa in un posto solo.
@@ -570,9 +546,9 @@
         function statoProssimaRotazione(data) {
             if (data.rotation_state) return 'in_corso';
             if (!(data.interval_days > 0)) return 'disattivata';
-            const t = pickTs(data, 'next_rotation_at');
-            if (!t) return 'mai';
-            return t.getTime() <= Date.now() ? 'dovuta' : 'programmata';
+            const ts = pickTs(data, 'next_rotation_at');
+            if (!ts) return 'mai';
+            return ts.getTime() <= Date.now() ? 'dovuta' : 'programmata';
         }
 
         function renderRotationTimeline(data, hasDkim) {
@@ -590,8 +566,7 @@
                 const skewMs = data.server_now_ms - Date.now();
                 if (Math.abs(skewMs) > 5 * 60 * 1000) {
                     const skewMin = Math.round(skewMs / 60000);
-                    const sign = skewMin > 0 ? 'avanti' : 'indietro';
-                    console.warn('[DKIM] Server clock skew: ' + skewMin + ' min ' + sign + ' rispetto al browser');
+                    console.warn('[DKIM] Server clock skew: ' + skewMin + ' min (' + (skewMin > 0 ? 'ahead of' : 'behind') + ' the browser)');
                 }
             }
 
@@ -605,27 +580,27 @@
                 let relText;
                 let showFixButtons = false;
                 if (deltaMs > 0 && deltaMs < 60 * 1000) {
-                    relText = 'appena adesso';
+                    relText = escHtml(t('dns.justNow'));
                 } else if (deltaMs > 0) {
                     const minAhead = Math.round(deltaMs / 60000);
-                    relText = '<span class="text-warning" title="Il timestamp risulta ' + minAhead + ' minuti nel futuro rispetto al clock del server. È un valore fossile salvato prima del fix timezone — usa i bottoni per correggerlo.">incongruenza dati ⚠ (+' + minAhead + ' min)</span>';
+                    relText = '<span class="text-warning" title="' + escHtml(t('dns.futureTsHint', { min: minAhead })) + '">' + escHtml(t('dns.futureTs', { min: minAhead })) + '</span>';
                     showFixButtons = true;
                 } else {
                     const fakeDate = new Date(lastTs.getTime() - (Date.now() - referenceNowMs));
                     relText = formatRelativeTime(fakeDate);
                 }
-                let html = '<strong>' + formatItalianDate(lastTs) + '</strong>' +
+                let html = '<strong>' + formatPanelDate(lastTs) + '</strong>' +
                     '<div class="small text-muted">' + relText + '</div>';
                 if (showFixButtons) {
                     html += '<div class="mt-2 d-flex gap-1 flex-wrap">';
-                    html += '<button class="btn btn-sm btn-outline-warning" onclick="resetLastRotationTimestamp()" title="Imposta il timestamp \'ultima rotazione\' a ora"><i class="fas fa-sync-alt me-1"></i>Reset a ora</button>';
-                    html += '<button class="btn btn-sm btn-outline-secondary" onclick="clearLastRotationTimestamp()" title="Cancella il timestamp (mostra \'Mai effettuata\')"><i class="fas fa-eraser me-1"></i>Cancella</button>';
+                    html += '<button class="btn btn-sm btn-outline-warning" onclick="resetLastRotationTimestamp()" title="' + escHtml(t('dns.resetNowHint')) + '"><i class="fas fa-sync-alt me-1" aria-hidden="true"></i>' + escHtml(t('dns.resetNow')) + '</button>';
+                    html += '<button class="btn btn-sm btn-outline-secondary" onclick="clearLastRotationTimestamp()" title="' + escHtml(t('dns.clearTsHint')) + '"><i class="fas fa-eraser me-1" aria-hidden="true"></i>' + escHtml(t('dns.clearTs')) + '</button>';
                     html += '</div>';
                 }
                 lastEl.innerHTML = html;
             } else {
-                lastEl.innerHTML = '<span class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Mai effettuata</span>' +
-                    '<div class="small text-muted">Nessuna rotazione registrata per questo dominio</div>';
+                lastEl.innerHTML = '<span class="text-warning"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('dns.never')) + '</span>' +
+                    '<div class="small text-muted">' + escHtml(t('dns.noRotation')) + '</div>';
             }
 
             // Prossima rotazione (calcolata se schedule attivo)
@@ -639,20 +614,20 @@
             const quando = statoProssimaRotazione(data);
             if (quando === 'in_corso') {
                 const passi = {
-                    'pending_dns': 'chiave nuova generata e record pubblicato: si attende la propagazione',
-                    'propagated':  'record propagato: la firma sta per passare alla chiave nuova',
-                    'active_grace':'firma gia\' passata alla chiave nuova: la vecchia resta in DNS per il periodo di grazia'
+                    'pending_dns': t('dns.stepPendingDns'),
+                    'propagated': t('dns.stepPropagated'),
+                    'active_grace': t('dns.stepActiveGrace')
                 };
-                nextEl.innerHTML = '<strong>Rotazione in corso</strong> '
+                nextEl.innerHTML = '<strong>' + escHtml(t('dns.rotationInProgress')) + '</strong> '
                     + '<span class="badge bg-info text-dark ms-1">' + escapeHtmlBl(data.rotation_state) + '</span>'
                     + '<div class="small text-muted">'
-                    + (passi[data.rotation_state] || 'in corso')
+                    + escHtml(passi[data.rotation_state] || t('dns.inProgress'))
                     + (data.rotation_pending_selector
-                        ? ' &mdash; nuovo selector <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>' : '')
-                    + '. I passi sono qui sotto; la prossima scadenza si ricalcola quando questa si chiude.</div>';
+                        ? ' &mdash; ' + escHtml(t('dns.newSelector')) + ' <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>' : '')
+                    + '. ' + escHtml(t('dns.stepsBelow')) + '</div>';
             } else if (quando === 'disattivata') {
-                nextEl.innerHTML = '<span class="text-muted"><i class="fas fa-pause-circle me-1"></i>Non programmata</span>' +
-                    '<div class="small text-muted">La rotazione automatica è disattivata. Avviala manualmente quando vuoi.</div>';
+                nextEl.innerHTML = '<span class="text-muted"><i class="fas fa-pause-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.notScheduled')) + '</span>' +
+                    '<div class="small text-muted">' + escHtml(t('dns.autoOff')) + '</div>';
             } else if (nextTs) {
                 if (quando === 'dovuta') {
                     // Una data passata sotto l'etichetta "Prossima rotazione", con un bollino
@@ -660,20 +635,17 @@
                     // non fa niente". Non e' cosi': lo scheduler confronta (adesso - ultima)
                     // con l'intervallo, quindi una scadenza passata e' gia' "dovuta" e parte al
                     // primo controllo. Quello che mancava non era il meccanismo, era dirlo.
-                    nextEl.innerHTML = '<strong>Dovuta</strong> '
-                        + '<span class="badge bg-warning text-dark ms-1">parte al prossimo controllo</span>'
-                        + '<div class="small text-muted">Era prevista per ' + formatItalianDate(nextTs)
-                        + ' (' + formatRelativeTime(nextTs) + ', ogni ' + interval + ' giorni). '
-                        + 'Lo scheduler controlla ogni ora e la avvia da s&eacute;: crea la chiave nuova, '
-                        + 'pubblica il record, attende la propagazione, attiva la firma e dopo 7 giorni '
-                        + 'rimuove la vecchia. ' + fraseAvvioAutomatico(data) + '</div>';
+                    nextEl.innerHTML = '<strong>' + escHtml(t('dns.due')) + '</strong> '
+                        + '<span class="badge bg-warning text-dark ms-1">' + escHtml(t('dns.nextCheck')) + '</span>'
+                        + '<div class="small text-muted">' + escHtml(t('dns.dueWas', { date: formatPanelDate(nextTs), rel: formatRelativeTime(nextTs), days: interval })) + ' '
+                        + escHtml(t('dns.dueHow')) + ' ' + fraseAvvioAutomatico(data) + '</div>';
                 } else {
-                    nextEl.innerHTML = '<strong>' + formatItalianDate(nextTs) + '</strong>' +
-                        '<div class="small text-muted">' + formatRelativeTime(nextTs) + ' (ogni ' + interval + ' giorni)</div>';
+                    nextEl.innerHTML = '<strong>' + formatPanelDate(nextTs) + '</strong>' +
+                        '<div class="small text-muted">' + escHtml(t('dns.relEvery', { rel: formatRelativeTime(nextTs), days: interval })) + '</div>';
                 }
             } else {
-                nextEl.innerHTML = '<strong>Al prossimo check</strong> <span class="badge bg-warning text-dark ms-1">subito</span>' +
-                    '<div class="small text-muted">Schedule attivo ogni ' + interval + ' giorni, ma nessuna rotazione ancora registrata.</div>';
+                nextEl.innerHTML = '<strong>' + escHtml(t('dns.atNextCheck')) + '</strong> <span class="badge bg-warning text-dark ms-1">' + escHtml(t('dns.soon')) + '</span>' +
+                    '<div class="small text-muted">' + escHtml(t('dns.scheduleNoRotation', { days: interval })) + '</div>';
             }
         }
 
@@ -681,14 +653,14 @@
             const panel = document.getElementById('dkimSchedulePanel');
             const info = document.getElementById('dkimScheduleInfo');
             panel.classList.remove('d-none');
-            info.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Caricamento...';
+            info.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('common.loading'));
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'schedule_get', domain_id: parseInt(domainId) })
             }).then(r => r.json()).then(data => {
                 if (!data.success) {
-                    info.innerHTML = '<span class="text-danger">' + escapeHtmlBl(data.error || 'errore') + '</span>';
+                    info.innerHTML = '<span class="text-danger">' + escapeHtmlBl(data.error || t('common.errorShort')) + '</span>';
                     return;
                 }
                 // Aggiorna i due box prominenti
@@ -702,10 +674,10 @@
                 dkimSchedulePresets.forEach(p => {
                     const isSel = (p.days === cur);
                     if (isSel) matched = true;
-                    optionsHtml += '<option value="' + p.days + '"' + (isSel ? ' selected' : '') + '>' + escapeHtmlBl(p.label) + (p.days > 0 ? ' (' + p.days + ' giorni)' : '') + '</option>';
+                    optionsHtml += '<option value="' + escHtml(p.days) + '"' + (isSel ? ' selected' : '') + '>' + escapeHtmlBl(p.label) + (p.days > 0 ? ' ' + escHtml(tn('dns.daysParen', p.days)) : '') + '</option>';
                 });
                 // Custom: se cur > 0 ma non corrisponde a nessun preset, selezioniamo custom
-                optionsHtml += '<option value="custom"' + (!matched && cur > 0 ? ' selected' : '') + '>Custom (giorni specifici)</option>';
+                optionsHtml += '<option value="custom"' + (!matched && cur > 0 ? ' selected' : '') + '>' + escHtml(t('dns.customOption')) + '</option>';
                 sel.innerHTML = optionsHtml;
                 // Mostra/nascondi campo custom
                 if (!matched && cur > 0) {
@@ -718,9 +690,9 @@
                 // Riepilogo testuale
                 let html = '';
                 if (cur === 0) {
-                    html = '<span class="text-muted"><i class="fas fa-info-circle me-1"></i>Rotazione automatica programmata: <strong>disattivata</strong>. Devi avviare la rotazione manualmente quando vuoi.</span>';
+                    html = '<span class="text-muted"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.autoOffLong')) + '</span>';
                 } else {
-                    html = '<i class="fas fa-clock text-primary me-1"></i>Rotazione automatica ogni <strong>' + cur + ' giorni</strong>. ';
+                    html = '<i class="fas fa-clock text-primary me-1" aria-hidden="true"></i>' + escHtml(tn('dns.autoEvery', cur)) + ' ';
                     // Le date qui si formattano come nei due riquadri sopra.
                     //
                     // Prima questa riga stampava il timestamp grezzo in UTC mentre i riquadri
@@ -732,41 +704,37 @@
                     const lastQui = pickTs(data, 'last_rotation_at');
                     const nextQui = pickTs(data, 'next_rotation_at');
                     if (lastQui) {
-                        html += 'Ultima rotazione: <strong>' + formatItalianDate(lastQui) + '</strong>. ';
+                        html += escHtml(t('dns.lastWas', { date: formatPanelDate(lastQui) })) + ' ';
                     } else if (data.last_rotation_at) {
-                        html += 'Ultima rotazione: <strong>' + escapeHtmlBl(data.last_rotation_at) + '</strong>. ';
+                        html += escHtml(t('dns.lastWas', { date: data.last_rotation_at })) + ' ';
                     } else {
-                        html += '<span class="text-warning">Nessuna rotazione ancora effettuata.</span> ';
+                        html += '<span class="text-warning">' + escHtml(t('dns.noRotationYet')) + '</span> ';
                     }
                     // Stessa domanda, stessa risposta del riquadro qui sopra.
                     const quandoQui = statoProssimaRotazione(data);
                     if (quandoQui === 'in_corso') {
-                        html += 'Una rotazione &egrave; <strong>gi&agrave; in corso</strong>'
+                        html += escHtml(t('dns.alreadyRunning'))
                              + (data.rotation_pending_selector
-                                 ? ' (nuovo selector <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>)' : '')
-                             + ': la prossima scadenza si ricalcola quando questa si chiude.';
+                                 ? ' (' + escHtml(t('dns.newSelector')) + ' <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>)' : '')
+                             + ': ' + escHtml(t('dns.nextAfter'));
                     } else if (quandoQui === 'dovuta') {
-                        html += 'La rotazione era prevista per <strong>'
-                             + (nextQui ? formatItalianDate(nextQui) : escapeHtmlBl(data.next_rotation_at))
-                             + '</strong> ed &egrave; <strong>dovuta</strong>: parte al prossimo controllo.';
+                        html += escHtml(t('dns.dueAt', { date: nextQui ? formatPanelDate(nextQui) : data.next_rotation_at }));
                     } else if (data.next_rotation_at) {
-                        html += 'Prossima rotazione prevista: <strong>'
-                             + (nextQui ? formatItalianDate(nextQui) : escapeHtmlBl(data.next_rotation_at))
-                             + '</strong>.';
+                        html += escHtml(t('dns.nextAt', { date: nextQui ? formatPanelDate(nextQui) : data.next_rotation_at }));
                     }
                     // Il flag arriva con la risposta; la globale resta solo come ripiego per
                     // non cambiare comportamento se il campo mancasse.
                     const cfQui = (data.cloudflare_configured !== undefined)
                         ? !!data.cloudflare_configured : cloudflareConfigured;
                     if (!cfQui) {
-                        html += '<br><span class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i><strong>Attenzione:</strong> per attivare lo schedule in automatico è necessario un account Cloudflare assegnato a questo dominio. Senza CF, lo schedule resta inattivo.</span>';
+                        html += '<br><span class="text-warning"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('dns.needCf')) + '</span>';
                     } else {
-                        html += '<br><small class="text-muted">Lo scheduler creerà la nuova chiave, pubblicherà il record TXT, attenderà ' + (data.auto_activate_after_hours || 24) + 'h di propagazione, attiverà la firma, poi dopo ' + (data.grace_period_days || 7) + ' giorni di grace period rimuoverà la vecchia chiave. Tutto automatico.</small>';
+                        html += '<br><small class="text-muted">' + escHtml(t('dns.schedulerPlan', { hours: data.auto_activate_after_hours || 24, days: data.grace_period_days || 7 })) + '</small>';
                     }
                 }
                 info.innerHTML = html;
             }).catch(e => {
-                info.innerHTML = '<span class="text-danger">Errore rete: ' + e.message + '</span>';
+                info.innerHTML = '<span class="text-danger">' + escHtml(t('common.networkError', { message: e.message })) + '</span>';
             });
         }
 
@@ -782,7 +750,7 @@
 
         function resetLastRotationTimestamp() {
             if (!currentDomainId) return;
-            if (!confirm('Resettare il timestamp \'ultima rotazione\' a ora?\n\nUsa questa funzione se il valore mostrato è un fossile dovuto a timezone MySQL sbagliata (prima del fix). Il nuovo timestamp userà il clock corrente del JVM Java.')) return;
+            if (!confirm(t('dns.confirmResetNow'))) return;
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -790,12 +758,12 @@
             }).then(r => r.json()).then(data => {
                 alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) loadDkimSchedule(currentDomainId);
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         function clearLastRotationTimestamp() {
             if (!currentDomainId) return;
-            if (!confirm('Cancellare il timestamp \'ultima rotazione\'?\n\nIl campo verrà impostato a NULL e l\'UI mostrerà \'Mai effettuata\'. La prossima rotazione lo ripopolerà con il valore corretto.')) return;
+            if (!confirm(t('dns.confirmClearTs'))) return;
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -803,7 +771,7 @@
             }).then(r => r.json()).then(data => {
                 alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) loadDkimSchedule(currentDomainId);
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
         function saveDkimSchedule() {
@@ -813,7 +781,7 @@
             if (sel.value === 'custom') {
                 const v = parseInt(document.getElementById('dkimScheduleCustomDays').value);
                 if (isNaN(v) || v < 1 || v > 3650) {
-                    alert('Inserisci un numero di giorni tra 1 e 3650');
+                    alert(t('dns.daysRange'));
                     return;
                 }
                 days = v;
@@ -830,7 +798,7 @@
                     loadDkimSchedule(currentDomainId);
                     loadDkimHistory(currentDomainId);
                 }
-            }).catch(e => alert('Errore rete: ' + e.message));
+            }).catch(e => alert(t('common.networkError', { message: e.message })));
         }
 
 
@@ -841,7 +809,7 @@
         // da mesi mentre gli altri ruotano — si vedono solo mettendoli in fila.
         async function dkRiepilogo() {
             const el = document.getElementById('dkRiepilogoBody');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Interrogo il DNS per ogni dominio...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('dns.sumAsking'));
             let r;
             try {
                 const resp = await fetch('/api/dkim', {
@@ -851,48 +819,45 @@
                 });
                 r = await resp.json();
             } catch (e) {
-                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">Non sono riuscito a chiedere: '
-                             + escapeHtmlBl(String(e)) + '</div>';
+                el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(t('dns.sumAskFailed', { message: String(e) })) + '</div>';
                 return;
             }
             if (!r || !r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">'
-                             + escapeHtmlBl((r && r.error) || 'richiesta non riuscita') + '</div>';
+                             + escapeHtmlBl((r && r.error) || t('dns.requestFailed')) + '</div>';
                 return;
             }
 
             const righe = r.domini || [];
             // Il titolo dice la cosa peggiore per prima: un dominio senza chiave non deve
             // finire in fondo a un elenco che comincia con "tutto bene".
-            let cls = 'success', testo = 'Tutti i domini hanno una chiave DKIM che corrisponde a quella pubblicata.';
+            let cls = 'success', testo = t('dns.sumAllMatch');
             if (r.senzaChiave > 0) {
                 cls = 'danger';
-                testo = r.senzaChiave + (r.senzaChiave === 1 ? ' dominio non ha' : ' domini non hanno')
-                      + ' nessuna chiave DKIM: la posta parte senza firma.';
+                testo = tn('dns.sumNoKey', r.senzaChiave);
             } else if (righe.some(d => d.stato === 'non_corrisponde')) {
                 cls = 'danger';
-                testo = 'Su almeno un dominio la chiave pubblicata NON e\' quella del pannello: '
-                      + 'le firme non si verificano.';
+                testo = t('dns.sumMismatch');
             } else if (r.nonVerificabili > 0) {
                 cls = 'warning';
-                testo = r.nonVerificabili + ' domini non ho potuto verificarli: non e\' "va tutto bene".';
+                testo = tn('dns.sumUnverifiable', r.nonVerificabili);
             }
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + escapeHtmlBl(testo) + '</div>';
 
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-               + '<th>Dominio</th><th>Selettore</th><th>La firma si verifica</th>'
-               + '<th>Et&agrave; della chiave</th><th>Rotazione</th></tr></thead><tbody>';
+               + '<th scope="col">' + escHtml(t('st.colDomain')) + '</th><th scope="col">' + escHtml(t('dns.colSelector')) + '</th><th scope="col">' + escHtml(t('dns.colVerifies')) + '</th>'
+               + '<th scope="col">' + escHtml(t('dns.colKeyAge')) + '</th><th scope="col">' + escHtml(t('dns.colRotation')) + '</th></tr></thead><tbody>';
             righe.forEach(d => {
                 let stato;
                 if (d.stato === 'assente')
-                    stato = '<span class="badge bg-danger">nessuna chiave</span>';
+                    stato = '<span class="badge bg-danger">' + escHtml(t('dns.noKey')) + '</span>';
                 else if (d.stato === 'ok')
-                    stato = '<span class="badge bg-success">s&igrave;</span>';
+                    stato = '<span class="badge bg-success">' + escHtml(t('dns.yes')) + '</span>';
                 else if (d.stato === 'non_corrisponde')
-                    stato = '<span class="badge bg-danger">no: la chiave in DNS &egrave; un&rsquo;altra</span>';
+                    stato = '<span class="badge bg-danger">' + escHtml(t('dns.otherKey')) + '</span>';
                 else
                     // "Non ho potuto controllare" non e' "va bene", e non e' nemmeno "e' rotto".
-                    stato = '<span class="badge bg-secondary">non verificabile</span>';
+                    stato = '<span class="badge bg-secondary">' + escHtml(t('dns.unverifiable')) + '</span>';
 
                 let eta = '<span class="text-muted">&mdash;</span>';
                 if (d.giorniDallUltima !== undefined && d.giorniDallUltima !== null) {
@@ -900,23 +865,21 @@
                     // Oltre l'intervallo scelto la chiave e' in ritardo; senza intervallo il
                     // riferimento e' 90 giorni, la cadenza che il pannello consiglia.
                     const limite = (d.intervalloGiorni && d.intervalloGiorni > 0) ? d.intervalloGiorni : 90;
-                    eta = g + ' giorni'
-                        + (g > limite ? ' <span class="badge bg-warning text-dark">oltre i ' + limite + '</span>' : '');
+                    eta = escHtml(tn('dns.days', g))
+                        + (g > limite ? ' <span class="badge bg-warning text-dark">' + escHtml(t('dns.overLimit', { limit: limite })) + '</span>' : '');
                 }
 
                 let rot;
                 if (d.stato === 'assente') rot = '<span class="text-muted">&mdash;</span>';
                 else if (d.intervalloGiorni && d.intervalloGiorni > 0)
-                    rot = 'ogni ' + d.intervalloGiorni + ' giorni'
-                        + (d.prossimaRotazione ? '<div class="small text-muted">prossima: '
-                            + escapeHtmlBl(String(d.prossimaRotazione).substring(0, 10)) + '</div>' : '');
+                    rot = escHtml(tn('dns.every', d.intervalloGiorni))
+                        + (d.prossimaRotazione ? '<div class="small text-muted">' + escHtml(t('dns.nextShort', { date: String(d.prossimaRotazione).substring(0, 10) })) + '</div>' : '');
                 else
-                    rot = '<span class="badge bg-warning text-dark">disattivata</span>';
+                    rot = '<span class="badge bg-warning text-dark">' + escHtml(t('dns.off')) + '</span>';
 
                 h += '<tr class="upd-cell"><td><code class="small">' + escapeHtmlBl(d.dominio) + '</code></td>'
                    + '<td><code class="small">' + escapeHtmlBl(d.selettore || '') + '</code>'
-                   + (d.rotazioneInCorso ? '<div class="small text-muted">rotazione in corso: '
-                        + escapeHtmlBl(d.rotazioneInCorso) + '</div>' : '')
+                   + (d.rotazioneInCorso ? '<div class="small text-muted">' + escHtml(t('dns.rotatingNow', { state: d.rotazioneInCorso })) + '</div>' : '')
                    + '</td>'
                    + '<td>' + stato
                    + (d.stato === 'ok' ? '' : '<div class="small text-muted">'
@@ -925,8 +888,6 @@
                    + '<td>' + eta + '</td><td>' + rot + '</td></tr>';
             });
             h += '</tbody></table></div>'
-               + '<div class="small text-muted">La colonna &laquo;la firma si verifica&raquo; non legge il database: '
-               + 'interroga il DNS pubblico e confronta la chiave trovata con quella del pannello. '
-               + '&Egrave; la stessa verifica della scheda qui sotto, chiamata per ogni dominio.</div>';
+               + '<div class="small text-muted">' + escHtml(t('dns.sumHow')) + '</div>';
             el.innerHTML = h;
         }

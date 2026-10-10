@@ -13,47 +13,47 @@
 
         async function ramoStato() {
             const box = document.getElementById('ramo-body');
-            box.textContent = 'Leggo la configurazione di pkg...';
+            box.textContent = t('up.readingPkg');
             document.getElementById('ramo-anteprima').textContent = '';
             const r = await updApi('ramo_stato');
             box.textContent = '';
             if (!r.success) {
-                box.appendChild(ramoEl('div', 'alert alert-secondary py-2 small mb-0', r.error || 'Non ho potuto leggere il ramo.'));
+                box.appendChild(ramoEl('div', 'alert alert-secondary py-2 small mb-0', r.error || t('up.branchUnreadable')));
                 return;
             }
             ramoDati = r;
             const testa = ramoEl('p', 'mb-1');
             if (r.ramo === 'quarterly' || r.ramo === 'latest') {
-                testa.appendChild(document.createTextNode('I pacchetti arrivano dal ramo '));
-                testa.appendChild(ramoEl('span', 'badge ' + (r.ramo === 'latest' ? 'bg-info text-dark' : 'bg-secondary') + ' fs-6', r.ramo));
+                testa.append(...tNodes('up.branchFrom', { branch: ramoEl('span', 'badge ' + (r.ramo === 'latest' ? 'bg-info text-dark' : 'bg-secondary') + ' fs-6', r.ramo) }));
             } else if (r.ramo === 'misti') {
-                testa.appendChild(ramoEl('span', 'badge bg-warning text-dark fs-6', 'rami misti'));
+                testa.appendChild(ramoEl('span', 'badge bg-warning text-dark fs-6', t('up.mixedBranches')));
             } else {
-                testa.appendChild(ramoEl('span', 'badge bg-secondary fs-6', 'nessun ramo ufficiale'));
+                testa.appendChild(ramoEl('span', 'badge bg-secondary fs-6', t('up.noOfficialBranch')));
             }
             box.appendChild(testa);
             box.appendChild(ramoEl('p', 'small mb-2', r.spiegazione));
 
             const tab = ramoEl('table', 'table table-sm align-middle mb-2 tabella-schede');
-            tab.setAttribute('aria-label', 'Repository di pkg');
+            tab.setAttribute('aria-label', t('up.pkgRepos'));
             const th = tab.createTHead().insertRow();
-            ['Repository', 'A cosa serve', 'Ramo', 'Acceso', 'Indirizzo'].forEach(t => {
-                const c = ramoEl('th', '', t);
+            const COL = [t('up.colRepo'), t('up.colWhatFor'), t('up.colBranch'), t('up.colEnabled'), t('up.colAddress')];
+            COL.forEach(titolo => {
+                const c = ramoEl('th', '', titolo);
                 c.scope = 'col';
                 th.appendChild(c);
             });
             const corpo = tab.createTBody();
             (r.repository || []).forEach(x => {
                 const tr = corpo.insertRow();
-                const celle = [[x.nome, 'Repository'], [x.ruolo, 'A cosa serve'], [x.ramo || '-', 'Ramo'],
-                               [x.acceso ? 'si' : 'no', 'Acceso']];
-                celle.forEach(([t, etichetta]) => {
-                    const td = ramoEl('td', '', t);
+                const celle = [[x.nome, COL[0]], [x.ruolo, COL[1]], [x.ramo || '-', COL[2]],
+                               [x.acceso ? t('dns.yes') : t('acf.no'), COL[3]]];
+                celle.forEach(([testo, etichetta]) => {
+                    const td = ramoEl('td', '', testo);
                     td.setAttribute('data-label', etichetta);
                     tr.appendChild(td);
                 });
                 const ind = ramoEl('td', 'testo-lungo');
-                ind.setAttribute('data-label', 'Indirizzo');
+                ind.setAttribute('data-label', COL[4]);
                 ind.appendChild(ramoEl('code', 'small', x.url));
                 tr.appendChild(ind);
             });
@@ -63,12 +63,9 @@
 
             const file = ramoEl('p', 'small text-muted mb-2');
             if (r.fileDelPannello) {
-                file.appendChild(document.createTextNode('Il ramo lo decide il file del pannello '));
-                file.appendChild(ramoEl('code', '', r.file));
-                file.appendChild(document.createTextNode(', l\'ultimo che pkg legge.'));
+                file.append(...tNodes('up.branchByFile', { file: ramoEl('code', '', r.file) }));
             } else {
-                file.textContent = 'Nessun file del pannello: vale la configurazione di serie (/etc/pkg/FreeBSD.conf) '
-                    + 'e gli eventuali file in /usr/local/etc/pkg/repos.';
+                file.textContent = t('up.noPanelFile');
             }
             box.appendChild(file);
             if (r.base) box.appendChild(ramoEl('p', 'small text-muted mb-2', r.base));
@@ -79,7 +76,7 @@
             }
             const azioni = ramoEl('div', 'd-flex flex-wrap gap-2');
             (r.verso || []).forEach(v => {
-                const b = ramoEl('button', 'btn btn-sm btn-outline-warning', 'Passa al ramo ' + v + '...');
+                const b = ramoEl('button', 'btn btn-sm btn-outline-warning', t('up.switchTo', { branch: v }));
                 b.type = 'button';
                 b.addEventListener('click', () => ramoAnteprima(v));
                 azioni.appendChild(b);
@@ -89,7 +86,7 @@
 
         async function ramoAnteprima(verso) {
             const box = document.getElementById('ramo-anteprima');
-            box.textContent = 'Preparo l\'anteprima...';
+            box.textContent = t('up.buildingPreview');
             document.getElementById('ramo-esito').textContent = '';
             const r = await updApi('ramo_anteprima', { verso: verso });
             box.textContent = '';
@@ -98,14 +95,12 @@
             ramoVerso = verso;
             ramoDati.impronta = r.impronta;
             const card = ramoEl('div', 'border rounded p-3');
-            card.appendChild(ramoEl('h6', 'mb-2', 'Passare dal ramo ' + r.da + ' al ramo ' + verso));
+            card.appendChild(ramoEl('h6', 'mb-2', t('up.switchFromTo', { from: r.da, to: verso })));
             const cambi = ramoEl('ul', 'small mb-2');
             (r.cambi || []).forEach(c => {
                 const li = ramoEl('li', 'testo-lungo');
                 li.appendChild(ramoEl('strong', '', c.nome + ': '));
-                li.appendChild(ramoEl('code', '', c.da));
-                li.appendChild(document.createTextNode(' diventa '));
-                li.appendChild(ramoEl('code', '', c.a));
+                li.append(...tNodes('up.becomes', { from: ramoEl('code', '', c.da), to: ramoEl('code', '', c.a) }));
                 cambi.appendChild(li);
             });
             card.appendChild(cambi);
@@ -113,13 +108,11 @@
             (r.avvisi || []).forEach(a => avvisi.appendChild(ramoEl('li', '', a)));
             card.appendChild(avvisi);
             const dove = ramoEl('p', 'small mb-1');
-            dove.appendChild(document.createTextNode('Il file che il pannello scrive, '));
-            dove.appendChild(ramoEl('code', '', r.file));
-            dove.appendChild(document.createTextNode(':'));
+            dove.append(...tNodes('up.fileWritten', { file: ramoEl('code', '', r.file) }));
             card.appendChild(dove);
             card.appendChild(ramoEl('pre', 'small border rounded p-2 mb-1', r.contenuto));
             if (r.comeTorna) card.appendChild(ramoEl('p', 'small text-muted mb-2', r.comeTorna));
-            const lab = ramoEl('label', 'form-label small mb-1', 'Per confermare scrivi il nome del ramo: ' + verso);
+            const lab = ramoEl('label', 'form-label small mb-1', t('up.typeBranch', { branch: verso }));
             lab.htmlFor = 'ramo-conferma';
             card.appendChild(lab);
             const riga = ramoEl('div', 'd-flex flex-wrap gap-2 align-items-center');
@@ -128,13 +121,13 @@
             inp.style.maxWidth = '14rem';
             inp.autocomplete = 'off';
             inp.spellcheck = false;
-            const via = ramoEl('button', 'btn btn-sm btn-danger', 'Cambia ramo');
+            const via = ramoEl('button', 'btn btn-sm btn-danger', t('up.changeBranch'));
             via.type = 'button';
             via.id = 'ramo-via';
             via.disabled = true;
             inp.addEventListener('input', () => { via.disabled = inp.value.trim() !== verso; });
             via.addEventListener('click', ramoCambia);
-            const annulla = ramoEl('button', 'btn btn-sm btn-secondary', 'Annulla');
+            const annulla = ramoEl('button', 'btn btn-sm btn-secondary', t('common.cancel'));
             annulla.type = 'button';
             annulla.addEventListener('click', () => { box.textContent = ''; });
             riga.append(inp, via, annulla);
@@ -151,12 +144,12 @@
             const r = await updApi('ramo_cambia', { verso: ramoVerso, impronta: ramoDati.impronta, confirm: inp.value.trim() });
             if (!r.success) {
                 esito.textContent = '';
-                esito.appendChild(ramoEl('div', 'alert alert-danger py-2 small mb-0', r.error || 'Il cambio non e\' partito.'));
+                esito.appendChild(ramoEl('div', 'alert alert-danger py-2 small mb-0', r.error || t('up.changeNotStarted')));
                 document.getElementById('ramo-via').disabled = false;
                 return;
             }
             document.getElementById('ramo-anteprima').textContent = '';
-            esito.textContent = 'Cambio di ramo in corso: scarico il catalogo nuovo...';
+            esito.textContent = t('up.changingBranch');
             const pre = document.getElementById('ramo-log');
             pre.style.display = 'block';
             pre.textContent = '';
@@ -174,7 +167,7 @@
                     esito.textContent = '';
                     const ok = s.job.status === 'completed';
                     esito.appendChild(ramoEl('div', 'alert ' + (ok ? 'alert-success' : 'alert-danger') + ' py-2 small mb-0',
-                        ok ? (s.job.result || 'Ramo cambiato.') : (s.job.errorMessage || 'Il cambio di ramo non e\' riuscito.')));
+                        ok ? (s.job.result || t('up.branchChanged')) : (s.job.errorMessage || t('up.branchChangeFailed'))));
                     ramoStato();
                     return;
                 }

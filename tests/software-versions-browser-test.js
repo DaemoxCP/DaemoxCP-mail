@@ -62,6 +62,8 @@ async function servi(route) {
         const html = fs.readFileSync(path.join(pagine, 'home.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-prova');
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
     }
+    // The script dictionary (t() and the texts), as the panel serves it.
+    if (p.startsWith('/i18n/')) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(pagine, p)) });
     if (p.startsWith('/vendor/') || p.startsWith('/fa/')) {
         const f = path.join(risorse, p);
         if (!fs.existsSync(f)) return route.fulfill({ status: 404, body: '' });

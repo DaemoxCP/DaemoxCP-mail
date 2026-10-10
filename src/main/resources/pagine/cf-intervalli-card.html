@@ -1,32 +1,15 @@
             <!-- La lista di chi il pannello considera un proxy fidato -->
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-user-shield me-2"></i><strong>Chi il pannello riconosce come Cloudflare</strong>
-                        <span class="small text-muted ms-2">la lista che decide di chi fidarsi</span></span>
+                    <span><i class="fas fa-user-shield me-2" aria-hidden="true"></i><strong>{{t:cfi.title}}</strong>
+                        <span class="small text-muted ms-2">{{t:cfi.sub}}</span></span>
                     <button class="btn btn-sm btn-outline-primary" onclick="cfIntervalli()">
-                        <i class="fas fa-magnifying-glass me-1"></i>Confronta con l&rsquo;originale</button>
+                        <i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:cfi.compare}}</button>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-2">
-                        I due pannelli stanno dietro Cloudflare, quindi ogni richiesta arriva da un indirizzo
-                        dell&rsquo;edge. L&rsquo;indirizzo vero di chi bussa e&rsquo; nell&rsquo;intestazione
-                        <code>CF-Connecting-IP</code>, e il pannello se ne fida <strong>solo</strong> se la
-                        connessione viene da un indirizzo che riconosce come Cloudflare &mdash; altrimenti
-                        chiunque potrebbe scriverci dentro quello che vuole e falsificarsi nei registri.
-                    </p>
-                    <p class="small text-muted mb-2">
-                        Quell&rsquo;elenco &egrave; <strong>scritto a mano</strong> dentro il pannello e deve restare
-                        uguale a quello ufficiale. Se Cloudflare aggiunge un intervallo e comincia a servire da
-                        l&igrave;, il pannello smette di riconoscerlo: da quel momento <strong>tutti i visitatori
-                        diventano un indirizzo solo</strong>, e il limite dei tentativi di accesso vale per tutti
-                        insieme &mdash; cinque tentativi sbagliati di chiunque chiuderebbero fuori anche te.
-                        Fallisce diventando pi&ugrave; severo, che &egrave; il modo pi&ugrave; silenzioso di rompersi.
-                    </p>
-                    <p class="small text-muted mb-2">
-                        Questo controllo <strong>legge e basta</strong>: scarica le due liste ufficiali e le
-                        confronta. Non aggiorna niente da solo &mdash; una lista di chi &egrave; degno di fiducia
-                        non si riscrive senza che un essere umano l&rsquo;abbia guardata.
-                    </p>
-                    <div id="cf-body"><span class="text-muted small">Premi &laquo;Confronta&raquo;: legge e basta.</span></div>
+                    <p class="small text-muted mb-2">{{t:cfi.intro1.html}}</p>
+                    <p class="small text-muted mb-2">{{t:cfi.intro2.html}}</p>
+                    <p class="small text-muted mb-2">{{t:cfi.intro3.html}}</p>
+                    <div id="cf-body"><span class="text-muted small">{{t:cfi.ph}}</span></div>
                 </div>
             </div>

@@ -13,9 +13,16 @@
             return await r.json();
         }
 
-        function adEsc(t) {
+        // La conferma scritta: la parola e' nella lingua della pagina, il server riceve sempre il
+        // suo codice fisso (CREA, CAMBIA, CONFIGURA) e non dipende dalla lingua.
+        function adConferma(testo, parola) {
+            const typed = prompt(testo + '\n\n' + t('ad.typeToConfirm', { word: parola }));
+            return typed !== null && typed.trim().toUpperCase() === parola.toUpperCase();
+        }
+
+        function adEsc(v) {
             const d = document.createElement('div');
-            d.textContent = t === null || t === undefined ? '' : String(t);
+            d.textContent = v === null || v === undefined ? '' : String(v);
             return d.innerHTML;
         }
 
@@ -23,37 +30,35 @@
             if (!lista || !lista.length) return '';
             return '<div class="mt-2">' + lista.map(a =>
                 '<div class="small d-flex gap-2 mb-1">'
-                + '<i class="fas fa-triangle-exclamation text-warning mt-1"></i>'
+                + '<i class="fas fa-triangle-exclamation text-warning mt-1" aria-hidden="true"></i>'
                 + '<span>' + adEsc(a) + '</span></div>').join('') + '</div>';
         }
 
         async function autoDnsCarica() {
             const el = document.getElementById('autoDnsBody');
             if (!el) return;
-            if (!currentDomainId) { el.innerHTML = '<span class="text-muted small">Seleziona un dominio.</span>'; return; }
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Chiedo a Cloudflare cosa c&rsquo;&egrave; gi&agrave;...';
+            if (!currentDomainId) { el.innerHTML = '<span class="text-muted small">' + escHtml(t('dns.chooseDomainFirst')) + '</span>'; return; }
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.askingCf'));
             const r = await autoDnsApi('status');
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + adEsc(r.error) + '</div>'; return; }
             if (!r.cloudflare || !r.zona) {
                 el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + adEsc(r.nota) + '</div>';
                 return;
             }
-            let h = '<div class="small text-muted mb-2">Account Cloudflare: <strong>' + adEsc(r.account)
-                  + '</strong> &middot; zona <code>' + adEsc(r.dominio) + '</code></div>'
+            let h = '<div class="small text-muted mb-2">' + escHtml(t('ad.accountZone', { account: r.account, zone: r.dominio })) + '</div>'
                   + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th>Record</th><th>In Cloudflare</th><th>Cosa scriverebbe il pannello</th><th></th>'
+                  + '<th scope="col">Record</th><th scope="col">' + escHtml(t('ad.colInCf')) + '</th><th scope="col">' + escHtml(t('ad.colWouldWrite')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('home.colActions')) + '</span></th>'
                   + '</tr></thead><tbody>';
             (r.record || []).forEach(x => {
                 const nome = x.quale === 'spf' ? 'SPF' : 'DMARC';
                 const troppi = (x.quanti || 0) > 1;
 
                 let stato;
-                if (troppi) stato = '<span class="badge bg-danger">' + x.quanti + ' record: si annullano</span>';
-                else if (x.esiste) stato = '<span class="badge bg-success">esiste gi&agrave;</span>';
-                else stato = '<span class="badge bg-warning text-dark">assente</span>';
+                if (troppi) stato = '<span class="badge bg-danger">' + escHtml(t('ad.cancelOut', { n: x.quanti })) + '</span>';
+                else if (x.esiste) stato = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
+                else stato = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
                 if (x.altriTxt > 0)
-                    stato += '<div class="small text-muted mt-1">+ ' + x.altriTxt + ' altro TXT sullo stesso '
-                           + 'nome, non pertinente</div>';
+                    stato += '<div class="small text-muted mt-1">' + escHtml(tn('ad.otherTxt', x.altriTxt)) + '</div>';
                 if (x.contenuto)
                     stato += '<div class="small mt-1" style="word-break:break-all"><code>' + adEsc(x.contenuto) + '</code></div>';
 
@@ -63,14 +68,12 @@
                 } else {
                     proposta = '<code class="small" style="word-break:break-all">' + adEsc(x.proposto) + '</code>';
                     if (x.quale === 'dmarc' && !x.esiste)
-                        proposta += '<div class="mt-1"><select class="form-select form-select-sm" id="adPolitica" style="max-width:22rem">'
-                                  + '<option value="none" selected>p=none &mdash; osserva soltanto (si comincia da qui)</option>'
-                                  + '<option value="quarantine">p=quarantine &mdash; in quarantena chi non si autentica</option>'
-                                  + '<option value="reject">p=reject &mdash; rifiuta chi non si autentica</option>'
+                        proposta += '<div class="mt-1"><select class="form-select form-select-sm" id="adPolitica" style="max-width:22rem" aria-label="' + escHtml(t('ad.policy')) + '">'
+                                  + '<option value="none" selected>p=none &mdash; ' + escHtml(t('ad.pNone')) + '</option>'
+                                  + '<option value="quarantine">p=quarantine &mdash; ' + escHtml(t('ad.pQuarantine')) + '</option>'
+                                  + '<option value="reject">p=reject &mdash; ' + escHtml(t('ad.pReject')) + '</option>'
                                   + '</select>'
-                                  + '<div class="small text-muted mt-1">Si parte da <code>none</code>: non blocca nulla e '
-                                  + 'fa arrivare i rapporti. Si stringe dopo, quando i rapporti dicono che nessuna '
-                                  + 'posta buona verrebbe fermata.</div></div>';
+                                  + '<div class="small text-muted mt-1">' + escHtml(t('ad.pStart')) + '</div></div>';
                 }
 
                 let azione;
@@ -80,17 +83,17 @@
                     const opz = ['none', 'quarantine', 'reject'].map(v =>
                         '<option value="' + v + '"' + (v === x.politicaAttuale ? ' selected' : '') + '>p='
                         + v + '</option>').join('');
-                    azione = '<select class="form-select form-select-sm mb-1" id="adPoliticaNuova">' + opz + '</select>'
+                    azione = '<select class="form-select form-select-sm mb-1" id="adPoliticaNuova" aria-label="' + escHtml(t('ad.policy')) + '">' + opz + '</select>'
                            + '<button class="btn btn-sm btn-outline-warning" onclick="autoDnsCambiaPolitica()">'
-                           + '<i class="fas fa-pen me-1"></i>Cambia politica</button>';
+                           + '<i class="fas fa-pen me-1" aria-hidden="true"></i>' + escHtml(t('ad.changePolicy')) + '</button>';
                 } else if (x.esiste || x.bloccato) {
-                    azione = '<span class="small text-muted">' + (x.esiste ? 'niente da fare' : 'non creabile') + '</span>';
+                    azione = '<span class="small text-muted">' + escHtml(x.esiste ? t('ad.nothingToDo') : t('ad.cannotCreate')) + '</span>';
                 } else {
                     azione = '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCrea(\'' + adEsc(x.quale) + '\')">'
-                           + '<i class="fas fa-cloud-arrow-up me-1"></i>Crea</button>';
+                           + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('ad.create')) + '</button>';
                 }
 
-                h += '<tr class="upd-cell"><td><strong>' + nome + '</strong><br>'
+                h += '<tr class="upd-cell"><td><strong>' + escHtml(nome) + '</strong><br>'
                    + '<code class="small">' + adEsc(x.nome) + '</code></td>'
                    + '<td>' + stato + '</td><td>' + proposta + '</td>'
                    + '<td class="text-end">' + azione + '</td></tr>';
@@ -103,10 +106,7 @@
             h += adRapporti(r.rapporti);
             h += adOpzionali(r.opzionali);
 
-            h += '<div class="small text-muted mt-3">SPF e DMARC non contengono chiavi: sono dichiarazioni '
-               + 'pubbliche di politica, e si cambiano quando cambia il server o la politica, non a scadenza. '
-               + 'Per questo qui non c&rsquo;&egrave; una rotazione: sarebbe una manutenzione finta, e ogni '
-               + 'cambio automatico di SPF &egrave; un&rsquo;occasione per fermare la posta in uscita.</div>';
+            h += '<div class="small text-muted mt-3">' + escHtml(t('ad.noRotation')) + '</div>';
             el.innerHTML = h;
             if (r.rapporti && !r.rapporti.esiste) adCaricaCaselle();
         }
@@ -121,49 +121,36 @@
             if (!rap) return '';
             if (rap.esiste) {
                 return '<div class="alert alert-success py-2 small mb-0 mt-2">'
-                     + '<i class="fas fa-inbox me-1"></i>I rapporti arriveranno a <code>' + adEsc(rap.indirizzo)
-                     + '</code>, che esiste come <strong>' + adEsc(rap.tipo) + '</strong>'
-                     + (rap.verso ? ' e viene girata a <code>' + adEsc(rap.verso) + '</code>' : '') + '.</div>';
+                     + '<i class="fas fa-inbox me-1" aria-hidden="true"></i>'
+                     + escHtml(rap.verso ? t('ad.reportsToFwd', { address: rap.indirizzo, kind: rap.tipo, to: rap.verso }) : t('ad.reportsTo', { address: rap.indirizzo, kind: rap.tipo })) + '</div>';
             }
-            const ind = adEsc(rap.indirizzo);
             return '<div class="card mt-2"><div class="card-body py-3">'
-                 + '<div class="small mb-3"><i class="fas fa-inbox me-1"></i>'
-                 + '<strong>Manca la cassetta dei rapporti.</strong> Oggi la posta indirizzata a <code>' + ind
-                 + '</code> non arriva da nessuna parte: non esiste una casella con quel nome, e non c&rsquo;&egrave; '
-                 + 'un inoltro che la giri altrove. Finch&eacute; &egrave; cos&igrave;, pubblicare il DMARC '
-                 + 'servirebbe a poco: i rapporti partirebbero e rimbalzerebbero tutti. '
-                 + adEsc(rap.nota || '') + ' <strong>Scegli una delle due strade.</strong></div>'
+                 + '<div class="small mb-3"><i class="fas fa-inbox me-1" aria-hidden="true"></i>'
+                 + '<strong>' + escHtml(t('ad.noReportBox')) + '</strong> ' + escHtml(t('ad.noReportBoxWhy', { address: rap.indirizzo })) + ' '
+                 + adEsc(rap.nota || '') + ' <strong>' + escHtml(t('ad.pickOne')) + '</strong></div>'
 
                  + '<div class="row g-3">'
 
                  // --- A: inoltro ---
                  + '<div class="col-lg-6"><div class="border rounded p-3 h-100">'
-                 + '<div class="fw-bold mb-1"><i class="fas fa-share me-1"></i>Giralo a un indirizzo che leggi gi&agrave;</div>'
-                 + '<div class="small text-muted mb-3">Non crea nessuna casella nuova e non occupa spazio. '
-                 + 'Quello che arriva a <code>' + ind + '</code> viene consegnato all&rsquo;indirizzo che scegli '
-                 + 'qui sotto. <strong>&Egrave; la strada che consiglio.</strong></div>'
-                 + '<label class="form-label small mb-1">La posta per <code>' + ind + '</code> deve arrivare a:</label>'
+                 + '<div class="fw-bold mb-1"><i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.fwdTitle')) + '</div>'
+                 + '<div class="small text-muted mb-3">' + escHtml(t('ad.fwdHint', { address: rap.indirizzo })) + ' <strong>' + escHtml(t('ad.recommended')) + '</strong></div>'
+                 + '<label class="form-label small mb-1" for="adVerso">' + escHtml(t('ad.fwdTo', { address: rap.indirizzo })) + '</label>'
                  + '<select class="form-select form-select-sm mb-2" id="adVerso" onchange="adVersoCambia()">'
-                 + '<option value="">Carico gli indirizzi...</option></select>'
+                 + '<option value="">' + escHtml(t('ad.loadingAddresses')) + '</option></select>'
                  + '<input type="email" class="form-control form-control-sm mb-2 d-none" id="adVersoAltro" '
-                 + 'placeholder="nome@dominio.it" autocomplete="off">'
-                 + '<div class="small text-muted mb-2 d-none" id="adVersoAltroNota">Un indirizzo fuori da questo '
-                 + 'pannello va bene, ma non posso verificare che esista: se lo sbagli, i rapporti si perdono '
-                 + 'senza alcun segnale.</div>'
+                 + 'placeholder="' + escHtml(t('al.destPh')) + '" aria-label="' + escHtml(t('ad.otherAddress')) + '" autocomplete="off">'
+                 + '<div class="small text-muted mb-2 d-none" id="adVersoAltroNota">' + escHtml(t('ad.otherAddressNote')) + '</div>'
                  + '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreaAlias()">'
-                 + '<i class="fas fa-share me-1"></i>Crea l&rsquo;inoltro</button>'
+                 + '<i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.createFwd')) + '</button>'
                  + '</div></div>'
 
                  // --- B: casella vera ---
                  + '<div class="col-lg-6"><div class="border rounded p-3 h-100">'
-                 + '<div class="fw-bold mb-1"><i class="fas fa-inbox me-1"></i>Crea la casella <code>' + ind + '</code></div>'
-                 + '<div class="small text-muted mb-3">Una casella vera, con la sua password e 512 MB di quota. '
-                 + 'I rapporti restano separati da tutto il resto &mdash; in cambio &egrave; una casella in '
-                 + 'pi&ugrave; da aprire ogni tanto. La password la genera il pannello e la conserva '
-                 + 'cifrata nel vault: la rivedi quando vuoi da <strong>Caselle &rarr; Modifica &rarr; '
-                 + 'Rivela</strong>.</div>'
+                 + '<div class="fw-bold mb-1"><i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.boxTitle', { address: rap.indirizzo })) + '</div>'
+                 + '<div class="small text-muted mb-3">' + escHtml(t('ad.boxHint')) + '</div>'
                  + '<button class="btn btn-sm btn-outline-secondary" onclick="autoDnsCreaCasella()">'
-                 + '<i class="fas fa-inbox me-1"></i>Crea la casella</button>'
+                 + '<i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.createBox')) + '</button>'
                  + '</div></div>'
 
                  + '</div><div id="adAliasEsito" class="mt-3"></div></div></div>';
@@ -188,9 +175,9 @@
             if (!sel) return;
             const r = await autoDnsApi('mailboxes');
             const caselle = (r.success && r.caselle) ? r.caselle : [];
-            sel.innerHTML = '<option value="">&mdash; scegli l&rsquo;indirizzo &mdash;</option>'
+            sel.innerHTML = '<option value="">&mdash; ' + escHtml(t('ad.chooseAddress')) + ' &mdash;</option>'
                 + caselle.map(c => '<option value="' + adEsc(c) + '">' + adEsc(c) + '</option>').join('')
-                + '<option value="__altro__">&mdash; un altro indirizzo (anche fuori dal pannello) &mdash;</option>';
+                + '<option value="__altro__">&mdash; ' + escHtml(t('ad.anotherAddress')) + ' &mdash;</option>';
         }
 
         function adVersoScelto() {
@@ -207,14 +194,11 @@
             const verso = adVersoScelto();
             const el = document.getElementById('adAliasEsito');
             if (!verso) {
-                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">Scegli prima l&rsquo;indirizzo '
-                             + 'a cui far arrivare i rapporti.</div>';
+                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + escHtml(t('ad.chooseFirst')) + '</div>';
                 return;
             }
-            if (prompt('La posta indirizzata a dmarc@ verrà consegnata a ' + verso + '.\n\n'
-                     + 'Se quell\'indirizzo esiste già come casella o alias, il pannello NON lo tocca.\n'
-                     + 'Scrivi CREA per confermare.') !== 'CREA') return;
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creo l&rsquo;inoltro...';
+            if (!adConferma(t('ad.confirmFwd', { to: verso }), t('ad.wordCreate'))) return;
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingFwd'));
             const r = await autoDnsApi('alias_create', { confirm: 'CREA', verso: verso });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + adEsc(r.nota || r.error) + '</div>';
@@ -226,25 +210,21 @@
 
         async function autoDnsCreaCasella() {
             const el = document.getElementById('adAliasEsito');
-            if (prompt('Creare la casella dei rapporti, con password generata dal pannello?\n\n'
-                     + 'La password resta consultabile da Caselle > Modifica > Rivela.\n'
-                     + 'Scrivi CREA per confermare.') !== 'CREA') return;
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creo la casella...';
+            if (!adConferma(t('ad.confirmBox'), t('ad.wordCreate'))) return;
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingBox'));
             const r = await autoDnsApi('mailbox_create', { confirm: 'CREA' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                   + adEsc(r.nota || r.error) + '</div>';
             if (r.success && r.password)
                 h += '<div class="alert alert-warning py-2 small mb-0 mt-2">'
-                   + '<i class="fas fa-key me-1"></i><strong>Password di ' + adEsc(r.indirizzo) + ':</strong> '
+                   + '<i class="fas fa-key me-1" aria-hidden="true"></i><strong>' + escHtml(t('ad.passwordOf', { address: r.indirizzo })) + '</strong> '
                    + '<code style="font-size:1.05em">' + adEsc(r.password) + '</code><br>'
-                   + 'Non serve trascriverla di fretta: resta cifrata nel vault del pannello e la '
-                   + 'rivedi da <strong>Caselle &rarr; Modifica &rarr; Rivela</strong>.</div>';
+                   + escHtml(t('ad.passwordKept')) + '</div>';
             el.innerHTML = h;
             // Non si ricarica da soli: la ricarica cancellerebbe la password dallo schermo.
             if (r.success) {
                 const b = document.getElementById('autoDnsEsito');
-                if (b) b.innerHTML = '<div class="alert alert-info py-2 small mb-1">Casella creata. Premi '
-                                   + '<strong>Aggiorna</strong> qui in alto, poi crea SPF e DMARC.</div>';
+                if (b) b.innerHTML = '<div class="alert alert-info py-2 small mb-1">' + escHtml(t('ad.boxCreated')) + '</div>';
             }
         }
 
@@ -258,37 +238,37 @@
             const mancanti = lista.filter(x => !x.esiste && !x.conflitto).length;
 
             let h = '<div class="card mt-3"><div class="card-header d-flex justify-content-between '
-                  + 'align-items-center"><span><i class="fas fa-wand-magic-sparkles me-2"></i>'
-                  + '<strong>Record che facilitano la configurazione dei client</strong>'
-                  + '<span class="small text-muted ms-2">opzionali: la posta funziona anche senza</span></span>'
+                  + 'align-items-center flex-wrap gap-2"><span><i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i>'
+                  + '<strong>' + escHtml(t('ad.optTitle')) + '</strong>'
+                  + '<span class="small text-muted ms-2">' + escHtml(t('ad.optSubtitle')) + '</span></span>'
                   + (mancanti > 1
                      ? '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreaTuttiOpzionali()">'
-                       + '<i class="fas fa-cloud-arrow-up me-1"></i>Crea tutti i ' + mancanti + ' mancanti</button>'
+                       + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('ad.createAllMissing', { n: mancanti })) + '</button>'
                      : '')
                   + '</div><div class="card-body">'
                   + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th>Record</th><th>In Cloudflare</th><th>Cosa scriverebbe il pannello</th><th></th>'
+                  + '<th scope="col">Record</th><th scope="col">' + escHtml(t('ad.colInCf')) + '</th><th scope="col">' + escHtml(t('ad.colWouldWrite')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('home.colActions')) + '</span></th>'
                   + '</tr></thead><tbody>';
 
             lista.forEach(x => {
                 let stato;
-                if (x.conflitto) stato = '<span class="badge bg-danger">in conflitto</span>';
-                else if (x.esiste) stato = '<span class="badge bg-success">esiste gi&agrave;</span>';
-                else stato = '<span class="badge bg-warning text-dark">assente</span>';
+                if (x.conflitto) stato = '<span class="badge bg-danger">' + escHtml(t('ad.conflict')) + '</span>';
+                else if (x.esiste) stato = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
+                else stato = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
                 if (x.contenuto)
                     stato += '<div class="small mt-1" style="word-break:break-all"><code>'
                            + adEsc(x.contenuto) + '</code></div>';
 
                 const azione = (x.esiste || x.conflitto)
-                    ? '<span class="small text-muted">' + (x.esiste ? 'niente da fare' : 'da risolvere a mano') + '</span>'
+                    ? '<span class="small text-muted">' + escHtml(x.esiste ? t('ad.nothingToDo') : t('ad.byHand')) + '</span>'
                     : '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreaOpzionale(\'' + adEsc(x.quale) + '\')">'
-                      + '<i class="fas fa-cloud-arrow-up me-1"></i>Crea</button>';
+                      + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('ad.create')) + '</button>';
 
                 h += '<tr class="upd-cell"><td><strong>' + adEsc(x.tipo) + '</strong><br>'
                    + '<code class="small">' + adEsc(x.nome) + '</code>'
                    + '<div class="small text-muted mt-1">' + adEsc(x.aCosaServe) + '</div>'
                    + (x.premessa
-                      ? '<div class="small mt-1"><i class="fas fa-circle-info me-1 text-secondary"></i>'
+                      ? '<div class="small mt-1"><i class="fas fa-circle-info me-1 text-secondary" aria-hidden="true"></i>'
                         + '<span class="text-secondary">' + adEsc(x.premessa) + '</span></div>'
                       : '') + '</td>'
                    + '<td>' + stato + '</td>'
@@ -313,10 +293,8 @@
 
         async function autoDnsCreaOpzionale(quale) {
             const el = document.getElementById('adOpzEsito');
-            if (prompt('Creare questo record su Cloudflare?\n\n'
-                     + 'Se sul quel nome esiste già qualcosa, il pannello NON lo tocca: si ferma e te lo mostra.\n'
-                     + 'Scrivi CREA per confermare.') !== 'CREA') return;
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Scrivo su Cloudflare...';
+            if (!adConferma(t('ad.confirmOpt'), t('ad.wordCreate'))) return;
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
             const r = await autoDnsApi('create_optional', { confirm: 'CREA', quale: quale });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + adEsc(r.nota || r.error) + '</div>';
@@ -329,16 +307,15 @@
             const el = document.getElementById('adOpzEsito');
             const r0 = await autoDnsApi('status');
             const mancanti = (r0.opzionali || []).filter(x => !x.esiste && !x.conflitto);
-            if (!mancanti.length) { el.innerHTML = '<div class="alert alert-info py-2 small mb-0">Non manca nulla.</div>'; return; }
-            if (prompt('Creare ' + mancanti.length + ' record su Cloudflare?\n\n'
+            if (!mancanti.length) { el.innerHTML = '<div class="alert alert-info py-2 small mb-0">' + escHtml(t('ad.nothingMissing')) + '</div>'; return; }
+            if (!adConferma(tn('ad.confirmMany', mancanti.length) + '\n\n'
                      + mancanti.map(x => '• ' + x.tipo + ' ' + x.nome).join('\n') + '\n\n'
-                     + 'Nessun record esistente verrà toccato.\n'
-                     + 'Scrivi CREA per confermare.') !== 'CREA') return;
+                     + t('ad.noneTouched'), t('ad.wordCreate'))) return;
 
             let esiti = '';
             for (const x of mancanti) {
-                el.innerHTML = esiti + '<div class="small text-muted"><i class="fas fa-spinner fa-spin me-1"></i>'
-                             + 'Creo ' + adEsc(x.nome) + '...</div>';
+                el.innerHTML = esiti + '<div class="small text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
+                             + escHtml(t('ad.creatingName', { name: x.nome })) + '</div>';
                 const r = await autoDnsApi('create_optional', { confirm: 'CREA', quale: x.quale });
                 esiti += '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
                        + '<code>' + adEsc(x.nome) + '</code> &mdash; ' + adEsc(r.nota || r.error) + '</div>';
@@ -354,7 +331,7 @@
             if (!sel) return;
             const nuova = sel.value;
             const el = document.getElementById('autoDnsEsito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo il record attuale...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.readingCurrent'));
 
             const a = await autoDnsApi('change_policy', { politica: nuova });
             if (!a.success) {
@@ -368,24 +345,20 @@
 
             el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                          + '<div class="mb-1">' + adEsc(a.nota) + '</div>'
-                         + '<div><span class="text-muted">prima:</span> <code style="word-break:break-all">'
+                         + '<div><span class="text-muted">' + escHtml(t('ad.before')) + '</span> <code style="word-break:break-all">'
                          + adEsc(a.prima) + '</code></div>'
-                         + '<div><span class="text-muted">dopo:</span> <code style="word-break:break-all">'
+                         + '<div><span class="text-muted">' + escHtml(t('ad.after')) + '</span> <code style="word-break:break-all">'
                          + adEsc(a.dopo) + '</code></div></div>';
 
-            const avviso = nuova === 'reject'
-                ? '\n\nATTENZIONE: con p=reject la posta che non si autentica a nome di questo dominio\n'
-                  + 'viene RIFIUTATA. Se un tuo servizio non era autorizzato, smette di essere consegnato.\n'
-                : nuova === 'quarantine'
-                ? '\n\nCon p=quarantine la posta che non si autentica finisce in spam.\n' : '\n';
-            if (prompt('Cambiare la politica DMARC in p=' + nuova + '?\n\n'
-                     + 'prima:  ' + a.prima + '\n'
-                     + 'dopo:   ' + a.dopo + '\n'
-                     + '\nCambia solo il valore di "p": tutto il resto del record resta com\'è.'
-                     + avviso
-                     + '\nScrivi CAMBIA per confermare.') !== 'CAMBIA') return;
+            const avviso = nuova === 'reject' ? '\n\n' + t('ad.warnReject')
+                : nuova === 'quarantine' ? '\n\n' + t('ad.warnQuarantine') : '';
+            if (!adConferma(t('ad.confirmPolicy', { policy: nuova }) + '\n\n'
+                     + t('ad.before') + '  ' + a.prima + '\n'
+                     + t('ad.after') + '  ' + a.dopo + '\n\n'
+                     + t('ad.onlyP')
+                     + avviso, t('ad.wordChange'))) return;
 
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Modifico su Cloudflare...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.editingCf'));
             const r = await autoDnsApi('change_policy', { politica: nuova, confirm: 'CAMBIA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + adEsc(r.nota || r.error) + '</div>';
@@ -396,17 +369,14 @@
             const sel = document.getElementById('adPolitica');
             const politica = (sel && sel.value) ? sel.value : 'none';
             const che = quale === 'spf' ? 'SPF' : 'DMARC (p=' + politica + ')';
-            if (prompt('Creare il record ' + che + ' su Cloudflare?\n\n'
-                     + 'Se su quel nome esiste già un record di quel tipo, il pannello NON lo sovrascrive:\n'
-                     + 'si ferma e te lo mostra.\n\n'
-                     + 'Scrivi CREA per confermare.') !== 'CREA') return;
+            if (!adConferma(t('ad.confirmCreate', { record: che }), t('ad.wordCreate'))) return;
             const el = document.getElementById('autoDnsEsito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Scrivo su Cloudflare...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
             const r = await autoDnsApi('create', { confirm: 'CREA', quale: quale, politica: politica });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
                   + adEsc(r.nota || r.error) + '</div>';
             if (r.contenuto)
-                h += '<div class="small text-muted mb-1">C&rsquo;&egrave; gi&agrave;: <code style="word-break:break-all">'
+                h += '<div class="small text-muted mb-1">' + escHtml(t('ad.alreadyThere')) + ' <code style="word-break:break-all">'
                    + adEsc(r.contenuto) + '</code></div>';
             if (r.nome && r.valore)
                 h += '<div class="small text-muted"><code>' + adEsc(r.nome) + '</code> &rarr; <code '
@@ -421,27 +391,14 @@
         // c'e' gia' e aggiunge solo il resto.
         async function autoDnsConfiguraTutto() {
             if (!currentDomainId) return;
-            if (prompt('Configurare tutto quello che serve a questo dominio?\n\n'
-                     + 'Chiavi DKIM e loro record, SPF, cassetta dei rapporti, DMARC in osservazione,\n'
-                     + 'autoconfig, i due SRV. Poi MTA-STS per intero: la riga di include in nginx,\n'
-                     + 'la configurazione della 443, la jail, il CNAME mta-sts, il proxy Cloudflare\n'
-                     + 'spento su quel nome, un certificato che lo copra, la prova della politica e\n'
-                     + 'infine il record TXT.\n\n'
-                     + 'Nessun record esistente viene sovrascritto: quelli li trova, li lascia e te lo dice.\n'
-                     + 'Un eventuale jolly *.dominio non viene toccato.\n\n'
-                     + 'Il certificato NON viene riemesso se copre gia\' tutti i nomi: la riemissione\n'
-                     + 'parte solo se ne manca almeno uno.\n\n'
-                     + 'Dove crea un record, la sequenza aspetta che il DNS propaghi prima di provare\n'
-                     + 'la politica: puo\' durare qualche minuto. Il lavoro prosegue sul server anche\n'
-                     + 'se chiudi la pagina.\n\n'
-                     + 'Scrivi CONFIGURA per confermare.') !== 'CONFIGURA') return;
+            if (!adConferma(t('ad.confirmAll'), t('ad.wordConfigure'))) return;
 
             const el = document.getElementById('autoDnsEsito');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Avvio la configurazione...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.starting'));
             const r = await autoDnsApi('configura_tutto', { confirm: 'CONFIGURA' });
             if (!r.success || !r.jobId) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">'
-                             + adEsc(r.error || 'avvio non riuscito') + '</div>';
+                             + adEsc(r.error || t('ad.startFailed')) + '</div>';
                 return;
             }
             // La richiesta torna SUBITO con un identificativo. La sequenza include l'attesa
@@ -449,8 +406,7 @@
             // browser riceverebbe la pagina di errore del proxy mentre sul server il lavoro
             // continua, e nessuno saprebbe piu' com'e' finita.
             el.innerHTML = '<div class="alert alert-info py-2 small mb-2">'
-                         + '<i class="fas fa-spinner fa-spin me-1"></i>Configurazione in corso. '
-                         + 'Puoi anche chiudere la pagina: il lavoro prosegue sul server.</div>'
+                         + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.running')) + '</div>'
                          + '<pre id="adLog" class="small p-2 border rounded mb-0" '
                          + 'style="max-height:26rem;overflow:auto"></pre>';
             adSegui(r.jobId);
@@ -476,11 +432,8 @@
                     // Il registro sta dentro il contenitore che si ridisegna, quindi lo si tiene
                     // da parte e lo si rimette nella scheda nuova.
                     const riga = (s.job.status === 'completed'
-                            ? '<i class="fas fa-check-circle me-1"></i>Configurazione completata in '
-                              + adEsc(s.job.elapsedSeconds) + 's.'
-                              + ' Lo stato qui sopra e\' stato riletto dopo il lavoro.'
-                            : '<i class="fas fa-triangle-exclamation me-1"></i>Configurazione interrotta: '
-                              + adEsc(s.job.errorMessage) + ' Il registro qui sotto dice a che punto.');
+                            ? '<i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('ad.done', { s: s.job.elapsedSeconds }))
+                            : '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + escHtml(t('ad.stopped', { message: s.job.errorMessage })));
                     const registro = pre ? pre.textContent : '';
                     await autoDnsCarica();
                     const fresco = document.getElementById('autoDnsEsito');

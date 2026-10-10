@@ -10,16 +10,16 @@
             return await r.json();
         }
 
-        function paEsc(t) {
+        function paEsc(v) {
             const d = document.createElement('div');
-            d.textContent = t === null || t === undefined ? '' : String(t);
+            d.textContent = v === null || v === undefined ? '' : String(v);
             return d.innerHTML;
         }
 
         async function paCarica() {
             const el = document.getElementById('paBody');
             if (!el) return;
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Leggo le caselle...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + paEsc(t('pa.reading'));
             const r = await paApi('status');
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + paEsc(r.error) + '</div>';
@@ -27,34 +27,24 @@
             }
             const caselle = r.caselle || [];
             if (!caselle.length) {
-                el.innerHTML = '<div class="alert alert-info py-2 small mb-0">Non c&rsquo;&egrave; ancora nessuna casella.</div>';
+                el.innerHTML = '<div class="alert alert-info py-2 small mb-0">' + paEsc(t('pa.none')) + '</div>';
                 return;
             }
 
             el.innerHTML =
                   '<div class="d-flex gap-2 align-items-end flex-wrap mb-2">'
-                + '<div><label class="form-label small mb-1">Casella</label>'
+                + '<div><label class="form-label small mb-1" for="paCasella">' + paEsc(t('pa.mailbox')) + '</label>'
                 + '<select class="form-select form-select-sm" id="paCasella" style="min-width:18rem">'
                 + caselle.map(c => '<option value="' + paEsc(c) + '">' + paEsc(c) + '</option>').join('')
                 + '</select></div>'
                 + '<button class="btn btn-sm btn-mail" onclick="paScarica()">'
-                + '<i class="fas fa-download me-1"></i>Scarica il profilo</button>'
+                + '<i class="fas fa-download me-1" aria-hidden="true"></i>' + paEsc(t('pa.download')) + '</button>'
                 + '<button class="btn btn-sm btn-outline-secondary" onclick="paAnteprima()">'
-                + '<i class="fas fa-eye me-1"></i>Guarda cosa contiene</button>'
+                + '<i class="fas fa-eye me-1" aria-hidden="true"></i>' + paEsc(t('pa.look')) + '</button>'
                 + '</div>'
-                + '<div class="small text-muted mb-2">Il profilo imposta IMAP su <code>' + paEsc(r.hostDiPosta)
-                + ':' + paEsc(r.portaImap) + '</code> e SMTP su <code>' + paEsc(r.hostDiPosta) + ':'
-                + paEsc(r.portaSmtp) + '</code>, entrambi in TLS diretto, con l&rsquo;indirizzo completo come '
-                + 'nome utente. La 465 &egrave; scelta apposta: lo schema Apple ha un solo interruttore '
-                + '&ldquo;usa SSL&rdquo; e non distingue STARTTLS, mentre su quella porta Postfix parla TLS '
-                + 'dal primo byte &mdash; nessuna ambiguit&agrave;.</div>'
+                + '<div class="small text-muted mb-2">' + t('pa.sets.html', { imap: paEsc(r.hostDiPosta + ':' + r.portaImap), smtp: paEsc(r.hostDiPosta + ':' + r.portaSmtp) }) + '</div>'
                 + '<div class="alert alert-secondary py-2 small mb-0">'
-                + '<i class="fas fa-circle-info me-1"></i><strong>Dopo aver scaricato:</strong> '
-                + 'su <strong>Mac</strong> il file va aperto e poi confermato in Impostazioni di Sistema &rarr; '
-                + 'Generali &rarr; VPN e gestione dispositivi. Su <strong>iPhone o iPad</strong> compare '
-                + '&ldquo;Profilo scaricato&rdquo; in Impostazioni, in cima. Il profilo non &egrave; firmato, '
-                + 'quindi viene indicato come non verificato: &egrave; normale per un profilo che ti sei '
-                + 'generato da solo.</div>'
+                + '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>' + t('pa.after.html') + '</div>'
                 + '<div id="paEsito" class="mt-2"></div>';
         }
 
@@ -68,7 +58,7 @@
             const sel = document.getElementById('paCasella');
             const el = document.getElementById('paEsito');
             if (!sel || !sel.value) return;
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Genero il profilo...';
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + paEsc(t('pa.generating'));
             const r = await paApi('preview', { email: sel.value });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + paEsc(r.error) + '</div>';

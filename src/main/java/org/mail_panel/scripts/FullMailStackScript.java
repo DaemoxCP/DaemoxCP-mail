@@ -247,17 +247,21 @@ public class FullMailStackScript {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
             -- Panel admin users
+            -- No password: passkeys and email codes. The panel adds its login tables when it starts.
             CREATE TABLE IF NOT EXISTS panel_admin (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 username VARCHAR(50) NOT NULL UNIQUE,
-                password_hash VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP NULL,
+                email_enc VARCHAR(512) NULL,
+                email_index CHAR(64) CHARACTER SET ascii NULL,
+                user_handle VARCHAR(64) CHARACTER SET ascii NULL,
+                created_at DATETIME NULL,
+                last_login DATETIME NULL,
                 active BOOLEAN DEFAULT TRUE,
-                totp_secret VARCHAR(64) NULL,
-                totp_enabled BOOLEAN DEFAULT FALSE,
-                backup_codes TEXT NULL,
-                role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin'
+                role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin',
+                theme VARCHAR(10) DEFAULT 'auto',
+                language VARCHAR(5) NULL,
+                UNIQUE KEY uq_admin_email_index (email_index),
+                UNIQUE KEY uq_admin_user_handle (user_handle)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
             -- Panel settings
@@ -658,14 +662,9 @@ PHPFPMCONF
 \\$config['skin'] = 'elastic';
 \\$config['language'] = 'it_IT';
 
-// Password plugin configuration (change password from webmail)
-\\$config['password_driver'] = 'sql';
-\\$config['password_db_dsn'] = 'mysql://mailpanel:${MAILSERVER_PASS}@127.0.0.1/mailpanel';
-\\$config['password_query'] = 'UPDATE mailboxes SET password=%P WHERE email=%u';
-\\$config['password_crypt_hash'] = 'blowfish';
-// Stesso minimo del pannello per le password delle caselle (SecurityUtils.PASSWORD_CASELLA_MIN):
-// senza questa riga, dalla webmail vale la regola del plugin e non quella del pannello.
-\\$config['password_minimum_length'] = 12;
+// Password plugin (change password from webmail): the settings are added by the mail panel at
+// startup, in the "mail-panel: webmail password changes" block at the end of this file. The change
+// goes through the panel, which writes the bcrypt hash and the encrypted copy it can show again.
 
 // Managesieve plugin (Dovecot Sieve filters)
 \\$config['managesieve_host'] = '127.0.0.1';
