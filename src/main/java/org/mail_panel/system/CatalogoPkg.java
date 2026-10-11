@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.util.Shell;
 
@@ -43,7 +44,6 @@ public final class CatalogoPkg {
 
     private CatalogoPkg() {}
 
-    private static final DateTimeFormatter DATA_ORA = DateTimeFormatter.ofPattern("dd/MM/yyyy 'alle' HH:mm");
 
     /** Un nome di repository finisce in un percorso: solo questi caratteri, e non troppi. */
     private static final Pattern NOME_REPO = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
@@ -119,7 +119,7 @@ public final class CatalogoPkg {
             JSONObject o = new JSONObject().put("nome", nome);
             elenco.put(o);
             if (!NOME_REPO.matcher(nome).matches()) {
-                o.put("trovato", false).put("errore", "nome di repository che non uso in un percorso");
+                o.put("trovato", false).put("errore", I18n.tr("server.catalog.badRepoName"));
                 mancanti.put(nome);
                 continue;
             }
@@ -139,7 +139,7 @@ public final class CatalogoPkg {
             // Un orologio un po' indietro rispetto al server darebbe un'eta' negativa: e' "oggi".
             long secondi = Math.max(0, adesso - pubblicato);
             o.put("trovato", true).put("file", file.toString()).put("pubblicato", pubblicato)
-             .put("data", DATA_ORA.format(Instant.ofEpochSecond(pubblicato).atZone(ZoneId.systemDefault())))
+             .put("data", DateTimeFormatter.ofPattern(I18n.tr("server.catalog.dateTime")).format(Instant.ofEpochSecond(pubblicato).atZone(ZoneId.systemDefault())))
              .put("ore", secondi / 3600).put("giorni", secondi / 86400);
             if (piuVecchio == null || secondi / 3600 > piuVecchio.getLong("ore")) piuVecchio = o;
         }
@@ -155,7 +155,8 @@ public final class CatalogoPkg {
 
     /** "oggi", "ieri", "N giorni fa". */
     static String quanto(long giorni) {
-        return giorni < 0 ? "data sconosciuta" : giorni == 0 ? "oggi" : giorni == 1 ? "ieri" : giorni + " giorni fa";
+        return giorni < 0 ? I18n.tr("server.catalog.unknownDate") : giorni == 0 ? I18n.tr("server.catalog.today")
+                : giorni == 1 ? I18n.tr("server.catalog.yesterday") : I18n.tr("server.catalog.daysAgo", java.util.Map.of("n", String.valueOf(giorni)));
     }
 
     /** La frase sul catalogo, per la Home e per il rapporto: una sola, scritta qui. */
@@ -168,33 +169,30 @@ public final class CatalogoPkg {
             for (int i = 0; el != null && i < el.length(); i++) {
                 JSONObject o = el.getJSONObject(i);
                 if (o.optBoolean("trovato"))
-                    date.add(o.getString("nome") + " il " + o.getString("data") + " (" + quanto(o.getLong("giorni")) + ")");
+                    date.add(I18n.tr("server.catalog.repoOn", java.util.Map.of("name", String.valueOf(o.getString("nome")), "date", String.valueOf(o.getString("data")), "ago", String.valueOf(quanto(o.getLong("giorni"))))));
             }
-            t.append(date.size() == 1 ? "Catalogo pubblicato: " : "Cataloghi pubblicati: ")
-             .append(String.join("; ", date)).append('.');
+            t.append(date.size() == 1
+                     ? I18n.tr("server.catalog.published.one", java.util.Map.of("list", String.valueOf(String.join("; ", date))))
+                     : I18n.tr("server.catalog.published.other", java.util.Map.of("list", String.valueOf(String.join("; ", date)))));
             if (date.size() > 1)
-                t.append(" I conteggi sono freschi quanto il piu' vecchio, ").append(c.optString("piuVecchio")).append('.');
-            t.append(" E' la data del catalogo sul server di pkg, non dell'ultimo controllo: se sul server "
-                   + "non c'e' niente di nuovo, pkg update non la cambia.");
+                t.append(" ").append(I18n.tr("server.catalog.oldest", java.util.Map.of("name", String.valueOf(c.optString("piuVecchio")))));
+            t.append(" ").append(I18n.tr("server.catalog.serverDate"));
             if (manc != null && manc.length() > 0) {
                 List<String> n = new ArrayList<>();
                 for (int i = 0; i < manc.length(); i++) n.add(manc.getString(i));
-                t.append(n.size() == 1
-                         ? " Il repository " + n.get(0) + " e' acceso ma non ha un catalogo scaricato: i suoi pacchetti"
-                         : " I repository " + String.join(", ", n) + " sono accesi ma non hanno un catalogo scaricato: i loro pacchetti")
-                 .append(" non entrano nei conteggi.");
+                t.append(" ").append(n.size() == 1
+                         ? I18n.tr("server.catalog.missing.one", java.util.Map.of("list", String.valueOf(n.get(0))))
+                         : I18n.tr("server.catalog.missing.other", java.util.Map.of("list", String.valueOf(String.join(", ", n)))));
             }
         } else if (c.optBoolean("daPkg") && (el == null || el.length() == 0)) {
-            t.append("Nessun repository di pkg e' acceso: non c'e' un catalogo con cui confrontare.");
+            t.append(I18n.tr("server.catalog.noRepo"));
         } else {
             List<String> cercati = new ArrayList<>();
             for (int i = 0; el != null && i < el.length(); i++)
                 cercati.add(el.getJSONObject(i).optString("cercato", el.getJSONObject(i).optString("nome")));
-            t.append("Non so di quando sia il catalogo dei pacchetti: ")
-             .append(cercati.isEmpty()
-                     ? "pkg non mi ha detto quali repository sono accesi, e nella cartella "
-                       + c.optString("cartella", "di pkg") + " non ho trovato cataloghi."
-                     : "non c'e' " + String.join(", ", cercati) + ".");
+            t.append(cercati.isEmpty()
+                     ? I18n.tr("server.catalog.unknownNoRepos", java.util.Map.of("dir", String.valueOf(c.optString("cartella", "/var/db/pkg"))))
+                     : I18n.tr("server.catalog.unknownMissing", java.util.Map.of("list", String.valueOf(String.join(", ", cercati)))));
         }
         return t.toString();
     }

@@ -55,6 +55,7 @@ senza le opzioni `-Dmysql.*` la saltano dicendolo. Serve il MySQL ufficiale 8.0,
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.QueueApiTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RateLimitsApiTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.CsrfFilterTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RolesTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.LoginRoutesTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.MailboxPasswordTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.LoginSecurityTest
@@ -339,11 +340,14 @@ vince all'avvio dopo; la chiave PEM torna identica; con il file non scrivibile i
 SQLite e si legge lo stesso; database/ 700 e mail_panel.db 600.
 
 **login-browser-test.js** — l'accesso in Chromium con un autenticatore virtuale, sul server vero:
-il primo accesso con il codice della console (java ... Main --access-code), la passkey creata nelle
-Impostazioni, l'email di accesso confermata con il suo codice, le sessioni aperte, la chiave del
-vault che chiede la conferma con la passkey, l'uscita e l'ingresso con la sola passkey, un
-amministratore nuovo con l'email, l'ingresso con un codice via email (e uno sbagliato rifiutato),
-la pagina di accesso su un telefono in italiano.
+il primo accesso con il codice della console (java ... Main --access-code), la passkey creata nella
+pagina Account, l'email di accesso confermata con il suo codice, le sessioni aperte, la chiave del
+vault (in Impostazioni) che chiede la conferma con la passkey, l'uscita e l'ingresso con la sola
+passkey, un amministratore nuovo con l'email, l'ingresso con un codice via email (e uno sbagliato
+rifiutato); poi i ruoli: l'amministratore nuovo (Lettore) entra con un codice e trova un menu
+ridotto, "Sola lettura" e i rifiuti (password delle caselle, messaggi in coda), promosso a
+Operatore puo' cambiare le caselle alla pagina dopo, eliminato esce subito. In fondo la pagina di
+accesso su un telefono in italiano.
 
 **layout-browser-test.js** — la cornice in Chromium: la barra laterale a quattro sezioni (con le
 pagine Coda, Limiti di invio, Statistiche e Amministratori, che prima nessun link raggiungeva), la
@@ -393,6 +397,15 @@ Statistiche: l'avviso che i conteggi di invio e ricezione non vengono raccolti, 
 "totals" e la tabella da "domains", i numeri di Rspamd letti dove il server li mette (prima li
 cercava sotto "stats": sempre "-"), il periodo mandato come giorni, numeri e date nella lingua
 della pagina; nessuno scorrimento di lato sul telefono.
+
+**RolesTest** — ruoli e permessi con nome sul server vero, in HTTPS, col MySQL di prova. Prima
+solo amministratori e vault erano del superadmin, e un Lettore poteva cambiare tutto il resto.
+Controlla i permessi di ogni ruolo, la tabella delle rotte (ognuna dichiara il suo accesso, le
+pubbliche sono solo quelle dell'accesso, di autoconfig, di MTA-STS e della webmail, ogni voce del
+menu chiede lo stesso permesso della sua rotta) e il controllo davanti a ogni rotta per ogni ruolo:
+302 e 401 senza sessione, 403 per la password di una casella, un messaggio in coda, la webmail di
+una casella, un servizio, il riavvio, il vault, il firewall; il corpo rimesso al suo posto per il
+gestore; il ruolo cambiato che vale subito; l'amministratore tolto che esce; i rifiuti nel registro.
 
 **CsrfFilterTest** — il token CSRF controllato una volta per tutte le rotte (il filtro di
 SSLMailServer.context), sul server vero. Venticinque rotte autenticate accettavano POST senza

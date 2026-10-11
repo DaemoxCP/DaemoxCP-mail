@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -154,16 +155,10 @@ public final class RamoPkg {
 
     static String spiegazione(String ramo) {
         return switch (ramo) {
-            case "quarterly" -> "Ramo trimestrale: si stacca dallo sviluppo dei port a gennaio, aprile, luglio e ottobre "
-                    + "e per tre mesi riceve solo correzioni. Le correzioni di sicurezza arrivano, ma dopo che qualcuno "
-                    + "le ha portate sul ramo: piu' tardi che su latest. Le versioni maggiori nuove (PHP, MySQL, nginx) "
-                    + "arrivano solo al trimestre successivo.";
-            case "latest" -> "Ramo continuo: le versioni arrivano appena il port e' aggiornato e compilato. Le correzioni "
-                    + "arrivano prima, ma arrivano anche le versioni nuove, senza i tre mesi di assestamento del "
-                    + "trimestrale.";
-            case "misti" -> "I pacchetti e i moduli del kernel vengono da rami diversi: FreeBSD li vuole sullo stesso ramo.";
-            default -> "I pacchetti non arrivano dal repository ufficiale di FreeBSD, o arrivano da piu' di uno: "
-                    + "il ramo lo decide il repository che usi.";
+            case "quarterly" -> I18n.tr("server.branch.quarterly");
+            case "latest" -> I18n.tr("server.branch.latest");
+            case "misti" -> I18n.tr("server.branch.mixed");
+            default -> I18n.tr("server.branch.unofficial");
         };
     }
 
@@ -171,11 +166,11 @@ public final class RamoPkg {
     public static JSONObject stato(Sistema s) {
         String vv = s.pkgVv();
         if (vv == null)
-            return new JSONObject().put("success", false).put("error", "pkg -vv non risponde: non so da quale ramo arrivano i pacchetti.");
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.branch.noPkgVv"));
         List<Repo> repos = repository(vv);
         if (repos.isEmpty())
             return new JSONObject().put("success", false)
-                    .put("error", "pkg -vv ha risposto, ma non ci ho riconosciuto nessun repository: non dico niente piuttosto che sbagliare.");
+                    .put("error", I18n.tr("server.branch.noRepoRecognized"));
         String ramo = ramo(repos);
         String nostro = s.leggi(FILE);
         JSONObject r = new JSONObject().put("success", true).put("ramo", ramo).put("spiegazione", spiegazione(ramo))
@@ -185,8 +180,7 @@ public final class RamoPkg {
         List<String> dopo = fileDopo(s);
         if (!dopo.isEmpty()) r.put("fileDopo", new JSONArray(dopo));
         Repo base = acceso(repos, "base");
-        if (base != null) r.put("base", "Il sistema base arriva da pkg (FreeBSD-base, ramo " + base.ramo() + "): ha un ramo suo, "
-                + "e il pannello non lo tocca.");
+        if (base != null) r.put("base", I18n.tr("server.branch.baseFromPkg", java.util.Map.of("r", String.valueOf(base.ramo()))));
         String motivo = motivoNo(repos);
         r.put("cambiabile", motivo == null);
         if (motivo != null) r.put("motivo", motivo);
@@ -201,9 +195,8 @@ public final class RamoPkg {
     /** Perche' non si puo' cambiare ramo da qui, o null se si puo'. */
     static String motivoNo(List<Repo> repos) {
         long p = accesi(repos, "pacchetti"), k = accesi(repos, "moduli");
-        if (p == 0) return "I pacchetti non arrivano dal repository ufficiale di FreeBSD (e' spento o sostituito da uno tuo): "
-                + "il ramo lo decide il repository che usi, e non e' qualcosa che il pannello debba cambiare.";
-        if (p > 1 || k > 1) return "Ci sono piu' repository ufficiali accesi dello stesso tipo: non so quale cambiare.";
+        if (p == 0) return I18n.tr("server.branch.officialOff");
+        if (p > 1 || k > 1) return I18n.tr("server.branch.manyOfficial");
         return null;
     }
 
@@ -213,11 +206,11 @@ public final class RamoPkg {
             a.put(new JSONObject().put("nome", r.nome()).put("url", r.url()).put("acceso", r.acceso())
                     .put("tipo", r.tipo()).put("ramo", r.ramo()).put("ufficiale", !r.tipo().equals("esterno"))
                     .put("ruolo", switch (r.tipo()) {
-                        case "pacchetti" -> "Pacchetti (port)";
-                        case "moduli" -> "Moduli del kernel";
-                        case "base" -> "Sistema base";
-                        case "esterno" -> "Repository non ufficiale";
-                        default -> "Repository ufficiale";
+                        case "pacchetti" -> I18n.tr("server.branch.kindPackages");
+                        case "moduli" -> I18n.tr("server.branch.kindKmods");
+                        case "base" -> I18n.tr("server.branch.kindBase");
+                        case "esterno" -> I18n.tr("server.branch.kindExternal");
+                        default -> I18n.tr("server.branch.kindOfficial");
                     }));
         }
         return a;
@@ -276,11 +269,11 @@ public final class RamoPkg {
     public static JSONObject anteprima(Sistema s, String verso) {
         JSONObject st = stato(s);
         if (!st.optBoolean("success")) return st;
-        if (!RAMI.contains(verso)) return new JSONObject().put("success", false).put("error", "Ramo non valido.");
+        if (!RAMI.contains(verso)) return new JSONObject().put("success", false).put("error", I18n.tr("server.branch.badBranch"));
         JSONObject r = new JSONObject().put("success", true).put("da", st.getString("ramo")).put("verso", verso)
                 .put("impronta", st.getString("impronta"));
         if (!st.optBoolean("cambiabile")) return r.put("possibile", false).put("motivo", st.getString("motivo"));
-        if (verso.equals(st.getString("ramo"))) return r.put("possibile", false).put("motivo", "Sei gia' sul ramo " + verso + ".");
+        if (verso.equals(st.getString("ramo"))) return r.put("possibile", false).put("motivo", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
         List<Repo> repos = repository(s.pkgVv());
         JSONArray cambi = new JSONArray();
         for (String tipo : List.of("pacchetti", "moduli")) {
@@ -288,23 +281,18 @@ public final class RamoPkg {
             if (x != null) cambi.put(new JSONObject().put("nome", x.nome()).put("da", x.url()).put("a", indirizzo(x, verso)));
         }
         JSONArray avvisi = new JSONArray();
-        avvisi.put("Non si aggiorna nessun pacchetto: cambia da dove pkg li prende, e si scarica il catalogo del ramo "
-                + verso + " (serve la rete). Gli aggiornamenti li vedi e li decidi dopo, dal loro piano.");
+        avvisi.put(I18n.tr("server.branch.noUpdate", java.util.Map.of("r", String.valueOf(verso))));
         if (verso.equals("quarterly"))
-            avvisi.put("Tornare a quarterly non riporta indietro i pacchetti: quelli presi da latest restano alla loro versione, "
-                    + "e non si aggiornano finche' quarterly non li raggiunge. Il pannello non fa downgrade: per alcuni "
-                    + "(MySQL su tutti) tornare a una versione precedente rovinerebbe i dati.");
+            avvisi.put(I18n.tr("server.branch.backToQuarterly"));
         else
-            avvisi.put("Su latest il prossimo aggiornamento puo' portare versioni maggiori nuove (PHP, MySQL, nginx...) appena "
-                    + "escono: guarda sempre il piano prima di aggiornare.");
+            avvisi.put(I18n.tr("server.branch.onLatest"));
         JSONArray dopo = st.optJSONArray("fileDopo");
         if (dopo != null && !dopo.isEmpty())
-            avvisi.put("In " + CARTELLA + " ci sono file letti dopo quello del pannello (" + String.join(", ", strings(dopo))
-                    + "): se cambiano anche loro l'indirizzo vincono loro. Il pannello se ne accorge e rimette tutto com'era.");
+            avvisi.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(CARTELLA), "elenco", String.valueOf(String.join(", ", strings(dopo))))));
         return r.put("possibile", true).put("cambi", cambi).put("avvisi", avvisi).put("file", FILE.toString())
                 .put("contenuto", contenuto(repos, verso, s.adesso()))
                 .put("comeTorna", st.optBoolean("fileDelPannello")
-                        ? "Se senza il file del pannello il ramo e' gia' " + verso + ", il file si toglie invece di riscriverlo."
+                        ? I18n.tr("server.branch.removeInstead", java.util.Map.of("r", String.valueOf(verso)))
                         : "");
     }
 
@@ -327,53 +315,51 @@ public final class RamoPkg {
     public static JSONObject cambia(Sistema s, Registro log, String verso, String impronta) {
         JSONObject st = stato(s);
         if (!st.optBoolean("success")) return st;
-        if (!RAMI.contains(verso)) return errore(log, "Ramo non valido.");
+        if (!RAMI.contains(verso)) return errore(log, I18n.tr("server.branch.badBranch"));
         if (!st.optBoolean("cambiabile")) return errore(log, st.getString("motivo"));
         if (!st.getString("impronta").equals(impronta))
-            return errore(log, "La configurazione di pkg e' cambiata dopo l'anteprima: rileggila prima di confermare.");
+            return errore(log, I18n.tr("server.branch.changedSincePreview"));
         String da = st.getString("ramo");
-        if (verso.equals(da)) return errore(log, "Sei gia' sul ramo " + verso + ".");
+        if (verso.equals(da)) return errore(log, I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
         List<Repo> repos = repository(s.pkgVv());
         String prima = s.leggi(FILE);
-        log.riga("Ramo adesso: " + da + ". Ramo chiesto: " + verso + ".");
+        log.riga(I18n.tr("server.branch.nowAsked", java.util.Map.of("da", String.valueOf(da), "verso", String.valueOf(verso))));
         try {
             boolean fatto = false;
             if (prima != null) {
-                log.riga("[1/3] Tolgo il file del pannello (" + FILE + ") e guardo il ramo di serie...");
+                log.riga("[1/3] " + I18n.tr("server.branch.removingFile", java.util.Map.of("f", String.valueOf(FILE))));
                 s.elimina(FILE);
                 String senza = effettivo(s);
-                log.riga("      senza il file del pannello il ramo e': " + senza);
+                log.riga("      " + I18n.tr("server.branch.withoutFile", java.util.Map.of("r", String.valueOf(senza))));
                 fatto = verso.equals(senza);
-                if (fatto) log.riga("      e' quello chiesto: il file resta tolto.");
+                if (fatto) log.riga("      " + I18n.tr("server.branch.isAsked"));
             }
             if (!fatto) {
-                log.riga("[1/3] Scrivo " + FILE + ":");
+                log.riga("[1/3] " + I18n.tr("server.branch.writing", java.util.Map.of("f", String.valueOf(FILE))));
                 String nuovo = contenuto(repos, verso, s.adesso());
                 for (String riga : nuovo.split("\n")) if (!riga.startsWith("#")) log.riga("      " + riga);
                 s.scrivi(FILE, nuovo);
             }
-            log.riga("[2/3] Controllo con pkg -vv quale ramo vede pkg adesso...");
+            log.riga("[2/3] " + I18n.tr("server.branch.checking"));
             String ora = effettivo(s);
-            log.riga("      pkg vede: " + ora);
+            log.riga("      " + I18n.tr("server.branch.pkgSees", java.util.Map.of("r", String.valueOf(ora))));
             if (!verso.equals(ora)) {
                 ripristina(s, prima);
                 List<String> dopo = fileDopo(s);
-                return errore(log, "Dopo la modifica pkg vede il ramo \"" + ora + "\", non " + verso + ". "
-                        + (dopo.isEmpty() ? "" : "Lo decide un file letto dopo quello del pannello (" + String.join(", ", dopo) + "). ")
-                        + "Ho rimesso tutto com'era.");
+                return errore(log, I18n.tr("server.branch.wrongAfter", java.util.Map.of("ora", String.valueOf(ora), "verso", String.valueOf(verso))) + " "
+                        + (dopo.isEmpty() ? "" : I18n.tr("server.branch.decidedByLater", java.util.Map.of("elenco", String.valueOf(String.join(", ", dopo)))) + " ")
+                        + I18n.tr("server.branch.restored"));
             }
-            log.riga("[3/3] Scarico il catalogo del ramo " + verso + " (pkg update -f)...");
+            log.riga("[3/3] " + I18n.tr("server.branch.downloading", java.util.Map.of("r", String.valueOf(verso))));
             Esito u = s.pkgUpdate(log);
             if (u.codice() != 0) {
                 ripristina(s, prima);
                 String torna = effettivo(s);
-                return errore(log, "Il catalogo del ramo " + verso + " non si scarica (pkg update e' uscito con codice " + u.codice()
-                        + "). Ho rimesso la configurazione com'era (pkg vede di nuovo: " + torna + "), e il catalogo di "
-                        + "prima e' rimasto: pkg lo rimette da solo quando un aggiornamento fallisce.");
+                return errore(log, I18n.tr("server.branch.catalogFails", java.util.Map.of("r", String.valueOf(verso), "c", String.valueOf(u.codice()), "torna", String.valueOf(torna))));
             }
         } catch (IOException e) {
             try { ripristina(s, prima); } catch (IOException ignorata) { /* detto sotto */ }
-            return errore(log, "Non riesco a scrivere in " + CARTELLA + ": " + e.getMessage() + ". Ho provato a rimettere tutto com'era.");
+            return errore(log, I18n.tr("server.branch.cannotWrite", java.util.Map.of("dir", String.valueOf(CARTELLA), "m", String.valueOf(e.getMessage()))));
         }
         // Cosa cambia per i pacchetti installati, dal catalogo appena scaricato.
         int aggiornabili = 0;
@@ -386,24 +372,23 @@ public final class RamoPkg {
                 else if (m.group(2).equals(">")) piuRecenti.add(m.group(1));
             }
         }
-        StringBuilder msg = new StringBuilder("Adesso i pacchetti arrivano dal ramo " + verso + ", e il suo catalogo e' scaricato. "
-                + "Nessun pacchetto e' stato cambiato.");
-        if (v == null) msg.append(" Non ho potuto contare cosa cambierebbe: lo vedi da Aggiornamenti.");
+        StringBuilder msg = new StringBuilder(I18n.tr("server.branch.done", java.util.Map.of("r", String.valueOf(verso))));
+        if (v == null) msg.append(" ").append(I18n.tr("server.branch.cannotCount"));
         else {
-            msg.append(aggiornabili == 0 ? " Nessun pacchetto ha una versione piu' nuova su questo ramo."
-                    : " " + aggiornabili + (aggiornabili == 1 ? " pacchetto si puo' aggiornare" : " pacchetti si possono aggiornare")
-                      + ": il piano e la decisione sono in Aggiornamenti.");
+            msg.append(" ").append(aggiornabili == 0 ? I18n.tr("server.branch.noneNewer")
+                    : aggiornabili == 1 ? I18n.tr("server.branch.updatable.one")
+                    : I18n.tr("server.branch.updatable.other", java.util.Map.of("n", String.valueOf(aggiornabili))));
             if (!piuRecenti.isEmpty())
-                msg.append(" ").append(piuRecenti.size()).append(piuRecenti.size() == 1 ? " pacchetto installato e' piu' nuovo"
-                        : " pacchetti installati sono piu' nuovi").append(" del ramo ").append(verso)
-                   .append(": restano come sono, e riprendono ad aggiornarsi quando il ramo li raggiunge.");
+                msg.append(" ").append(piuRecenti.size() == 1
+                        ? I18n.tr("server.branch.newer.one", java.util.Map.of("r", String.valueOf(verso)))
+                        : I18n.tr("server.branch.newer.other", java.util.Map.of("n", String.valueOf(piuRecenti.size()), "r", String.valueOf(verso))));
         }
         log.riga("");
         log.riga(msg.toString());
         JSONObject r = new JSONObject().put("success", true).put("ramo", verso).put("messaggio", msg.toString());
         if (v != null) {
             r.put("aggiornabili", aggiornabili).put("piuRecenti", new JSONArray(piuRecenti.size() > 30 ? piuRecenti.subList(0, 30) : piuRecenti));
-            if (!piuRecenti.isEmpty()) log.riga("Piu' nuovi del ramo: " + String.join(", ", piuRecenti.size() > 30 ? piuRecenti.subList(0, 30) : piuRecenti));
+            if (!piuRecenti.isEmpty()) log.riga(I18n.tr("server.branch.newerList", java.util.Map.of("elenco", String.valueOf(String.join(", ", piuRecenti.size() > 30 ? piuRecenti.subList(0, 30) : piuRecenti)))));
         }
         return r;
     }
@@ -414,7 +399,7 @@ public final class RamoPkg {
     }
 
     private static JSONObject errore(Registro log, String testo) {
-        log.riga("ERRORE: " + testo);
+        log.riga(I18n.tr("server.branch.error", java.util.Map.of("t", String.valueOf(testo))));
         return new JSONObject().put("success", false).put("error", testo);
     }
 

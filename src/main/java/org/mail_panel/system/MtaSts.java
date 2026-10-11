@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.Main;
 
@@ -131,21 +132,17 @@ public class MtaSts {
     public static JSONObject impostaModo(String modo) {
         if (!modoValido(modo))
             return new JSONObject().put("success", false)
-                    .put("error", "Modo non valido: sono ammessi testing, enforce e none.");
+                    .put("error", I18n.tr("server.mtasts.badMode"));
         try {
             Main.mailDatabase.setSetting("mta_sts_mode", modo.toLowerCase(Locale.ROOT));
             return new JSONObject().put("success", true).put("modo", modo.toLowerCase(Locale.ROOT))
                     .put("nota", "enforce".equalsIgnoreCase(modo)
-                        ? "Modo \"enforce\": da ora i mittenti che non riescono a stabilire una "
-                          + "connessione TLS valida con questo server NON consegnano. Attenzione: "
-                          + "l'id della politica cambia, quindi i mittenti la riscaricheranno."
+                        ? I18n.tr("server.mtasts.modeEnforce")
                         : "none".equalsIgnoreCase(modo)
-                        ? "Modo \"none\": annulla una politica pubblicata in precedenza. Si usa per "
-                          + "smettere, non per cominciare."
-                        : "Modo \"testing\": i mittenti segnalano i problemi ma consegnano lo stesso. "
-                          + "E' il punto di partenza, come p=none per DMARC.");
+                        ? I18n.tr("server.mtasts.modeNone")
+                        : I18n.tr("server.mtasts.modeTesting"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", "non riesco a salvare: " + e.getMessage());
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.mtasts.saveFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -160,8 +157,7 @@ public class MtaSts {
         r.put("hostDiPosta", host).put("modo", modo).put("percorso", PERCORSO);
         if (host == null || host.isBlank())
             return new JSONObject().put("success", false)
-                    .put("error", "L'hostname del server di posta non e' configurato: senza, la politica "
-                            + "non saprebbe quale MX dichiarare.");
+                    .put("error", I18n.tr("server.mtasts.noHostname"));
 
         String pol = politica(host, modo, maxAgeConsigliato(modo));
         r.put("politica", pol).put("id", id(pol)).put("recordTxt", recordTxt(pol));
@@ -222,17 +218,15 @@ public class MtaSts {
     static String spiegaCodice(int codice) {
         String cosa;
         switch (codice) {
-            case 520: cosa = "il server ha risposto qualcosa che Cloudflare non ha capito"; break;
-            case 521: cosa = "Cloudflare non trova il server acceso"; break;
-            case 522: cosa = "la connessione al server e' scaduta"; break;
-            case 523: cosa = "Cloudflare non raggiunge il server"; break;
-            case 525: cosa = "l'handshake TLS con il server e' fallito"; break;
-            case 526: cosa = "Cloudflare non considera valido il certificato del server"; break;
+            case 520: cosa = I18n.tr("server.mtasts.cf520"); break;
+            case 521: cosa = I18n.tr("server.mtasts.cf521"); break;
+            case 522: cosa = I18n.tr("server.mtasts.cf522"); break;
+            case 523: cosa = I18n.tr("server.mtasts.cf523"); break;
+            case 525: cosa = I18n.tr("server.mtasts.cf525"); break;
+            case 526: cosa = I18n.tr("server.mtasts.cf526"); break;
             default: return "";
         }
-        return " Il codice " + codice + " lo restituisce Cloudflare (" + cosa + "), non nginx: "
-             + "vuol dire che quel nome sta ancora passando dal proxy. Va messo su Solo DNS "
-             + "(nuvola grigia), altrimenti chi legge la politica non parla mai con il server.";
+        return " " + I18n.tr("server.mtasts.cfCode", java.util.Map.of("c", String.valueOf(codice), "what", String.valueOf(cosa)));
     }
 
     private static JSONObject provaPolitica(String nomeWeb, String mailHost, String modo) {
@@ -255,26 +249,22 @@ public class MtaSts {
             r.put("ok", ok);
             if (!ok) {
                 if (resp.statusCode() != 200)
-                    r.put("errore", "risponde " + resp.statusCode() + " invece di 200: su quel nome la "
-                            + "politica non viene servita." + spiegaCodice(resp.statusCode()));
+                    r.put("errore", I18n.tr("server.mtasts.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))) + spiegaCodice(resp.statusCode()));
                 else if (!corpo.contains("version: STSv1"))
-                    r.put("errore", "risponde 200 ma quello che torna non e' una politica MTA-STS: "
-                            + "probabilmente e' la webmail o una pagina di errore.");
+                    r.put("errore", I18n.tr("server.mtasts.notPolicy"));
                 else
-                    r.put("errore", "la politica c'e' ma non dichiara " + mailHost + " fra gli MX.");
+                    r.put("errore", I18n.tr("server.mtasts.noMx", java.util.Map.of("host", String.valueOf(mailHost))));
             }
             return r;
         } catch (javax.net.ssl.SSLException e) {
             return r.put("ok", false).put("tls", true)
-                    .put("errore", "il certificato non e' valido per " + nomeWeb + ". E' proprio quel "
-                            + "certificato a dimostrare che la politica viene da te: senza, i mittenti "
-                            + "la ignorano. Va rigenerato includendo questo nome.");
+                    .put("errore", I18n.tr("server.mtasts.certInvalid", java.util.Map.of("name", String.valueOf(nomeWeb))));
         } catch (java.net.UnknownHostException e) {
             return r.put("ok", false).put("dns", true)
-                    .put("errore", "il nome " + nomeWeb + " non si risolve: manca il record CNAME.");
+                    .put("errore", I18n.tr("server.mtasts.noCname", java.util.Map.of("name", String.valueOf(nomeWeb))));
         } catch (Exception e) {
             return r.put("ok", false)
-                    .put("errore", "non raggiungibile: " + e.getClass().getSimpleName());
+                    .put("errore", I18n.tr("server.mtasts.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
         }
     }
 
@@ -293,10 +283,7 @@ public class MtaSts {
             return r.put("pubblicabile", true)
                     .put("valore", recordTxt(politica(host, modo, maxAgeConsigliato(modo))));
         return r.put("pubblicabile", false)
-                .put("motivo", "La politica su https://mta-sts." + dominio + PERCORSO + " non risponde "
-                        + "ancora: " + prova.optString("errore", "motivo sconosciuto") + " Finche' e' cosi', "
-                        + "pubblicare il record TXT vorrebbe dire dichiarare una protezione che non c'e', "
-                        + "e chi va a leggerla trova un errore.");
+                .put("motivo", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + dominio + PERCORSO), "err", String.valueOf(prova.optString("errore", I18n.tr("server.mtasts.unknownReason"))))));
     }
 
     /** I domini gestiti, per l'interfaccia. */

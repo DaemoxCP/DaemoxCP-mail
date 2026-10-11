@@ -81,7 +81,7 @@ public class PackageQueueTest {
         vero("elenco nuovo: scritto", TurnoPacchetti.scriviStato(List.of("kafka", "librdkafka")) == null);
         vero("elenco nuovo: contenuto giusto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
         String e = TurnoPacchetti.scriviStato(f, List.of("nginx"));
-        vero("elenco gia' presente: rifiutato", e != null && e.contains("esiste gia'"));
+        vero("elenco gia' presente: rifiutato", e != null && e.contains("esiste già"));
         vero("elenco gia' presente: NON sovrascritto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
         Path senzaCartella = d.resolve("non-esiste").resolve("mail-panel-maintenance-locks");
         e = TurnoPacchetti.scriviStato(senzaCartella, List.of("nginx"));
@@ -92,7 +92,7 @@ public class PackageQueueTest {
         // sbloccati: nessun lavoro che installa o aggiorna parte. Rimettere le protezioni si',
         // perche' e' proprio il rimedio.
         String e2 = TurnoPacchetti.prendi("upd", "aggiornamento dei pacchetti non protetti");
-        vero("elenco aperto: un aggiornamento non parte", e2 != null && e2.contains("non si e' chiuso"));
+        vero("elenco aperto: un aggiornamento non parte", e2 != null && e2.contains("non si è chiuso"));
         vero("elenco aperto: e il turno non resta preso", TurnoPacchetti.chi() == null);
         vero("elenco aperto: le protezioni si possono rimettere",
             TurnoPacchetti.prendiPerLeProtezioni("lock", "protezione dei pacchetti") == null);

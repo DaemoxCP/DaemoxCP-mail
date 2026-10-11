@@ -41,8 +41,10 @@ public class SecurityUtils {
     }
 
     /** Il perche' del rifiuto, per chi crea o modifica una casella. */
-    public static final String PASSWORD_CASELLA_REGOLA = "servono da " + PASSWORD_CASELLA_MIN + " a " + PASSWORD_MAX
-            + " caratteri tra lettere senza accenti, cifre e " + String.join(" ", PASSWORD_SIMBOLI.split(""));
+    public static String passwordRule() {
+        return org.mail_panel.i18n.I18n.tr("server.mailbox.passwordRule", java.util.Map.of("min", PASSWORD_CASELLA_MIN, "max", PASSWORD_MAX,
+                "symbols", String.join(" ", PASSWORD_SIMBOLI.split(""))));
+    }
 
     /** [a-zA-Z0-9 + simboli], con i soli caratteri che dentro una classe vanno protetti: \ [ ] ^ - */
     private static String classeDiCaratteri(String simboli) {

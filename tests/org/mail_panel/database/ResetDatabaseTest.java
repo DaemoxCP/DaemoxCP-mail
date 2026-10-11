@@ -38,7 +38,7 @@ public class ResetDatabaseTest {
             new MailDatabase().dropAllTables();
             vero("un'eccezione", false);
         } catch (SQLException e) {
-            vero("un'eccezione: " + e.getMessage(), e.getMessage().contains("Non collegato"));
+            vero("un'eccezione: " + e.getMessage(), e.getMessage().contains("Not connected"));
         }
 
         String porta = System.getProperty("mysql.porta");
@@ -138,8 +138,8 @@ public class ResetDatabaseTest {
         } catch (SQLException e) {
             String m = e.getMessage();
             System.out.println("  " + m);
-            vero("un'eccezione che dice perche' e che cosa resta", m.startsWith("Reset non riuscito")
-                    && m.contains("estranea_figlia") && m.contains("ancora presenti: admin_passkeys, aliases"));
+            vero("un'eccezione che dice perche' e che cosa resta", m.startsWith("Reset failed")
+                    && m.contains("estranea_figlia") && m.contains("still present: admin_passkeys, aliases"));
         }
         vero("tutto com'era: le " + n + " tabelle, con i loro dati", tabelle(c).size() == n + 2
                 && righe(c, "domains") == 1 && righe(c, "mailboxes") == 1 && righe(c, "admin_passkeys") == 1);

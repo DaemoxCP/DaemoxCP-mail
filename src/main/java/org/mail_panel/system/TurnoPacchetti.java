@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import java.nio.ByteBuffer;
+import org.mail_panel.i18n.I18n;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
@@ -79,9 +80,7 @@ public final class TurnoPacchetti {
         }
         if (nonConElencoAperto && statoPresente()) {
             rilascia(id);
-            return "C'e' " + elenco + ", l'elenco dei pacchetti sbloccati da un lavoro che non si e' chiuso: "
-                 + "potrebbero essere ancora senza protezione, e questo lavoro li toccherebbe. Riavvia il "
-                 + "pannello, che li riprotegge da solo, e riprova.";
+            return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(elenco)));
         }
         return null;
     }
@@ -97,7 +96,9 @@ public final class TurnoPacchetti {
         Turno t = IN_CORSO.get();
         if (t == null) return null;
         long min = (System.currentTimeMillis() - t.inizio()) / 60000;
-        return t.descrizione() + (min < 1 ? ", appena partito" : ", in corso da " + min + (min == 1 ? " minuto" : " minuti"));
+        return t.descrizione() + ", " + (min < 1 ? I18n.tr("server.turn.justStarted")
+                : min == 1 ? I18n.tr("server.turn.running.one")
+                : I18n.tr("server.turn.running.other", java.util.Map.of("n", String.valueOf(min))));
     }
 
     /**
@@ -107,14 +108,12 @@ public final class TurnoPacchetti {
     public static String pianoNonAdesso() {
         String chi = chi();
         return chi == null ? null
-             : "C'e' un lavoro sui pacchetti in corso (" + chi + "): un piano calcolato adesso vedrebbe "
-               + "protezioni tolte e versioni che stanno cambiando. Aspetta che finisca e riprova.";
+             : I18n.tr("server.turn.busyPlan", java.util.Map.of("who", String.valueOf(chi)));
     }
 
     /** Il messaggio per chi trova il turno preso. */
     static String occupato(String chi) {
-        return "C'e' gia' un lavoro sui pacchetti in corso (" + chi + "). Aspetta che finisca: due insieme "
-             + "si toglierebbero le protezioni a vicenda.";
+        return I18n.tr("server.turn.busy", java.util.Map.of("who", String.valueOf(chi)));
     }
 
     /**
@@ -123,10 +122,11 @@ public final class TurnoPacchetti {
      */
     public static void avvia(String id, String nome, Runnable lavoro) {
         try {
-            Thread t = new Thread(() -> {
+            // La lingua di chi ha chiesto il lavoro segue il lavoro nel suo thread (messaggi e log)
+            Thread t = new Thread(I18n.withCurrent(() -> {
                 try { lavoro.run(); }
                 finally { rilascia(id); }
-            }, nome);
+            }), nome);
             t.setDaemon(true);   // come prima: un lavoro non tiene acceso un pannello che si sta spegnendo
             t.start();
         } catch (RuntimeException | Error e) {
@@ -159,24 +159,22 @@ public final class TurnoPacchetti {
             c.force(true);
             return null;
         } catch (FileAlreadyExistsException e) {
-            return "esiste gia' " + f + ", l'elenco di un lavoro interrotto che non e' stato chiuso: riavvia "
-                 + "il pannello, che riprotegge da solo quei pacchetti, e riprova";
+            return I18n.tr("server.turn.listExists", java.util.Map.of("file", String.valueOf(f)));
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Impossibile scrivere " + f, e);
+            LOGGER.log(Level.WARNING, "Cannot write " + f, e);
             // Un elenco scritto a meta' non deve restare: l'avvio lo leggerebbe come vero.
             if (creato) {
                 try { Files.deleteIfExists(f); }
-                catch (Exception x) { LOGGER.log(Level.WARNING, "Impossibile rimuovere " + f, x); }
+                catch (Exception x) { LOGGER.log(Level.WARNING, "Cannot remove " + f, x); }
             }
-            return "non riesco a scrivere " + f + " (" + e + "): senza quell'elenco su disco, "
-                 + "un'interruzione lascerebbe i pacchetti sbloccati senza che il pannello lo sappia";
+            return I18n.tr("server.turn.cannotWrite", java.util.Map.of("file", String.valueOf(f), "err", String.valueOf(e)));
         }
     }
 
     /** Cancella l'elenco. Lo fa solo il lavoro che l'ha scritto, dopo aver riprotetto tutto. */
     public static void cancellaStato() {
         try { Files.deleteIfExists(elenco); }
-        catch (Exception e) { LOGGER.log(Level.WARNING, "Impossibile rimuovere " + elenco, e); }
+        catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + elenco, e); }
     }
 
     /** Se c'e' un elenco di un lavoro non concluso. */

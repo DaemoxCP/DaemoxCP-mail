@@ -57,19 +57,19 @@ public class ConfigRegeneratorScript {
             // Si chiede a Dovecot se accetta la configurazione PRIMA di ricaricarla.
             // Un reload su una configurazione rotta ferma il servizio: meglio non ricaricare
             // e lasciare in servizio quella precedente, dicendolo a chiare lettere.
-            script.append("echo 'Verifico la configurazione Dovecot...'\n");
+            script.append("echo 'Checking the Dovecot configuration...'\n");
             script.append("if command -v doveconf >/dev/null 2>&1; then\n");
             script.append("    DOVECONF_ERR=$(doveconf -n 2>&1 >/dev/null)\n");
             script.append("    if [ -n \"$DOVECONF_ERR\" ]; then\n");
-            script.append("        echo '[ERRORE] Dovecot non accetta la configurazione: NON la ricarico.'\n");
+            script.append("        echo '[ERROR] Dovecot does not accept the configuration: NOT reloading it.'\n");
             script.append("        echo \"$DOVECONF_ERR\" | sed 's/^/         /'\n");
-            script.append("        echo '[INFO] Il servizio continua con la configurazione precedente.'\n");
+            script.append("        echo '[INFO] The service keeps running with the previous configuration.'\n");
             script.append("    else\n");
             script.append("        echo 'Reloading Dovecot...'\n");
             script.append("        service dovecot reload 2>/dev/null || true\n");
             script.append("    fi\n");
             script.append("else\n");
-            script.append("    echo 'Reloading Dovecot (doveconf non disponibile, nessuna verifica possibile)...'\n");
+            script.append("    echo 'Reloading Dovecot (doveconf not available, no check possible)...'\n");
             script.append("    service dovecot reload 2>/dev/null || true\n");
             script.append("fi\n");
             script.append("\n");

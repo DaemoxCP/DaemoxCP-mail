@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.Main;
 
@@ -77,8 +78,8 @@ public class ProfiloApple {
               <key>PayloadVersion</key>         <integer>1</integer>
               <key>PayloadIdentifier</key>      <string>%s</string>
               <key>PayloadUUID</key>            <string>%s</string>
-              <key>PayloadDisplayName</key>     <string>Posta %s</string>
-              <key>PayloadDescription</key>     <string>Configura la casella %s su Mail.</string>
+              <key>PayloadDisplayName</key>     <string>%s</string>
+              <key>PayloadDescription</key>     <string>%s</string>
               <key>PayloadOrganization</key>    <string>%s</string>
               <key>PayloadContent</key>
               <array>
@@ -111,7 +112,8 @@ public class ProfiloApple {
             </dict>
             </plist>
             """.formatted(
-                esc(idProfilo), uuidProfilo, e, e, org,
+                esc(idProfilo), uuidProfilo,
+                esc(I18n.tr("server.appleprof.displayName", java.util.Map.of("e", String.valueOf(email)))), esc(I18n.tr("server.appleprof.description", java.util.Map.of("e", String.valueOf(email)))), org,
                 esc(idProfilo), uuidPosta, e,
                 e, n, e,
                 h, PORTA_IMAP, e,
@@ -164,8 +166,7 @@ public class ProfiloApple {
         r.put("portaImap", PORTA_IMAP).put("portaSmtp", PORTA_SMTP);
         if (host == null || host.isBlank())
             return r.put("success", false)
-                    .put("error", "L'hostname del server di posta non e' configurato: senza, il profilo "
-                            + "direbbe a Mail di collegarsi a un server senza nome.");
+                    .put("error", I18n.tr("server.appleprof.noHostnameProfile"));
         JSONArray caselle = new JSONArray();
         try {
             for (var d : Main.mailDatabase.getDomains())
@@ -173,7 +174,7 @@ public class ProfiloApple {
                     if (m.email != null && !m.email.isBlank()) caselle.put(m.email);
         } catch (Exception e) {
             return new JSONObject().put("success", false)
-                    .put("error", "non riesco a leggere le caselle: " + e.getMessage());
+                    .put("error", I18n.tr("server.appleprof.mailboxesUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
         return r.put("caselle", caselle);
     }
@@ -183,11 +184,11 @@ public class ProfiloApple {
         Casella c = casella(email);
         if (c == null)
             return new JSONObject().put("success", false)
-                    .put("error", "La casella " + email + " non esiste in questo pannello.");
+                    .put("error", I18n.tr("server.appleprof.noMailbox", java.util.Map.of("e", String.valueOf(email))));
         String host = hostDiPosta();
         if (host == null || host.isBlank())
             return new JSONObject().put("success", false)
-                    .put("error", "L'hostname del server di posta non e' configurato.");
+                    .put("error", I18n.tr("server.appleprof.noHostname"));
         return new JSONObject().put("success", true).put("email", c.email())
                 .put("profilo", mobileconfig(c.email(), c.nome(), host, host));
     }

@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import org.mail_panel.database.MailDatabase;
+import org.mail_panel.i18n.I18n;
 
 import java.io.*;
 import java.nio.file.*;
@@ -172,13 +173,13 @@ public class AcmeManager {
             if (isAcmeInstalled()) {
                 // Save email to database
                 database.setSetting("acme_email", email);
-                return new InstallResult(true, "acme.sh installato con successo", output);
+                return new InstallResult(true, I18n.tr("server.acme.installed"), output);
             } else {
-                return new InstallResult(false, "Installazione fallita", output);
+                return new InstallResult(false, I18n.tr("server.acme.installFailed"), output);
             }
 
         } catch (Exception e) {
-            return new InstallResult(false, "Errore: " + e.getMessage(), null);
+            return new InstallResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -192,15 +193,15 @@ public class AcmeManager {
      */
     public CertificateResult issueCertificate(String domain, String mailHostname, String challengeType, String webroot) {
         if (!isAcmeInstalled()) {
-            return new CertificateResult(false, "acme.sh non installato", null);
+            return new CertificateResult(false, I18n.tr("server.acme.notInstalled"), null);
         }
 
         // SECURITY: validate hostname/domain prima di metterli in shell command
         if (!InputValidator.isValidHostname(mailHostname) || !InputValidator.isValidDomain(domain)) {
-            return new CertificateResult(false, "Hostname o dominio non valido", null);
+            return new CertificateResult(false, I18n.tr("server.acme.badHostOrDomain"), null);
         }
         if (webroot != null && !webroot.isEmpty() && (webroot.contains("..") || webroot.contains(";") || webroot.contains("|") || webroot.contains("&") || webroot.contains("`") || webroot.contains("$"))) {
-            return new CertificateResult(false, "Webroot path non valido", null);
+            return new CertificateResult(false, I18n.tr("server.acme.badWebroot"), null);
         }
 
         try {
@@ -256,23 +257,23 @@ public class AcmeManager {
                 if (deployResult.success) {
                     // Save to database
                     saveCertificateInfo(domain, mailHostname);
-                    return new CertificateResult(true, "Certificato emesso e installato", output + "\n" + deployResult.output);
+                    return new CertificateResult(true, I18n.tr("server.acme.issuedInstalled"), output + "\n" + deployResult.output);
                 } else {
-                    return new CertificateResult(false, "Certificato emesso ma deploy fallito: " + deployResult.message, output);
+                    return new CertificateResult(false, I18n.tr("server.acme.issuedDeployFailed", java.util.Map.of("m", String.valueOf(deployResult.message))), output);
                 }
             }
 
             // Check for DNS challenge instructions
             if ("dns".equals(challengeType) && output.contains("TXT value")) {
                 return new CertificateResult(false,
-                    "DNS challenge richiesto. Aggiungi il record TXT indicato e riprova.",
+                    I18n.tr("server.acme.dnsChallengeNeeded"),
                     output);
             }
 
-            return new CertificateResult(false, "Emissione certificato fallita", output);
+            return new CertificateResult(false, I18n.tr("server.acme.issueFailed"), output);
 
         } catch (Exception e) {
-            return new CertificateResult(false, "Errore: " + e.getMessage(), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -397,7 +398,7 @@ public class AcmeManager {
     public DeployResult deployCertificate(String mailHostname, String uscitaAcme) {
         // SECURITY: validate hostname before Paths.get and shell usage
         if (!InputValidator.isValidHostname(mailHostname)) {
-            return new DeployResult(false, "Hostname non valido", null);
+            return new DeployResult(false, I18n.tr("server.acme.badHostname"), null);
         }
         try {
             // Create SSL directory
@@ -418,7 +419,7 @@ public class AcmeManager {
                 } else if (Files.exists(regularDir) && Files.exists(regularDir.resolve(mailHostname + ".cer"))) {
                     sorgente = regularDir;
                 } else {
-                    return new DeployResult(false, "File certificato non trovati in " + ACME_HOME, null);
+                    return new DeployResult(false, I18n.tr("server.acme.filesNotFound", java.util.Map.of("d", String.valueOf(ACME_HOME))), null);
                 }
             }
 
@@ -429,7 +430,7 @@ public class AcmeManager {
 
             // Check source files exist
             if (!Files.exists(acmeCert) || !Files.exists(acmeKey)) {
-                return new DeployResult(false, "File certificato non trovati in " + sorgente, null);
+                return new DeployResult(false, I18n.tr("server.acme.filesNotFound", java.util.Map.of("d", String.valueOf(sorgente))), null);
             }
 
             // COPIA DI SICUREZZA prima di sovrascrivere.
@@ -450,8 +451,7 @@ public class AcmeManager {
                     salvati.put(f, dest.toString());
                 }
             } catch (Exception e) {
-                return new DeployResult(false, "Non riesco a fare la copia di sicurezza del certificato "
-                        + "attuale (" + e.getMessage() + "): non lo sostituisco.", null);
+                return new DeployResult(false, I18n.tr("server.acme.noBackup", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
             }
 
             // Copy files
@@ -477,9 +477,7 @@ public class AcmeManager {
                                 StandardCopyOption.REPLACE_EXISTING);
                     } catch (Exception ignore) {}
                 }
-                return new DeployResult(false, "Il certificato appena emesso e la sua chiave NON "
-                        + "corrispondono. Ho rimesso quello di prima e non ho ricaricato niente: la "
-                        + "posta continua a funzionare come prima.", null);
+                return new DeployResult(false, I18n.tr("server.acme.keyMismatchRestored"), null);
             }
 
             // Set permissions
@@ -507,10 +505,10 @@ public class AcmeManager {
                 echo "Services reloaded"
                 """);
 
-            return new DeployResult(true, "Certificato deployato con successo", reloadOutput);
+            return new DeployResult(true, I18n.tr("server.acme.deployed"), reloadOutput);
 
         } catch (Exception e) {
-            return new DeployResult(false, "Errore deploy: " + e.getMessage(), null);
+            return new DeployResult(false, I18n.tr("server.acme.deployError", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -576,12 +574,12 @@ public class AcmeManager {
      */
     public CertificateResult renewCertificate(String mailHostname) {
         if (!isAcmeInstalled()) {
-            return new CertificateResult(false, "acme.sh non installato", null);
+            return new CertificateResult(false, I18n.tr("server.acme.notInstalled"), null);
         }
 
         // SECURITY: validate hostname before shell concatenation
         if (!InputValidator.isValidHostname(mailHostname)) {
-            return new CertificateResult(false, "Hostname non valido", null);
+            return new CertificateResult(false, I18n.tr("server.acme.badHostname"), null);
         }
 
         // Se il dominio ha un account Cloudflare collegato, rinnova in modo
@@ -612,7 +610,7 @@ public class AcmeManager {
                 // Redeploy
                 DeployResult deployResult = deployCertificate(mailHostname);
                 return new CertificateResult(deployResult.success,
-                    deployResult.success ? "Certificato rinnovato" : "Rinnovo OK ma deploy fallito",
+                    deployResult.success ? I18n.tr("server.acme.renewed") : I18n.tr("server.acme.renewedDeployFailed"),
                     output + "\n" + (deployResult.output != null ? deployResult.output : ""));
             }
 
@@ -620,16 +618,14 @@ public class AcmeManager {
             if (output.contains("manual mode") || output.contains("can not be renewed")
                     || output.contains("cannot be renewed")) {
                 return new CertificateResult(false,
-                    "Certificato in modalità DNS manuale — rinnovo automatico non possibile. "
-                    + "Collega un account Cloudflare al dominio per il rinnovo automatico, "
-                    + "oppure rinnova manualmente dal pannello.",
+                    I18n.tr("server.acme.manualDns"),
                     output);
             }
 
-            return new CertificateResult(false, "Rinnovo fallito", output);
+            return new CertificateResult(false, I18n.tr("server.acme.renewFailed"), output);
 
         } catch (Exception e) {
-            return new CertificateResult(false, "Errore: " + e.getMessage(), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -654,10 +650,9 @@ public class AcmeManager {
         MailDatabase.CloudflareAccount cf = cloudflareAccountForHostname(mailHostname);
         if (cf == null)
             return new CertificateResult(false,
-                "Nessun account Cloudflare collegato all'hostname " + mailHostname
-              + ": senza, non posso validare i nomi via DNS.", null);
+                I18n.tr("server.acme.noCfForHost", java.util.Map.of("h", String.valueOf(mailHostname))), null);
         if (!InputValidator.isValidHostname(mailHostname))
-            return new CertificateResult(false, "Hostname non valido: " + mailHostname, null);
+            return new CertificateResult(false, I18n.tr("server.acme.badHostnameNamed", java.util.Map.of("h", String.valueOf(mailHostname))), null);
 
         // --server letsencrypt su OGNI comando, non una volta sola in fase di installazione.
         // La documentazione di acme.sh dice: "For now, the default CA is zerossl. If you want
@@ -689,16 +684,14 @@ public class AcmeManager {
             boolean emesso = output.contains("Cert success") || output.contains("Cert renewed");
             if (!emesso) {
                 String perche = output.contains("Skipping. Next renewal time")
-                        ? "acme.sh ha SALTATO l'emissione (il certificato attuale non era ancora "
-                        + "scaduto) e quindi i nomi nuovi non sono stati aggiunti."
-                        : "Emissione fallita";
+                        ? I18n.tr("server.acme.skipped")
+                        : I18n.tr("server.acme.issueFailedShort");
                 return new CertificateResult(false, perche, output);
             }
 
             DeployResult dep = deployCertificate(mailHostname, output);
             if (!dep.success)
-                return new CertificateResult(false, "Emissione riuscita ma deploy fallito: "
-                        + dep.message, output + "\n" + (dep.output != null ? dep.output : ""));
+                return new CertificateResult(false, I18n.tr("server.acme.issueOkDeployFailed", java.util.Map.of("m", String.valueOf(dep.message))), output + "\n" + (dep.output != null ? dep.output : ""));
 
             // LA verifica che conta: il certificato INSTALLATO contiene davvero i nomi chiesti?
             // Che acme.sh non abbia protestato non basta — puo' aver scritto in una cartella
@@ -708,18 +701,13 @@ public class AcmeManager {
             for (String n : visti) if (!certificatoInstallatoCopre(n)) mancanti.add(n);
             if (!mancanti.isEmpty())
                 return new CertificateResult(false,
-                        "Il comando e' riuscito, ma il certificato INSTALLATO non contiene "
-                      + mancanti.size() + " dei nomi richiesti (" + String.join(", ", mancanti)
-                      + "). Vuol dire che acme.sh ha scritto in un posto diverso da quello da cui "
-                      + "leggo, oppure che il deploy ha copiato un file piu' vecchio. Non dichiaro "
-                      + "riuscita una cosa che non e' successa.",
+                        I18n.tr("server.acme.namesMissing", java.util.Map.of("n", String.valueOf(mancanti.size()), "elenco", String.valueOf(String.join(", ", mancanti)))),
                         output + "\n" + (dep.output != null ? dep.output : ""));
 
-            return new CertificateResult(true, "Certificato emesso e installato con "
-                    + visti.size() + " nomi, verificati nel file in uso",
+            return new CertificateResult(true, I18n.tr("server.acme.issuedWithNames", java.util.Map.of("n", String.valueOf(visti.size()))),
                     output + "\n" + (dep.output != null ? dep.output : ""));
         } catch (Exception e) {
-            return new CertificateResult(false, "Errore: " + e.getMessage(), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -761,15 +749,15 @@ public class AcmeManager {
                     || output.contains("Skipping. Next renewal time")) {
                 DeployResult deployResult = deployCertificate(mailHostname, output);
                 return new CertificateResult(deployResult.success,
-                    deployResult.success ? "Certificato rinnovato (Cloudflare DNS API)"
-                                         : "Rinnovo Cloudflare OK ma deploy fallito",
+                    deployResult.success ? I18n.tr("server.acme.renewedCf")
+                                         : I18n.tr("server.acme.renewedCfDeployFailed"),
                     output + "\n" + (deployResult.output != null ? deployResult.output : ""));
             }
 
-            return new CertificateResult(false, "Rinnovo Cloudflare fallito", output);
+            return new CertificateResult(false, I18n.tr("server.acme.renewCfFailed"), output);
 
         } catch (Exception e) {
-            return new CertificateResult(false, "Errore Cloudflare: " + e.getMessage(), null);
+            return new CertificateResult(false, I18n.tr("server.acme.cfError", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -836,8 +824,8 @@ public class AcmeManager {
         String now = LocalDateTime.now().toString();
         try {
             if (!forceRun && !isAutoRenewalEnabled()) {
-                String msg = "Auto-renewal disabilitato — check saltato";
-                System.out.println("[ACME] " + msg);
+                String msg = I18n.tr("server.acme.autoOff");
+                System.out.println("[ACME] Auto-renewal disabled — check skipped");
                 database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "SKIP|" + msg);
                 return new CertificateResult(true, msg, null);
@@ -845,8 +833,8 @@ public class AcmeManager {
 
             CertificateInfo info = getCertificateInfo();
             if (info == null || info.expiresAt == null) {
-                String msg = "Nessun certificato installato o data di scadenza non leggibile";
-                System.out.println("[ACME] " + msg);
+                String msg = I18n.tr("server.acme.noCertInfo");
+                System.out.println("[ACME] No certificate installed or expiry date not readable");
                 database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "INFO|" + msg);
                 return new CertificateResult(false, msg, null);
@@ -856,7 +844,7 @@ public class AcmeManager {
             int threshold = getRenewalThresholdDays();
 
             if (daysUntilExpiry <= 0) {
-                System.err.println("[ACME] WARNING: Certificato SCADUTO! Provo a rinnovarlo...");
+                System.err.println("[ACME] WARNING: certificate EXPIRED! Trying to renew it...");
                 CertificateResult result = renewCertificate(info.commonName);
                 String resStr = (result.success ? "OK" : "FAIL") + "|" + renewalSummary(result, daysUntilExpiry, true);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
@@ -864,7 +852,7 @@ public class AcmeManager {
                 if (result.success) database.setSetting(SETTING_AUTO_RENEW_LAST_RENEWAL, now);
                 return result;
             } else if (daysUntilExpiry <= threshold) {
-                System.out.println("[ACME] Certificato scade in " + daysUntilExpiry + " giorni (soglia: " + threshold + "), rinnovo...");
+                System.out.println("[ACME] Certificate expires in " + daysUntilExpiry + " days (threshold: " + threshold + "), renewing...");
                 CertificateResult result = renewCertificate(info.commonName);
                 String resStr = (result.success ? "OK" : "FAIL") + "|" + renewalSummary(result, daysUntilExpiry, false);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
@@ -872,8 +860,8 @@ public class AcmeManager {
                 if (result.success) database.setSetting(SETTING_AUTO_RENEW_LAST_RENEWAL, now);
                 return result;
             } else {
-                String msg = "Certificato OK — scade tra " + daysUntilExpiry + " giorni (" + info.commonName + ")";
-                System.out.println("[ACME] " + msg);
+                String msg = I18n.tr("server.acme.certOk", java.util.Map.of("n", String.valueOf(daysUntilExpiry), "cn", String.valueOf(info.commonName)));
+                System.out.println("[ACME] Certificate OK — expires in " + daysUntilExpiry + " days (" + info.commonName + ")");
                 database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
                 database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "OK|" + msg);
                 return new CertificateResult(true, msg, null);
@@ -882,8 +870,8 @@ public class AcmeManager {
         } catch (Exception e) {
             System.err.println("[ACME] Certificate check failed: " + e.getMessage());
             database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
-            database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "FAIL|Errore: " + e.getMessage());
-            return new CertificateResult(false, "Errore: " + e.getMessage(), null);
+            database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "FAIL|" + I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -902,9 +890,9 @@ public class AcmeManager {
                     newDays = ChronoUnit.DAYS.between(LocalDateTime.now(), fresh.expiresAt);
                 }
             } catch (Exception ignore) { /* best-effort */ }
-            return result.message + (newDays >= 0 ? " — nuova scadenza tra " + newDays + " giorni" : "");
+            return result.message + (newDays >= 0 ? " — " + I18n.tr("server.acme.newExpiry", java.util.Map.of("n", String.valueOf(newDays))) : "");
         }
-        return (wasExpired ? "Scaduto, rinnovo: " : "Rinnovo (" + daysBefore + "gg restanti): ") + result.message;
+        return (wasExpired ? I18n.tr("server.acme.expiredRenew") : I18n.tr("server.acme.renewDaysLeft", java.util.Map.of("n", String.valueOf(daysBefore)))) + " " + result.message;
     }
 
     /** Backward-compatible — chiama checkAndRenewCertificates(false) */
@@ -1068,12 +1056,12 @@ public class AcmeManager {
 
     public DnsChallengeResult generateDnsChallenge(String hostname, boolean forceRegenerate) {
         if (!isAcmeInstalled()) {
-            return new DnsChallengeResult(false, "acme.sh non installato", null, null);
+            return new DnsChallengeResult(false, I18n.tr("server.acme.notInstalled"), null, null);
         }
 
         // SECURITY: validate hostname before shell concatenation and Paths.get
         if (!InputValidator.isValidHostname(hostname)) {
-            return new DnsChallengeResult(false, "Hostname non valido", null, null);
+            return new DnsChallengeResult(false, I18n.tr("server.acme.badHostname"), null, null);
         }
 
         try {
@@ -1112,18 +1100,18 @@ public class AcmeManager {
                 database.setSetting("dns_challenge_value", txtValue);
                 database.setSetting("dns_challenge_time", LocalDateTime.now().toString());
 
-                return new DnsChallengeResult(true, "Record TXT generato", txtDomain, txtValue);
+                return new DnsChallengeResult(true, I18n.tr("server.acme.txtGenerated"), txtDomain, txtValue);
             }
 
             // Check if certificate already exists
             if (output.contains("already verified") || output.contains("Cert success")) {
-                return new DnsChallengeResult(false, "Certificato già esistente, usa rinnovo", null, null);
+                return new DnsChallengeResult(false, I18n.tr("server.acme.alreadyExists"), null, null);
             }
 
-            return new DnsChallengeResult(false, "Impossibile generare challenge DNS. Output: " + output, null, null);
+            return new DnsChallengeResult(false, I18n.tr("server.acme.challengeFailed", java.util.Map.of("o", String.valueOf(output))), null, null);
 
         } catch (Exception e) {
-            return new DnsChallengeResult(false, "Errore: " + e.getMessage(), null, null);
+            return new DnsChallengeResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null, null);
         }
     }
 
@@ -1133,12 +1121,12 @@ public class AcmeManager {
      */
     public CertificateResult verifyDnsAndIssue(String hostname) {
         if (!isAcmeInstalled()) {
-            return new CertificateResult(false, "acme.sh non installato", null);
+            return new CertificateResult(false, I18n.tr("server.acme.notInstalled"), null);
         }
 
         // SECURITY: validate hostname before shell concatenation and Paths.get
         if (!InputValidator.isValidHostname(hostname)) {
-            return new CertificateResult(false, "Hostname non valido", null);
+            return new CertificateResult(false, I18n.tr("server.acme.badHostname"), null);
         }
 
         try {
@@ -1149,7 +1137,7 @@ public class AcmeManager {
 
             if (savedHostname == null || !savedHostname.equals(hostname)) {
                 return new CertificateResult(false,
-                    "Nessun challenge DNS trovato per questo hostname. Genera prima il challenge.", null);
+                    I18n.tr("server.acme.noChallenge"), null);
             }
 
             // Verify TXT record exists using dig
@@ -1158,10 +1146,7 @@ public class AcmeManager {
 
             if (digOutput.isEmpty() || !digOutput.contains(expectedValue)) {
                 return new CertificateResult(false,
-                    "Record TXT non trovato o valore errato.\n" +
-                    "Atteso: " + expectedValue + "\n" +
-                    "Trovato: " + (digOutput.isEmpty() ? "(nessuno)" : digOutput) + "\n" +
-                    "Attendi qualche minuto per la propagazione DNS e riprova.", null);
+                    I18n.tr("server.acme.txtWrong", java.util.Map.of("atteso", String.valueOf(expectedValue), "trovato", String.valueOf(digOutput.isEmpty() ? I18n.tr("server.acme.none") : digOutput))), null);
             }
 
             // TXT record verified, now complete the certificate issuance with --renew
@@ -1186,17 +1171,17 @@ public class AcmeManager {
                     // Extract domain from hostname (mail.example.com -> example.com)
                     String domain = hostname.replaceFirst("^[^.]+\\.", "");
                     saveCertificateInfo(domain, hostname);
-                    return new CertificateResult(true, "Certificato emesso e installato via DNS-01",
+                    return new CertificateResult(true, I18n.tr("server.acme.issuedDns01"),
                         output + "\n" + deployResult.output);
                 } else {
-                    return new CertificateResult(false, "Certificato emesso ma deploy fallito: " + deployResult.message, output);
+                    return new CertificateResult(false, I18n.tr("server.acme.issuedDeployFailed", java.util.Map.of("m", String.valueOf(deployResult.message))), output);
                 }
             }
 
-            return new CertificateResult(false, "Verifica completata ma emissione fallita", output);
+            return new CertificateResult(false, I18n.tr("server.acme.verifiedNotIssued"), output);
 
         } catch (Exception e) {
-            return new CertificateResult(false, "Errore: " + e.getMessage(), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -1209,22 +1194,22 @@ public class AcmeManager {
         try {
             // Validate certificate and key
             if (certContent == null || certContent.trim().isEmpty()) {
-                return new CertificateResult(false, "Contenuto certificato vuoto", null);
+                return new CertificateResult(false, I18n.tr("server.acme.emptyCert"), null);
             }
             if (keyContent == null || keyContent.trim().isEmpty()) {
-                return new CertificateResult(false, "Contenuto chiave privata vuoto", null);
+                return new CertificateResult(false, I18n.tr("server.acme.emptyKey"), null);
             }
             // SECURITY: validate hostname (usato per scrivere su disco e per nginx config)
             if (hostname != null && !hostname.isEmpty() && !InputValidator.isValidHostname(hostname)) {
-                return new CertificateResult(false, "Hostname non valido", null);
+                return new CertificateResult(false, I18n.tr("server.acme.badHostname"), null);
             }
 
             // Ensure content has proper PEM format
             if (!certContent.contains("-----BEGIN CERTIFICATE-----")) {
-                return new CertificateResult(false, "Formato certificato non valido (deve essere PEM)", null);
+                return new CertificateResult(false, I18n.tr("server.acme.badCertFormat"), null);
             }
             if (!keyContent.contains("-----BEGIN") || !keyContent.contains("PRIVATE KEY")) {
-                return new CertificateResult(false, "Formato chiave non valido (deve essere PEM)", null);
+                return new CertificateResult(false, I18n.tr("server.acme.badKeyFormat"), null);
             }
 
             // Create SSL directory
@@ -1246,7 +1231,7 @@ public class AcmeManager {
                 Files.deleteIfExists(Paths.get(CERT_FILE));
                 Files.deleteIfExists(Paths.get(KEY_FILE));
                 Files.deleteIfExists(Paths.get(FULLCHAIN_FILE));
-                return new CertificateResult(false, "Certificato e chiave non corrispondono", null);
+                return new CertificateResult(false, I18n.tr("server.acme.certKeyMismatch"), null);
             }
 
             // Set permissions
@@ -1277,10 +1262,10 @@ public class AcmeManager {
             database.setSetting("ssl_hostname", hostname != null ? hostname : "manual");
             database.setSetting("ssl_issued_at", LocalDateTime.now().toString());
 
-            return new CertificateResult(true, "Certificato manuale installato con successo", reloadOutput);
+            return new CertificateResult(true, I18n.tr("server.acme.manualInstalled"), reloadOutput);
 
         } catch (Exception e) {
-            return new CertificateResult(false, "Errore: " + e.getMessage(), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 

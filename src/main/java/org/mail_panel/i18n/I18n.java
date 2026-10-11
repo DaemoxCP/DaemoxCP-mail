@@ -264,6 +264,32 @@ public final class I18n {
         };
     }
 
+    /** Come withCurrent, per un compito che restituisce un valore (CompletableFuture.supplyAsync). */
+    public static <T> java.util.function.Supplier<T> withCurrentSupplier(java.util.function.Supplier<T> job) {
+        String lang = current();
+        return () -> {
+            setCurrent(lang);
+            try {
+                return job.get();
+            } finally {
+                clearCurrent();
+            }
+        };
+    }
+
+    /** Come withCurrent, per un compito dato a un ExecutorService. */
+    public static <T> java.util.concurrent.Callable<T> withCurrentCallable(java.util.concurrent.Callable<T> job) {
+        String lang = current();
+        return () -> {
+            setCurrent(lang);
+            try {
+                return job.call();
+            } finally {
+                clearCurrent();
+            }
+        };
+    }
+
     // ---------- la lingua di una richiesta ----------
 
     /**

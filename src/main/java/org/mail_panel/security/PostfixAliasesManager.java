@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import java.io.BufferedReader;
+import org.mail_panel.i18n.I18n;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -108,23 +109,23 @@ public class PostfixAliasesManager {
             // Verdetto
             if (!s.sourceExists) {
                 s.overall = "MISSING_SOURCE";
-                s.summary = "Il file " + s.aliasFile + " non esiste. Postfix non può risolvere alias di sistema.";
+                s.summary = I18n.tr("server.aliases.missingSource", java.util.Map.of("file", String.valueOf(s.aliasFile)));
             } else if (!s.dbExists) {
                 s.overall = "MISSING_DB";
-                s.summary = "Il file " + s.aliasFile + " esiste ma " + s.aliasDbFile + " manca. Va compilato con postalias.";
+                s.summary = I18n.tr("server.aliases.missingDb", java.util.Map.of("file", String.valueOf(s.aliasFile), "db", String.valueOf(s.aliasDbFile)));
             } else if (s.dbStaleVsSource) {
                 s.overall = "STALE_DB";
-                s.summary = "Il file " + s.aliasDbFile + " è più vecchio del sorgente — Postfix potrebbe non vedere gli ultimi alias.";
+                s.summary = I18n.tr("server.aliases.staleDb", java.util.Map.of("db", String.valueOf(s.aliasDbFile)));
             } else {
                 s.overall = "OK";
-                s.summary = "Alias map OK (" + s.aliasFile + " + " + s.aliasDbFile + ").";
+                s.summary = I18n.tr("server.aliases.ok", java.util.Map.of("file", String.valueOf(s.aliasFile), "db", String.valueOf(s.aliasDbFile)));
             }
 
             s.success = true;
             return s;
         } catch (Exception e) {
             s.success = false;
-            s.error = "Errore diagnostica: " + e.getMessage();
+            s.error = I18n.tr("server.aliases.diagError", java.util.Map.of("err", String.valueOf(e.getMessage())));
             s.overall = "ERROR";
             return s;
         }
@@ -160,15 +161,15 @@ public class PostfixAliasesManager {
                     }
                     Files.writeString(src, DEFAULT_ALIASES, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-                    r.log.append("✓ Creato ").append(s.aliasFile).append(" con contenuto default\n");
+                    r.log.append("✓ ").append(I18n.tr("server.aliases.created", java.util.Map.of("file", String.valueOf(s.aliasFile)))).append("\n");
                     s.sourceExists = true;
                 } catch (Exception e) {
                     r.success = false;
-                    r.message = "Errore creazione " + s.aliasFile + ": " + e.getMessage();
+                    r.message = I18n.tr("server.aliases.createError", java.util.Map.of("file", String.valueOf(s.aliasFile), "err", String.valueOf(e.getMessage())));
                     return r;
                 }
             } else {
-                r.log.append("✓ Sorgente già presente: ").append(s.aliasFile).append("\n");
+                r.log.append("✓ ").append(I18n.tr("server.aliases.sourcePresent", java.util.Map.of("file", String.valueOf(s.aliasFile)))).append("\n");
             }
 
             // 2) postalias <file>
@@ -180,28 +181,26 @@ public class PostfixAliasesManager {
                     .append(" exit=").append(pc.exitCode)
                     .append(" output: ").append(pc.output).append("\n");
                 r.success = false;
-                r.message = "postalias ha fallito (exit " + pc.exitCode + "): " + pc.output;
+                r.message = I18n.tr("server.aliases.postaliasExit", java.util.Map.of("c", String.valueOf(pc.exitCode), "out", String.valueOf(pc.output)));
                 return r;
             }
 
             // 3) service postfix reload
             CommandResult sr = runCommand(SERVICE, "postfix", "reload");
             if (sr.exitCode == 0) {
-                r.log.append("✓ Postfix ricaricato\n");
+                r.log.append("✓ ").append(I18n.tr("server.aliases.reloaded")).append("\n");
             } else {
                 // Non blocchiamo: il file .db è già aggiornato anche senza reload
                 // perché Postfix lo rilegge automaticamente al lookup successivo.
-                r.log.append("⚠ service postfix reload exit=").append(sr.exitCode)
-                    .append(" output: ").append(sr.output)
-                    .append(" (non bloccante: Postfix rileggerà al prossimo lookup)\n");
+                r.log.append("⚠ ").append(I18n.tr("server.aliases.reloadNonBlocking", java.util.Map.of("c", String.valueOf(sr.exitCode), "out", String.valueOf(sr.output)))).append("\n");
             }
 
             r.success = true;
-            r.message = "Alias map Postfix ripristinata: " + s.aliasFile + " + " + s.aliasDbFile;
+            r.message = I18n.tr("server.aliases.restored", java.util.Map.of("file", String.valueOf(s.aliasFile), "db", String.valueOf(s.aliasDbFile)));
             return r;
         } catch (Exception e) {
             r.success = false;
-            r.message = "Errore fix: " + e.getMessage();
+            r.message = I18n.tr("server.aliases.fixError", java.util.Map.of("err", String.valueOf(e.getMessage())));
             return r;
         }
     }
@@ -224,7 +223,7 @@ public class PostfixAliasesManager {
             // Validazione molto basilare (email o username locale)
             if (!forwardTo.matches("^[a-zA-Z0-9._+\\-@]+$")) {
                 r.success = false;
-                r.message = "Indirizzo di forward non valido. Usa una email o un username locale.";
+                r.message = I18n.tr("server.aliases.badForward");
                 return r;
             }
 
@@ -249,11 +248,11 @@ public class PostfixAliasesManager {
             String newContent;
             if (m.find()) {
                 newContent = m.replaceFirst(Matcher.quoteReplacement(newLine));
-                r.log.append("✓ Modificata riga 'root:' in ").append(s.aliasFile).append("\n");
+                r.log.append("✓ ").append(I18n.tr("server.aliases.rootChanged", java.util.Map.of("file", String.valueOf(s.aliasFile)))).append("\n");
             } else {
                 if (!content.endsWith("\n")) content = content + "\n";
                 newContent = content + newLine + "\n";
-                r.log.append("✓ Aggiunta riga 'root:' in ").append(s.aliasFile).append("\n");
+                r.log.append("✓ ").append(I18n.tr("server.aliases.rootAdded", java.util.Map.of("file", String.valueOf(s.aliasFile)))).append("\n");
             }
 
             Files.writeString(src, newContent, StandardCharsets.UTF_8,
@@ -266,19 +265,19 @@ public class PostfixAliasesManager {
             } else {
                 r.log.append("✗ postalias exit=").append(pc.exitCode).append(" ").append(pc.output).append("\n");
                 r.success = false;
-                r.message = "postalias fallito: " + pc.output;
+                r.message = I18n.tr("server.aliases.postaliasFailed", java.util.Map.of("out", String.valueOf(pc.output)));
                 return r;
             }
             CommandResult sr = runCommand(SERVICE, "postfix", "reload");
-            if (sr.exitCode == 0) r.log.append("✓ Postfix ricaricato\n");
-            else r.log.append("⚠ reload exit=").append(sr.exitCode).append(" (non bloccante)\n");
+            if (sr.exitCode == 0) r.log.append("✓ ").append(I18n.tr("server.aliases.reloaded")).append("\n");
+            else r.log.append("⚠ ").append(I18n.tr("server.aliases.reloadExit", java.util.Map.of("c", String.valueOf(sr.exitCode)))).append("\n");
 
             r.success = true;
-            r.message = "Forward root impostato su: " + forwardTo;
+            r.message = I18n.tr("server.aliases.rootSet", java.util.Map.of("to", String.valueOf(forwardTo)));
             return r;
         } catch (Exception e) {
             r.success = false;
-            r.message = "Errore: " + e.getMessage();
+            r.message = I18n.tr("server.aliases.error", java.util.Map.of("err", String.valueOf(e.getMessage())));
             return r;
         }
     }
@@ -289,22 +288,26 @@ public class PostfixAliasesManager {
      * Se è tutto OK, non fa nulla. Idempotente.
      */
     public void ensureAtBoot() {
+        // All'avvio non c'e' una richiesta: riepiloghi e messaggi finiscono solo nel log, in inglese.
+        I18n.setCurrent("en");
         try {
             AliasesStatus s = diagnose();
             if (!s.success) {
-                LOGGER.warning("[PostfixAliases] Diagnose fallito al boot: " + s.error);
+                LOGGER.warning("[PostfixAliases] Diagnose failed at boot: " + s.error);
                 return;
             }
             if ("OK".equals(s.overall)) {
                 LOGGER.info("[PostfixAliases] " + s.summary);
                 return;
             }
-            LOGGER.warning("[PostfixAliases] " + s.overall + " — " + s.summary + " — applico fix automatico.");
+            LOGGER.warning("[PostfixAliases] " + s.overall + " — " + s.summary + " — applying the automatic fix.");
             FixResult fr = fix();
             if (fr.success) LOGGER.info("[PostfixAliases] Auto-fix OK: " + fr.message);
-            else LOGGER.warning("[PostfixAliases] Auto-fix FALLITO: " + fr.message);
+            else LOGGER.warning("[PostfixAliases] Auto-fix FAILED: " + fr.message);
         } catch (Throwable t) {
-            LOGGER.warning("[PostfixAliases] ensureAtBoot eccezione: " + t.getMessage());
+            LOGGER.warning("[PostfixAliases] ensureAtBoot exception: " + t.getMessage());
+        } finally {
+            I18n.clearCurrent();
         }
     }
 
@@ -366,7 +369,7 @@ public class PostfixAliasesManager {
             if (!done) {
                 p.destroyForcibly();
                 r.exitCode = -1;
-                r.output = sb + "\n[timeout dopo 10s]";
+                r.output = sb + "\n[timeout after 10s]";
                 return r;
             }
             r.exitCode = p.exitValue();

@@ -3,14 +3,16 @@
 //
 //   1. First start: no administrator. The page does not create one: it shows the console
 //      command. java ... Main --create-admin creates it (a second time it refuses) and prints a
-//      code; --access-code prints a new one that replaces it; the page goes to Settings to
+//      code; --access-code prints a new one that replaces it; the page goes to Account to
 //      create a passkey.
-//   2. Settings: a passkey with the browser's authenticator, the login email with a code sent to
+//   2. Account: a passkey with the browser's authenticator, the login email with a code sent to
 //      it, the open sessions.
-//   3. The vault key asks for a confirmation: the passkey gives it.
+//   3. Settings: the vault key asks for a confirmation, the passkey gives it.
 //   4. Logout, then the passkey alone (no name, no password): straight to /home.
 //   5. Administrators: a new one with an email, no password field.
 //   6. Logout, then a code by email; a wrong code is refused.
+//   7. Roles: a viewer signs in with an email code, sees a reduced menu, "Read only" and
+//      refusals; promoted to operator, the mailboxes become editable; deleted, the session ends.
 //
 // Usage (from the project root, after mvn package, with the test MySQL of README.md):
 //   D=$(mktemp -d) && cp target/freebsd-mail-panel-1.0.jar $D/
@@ -127,14 +129,14 @@ async function shot(page, name) {
         await page.waitForSelector('#errorAlert:not(.d-none)');
         check('the code replaced by a newer one: an error, still on the login page', new URL(page.url()).pathname === '/index');
         await page.fill('#consoleCode', m ? m[1] : '');
-        await Promise.all([page.waitForURL('**/settings?setup=passkey'), page.click('#btnConsole')]);
-        check('the right code: signed in, sent to Settings to create a passkey', new URL(page.url()).pathname === '/settings');
+        await Promise.all([page.waitForURL('**/account?setup=passkey'), page.click('#btnConsole')]);
+        check('the right code: signed in, sent to Account to create a passkey', new URL(page.url()).pathname === '/account');
         await page.waitForSelector('#passkeySetupNotice:not(.d-none)');
-        check('Settings explains why: no passkey yet', await page.locator('#passkeySetupNotice').isVisible());
+        check('Account explains why: no passkey yet', await page.locator('#passkeySetupNotice').isVisible());
         check('no password or 2FA card left', await page.locator('input[type=password]').count() === 0
             && await page.locator('[id="2faStatus"]').count() === 0);
 
-        console.log('\n== 2. Settings: a passkey, the login email, the sessions ==');
+        console.log('\n== 2. Account: a passkey, the login email, the sessions ==');
         await page.waitForSelector('#addPasskeyBtn:not([disabled])');
         await page.click('#addPasskeyBtn');
         await page.waitForSelector('#passkeyNameModal.show');
@@ -158,9 +160,11 @@ async function shot(page, name) {
         const sessionsText = await page.locator('#sessionsList').innerText();
         check('the open sessions: this one, with the browser and the IP address', /this one/.test(sessionsText) && /Chrome/.test(sessionsText)
             && /127\.0\.0\.1/.test(sessionsText));
-        await shot(page, 'settings');
+        await shot(page, 'account');
 
-        console.log('\n== 3. The vault key asks for a confirmation ==');
+        console.log('\n== 3. Settings: the vault key asks for a confirmation ==');
+        check('Account has no vault card (it is in Settings, for the superadmin)', await page.locator('button[onclick="vaultBackupKey()"]').count() === 0);
+        await page.goto(BASE + '/settings');
         await page.click('button[onclick="vaultBackupKey()"]');
         await page.waitForSelector('#stepUpModal.show');
         check('the confirmation window offers the passkey and an email code', await page.locator('#stepUpPasskeyBtn').isEnabled()
@@ -212,6 +216,57 @@ async function shot(page, name) {
         await page.fill('#emailCode', login ? login.code : '');
         await Promise.all([page.waitForURL('**/home'), page.click('#btnVerifyCode')]);
         check('the right code: /home (a passkey exists, no setup notice)', new URL(page.url()).pathname === '/home');
+
+        console.log('\n== 7. Roles: what a viewer sees and can do ==');
+        const other = await browser.newContext({ locale: 'en-US', ignoreHTTPSErrors: true });
+        const viewer = await other.newPage();
+        viewer.on('pageerror', e => errors.push('viewer: ' + e.message));
+        await viewer.goto(BASE + '/index');
+        const sentBefore = mails().length;
+        await viewer.fill('#email', 'second@example.org');
+        await viewer.click('#btnSendCode');
+        await viewer.waitForSelector('#step-code.active');
+        const viewerCode = mails().slice(sentBefore).pop();
+        await viewer.fill('#emailCode', viewerCode ? viewerCode.code : '');
+        await Promise.all([viewer.waitForURL('**/account?setup=passkey'), viewer.click('#btnVerifyCode')]);
+        check('"second" (created as viewer) signs in with an email code and lands on Account', new URL(viewer.url()).pathname === '/account');
+        const top = await viewer.locator('.topbar-actions').innerText();
+        check('the top bar shows the name and the role', top.includes('second') && top.includes('Viewer'));
+        const menu = await viewer.$$eval('.sidebar-link', l => l.map(a => a.getAttribute('href')));
+        check('the viewer menu: mail, DNS, security and system yes; administrators and settings no',
+            menu.includes('/mailboxes') && menu.includes('/dns') && menu.includes('/firewall') && menu.includes('/updates')
+            && !menu.includes('/admins') && !menu.includes('/settings'));
+        const denied = await viewer.goto(BASE + '/settings');
+        check('opening /settings anyway: 403 with "Access denied" inside the panel frame',
+            denied.status() === 403 && (await viewer.locator('h2').innerText()).includes('Access denied') && await viewer.locator('.sidebar').count() === 1);
+        await viewer.goto(BASE + '/mailboxes');
+        check('the mailboxes page says "Read only" in the top bar', await viewer.locator('.topbar-readonly').isVisible());
+        const refused = await viewer.evaluate(async () => {
+            const reveal = await fetch('/api/mailboxes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'reveal_password', id: 1 }) });
+            const message = await fetch('/api/queue?action=message&id=ABC123');
+            return [reveal.status, (await reveal.json()).forbidden, message.status];
+        });
+        check('revealing a mailbox password or reading a queued message: 403', refused[0] === 403 && refused[1] === true && refused[2] === 403);
+        await shot(viewer, 'viewer-mailboxes');
+
+        await page.goto(BASE + '/admins');
+        await page.waitForFunction(() => document.getElementById('adminsBody').innerText.includes('second@example.org'));
+        check('the roles table comes from the real permissions', (await page.locator('#roleMatrix thead .role-badge').count()) === 4
+            && (await page.locator('#roleMatrix td[data-role="viewer"] .fa-pen').count()) === 0);
+        await page.locator('#adminsBody tr', { hasText: 'second' }).locator('button[onclick^="editAdmin"]').click();
+        await page.waitForSelector('#editAdminModal.show');
+        await page.selectOption('#editRole', 'operator');
+        await page.click('#editAdminModal .btn-primary');
+        await page.waitForFunction(() => document.querySelector('#adminsBody .role-badge.operator') !== null);
+        await viewer.goto(BASE + '/mailboxes');
+        check('promoted to operator: the mailboxes are editable at the next page, no new sign-in',
+            await viewer.locator('.topbar-readonly').count() === 0);
+        await page.locator('#adminsBody tr', { hasText: 'second' }).locator('button[onclick^="deleteAdmin"]').click();
+        await page.waitForFunction(() => !document.getElementById('adminsBody').innerText.includes('second@example.org'));
+        await viewer.goto(BASE + '/home');
+        check('deleted: the next page is the sign-in page', ['/', '/index'].includes(new URL(viewer.url()).pathname));
+        await other.close();
 
         const phone = await browser.newContext({ locale: 'it-IT', viewport: { width: 375, height: 800 } });
         const small = await phone.newPage();

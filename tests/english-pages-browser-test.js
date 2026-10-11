@@ -234,9 +234,11 @@ const VISITS = [
     { path: '/admins', prepare: async page => {
         await page.waitForSelector('#adminsBody .role-badge');
     } },
-    { path: '/settings', prepare: async page => {
+    { path: '/account', prepare: async page => {
         await page.waitForSelector('#passkeysList button.btn-outline-danger');
         await page.waitForSelector('#sessionsList .badge');
+    } },
+    { path: '/settings', prepare: async page => {
         await page.waitForSelector('#hostnameConsistency .alert');
         await page.waitForSelector('#rcDomainDns .badge');
         await page.click('.card-header button[onclick="repCarica()"]');

@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.util.Shell;
 
@@ -137,9 +138,7 @@ public class DiagnosiWeb {
         Ris dump = esegui("nginx", "-T");
         if (dump.codice != 0) {
             r.put("nginxLeggibile", false)
-             .put("nginxProblema", "non riesco a leggere la configurazione con \"nginx -T\": "
-                     + primeRighe(dump.uscita, 3)
-                     + " Senza, non so cosa nginx stia servendo: NON vuol dire che vada tutto bene.");
+             .put("nginxProblema", I18n.tr("server.webdiag.dumpFailed", java.util.Map.of("out", String.valueOf(primeRighe(dump.uscita, 3)))));
         } else {
             r.put("nginxLeggibile", true);
             List<Blocco> bl = blocchi(dump.uscita);
@@ -271,28 +270,20 @@ public class DiagnosiWeb {
     private static String verdetto(JSONObject r) {
         List<String> p = new ArrayList<>();
         if (!r.optBoolean("nginxLeggibile", false))
-            p.add("La configurazione di nginx non si legge, quindi la parte piu' importante di questa "
-                + "diagnosi manca.");
+            p.add(I18n.tr("server.webdiag.nginxUnreadable"));
         else {
             if (r.optBoolean("contenutiInChiaro", false))
-                p.add("C'e' un sito che serve contenuti sulla porta 80 SENZA cifratura: chi lo usa manda "
-                    + "in chiaro tutto, comprese le credenziali. E' la cosa piu' grave di questo elenco.");
+                p.add(I18n.tr("server.webdiag.plain80"));
             else if (r.optBoolean("porta80Presente", false))
-                p.add("La porta 80 e' in ascolto ma non serve contenuti: va bene, e si puo' comunque "
-                    + "chiudere, perche' il rinnovo del certificato passa dal DNS e non ne ha bisogno.");
+                p.add(I18n.tr("server.webdiag.port80NoContent"));
             else
-                p.add("Nessun blocco in ascolto sulla porta 80: sei gia' solo HTTPS.");
+                p.add(I18n.tr("server.webdiag.httpsOnly"));
 
             if (!r.optBoolean("porta443Presente", false))
-                p.add("Nessun sito ascolta sulla porta 443. Non e' un difetto in se', ma due funzioni "
-                    + "del pannello ne hanno bisogno: la configurazione automatica per Thunderbird e la "
-                    + "politica MTA-STS vengono chieste dai client su https://<nome>/..., cioe' sulla 443 "
-                    + "implicita. Finche' li' non risponde nessuno, quelle due non possono funzionare, "
-                    + "qualunque record DNS si crei.");
+                p.add(I18n.tr("server.webdiag.no443"));
 
             if (!r.optBoolean("limitReq", false) && !r.optBoolean("limitConn", false))
-                p.add("Non c'e' nessun limite di frequenza ne' di connessioni: un singolo indirizzo puo' "
-                    + "aprire richieste finche' nginx smette di accettarne.");
+                p.add(I18n.tr("server.webdiag.noLimits"));
         }
         if (r.optBoolean("fail2banLetto", false)) {
             if (r.optBoolean("jailNginx", false)) {
@@ -305,19 +296,15 @@ public class DiagnosiWeb {
                     if (quali.length() > 0) quali.append(", ");
                     quali.append(j.optString("jail", "?"));
                 }
-                p.add("Una jail di fail2ban sorveglia un log di nginx (" + quali + "): su quel log chi "
-                    + "insiste viene bannato. Attenzione pero': una jail guarda UN log, non tutto "
-                    + "nginx — gli altri siti serviti restano scoperti se nessuna jail legge il loro.");
+                p.add(I18n.tr("server.webdiag.jailWatches", java.util.Map.of("which", String.valueOf(quali))));
             } else if (!r.optBoolean("jailTutteLette", true)) {
-                p.add("fail2ban funziona ma non sono riuscito a chiedere a tutte le jail quali log "
-                    + "sorveglino: non posso dire se le porte web siano coperte.");
+                p.add(I18n.tr("server.webdiag.jailsUnknown"));
             } else {
-                p.add("fail2ban funziona ma nessuna delle sue jail sorveglia un log di nginx: chi "
-                    + "insiste sulle porte web non viene bannato.");
+                p.add(I18n.tr("server.webdiag.noNginxJail"));
             }
         }
         if (!r.optBoolean("pfLetto", false))
-            p.add("Non ho potuto leggere le regole di pf: non so se le porte web siano filtrate.");
+            p.add(I18n.tr("server.webdiag.pfUnread"));
         return String.join(" ", p);
     }
 

@@ -222,7 +222,7 @@ public class MailDatabase {
      * della connessione su cui gira.
      */
     public List<String> dropAllTables() throws SQLException {
-        if (!connected) throw new SQLException("Non collegato a MySQL: il reset non e' partito.");
+        if (!connected) throw new SQLException("Not connected to MySQL: the reset did not start.");
         try (Connection c = connessionePropria()) {
             List<String> prima = tabelleDelPannello(c);
             try (Statement st = c.createStatement()) {
@@ -232,16 +232,16 @@ public class MailDatabase {
                 String presenti;
                 try {
                     List<String> t = tabelleDelPannello(c);
-                    presenti = t.isEmpty() ? "nessuna" : String.join(", ", t);
+                    presenti = t.isEmpty() ? "none" : String.join(", ", t);
                 } catch (SQLException perse) {
-                    presenti = "non si sa, MySQL non risponde";
+                    presenti = "unknown, MySQL does not answer";
                 }
-                throw new SQLException("Reset non riuscito: " + e.getMessage()
-                        + " Tabelle del pannello ancora presenti: " + presenti + ".", e);
+                throw new SQLException("Reset failed: " + e.getMessage()
+                        + " Panel tables still present: " + presenti + ".", e);
             }
             List<String> restano = tabelleDelPannello(c);
             if (!restano.isEmpty()) {
-                throw new SQLException("Reset non completo: restano le tabelle " + String.join(", ", restano) + ".");
+                throw new SQLException("Reset not complete: these tables remain: " + String.join(", ", restano) + ".");
             }
             return prima;
         }
@@ -2130,7 +2130,7 @@ public class MailDatabase {
             c.setAutoCommit(false);
             try {
                 int id = inserisciCasella(c, domainId, email, password, name, quotaMb, true);
-                if (id <= 0) throw new SQLException("la casella non e' stata creata");
+                if (id <= 0) throw new SQLException("the mailbox was not created");
                 if (tieniInoltri) {
                     try (PreparedStatement p = c.prepareStatement(
                             "INSERT INTO aliases (domain_id, source, destination, active) VALUES (?, ?, ?, 1) "
@@ -2189,7 +2189,7 @@ public class MailDatabase {
                 try (PreparedStatement p = c.prepareStatement("DELETE FROM mailboxes WHERE id = ? AND email = ?")) {
                     p.setInt(1, mailboxId);
                     p.setString(2, indirizzo);
-                    if (p.executeUpdate() != 1) throw new SQLException("la casella non c'e' piu'");
+                    if (p.executeUpdate() != 1) throw new SQLException("the mailbox no longer exists");
                 }
                 c.commit();
             } catch (SQLException e) {

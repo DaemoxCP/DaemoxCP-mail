@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.util.Shell;
 
@@ -123,12 +124,9 @@ public class ScadenzaOpenssl {
 
         JSONArray trovati = new JSONArray();
         trovati.put(esamina("base", "/usr/bin/openssl", oggi,
-                "Fa parte del sistema FreeBSD. Lo mantiene il progetto FreeBSD, che pubblica "
-                + "correzioni (avvisi SA/EN) finche' la release e' supportata: non segue "
-                + "automaticamente il calendario di upstream."));
+                I18n.tr("server.sslexp.base")));
         trovati.put(esamina("port", "/usr/local/bin/openssl", oggi,
-                "Il pacchetto installato a parte. Questo segue il calendario di upstream: "
-                + "quando il ramo esce dal supporto, smette di ricevere correzioni."));
+                I18n.tr("server.sslexp.port")));
         r.put("installazioni", trovati);
 
         // Chi vince nel PATH del pannello: e' quello che finirebbe negli script.
@@ -149,12 +147,11 @@ public class ScadenzaOpenssl {
         }
         r.put("urgenza", qualcosa ? peggiore : 3);
         r.put("nota", !qualcosa
-                ? "Non ho trovato nessun binario openssl da interrogare: senza, non posso dire "
-                  + "che versione gira, e non voglio dedurlo dalle note di rilascio."
-                : peggiore == 0 ? "Tutto quello che e' installato riceve ancora correzioni."
-                : peggiore == 1 ? "Qualcosa esce dal supporto entro tre mesi: da programmare, non da rincorrere."
-                : peggiore == 2 ? "Qualcosa e' gia' fuori supporto upstream: va guardato subito."
-                : "Non riconosco una delle versioni trovate: la tabella delle scadenze va aggiornata.");
+                ? I18n.tr("server.sslexp.noBinary")
+                : peggiore == 0 ? I18n.tr("server.sslexp.allSupported")
+                : peggiore == 1 ? I18n.tr("server.sslexp.soon")
+                : peggiore == 2 ? I18n.tr("server.sslexp.expired")
+                : I18n.tr("server.sslexp.unknownVersion"));
         return r;
     }
 
@@ -168,23 +165,20 @@ public class ScadenzaOpenssl {
         o.put("presente", true).put("uscita", v.uscita.trim()).put("versione", versione == null ? "" : versione);
         if (versione == null)
             return o.put("urgenza", 3)
-                    .put("commento", "Risponde, ma non riesco a leggere il numero di versione da: "
-                            + v.uscita.trim());
+                    .put("commento", I18n.tr("server.sslexp.unreadable", java.util.Map.of("out", String.valueOf(v.uscita.trim()))));
 
         String fine = fineSupporto(versione);
         Long giorni = giorniRimasti(versione, oggi);
         int u = urgenza(versione, oggi);
         o.put("ramo", ramo(versione)).put("lts", eLts(versione)).put("urgenza", u);
         if (fine == null)
-            return o.put("commento", "Il ramo " + ramo(versione) + " non e' nella tabella delle scadenze: "
-                    + "la tabella e' ferma alle date lette il 01/09/2026 e va aggiornata.");
+            return o.put("commento", I18n.tr("server.sslexp.notInTable", java.util.Map.of("b", String.valueOf(ramo(versione)))));
 
         o.put("fineSupporto", fine).put("giorni", giorni);
         o.put("commento", u == 2
-                ? "Fuori supporto upstream dal " + fine + " (" + (-giorni) + " giorni fa)."
-                : u == 1 ? "Esce dal supporto il " + fine + ": mancano " + giorni + " giorni."
-                : "Supportato fino al " + fine + (eLts(versione) ? " (LTS)" : "") + ": mancano "
-                  + giorni + " giorni.");
+                ? I18n.tr("server.sslexp.outSince", java.util.Map.of("date", String.valueOf(fine), "d", String.valueOf(-giorni)))
+                : u == 1 ? I18n.tr("server.sslexp.leaves", java.util.Map.of("date", String.valueOf(fine), "d", String.valueOf(giorni)))
+                : I18n.tr("server.sslexp.until", java.util.Map.of("date", String.valueOf(fine), "lts", String.valueOf(eLts(versione) ? " (LTS)" : ""), "d", String.valueOf(giorni))));
         return o;
     }
 

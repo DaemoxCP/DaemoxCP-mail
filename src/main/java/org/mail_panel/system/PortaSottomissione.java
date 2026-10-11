@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONObject;
+import org.mail_panel.i18n.I18n;
 import org.mail_panel.util.Shell;
 
 import java.nio.file.Files;
@@ -117,7 +118,7 @@ public class PortaSottomissione {
             Path p = Path.of(MASTER);
             if (!Files.isReadable(p))
                 return new JSONObject().put("success", false)
-                        .put("error", "Non riesco a leggere " + MASTER + ".");
+                        .put("error", I18n.tr("server.subm.cannotRead", java.util.Map.of("file", String.valueOf(MASTER))));
             Modifica m = aggiungiRestrizione(Files.readString(p));
             r.put("voce", m.voce == null ? JSONObject.NULL : m.voce)
              .put("riga", m.riga)
@@ -132,18 +133,14 @@ public class PortaSottomissione {
             r.put("sicuro", d.codice == 0 && valore.equalsIgnoreCase("yes"));
 
             switch (m.esito) {
-                case GIA_PRESENTE -> r.put("nota", "La voce " + m.voce + " richiede gia' l'autenticazione: "
-                        + "non c'e' niente da aggiungere. La riga che lo fa e': " + m.gia)
+                case GIA_PRESENTE -> r.put("nota", I18n.tr("server.subm.already", java.util.Map.of("svc", String.valueOf(m.voce), "line", String.valueOf(m.gia))))
                         .put("gia", m.gia);
-                case VOCE_ASSENTE -> r.put("nota", "In master.cf non c'e' una voce smtps o submissions "
-                        + "attiva: la porta 465 non e' in ascolto, quindi non c'e' nulla da irrigidire.");
-                case AGGIUNTA -> r.put("nota", "La voce " + m.voce + " (riga " + m.riga + ") accetta anche "
-                        + "chi non si autentica. RFC 6409 §4.3 dice che un MSA deve rifiutarlo, e RFC 8314 "
-                        + "§3.3 dice che la 465 e' un MSA.");
+                case VOCE_ASSENTE -> r.put("nota", I18n.tr("server.subm.noEntry"));
+                case AGGIUNTA -> r.put("nota", I18n.tr("server.subm.acceptsUnauth", java.util.Map.of("svc", String.valueOf(m.voce), "line", String.valueOf(m.riga))));
             }
             return r;
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", "errore in lettura: " + e.getMessage());
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.subm.readError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -156,7 +153,7 @@ public class PortaSottomissione {
         try {
             JSONObject st = stato();
             if (!st.optBoolean("success", false))
-                return r.put("success", false).put("error", st.optString("error", "stato non leggibile"));
+                return r.put("success", false).put("error", st.optString("error", I18n.tr("server.subm.stateUnreadable")));
 
             String stato = st.optString("stato", "");
             if ("GIA_PRESENTE".equals(stato))
@@ -168,19 +165,15 @@ public class PortaSottomissione {
             // rifiuterebbe anche chi si autentica, perche' verrebbe valutata prima dell'AUTH.
             if (!st.optBoolean("sicuro", false))
                 return r.put("success", false)
-                        .put("error", "Non applico: smtpd_delay_reject risulta \"" + st.optString("delayReject", "?")
-                                + "\" invece di \"yes\"" + (st.optBoolean("delayRejectLetto", false) ? ""
-                                : " (e non sono nemmeno riuscito a leggerlo)")
-                                + ". Con quel valore le restrizioni sul client vengono valutate PRIMA "
-                                + "dell'autenticazione, quindi la riga rifiuterebbe anche gli utenti "
-                                + "legittimi: la posta in uscita si fermerebbe.");
+                        .put("error", st.optBoolean("delayRejectLetto", false)
+                                ? I18n.tr("server.subm.delayReject", java.util.Map.of("v", String.valueOf(st.optString("delayReject", "?"))))
+                                : I18n.tr("server.subm.delayRejectUnread", java.util.Map.of("v", String.valueOf(st.optString("delayReject", "?")))));
 
             Path p = Path.of(MASTER);
             String prima = Files.readString(p);
             Modifica m = aggiungiRestrizione(prima);
             if (m.esito != Esito.AGGIUNTA)
-                return r.put("success", false).put("error", "Rileggendo il file la situazione e' cambiata: "
-                        + m.esito.name() + ". Non tocco niente, riprova.");
+                return r.put("success", false).put("error", I18n.tr("server.subm.changed", java.util.Map.of("state", String.valueOf(m.esito.name()))));
 
             Path copia = Path.of(COPIA);
             Files.createDirectories(copia.getParent());
@@ -193,8 +186,7 @@ public class PortaSottomissione {
             if (check.codice != 0) {
                 Files.writeString(p, prima);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", "postfix check ha protestato, quindi ho rimesso il file di prima e "
-                                + "NON ho ricaricato niente. Detto da Postfix: " + check.uscita.trim());
+                        .put("error", I18n.tr("server.subm.checkFailed", java.util.Map.of("out", String.valueOf(check.uscita.trim()))));
             }
 
             Ris reload = esegui("postfix", "reload");
@@ -202,27 +194,22 @@ public class PortaSottomissione {
                 Files.writeString(p, prima);
                 esegui("postfix", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", "Il reload e' fallito: ho rimesso il file di prima e ricaricato. "
-                                + "Detto da Postfix: " + reload.uscita.trim());
+                        .put("error", I18n.tr("server.subm.reloadFailed", java.util.Map.of("out", String.valueOf(reload.uscita.trim()))));
             }
 
             // Non basta che i comandi non abbiano protestato: si rilegge e si guarda.
             Modifica dopo = aggiungiRestrizione(Files.readString(p));
             if (dopo.esito != Esito.GIA_PRESENTE)
                 return r.put("success", false)
-                        .put("error", "Ho scritto e ricaricato, ma rileggendo master.cf la restrizione non "
-                                + "risulta presente. Guarda " + MASTER + " prima di riprovare.");
+                        .put("error", I18n.tr("server.subm.notPresent", java.util.Map.of("file", String.valueOf(MASTER))));
 
             Ris m465 = esegui("postconf", "-M", m.voce + "/inet");
             r.put("vocePostfix", m465.uscita.trim());
 
             return r.put("success", true)
-                    .put("nota", "Fatto: la voce " + m.voce + " ora rifiuta chi non si autentica, come "
-                            + "chiedono RFC 6409 §4.3 e RFC 8314 §3.3. La porta 25 non e' stata toccata: "
-                            + "li' le connessioni non autenticate devono continuare a passare, altrimenti "
-                            + "non arriverebbe piu' posta dall'esterno. Copia di sicurezza in " + copia + ".");
+                    .put("nota", I18n.tr("server.subm.done", java.util.Map.of("svc", String.valueOf(m.voce), "copy", String.valueOf(copia))));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", "errore: " + e.getMessage());
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.subm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 

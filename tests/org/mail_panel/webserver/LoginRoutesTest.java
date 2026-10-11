@@ -216,7 +216,7 @@ public class LoginRoutesTest {
             check("200 and the session cookie: __Host-, HttpOnly, Secure, SameSite, 12 hours", ok.statusCode() == 200 && session != null
                     && setCookie(ok).contains(WebSessions.COOKIE + "=" + session + "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200"));
             JSONObject okJson = new JSONObject(ok.body());
-            check("no passkey yet: sent to the settings to create one", "/settings?setup=passkey".equals(okJson.optString("redirect")));
+            check("no passkey yet: sent to Account to create one", "/account?setup=passkey".equals(okJson.optString("redirect")));
             check("the session is in the database, by its hash", count("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ? AND admin_id = ?",
                     DataCrypto.sha256Hex(session), boss.id()) == 1);
             String sc = WebSessions.COOKIE + "=" + session;

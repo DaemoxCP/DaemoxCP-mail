@@ -116,141 +116,139 @@ public class SSLMailServer {
         setupRoutes();
     }
 
+    // I permessi, per nome: le stesse stringhe di AuthStore.
+    private static final String HOME = "home.view", ACCOUNT = "account.self";
+    private static final String MAIL_VIEW = "mail.view", MAILBOXES = "mailboxes.manage", DOMAINS = "domains.manage";
+    private static final String QUEUE_VIEW = "queue.view", QUEUE_MANAGE = "queue.manage";
+    private static final String DNS_VIEW = "dns.view", DNS_MANAGE = "dns.manage";
+    private static final String SECURITY_VIEW = "security.view", SECURITY_MANAGE = "security.manage";
+    private static final String SYSTEM_VIEW = "system.view", SYSTEM_MANAGE = "system.manage";
+    private static final String SETTINGS = "settings.manage", ADMINS = "admins.manage", VAULT = "vault.manage";
+
+    /** /api/updates: le azioni che leggono (anteprime, stati, diagnosi). Tutte le altre cambiano il sistema. */
+    static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
+        "packages_status", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
+        "mysql84_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "ramo_stato", "ramo_anteprima",
+        "system_report", "os_status", "reboot_preview", "rc_stato", "riepilogo_sistema", "cf_intervalli",
+        "rc_remove_preview", "rc_preview", "os_upgrade_targets", "os_upgrade_preflight", "os_upgrade_instructions",
+        "os_upgrade_verify", "salto_stato", "be_list", "ssl_uso", "removal_candidates", "panel_uses", "deep_scan",
+        "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosi", "web443_status", "web443_config",
+        "mtasts_piano", "sorveglianza", "sorveglianza_cambi", "openssl_scadenza", "porta465_status",
+        "python_preflight", "python_leftovers", "java_preflight", "java_status", "roundcube_preflight",
+        "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status");
+
+    /** Le rotte dichiarate, con il loro accesso: le prove controllano che ci siano tutte. */
+    private final Map<String, Access> routes = new java.util.LinkedHashMap<>();
+
+    /** Ogni rotta registrata e chi la puo' usare. */
+    public Map<String, Access> routes() {
+        return java.util.Collections.unmodifiableMap(routes);
+    }
+
     private void setupRoutes() {
-        // Public routes (no auth required)
-        // I file di Font Awesome viaggiano dentro il jar e li serve il pannello stesso.
-        // NON richiede autenticazione di proposito: il foglio di stile serve anche alla
-        // pagina di accesso, che per definizione si vede prima di essere autenticati.
-        // Rotta PUBBLICA e senza autenticazione, e non puo' essere altrimenti: e' Thunderbird
-        // a chiederla, prima ancora che l'utente abbia inserito una password. Restituisce solo
-        // nomi di server e numeri di porta, che sono gia' pubblici (stanno nei record DNS), e
-        // solo per i domini che questo pannello ospita davvero.
-        context("/autoconfig", this::handleAutoconfigPubblico);
-        // Anche questa e' pubblica per forza: la politica MTA-STS la leggono i server mittenti
-        // del mondo, che non hanno e non devono avere credenziali. Contiene solo il nome del
-        // proprio MX, che sta gia' nei record DNS.
-        context("/mta-sts", this::handleMtaStsPubblico);
-        context("/fa", this::handleStatico);
-        context("/vendor", this::handleStatico);
-        // Il dizionario degli script e il cambio di lingua: pubblici anche loro, perche' la
-        // pagina di accesso e quella di installazione hanno gia' la scelta IT/EN.
-        context("/i18n/", this::handleI18nScript);
-        context("/api/language", this::handleApiLanguage);
-        context("/", this::handleRoot);
-        context("/index", this::handleIndex);
-        context("/api/login", auth::handleLogin);
-        context("/setup", this::handleSetup);
-
-        // Protected routes (auth required)
-        context("/home", this::handleProtectedPage);
-        context("/domains", this::handleProtectedPage);
-        context("/mailboxes", this::handleProtectedPage);
-        context("/aliases", this::handleProtectedPage);
-        context("/dns", this::handleProtectedPage);
-        // /install removed - installation is done via terminal GUI only
-        context("/settings", this::handleProtectedPage);
-        context("/logs", this::handleProtectedPage);
-        context("/ssl", this::handleProtectedPage);
-        context("/queue", this::handleProtectedPage);
-        context("/security", this::handleProtectedPage);
-        context("/firewall", this::handleProtectedPage);
-        context("/cloudflare", this::handleProtectedPage);
-        context("/api/logout", this::handleLogout);
-
-        // API endpoints - Core
-        context("/api/status", this::handleApiStatus);
-        context("/api/domains", this::handleApiDomains);
-        context("/api/mailboxes", this::handleApiMailboxes);
-        context("/api/mailconfig", this::handleApiMailConfig);
-        context("/api/aliases", this::handleApiAliases);
-        context("/api/webmail", this::handleApiWebmail);
-        context("/api/service", this::handleApiService);
-        context("/api/versioni", this::handleApiVersioni);
-        // /api/install removed - installation is done via terminal GUI only
-
-        // API endpoints - DKIM & DNS
-        context("/api/dkim", this::handleApiDkim);
-        context("/api/dns", this::handleApiDns);
-        context("/api/cloudflare", this::handleApiCloudflare);
-        context("/api/timezone-diag", this::handleApiTimezoneDiag);
-        context("/api/postfix-aliases-health", this::handleApiPostfixAliases);
-
-        // API endpoints - SSL/Let's Encrypt
-        context("/api/ssl", this::handleApiSsl);
-
-        // API endpoints - Logs & Monitoring
-        context("/api/logs", this::handleApiLogs);
-        context("/api/stats", this::handleApiStats);
-
-        // API endpoints - Mail Queue
-        context("/api/queue", this::handleApiQueue);
-
-        // API endpoints - Roundcube SSO
-        context("/api/sso", this::handleApiSso);
-        context("/api/webmail/open", this::handleApiWebmailOpen);
-
-        // API endpoints - Fail2ban
-        context("/api/fail2ban", this::handleApiFail2ban);
-        context("/api/fail2ban_health", this::handleApiFail2banHealth);
-        context("/api/system_paths", this::handleApiSystemPaths);
-        context("/api/clamav_health", this::handleApiClamavHealth);
-        context("/api/blacklist_check", this::handleApiBlacklistCheck);
-        context("/api/unbound_health", this::handleApiUnboundHealth);
-        context("/api/firewall", this::handleApiFirewall);
-        context("/paths", this::handleProtectedPage);
-
-        // Aggiornamenti, protezione pacchetti e vulnerabilita'
-        context("/updates", this::handleProtectedPage);
-        context("/api/updates", this::handleApiUpdates);
-
-        // New feature pages
-        context("/admins", this::handleProtectedPage);
-        context("/statistics", this::handleProtectedPage);
-        context("/ratelimits", this::handleProtectedPage);
-
-        // API endpoints - 2FA
-
-        // API endpoints - Auth check (for login flow)
-
-        // API endpoints - Passkey (WebAuthn)
-        context("/api/account", auth::handleAccount);
-
+        // ---------- Pubbliche ----------
+        // Rotta PUBBLICA per forza: e' Thunderbird a chiederla, prima ancora che l'utente abbia
+        // inserito una password. Restituisce solo nomi di server e numeri di porta, gia' pubblici
+        // nei record DNS, e solo per i domini che questo pannello ospita davvero.
+        context("/autoconfig", Access.PUBLIC, this::handleAutoconfigPubblico);
+        // La politica MTA-STS la leggono i server mittenti del mondo, senza credenziali: contiene
+        // solo il nome del proprio MX, che sta gia' nei record DNS.
+        context("/mta-sts", Access.PUBLIC, this::handleMtaStsPubblico);
+        // Font Awesome e Bootstrap dal jar: servono anche alla pagina di accesso.
+        context("/fa", Access.PUBLIC, this::handleStatico);
+        context("/vendor", Access.PUBLIC, this::handleStatico);
+        // Il dizionario degli script e il cambio di lingua: le pagine di accesso e di installazione
+        // hanno gia' la scelta IT/EN. /api/language controlla da se' il token della pagina.
+        context("/i18n/", Access.PUBLIC, this::handleI18nScript);
+        context("/api/language", Access.PUBLIC, this::handleApiLanguage);
+        context("/", Access.PUBLIC, this::handleRoot);
+        context("/index", Access.PUBLIC, this::handleIndex);
+        context("/api/login", Access.PUBLIC, auth::handleLogin);
+        context("/setup", Access.PUBLIC, this::handleSetup);
+        // Chiude solo la sessione di chi la chiama.
+        context("/api/logout", Access.PUBLIC, this::handleLogout);
         // Solo per la webmail sullo stesso server (loopback + chiave): cambio password e copia nel vault
-        context(org.mail_panel.integration.WebmailPasswordConfig.PATH, webmail::handlePasswordChange);
-        context("/api/internal/mailbox-vault", webmail::handleVaultCopy);
+        context(org.mail_panel.integration.WebmailPasswordConfig.PATH, Access.PUBLIC, webmail::handlePasswordChange);
+        context("/api/internal/mailbox-vault", Access.PUBLIC, webmail::handleVaultCopy);
 
-        // API endpoints - Admin management
-        context("/api/admins", this::handleApiAdmins);
-        context("/api/report", this::handleApiReport);
-        context("/api/autodns", this::handleApiAutoDns);
-        context("/api/autoconfig", this::handleApiAutoconfig);
-        context("/api/profilo-apple", this::handleApiProfiloApple);
-        context("/profilo-apple", this::handleScaricaProfiloApple);
+        // ---------- Home e account ----------
+        context("/home", Access.page(HOME), this::handleProtectedPage);
+        context("/api/status", Access.api(HOME), this::handleApiStatus);
+        context("/api/stats", Access.api(HOME), this::handleApiStats);
+        context("/api/versioni", Access.api(HOME), this::handleApiVersioni);
+        context("/account", Access.page(ACCOUNT), this::handleProtectedPage);
+        context("/api/account", Access.api(ACCOUNT), auth::handleAccount);
+        context("/api/theme", Access.api(ACCOUNT), this::handleApiTheme);
 
-        // API endpoints - Auto-responder
-        context("/api/autoresponder", this::handleApiAutoResponder);
+        // ---------- Posta ----------
+        context("/domains", Access.page(MAIL_VIEW), this::handleProtectedPage);
+        context("/api/domains", Access.api(MAIL_VIEW, DOMAINS), this::handleApiDomains);
+        context("/mailboxes", Access.page(MAIL_VIEW), this::handleProtectedPage);
+        // La password di una casella si rivela con una POST (reveal_password): vuole mailboxes.manage.
+        context("/api/mailboxes", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiMailboxes);
+        context("/api/mailconfig", Access.api(MAIL_VIEW), this::handleApiMailConfig);
+        context("/aliases", Access.page(MAIL_VIEW), this::handleProtectedPage);
+        context("/api/aliases", Access.api(MAIL_VIEW, DOMAINS), this::handleApiAliases);
+        // Entrare nella webmail di una casella vuol dire leggerne la posta.
+        context("/api/webmail", Access.api(MAILBOXES), this::handleApiWebmail);
+        context("/api/webmail/open", Access.api(MAILBOXES), this::handleApiWebmailOpen);
+        context("/api/autoresponder", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiAutoResponder);
+        context("/api/sieve", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiSieve);
+        context("/api/forwarding", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiForwarding);
+        context("/queue", Access.page(QUEUE_VIEW), this::handleProtectedPage);
+        // Il contenuto di un messaggio in coda e' posta di qualcuno: ?action=message vuole queue.manage.
+        context("/api/queue", Access.api(QUEUE_VIEW, QUEUE_MANAGE, Access.actions(QUEUE_MANAGE, "message")), this::handleApiQueue);
+        context("/ratelimits", Access.page(MAIL_VIEW), this::handleProtectedPage);
+        context("/api/ratelimits", Access.api(MAIL_VIEW, DOMAINS), this::handleApiRateLimits);
+        context("/statistics", Access.page(MAIL_VIEW), this::handleProtectedPage);
+        context("/api/statistics", Access.api(MAIL_VIEW), this::handleApiStatistics);
+        context("/api/profilo-apple", Access.api(MAIL_VIEW, DNS_MANAGE, Access.actions(MAIL_VIEW, "status", "preview")), this::handleApiProfiloApple);
+        context("/profilo-apple", Access.api(MAIL_VIEW), this::handleScaricaProfiloApple);
 
-        // API endpoints - Sieve filters
-        context("/api/sieve", this::handleApiSieve);
+        // ---------- DNS e certificati ----------
+        context("/dns", Access.page(DNS_VIEW), this::handleProtectedPage);
+        context("/api/dns", Access.api(DNS_VIEW, DNS_MANAGE), this::handleApiDns);
+        context("/api/dkim", Access.api(DNS_VIEW, DNS_MANAGE), this::handleApiDkim);
+        context("/ssl", Access.page(DNS_VIEW), this::handleProtectedPage);
+        context("/api/ssl", Access.api(DNS_VIEW, DNS_MANAGE, Access.actions(DNS_VIEW, "get_auto_renewal_settings", "check_self_signed")), this::handleApiSsl);
+        context("/cloudflare", Access.page(DNS_VIEW), this::handleProtectedPage);
+        context("/api/cloudflare", Access.api(DNS_VIEW, DNS_MANAGE), this::handleApiCloudflare);
+        context("/api/autodns", Access.api(DNS_VIEW, DNS_MANAGE, Access.actions(
+                DNS_VIEW, "status", "mtasts_status", "job_status",
+                MAIL_VIEW, "mailboxes",
+                MAILBOXES, "mailbox_create",
+                DOMAINS, "alias_create")), this::handleApiAutoDns);
+        context("/api/autoconfig", Access.api(DNS_VIEW, DNS_MANAGE, Access.actions(DNS_VIEW, "status", "preview")), this::handleApiAutoconfig);
 
-        // API endpoints - Forwarding
-        context("/api/forwarding", this::handleApiForwarding);
+        // ---------- Sicurezza ----------
+        context("/security", Access.page(SECURITY_VIEW), this::handleProtectedPage);
+        context("/firewall", Access.page(SECURITY_VIEW), this::handleProtectedPage);
+        context("/api/fail2ban", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "verifica_filtro", "confronto_pf")), this::handleApiFail2ban);
+        context("/api/fail2ban_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE), this::handleApiFail2banHealth);
+        context("/api/clamav_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "test_eicar")), this::handleApiClamavHealth);
+        context("/api/unbound_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "test_query")), this::handleApiUnboundHealth);
+        context("/api/blacklist_check", Access.api(SECURITY_VIEW), this::handleApiBlacklistCheck);
+        context("/api/firewall", Access.api(SECURITY_VIEW, SECURITY_MANAGE), this::handleApiFirewall);
+        context("/api/rspamd", Access.api(SECURITY_VIEW, SECURITY_MANAGE), this::handleApiRspamd);
 
-        // API endpoints - Rate limits
-        context("/api/ratelimits", this::handleApiRateLimits);
-
-        // API endpoints - Rspamd training
-        context("/api/rspamd", this::handleApiRspamd);
-
-        // API endpoints - Email statistics
-        context("/api/statistics", this::handleApiStatistics);
-        context("/api/theme", this::handleApiTheme);
-
-        // API endpoint - Hostname change
-        context("/api/hostname", this::handleApiHostname);
-
-        // API endpoint - Roundcube domain change
-        context("/api/roundcube-domain", this::handleApiRoundcubeDomain);
+        // ---------- Sistema ----------
+        context("/updates", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
+        context("/api/updates", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE, UPDATES_ACTIONS), this::handleApiUpdates);
+        context("/logs", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
+        context("/api/logs", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiLogs);
+        context("/paths", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
+        context("/api/system_paths", Access.api(SYSTEM_VIEW), this::handleApiSystemPaths);
+        context("/api/service", Access.api(SYSTEM_MANAGE), this::handleApiService);
+        context("/api/timezone-diag", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiTimezoneDiag);
+        context("/api/postfix-aliases-health", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiPostfixAliases);
+        context("/api/sso", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiSso);
+        context("/admins", Access.page(ADMINS), this::handleProtectedPage);
+        // La chiave del vault: esportarla o cambiarla vuole vault.manage (e una conferma recente).
+        context("/api/admins", Access.api(ADMINS, ADMINS, Access.actions(VAULT, "vault_backup_key", "vault_rotate_key")), this::handleApiAdmins);
+        context("/settings", Access.page(SETTINGS), this::handleProtectedPage);
+        context("/api/report", Access.api(SETTINGS), this::handleApiReport);
+        context("/api/hostname", Access.api(SETTINGS), this::handleApiHostname);
+        context("/api/roundcube-domain", Access.api(SETTINGS), this::handleApiRoundcubeDomain);
     }
 
     /**
@@ -259,7 +257,9 @@ public class SSLMailServer {
      * della lingua (o, senza, la lingua del browser): ogni pagina lo allinea alla scelta salvata
      * nell'account (renderPage), e le chiamate degli script arrivano da una pagina.
      */
-    private HttpContext context(String path, HttpHandler handler) {
+    private HttpContext context(String path, Access access, HttpHandler handler) {
+        java.util.Objects.requireNonNull(access, "every route declares its access");
+        if (routes.put(path, access) != null) throw new IllegalStateException("Route declared twice: " + path);
         HttpContext context = server.createContext(path, handler);
         context.getFilters().add(new Filter() {
             @Override
@@ -278,6 +278,19 @@ public class SSLMailServer {
                 return "request language";
             }
         });
+        if (access.kind() != Access.Kind.PUBLIC) {
+            context.getFilters().add(new Filter() {
+                @Override
+                public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+                    if (accessAllowed(exchange, access)) chain.doFilter(exchange);
+                }
+
+                @Override
+                public String description() {
+                    return "named permission of the route";
+                }
+            });
+        }
         if (!CSRF_EXEMPT.contains(path)) {
             context.getFilters().add(new Filter() {
                 @Override
@@ -293,6 +306,65 @@ public class SSLMailServer {
             });
         }
         return context;
+    }
+
+    /**
+     * Il permesso della rotta per questa richiesta. Vero se la richiesta puo' proseguire; falso se
+     * la risposta e' gia' partita: senza sessione una pagina rimanda all'accesso e una API dice
+     * 401; senza permesso una pagina mostra "accesso negato" (403) nella cornice del pannello e
+     * una API risponde 403 con forbidden: true. Per le API a azioni l'azione viene da ?action= o
+     * dal corpo JSON, che si rimette al suo posto per il gestore.
+     */
+    private boolean accessAllowed(HttpExchange exchange, Access access) throws IOException {
+        Optional<WebSessions.Current> session = currentSession(exchange);
+        boolean pageGet = access.kind() == Access.Kind.PAGE && "GET".equals(exchange.getRequestMethod());
+        if (session.isEmpty()) {
+            if (pageGet) redirect(exchange, "/index");
+            else sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
+            return false;
+        }
+        String method = exchange.getRequestMethod();
+        String action = null;
+        if (access.byAction()) {
+            if ("GET".equals(method) || "HEAD".equals(method)) {
+                action = extractParamFromQuery(exchange.getRequestURI().getQuery(), "action");
+            } else {
+                String body = readRequestBodyWithLimit(exchange);
+                if (body == null) {
+                    sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
+                    return false;
+                }
+                exchange.setStreams(new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)), null);
+                try {
+                    if (body.trim().startsWith("{")) action = new JSONObject(body).optString("action", null);
+                } catch (org.json.JSONException e) {
+                    // Non e' JSON: niente azione, vale il permesso del metodo. Il gestore rispondera' 400.
+                }
+            }
+        }
+        String permission = access.permissionFor(method, action);
+        AuthStore.Admin admin = session.get().admin();
+        if (AuthStore.may(admin, permission)) return true;
+        LOGGER.info("Permission " + permission + " denied to " + admin.username() + " (" + admin.role() + ") on "
+                + method + " " + exchange.getRequestURI().getPath());
+        logAudit("PERMISSION_DENIED", getClientIp(exchange), "user=" + admin.username() + " permission=" + permission
+                + " path=" + exchange.getRequestURI().getPath());
+        if (pageGet) {
+            addSecurityHeaders(exchange);
+            byte[] html = renderPage(exchange, withTheme(exchange, org.mail_panel.content.MailPanelContent.getForbiddenHtml()),
+                    getCsrfToken(exchange)).getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+            exchange.sendResponseHeaders(403, html.length);
+            try (OutputStream os = exchange.getResponseBody()) { os.write(html); }
+        } else {
+            byte[] json = new JSONObject().put("success", false).put("forbidden", true)
+                    .put("error", I18n.tr("server.access.forbidden")).toString().getBytes(StandardCharsets.UTF_8);
+            addSecurityHeaders(exchange);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(403, json.length);
+            try (OutputStream os = exchange.getResponseBody()) { os.write(json); }
+        }
+        return false;
     }
 
     /**
@@ -362,7 +434,7 @@ public class SSLMailServer {
             try {
                 new org.mail_panel.security.PostfixAliasesManager().ensureAtBoot();
             } catch (Throwable t) {
-                LOGGER.warning("PostfixAliases ensureAtBoot fallito: " + t.getMessage());
+                LOGGER.warning("PostfixAliases ensureAtBoot failed: " + t.getMessage());
             }
 
             // Start auto-renewal for certificates
@@ -539,7 +611,6 @@ public class SSLMailServer {
         System.out.println("Certificate content length: " + certContent.length());
         System.out.println("Key content length: " + keyContent.length());
         System.out.println("Certificate starts with: " + certContent.substring(0, Math.min(50, certContent.length())));
-        System.out.println("Key starts with: " + keyContent.substring(0, Math.min(50, keyContent.length())));
 
         java.security.cert.CertificateFactory cf = java.security.cert.CertificateFactory.getInstance("X.509");
 
@@ -921,8 +992,7 @@ public class SSLMailServer {
             }
             // Il tema scelto dall'admin, dentro la pagina: la <head> lo applica prima del primo
             // disegno, invece di scoprirlo dopo con /api/theme (era il lampo bianco).
-            String tema = temaSalvato(exchange);
-            html = html.replace("{{THEME}}", tema).replace("{{COLOR_SCHEME}}", "auto".equals(tema) ? "light dark" : tema);
+            html = withTheme(exchange, html);
             // Replace system info placeholders
             html = html.replace("{{JAVA_VERSION}}", "Java " + System.getProperty("java.version") + " (OpenJDK)");
             html = html.replace("{{PLATFORM}}", System.getProperty("os.name") + " " + System.getProperty("os.version"));
@@ -937,8 +1007,17 @@ public class SSLMailServer {
             sendHtml(exchange, renderPage(exchange, html, csrfToken));
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error in handleProtectedPage", e);
-            sendJsonError(exchange, 500, "Errore interno del server");
+            sendJsonError(exchange, 500, I18n.tr("server.internalError"));
         }
+    }
+
+    /**
+     * Il tema scelto dall'admin, dentro la pagina: la <head> lo applica prima del primo disegno,
+     * invece di scoprirlo dopo con /api/theme (era il lampo bianco).
+     */
+    private String withTheme(HttpExchange exchange, String html) {
+        String tema = temaSalvato(exchange);
+        return html.replace("{{THEME}}", tema).replace("{{COLOR_SCHEME}}", "auto".equals(tema) ? "light dark" : tema);
     }
 
     // ============== LINGUA ==============
@@ -959,8 +1038,14 @@ public class SSLMailServer {
         }
         exchange.getResponseHeaders().set("Content-Language", lang);
         String page = html.replace("{{CSRF_TOKEN}}", I18n.escapeHtml(csrfToken == null ? "" : csrfToken));
-        page = Layout.expand(page, lang);
+        page = Layout.expand(page, lang, viewer(exchange));
         return I18n.render(page, lang);
+    }
+
+    /** Chi guarda la pagina: nome, ruolo e permessi dell'amministratore della sessione; prima di entrare, nessuno. */
+    private Layout.Viewer viewer(HttpExchange exchange) {
+        return currentSession(exchange).map(s -> new Layout.Viewer(s.admin().username(), s.admin().role(),
+                AuthStore.permissionsOf(s.admin().role()))).orElse(Layout.Viewer.NOBODY);
     }
 
     /** La lingua salvata dall'amministratore di questa sessione, o null (prima di entrare, o mai scelta). */
@@ -1006,7 +1091,7 @@ public class SSLMailServer {
     private void handleApiLanguage(HttpExchange exchange) throws IOException {
         try {
             if (!"POST".equals(exchange.getRequestMethod())) {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
             String body = readRequestBodyWithLimit(exchange);
@@ -1065,7 +1150,7 @@ public class SSLMailServer {
 
     private void handleApiStatus(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -1136,7 +1221,7 @@ public class SSLMailServer {
 
     private void handleApiDomains(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -1165,7 +1250,7 @@ public class SSLMailServer {
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
-                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                         return;
                     }
                     JSONObject req = new JSONObject(body);
@@ -1181,7 +1266,7 @@ public class SSLMailServer {
 
                     if (!SecurityUtils.isValidDomain(domain)) {
                         response.put("success", false);
-                        response.put("error", "Dominio non valido");
+                        response.put("error", I18n.tr("server.domain.invalid"));
                     } else {
                         int id = Main.mailDatabase.addDomain(domain, description);
                         if (id > 0) {
@@ -1192,14 +1277,14 @@ public class SSLMailServer {
                             regenerateMailConfigs();
                         } else {
                             response.put("success", false);
-                            response.put("error", "Dominio gia' esistente");
+                            response.put("error", I18n.tr("server.domain.exists"));
                         }
                     }
                 }
                 case "PUT" -> {
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
-                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                         return;
                     }
                     JSONObject req = new JSONObject(body);
@@ -1220,7 +1305,7 @@ public class SSLMailServer {
                         }
                     } else {
                         response.put("success", false);
-                        response.put("error", "ID non valido");
+                        response.put("error", I18n.tr("server.badId"));
                     }
                 }
                 case "DELETE" -> {
@@ -1235,11 +1320,11 @@ public class SSLMailServer {
                         }
                     } else {
                         response.put("success", false);
-                        response.put("error", "ID non valido");
+                        response.put("error", I18n.tr("server.badId"));
                     }
                 }
                 default -> {
-                    sendJsonError(exchange, 405, "Method not allowed");
+                    sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                     return;
                 }
             }
@@ -1253,7 +1338,7 @@ public class SSLMailServer {
 
     private void handleApiMailboxes(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -1270,7 +1355,7 @@ public class SSLMailServer {
                         try { tid = Integer.parseInt(trasforma); } catch (NumberFormatException e) { tid = 0; }
                         MailDatabase.Mailbox tm = tid > 0 ? Main.mailDatabase.getMailbox(tid) : null;
                         if (tm == null) {
-                            response.put("success", false).put("error", "Casella non trovata");
+                            response.put("success", false).put("error", I18n.tr("server.mailbox.notFound"));
                         } else {
                             response = org.mail_panel.system.TrasformaIndirizzo.anteprimaAAlias(
                                     org.mail_panel.system.TrasformaIndirizzo.stato(Main.mailDatabase, tm.email.toLowerCase(java.util.Locale.ROOT)),
@@ -1294,7 +1379,7 @@ public class SSLMailServer {
                             mbox.put("quota_mb", m.quotaMb);
                             mbox.put("active", m.active);
                             mbox.put("receive_enabled", m.receiveEnabled);
-                            mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : "Mai");
+                            mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : I18n.tr("server.never"));
                             // Flag: la casella ha una password archiviata nel vault?
                             // Usato dalla UI per mostrare/nascondere l'icona "rivela password".
                             try {
@@ -1307,7 +1392,7 @@ public class SSLMailServer {
                             response.put("mailbox", mbox);
                         } else {
                             response.put("success", false);
-                            response.put("error", "Mailbox non trovata");
+                            response.put("error", I18n.tr("server.mailbox.notFound"));
                         }
                     } else {
                         // Return all mailboxes
@@ -1321,7 +1406,7 @@ public class SSLMailServer {
                             mbox.put("quota_mb", m.quotaMb);
                             mbox.put("active", m.active);
                             mbox.put("receive_enabled", m.receiveEnabled);
-                            mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : "Mai");
+                            mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : I18n.tr("server.never"));
                             mbox.put("autoresponder_enabled", m.autoresponderEnabled);
                             mbox.put("forwarding_count", m.forwardingCount);
                             mbox.put("filters_count", m.filtersCount);
@@ -1334,7 +1419,7 @@ public class SSLMailServer {
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
-                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                         return;
                     }
                     JSONObject req = new JSONObject(body);
@@ -1376,7 +1461,7 @@ public class SSLMailServer {
                         }
                         if (idList.isEmpty()) {
                             response.put("success", false);
-                            response.put("error", "Nessuna casella specificata (passa mailbox_ids: array o \"all\")");
+                            response.put("error", I18n.tr("server.mailbox.noneGiven"));
                             sendJsonResponse(exchange, response);
                             return;
                         }
@@ -1397,7 +1482,7 @@ public class SSLMailServer {
                                 MailDatabase.Mailbox mb = Main.mailDatabase.getMailbox(mid);
                                 if (mb == null) {
                                     r.put("success", false);
-                                    r.put("error", "non trovata");
+                                    r.put("error", I18n.tr("server.mailbox.notFound"));
                                     results.put(r);
                                     failed++;
                                     continue;
@@ -1413,7 +1498,7 @@ public class SSLMailServer {
                                         "mailbox_id=" + mid + " email=" + mb.email);
                                 } else {
                                     r.put("success", false);
-                                    r.put("error", "update fallito");
+                                    r.put("error", I18n.tr("server.mailbox.updateFailed"));
                                     failed++;
                                 }
                             } catch (Exception ex) {
@@ -1521,10 +1606,10 @@ public class SSLMailServer {
 
                     if (!SecurityUtils.isValidEmail(email)) {
                         response.put("success", false);
-                        response.put("error", "Email non valida");
+                        response.put("error", I18n.tr("server.badEmail"));
                     } else if (!SecurityUtils.isValidMailboxPassword(password)) {
                         response.put("success", false);
-                        response.put("error", "Password non valida: " + SecurityUtils.PASSWORD_CASELLA_REGOLA + ".");
+                        response.put("error", I18n.tr("server.mailbox.badPassword", Map.of("rule", SecurityUtils.passwordRule())));
                     } else {
                         // Extract domain from email
                         String domainName = email.substring(email.indexOf("@") + 1);
@@ -1532,7 +1617,7 @@ public class SSLMailServer {
 
                         if (domain == null) {
                             response.put("success", false);
-                            response.put("error", "Dominio non esistente: " + domainName);
+                            response.put("error", I18n.tr("server.domain.unknown", Map.of("domain", domainName)));
                         } else {
                             int id = Main.mailDatabase.addMailbox(domain.id, email, password, name, quotaMb, receiveEnabled);
                             if (id > 0) {
@@ -1541,7 +1626,7 @@ public class SSLMailServer {
                                 regenerateMailConfigs();
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Mailbox gia' esistente");
+                                response.put("error", I18n.tr("server.mailbox.exists"));
                             }
                         }
                     }
@@ -1550,7 +1635,7 @@ public class SSLMailServer {
                     // Update existing mailbox
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
-                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                         return;
                     }
                     JSONObject req = new JSONObject(body);
@@ -1564,7 +1649,7 @@ public class SSLMailServer {
                     int id = req.optInt("id", 0);
                     if (id <= 0) {
                         response.put("success", false);
-                        response.put("error", "ID mailbox non valido");
+                        response.put("error", I18n.tr("server.mailbox.badId"));
                     } else {
                         String name = req.optString("name", "");
                         int quotaMb = req.optInt("quota_mb", 1024);  // 0 = unlimited
@@ -1580,18 +1665,17 @@ public class SSLMailServer {
                             if (SecurityUtils.isValidMailboxPassword(newPassword)) {
                                 Main.mailDatabase.updateMailboxPassword(id, newPassword);
                             } else {
-                                response.put("warning", "Password non aggiornata: " + SecurityUtils.PASSWORD_CASELLA_REGOLA
-                                        + ". Il resto delle modifiche e' salvato.");
+                                response.put("warning", I18n.tr("server.mailbox.passwordNotUpdated", Map.of("rule", SecurityUtils.passwordRule())));
                             }
                         }
 
                         if (updated) {
                             response.put("success", true);
-                            response.put("message", "Mailbox aggiornata");
+                            response.put("message", I18n.tr("server.mailbox.updated"));
                             regenerateMailConfigs();
                         } else {
                             response.put("success", false);
-                            response.put("error", "Errore aggiornamento mailbox");
+                            response.put("error", I18n.tr("server.mailbox.updateFailed"));
                         }
                     }
                 }
@@ -1599,7 +1683,7 @@ public class SSLMailServer {
                     // Eliminare cambia lo stato: stesso controllo CSRF di creazione e modifica (prima mancava).
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
-                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                         return;
                     }
                     if (!validateCsrfForRequest(exchange, body.isBlank() ? new JSONObject() : new JSONObject(body))) {
@@ -1618,11 +1702,11 @@ public class SSLMailServer {
                         }
                     } else {
                         response.put("success", false);
-                        response.put("error", "ID non valido");
+                        response.put("error", I18n.tr("server.badId"));
                     }
                 }
                 default -> {
-                    sendJsonError(exchange, 405, "Method not allowed");
+                    sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                     return;
                 }
             }
@@ -1640,7 +1724,7 @@ public class SSLMailServer {
      */
     private void handleApiMailConfig(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -1662,7 +1746,7 @@ public class SSLMailServer {
             imap.put("port_ssl", 993);
             imap.put("port_starttls", 143);
             imap.put("security", "SSL/TLS");
-            imap.put("auth_method", "Password normale");
+            imap.put("auth_method", I18n.tr("server.autoconf.normalPassword"));
             response.put("imap", imap);
 
             // POP3 Configuration
@@ -1671,7 +1755,7 @@ public class SSLMailServer {
             pop3.put("port_ssl", 995);
             pop3.put("port_starttls", 110);
             pop3.put("security", "SSL/TLS");
-            pop3.put("auth_method", "Password normale");
+            pop3.put("auth_method", I18n.tr("server.autoconf.normalPassword"));
             response.put("pop3", pop3);
 
             // SMTP Configuration
@@ -1680,12 +1764,12 @@ public class SSLMailServer {
             smtp.put("port_ssl", 465);
             smtp.put("port_starttls", 587);
             smtp.put("security", "STARTTLS");
-            smtp.put("auth_method", "Password normale");
+            smtp.put("auth_method", I18n.tr("server.autoconf.normalPassword"));
             response.put("smtp", smtp);
 
             // General info
-            response.put("username_format", "email completa (es: utente@dominio.it)");
-            response.put("password_info", "La password dell'account email");
+            response.put("username_format", I18n.tr("server.mailconfig.usernameFormat"));
+            response.put("password_info", I18n.tr("server.mailconfig.passwordInfo"));
 
             // Client-specific instructions
             JSONObject clients = new JSONObject();
@@ -1695,7 +1779,7 @@ public class SSLMailServer {
             outlook.put("name", "Microsoft Outlook");
             outlook.put("imap_port", 993);
             outlook.put("smtp_port", 587);
-            outlook.put("security", "SSL/TLS per IMAP, STARTTLS per SMTP");
+            outlook.put("security", I18n.tr("server.mailconfig.securityTls"));
             clients.put("outlook", outlook);
 
             // Thunderbird
@@ -1703,8 +1787,8 @@ public class SSLMailServer {
             thunderbird.put("name", "Mozilla Thunderbird");
             thunderbird.put("imap_port", 993);
             thunderbird.put("smtp_port", 587);
-            thunderbird.put("security", "SSL/TLS per IMAP, STARTTLS per SMTP");
-            thunderbird.put("note", "Thunderbird auto-rileva le impostazioni");
+            thunderbird.put("security", I18n.tr("server.mailconfig.securityTls"));
+            thunderbird.put("note", I18n.tr("server.mailconfig.thunderbirdNote"));
             clients.put("thunderbird", thunderbird);
 
             // Apple Mail
@@ -1712,7 +1796,7 @@ public class SSLMailServer {
             appleMail.put("name", "Apple Mail (macOS/iOS)");
             appleMail.put("imap_port", 993);
             appleMail.put("smtp_port", 587);
-            appleMail.put("security", "SSL per IMAP, STARTTLS per SMTP");
+            appleMail.put("security", I18n.tr("server.mailconfig.securitySsl"));
             clients.put("apple", appleMail);
 
             // Android
@@ -1721,7 +1805,7 @@ public class SSLMailServer {
             android.put("imap_port", 993);
             android.put("smtp_port", 587);
             android.put("security", "SSL/TLS");
-            android.put("note", "Seleziona 'Altro' quando aggiungi account");
+            android.put("note", I18n.tr("server.mailconfig.androidNote"));
             clients.put("android", android);
 
             response.put("clients", clients);
@@ -1740,8 +1824,7 @@ public class SSLMailServer {
      * la nota lo consigliava e il controllo lo rifiutava).
      */
     private static String aliasSuSeStesso(String indirizzo) {
-        return "Sorgente e destinazione coincidono: ha senso solo se " + indirizzo + " e' una casella, "
-             + "per tenerne una copia quando la posta e' inoltrata anche altrove.";
+        return I18n.tr("server.alias.selfOnlyMailbox", Map.of("address", indirizzo));
     }
 
     /**
@@ -1774,12 +1857,11 @@ public class SSLMailServer {
         }
         if (casella) {
             if (copia || altrove.isEmpty()) return null;
-            return "Attenzione: " + indirizzo + " e' anche una casella, e la sua posta va solo a " + String.join(", ", altrove)
-                 + ". Per tenerne una copia nella casella " + (copiaSpenta ? "riattiva" : "aggiungi")
-                 + " l'alias " + indirizzo + " -> " + indirizzo + ".";
+            return I18n.tr(copiaSpenta ? "server.alias.mailboxCopyOff" : "server.alias.mailboxNoCopy",
+                    Map.of("address", indirizzo, "targets", String.join(", ", altrove)));
         }
         if (copia || !altrove.isEmpty() || raccolta) return null;
-        return indirizzo + " non e' una casella e non ha alias attivi: da ora la posta per questo indirizzo viene rifiutata.";
+        return I18n.tr("server.alias.nowRejected", Map.of("address", indirizzo));
     }
 
     /** Un indirizzo per un alias: i caratteri ammessi da isValidEmail e i limiti della RFC 5321 (254 in tutto, 64 prima della @). */
@@ -1799,16 +1881,16 @@ public class SSLMailServer {
         JSONObject r = new JSONObject();
         int id = req.optInt("id", 0);
         MailDatabase.Alias alias = id > 0 ? Main.mailDatabase.getAliasById(id) : null;
-        if (alias == null) return r.put("success", false).put("error", "Alias non trovato");
+        if (alias == null) return r.put("success", false).put("error", I18n.tr("server.aliasNotFound"));
 
         boolean cambiaDestinazione = req.has("destination");
         Object stato = req.opt("active");
-        if (!cambiaDestinazione && stato == null) return r.put("success", false).put("error", "Niente da modificare");
-        if (stato != null && !(stato instanceof Boolean)) return r.put("success", false).put("error", "Stato non valido");
+        if (!cambiaDestinazione && stato == null) return r.put("success", false).put("error", I18n.tr("server.alias.nothingToChange"));
+        if (stato != null && !(stato instanceof Boolean)) return r.put("success", false).put("error", I18n.tr("server.alias.badState"));
 
         String destinazione = cambiaDestinazione ? req.optString("destination", "").toLowerCase().trim() : alias.destination;
         if (cambiaDestinazione && !indirizzoAliasValido(destinazione))
-            return r.put("success", false).put("error", "Email non valida");
+            return r.put("success", false).put("error", I18n.tr("server.badEmail"));
         if (cambiaDestinazione && destinazione.equals(alias.source) && Main.mailDatabase.getMailboxByEmail(alias.source) == null)
             return r.put("success", false).put("error", aliasSuSeStesso(alias.source));
 
@@ -1816,9 +1898,9 @@ public class SSLMailServer {
         if (nuovaDestinazione) {
             try {
                 if (!Main.mailDatabase.updateAliasDestination(id, destinazione))
-                    return r.put("success", false).put("error", "Alias non trovato");
+                    return r.put("success", false).put("error", I18n.tr("server.aliasNotFound"));
             } catch (java.sql.SQLIntegrityConstraintViolationException dup) {
-                return r.put("success", false).put("error", "Esiste gia' un alias " + alias.source + " -> " + destinazione);
+                return r.put("success", false).put("error", I18n.tr("server.alias.exists", Map.of("source", alias.source, "target", destinazione)));
             }
             logAudit("ALIAS_UPDATED", ip, alias.source + ": " + alias.destination + " -> " + destinazione);
         }
@@ -1827,7 +1909,7 @@ public class SSLMailServer {
         boolean nuovoStato = attivo != alias.active;
         if (nuovoStato) {
             if (!Main.mailDatabase.updateAliasStatus(id, attivo))
-                return r.put("success", false).put("error", "Alias non trovato");
+                return r.put("success", false).put("error", I18n.tr("server.aliasNotFound"));
             logAudit(attivo ? "ALIAS_ENABLED" : "ALIAS_DISABLED", ip, alias.source + " -> " + destinazione);
         }
         if (!nuovaDestinazione && !nuovoStato) return r.put("success", true);
@@ -1835,13 +1917,13 @@ public class SSLMailServer {
         regenerateMailConfigs();
         String nota = dopoGliAlias(alias.source, alias.domainId);
         if (nota != null)
-            r.put("nota", (nuovoStato ? (attivo ? "Alias riattivato. " : "Alias disattivato. ") : "Alias modificato. ") + nota);
+            r.put("nota", I18n.tr(nuovoStato ? (attivo ? "server.alias.reactivated" : "server.alias.deactivated") : "server.alias.modified") + " " + nota);
         return r.put("success", true);
     }
 
     private void handleApiAliases(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -1856,7 +1938,7 @@ public class SSLMailServer {
                         // Anteprima di "alias -> casella": cosa succede, o perche' non si puo'. Non cambia niente.
                         String indirizzo = trasforma.trim().toLowerCase(java.util.Locale.ROOT);
                         if (indirizzo.length() > 254) {
-                            response.put("success", false).put("error", "Indirizzo non valido");
+                            response.put("success", false).put("error", I18n.tr("server.badAddress"));
                         } else {
                             response = org.mail_panel.system.TrasformaIndirizzo.anteprimaACasella(
                                     org.mail_panel.system.TrasformaIndirizzo.stato(Main.mailDatabase, indirizzo),
@@ -1880,7 +1962,7 @@ public class SSLMailServer {
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
-                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                         return;
                     }
                     JSONObject req = new JSONObject(body);
@@ -1901,7 +1983,7 @@ public class SSLMailServer {
 
                     if (!indirizzoAliasValido(source) || !indirizzoAliasValido(destination)) {
                         response.put("success", false);
-                        response.put("error", "Email non valida");
+                        response.put("error", I18n.tr("server.badEmail"));
                     } else if (source.equals(destination) && Main.mailDatabase.getMailboxByEmail(source) == null) {
                         // "casella -> se stessa" e' il modo di tenerne una copia quando la posta e'
                         // inoltrata altrove; su un indirizzo che non e' una casella non porta da nessuna parte.
@@ -1913,7 +1995,7 @@ public class SSLMailServer {
 
                         if (domain == null) {
                             response.put("success", false);
-                            response.put("error", "Dominio non esistente: " + domainName);
+                            response.put("error", I18n.tr("server.domain.unknown", Map.of("domain", domainName)));
                         } else {
                             int id;
                             try {
@@ -1929,10 +2011,10 @@ public class SSLMailServer {
                                 regenerateMailConfigs();
                                 // Se la sorgente e' anche una casella, da ora la sua posta va solo alle destinazioni.
                                 String nota = dopoGliAlias(source, domain.id);
-                                if (nota != null) response.put("nota", "Alias creato. " + nota);
+                                if (nota != null) response.put("nota", I18n.tr("server.alias.created") + " " + nota);
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Alias gia' esistente");
+                                response.put("error", I18n.tr("server.alias.alreadyExists"));
                             }
                         }
                     }
@@ -1941,7 +2023,7 @@ public class SSLMailServer {
                     // Modifica: nuova destinazione e/o attivo si'/no, stesso controllo CSRF.
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
-                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                         return;
                     }
                     JSONObject req = new JSONObject(body);
@@ -1955,7 +2037,7 @@ public class SSLMailServer {
                     // Anche l'eliminazione cambia lo stato: stesso controllo CSRF della creazione.
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
-                        sendJsonError(exchange, 413, "Richiesta troppo grande");
+                        sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                         return;
                     }
                     if (!validateCsrfForRequest(exchange, body.isBlank() ? new JSONObject() : new JSONObject(body))) {
@@ -1974,15 +2056,15 @@ public class SSLMailServer {
                                     via != null ? via.source + " -> " + via.destination + " (ID " + id + ")" : "Alias ID: " + id);
                             regenerateMailConfigs();
                             String nota = via != null ? dopoGliAlias(via.source, via.domainId) : null;
-                            if (nota != null) response.put("nota", "Alias eliminato. " + nota);
+                            if (nota != null) response.put("nota", I18n.tr("server.alias.deleted") + " " + nota);
                         }
                     } else {
                         response.put("success", false);
-                        response.put("error", "ID non valido");
+                        response.put("error", I18n.tr("server.badId"));
                     }
                 }
                 default -> {
-                    sendJsonError(exchange, 405, "Method not allowed");
+                    sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                     return;
                 }
             }
@@ -1996,13 +2078,13 @@ public class SSLMailServer {
 
     private void handleApiWebmail(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
         String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
         JSONObject req = new JSONObject(body);
@@ -2017,7 +2099,7 @@ public class SSLMailServer {
                 response.put("url", "/roundcube/?_autologin=" + token);
             } else {
                 response.put("success", false);
-                response.put("error", "ID mailbox non valido");
+                response.put("error", I18n.tr("server.mailbox.badId"));
             }
         } catch (Exception e) {
             response.put("success", false);
@@ -2030,18 +2112,18 @@ public class SSLMailServer {
     private void handleApiService(HttpExchange exchange) throws IOException {
         try {
             if (!isAuthenticated(exchange)) {
-                sendJsonError(exchange, 401, "Unauthorized");
+                sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
                 return;
             }
 
             if (!"POST".equals(exchange.getRequestMethod())) {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
 
             String body = readRequestBodyWithLimit(exchange);
             if (body == null) {
-                sendJsonError(exchange, 413, "Richiesta troppo grande");
+                sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                 return;
             }
             JSONObject req = new JSONObject(body);
@@ -2063,14 +2145,14 @@ public class SSLMailServer {
             }
             if (!Set.of("postfix", "dovecot", "rspamd", "clamav_clamd", "redis", "mysql-server", "roundcube").contains(service)) {
                 System.out.println("[SERVICE] Invalid service: " + service);
-                sendJsonError(exchange, 400, "Servizio non valido: " + service);
+                sendJsonError(exchange, 400, I18n.tr("server.service.invalid", Map.of("service", service)));
                 return;
             }
 
             // Validate action
             if (!Set.of("start", "stop", "restart").contains(action)) {
                 System.out.println("[SERVICE] Invalid action: " + action);
-                sendJsonError(exchange, 400, "Azione non valida: " + action);
+                sendJsonError(exchange, 400, I18n.tr("server.badActionNamed", Map.of("action", action)));
                 return;
             }
 
@@ -2085,7 +2167,7 @@ public class SSLMailServer {
             }
             System.out.println("[SERVICE] Result: " + (success ? "OK" : "FAILED"));
             logAudit("SERVICE_" + action.toUpperCase(Locale.ROOT), getClientIp(exchange),
-                    "Servizio: " + service + (success ? "" : " (non riuscito)"));
+                    "service=" + service + (success ? "" : " (failed)"));
             // Dopo un riavvio "da riavviare" deve sparire subito, non fra trenta secondi. Senza
             // prendere il lock delle letture: una lettura in corso non deve trattenere questa risposta.
             VERSIONI_AZIONI.incrementAndGet();
@@ -2093,13 +2175,13 @@ public class SSLMailServer {
             JSONObject response = new JSONObject();
             response.put("success", success);
             if (!success) {
-                response.put("error", "Comando fallito: service " + service + " " + action);
+                response.put("error", I18n.tr("server.service.commandFailed", Map.of("command", "service " + service + " " + action)));
             }
             sendJsonResponse(exchange, response);
         } catch (Exception e) {
             System.err.println("[SERVICE] Exception: " + e.getMessage());
             e.printStackTrace();
-            sendJsonError(exchange, 500, "Errore interno: " + e.getMessage());
+            sendJsonError(exchange, 500, I18n.tr("server.internalErrorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -2121,16 +2203,16 @@ public class SSLMailServer {
      */
     private void handleApiVersioni(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
         if (!"GET".equals(exchange.getRequestMethod())) {
-            sendJsonError(exchange, 405, "Method not allowed");
+            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
             return;
         }
         String fresco = parametroQuery(exchange.getRequestURI().getRawQuery(), "fresco");
         if (fresco != null && !fresco.equals("1")) {
-            sendJsonError(exchange, 400, "Parametro non valido");
+            sendJsonError(exchange, 400, I18n.tr("server.badParameter"));
             return;
         }
         JSONObject r;
@@ -2150,8 +2232,8 @@ public class SSLMailServer {
                 r = versioniLette;
             }
         } catch (RuntimeException e) {
-            LOGGER.log(Level.WARNING, "Lettura delle versioni non riuscita", e);
-            sendJsonError(exchange, 500, "Lettura delle versioni non riuscita");
+            LOGGER.log(Level.WARNING, "Reading the software versions failed", e);
+            sendJsonError(exchange, 500, I18n.tr("server.versions.readFailed"));
             return;
         }
         sendJsonResponse(exchange, r);
@@ -2162,6 +2244,10 @@ public class SSLMailServer {
      * TurnoPacchetti): uno alla volta. Se un altro lavoro sta cambiando i pacchetti, o c'e'
      * l'elenco di uno che non si e' chiuso, non parte e la risposta dice perche'.
      */
+    /** Un fuso per MySQL: offset (+02:00), SYSTEM o un nome IANA (Europe/Rome). */
+    private static final java.util.regex.Pattern TIME_ZONE_VALUE =
+            java.util.regex.Pattern.compile("[+-](0\\d|1[0-4]):[0-5]\\d|SYSTEM|[A-Za-z][A-Za-z0-9_+-]{0,30}(/[A-Za-z0-9_+-]{1,30}){0,2}");
+
     private static JSONObject sulTurnoPacchetti(String descrizione, java.util.function.Supplier<JSONObject> lavoro) {
         String id = "installa-" + System.nanoTime();
         String rifiuto = org.mail_panel.system.TurnoPacchetti.prendi(id, descrizione);
@@ -2172,18 +2258,18 @@ public class SSLMailServer {
 
     private void handleApiInstall(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
         if (!"POST".equals(exchange.getRequestMethod())) {
-            sendJsonError(exchange, 405, "Method not allowed");
+            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
             return;
         }
 
         String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
         JSONObject req = new JSONObject(body);
@@ -2206,7 +2292,7 @@ public class SSLMailServer {
         JSONObject response = new JSONObject();
         if (scriptContent == null) {
             response.put("success", false);
-            response.put("error", "Componente sconosciuto");
+            response.put("error", I18n.tr("server.install.unknownComponent"));
         } else {
             // Gli script dei componenti tolgono e rimettono pacchetti: aspettano il turno dei
             // lavori sui pacchetti. Il fuso orario no.
@@ -2226,7 +2312,7 @@ public class SSLMailServer {
                 return r;
             };
             response = "timezone".equals(component) ? installa.get()
-                     : sulTurnoPacchetti("installazione di " + component, installa);
+                     : sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", component)), installa);
         }
 
         sendJsonResponse(exchange, response);
@@ -2258,41 +2344,40 @@ public class SSLMailServer {
     private JSONObject aliasInCasella(JSONObject req, String ip) throws Exception {
         JSONObject r = new JSONObject();
         String indirizzo = req.optString("source", "").trim().toLowerCase(java.util.Locale.ROOT);
-        if (indirizzo.length() > 254) return r.put("success", false).put("error", "Indirizzo non valido");
+        if (indirizzo.length() > 254) return r.put("success", false).put("error", I18n.tr("server.badAddress"));
         org.mail_panel.system.TrasformaIndirizzo.Stato s = org.mail_panel.system.TrasformaIndirizzo.stato(Main.mailDatabase, indirizzo);
         String no = org.mail_panel.system.TrasformaIndirizzo.motivoNoCasella(s);
         if (no != null) return r.put("success", false).put("error", no);
         if (!org.mail_panel.system.TrasformaIndirizzo.impronta(s).equals(req.optString("impronta", "")))
             return r.put("success", false).put("cambiato", true).put("error",
-                    "Dall'anteprima e' cambiato qualcosa (un alias, una casella, la posta sul disco): riapri la finestra e ricontrolla.");
+                    I18n.tr("server.convert.changedToMailbox"));
         String password = req.optString("password", "");
         if (!SecurityUtils.isValidMailboxPassword(password))
-            return r.put("success", false).put("error", "Password non valida: " + SecurityUtils.PASSWORD_CASELLA_REGOLA + ".");
+            return r.put("success", false).put("error", I18n.tr("server.mailbox.badPassword", Map.of("rule", SecurityUtils.passwordRule())));
         String nome = req.optString("name", "").trim();
         if (nome.length() > 100 || !org.mail_panel.system.TrasformaIndirizzo.stampabile(nome))
-            return r.put("success", false).put("error", "Il nome e' troppo lungo o ha caratteri non ammessi (solo ASCII, niente lettere accentate).");
+            return r.put("success", false).put("error", I18n.tr("server.convert.badName"));
         int quota = req.opt("quota_mb") instanceof Number n ? n.intValue() : 1024;
-        if (quota < 0 || quota > 1_048_576) return r.put("success", false).put("error", "Quota non valida: da 0 (illimitata) a 1048576 MB.");
+        if (quota < 0 || quota > 1_048_576) return r.put("success", false).put("error", I18n.tr("server.convert.badQuota"));
         if (!(req.opt("tieni_inoltri") instanceof Boolean tieni))
-            return r.put("success", false).put("error", "Manca la scelta: tenere o no gli inoltri di adesso.");
+            return r.put("success", false).put("error", I18n.tr("server.convert.keepMissing"));
         String vecchia = req.optString("posta_vecchia", "");
         boolean archivia = false;
         if (s.posta().presente()) {
             if (!vecchia.equals("ritrova") && !vecchia.equals("archivia"))
                 return r.put("success", false).put("error",
-                        "Sul disco c'e' gia' la posta di una casella di prima con questo indirizzo: scegli se ritrovarla o metterla da parte.");
+                        I18n.tr("server.convert.oldMailChoice"));
             archivia = vecchia.equals("archivia");
         }
         MailDatabase.Domain dominio = Main.mailDatabase.getDomainByName(indirizzo.substring(indirizzo.lastIndexOf('@') + 1));
-        if (dominio == null) return r.put("success", false).put("error", "Il dominio non e' fra i domini del pannello.");
+        if (dominio == null) return r.put("success", false).put("error", I18n.tr("server.convert.domainNotInPanel"));
 
         List<java.nio.file.Path[]> spostate = List.of();
         if (archivia) {
             try {
                 spostate = org.mail_panel.system.TrasformaIndirizzo.archivia(indirizzo, System.currentTimeMillis());
             } catch (IOException e) {
-                return r.put("success", false).put("error", "Non sono riuscito a mettere da parte la posta di prima ("
-                        + e.getMessage() + "): non ho cambiato niente.");
+                return r.put("success", false).put("error", I18n.tr("server.convert.archiveFailed", Map.of("error", String.valueOf(e.getMessage()))));
             }
         }
         int id;
@@ -2300,19 +2385,19 @@ public class SSLMailServer {
             id = Main.mailDatabase.trasformaAliasInCasella(dominio.id, indirizzo, password, nome, quota, tieni);
         } catch (java.sql.SQLException e) {
             org.mail_panel.system.TrasformaIndirizzo.rimetti(spostate);
-            LOGGER.log(Level.WARNING, "Alias -> casella non riuscito per " + indirizzo, e);
-            return r.put("success", false).put("error", "La trasformazione non e' riuscita, non ho cambiato niente: " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Alias -> mailbox failed for " + indirizzo, e);
+            return r.put("success", false).put("error", I18n.tr("server.convert.failed", Map.of("error", String.valueOf(e.getMessage()))));
         }
-        logAudit("ALIAS_TO_MAILBOX", ip, indirizzo + (tieni ? " (inoltri tenuti, copia nella casella)" : " (alias tolti)")
-                + (archivia ? ", posta di prima messa da parte" : s.posta().presente() ? ", posta di prima ritrovata" : ""));
+        logAudit("ALIAS_TO_MAILBOX", ip, indirizzo + (tieni ? " (forwards kept, copy in the mailbox)" : " (aliases removed)")
+                + (archivia ? ", old mail set aside" : s.posta().presente() ? ", old mail found again" : ""));
         regenerateMailConfigs();
         // I filtri compilati di una casella di prima non devono valere per questa: si riscrivono, vuoti.
         if (!archivia && s.posta().filtri() && sieveGenerator != null)
             sieveGenerator.saveSieveScript(indirizzo, sieveGenerator.generateSieveScript(id, Main.mailDatabase));
-        StringBuilder msg = new StringBuilder(indirizzo).append(" ora e' una casella.");
-        if (tieni) msg.append(" La posta continua ad andare anche alle destinazioni di prima, e una copia resta nella casella.");
-        if (!spostate.isEmpty()) msg.append(" La posta di prima e' in ").append(spostate.get(0)[1]).append(".");
-        else if (s.posta().presente()) msg.append(" Ritrova la posta che c'era.");
+        StringBuilder msg = new StringBuilder(I18n.tr("server.convert.nowMailbox", Map.of("address", indirizzo)));
+        if (tieni) msg.append(' ').append(I18n.tr("server.convert.forwardsKept"));
+        if (!spostate.isEmpty()) msg.append(' ').append(I18n.tr("server.convert.oldMailIn", Map.of("path", String.valueOf(spostate.get(0)[1]))));
+        else if (s.posta().presente()) msg.append(' ').append(I18n.tr("server.convert.oldMailFound"));
         return r.put("success", true).put("id", id).put("message", msg.toString());
     }
 
@@ -2325,14 +2410,14 @@ public class SSLMailServer {
         JSONObject r = new JSONObject();
         int id = req.optInt("id", 0);
         MailDatabase.Mailbox m = id > 0 ? Main.mailDatabase.getMailbox(id) : null;
-        if (m == null) return r.put("success", false).put("error", "Casella non trovata");
+        if (m == null) return r.put("success", false).put("error", I18n.tr("server.mailbox.notFound"));
         String indirizzo = m.email.toLowerCase(java.util.Locale.ROOT);
         if (!indirizzo.equals(req.optString("conferma", "").trim().toLowerCase(java.util.Locale.ROOT)))
-            return r.put("success", false).put("error", "Per confermare scrivi l'indirizzo della casella: " + indirizzo);
+            return r.put("success", false).put("error", I18n.tr("server.convert.typeAddress", Map.of("address", indirizzo)));
         org.mail_panel.system.TrasformaIndirizzo.Stato s = org.mail_panel.system.TrasformaIndirizzo.stato(Main.mailDatabase, indirizzo);
         if (!org.mail_panel.system.TrasformaIndirizzo.impronta(s).equals(req.optString("impronta", "")))
             return r.put("success", false).put("cambiato", true).put("error",
-                    "Dall'anteprima e' cambiato qualcosa (un alias, la casella, i suoi filtri o inoltri): riapri la finestra e ricontrolla.");
+                    I18n.tr("server.convert.changedToAlias"));
         List<String> destinazioni;
         try {
             destinazioni = org.mail_panel.system.TrasformaIndirizzo.destinazioni(s, req.optJSONArray("destinazioni"),
@@ -2343,15 +2428,14 @@ public class SSLMailServer {
         try {
             Main.mailDatabase.trasformaCasellaInAlias(m.id, m.domainId, indirizzo, destinazioni);
         } catch (java.sql.SQLException e) {
-            LOGGER.log(Level.WARNING, "Casella -> alias non riuscito per " + indirizzo, e);
-            return r.put("success", false).put("error", "La trasformazione non e' riuscita, non ho cambiato niente: " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Mailbox -> alias failed for " + indirizzo, e);
+            return r.put("success", false).put("error", I18n.tr("server.convert.failed", Map.of("error", String.valueOf(e.getMessage()))));
         }
         logAudit("MAILBOX_TO_ALIAS", ip, indirizzo + " -> " + String.join(", ", destinazioni));
         regenerateMailConfigs();
-        String msg = indirizzo + " ora e' un alias verso " + String.join(", ", destinazioni) + ".";
+        String msg = I18n.tr("server.convert.nowAlias", Map.of("address", indirizzo, "targets", String.join(", ", destinazioni)));
         if (s.posta().presente())
-            msg += " La posta gia' arrivata resta sul disco, in " + org.mail_panel.system.TrasformaIndirizzo.cartellaPosta(indirizzo)
-                 + ": se un giorno l'indirizzo torna una casella, si potra' ritrovarla.";
+            msg += " " + I18n.tr("server.convert.mailStaysOnDisk", Map.of("path", String.valueOf(org.mail_panel.system.TrasformaIndirizzo.cartellaPosta(indirizzo))));
         return r.put("success", true).put("message", msg);
     }
 
@@ -2742,14 +2826,14 @@ public class SSLMailServer {
     }
 
     private void handleApiAutoconfig(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
-        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, "Method not allowed"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed")); return; }
         String body = readRequestBodyWithLimit(exchange);
-        if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+        if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
         String ip = getClientIp(exchange);
         JSONObject req;
         try { req = new JSONObject(body); }
-        catch (Exception e) { sendJsonError(exchange, 400, "JSON non valido"); return; }
+        catch (Exception e) { sendJsonError(exchange, 400, I18n.tr("server.badJson")); return; }
 
         JSONObject response;
         switch (req.optString("action", "")) {
@@ -2757,14 +2841,14 @@ public class SSLMailServer {
             case "preview" -> response = org.mail_panel.system.Autoconfig.anteprima();
             case "install" -> {
                 if (!"INSTALLA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 response = org.mail_panel.system.Autoconfig.installa();
                 logAudit("AUTOCONFIG_INSTALL", ip, response.optBoolean("success")
-                        ? "nginx configurato" : "NON configurato: " + response.optString("error", "?"));
+                        ? "nginx configured" : "NOT configured: " + response.optString("error", "?"));
             }
-            default -> response = new JSONObject().put("success", false).put("error", "azione sconosciuta");
+            default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
         }
         sendJsonResponse(exchange, response);
     }
@@ -2801,7 +2885,7 @@ public class SSLMailServer {
             exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + nome + "\"");
             exchange.sendResponseHeaders(200, dati.length);
             try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
-            logAudit("PROFILO_APPLE", getClientIp(exchange), "scaricato per " + casella.email());
+            logAudit("PROFILO_APPLE", getClientIp(exchange), "downloaded for " + casella.email());
         } catch (Exception e) {
             try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
         } finally {
@@ -2810,18 +2894,18 @@ public class SSLMailServer {
     }
 
     private void handleApiProfiloApple(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
-        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, "Method not allowed"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed")); return; }
         String body = readRequestBodyWithLimit(exchange);
-        if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+        if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
         JSONObject req;
         try { req = new JSONObject(body); }
-        catch (Exception e) { sendJsonError(exchange, 400, "JSON non valido"); return; }
+        catch (Exception e) { sendJsonError(exchange, 400, I18n.tr("server.badJson")); return; }
 
         JSONObject response = switch (req.optString("action", "")) {
             case "status" -> org.mail_panel.system.ProfiloApple.stato();
             case "preview" -> org.mail_panel.system.ProfiloApple.anteprima(req.optString("email", ""));
-            default -> new JSONObject().put("success", false).put("error", "azione sconosciuta");
+            default -> new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
         };
         sendJsonResponse(exchange, response);
     }
@@ -2943,18 +3027,18 @@ public class SSLMailServer {
         headers.set("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
     }
 
-    /** Converte ISO LocalDateTime in formato leggibile italiano, ritorna "Mai" se vuoto */
+    /** Converte ISO LocalDateTime in formato leggibile, nella lingua della richiesta; "Mai" se vuoto */
     private static String humanizeDateTime(String iso) {
-        if (iso == null || iso.isEmpty()) return "Mai";
+        if (iso == null || iso.isEmpty()) return I18n.tr("server.never");
         try {
             java.time.LocalDateTime dt = java.time.LocalDateTime.parse(iso);
             java.time.Duration diff = java.time.Duration.between(dt, java.time.LocalDateTime.now());
             String formatted = dt.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
             long minutes = diff.toMinutes();
-            if (minutes < 1)        return formatted + " (poco fa)";
-            else if (minutes < 60)  return formatted + " (" + minutes + " min fa)";
-            else if (minutes < 1440) return formatted + " (" + (minutes/60) + "h fa)";
-            else                    return formatted + " (" + (minutes/1440) + "g fa)";
+            if (minutes < 1)        return formatted + " " + I18n.tr("server.ago.now");
+            else if (minutes < 60)  return formatted + " " + I18n.tr("server.ago.min", java.util.Map.of("n", String.valueOf(minutes)));
+            else if (minutes < 1440) return formatted + " " + I18n.tr("server.ago.hours", java.util.Map.of("n", String.valueOf((minutes/60))));
+            else                    return formatted + " " + I18n.tr("server.ago.days", java.util.Map.of("n", String.valueOf((minutes/1440))));
         } catch (Exception e) {
             return iso;
         }
@@ -2999,7 +3083,7 @@ public class SSLMailServer {
 
     private void handleApiDkim(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -3031,17 +3115,17 @@ public class SSLMailServer {
                         }
                     } else {
                         response.put("success", false);
-                        response.put("error", "Dominio non trovato");
+                        response.put("error", I18n.tr("server.domainNotFound"));
                     }
                 } else {
                     response.put("success", false);
-                    response.put("error", "ID dominio richiesto");
+                    response.put("error", I18n.tr("server.domain.idRequired"));
                 }
 
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                 JSONObject req = new JSONObject(body);
@@ -3054,24 +3138,21 @@ public class SSLMailServer {
                     MailDatabase.Domain domain = Main.mailDatabase.getDomain(domainId);
                     if (domain == null) {
                         response.put("success", false);
-                        response.put("error", "Dominio non trovato");
+                        response.put("error", I18n.tr("server.domainNotFound"));
                     } else if (domain.hasDkim) {
                         // SAFETY: 'generate' è solo per il SETUP INIZIALE. Se DKIM è già configurato,
                         // sovrascrivere la chiave senza rotazione causerebbe DKIM-fail su mail in transito.
                         // L'utente DEVE usare 'rotate_start' per cambiare la chiave su un dominio già attivo.
                         response.put("success", false);
                         response.put("error",
-                            "DKIM è già configurato per questo dominio (selector: " + domain.dkimSelector + "). " +
-                            "Per generare una nuova chiave, usa il workflow di rotazione (\"Avvia rotazione chiave\"): " +
-                            "rispetta il grace period di 7 giorni evitando DKIM-fail su mail in transito. " +
-                            "L'azione 'generate' è riservata al setup iniziale.");
+                            I18n.tr("server.dkim.alreadyConfigured", Map.of("selector", String.valueOf(domain.dkimSelector))));
                     } else {
                         DkimManager.DkimResult result = dkimManager.generateDkimKeys(domainId, domain.domain, selector);
                         response.put("success", result.success);
                         if (result.success) {
                             response.put("selector", result.selector);
                             response.put("dns_record", result.dnsRecord);
-                            response.put("message", "Chiavi DKIM generate. Aggiungi il record DNS per completare la configurazione.");
+                            response.put("message", I18n.tr("server.dkim.generated"));
                         } else {
                             response.put("error", result.error);
                         }
@@ -3105,11 +3186,11 @@ public class SSLMailServer {
                         // r.error qui è usato come "warning" non bloccante (es. CF non trovata)
                         if (r.error != null && !r.error.isEmpty()) {
                             response.put("warning", r.error);
-                            response.put("message", "Chiave generata (con avviso): " + r.error);
+                            response.put("message", I18n.tr("server.dkim.generatedWarning", Map.of("warning", String.valueOf(r.error))));
                         } else if (auto && cloudflareManager != null && cloudflareManager.hasAccountForDomain(domainId)) {
-                            response.put("message", "Chiave generata e record DNS pubblicato via Cloudflare. Pronto per l'attivazione.");
+                            response.put("message", I18n.tr("server.dkim.generatedPublished"));
                         } else {
-                            response.put("message", "Nuova chiave generata. Aggiungi il record DNS, poi avvia la verifica.");
+                            response.put("message", I18n.tr("server.dkim.generatedAddRecord"));
                         }
                     } else {
                         response.put("error", r.error);
@@ -3154,7 +3235,7 @@ public class SSLMailServer {
                     DkimManager.RotationInfo info = dkimManager.getRotationInfo(domainId);
                     if (info == null) {
                         response.put("success", false);
-                        response.put("error", "Dominio non trovato");
+                        response.put("error", I18n.tr("server.domainNotFound"));
                     } else {
                         response.put("success", true);
                         response.put("domain", info.domain);
@@ -3268,7 +3349,7 @@ public class SSLMailServer {
                     String recordId = req.optString("record_id", "");
                     if (domainId <= 0 || recordId.isEmpty()) {
                         response.put("success", false);
-                        response.put("error", "domain_id e record_id richiesti");
+                        response.put("error", I18n.tr("server.dkim.idsRequired"));
                     } else {
                         DkimManager.RotationActionResult r = dkimManager.deleteDkimRecordById(domainId, recordId);
                         response.put("success", r.success);
@@ -3281,11 +3362,11 @@ public class SSLMailServer {
                     int domainId = req.optInt("domain_id", 0);
                     if (domainId <= 0) {
                         response.put("success", false);
-                        response.put("error", "domain_id richiesto");
+                        response.put("error", I18n.tr("server.domain.idRequired"));
                     } else {
                         Main.mailDatabase.markDkimRotationActivated(domainId);
                         response.put("success", true);
-                        response.put("message", "Timestamp 'ultima rotazione' reimpostato a ora.");
+                        response.put("message", I18n.tr("server.dkim.rotationReset"));
                     }
 
                 } else if ("last_rotation_clear".equals(action)) {
@@ -3293,11 +3374,11 @@ public class SSLMailServer {
                     int domainId = req.optInt("domain_id", 0);
                     if (domainId <= 0) {
                         response.put("success", false);
-                        response.put("error", "domain_id richiesto");
+                        response.put("error", I18n.tr("server.domain.idRequired"));
                     } else {
                         Main.mailDatabase.clearDkimLastRotation(domainId);
                         response.put("success", true);
-                        response.put("message", "Timestamp 'ultima rotazione' cancellato (NULL).");
+                        response.put("message", I18n.tr("server.dkim.lastRotationCleared"));
                     }
 
                 } else if ("schedule_get".equals(action)) {
@@ -3346,11 +3427,11 @@ public class SSLMailServer {
                         } catch (Exception ignora) { }
                         // Preset consigliati (per la UI)
                         JSONArray presets = new JSONArray();
-                        presets.put(new JSONObject().put("days", 0).put("label", "Disattivato"));
-                        presets.put(new JSONObject().put("days", DkimManager.PRESET_AGGRESSIVE).put("label", "Mensile (massima sicurezza)"));
-                        presets.put(new JSONObject().put("days", DkimManager.PRESET_RECOMMENDED).put("label", "Trimestrale — consigliato"));
-                        presets.put(new JSONObject().put("days", DkimManager.PRESET_BALANCED).put("label", "Semestrale (equilibrato)"));
-                        presets.put(new JSONObject().put("days", DkimManager.PRESET_MINIMAL).put("label", "Annuale (minimo)"));
+                        presets.put(new JSONObject().put("days", 0).put("label", I18n.tr("server.dkim.preset.off")));
+                        presets.put(new JSONObject().put("days", DkimManager.PRESET_AGGRESSIVE).put("label", I18n.tr("server.dkim.preset.monthly")));
+                        presets.put(new JSONObject().put("days", DkimManager.PRESET_RECOMMENDED).put("label", I18n.tr("server.dkim.preset.quarterly")));
+                        presets.put(new JSONObject().put("days", DkimManager.PRESET_BALANCED).put("label", I18n.tr("server.dkim.preset.halfYearly")));
+                        presets.put(new JSONObject().put("days", DkimManager.PRESET_MINIMAL).put("label", I18n.tr("server.dkim.preset.yearly")));
                         response.put("presets", presets);
                     }
 
@@ -3360,8 +3441,8 @@ public class SSLMailServer {
                     DkimManager.ScheduleResult s = dkimManager.setRotationSchedule(domainId, days);
                     response.put("success", s.success);
                     response.put("message", s.success
-                        ? (days == 0 ? "Rotazione programmata disattivata."
-                                     : "Rotazione programmata ogni " + days + " giorni.")
+                        ? (days == 0 ? I18n.tr("server.dkim.scheduleOff")
+                                     : I18n.tr("server.dkim.scheduleEvery", Map.of("days", days)))
                         : s.message);
                     response.put("interval_days", s.intervalDays);
                     putTs(response, "last_rotation_at", s.lastRotationAt);
@@ -3372,7 +3453,7 @@ public class SSLMailServer {
                     int limit = req.optInt("limit", 50);
                     if (domainId <= 0) {
                         response.put("success", false);
-                        response.put("error", "domain_id richiesto");
+                        response.put("error", I18n.tr("server.domain.idRequired"));
                     } else {
                         java.util.List<MailDatabase.DkimRotationEvent> events =
                             Main.mailDatabase.getDkimRotationHistory(domainId, limit);
@@ -3415,11 +3496,11 @@ public class SSLMailServer {
 
                 } else {
                     response.put("success", false);
-                    response.put("error", "Azione non valida");
+                    response.put("error", I18n.tr("server.badAction"));
                 }
 
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
 
@@ -3435,7 +3516,7 @@ public class SSLMailServer {
 
     private void handleApiDns(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -3454,7 +3535,7 @@ public class SSLMailServer {
 
                 if (domain == null || domain.isEmpty()) {
                     response.put("success", false);
-                    response.put("error", "Dominio richiesto");
+                    response.put("error", I18n.tr("server.domain.required"));
                 } else {
                     // Get server IP and hostname
                     String serverIp = dnsGenerator.detectServerIp();
@@ -3492,7 +3573,7 @@ public class SSLMailServer {
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                 JSONObject req = new JSONObject(body);
@@ -3537,16 +3618,16 @@ public class SSLMailServer {
                         response.put("success", true);
                     } else {
                         response.put("success", false);
-                        response.put("error", "Hostname richiesto");
+                        response.put("error", I18n.tr("server.hostnameRequired"));
                     }
 
                 } else {
                     response.put("success", false);
-                    response.put("error", "Azione non valida");
+                    response.put("error", I18n.tr("server.badAction"));
                 }
 
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
 
@@ -3572,7 +3653,7 @@ public class SSLMailServer {
      */
     private void handleApiCloudflare(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
         if (cloudflareManager == null) {
@@ -3628,13 +3709,13 @@ public class SSLMailServer {
             }
 
             if (!"POST".equals(method)) {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
 
             String body = readRequestBodyWithLimit(exchange);
             if (body == null) {
-                sendJsonError(exchange, 413, "Richiesta troppo grande");
+                sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                 return;
             }
             org.json.JSONObject req = new org.json.JSONObject(body);
@@ -3644,7 +3725,7 @@ public class SSLMailServer {
                 String token = req.optString("token", "").trim();
                 if (token.isEmpty()) {
                     response.put("success", false);
-                    response.put("error", "Token non fornito");
+                    response.put("error", I18n.tr("server.cf.tokenMissing"));
                 } else {
                     org.mail_panel.security.CloudflareManager.TokenCheck tc = cloudflareManager.verifyToken(token);
                     response.put("success", tc.valid);
@@ -3676,11 +3757,11 @@ public class SSLMailServer {
                 int id = req.optInt("account_id", 0);
                 if (id <= 0) {
                     response.put("success", false);
-                    response.put("error", "account_id richiesto");
+                    response.put("error", I18n.tr("server.cf.accountIdRequired"));
                 } else {
                     boolean ok = cloudflareManager.deleteAccount(id);
                     response.put("success", ok);
-                    response.put("message", ok ? "Account rimosso. Domini assegnati: torno a modalità manuale." : "Account non trovato");
+                    response.put("message", ok ? I18n.tr("server.cf.accountRemoved") : I18n.tr("server.cf.accountNotFound"));
                 }
 
             } else if ("assign".equals(action)) {
@@ -3688,13 +3769,13 @@ public class SSLMailServer {
                 int accountId = req.optInt("account_id", 0); // 0 = manuale
                 if (domainId <= 0) {
                     response.put("success", false);
-                    response.put("error", "domain_id richiesto");
+                    response.put("error", I18n.tr("server.domain.idRequired"));
                 } else {
                     boolean ok = cloudflareManager.assignDomain(domainId, accountId);
                     response.put("success", ok);
                     response.put("message", ok
-                        ? (accountId > 0 ? "Dominio assegnato all'account." : "Dominio impostato su modalità manuale.")
-                        : "Operazione fallita");
+                        ? (accountId > 0 ? I18n.tr("server.cf.domainAssigned") : I18n.tr("server.cf.domainManual"))
+                        : I18n.tr("server.operationFailed"));
                 }
 
             } else if ("test_mailserver".equals(action)) {
@@ -3704,33 +3785,31 @@ public class SSLMailServer {
                 String mh = Main.dbManager != null ? Main.dbManager.getMailHostname() : null;
                 if (mh == null || mh.isBlank()) {
                     response.put("success", false);
-                    response.put("error", "Mail Hostname non configurato");
+                    response.put("error", I18n.tr("server.cf.noMailHostname"));
                 } else if (accountId <= 0) {
                     response.put("success", false);
-                    response.put("error", "Seleziona un account Cloudflare da testare");
+                    response.put("error", I18n.tr("server.cf.chooseAccount"));
                 } else {
                     MailDatabase.CloudflareAccount acct = Main.mailDatabase.getCloudflareAccount(accountId);
                     if (acct == null || acct.apiToken == null || acct.apiToken.isBlank()) {
                         response.put("success", false);
-                        response.put("error", "Account o token non trovato");
+                        response.put("error", I18n.tr("server.cf.accountOrTokenMissing"));
                     } else {
                         org.mail_panel.security.CloudflareManager.TokenCheck tc =
                             cloudflareManager.verifyToken(acct.apiToken);
                         if (!tc.valid) {
                             response.put("success", false);
-                            response.put("error", "Token non valido: " + tc.message);
+                            response.put("error", I18n.tr("server.cf.tokenInvalid", Map.of("reason", String.valueOf(tc.message))));
                         } else {
                             org.mail_panel.security.CloudflareManager.ZoneLookup zl =
                                 cloudflareManager.findZone(acct.apiToken, mh);
                             if (zl.found) {
                                 response.put("success", true);
                                 response.put("zone", zl.zoneName);
-                                response.put("message", "Token valido e zona DNS '" + zl.zoneName
-                                    + "' raggiungibile per " + mh + ". Il rinnovo automatico funzionerà.");
+                                response.put("message", I18n.tr("server.cf.zoneOkRenewal", Map.of("zone", String.valueOf(zl.zoneName), "name", mh)));
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Token valido, ma non trova la zona DNS per " + mh
-                                    + ": " + zl.error + " — aggiungi questa zona ai permessi del token.");
+                                response.put("error", I18n.tr("server.cf.zoneMissing", Map.of("name", mh, "error", String.valueOf(zl.error))));
                             }
                         }
                     }
@@ -3742,34 +3821,32 @@ public class SSLMailServer {
                 int domainId = req.optInt("domain_id", 0);
                 if (domainId <= 0) {
                     response.put("success", false);
-                    response.put("error", "domain_id richiesto");
+                    response.put("error", I18n.tr("server.domain.idRequired"));
                 } else {
                     MailDatabase.Domain dom = Main.mailDatabase.getDomain(domainId);
                     MailDatabase.CloudflareAccount acct = cloudflareManager.getAccountForDomain(domainId);
                     if (dom == null) {
                         response.put("success", false);
-                        response.put("error", "Dominio non trovato");
+                        response.put("error", I18n.tr("server.domainNotFound"));
                     } else if (acct == null || acct.apiToken == null || acct.apiToken.isBlank()) {
                         response.put("success", false);
-                        response.put("error", "Nessun account Cloudflare assegnato a questo dominio (modalità manuale)");
+                        response.put("error", I18n.tr("server.cf.noAccountForDomain"));
                     } else {
                         org.mail_panel.security.CloudflareManager.TokenCheck tc =
                             cloudflareManager.verifyToken(acct.apiToken);
                         if (!tc.valid) {
                             response.put("success", false);
-                            response.put("error", "Token non valido: " + tc.message);
+                            response.put("error", I18n.tr("server.cf.tokenInvalid", Map.of("reason", String.valueOf(tc.message))));
                         } else {
                             org.mail_panel.security.CloudflareManager.ZoneLookup zl =
                                 cloudflareManager.findZone(acct.apiToken, dom.domain);
                             if (zl.found) {
                                 response.put("success", true);
                                 response.put("zone", zl.zoneName);
-                                response.put("message", "Token valido e zona DNS '" + zl.zoneName
-                                    + "' raggiungibile per " + dom.domain + ".");
+                                response.put("message", I18n.tr("server.cf.zoneOk", Map.of("zone", String.valueOf(zl.zoneName), "name", dom.domain)));
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Token valido, ma non trova la zona DNS per " + dom.domain
-                                    + ": " + zl.error + " — aggiungi questa zona ai permessi del token.");
+                                response.put("error", I18n.tr("server.cf.zoneMissing", Map.of("name", dom.domain, "error", String.valueOf(zl.error))));
                             }
                         }
                     }
@@ -3780,21 +3857,21 @@ public class SSLMailServer {
                 int accountId = req.optInt("account_id", 0); // 0 = manuale
                 if (acmeManager == null) {
                     response.put("success", false);
-                    response.put("error", "ACME manager non inizializzato");
+                    response.put("error", I18n.tr("server.acme.notReady"));
                 } else if (accountId > 0 && Main.mailDatabase.getCloudflareAccount(accountId) == null) {
                     response.put("success", false);
-                    response.put("error", "Account non trovato");
+                    response.put("error", I18n.tr("server.cf.accountNotFound"));
                 } else {
                     acmeManager.setMailCertCloudflareAccountId(accountId);
                     response.put("success", true);
                     response.put("message", accountId > 0
-                        ? "Account Cloudflare collegato al certificato del server mail. Il rinnovo automatico è ora attivo."
-                        : "Certificato del server mail impostato su modalità manuale.");
+                        ? I18n.tr("server.cf.mailCertLinked")
+                        : I18n.tr("server.cf.mailCertManual"));
                 }
 
             } else {
                 response.put("success", false);
-                response.put("error", "Azione non valida");
+                response.put("error", I18n.tr("server.badAction"));
             }
 
         } catch (Exception e) {
@@ -3822,7 +3899,7 @@ public class SSLMailServer {
      */
     private void handleApiTimezoneDiag(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
         String method = exchange.getRequestMethod();
@@ -3835,11 +3912,11 @@ public class SSLMailServer {
                 return;
             }
             if (!"POST".equals(method)) {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
             String body = readRequestBodyWithLimit(exchange);
-            if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+            if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
             org.json.JSONObject req = new org.json.JSONObject(body);
             String action = req.optString("action", "");
 
@@ -3849,7 +3926,7 @@ public class SSLMailServer {
                     desired = req.optString("value", "").trim();
                     if (desired.isEmpty()) {
                         response.put("success", false);
-                        response.put("error", "Valore richiesto (es. '+02:00', 'SYSTEM', 'Europe/Rome')");
+                        response.put("error", I18n.tr("server.tz.valueRequired"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
@@ -3865,20 +3942,30 @@ public class SSLMailServer {
                 StringBuilder log = new StringBuilder();
                 boolean ok = true;
                 String errMsg = null;
-                try (java.sql.Statement stmt = Main.mailDatabase.getConnection().createStatement()) {
+                if (!TIME_ZONE_VALUE.matcher(desired).matches()) {
+                    response.put("success", false);
+                    response.put("error", I18n.tr("server.tz.badValue"));
+                    sendJsonResponse(exchange, response);
+                    return;
+                }
+                // Il valore passa come parametro, mai incollato nella query
+                try (java.sql.PreparedStatement global = Main.mailDatabase.getConnection().prepareStatement("SET GLOBAL time_zone = ?");
+                     java.sql.PreparedStatement session = Main.mailDatabase.getConnection().prepareStatement("SET SESSION time_zone = ?")) {
                     // Prova global (richiede SUPER), poi session
                     try {
-                        stmt.executeUpdate("SET GLOBAL time_zone = '" + desired.replace("'", "") + "'");
-                        log.append("✓ Global time_zone impostata a '").append(desired).append("'\n");
+                        global.setString(1, desired);
+                        global.executeUpdate();
+                        log.append("✓ ").append(I18n.tr("server.tz.globalSet", Map.of("value", desired))).append("\n");
                     } catch (Exception ex) {
-                        log.append("✗ Impossibile impostare GLOBAL time_zone (manca privilegio SUPER?): ").append(ex.getMessage()).append("\n");
+                        log.append("✗ ").append(I18n.tr("server.tz.globalFailed", Map.of("error", String.valueOf(ex.getMessage())))).append("\n");
                         // Continua comunque a impostare session per la connessione corrente
                     }
                     try {
-                        stmt.executeUpdate("SET SESSION time_zone = '" + desired.replace("'", "") + "'");
-                        log.append("✓ Session time_zone impostata a '").append(desired).append("'\n");
+                        session.setString(1, desired);
+                        session.executeUpdate();
+                        log.append("✓ ").append(I18n.tr("server.tz.sessionSet", Map.of("value", desired))).append("\n");
                     } catch (Exception ex) {
-                        log.append("✗ Errore session: ").append(ex.getMessage()).append("\n");
+                        log.append("✗ ").append(I18n.tr("server.tz.sessionFailed", Map.of("error", String.valueOf(ex.getMessage())))).append("\n");
                         ok = false;
                         errMsg = ex.getMessage();
                     }
@@ -3897,10 +3984,10 @@ public class SSLMailServer {
             }
 
             response.put("success", false);
-            response.put("error", "Azione non valida");
+            response.put("error", I18n.tr("server.badAction"));
             sendJsonResponse(exchange, response);
         } catch (Exception e) {
-            sendJsonError(exchange, 500, "Errore: " + e.getMessage());
+            sendJsonError(exchange, 500, I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -3968,7 +4055,7 @@ public class SSLMailServer {
      */
     private void handleApiPostfixAliases(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
         String method = exchange.getRequestMethod();
@@ -3983,11 +4070,11 @@ public class SSLMailServer {
                 return;
             }
             if (!"POST".equals(method)) {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
             String body = readRequestBodyWithLimit(exchange);
-            if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+            if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
             org.json.JSONObject req = new org.json.JSONObject(body);
             String action = req.optString("action", "");
 
@@ -4020,7 +4107,7 @@ public class SSLMailServer {
             }
 
             response.put("success", false);
-            response.put("error", "Azione non valida (usa: fix, set_root_forward)");
+            response.put("error", I18n.tr("server.aliasesHealth.badAction"));
             sendJsonResponse(exchange, response);
         } catch (Exception e) {
             response.put("success", false);
@@ -4076,7 +4163,7 @@ public class SSLMailServer {
 
     private void handleApiSsl(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -4128,7 +4215,7 @@ public class SSLMailServer {
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                 JSONObject req = new JSONObject(body);
@@ -4139,10 +4226,10 @@ public class SSLMailServer {
                         String email = req.optString("email", "");
                         if (email.isEmpty() || !email.contains("@")) {
                             response.put("success", false);
-                            response.put("error", "Email valida richiesta");
+                            response.put("error", I18n.tr("server.acme.emailRequired"));
                         } else {
                             // installAcme fa "pkg install curl socat": aspetta il turno dei lavori sui pacchetti.
-                            JSONObject esito = sulTurnoPacchetti("installazione di acme.sh", () -> {
+                            JSONObject esito = sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", "acme.sh")), () -> {
                                 AcmeManager.InstallResult result = acmeManager.installAcme(email);
                                 JSONObject r = new JSONObject().put("success", result.success).put("message", result.message);
                                 if (result.output != null) r.put("output", result.output);
@@ -4159,7 +4246,7 @@ public class SSLMailServer {
 
                         if (domain.isEmpty()) {
                             response.put("success", false);
-                            response.put("error", "Dominio richiesto");
+                            response.put("error", I18n.tr("server.domain.required"));
                         } else {
                             AcmeManager.CertificateResult result = acmeManager.issueCertificate(domain, mailHostname, challengeType, webroot);
                             response.put("success", result.success);
@@ -4181,7 +4268,7 @@ public class SSLMailServer {
 
                         if (mailHostname == null || mailHostname.isEmpty()) {
                             response.put("success", false);
-                            response.put("error", "Hostname richiesto");
+                            response.put("error", I18n.tr("server.hostnameRequired"));
                         } else {
                             AcmeManager.CertificateResult result = acmeManager.renewCertificate(mailHostname);
                             response.put("success", result.success);
@@ -4235,12 +4322,12 @@ public class SSLMailServer {
                                     java.time.LocalDateTime next = last.plusHours(24);
                                     response.put("next_check_human", next.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
                                 } catch (Exception ignored) {
-                                    response.put("next_check_human", "Entro 24h");
+                                    response.put("next_check_human", I18n.tr("server.ssl.within24h"));
                                 }
                             } else if (acmeManager.isAutoRenewalEnabled()) {
-                                response.put("next_check_human", "Entro 24h");
+                                response.put("next_check_human", I18n.tr("server.ssl.within24h"));
                             } else {
-                                response.put("next_check_human", "Disattivato");
+                                response.put("next_check_human", I18n.tr("server.ssl.autoOff"));
                             }
                         } catch (Exception e) {
                             response.put("success", false);
@@ -4255,7 +4342,7 @@ public class SSLMailServer {
                             acmeManager.setAutoRenewalEnabled(enabled);
                             acmeManager.setRenewalThresholdDays(thresholdDays);
                             response.put("success", true);
-                            response.put("message", "Impostazioni salvate");
+                            response.put("message", I18n.tr("server.settingsSaved"));
                             logAudit("SSL_AUTO_RENEWAL_SETTINGS_CHANGED", getClientIp(exchange),
                                 "enabled=" + enabled + " threshold=" + thresholdDays);
                         } catch (Exception e) {
@@ -4284,7 +4371,7 @@ public class SSLMailServer {
                         String hostname = req.optString("hostname", "");
                         if (hostname.isEmpty()) {
                             response.put("success", false);
-                            response.put("error", "Hostname richiesto (es. mail.example.com)");
+                            response.put("error", I18n.tr("server.ssl.hostnameRequired"));
                         } else {
                             // Extract domain from hostname
                             String domain = hostname.replaceFirst("^[^.]+\\.", "");
@@ -4305,7 +4392,7 @@ public class SSLMailServer {
                         boolean forceRegenerate = req.optBoolean("force", false);
                         if (hostname.isEmpty()) {
                             response.put("success", false);
-                            response.put("error", "Hostname richiesto (es. mail.example.com)");
+                            response.put("error", I18n.tr("server.ssl.hostnameRequired"));
                         } else {
                             AcmeManager.DnsChallengeResult result = acmeManager.generateDnsChallenge(hostname, forceRegenerate);
                             response.put("success", result.success);
@@ -4324,7 +4411,7 @@ public class SSLMailServer {
                         String hostname = req.optString("hostname", "");
                         if (hostname.isEmpty()) {
                             response.put("success", false);
-                            response.put("error", "Hostname richiesto");
+                            response.put("error", I18n.tr("server.hostnameRequired"));
                         } else {
                             AcmeManager.DeployResult result = acmeManager.deployCertificate(hostname);
                             response.put("success", result.success);
@@ -4342,7 +4429,7 @@ public class SSLMailServer {
                         String hostname = req.optString("hostname", "");
                         if (hostname.isEmpty()) {
                             response.put("success", false);
-                            response.put("error", "Hostname richiesto (es. mail.example.com)");
+                            response.put("error", I18n.tr("server.ssl.hostnameRequired"));
                         } else {
                             AcmeManager.CertificateResult result = acmeManager.verifyDnsAndIssue(hostname);
                             response.put("success", result.success);
@@ -4363,7 +4450,7 @@ public class SSLMailServer {
 
                         if (cert.isEmpty() || key.isEmpty()) {
                             response.put("success", false);
-                            response.put("error", "Certificato e chiave privata richiesti");
+                            response.put("error", I18n.tr("server.ssl.certKeyRequired"));
                         } else {
                             AcmeManager.CertificateResult result = acmeManager.installManualCertificate(cert, key, hostname);
                             response.put("success", result.success);
@@ -4385,12 +4472,12 @@ public class SSLMailServer {
 
                     default -> {
                         response.put("success", false);
-                        response.put("error", "Azione non valida");
+                        response.put("error", I18n.tr("server.badAction"));
                     }
                 }
 
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
 
@@ -4406,7 +4493,7 @@ public class SSLMailServer {
 
     private void handleApiLogs(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -4482,7 +4569,7 @@ public class SSLMailServer {
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                 JSONObject req = new JSONObject(body);
@@ -4512,11 +4599,11 @@ public class SSLMailServer {
 
                 } else {
                     response.put("success", false);
-                    response.put("error", "Azione non valida");
+                    response.put("error", I18n.tr("server.badAction"));
                 }
 
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
 
@@ -4537,7 +4624,7 @@ public class SSLMailServer {
 
     private void handleApiStats(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -4606,7 +4693,7 @@ public class SSLMailServer {
 
     private void handleApiQueue(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -4732,7 +4819,7 @@ public class SSLMailServer {
                     response.put("message", result.message);
                 }
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
 
@@ -4776,7 +4863,7 @@ public class SSLMailServer {
 
     private void handleApiSso(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -4816,7 +4903,7 @@ public class SSLMailServer {
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                 JSONObject json = new JSONObject(body);
@@ -4862,7 +4949,7 @@ public class SSLMailServer {
 
     private void handleApiWebmailOpen(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -4876,7 +4963,7 @@ public class SSLMailServer {
         try {
             String body = readRequestBodyWithLimit(exchange);
             if (body == null) {
-                sendJsonError(exchange, 413, "Richiesta troppo grande");
+                sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                 return;
             }
             JSONObject json = new JSONObject(body);
@@ -4909,7 +4996,7 @@ public class SSLMailServer {
 
     private void handleApiFail2ban(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -4992,7 +5079,7 @@ public class SSLMailServer {
                         response.put("error", "Jail name required");
                     } else if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
                         response.put("success", false);
-                        response.put("error", "Nome jail non valido");
+                        response.put("error", I18n.tr("server.f2b.badJail"));
                     } else {
                         Fail2banManager.JailStatus jail = fail2banManager.getJailStatus(jailName);
                         response.put("success", jail.exists);
@@ -5016,7 +5103,7 @@ public class SSLMailServer {
                     String jailName = extractParamFromQuery(query, "name");
                     if (jailName == null || !org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
                         response.put("success", false);
-                        response.put("error", "Nome jail non valido");
+                        response.put("error", I18n.tr("server.f2b.badJail"));
                     } else {
                         Fail2banManager.JailLiveState s = fail2banManager.getJailLiveState(jailName);
                         response.put("success", s.success);
@@ -5040,7 +5127,7 @@ public class SSLMailServer {
                             = new java.util.ArrayList<>();
                         for (String jail : overall.activeJails) {
                             futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
-                                () -> fail2banManager.getJailLiveState(jail), exec));
+                                I18n.withCurrentSupplier(() -> fail2banManager.getJailLiveState(jail)), exec));
                         }
                         for (var f : futures) {
                             Fail2banManager.JailLiveState s = f.get(20, java.util.concurrent.TimeUnit.SECONDS);
@@ -5089,7 +5176,7 @@ public class SSLMailServer {
                         response.put("error", "IP address required");
                     } else if (!org.mail_panel.security.InputValidator.isValidIp(ip)) {
                         response.put("success", false);
-                        response.put("error", "IP non valido");
+                        response.put("error", I18n.tr("server.badIp"));
                     } else {
                         Fail2banManager.IpInfo info = fail2banManager.getIpInfo(ip);
                         response.put("success", info.found);
@@ -5119,7 +5206,7 @@ public class SSLMailServer {
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                 JSONObject json = new JSONObject(body);
@@ -5172,12 +5259,12 @@ public class SSLMailServer {
                         // SECURITY: validare prima di passarli a shell
                         if (!org.mail_panel.security.InputValidator.isValidIp(ip)) {
                             response.put("success", false);
-                            response.put("message", "IP non valido");
+                            response.put("message", I18n.tr("server.badIp"));
                             break;
                         }
                         if (!org.mail_panel.security.InputValidator.isValidJailName(jail)) {
                             response.put("success", false);
-                            response.put("message", "Nome jail non valido");
+                            response.put("message", I18n.tr("server.f2b.badJail"));
                             break;
                         }
                         Fail2banManager.BanAction result = fail2banManager.banIp(ip, jail);
@@ -5191,12 +5278,12 @@ public class SSLMailServer {
                         String jail = json.optString("jail", null);
                         if (!org.mail_panel.security.InputValidator.isValidIp(ip)) {
                             response.put("success", false);
-                            response.put("message", "IP non valido");
+                            response.put("message", I18n.tr("server.badIp"));
                             break;
                         }
                         if (jail != null && !jail.isEmpty() && !org.mail_panel.security.InputValidator.isValidJailName(jail)) {
                             response.put("success", false);
-                            response.put("message", "Nome jail non valido");
+                            response.put("message", I18n.tr("server.f2b.badJail"));
                             break;
                         }
                         Fail2banManager.BanAction result;
@@ -5241,7 +5328,7 @@ public class SSLMailServer {
                         // SECURITY: validate jail name (concatenato in shell)
                         if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
                             response.put("success", false);
-                            response.put("message", "Nome jail non valido");
+                            response.put("message", I18n.tr("server.f2b.badJail"));
                             break;
                         }
                         int maxRetry = json.optInt("max_retry", 5);
@@ -5252,7 +5339,7 @@ public class SSLMailServer {
                             findTime < 30 || findTime > 86400 ||
                             banTime  < 60 || banTime  > 31_536_000) {
                             response.put("success", false);
-                            response.put("message", "Valori fuori range (maxRetry 1-100, findTime 30-86400s, banTime 60-31536000s)");
+                            response.put("message", I18n.tr("server.f2b.outOfRange"));
                             break;
                         }
                         Fail2banManager.BanAction result = fail2banManager.updateJailConfig(jailName, maxRetry, findTime, banTime);
@@ -5270,7 +5357,7 @@ public class SSLMailServer {
                             findTime < 30 || findTime > 86400 ||
                             banTime  < 60 || banTime  > 31_536_000) {
                             response.put("success", false);
-                            response.put("message", "Valori fuori range (maxRetry 1-100, findTime 30-86400s, banTime 60-31536000s)");
+                            response.put("message", I18n.tr("server.f2b.outOfRange"));
                             break;
                         }
                         Fail2banManager.BulkJailConfigResult bulk =
@@ -5290,8 +5377,8 @@ public class SSLMailServer {
                         response.put("results", jarr);
                         response.put("message", bulk.error != null
                             ? bulk.error
-                            : ("Configurazione applicata a " + bulk.successCount + " jail"
-                               + (bulk.failCount > 0 ? " (" + bulk.failCount + " errori)" : "")));
+                            : (I18n.tr("server.f2b.appliedTo", Map.of("n", bulk.successCount))
+                               + (bulk.failCount > 0 ? " " + I18n.tr("server.f2b.errors", Map.of("n", bulk.failCount)) : "")));
                         logAudit(bulk.success ? "FAIL2BAN_ALL_JAILS_UPDATED" : "FAIL2BAN_ALL_JAILS_UPDATE_PARTIAL",
                             getClientIp(exchange),
                             "maxRetry=" + maxRetry + " findTime=" + findTime + " banTime=" + banTime
@@ -5301,14 +5388,14 @@ public class SSLMailServer {
                         String ip = json.optString("ip", "");
                         if (!org.mail_panel.security.InputValidator.isValidIp(ip)) {
                             response.put("success", false);
-                            response.put("message", "IP non valido");
+                            response.put("message", I18n.tr("server.badIp"));
                             break;
                         }
                         try {
                             boolean added = fail2banManager.addPermaban(ip);
                             response.put("success", true);
                             response.put("added", added);
-                            response.put("message", added ? "IP aggiunto al permaban" : "IP già nella lista permaban");
+                            response.put("message", I18n.tr(added ? "server.f2b.permabanAdded" : "server.f2b.permabanPresent"));
                             logAudit(added ? "PERMABAN_ADDED" : "PERMABAN_ALREADY_PRESENT",
                                 getClientIp(exchange), "target_ip=" + ip);
                             // Sbanna anche da tutte le jail Fail2ban (l'utente potrebbe essere già bannato temporaneamente)
@@ -5322,14 +5409,14 @@ public class SSLMailServer {
                         String ip = json.optString("ip", "");
                         if (!org.mail_panel.security.InputValidator.isValidIp(ip)) {
                             response.put("success", false);
-                            response.put("message", "IP non valido");
+                            response.put("message", I18n.tr("server.badIp"));
                             break;
                         }
                         try {
                             boolean removed = fail2banManager.removePermaban(ip);
                             response.put("success", true);
                             response.put("removed", removed);
-                            response.put("message", removed ? "IP rimosso dal permaban" : "IP non era in permaban");
+                            response.put("message", I18n.tr(removed ? "server.f2b.permabanRemoved" : "server.f2b.permabanAbsent"));
                             logAudit(removed ? "PERMABAN_REMOVED" : "PERMABAN_NOT_FOUND",
                                 getClientIp(exchange), "target_ip=" + ip);
                         } catch (Exception e) {
@@ -5355,8 +5442,8 @@ public class SSLMailServer {
                         boolean ok = fail2banManager.reloadPermabanFromFile();
                         response.put("success", ok);
                         response.put("message", ok
-                            ? "Tabella pf <permaban> ricaricata da file"
-                            : "Reload fallito (pf attivo?)");
+                            ? I18n.tr("server.f2b.permabanReloaded")
+                            : I18n.tr("server.f2b.permabanReloadFailed"));
                         logAudit(ok ? "PERMABAN_RELOADED" : "PERMABAN_RELOAD_FAILED",
                             getClientIp(exchange), "");
                     }
@@ -5364,13 +5451,13 @@ public class SSLMailServer {
                         String jailName = json.getString("jail");
                         if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
                             response.put("success", false);
-                            response.put("message", "Nome jail non valido");
+                            response.put("message", I18n.tr("server.f2b.badJail"));
                             break;
                         }
                         Fail2banManager.JailConfig cfg = fail2banManager.getJailConfig(jailName);
                         if (cfg == null || !cfg.found) {
                             response.put("success", false);
-                            response.put("message", "Jail non trovata in jail.local");
+                            response.put("message", I18n.tr("server.f2b.jailNotFound"));
                         } else {
                             response.put("success", true);
                             response.put("jail", cfg.name);
@@ -5391,7 +5478,7 @@ public class SSLMailServer {
                         String filter = json.optString("filter", "");
                         if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
                             response.put("success", false);
-                            response.put("message", "Nome jail non valido");
+                            response.put("message", I18n.tr("server.f2b.badJail"));
                             break;
                         }
                         Fail2banManager.BanAction r = fail2banManager.setJailFilter(jailName, filter);
@@ -5406,7 +5493,7 @@ public class SSLMailServer {
                         String ip = json.optString("ip", "").trim();
                         if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
                             response.put("success", false);
-                            response.put("message", "Nome jail non valido");
+                            response.put("message", I18n.tr("server.f2b.badJail"));
                             break;
                         }
                         Fail2banManager.BanAction r = fail2banManager.addIgnoreIp(jailName, ip);
@@ -5421,7 +5508,7 @@ public class SSLMailServer {
                         String ip = json.optString("ip", "").trim();
                         if (!org.mail_panel.security.InputValidator.isValidJailName(jailName)) {
                             response.put("success", false);
-                            response.put("message", "Nome jail non valido");
+                            response.put("message", I18n.tr("server.f2b.badJail"));
                             break;
                         }
                         Fail2banManager.BanAction r = fail2banManager.removeIgnoreIp(jailName, ip);
@@ -5472,7 +5559,7 @@ public class SSLMailServer {
      *        - apply              (rigenera anchor + syntax check + carica nel kernel)
      */
     private void handleApiFirewall(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
         if (firewallManager == null) {
             firewallManager = new org.mail_panel.security.PfFirewallManager();
         }
@@ -5483,7 +5570,7 @@ public class SSLMailServer {
                 response = buildFirewallStatusJson();
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
-                if (body == null) { sendJsonError(exchange, 413, "Body troppo grande"); return; }
+                if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
                 JSONObject req = new JSONObject(body);
                 if (!validateCsrfForRequest(exchange, req)) { sendCsrfError(exchange); return; }
                 String action = req.optString("action", "");
@@ -5497,62 +5584,62 @@ public class SSLMailServer {
                                 org.mail_panel.security.PfFirewallManager.Mode.valueOf(modeStr);
                             firewallManager.setMode(m);
                             response.put("success", true);
-                            response.put("message", "Modalita' impostata: " + m);
+                            response.put("message", I18n.tr("server.fw.modeSet", Map.of("mode", String.valueOf(m))));
                             logAudit("FW_MODE_CHANGED", clientIp, "mode=" + m);
                         } catch (IllegalArgumentException e) {
                             response.put("success", false);
-                            response.put("error", "Modalita' non valida: " + modeStr);
+                            response.put("error", I18n.tr("server.fw.badMode", Map.of("mode", modeStr)));
                         }
                     }
                     case "set_port25_geo" -> {
                         boolean v = req.optBoolean("value", false);
                         firewallManager.setApplyGeoToPort25(v);
                         response.put("success", true);
-                        response.put("message", "Geo su port 25: " + (v ? "ATTIVO" : "INATTIVO"));
+                        response.put("message", I18n.tr(v ? "server.fw.geo25On" : "server.fw.geo25Off"));
                         logAudit("FW_PORT25_GEO_TOGGLED", clientIp, "value=" + v);
                     }
                     case "add_cidr_wl" -> {
                         String cidr = req.optString("cidr", "").trim();
                         boolean ok = firewallManager.addCidrWhitelist(cidr);
                         response.put("success", ok);
-                        response.put("message", ok ? "Aggiunto a whitelist: " + cidr
-                                                   : "CIDR non valido o gia' presente");
+                        response.put("message", ok ? I18n.tr("server.fw.whitelistAdded", Map.of("cidr", cidr))
+                                                   : I18n.tr("server.fw.cidrInvalidOrPresent"));
                         if (ok) logAudit("FW_CIDR_WL_ADD", clientIp, "cidr=" + cidr);
                     }
                     case "remove_cidr_wl" -> {
                         String cidr = req.optString("cidr", "").trim();
                         boolean ok = firewallManager.removeCidrWhitelist(cidr);
                         response.put("success", ok);
-                        response.put("message", ok ? "Rimosso da whitelist: " + cidr : "Non presente");
+                        response.put("message", ok ? I18n.tr("server.fw.whitelistRemoved", Map.of("cidr", cidr)) : I18n.tr("server.fw.notPresent"));
                         if (ok) logAudit("FW_CIDR_WL_REMOVE", clientIp, "cidr=" + cidr);
                     }
                     case "add_cidr_bl" -> {
                         String cidr = req.optString("cidr", "").trim();
                         boolean ok = firewallManager.addCidrBlacklist(cidr);
                         response.put("success", ok);
-                        response.put("message", ok ? "Aggiunto a blacklist: " + cidr
-                                                   : "CIDR non valido o gia' presente");
+                        response.put("message", ok ? I18n.tr("server.fw.blacklistAdded", Map.of("cidr", cidr))
+                                                   : I18n.tr("server.fw.cidrInvalidOrPresent"));
                         if (ok) logAudit("FW_CIDR_BL_ADD", clientIp, "cidr=" + cidr);
                     }
                     case "remove_cidr_bl" -> {
                         String cidr = req.optString("cidr", "").trim();
                         boolean ok = firewallManager.removeCidrBlacklist(cidr);
                         response.put("success", ok);
-                        response.put("message", ok ? "Rimosso da blacklist: " + cidr : "Non presente");
+                        response.put("message", ok ? I18n.tr("server.fw.blacklistRemoved", Map.of("cidr", cidr)) : I18n.tr("server.fw.notPresent"));
                         if (ok) logAudit("FW_CIDR_BL_REMOVE", clientIp, "cidr=" + cidr);
                     }
                     case "add_country" -> {
                         String cc = req.optString("country", "").trim().toLowerCase();
                         boolean ok = firewallManager.addGeoCountry(cc);
                         response.put("success", ok);
-                        response.put("message", ok ? "Paese aggiunto: " + cc : "Codice non valido o gia' presente");
+                        response.put("message", ok ? I18n.tr("server.fw.countryAdded", Map.of("cc", cc)) : I18n.tr("server.fw.codeInvalidOrPresent"));
                         if (ok) logAudit("FW_COUNTRY_ADD", clientIp, "cc=" + cc);
                     }
                     case "remove_country" -> {
                         String cc = req.optString("country", "").trim().toLowerCase();
                         boolean ok = firewallManager.removeGeoCountry(cc);
                         response.put("success", ok);
-                        response.put("message", ok ? "Paese rimosso: " + cc : "Non presente");
+                        response.put("message", ok ? I18n.tr("server.fw.countryRemoved", Map.of("cc", cc)) : I18n.tr("server.fw.notPresent"));
                         if (ok) logAudit("FW_COUNTRY_REMOVE", clientIp, "cc=" + cc);
                     }
                     case "bulk_add_countries" -> {
@@ -5563,7 +5650,7 @@ public class SSLMailServer {
                         response.put("success", true);
                         response.put("added", added);
                         response.put("total_requested", codes.size());
-                        response.put("message", "Aggiunti " + added + " paesi (su " + codes.size() + " richiesti)");
+                        response.put("message", I18n.tr("server.fw.countriesAdded", Map.of("n", added, "requested", codes.size())));
                         logAudit("FW_BULK_COUNTRY_ADD", clientIp, "added=" + added + " requested=" + codes.size());
                     }
                     case "bulk_remove_countries" -> {
@@ -5573,14 +5660,14 @@ public class SSLMailServer {
                         int removed = firewallManager.bulkRemoveCountries(codes);
                         response.put("success", true);
                         response.put("removed", removed);
-                        response.put("message", "Rimossi " + removed + " paesi");
+                        response.put("message", I18n.tr("server.fw.countriesRemoved", Map.of("n", removed)));
                         logAudit("FW_BULK_COUNTRY_REMOVE", clientIp, "removed=" + removed);
                     }
                     case "clear_countries" -> {
                         int n = firewallManager.clearCountries();
                         response.put("success", true);
                         response.put("removed", n);
-                        response.put("message", "Lista paesi svuotata (" + n + " rimossi)");
+                        response.put("message", I18n.tr("server.fw.countriesCleared", Map.of("n", n)));
                         logAudit("FW_CLEAR_COUNTRIES", clientIp, "removed=" + n);
                     }
                     case "set_auto_sync" -> {
@@ -5588,7 +5675,7 @@ public class SSLMailServer {
                         int interval = Math.max(1, Math.min(req.optInt("interval_days", 7), 365));
                         firewallManager.setAutoSync(enabled, interval);
                         response.put("success", true);
-                        response.put("message", "Auto-sync " + (enabled ? "ATTIVO" : "INATTIVO") + " — intervallo " + interval + " giorni");
+                        response.put("message", I18n.tr(enabled ? "server.fw.autosyncOn" : "server.fw.autosyncOff", Map.of("days", interval)));
                         logAudit("FW_AUTOSYNC_SET", clientIp, "enabled=" + enabled + " interval=" + interval);
                     }
                     case "apply_preset_group" -> {
@@ -5599,7 +5686,7 @@ public class SSLMailServer {
                         }
                         if (grp == null) {
                             response.put("success", false);
-                            response.put("error", "Gruppo preset non riconosciuto: " + groupId);
+                            response.put("error", I18n.tr("server.fw.unknownPreset", Map.of("group", groupId)));
                         } else {
                             // Sostituisce completamente la selezione corrente con quella del gruppo
                             firewallManager.clearCountries();
@@ -5607,7 +5694,7 @@ public class SSLMailServer {
                             response.put("success", true);
                             response.put("group", groupId);
                             response.put("added", added);
-                            response.put("message", "Preset '" + grp.label() + "' applicato: " + added + " paesi selezionati");
+                            response.put("message", I18n.tr("server.fw.presetApplied", Map.of("group", groupId, "n", added)));
                             logAudit("FW_PRESET_APPLIED", clientIp, "group=" + groupId + " added=" + added);
                         }
                     }
@@ -5615,7 +5702,7 @@ public class SSLMailServer {
                         String cc = req.optString("country", "").trim().toLowerCase();
                         org.mail_panel.security.PfFirewallManager.SyncResult sr = firewallManager.syncCountry(cc);
                         response.put("success", sr.success);
-                        response.put("message", sr.success ? sr.message : ("Errore: " + sr.error));
+                        response.put("message", sr.success ? sr.message : I18n.tr("server.errorWith", Map.of("error", String.valueOf(sr.error))));
                         response.put("country", sr.country);
                         response.put("cidr_count", sr.cidrCount);
                         logAudit(sr.success ? "FW_GEO_SYNC_OK" : "FW_GEO_SYNC_FAIL", clientIp,
@@ -5636,7 +5723,7 @@ public class SSLMailServer {
                         }
                         response.put("success", ok == results.size());
                         response.put("results", arr);
-                        response.put("message", ok + "/" + results.size() + " paesi sincronizzati");
+                        response.put("message", I18n.tr("server.fw.synced", Map.of("ok", ok, "total", results.size())));
                         logAudit("FW_GEO_SYNC_ALL", clientIp, "ok=" + ok + "/" + results.size());
                     }
                     case "apply" -> {
@@ -5650,13 +5737,13 @@ public class SSLMailServer {
                     }
                     default -> {
                         response.put("success", false);
-                        response.put("error", "Azione non riconosciuta: " + action);
+                        response.put("error", I18n.tr("server.badActionNamed", Map.of("action", action)));
                     }
                 }
             }
             sendJsonResponse(exchange, response);
         } catch (Exception e) {
-            sendJsonError(exchange, 500, "Errore interno: " + e.getMessage());
+            sendJsonError(exchange, 500, I18n.tr("server.internalErrorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -5689,7 +5776,7 @@ public class SSLMailServer {
             org.mail_panel.security.CountryCatalog.Country meta =
                 org.mail_panel.security.CountryCatalog.byCode(cc);
             if (meta != null) {
-                c.put("name", meta.name());
+                c.put("name", meta.localName());
                 c.put("flag", meta.flag());
             }
             geoDetail.put(c);
@@ -5729,7 +5816,7 @@ public class SSLMailServer {
     }
 
     private void handleApiUnboundHealth(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
         String method = exchange.getRequestMethod();
         JSONObject response = new JSONObject();
         try {
@@ -5737,7 +5824,7 @@ public class SSLMailServer {
                 response = buildUnboundHealthReport();
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
-                if (body == null) { sendJsonError(exchange, 413, "Body troppo grande"); return; }
+                if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
                 JSONObject req = new JSONObject(body);
                 if (!validateCsrfForRequest(exchange, req)) { sendCsrfError(exchange); return; }
                 String action = req.optString("action", "");
@@ -5811,11 +5898,11 @@ public class SSLMailServer {
                     }
                     default -> {
                         response.put("success", false);
-                        response.put("error", "Azione non valida: " + action);
+                        response.put("error", I18n.tr("server.badActionNamed", Map.of("action", action)));
                     }
                 }
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
         } catch (Exception e) {
@@ -5829,11 +5916,11 @@ public class SSLMailServer {
 
     private static final String UNBOUND_CONF_CONTENT = ""
         + "# /usr/local/etc/unbound/unbound.conf\n"
-        + "# Generato dal mail panel — Resolver DNS LOCALE per il server\n"
-        + "# Ascolta SOLO su 127.0.0.1, non raggiungibile da internet\n"
+        + "# Generated by the mail panel: LOCAL DNS resolver for this server\n"
+        + "# Listens ONLY on 127.0.0.1, not reachable from the internet\n"
         + "\n"
         + "server:\n"
-        + "    # Bind solo loopback (sicurezza: invisibile da fuori)\n"
+        + "    # Loopback only (security: invisible from outside)\n"
         + "    interface: 127.0.0.1\n"
         + "    interface: ::1\n"
         + "    port: 53\n"
@@ -5842,13 +5929,13 @@ public class SSLMailServer {
         + "    do-udp: yes\n"
         + "    do-tcp: yes\n"
         + "\n"
-        + "    # Solo localhost può fare query\n"
+        + "    # Only localhost may query\n"
         + "    access-control: 127.0.0.0/8 allow\n"
         + "    access-control: ::1 allow\n"
         + "    access-control: 0.0.0.0/0 refuse\n"
         + "    access-control: ::/0 refuse\n"
         + "\n"
-        + "    # Privacy e sicurezza\n"
+        + "    # Privacy and security\n"
         + "    hide-identity: yes\n"
         + "    hide-version: yes\n"
         + "    harden-glue: yes\n"
@@ -5866,7 +5953,7 @@ public class SSLMailServer {
         + "    use-syslog: yes\n"
         + "    verbosity: 1\n"
         + "\n"
-        + "    # Permetti private addresses nelle risposte (necessario per alcuni DNSBL)\n"
+        + "    # Allow private addresses in answers (needed by some DNSBLs)\n"
         + "    private-address: 192.168.0.0/16\n"
         + "    private-address: 10.0.0.0/8\n"
         + "    private-address: 172.16.0.0/12\n"
@@ -5896,17 +5983,17 @@ public class SSLMailServer {
         boolean installed = pkgInstalled || baseUnboundAvailable;
 
         String installedStatus;
-        if (pkgInstalled && baseUnboundRunning) installedStatus = "Pacchetto 'unbound' installato + 'local_unbound' base attivo";
-        else if (pkgInstalled) installedStatus = "Pacchetto unbound (pkg) presente";
-        else if (baseUnboundRunning) installedStatus = "local_unbound (base system FreeBSD) attivo — non serve pacchetto pkg";
-        else if (baseUnboundAvailable) installedStatus = "local_unbound (base system) disponibile ma fermo";
-        else installedStatus = "Nessun resolver locale disponibile";
+        if (pkgInstalled && baseUnboundRunning) installedStatus = I18n.tr("server.unbound.statusBoth");
+        else if (pkgInstalled) installedStatus = I18n.tr("server.unbound.statusPkg");
+        else if (baseUnboundRunning) installedStatus = I18n.tr("server.unbound.statusBaseRunning");
+        else if (baseUnboundAvailable) installedStatus = I18n.tr("server.unbound.statusBaseStopped");
+        else installedStatus = I18n.tr("server.unbound.statusNone");
 
-        checks.put(makeCheck("unbound-installed", "Resolver locale disponibile", installed,
+        checks.put(makeCheck("unbound-installed", I18n.tr("server.unbound.checkInstalled"), installed,
             installedStatus,
-            installed ? null : "Senza un resolver locale non puoi fare check DNSBL affidabili (Spamhaus rifiuta query da DNS pubblici).",
+            installed ? null : I18n.tr("server.unbound.impactInstalled"),
             installed ? null : "install_unbound",
-            "Installa pacchetto unbound (alternativa: usa local_unbound del base system)"));
+            I18n.tr("server.unbound.fixInstalled")));
 
         // 2. Config file: solo se usi il pacchetto pkg, non serve per local_unbound (config in /var/unbound/)
         boolean confPresent = java.nio.file.Files.exists(java.nio.file.Paths.get(UNBOUND_CONF_PATH));
@@ -5923,15 +6010,15 @@ public class SSLMailServer {
         String configStatus;
         if (confValid) configStatus = UNBOUND_CONF_PATH + " (pkg unbound)";
         else if (baseConfPresent) configStatus = "/var/unbound/unbound.conf (local_unbound base system)";
-        else if (baseUnboundRunning) configStatus = "local_unbound attivo (config auto-gestita)";
-        else if (confPresent) configStatus = "Config pkg esiste ma non è valida";
-        else configStatus = "Nessuna config trovata";
-        checks.put(makeCheck("unbound-config", "Config resolver presente",
+        else if (baseUnboundRunning) configStatus = I18n.tr("server.unbound.configAuto");
+        else if (confPresent) configStatus = I18n.tr("server.unbound.configInvalid");
+        else configStatus = I18n.tr("server.unbound.configNone");
+        checks.put(makeCheck("unbound-config", I18n.tr("server.unbound.checkConfig"),
             configOk,
             configStatus,
-            configOk ? null : "Senza config, il resolver non parte.",
+            configOk ? null : I18n.tr("server.unbound.impactConfig"),
             (configOk || !installed || baseUnboundAvailable) ? null : "configure_unbound",
-            "Scrive config minimal+sicura su " + UNBOUND_CONF_PATH));
+            I18n.tr("server.unbound.fixConfig", Map.of("path", UNBOUND_CONF_PATH))));
 
         // 3. Abilitato al boot — verifica sia unbound_enable che local_unbound_enable
         boolean unboundEnabledBoot = isSysrcYes("unbound_enable");
@@ -5941,16 +6028,16 @@ public class SSLMailServer {
         if (unboundEnabledBoot && localUnboundEnabledBoot) bootStatus = "unbound_enable + local_unbound_enable=YES";
         else if (unboundEnabledBoot) bootStatus = "unbound_enable=YES (pkg)";
         else if (localUnboundEnabledBoot) bootStatus = "local_unbound_enable=YES (base system)";
-        else bootStatus = "Nessun resolver locale abilitato al boot";
+        else bootStatus = I18n.tr("server.unbound.bootNone");
         // Fix appropriato: se base system esiste, abilita quello, altrimenti pkg
         String bootFixAction = enabledBoot ? null : (baseUnboundAvailable && !pkgInstalled ? "enable_local_unbound_at_boot" : "enable_unbound_at_boot");
         String bootFixDesc = baseUnboundAvailable && !pkgInstalled
-            ? "sysrc local_unbound_enable=YES (usa il resolver del base system)"
+            ? I18n.tr("server.unbound.fixBootBase")
             : "sysrc unbound_enable=YES";
-        checks.put(makeCheck("unbound-enabled-boot", "Resolver locale abilitato al boot",
+        checks.put(makeCheck("unbound-enabled-boot", I18n.tr("server.unbound.checkBoot"),
             enabledBoot,
             bootStatus,
-            enabledBoot ? null : "Dopo un reboot, il server non avrà resolver locale e tornerai ai problemi con DNSBL.",
+            enabledBoot ? null : I18n.tr("server.unbound.impactBoot"),
             (enabledBoot || !installed) ? null : bootFixAction,
             bootFixDesc));
 
@@ -5958,27 +6045,27 @@ public class SSLMailServer {
         boolean pkgRunning = isServiceRunning("unbound");
         boolean running = pkgRunning || baseUnboundRunning;
         String runningStatus;
-        if (pkgRunning && baseUnboundRunning) runningStatus = "Entrambi attivi (pkg + base)";
-        else if (pkgRunning) runningStatus = "unbound (pkg) in esecuzione";
-        else if (baseUnboundRunning) runningStatus = "local_unbound (base system) in esecuzione";
-        else runningStatus = "Nessun resolver in esecuzione";
+        if (pkgRunning && baseUnboundRunning) runningStatus = I18n.tr("server.unbound.runningBoth");
+        else if (pkgRunning) runningStatus = I18n.tr("server.unbound.runningPkg");
+        else if (baseUnboundRunning) runningStatus = I18n.tr("server.unbound.runningBase");
+        else runningStatus = I18n.tr("server.unbound.runningNone");
         String runningFixAction = running ? null : (baseUnboundAvailable && !pkgInstalled ? "start_local_unbound" : "start_unbound");
         String runningFixDesc = baseUnboundAvailable && !pkgInstalled
             ? "service local_unbound start"
             : "service unbound start";
-        checks.put(makeCheck("unbound-running", "Resolver locale attivo",
+        checks.put(makeCheck("unbound-running", I18n.tr("server.unbound.checkRunning"),
             running,
             runningStatus,
-            running ? null : "Nessuna query DNS verrà servita localmente.",
+            running ? null : I18n.tr("server.unbound.impactRunning"),
             (running || !installed) ? null : runningFixAction,
             runningFixDesc));
 
         // 5. Ascolta su 127.0.0.1:53
         boolean listening53 = isPortListeningOnLocalhost(53);
-        checks.put(makeCheck("unbound-listening", "Ascolta su 127.0.0.1:53",
+        checks.put(makeCheck("unbound-listening", I18n.tr("server.unbound.checkListening"),
             listening53,
-            listening53 ? "Port 53 (DNS) attivo su loopback" : "Niente in ascolto su 127.0.0.1:53",
-            listening53 ? null : "Il resolver gira ma non risponde sulla porta giusta.",
+            listening53 ? I18n.tr("server.unbound.listeningYes") : I18n.tr("server.unbound.listeningNo"),
+            listening53 ? null : I18n.tr("server.unbound.impactListening"),
             null, null));
 
         // 6. /etc/resolv.conf punta a 127.0.0.1
@@ -5996,20 +6083,20 @@ public class SSLMailServer {
                 }
             }
         } catch (Exception ignored) {}
-        checks.put(makeCheck("resolv-conf", "/etc/resolv.conf usa unbound (127.0.0.1)",
+        checks.put(makeCheck("resolv-conf", I18n.tr("server.unbound.checkResolv"),
             resolvOk,
-            resolvOk ? "Sistema usa unbound come primary resolver" : "Sistema NON usa unbound — query passano ancora per DNS esterni",
-            resolvOk ? null : "Se non lo cambi, tutte le query continuano ad andare via 1.1.1.1 e i check DNSBL falliscono.",
+            resolvOk ? I18n.tr("server.unbound.resolvYes") : I18n.tr("server.unbound.resolvNo"),
+            resolvOk ? null : I18n.tr("server.unbound.impactResolv"),
             (resolvOk || !running || !listening53) ? null : "switch_resolv_conf",
-            "Backup /etc/resolv.conf + scrive 'nameserver 127.0.0.1' + fallback. Pre-flight test prima di applicare."));
+            I18n.tr("server.unbound.fixResolv")));
 
         // 7. Query di test funziona
         boolean queryOk = testUnboundQuerySimple();
-        checks.put(makeCheck("unbound-query-works", "Query di test risolve correttamente",
+        checks.put(makeCheck("unbound-query-works", I18n.tr("server.unbound.checkQuery"),
             queryOk,
-            queryOk ? "dig @127.0.0.1 freebsd.org → risolto"
-                    : (listening53 ? "Query test fallita — unbound non risolve" : "Skip: unbound non in ascolto"),
-            queryOk ? null : "Anche se attivo, unbound non sta riuscendo a risolvere domini reali (problema upstream?).",
+            queryOk ? I18n.tr("server.unbound.queryYes")
+                    : I18n.tr(listening53 ? "server.unbound.queryFailed" : "server.unbound.querySkipped"),
+            queryOk ? null : I18n.tr("server.unbound.impactQuery"),
             null, null));
 
         // 8. Modalità RICORSIVA (no forwarder) — fondamentale per Spamhaus/SURBL
@@ -6017,16 +6104,14 @@ public class SSLMailServer {
         //    arrivare da resolver pubblico → 127.255.255.254 (blocked).
         boolean isForwarding = isUnboundUsingForwarder();
         boolean dnsblWorking = testDnsblQuery();
-        checks.put(makeCheck("unbound-recursive", "Resolution ricorsiva diretta (no forwarder)",
+        checks.put(makeCheck("unbound-recursive", I18n.tr("server.unbound.checkRecursive"),
             !isForwarding && dnsblWorking,
             !isForwarding
-                ? (dnsblWorking ? "Risolve ricorsivamente dai root server — Spamhaus funziona"
-                                : "Config OK ma query DNSBL non risponde, verifica connettività")
-                : "local_unbound usa FORWARDER (es. 1.1.1.1) — Spamhaus blocca queste query",
-            (!isForwarding && dnsblWorking) ? null
-                : "Spamhaus/SURBL non rispondono perché local_unbound gira le query a Cloudflare/Google che sono resolver pubblici bloccati.",
+                ? I18n.tr(dnsblWorking ? "server.unbound.recursiveYes" : "server.unbound.recursiveNoAnswer")
+                : I18n.tr("server.unbound.forwarding"),
+            (!isForwarding && dnsblWorking) ? null : I18n.tr("server.unbound.impactRecursive"),
             (!isForwarding || !running) ? null : "disable_forwarder",
-            "Svuota /var/unbound/forward.conf (backup automatico) e ricarica local_unbound. Il resolver passa a modalità ricorsiva diretta."));
+            I18n.tr("server.unbound.fixRecursive")));
 
         boolean allOk = installed && configOk && enabledBoot && running && listening53 && resolvOk && queryOk
             && !isForwarding && dnsblWorking;
@@ -6159,7 +6244,7 @@ public class SSLMailServer {
     }
 
     private JSONObject installUnbound() {
-        return sulTurnoPacchetti("installazione di unbound", this::eseguiInstallUnbound);
+        return sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", "unbound")), this::eseguiInstallUnbound);
     }
 
     private JSONObject eseguiInstallUnbound() {
@@ -6172,13 +6257,13 @@ public class SSLMailServer {
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             boolean done = p.waitFor(180, java.util.concurrent.TimeUnit.SECONDS);
-            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", "Timeout installazione (>3min)"); return r; }
+            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", I18n.tr("server.install.timeout")); return r; }
             r.put("success", p.exitValue() == 0);
-            r.put("message", p.exitValue() == 0 ? "unbound installato" : "pkg install exit=" + p.exitValue());
+            r.put("message", p.exitValue() == 0 ? I18n.tr("server.unbound.installed") : "pkg install exit=" + p.exitValue());
             r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -6210,16 +6295,16 @@ public class SSLMailServer {
                 p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
                 if (p.exitValue() != 0) {
                     r.put("success", false);
-                    r.put("message", "unbound-checkconf ha rilevato errori: " + out);
+                    r.put("message", I18n.tr("server.unbound.checkconfErrors", Map.of("output", out)));
                     return r;
                 }
             } catch (Exception ignored) {}
 
             r.put("success", true);
-            r.put("message", "Config scritta: " + UNBOUND_CONF_PATH);
+            r.put("message", I18n.tr("server.unbound.configWritten", Map.of("path", UNBOUND_CONF_PATH)));
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -6239,7 +6324,7 @@ public class SSLMailServer {
             // 1. Pre-flight: unbound deve rispondere
             if (!testUnboundQuerySimple()) {
                 r.put("success", false);
-                r.put("message", "PRE-FLIGHT FAIL: dig @127.0.0.1 non risolve. NON modifico resolv.conf — rischio lockout.");
+                r.put("message", I18n.tr("server.unbound.preflightFail"));
                 return r;
             }
             // 2. Backup
@@ -6249,9 +6334,9 @@ public class SSLMailServer {
             }
             // 3. Scrivi nuovo
             String content = ""
-                + "# Configurato dal mail panel\n"
-                + "# Resolver primario: unbound locale\n"
-                + "# Fallback: DNS pubblici se unbound non risponde\n"
+                + "# Configured by the mail panel\n"
+                + "# Primary resolver: local unbound\n"
+                + "# Fallback: public DNS if unbound does not answer\n"
                 + "nameserver 127.0.0.1\n"
                 + "nameserver 1.1.1.1\n"
                 + "nameserver 9.9.9.9\n"
@@ -6272,22 +6357,22 @@ public class SSLMailServer {
                     // Rollback
                     java.nio.file.Files.copy(java.nio.file.Paths.get(bakPath), resolvPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     r.put("success", false);
-                    r.put("message", "POST-FLIGHT FAIL: la risoluzione DNS non funziona dopo lo switch. Rollback eseguito, /etc/resolv.conf ripristinato.");
+                    r.put("message", I18n.tr("server.unbound.postflightFail"));
                     return r;
                 }
             } catch (Exception e) {
                 // Rollback su exception
                 try { java.nio.file.Files.copy(java.nio.file.Paths.get(bakPath), resolvPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING); } catch (Exception ignored) {}
                 r.put("success", false);
-                r.put("message", "Errore post-flight: " + e.getMessage() + " — rollback tentato");
+                r.put("message", I18n.tr("server.unbound.postflightError", Map.of("error", String.valueOf(e.getMessage()))));
                 return r;
             }
 
             r.put("success", true);
-            r.put("message", "/etc/resolv.conf aggiornato. Backup: " + bakPath);
+            r.put("message", I18n.tr("server.unbound.resolvUpdated", Map.of("backup", bakPath)));
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -6322,7 +6407,7 @@ public class SSLMailServer {
                         if (!t.startsWith("#") && t.startsWith("forward-zone:")) {
                             hasForwardZone = true;
                             inForwardZone = true;
-                            cleaned.append("# Disabilitato dal mail panel (forwarder bloccava Spamhaus)\n");
+                            cleaned.append("# Disabled by the mail panel (the forwarder got Spamhaus queries blocked)\n");
                             cleaned.append("# ").append(line).append("\n");
                         } else {
                             cleaned.append(line).append("\n");
@@ -6343,7 +6428,7 @@ public class SSLMailServer {
                     String result = cleaned.toString();
                     java.nio.file.Files.writeString(p, result, java.nio.charset.StandardCharsets.UTF_8);
                     touched++;
-                    log.append("✓ Commentato forward-zone in ").append(path).append("\n");
+                    log.append("✓ ").append(I18n.tr("server.unbound.log.forwardZoneCommented", Map.of("path", path))).append("\n");
                 }
             }
 
@@ -6370,12 +6455,12 @@ public class SSLMailServer {
                     pbDel.redirectErrorStream(true);
                     Process pd = pbDel.start();
                     pd.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-                    log.append("✓ Rimosso local_unbound_forwarders da rc.conf (era: \"").append(currentVal).append("\")\n");
+                    log.append("✓ ").append(I18n.tr("server.unbound.log.forwardersRemoved", Map.of("value", currentVal))).append("\n");
                 } else {
-                    log.append("• local_unbound_forwarders gia' vuoto in rc.conf\n");
+                    log.append("• ").append(I18n.tr("server.unbound.log.forwardersEmpty")).append("\n");
                 }
             } catch (Exception e) {
-                log.append("⚠ Impossibile sistemare rc.conf: ").append(e.getMessage()).append("\n");
+                log.append("⚠ ").append(I18n.tr("server.unbound.log.rcConfFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
             // 2) Assicurati che /etc/resolv.conf abbia 127.0.0.1 come PRIMO nameserver
@@ -6395,15 +6480,15 @@ public class SSLMailServer {
                     if (firstNs == null || (!firstNs.equals("127.0.0.1") && !firstNs.equals("::1"))) {
                         java.nio.file.Files.copy(resolv,
                             java.nio.file.Paths.get("/etc/resolv.conf.bak." + System.currentTimeMillis()));
-                        String newContent = "# Generato dal mail panel\n# Loopback come PRIMO nameserver per local_unbound\nnameserver 127.0.0.1\noptions edns0\n";
+                        String newContent = "# Generated by the mail panel\n# Loopback as the FIRST nameserver for local_unbound\nnameserver 127.0.0.1\noptions edns0\n";
                         java.nio.file.Files.writeString(resolv, newContent, java.nio.charset.StandardCharsets.UTF_8);
-                        log.append("✓ /etc/resolv.conf riscritto con 127.0.0.1 come unico nameserver (backup creato)\n");
+                        log.append("✓ ").append(I18n.tr("server.unbound.log.resolvRewritten")).append("\n");
                     } else {
-                        log.append("• /etc/resolv.conf gia' OK (127.0.0.1 primo)\n");
+                        log.append("• ").append(I18n.tr("server.unbound.log.resolvOk")).append("\n");
                     }
                 }
             } catch (Exception e) {
-                log.append("⚠ Impossibile sistemare /etc/resolv.conf: ").append(e.getMessage()).append("\n");
+                log.append("⚠ ").append(I18n.tr("server.unbound.log.resolvFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
             // 3) Disabilita resolvconf se attivo (altrimenti DHCP riscrive resolv.conf al reboot)
@@ -6422,10 +6507,10 @@ public class SSLMailServer {
                     pbSet.redirectErrorStream(true);
                     Process ps = pbSet.start();
                     ps.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-                    log.append("✓ Disabilitato resolvconf_enable (DHCP non riscrivera' piu' resolv.conf al boot)\n");
+                    log.append("✓ ").append(I18n.tr("server.unbound.log.resolvconfDisabled")).append("\n");
                 }
             } catch (Exception e) {
-                log.append("⚠ Impossibile disabilitare resolvconf: ").append(e.getMessage()).append("\n");
+                log.append("⚠ ").append(I18n.tr("server.unbound.log.resolvconfFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
             // 4) FIX DEFINITIVO: rimuovi 'include: forward.conf' da unbound.conf.
@@ -6443,7 +6528,7 @@ public class SSLMailServer {
                         // Cattura "include: ..forward.conf" anche con virgolette o spazi
                         if (!trimmed.startsWith("#") && trimmed.toLowerCase().startsWith("include:")
                                 && trimmed.toLowerCase().contains("forward.conf")) {
-                            sb.append("# Disabilitato dal mail panel (forward-zone bloccava Spamhaus): ").append(line).append("\n");
+                            sb.append("# Disabled by the mail panel (the forward-zone got Spamhaus queries blocked): ").append(line).append("\n");
                             changed = true;
                         } else {
                             sb.append(line).append("\n");
@@ -6456,13 +6541,13 @@ public class SSLMailServer {
                         String newContent = sb.toString();
                         if (newContent.endsWith("\n\n")) newContent = newContent.substring(0, newContent.length() - 1);
                         java.nio.file.Files.writeString(ucPath, newContent, java.nio.charset.StandardCharsets.UTF_8);
-                        log.append("✓ Commentato 'include: forward.conf' in /var/unbound/unbound.conf (backup creato)\n");
+                        log.append("✓ ").append(I18n.tr("server.unbound.log.includeCommented")).append("\n");
                     } else {
-                        log.append("• unbound.conf: nessun 'include: forward.conf' attivo\n");
+                        log.append("• ").append(I18n.tr("server.unbound.log.noInclude")).append("\n");
                     }
                 }
             } catch (Exception e) {
-                log.append("⚠ Impossibile modificare unbound.conf: ").append(e.getMessage()).append("\n");
+                log.append("⚠ ").append(I18n.tr("server.unbound.log.unboundConfFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
             // 5) Svuota forward.conf (anche se non e' piu' incluso, per pulizia)
@@ -6478,12 +6563,12 @@ public class SSLMailServer {
                     java.nio.file.Files.copy(fcPath,
                         java.nio.file.Paths.get("/var/unbound/forward.conf.bak." + System.currentTimeMillis()));
                     java.nio.file.Files.writeString(fcPath,
-                        "# Mail panel: modalita' ricorsiva diretta — forward-zone DISABILITATE\n",
+                        "# Mail panel: direct recursive mode, forward-zones DISABLED\n",
                         java.nio.charset.StandardCharsets.UTF_8);
-                    log.append("✓ /var/unbound/forward.conf svuotato (backup creato)\n");
+                    log.append("✓ ").append(I18n.tr("server.unbound.log.forwardConfEmptied")).append("\n");
                 }
             } catch (Exception e) {
-                log.append("⚠ Impossibile svuotare forward.conf: ").append(e.getMessage()).append("\n");
+                log.append("⚠ ").append(I18n.tr("server.unbound.log.forwardConfFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
             // 6) Rendi forward.conf IMMUTABILE — local-unbound-setup non puo' piu' sovrascriverlo
@@ -6493,12 +6578,12 @@ public class SSLMailServer {
                     .redirectErrorStream(true).start();
                 pCh.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
                 if (pCh.exitValue() == 0) {
-                    log.append("✓ chflags schg applicato a forward.conf (file IMMUTABILE)\n");
+                    log.append("✓ ").append(I18n.tr("server.unbound.log.chflagsDone")).append("\n");
                 } else {
-                    log.append("⚠ chflags schg fallito (richiede securelevel <= 0); il file resta scrivibile ma 'include' e' gia' commentato\n");
+                    log.append("⚠ ").append(I18n.tr("server.unbound.log.chflagsFailed")).append("\n");
                 }
             } catch (Exception e) {
-                log.append("⚠ chflags non eseguibile: ").append(e.getMessage()).append("\n");
+                log.append("⚠ ").append(I18n.tr("server.unbound.log.chflagsError", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
             // 7) RESTART (non reload) — il reload non ricarica forward.conf se l'include e' cambiato
@@ -6509,20 +6594,20 @@ public class SSLMailServer {
             Process p = pb.start();
             String reloadOut = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             p.waitFor(20, java.util.concurrent.TimeUnit.SECONDS);
-            log.append("✓ service local_unbound restart eseguito\n");
+            log.append("✓ ").append(I18n.tr("server.unbound.log.restarted")).append("\n");
             if (!reloadOut.isEmpty()) log.append("  output: ").append(reloadOut.trim()).append("\n");
 
             try { Thread.sleep(1500); } catch (Exception ignored) {}
             boolean stillForwarding = isUnboundUsingForwarder();
             boolean dnsblWorks = testDnsblQuery();
             r.put("success", !stillForwarding);
-            r.put("message", "Modalita' ricorsiva attivata e RESA PERSISTENTE al reboot."
-                + (touched == 0 ? " (forward.conf gia' pulito) " : " (commentati " + touched + " file) ")
-                + (dnsblWorks ? "Test Spamhaus: OK ✓" : "Test Spamhaus: ancora non OK (attendi qualche secondo e ricontrolla)"));
+            r.put("message", I18n.tr("server.unbound.recursiveOn") + " "
+                + (touched == 0 ? I18n.tr("server.unbound.forwardAlreadyClean") : I18n.tr("server.unbound.filesCommented", Map.of("n", touched))) + " "
+                + I18n.tr(dnsblWorks ? "server.unbound.spamhausOk" : "server.unbound.spamhausNotYet"));
             r.put("output", log.toString());
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
             r.put("output", log.toString());
         }
         return r;
@@ -6545,16 +6630,16 @@ public class SSLMailServer {
             }
             if (latest == null) {
                 r.put("success", false);
-                r.put("message", "Nessun backup trovato in /etc/resolv.conf.bak.*");
+                r.put("message", I18n.tr("server.unbound.noBackup"));
                 return r;
             }
             java.nio.file.Files.copy(java.nio.file.Paths.get(latest), java.nio.file.Paths.get("/etc/resolv.conf"),
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             r.put("success", true);
-            r.put("message", "Ripristinato da " + latest);
+            r.put("message", I18n.tr("server.unbound.restoredFrom", Map.of("file", String.valueOf(latest))));
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -6585,17 +6670,17 @@ public class SSLMailServer {
 
             r.put("success", basic);
             StringBuilder msg = new StringBuilder();
-            msg.append("Test query base (freebsd.org): ").append(basic ? "OK" : "FAIL").append("\n");
-            msg.append("Test Spamhaus (2.0.0.127.zen.spamhaus.org → atteso 127.0.0.X): ");
-            if (dnsblOk) msg.append("OK ✓ — Spamhaus risponde, le query DNSBL funzionano via unbound!");
-            else if (dnsblOut.startsWith("127.255.255.")) msg.append("ANCORA BLOCCATO (resolver pubblico?). Verifica resolv.conf");
-            else msg.append("nessuna risposta: ").append(dnsblOut.isEmpty() ? "(vuota)" : dnsblOut);
+            msg.append(I18n.tr("server.unbound.testBasic", Map.of("result", basic ? "OK" : "FAIL"))).append("\n");
+            msg.append(I18n.tr("server.unbound.testSpamhaus")).append(" ");
+            if (dnsblOk) msg.append(I18n.tr("server.unbound.testSpamhausOk"));
+            else if (dnsblOut.startsWith("127.255.255.")) msg.append(I18n.tr("server.unbound.testSpamhausBlocked"));
+            else msg.append(I18n.tr("server.unbound.testNoAnswer", Map.of("answer", dnsblOut.isEmpty() ? I18n.tr("server.unbound.empty") : dnsblOut)));
             r.put("message", msg.toString());
             r.put("basic_ok", basic);
             r.put("dnsbl_ok", dnsblOk);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -6625,18 +6710,18 @@ public class SSLMailServer {
         if (baseAvailable) {
             svcName = "local_unbound";
             sysrcKey = "local_unbound_enable";
-            steps.put(buildSkipStep("install_unbound", "local_unbound (base system FreeBSD) disponibile — niente da installare"));
+            steps.put(buildSkipStep("install_unbound", I18n.tr("server.unbound.step.baseAvailable")));
         } else if (pkgInstalled) {
             svcName = "unbound";
             sysrcKey = "unbound_enable";
-            steps.put(buildSkipStep("install_unbound", "Pacchetto unbound già installato"));
+            steps.put(buildSkipStep("install_unbound", I18n.tr("server.unbound.step.pkgInstalled")));
         } else {
             // Niente di disponibile: installa pkg
             JSONObject res = installUnbound();
-            steps.put(buildStep("install_unbound", "Installa pacchetto unbound (no base system trovato)", res));
+            steps.put(buildStep("install_unbound", I18n.tr("server.unbound.step.installPkg"), res));
             if (!res.optBoolean("success")) {
                 anyFailed = true;
-                r.put("success", false); r.put("steps", steps); r.put("message", "Installazione fallita");
+                r.put("success", false); r.put("steps", steps); r.put("message", I18n.tr("server.install.failed"));
                 return r;
             }
             svcName = "unbound";
@@ -6654,31 +6739,31 @@ public class SSLMailServer {
             }
             if (!confValid) {
                 JSONObject res = writeUnboundConfig();
-                steps.put(buildStep("configure_unbound", "Scrive config (loopback, restrittiva)", res));
+                steps.put(buildStep("configure_unbound", I18n.tr("server.unbound.step.writeConfig"), res));
                 if (!res.optBoolean("success")) anyFailed = true;
             } else {
-                steps.put(buildSkipStep("configure_unbound", "Config pkg unbound già valida"));
+                steps.put(buildSkipStep("configure_unbound", I18n.tr("server.unbound.step.configValid")));
             }
         } else {
-            steps.put(buildSkipStep("configure_unbound", "local_unbound usa /var/unbound/unbound.conf (config auto-gestita dal base system)"));
+            steps.put(buildSkipStep("configure_unbound", I18n.tr("server.unbound.step.baseConfig")));
         }
 
         // 3. Enable at boot
         if (!isSysrcYes(sysrcKey)) {
             JSONObject res = sysrcSet(sysrcKey, "YES");
-            steps.put(buildStep("enable_at_boot", "Abilita " + svcName + " al boot (" + sysrcKey + "=YES)", res));
+            steps.put(buildStep("enable_at_boot", I18n.tr("server.unbound.step.enableBoot", Map.of("service", svcName, "key", sysrcKey)), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("enable_at_boot", svcName + " già abilitato al boot"));
+            steps.put(buildSkipStep("enable_at_boot", I18n.tr("server.unbound.step.bootAlready", Map.of("service", svcName))));
         }
 
         // 4. Start
         if (!isServiceRunning(svcName)) {
             JSONObject res = serviceCommand(svcName, "start", 30);
-            steps.put(buildStep("start_resolver", "Avvia " + svcName, res));
+            steps.put(buildStep("start_resolver", I18n.tr("server.unbound.step.start", Map.of("service", svcName)), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("start_resolver", svcName + " già in esecuzione"));
+            steps.put(buildSkipStep("start_resolver", I18n.tr("server.unbound.step.running", Map.of("service", svcName))));
         }
 
         // 5. Aspetta un attimo che unbound sia pronto
@@ -6688,7 +6773,7 @@ public class SSLMailServer {
         // Verifica preventiva
         boolean unboundReady = testUnboundQuerySimple();
         if (!unboundReady) {
-            steps.put(buildErrorStep("switch_resolv_conf", "unbound non risponde a dig @127.0.0.1 — NON modifico resolv.conf per non rischiare lockout"));
+            steps.put(buildErrorStep("switch_resolv_conf", I18n.tr("server.unbound.preflightFail")));
             anyFailed = true;
         } else {
             boolean resolvOk = false;
@@ -6706,33 +6791,33 @@ public class SSLMailServer {
             } catch (Exception ignored) {}
             if (!resolvOk) {
                 JSONObject res = switchResolvConfToUnbound();
-                steps.put(buildStep("switch_resolv_conf", "Switcha /etc/resolv.conf su 127.0.0.1 (con pre/post-flight + auto-rollback)", res));
+                steps.put(buildStep("switch_resolv_conf", I18n.tr("server.unbound.step.switchResolv"), res));
                 if (!res.optBoolean("success")) anyFailed = true;
             } else {
-                steps.put(buildSkipStep("switch_resolv_conf", "/etc/resolv.conf già configurato su unbound"));
+                steps.put(buildSkipStep("switch_resolv_conf", I18n.tr("server.unbound.step.resolvAlready")));
             }
         }
 
         // 7. Disabilita forwarder (forward-zone in unbound.conf) — necessario per DNSBL
         if (isUnboundUsingForwarder()) {
             JSONObject res = disableUnboundForwarder();
-            steps.put(buildStep("disable_forwarder", "Disabilita forwarder (modalità ricorsiva diretta per Spamhaus/SURBL)", res));
+            steps.put(buildStep("disable_forwarder", I18n.tr("server.unbound.step.disableForwarder"), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("disable_forwarder", "Modalità ricorsiva già attiva"));
+            steps.put(buildSkipStep("disable_forwarder", I18n.tr("server.unbound.step.recursiveAlready")));
         }
 
         r.put("success", !anyFailed);
         r.put("steps", steps);
-        r.put("message", anyFailed ? "Alcuni passaggi falliti — verifica dettagli" : "unbound operativo, sistema usa resolver locale, check DNSBL ora affidabili");
+        r.put("message", I18n.tr(anyFailed ? "server.unbound.someFailed" : "server.unbound.allDone"));
         return r;
     }
 
     // ============== BLACKLIST CHECK (DNSBL + RHSBL) ==============
     private void handleApiBlacklistCheck(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
         if (!"GET".equals(exchange.getRequestMethod())) {
-            sendJsonError(exchange, 405, "Method not allowed"); return;
+            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed")); return;
         }
         JSONObject response = new JSONObject();
         try {
@@ -6762,7 +6847,7 @@ public class SSLMailServer {
                 if (ip != null && !ip.isEmpty()) {
                     if (!org.mail_panel.security.InputValidator.isValidIp(ip)) {
                         response.put("success", false);
-                        response.put("error", "IP non valido");
+                        response.put("error", I18n.tr("server.badIp"));
                         sendJsonResponse(exchange, response); return;
                     }
                     reports.put(reportToJson(checker.checkIp(ip)));
@@ -6770,7 +6855,7 @@ public class SSLMailServer {
                 if (domain != null && !domain.isEmpty()) {
                     if (!org.mail_panel.security.InputValidator.isValidDomain(domain)) {
                         response.put("success", false);
-                        response.put("error", "Dominio non valido");
+                        response.put("error", I18n.tr("server.domain.invalid"));
                         sendJsonResponse(exchange, response); return;
                     }
                     reports.put(reportToJson(checker.checkDomain(domain)));
@@ -6822,18 +6907,18 @@ public class SSLMailServer {
      * poter essere innescate da una richiesta preparata altrove.
      */
     private void handleApiUpdates(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
         try {
             if ("GET".equals(exchange.getRequestMethod())) {
                 sendJsonResponse(exchange, UpdateManager.packagesStatus());
                 return;
             }
             if (!"POST".equals(exchange.getRequestMethod())) {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
             String body = readRequestBodyWithLimit(exchange);
-            if (body == null) { sendJsonError(exchange, 413, "Body troppo grande"); return; }
+            if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
             JSONObject req = new JSONObject(body);
             if (!validateCsrfForRequest(exchange, req)) { sendCsrfError(exchange); return; }
             String action = req.optString("action", "");
@@ -6849,7 +6934,7 @@ public class SSLMailServer {
                     // Riscrive la sola configurazione, senza toccare i pacchetti. La conferma
                     // scritta a mano c'e' perche' l'operazione ricarica un servizio vivo.
                     if (!"RIGENERA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaRigenerazioneDovecot();
@@ -6872,12 +6957,12 @@ public class SSLMailServer {
                     // dell'anteprima: si cambia solo cio' che si e' visto.
                     String verso = req.optString("verso", "");
                     if (verso.isEmpty() || !verso.equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Per confermare scrivi il nome del ramo.");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.updates.typeBranch"));
                         break;
                     }
                     response = UpdateManager.avviaCambioRamo(verso, req.optString("impronta", ""));
-                    logAudit("PKG_BRANCH_CHANGE", ip, "verso " + verso + (response.optBoolean("success")
-                            ? " (avviato, lavoro " + response.optString("jobId") + ")" : " (non avviato: " + response.optString("error") + ")"));
+                    logAudit("PKG_BRANCH_CHANGE", ip, "to " + verso + (response.optBoolean("success")
+                            ? " (started, job " + response.optString("jobId") + ")" : " (not started: " + response.optString("error") + ")"));
                 }
                 case "system_report" -> response = UpdateManager.rapportoSistema();
                 case "os_status" -> response = UpdateManager.sistemaOperativo();
@@ -6888,10 +6973,10 @@ public class SSLMailServer {
                 }
                 case "reboot_now" -> {
                     if (!"RIAVVIA IL SERVER".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    logAudit("SERVER_REBOOT", ip, "richiesto dal pannello");
+                    logAudit("SERVER_REBOOT", ip, "requested from the panel");
                     response = UpdateManager.riavviaServer(true, req.optInt("minuti", 1));
                 }
                 case "rc_stato" -> response = UpdateManager.avvioAutomatico();
@@ -6900,17 +6985,17 @@ public class SSLMailServer {
                 case "rc_remove_preview" -> response = UpdateManager.rimuoviScriptRcPannello(false);
                 case "rc_remove" -> {
                     if (!"RIMUOVI RC".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.rimuoviScriptRcPannello(true);
                     logAudit("RC_REMOVE", ip, response.optBoolean("success")
-                            ? "avvio automatico rimosso" : "NON rimosso: " + response.optString("error", "?"));
+                            ? "boot start removed" : "NOT removed: " + response.optString("error", "?"));
                 }
                 case "rc_preview" -> response = UpdateManager.scriptRcPannello(false);
                 case "rc_install" -> {
                     if (!"INSTALLA RC".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.scriptRcPannello(true);
@@ -6942,38 +7027,38 @@ public class SSLMailServer {
                 case "mtasts_piano" -> response = org.mail_panel.system.AttivaMtaSts.piano();
                 case "mtasts_attiva" -> {
                     if (!"ATTIVA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaAttivazioneMtaSts();
-                    logAudit("MTASTS_ATTIVA", ip, "avviata come lavoro " + response.optString("jobId", ""));
+                    logAudit("MTASTS_ATTIVA", ip, "started as job " + response.optString("jobId", ""));
                 }
                 case "web443_include" -> {
                     if (!"AGGIUNGI".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = org.mail_panel.system.ProtezioneWeb.aggiungiInclude();
                     logAudit("NGINX_INCLUDE", ip, response.optBoolean("success")
-                            ? "include aggiunto" : "NON aggiunto: " + response.optString("error", "?"));
+                            ? "include added" : "NOT added: " + response.optString("error", "?"));
                 }
                 case "web443_install" -> {
                     if (!"APRI".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = org.mail_panel.system.ProtezioneWeb.installa("", "");
                     logAudit("WEB443_INSTALL", ip, response.optBoolean("success")
-                            ? "443 aperta con superficie minima" : "NON aperta: " + response.optString("error", "?"));
+                            ? "443 open with minimal surface" : "NOT open: " + response.optString("error", "?"));
                 }
                 case "web443_jail" -> {
                     if (!"ATTIVA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = org.mail_panel.system.ProtezioneWeb.installaJail();
                     logAudit("WEB443_JAIL", ip, response.optBoolean("success")
-                            ? "jail attiva" : "NON attiva: " + response.optString("error", "?"));
+                            ? "jail active" : "NOT active: " + response.optString("error", "?"));
                 }
                 case "sorveglianza" -> response = org.mail_panel.system.Sorveglianza.controlla();
                 case "sorveglianza_cambi" -> response = org.mail_panel.system.Sorveglianza.cosaECambiato(
@@ -6986,46 +7071,46 @@ public class SSLMailServer {
                 case "porta465_status" -> response = org.mail_panel.system.PortaSottomissione.stato();
                 case "porta465_apply" -> {
                     if (!"APPLICA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = org.mail_panel.system.PortaSottomissione.applica();
                     logAudit("PORTA_465", ip, response.optBoolean("success")
-                            ? "restrizione applicata" : "NON applicata: " + response.optString("error", "?"));
+                            ? "restriction applied" : "NOT applied: " + response.optString("error", "?"));
                 }
                 case "postfix_level" -> {
                     if (!"ALZA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.alzaLivelloPostfix(req.optString("livello", ""));
                     logAudit("POSTFIX_LEVEL", ip, req.optString("livello", "")
-                            + (response.optBoolean("success") ? " - fatto" : " - NON fatto: "
+                            + (response.optBoolean("success") ? " - done" : " - NOT done: "
                                + response.optString("error", "?")));
                 }
                 case "pkg_remove" -> {
                     if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.rimuoviPacchetto(req.optString("nome", ""));
                     logAudit("PKG_REMOVE", ip, req.optString("nome", "")
-                            + (response.optBoolean("success") ? " - rimosso" : " - NON rimosso: "
+                            + (response.optBoolean("success") ? " - removed" : " - NOT removed: "
                                + response.optString("error", "?")));
                 }
                 case "be_destroy" -> {
                     if (!"ELIMINA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.eliminaAmbienteDiAvvio(req.optString("nome", ""));
                     logAudit("BE_DESTROY", ip, req.optString("nome", "")
-                            + (response.optBoolean("success") ? " - eliminato"
-                               : " - NON eliminato: " + response.optString("error", "?")));
+                            + (response.optBoolean("success") ? " - deleted"
+                               : " - NOT deleted: " + response.optString("error", "?")));
                 }
                 case "salto_prosegui" -> {
                     if (!"PROSEGUI".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaProseguiSalto(req.optString("target", ""));
@@ -7033,7 +7118,7 @@ public class SSLMailServer {
                 }
                 case "os_upgrade_prepare" -> {
                     if (!"PREPARA AGGIORNAMENTO".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaPreparazioneSistema(req.optString("target", "15.1"));
@@ -7041,7 +7126,7 @@ public class SSLMailServer {
                 }
                 case "os_fetch" -> {
                     if (!"CERCA AGGIORNAMENTI".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaCercaAggiornamentiSistema();
@@ -7051,7 +7136,7 @@ public class SSLMailServer {
                 case "python_leftovers" -> response = UpdateManager.restiPython(false);
                 case "python_leftovers_clean" -> {
                     if (!"PULISCI PYTHON".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.restiPython(true);
@@ -7059,7 +7144,7 @@ public class SSLMailServer {
                 }
                 case "python_move" -> {
                     if (!"SPOSTA PYTHON".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaPassaggioPython();
@@ -7069,10 +7154,10 @@ public class SSLMailServer {
                 case "java_status" -> response = UpdateManager.statoAggiornamentoJava();
                 case "java_update" -> {
                     if (!"AGGIORNA JAVA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    logAudit("JAVA_UPDATE_STARTED", ip, "il pannello si spegnera'");
+                    logAudit("JAVA_UPDATE_STARTED", ip, "the panel will shut down");
                     response = UpdateManager.avviaAggiornamentoJava();
                 }
                 case "roundcube_preflight" -> response = UpdateManager.roundcubePreflight();
@@ -7080,7 +7165,7 @@ public class SSLMailServer {
                 case "roundcube_nginx_preview" -> response = UpdateManager.riparaNginxPathInfo(false);
                 case "roundcube_nginx_fix" -> {
                     if (!"RIPARA NGINX".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.riparaNginxPathInfo(true);
@@ -7088,7 +7173,7 @@ public class SSLMailServer {
                 }
                 case "roundcube_update" -> {
                     if (!"AGGIORNA ROUNDCUBE".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaAggiornamentoRoundcube();
@@ -7096,7 +7181,7 @@ public class SSLMailServer {
                 }
                 case "clean_client" -> {
                     if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaPuliziaClientEstraneo(
@@ -7105,7 +7190,7 @@ public class SSLMailServer {
                 }
                 case "relink" -> {
                     if (!"RICOLLEGA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaRicollegamento();
@@ -7115,7 +7200,7 @@ public class SSLMailServer {
                     // E' una cancellazione: la conferma si scrive a mano, e il percorso non
                     // arriva dalla richiesta ma e' fissato nel codice.
                     if (!"ELIMINA CACHE".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaPuliziaCacheRspamd();
@@ -7123,7 +7208,7 @@ public class SSLMailServer {
                 }
                 case "mysql84_migrate" -> {
                     if (!"MIGRA A 8.4".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaMigrazione84();
@@ -7141,7 +7226,7 @@ public class SSLMailServer {
                     String pk = req.optString("package", "");
                     if (!pk.equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false)
-                                .put("error", "Per confermare scrivi esattamente il nome del pacchetto.");
+                                .put("error", I18n.tr("server.updates.typePackage"));
                         break;
                     }
                     response = UpdateManager.avviaAggiornamentoGuidato(pk, req.optString("firma", ""));
@@ -7152,13 +7237,13 @@ public class SSLMailServer {
                     String only = req.optString("package", "");
                     response = UpdateManager.packagesLock(lock, only);
                     logAudit(lock ? "PACKAGES_LOCKED" : "PACKAGES_UNLOCKED", ip,
-                            (only.isEmpty() ? "tutti" : only) + " -> " + response.optInt("changed", 0) + " modificati");
+                            (only.isEmpty() ? "all" : only) + " -> " + response.optInt("changed", 0) + " changed");
                 }
                 case "updates_apply" -> {
                     // La conferma scritta a mano non e' burocrazia: distingue un click di
                     // riflesso da una decisione. Qui si modifica un server di posta vivo.
                     if (!"AGGIORNA".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaAggiornamentoNonProtetti();
@@ -7166,14 +7251,14 @@ public class SSLMailServer {
                 }
                 case "maintenance_run" -> {
                     if (!"MANUTENZIONE".equals(req.optString("confirm", ""))) {
-                        response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.avviaManutenzione(req.optString("firma", ""));
                     logAudit("MAINTENANCE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
-                default -> response = new JSONObject().put("success", false).put("error", "Azione sconosciuta");
+                default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
             }
             sendJsonResponse(exchange, response);
         } catch (java.io.IOException e) {
@@ -7185,20 +7270,20 @@ public class SSLMailServer {
             String m = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
             if (m.contains("broken pipe") || m.contains("insufficient bytes")
                     || m.contains("connection reset")) {
-                LOGGER.info("/api/updates: il client ha chiuso la connessione prima della risposta "
-                        + "(l'operazione era gia' stata eseguita). " + e.getMessage());
+                LOGGER.info("/api/updates: the client closed the connection before the answer "
+                        + "(the operation had already run). " + e.getMessage());
             } else {
-                LOGGER.log(Level.SEVERE, "Errore di I/O in /api/updates", e);
-                try { sendJsonError(exchange, 500, "Errore interno del server"); } catch (Exception ignored) { }
+                LOGGER.log(Level.SEVERE, "I/O error in /api/updates", e);
+                try { sendJsonError(exchange, 500, I18n.tr("server.internalError")); } catch (Exception ignored) { }
             }
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Errore in /api/updates", e);
-            sendJsonError(exchange, 500, "Errore interno del server");
+            LOGGER.log(Level.SEVERE, "Error in /api/updates", e);
+            sendJsonError(exchange, 500, I18n.tr("server.internalError"));
         }
     }
 
     private void handleApiClamavHealth(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
         String method = exchange.getRequestMethod();
         JSONObject response = new JSONObject();
         try {
@@ -7206,7 +7291,7 @@ public class SSLMailServer {
                 response = buildClamavHealthReport();
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
-                if (body == null) { sendJsonError(exchange, 413, "Body troppo grande"); return; }
+                if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
                 JSONObject req = new JSONObject(body);
                 if (!validateCsrfForRequest(exchange, req)) { sendCsrfError(exchange); return; }
                 String action = req.optString("action", "");
@@ -7268,11 +7353,11 @@ public class SSLMailServer {
                     }
                     default -> {
                         response.put("success", false);
-                        response.put("error", "Azione non valida: " + action);
+                        response.put("error", I18n.tr("server.badActionNamed", Map.of("action", action)));
                     }
                 }
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
         } catch (Exception e) {
@@ -7297,27 +7382,27 @@ public class SSLMailServer {
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
             installed = p.exitValue() == 0;
         } catch (Exception e) { installed = false; }
-        checks.put(makeCheck("clamav-installed", "ClamAV installato", installed,
-            installed ? "Pacchetto clamav presente" : "Pacchetto clamav NON installato",
-            installed ? null : "Senza ClamAV non c'è scansione antivirus delle email.",
+        checks.put(makeCheck("clamav-installed", I18n.tr("server.clam.checkInstalled"), installed,
+            installed ? I18n.tr("server.clam.pkgPresent") : I18n.tr("server.clam.pkgMissing"),
+            installed ? null : I18n.tr("server.clam.impactInstalled"),
             installed ? null : "install_clamav",
-            "Esegue: pkg install -y clamav"));
+            I18n.tr("server.runs", Map.of("command", "pkg install -y clamav"))));
 
         // 2. freshclam abilitato al boot
         boolean freshclamEnabledBoot = isSysrcYes("clamav_freshclam_enable");
-        checks.put(makeCheck("freshclam-enabled-boot", "freshclam abilitato al boot",
+        checks.put(makeCheck("freshclam-enabled-boot", I18n.tr("server.clam.checkFreshclamBoot"),
             freshclamEnabledBoot,
-            freshclamEnabledBoot ? "clamav_freshclam_enable=YES" : "freshclam non si avvia al boot",
-            freshclamEnabledBoot ? null : "I database virus non verranno aggiornati automaticamente dopo un riavvio.",
+            freshclamEnabledBoot ? "clamav_freshclam_enable=YES" : I18n.tr("server.clam.freshclamNoBoot"),
+            freshclamEnabledBoot ? null : I18n.tr("server.clam.impactFreshclamBoot"),
             (freshclamEnabledBoot || !installed) ? null : "enable_freshclam_at_boot",
             "sysrc clamav_freshclam_enable=YES"));
 
         // 3. clamd abilitato al boot
         boolean clamdEnabledBoot = isSysrcYes("clamav_clamd_enable");
-        checks.put(makeCheck("clamd-enabled-boot", "clamd abilitato al boot",
+        checks.put(makeCheck("clamd-enabled-boot", I18n.tr("server.clam.checkClamdBoot"),
             clamdEnabledBoot,
-            clamdEnabledBoot ? "clamav_clamd_enable=YES" : "clamd non si avvia al boot",
-            clamdEnabledBoot ? null : "Dopo un reboot clamd non torna su e nessuna email viene scansionata.",
+            clamdEnabledBoot ? "clamav_clamd_enable=YES" : I18n.tr("server.clam.clamdNoBoot"),
+            clamdEnabledBoot ? null : I18n.tr("server.clam.impactClamdBoot"),
             (clamdEnabledBoot || !installed) ? null : "enable_clamd_at_boot",
             "sysrc clamav_clamd_enable=YES"));
 
@@ -7366,30 +7451,30 @@ public class SSLMailServer {
             } catch (Exception ignored) {}
         }
         String dbStatus = dbPresent
-            ? "Database trovati (più recente: " + dbAgeDays + " giorni fa)"
-            : "Nessun database .cvd/.cld in /var/db/clamav";
+            ? I18n.tr("server.clam.dbFound", Map.of("days", dbAgeDays))
+            : I18n.tr("server.clam.dbNone");
         boolean dbOk = dbPresent && dbAgeDays <= 7;
-        checks.put(makeCheck("clamav-db", "Database virus aggiornato",
+        checks.put(makeCheck("clamav-db", I18n.tr("server.clam.checkDb"),
             dbOk,
             dbPresent
-                ? (dbAgeDays > 7 ? "OBSOLETO: " + dbStatus : dbStatus)
+                ? (dbAgeDays > 7 ? I18n.tr("server.clam.dbOld", Map.of("status", dbStatus)) : dbStatus)
                 : dbStatus,
             dbOk ? null
-                : (dbPresent ? "I database hanno più di 7 giorni — nuovi malware non vengono rilevati."
-                             : "Senza database, clamd non può partire. Va scaricato con freshclam (primo download ~200MB)."),
+                : (dbPresent ? I18n.tr("server.clam.impactDbOld")
+                             : I18n.tr("server.clam.impactDbMissing")),
             (dbOk || !installed) ? null : "update_db",
-            "Esegue: freshclam --foreground --stdout (download iniziale richiede 2-5 min)"));
+            I18n.tr("server.clam.fixDb")));
 
         // 5. clamd in esecuzione
         boolean clamdRunning = isServiceRunning("clamav_clamd");
-        checks.put(makeCheck("clamd-running", "clamd attivo",
+        checks.put(makeCheck("clamd-running", I18n.tr("server.clam.checkClamdRunning"),
             clamdRunning,
-            clamdRunning ? "Servizio attivo, scansione operativa"
-                         : (dbPresent ? "Servizio fermo" : "Non può partire senza database"),
+            clamdRunning ? I18n.tr("server.clam.clamdRunning")
+                         : (dbPresent ? I18n.tr("server.serviceStopped") : I18n.tr("server.clam.clamdNoDb")),
             clamdRunning ? null
-                : "Mentre è fermo, Rspamd tenta di chiamarlo ma fallisce: le email NON vengono scansionate da ClamAV.",
+                : I18n.tr("server.clam.impactClamdRunning"),
             (clamdRunning || !installed || !dbPresent) ? null : "start_clamd",
-            "service clamav_clamd start (richiede database già scaricati)"));
+            I18n.tr("server.clam.fixClamdRunning")));
 
         // 6. freshclam in esecuzione (auto-update) — check rigoroso
         boolean freshclamRunning = isServiceRunning("clamav_freshclam");
@@ -7398,29 +7483,29 @@ public class SSLMailServer {
         boolean autoUpdateOk = freshclamRunning && fcLog.lastUpdateAgeHours >= 0 && fcLog.lastUpdateAgeHours <= 48;
         String fcStatusText;
         if (!freshclamRunning) {
-            fcStatusText = "Servizio fermo";
+            fcStatusText = I18n.tr("server.serviceStopped");
         } else if (fcLog.lastUpdateAgeHours < 0) {
-            fcStatusText = "Daemon attivo ma NESSUN update registrato nel log (mirror irraggiungibile?)";
+            fcStatusText = I18n.tr("server.clam.fcNoUpdates");
         } else if (fcLog.lastUpdateAgeHours <= 2) {
-            fcStatusText = "Ultimo check " + fcLog.lastUpdateAgeHours + "h fa — funziona correttamente";
+            fcStatusText = I18n.tr("server.clam.fcRecent", Map.of("hours", fcLog.lastUpdateAgeHours));
         } else if (fcLog.lastUpdateAgeHours <= 48) {
-            fcStatusText = "Ultimo check " + fcLog.lastUpdateAgeHours + "h fa";
+            fcStatusText = I18n.tr("server.clam.fcHoursAgo", Map.of("hours", fcLog.lastUpdateAgeHours));
         } else {
-            fcStatusText = "DATATO: ultimo update " + (fcLog.lastUpdateAgeHours / 24) + " giorni fa";
+            fcStatusText = I18n.tr("server.clam.fcOld", Map.of("days", fcLog.lastUpdateAgeHours / 24));
         }
         if (fcLog.lastErrorMessage != null) {
-            fcStatusText += " | Ultimo errore: " + fcLog.lastErrorMessage;
+            fcStatusText += " | " + I18n.tr("server.clam.fcLastError", Map.of("error", fcLog.lastErrorMessage));
         }
-        checks.put(makeCheck("freshclam-running", "freshclam attivo e funzionante",
+        checks.put(makeCheck("freshclam-running", I18n.tr("server.clam.checkFreshclamRunning"),
             autoUpdateOk,
             fcStatusText,
             autoUpdateOk ? null
                 : (freshclamRunning
-                    ? "Il daemon gira ma non sta aggiornando i database. Possibili cause: mirror irraggiungibile, firewall outbound, errore SSL. Verifica /var/log/clamav/freshclam.log"
-                    : "I database non vengono aggiornati: dopo qualche giorno saranno obsoleti."),
+                    ? I18n.tr("server.clam.impactFcNotUpdating")
+                    : I18n.tr("server.clam.impactFcStopped")),
             (autoUpdateOk || !installed) ? null
                 : (freshclamRunning ? "update_db" : "start_freshclam"),
-            freshclamRunning ? "Forza un update manuale (freshclam --foreground)" : "service clamav_freshclam start"));
+            freshclamRunning ? I18n.tr("server.clam.fixFcForce") : "service clamav_freshclam start"));
 
         // 7. Rspamd → ClamAV configurato
         boolean rspamdHasAntivirus = false;
@@ -7431,14 +7516,14 @@ public class SSLMailServer {
                 rspamdHasAntivirus = c.contains("clamav") && c.contains("clamd.sock");
             }
         } catch (Exception ignored) {}
-        checks.put(makeCheck("rspamd-antivirus", "Rspamd configurato per usare ClamAV",
+        checks.put(makeCheck("rspamd-antivirus", I18n.tr("server.clam.checkRspamd"),
             rspamdHasAntivirus,
-            rspamdHasAntivirus ? "antivirus.conf con riferimento a clamd.sock"
-                               : "antivirus.conf MANCA o non punta a clamd",
+            rspamdHasAntivirus ? I18n.tr("server.clam.rspamdOk")
+                               : I18n.tr("server.clam.rspamdMissing"),
             rspamdHasAntivirus ? null
-                : "Anche se ClamAV gira, Rspamd non lo chiama e le email passano senza scansione AV.",
+                : I18n.tr("server.clam.impactRspamd"),
             (rspamdHasAntivirus || !installed) ? null : "ensure_rspamd_antivirus",
-            "Scrive /usr/local/etc/rspamd/local.d/antivirus.conf e ricarica Rspamd"));
+            I18n.tr("server.clam.fixRspamd")));
 
         boolean allOk = installed && freshclamEnabledBoot && clamdEnabledBoot && dbOk
             && clamdRunning && freshclamRunning && rspamdHasAntivirus;
@@ -7565,7 +7650,7 @@ public class SSLMailServer {
             r.put("output", out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -7582,17 +7667,17 @@ public class SSLMailServer {
             p.waitFor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
             boolean ok = p.exitValue() == 0;
             r.put("success", ok);
-            r.put("message", ok ? "Servizio " + svc + " " + cmd + " OK" : "service " + svc + " " + cmd + " exit=" + p.exitValue());
+            r.put("message", ok ? I18n.tr("server.service.cmdOk", java.util.Map.of("svc", String.valueOf(svc), "cmd", String.valueOf(cmd))) : "service " + svc + " " + cmd + " exit=" + p.exitValue());
             r.put("output", out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
 
     private JSONObject installClamav() {
-        return sulTurnoPacchetti("installazione di ClamAV", this::eseguiInstallClamav);
+        return sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", "ClamAV")), this::eseguiInstallClamav);
     }
 
     private JSONObject eseguiInstallClamav() {
@@ -7605,13 +7690,13 @@ public class SSLMailServer {
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             boolean done = p.waitFor(300, java.util.concurrent.TimeUnit.SECONDS);
-            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", "Timeout installazione (>5min)"); return r; }
+            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", I18n.tr("server.install.timeout5")); return r; }
             r.put("success", p.exitValue() == 0);
-            r.put("message", p.exitValue() == 0 ? "ClamAV installato" : "pkg install exit=" + p.exitValue());
+            r.put("message", p.exitValue() == 0 ? I18n.tr("server.clam.installed") : "pkg install exit=" + p.exitValue());
             r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -7628,11 +7713,11 @@ public class SSLMailServer {
             boolean done = p.waitFor(600, java.util.concurrent.TimeUnit.SECONDS); // 10 min
             if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", "Timeout (>10min)"); return r; }
             r.put("success", p.exitValue() == 0);
-            r.put("message", p.exitValue() == 0 ? "Database virus aggiornato" : "freshclam exit=" + p.exitValue());
+            r.put("message", p.exitValue() == 0 ? I18n.tr("server.clam.dbUpdated") : "freshclam exit=" + p.exitValue());
             r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -7669,7 +7754,7 @@ public class SSLMailServer {
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             boolean done = p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
-            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", "Timeout clamdscan"); return r; }
+            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", I18n.tr("server.clam.scanTimeout")); return r; }
             int exit = p.exitValue();
 
             // Interpretazione exit code di clamdscan:
@@ -7678,25 +7763,25 @@ public class SSLMailServer {
             //   2 = errore
             if (exit == 1 && out.contains("FOUND") && (out.contains("EICAR") || out.contains("Eicar"))) {
                 r.put("success", true);
-                r.put("message", "✅ Test EICAR superato — ClamAV scansiona e rileva i virus correttamente");
+                r.put("message", "✅ " + I18n.tr("server.clam.eicarOk"));
                 r.put("scan_output", out.trim());
                 r.put("detected", true);
             } else if (exit == 2) {
                 r.put("success", false);
-                r.put("message", "❌ clamdscan ha avuto un errore (clamd irraggiungibile?)");
+                r.put("message", "❌ " + I18n.tr("server.clam.eicarError"));
                 r.put("scan_output", out.trim());
             } else if (exit == 0) {
                 r.put("success", false);
-                r.put("message", "⚠️ clamdscan NON ha rilevato il virus EICAR — database non aggiornato o configurazione anomala");
+                r.put("message", "⚠️ " + I18n.tr("server.clam.eicarMissed"));
                 r.put("scan_output", out.trim());
             } else {
                 r.put("success", false);
-                r.put("message", "❓ Risultato inaspettato (exit=" + exit + ")");
+                r.put("message", "❓ " + I18n.tr("server.clam.eicarUnexpected", Map.of("exit", exit)));
                 r.put("scan_output", out.trim());
             }
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         } finally {
             if (tmp != null) {
                 try { java.nio.file.Files.deleteIfExists(tmp); } catch (Exception ignored) {}
@@ -7714,7 +7799,7 @@ public class SSLMailServer {
             }
             java.nio.file.Path conf = confDir.resolve("antivirus.conf");
             String content = ""
-                + "# Auto-gestito dal mail panel — Rspamd → ClamAV\n"
+                + "# Managed by the mail panel: Rspamd → ClamAV\n"
                 + "clamav {\n"
                 + "  action = \"reject\";\n"
                 + "  symbol = \"CLAM_VIRUS\";\n"
@@ -7739,10 +7824,10 @@ public class SSLMailServer {
                 p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
             } catch (Exception ignored) {}
             r.put("success", true);
-            r.put("message", "antivirus.conf scritto e Rspamd ricaricato");
+            r.put("message", I18n.tr("server.clamav.confWritten"));
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
         }
         return r;
     }
@@ -7766,36 +7851,36 @@ public class SSLMailServer {
         } catch (Exception e) { installed = false; }
         if (!installed) {
             JSONObject res = installClamav();
-            steps.put(buildStep("install_clamav", "Installa ClamAV (pkg install)", res));
+            steps.put(buildStep("install_clamav", I18n.tr("server.clam.step.install"), res));
             if (!res.optBoolean("success")) anyFailed = true;
             installed = res.optBoolean("success");
         } else {
-            steps.put(buildSkipStep("install_clamav", "ClamAV già installato"));
+            steps.put(buildSkipStep("install_clamav", I18n.tr("server.clam.step.installed")));
         }
 
         if (!installed) {
             r.put("success", false);
             r.put("steps", steps);
-            r.put("message", "Installazione ClamAV fallita");
+            r.put("message", I18n.tr("server.clam.installFailed"));
             return r;
         }
 
         // 2. Enable freshclam at boot
         if (!isSysrcYes("clamav_freshclam_enable")) {
             JSONObject res = sysrcSet("clamav_freshclam_enable", "YES");
-            steps.put(buildStep("enable_freshclam_boot", "Abilita freshclam al boot", res));
+            steps.put(buildStep("enable_freshclam_boot", I18n.tr("server.step.enableBoot", Map.of("service", "freshclam")), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("enable_freshclam_boot", "freshclam già abilitato al boot"));
+            steps.put(buildSkipStep("enable_freshclam_boot", I18n.tr("server.unbound.step.bootAlready", Map.of("service", "freshclam"))));
         }
 
         // 3. Enable clamd at boot
         if (!isSysrcYes("clamav_clamd_enable")) {
             JSONObject res = sysrcSet("clamav_clamd_enable", "YES");
-            steps.put(buildStep("enable_clamd_boot", "Abilita clamd al boot", res));
+            steps.put(buildStep("enable_clamd_boot", I18n.tr("server.step.enableBoot", Map.of("service", "clamd")), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("enable_clamd_boot", "clamd già abilitato al boot"));
+            steps.put(buildSkipStep("enable_clamd_boot", I18n.tr("server.unbound.step.bootAlready", Map.of("service", "clamd"))));
         }
 
         // 4. Update database (può richiedere minuti)
@@ -7813,28 +7898,28 @@ public class SSLMailServer {
         } catch (Exception ignored) {}
         if (!dbPresent) {
             JSONObject res = runFreshclam();
-            steps.put(buildStep("update_db", "Scarica database virus (può richiedere fino a 5 min)", res));
+            steps.put(buildStep("update_db", I18n.tr("server.clam.step.downloadDb"), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("update_db", "Database virus già presente"));
+            steps.put(buildSkipStep("update_db", I18n.tr("server.clam.step.dbPresent")));
         }
 
         // 5. Start freshclam
         if (!isServiceRunning("clamav_freshclam")) {
             JSONObject res = serviceCommand("clamav_freshclam", "start", 30);
-            steps.put(buildStep("start_freshclam", "Avvia freshclam", res));
+            steps.put(buildStep("start_freshclam", I18n.tr("server.unbound.step.start", Map.of("service", "freshclam")), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("start_freshclam", "freshclam già in esecuzione"));
+            steps.put(buildSkipStep("start_freshclam", I18n.tr("server.unbound.step.running", Map.of("service", "freshclam"))));
         }
 
         // 6. Start clamd
         if (!isServiceRunning("clamav_clamd")) {
             JSONObject res = serviceCommand("clamav_clamd", "start", 60);
-            steps.put(buildStep("start_clamd", "Avvia clamd (scanner)", res));
+            steps.put(buildStep("start_clamd", I18n.tr("server.clam.step.startClamd"), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("start_clamd", "clamd già in esecuzione"));
+            steps.put(buildSkipStep("start_clamd", I18n.tr("server.unbound.step.running", Map.of("service", "clamd"))));
         }
 
         // 7. Configura Rspamd → ClamAV
@@ -7848,21 +7933,21 @@ public class SSLMailServer {
         } catch (Exception ignored) {}
         if (!rspamdConfigured) {
             JSONObject res = ensureRspamdAntivirusConfig();
-            steps.put(buildStep("ensure_rspamd_antivirus", "Configura Rspamd per chiamare ClamAV", res));
+            steps.put(buildStep("ensure_rspamd_antivirus", I18n.tr("server.clam.step.rspamd"), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else {
-            steps.put(buildSkipStep("ensure_rspamd_antivirus", "Rspamd → ClamAV già configurato"));
+            steps.put(buildSkipStep("ensure_rspamd_antivirus", I18n.tr("server.clam.step.rspamdDone")));
         }
 
         r.put("success", !anyFailed);
         r.put("steps", steps);
-        r.put("message", anyFailed ? "Alcuni passaggi sono falliti — verifica i dettagli" : "ClamAV operativo e collegato a Rspamd");
+        r.put("message", I18n.tr(anyFailed ? "server.unbound.someFailed" : "server.clam.allDone"));
         return r;
     }
 
     private void handleApiFail2banHealth(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
         String method = exchange.getRequestMethod();
@@ -7872,7 +7957,7 @@ public class SSLMailServer {
                 response = buildFail2banHealthReport();
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
-                if (body == null) { sendJsonError(exchange, 413, "Body troppo grande"); return; }
+                if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
                 JSONObject req = new JSONObject(body);
                 if (!validateCsrfForRequest(exchange, req)) { sendCsrfError(exchange); return; }
                 String action = req.optString("action", "");
@@ -7899,13 +7984,13 @@ public class SSLMailServer {
                     case "setup_mail_jail" -> {
                         org.mail_panel.security.Fail2banAutoSetup.run();
                         response.put("success", true);
-                        response.put("message", "Setup eseguito (filter, jail, log file, log rotation)");
+                        response.put("message", I18n.tr("server.f2b.setupDone"));
                         logAudit("FAIL2BAN_AUTOSETUP_TRIGGERED", clientIp, "manual trigger from health page");
                     }
                     case "install_mail_jails" -> {
                         Fail2banManager.InstallResult res = fail2banManager.installMailJails();
                         response.put("success", res.success);
-                        response.put("message", res.success ? res.message : (res.error != null ? res.error : "Installation failed"));
+                        response.put("message", res.success ? res.message : (res.error != null ? res.error : I18n.tr("server.install.failed")));
                         if (res.configPath != null) response.put("config_path", res.configPath);
                         logAudit(res.success ? "FAIL2BAN_MAIL_JAILS_INSTALLED" : "FAIL2BAN_MAIL_JAILS_FAILED",
                             clientIp, res.success ? res.configPath : (res.error != null ? res.error : ""));
@@ -7967,11 +8052,11 @@ public class SSLMailServer {
                     }
                     default -> {
                         response.put("success", false);
-                        response.put("error", "Azione non valida: " + action);
+                        response.put("error", I18n.tr("server.badActionNamed", Map.of("action", action)));
                     }
                 }
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
         } catch (Exception e) {
@@ -7988,11 +8073,11 @@ public class SSLMailServer {
      */
     private void handleApiSystemPaths(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
         if (!"GET".equals(exchange.getRequestMethod())) {
-            sendJsonError(exchange, 405, "Method not allowed");
+            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
             return;
         }
         JSONObject response = new JSONObject();
@@ -8003,68 +8088,68 @@ public class SSLMailServer {
             JSONArray rcEntries = new JSONArray();
             String rcInstall = fail2banManager.detectRoundcubeInstallPath();
             if (rcInstall != null) {
-                rcEntries.put(pathEntry("Installazione", rcInstall, "Directory radice di Roundcube"));
-                rcEntries.put(pathEntry("Config file", rcInstall + "/config/config.inc.php", "Configurazione PHP di Roundcube"));
-                rcEntries.put(pathEntry("Logs directory", rcInstall + "/logs", "Directory dei log di Roundcube"));
-                rcEntries.put(pathEntry("Login log (Fail2ban target)", rcInstall + "/logs/userlogins", "File che Fail2ban monitora per il jail roundcube-auth"));
-                rcEntries.put(pathEntry("Errors log (opzionale)", rcInstall + "/logs/errors", "Errori PHP/runtime di Roundcube — creato solo quando si verificano errori"));
+                rcEntries.put(pathEntry(I18n.tr("server.paths.install"), rcInstall, I18n.tr("server.paths.installDesc")));
+                rcEntries.put(pathEntry(I18n.tr("server.paths.configFile"), rcInstall + "/config/config.inc.php", I18n.tr("server.paths.configFileDesc")));
+                rcEntries.put(pathEntry(I18n.tr("server.paths.logsDir"), rcInstall + "/logs", I18n.tr("server.paths.logsDirDesc")));
+                rcEntries.put(pathEntry(I18n.tr("server.paths.loginLog"), rcInstall + "/logs/userlogins", I18n.tr("server.paths.loginLogDesc")));
+                rcEntries.put(pathEntry(I18n.tr("server.paths.errorsLog"), rcInstall + "/logs/errors", I18n.tr("server.paths.errorsLogDesc")));
             } else {
-                rcEntries.put(new JSONObject().put("label", "Roundcube non trovato")
-                    .put("path", "(nessuno dei path standard contiene un install plausibile)")
+                rcEntries.put(new JSONObject().put("label", I18n.tr("server.paths.rcNotFound"))
+                    .put("path", I18n.tr("server.paths.rcNotFoundDesc"))
                     .put("exists", false));
             }
             categories.put(new JSONObject().put("name", "Roundcube").put("entries", rcEntries));
 
             // === Fail2ban ===
             JSONArray f2bEntries = new JSONArray();
-            f2bEntries.put(pathEntry("Binario fail2ban-client", "/usr/local/bin/fail2ban-client", "Comando per gestire Fail2ban"));
-            f2bEntries.put(pathEntry("Config jail principale", "/usr/local/etc/fail2ban/jail.local", "jail.local: jail di base del pannello"));
-            f2bEntries.put(pathEntry("Config jail mail", "/usr/local/etc/fail2ban/jail.d/mail.local", "Jail aggiuntive per Postfix/Dovecot/Roundcube/Rspamd"));
-            f2bEntries.put(pathEntry("Directory filter", "/usr/local/etc/fail2ban/filter.d", "Filter regex per ogni jail"));
-            f2bEntries.put(pathEntry("Filter mail-panel-auth", "/usr/local/etc/fail2ban/filter.d/mail-panel-auth.conf", "Filter per il login del pannello"));
-            f2bEntries.put(pathEntry("Filter roundcube-auth", "/usr/local/etc/fail2ban/filter.d/roundcube-auth.conf", "Filter per i login Roundcube"));
-            f2bEntries.put(pathEntry("Log Fail2ban", "/var/log/fail2ban.log", "Log del servizio Fail2ban"));
+            f2bEntries.put(pathEntry(I18n.tr("server.paths.f2bClient"), "/usr/local/bin/fail2ban-client", I18n.tr("server.paths.f2bClientDesc")));
+            f2bEntries.put(pathEntry(I18n.tr("server.paths.jailMain"), "/usr/local/etc/fail2ban/jail.local", I18n.tr("server.paths.jailMainDesc")));
+            f2bEntries.put(pathEntry(I18n.tr("server.paths.jailMail"), "/usr/local/etc/fail2ban/jail.d/mail.local", I18n.tr("server.paths.jailMailDesc")));
+            f2bEntries.put(pathEntry(I18n.tr("server.paths.filterDir"), "/usr/local/etc/fail2ban/filter.d", I18n.tr("server.paths.filterDirDesc")));
+            f2bEntries.put(pathEntry(I18n.tr("server.paths.filterPanel"), "/usr/local/etc/fail2ban/filter.d/mail-panel-auth.conf", I18n.tr("server.paths.filterPanelDesc")));
+            f2bEntries.put(pathEntry(I18n.tr("server.paths.filterRc"), "/usr/local/etc/fail2ban/filter.d/roundcube-auth.conf", I18n.tr("server.paths.filterRcDesc")));
+            f2bEntries.put(pathEntry(I18n.tr("server.paths.f2bLog"), "/var/log/fail2ban.log", I18n.tr("server.paths.f2bLogDesc")));
             categories.put(new JSONObject().put("name", "Fail2ban").put("entries", f2bEntries));
 
             // === Mail Panel ===
             JSONArray panelEntries = new JSONArray();
-            panelEntries.put(pathEntry("Log auth pannello", "/var/log/mail-panel-auth.log", "File monitorato dal jail mail-panel-auth (LOGIN_FAILURE, CSRF_FAILURE, ...)"));
-            panelEntries.put(pathEntry("newsyslog conf", "/usr/local/etc/newsyslog.conf.d/mail-panel-auth.conf", "Configurazione di log rotation"));
+            panelEntries.put(pathEntry(I18n.tr("server.paths.panelAuthLog"), "/var/log/mail-panel-auth.log", I18n.tr("server.paths.panelAuthLogDesc")));
+            panelEntries.put(pathEntry(I18n.tr("server.paths.newsyslog"), "/usr/local/etc/newsyslog.conf.d/mail-panel-auth.conf", I18n.tr("server.paths.newsyslogDesc")));
             categories.put(new JSONObject().put("name", "Mail Panel").put("entries", panelEntries));
 
             // === pf (firewall) ===
             JSONArray pfEntries = new JSONArray();
-            pfEntries.put(pathEntry("Config principale", "/etc/pf.conf", "Regole pf attive"));
-            pfEntries.put(pathEntry("Binario pfctl", "/sbin/pfctl", "Strumento di controllo pf"));
-            pfEntries.put(pathEntry("rc.conf", "/etc/rc.conf", "Configurazione boot — contiene pf_enable, fail2ban_enable, ecc."));
-            pfEntries.put(pathEntry("loader.conf", "/boot/loader.conf", "Caricamento moduli kernel al boot (pf_load)"));
+            pfEntries.put(pathEntry(I18n.tr("server.paths.pfConf"), "/etc/pf.conf", I18n.tr("server.paths.pfConfDesc")));
+            pfEntries.put(pathEntry(I18n.tr("server.paths.pfctl"), "/sbin/pfctl", I18n.tr("server.paths.pfctlDesc")));
+            pfEntries.put(pathEntry(I18n.tr("server.paths.rcConf"), "/etc/rc.conf", I18n.tr("server.paths.rcConfDesc")));
+            pfEntries.put(pathEntry(I18n.tr("server.paths.loaderConf"), "/boot/loader.conf", I18n.tr("server.paths.loaderConfDesc")));
             categories.put(new JSONObject().put("name", "pf (firewall)").put("entries", pfEntries));
 
             // === Mail services ===
             JSONArray mailEntries = new JSONArray();
-            mailEntries.put(pathEntry("Postfix config", "/usr/local/etc/postfix/main.cf", "Config principale Postfix"));
-            mailEntries.put(pathEntry("Postfix master", "/usr/local/etc/postfix/master.cf", "Service definition Postfix"));
-            mailEntries.put(pathEntry("Dovecot config", "/usr/local/etc/dovecot/dovecot.conf", "Config principale Dovecot"));
-            mailEntries.put(pathEntry("Maillog", "/var/log/maillog", "Log condiviso Postfix/Dovecot (input dei jail postfix-auth e dovecot)"));
-            mailEntries.put(pathEntry("Rspamd log", "/var/log/rspamd/rspamd.log", "Log di rspamd (input del jail rspamd)"));
-            mailEntries.put(pathEntry("Rspamd config", "/usr/local/etc/rspamd/local.d", "Override di rspamd"));
-            categories.put(new JSONObject().put("name", "Servizi Mail").put("entries", mailEntries));
+            mailEntries.put(pathEntry(I18n.tr("server.paths.postfixConf"), "/usr/local/etc/postfix/main.cf", I18n.tr("server.paths.postfixConfDesc")));
+            mailEntries.put(pathEntry(I18n.tr("server.paths.postfixMaster"), "/usr/local/etc/postfix/master.cf", I18n.tr("server.paths.postfixMasterDesc")));
+            mailEntries.put(pathEntry(I18n.tr("server.paths.dovecotConf"), "/usr/local/etc/dovecot/dovecot.conf", I18n.tr("server.paths.dovecotConfDesc")));
+            mailEntries.put(pathEntry(I18n.tr("server.paths.maillog"), "/var/log/maillog", I18n.tr("server.paths.maillogDesc")));
+            mailEntries.put(pathEntry(I18n.tr("server.paths.rspamdLog"), "/var/log/rspamd/rspamd.log", I18n.tr("server.paths.rspamdLogDesc")));
+            mailEntries.put(pathEntry(I18n.tr("server.paths.rspamdConf"), "/usr/local/etc/rspamd/local.d", I18n.tr("server.paths.rspamdConfDesc")));
+            categories.put(new JSONObject().put("name", I18n.tr("server.paths.mailServices")).put("entries", mailEntries));
 
             // === SSL ===
             JSONArray sslEntries = new JSONArray();
-            sslEntries.put(pathEntry("Certificato + chain", "/usr/local/etc/ssl/mail/fullchain.pem", "Cert + CA chain usati da Postfix/Dovecot"));
-            sslEntries.put(pathEntry("Chiave privata", "/usr/local/etc/ssl/mail/privkey.pem", "Private key del certificato"));
-            sslEntries.put(pathEntry("ACME home", "/root/.acme.sh", "Home di acme.sh (rinnovi Let's Encrypt)"));
-            sslEntries.put(pathEntry("ACME binario", "/root/.acme.sh/acme.sh", "Comando acme.sh"));
+            sslEntries.put(pathEntry(I18n.tr("server.paths.certChain"), "/usr/local/etc/ssl/mail/fullchain.pem", I18n.tr("server.paths.certChainDesc")));
+            sslEntries.put(pathEntry(I18n.tr("server.paths.privKey"), "/usr/local/etc/ssl/mail/privkey.pem", I18n.tr("server.paths.privKeyDesc")));
+            sslEntries.put(pathEntry(I18n.tr("server.paths.acmeHome"), "/root/.acme.sh", I18n.tr("server.paths.acmeHomeDesc")));
+            sslEntries.put(pathEntry(I18n.tr("server.paths.acmeBin"), "/root/.acme.sh/acme.sh", I18n.tr("server.paths.acmeBinDesc")));
             categories.put(new JSONObject().put("name", "SSL/TLS").put("entries", sslEntries));
 
             // === Web server (nginx) ===
             JSONArray webEntries = new JSONArray();
-            webEntries.put(pathEntry("Nginx conf principale", "/usr/local/etc/nginx/nginx.conf", "Config principale Nginx"));
-            webEntries.put(pathEntry("Sites-enabled (opzionale)", "/usr/local/etc/nginx/sites-enabled", "Directory vhost separati — usata solo se il vhost Roundcube è in un file dedicato"));
-            webEntries.put(pathEntry("Vhost Roundcube (opzionale)", "/usr/local/etc/nginx/sites-enabled/roundcube.conf", "Vhost dedicato Roundcube, se gestito dal pannello"));
-            webEntries.put(pathEntry("Nginx access log", "/var/log/nginx/access.log", "Log accessi web"));
-            webEntries.put(pathEntry("Nginx error log", "/var/log/nginx/error.log", "Log errori web"));
+            webEntries.put(pathEntry(I18n.tr("server.paths.nginxConf"), "/usr/local/etc/nginx/nginx.conf", I18n.tr("server.paths.nginxConfDesc")));
+            webEntries.put(pathEntry(I18n.tr("server.paths.sitesEnabled"), "/usr/local/etc/nginx/sites-enabled", I18n.tr("server.paths.sitesEnabledDesc")));
+            webEntries.put(pathEntry(I18n.tr("server.paths.rcVhost"), "/usr/local/etc/nginx/sites-enabled/roundcube.conf", I18n.tr("server.paths.rcVhostDesc")));
+            webEntries.put(pathEntry(I18n.tr("server.paths.nginxAccess"), "/var/log/nginx/access.log", I18n.tr("server.paths.nginxAccessDesc")));
+            webEntries.put(pathEntry(I18n.tr("server.paths.nginxError"), "/var/log/nginx/error.log", I18n.tr("server.paths.nginxErrorDesc")));
             categories.put(new JSONObject().put("name", "Nginx / Web").put("entries", webEntries));
 
             // === Database (panel) ===
@@ -8075,15 +8160,15 @@ public class SSLMailServer {
                 java.nio.file.Path abs = java.nio.file.Paths.get(sqliteDbPath).toAbsolutePath().normalize();
                 sqliteDbPath = abs.toString();
             } catch (Exception ignored) {}
-            dbEntries.put(pathEntry("DB SQLite pannello", sqliteDbPath, "Database SQLite del mail panel (settings, sessioni, ecc.)"));
-            dbEntries.put(pathEntry("MySQL my.cnf", "/usr/local/etc/mysql/my.cnf", "Config MySQL/MariaDB"));
-            dbEntries.put(pathEntry("MySQL var (data)", "/var/db/mysql", "Directory dati MySQL/MariaDB"));
+            dbEntries.put(pathEntry(I18n.tr("server.paths.sqlite"), sqliteDbPath, I18n.tr("server.paths.sqliteDesc")));
+            dbEntries.put(pathEntry(I18n.tr("server.paths.mycnf"), "/usr/local/etc/mysql/my.cnf", I18n.tr("server.paths.mycnfDesc")));
+            dbEntries.put(pathEntry(I18n.tr("server.paths.mysqlData"), "/var/db/mysql", I18n.tr("server.paths.mysqlDataDesc")));
             categories.put(new JSONObject().put("name", "Database").put("entries", dbEntries));
 
             response.put("success", true);
             response.put("categories", categories);
             // Hostname: tentativi multipli, mai bloccante
-            String hostname = "(non disponibile)";
+            String hostname = I18n.tr("server.notAvailable");
             try {
                 hostname = java.net.InetAddress.getLocalHost().getHostName();
             } catch (Exception ignoredEx) {
@@ -8153,29 +8238,29 @@ public class SSLMailServer {
         JSONArray checks = new JSONArray();
         boolean f2bInstalled = java.nio.file.Files.exists(java.nio.file.Paths.get("/usr/local/bin/fail2ban-client"));
         checks.put(makeCheck("fail2ban-installed",
-            "Fail2ban installato",
+            I18n.tr("server.f2b.checkInstalled"),
             f2bInstalled,
-            f2bInstalled ? ("Pacchetto py311-fail2ban presente sul sistema. " + versioneFail2ban())
-                         : "Il pacchetto Fail2ban non è installato",
-            f2bInstalled ? null : "Senza Fail2ban gli IP che falliscono il login non vengono bannati a livello firewall.",
+            f2bInstalled ? (I18n.tr("server.f2b.pkgPresent") + " " + versioneFail2ban())
+                         : I18n.tr("server.f2b.pkgMissing"),
+            f2bInstalled ? null : I18n.tr("server.f2b.impactInstalled"),
             f2bInstalled ? null : "install_fail2ban",
-            f2bInstalled ? null : "Esegue: pkg install -y py311-fail2ban"));
+            f2bInstalled ? null : I18n.tr("server.runs", Map.of("command", "pkg install -y py311-fail2ban"))));
         boolean enabledAtBoot = isFail2banEnabledAtBoot();
         checks.put(makeCheck("fail2ban-enabled-boot",
-            "Avvio automatico al boot",
+            I18n.tr("server.f2b.checkBoot"),
             enabledAtBoot,
-            enabledAtBoot ? "fail2ban_enable=YES in rc.conf" : "fail2ban non si avvia automaticamente al riavvio del server",
-            enabledAtBoot ? null : "Se il server riparte (reboot, kernel panic), Fail2ban non si riaccende e gli IP malevoli non sono più bloccati.",
+            enabledAtBoot ? "fail2ban_enable=YES in rc.conf" : I18n.tr("server.f2b.noBoot"),
+            enabledAtBoot ? null : I18n.tr("server.f2b.impactBoot"),
             (enabledAtBoot || !f2bInstalled) ? null : "enable_at_boot",
-            "Esegue: sysrc fail2ban_enable=YES"));
+            I18n.tr("server.runs", Map.of("command", "sysrc fail2ban_enable=YES"))));
         boolean f2bRunning = isFail2banRunning();
         checks.put(makeCheck("fail2ban-running",
-            "Fail2ban in esecuzione",
+            I18n.tr("server.f2b.checkRunning"),
             f2bRunning,
-            f2bRunning ? "Servizio attivo" : "Servizio fermo",
-            f2bRunning ? null : "Mentre è fermo non vengono effettuati nuovi ban anche se il pannello rileva tentativi sospetti.",
+            f2bRunning ? I18n.tr("server.serviceRunning") : I18n.tr("server.serviceStopped"),
+            f2bRunning ? null : I18n.tr("server.f2b.impactRunning"),
             (f2bRunning || !f2bInstalled) ? null : "start_service",
-            "Esegue: service fail2ban start"));
+            I18n.tr("server.runs", Map.of("command", "service fail2ban start"))));
         boolean filterPresent = java.nio.file.Files.exists(java.nio.file.Paths.get("/usr/local/etc/fail2ban/filter.d/mail-panel-auth.conf"));
         boolean logPresent = java.nio.file.Files.exists(java.nio.file.Paths.get("/var/log/mail-panel-auth.log"));
         boolean jailPresent = false;
@@ -8187,17 +8272,14 @@ public class SSLMailServer {
             }
         } catch (Exception ignored) {}
         boolean panelSetupOk = filterPresent && logPresent && jailPresent;
-        String missingDetails = "Mancano: " +
-            (filterPresent ? "" : "filter ") +
-            (jailPresent ? "" : "jail ") +
-            (logPresent ? "" : "log-file ");
+        String missingDetails = I18n.tr("server.f2b.missing", Map.of("items", ((filterPresent ? "" : "filter ") + (jailPresent ? "" : "jail ") + (logPresent ? "" : "log-file")).trim()));
         checks.put(makeCheck("panel-jail-configured",
-            "Jail mail-panel-auth configurata",
+            I18n.tr("server.f2b.checkPanelJail"),
             panelSetupOk,
-            panelSetupOk ? "Filter + jail + log-file presenti" : missingDetails.trim(),
-            panelSetupOk ? null : "I tentativi di login falliti sul pannello vengono loggati ma NON producono ban automatici.",
+            panelSetupOk ? I18n.tr("server.f2b.panelJailOk") : missingDetails.trim(),
+            panelSetupOk ? null : I18n.tr("server.f2b.impactPanelJail"),
             (panelSetupOk || !f2bInstalled) ? null : "setup_mail_jail",
-            "Crea filter, jail e log file con i default consigliati"));
+            I18n.tr("server.f2b.fixPanelJail")));
 
         // Jail per i servizi mail (Postfix, Dovecot, Roundcube, Rspamd)
         // Verifica DOPPIA: file esiste E le jail sono effettivamente attive nel runtime di Fail2ban
@@ -8251,14 +8333,14 @@ public class SSLMailServer {
         boolean mailJailsActive = mailFileExists && missingActive.isEmpty();
         String detailStatus;
         if (mailJailsActive) {
-            detailStatus = "Tutte le 4 jail mail attive a runtime: " + String.join(", ", expectedMailJails);
+            detailStatus = I18n.tr("server.f2b.mailJailsAll", Map.of("jails", String.join(", ", expectedMailJails)));
         } else if (mailFileExists) {
-            detailStatus = "File configurato ma " + missingActive.size() + " jail NON attive a runtime: " + String.join(" | ", reasons);
+            detailStatus = I18n.tr("server.f2b.mailJailsSome", Map.of("n", missingActive.size(), "reasons", String.join(" | ", reasons)));
         } else {
-            detailStatus = "File mail.local non esiste — nessuna jail mail configurata";
+            detailStatus = I18n.tr("server.f2b.mailJailsNone");
         }
         String impact = mailJailsActive ? null
-            : "I mail server sono il bersaglio #1 per attacchi: SMTP AUTH, IMAP login, webmail. Le jail elencate sopra NON stanno bloccando niente.";
+            : I18n.tr("server.f2b.impactMailJails");
 
         // Fix appropriato:
         //   - file mancante o jail non attive a runtime → install_mail_jails (rigenera mail.local
@@ -8269,11 +8351,11 @@ public class SSLMailServer {
         String fixDesc = null;
         if (f2bInstalled && (!mailFileExists || !missingActive.isEmpty())) {
             fixAction = "install_mail_jails";
-            fixDesc = "Rigenera config jail Postfix/Dovecot/Roundcube/Rspamd con path corretti, crea log file mancanti, ricarica Fail2ban";
+            fixDesc = I18n.tr("server.f2b.fixMailJails");
         }
 
         checks.put(makeCheck("mail-services-jails",
-            "Jail per servizi mail (Postfix/Dovecot/Roundcube/Rspamd) attive a runtime",
+            I18n.tr("server.f2b.checkMailJails"),
             mailJailsActive,
             detailStatus,
             impact,
@@ -8300,30 +8382,23 @@ public class SSLMailServer {
         StringBuilder logDettaglio = new StringBuilder();
         if (!f2bRunning) {
             logOk = false;
-            logDettaglio.append("Fail2ban non e' in esecuzione: non ho potuto guardare nessuna jail, "
-                              + "quindi di questi file non so dire niente");
+            logDettaglio.append(I18n.tr("server.f2b.log.notRunning"));
         } else if (esame == null) {
             logOk = false;
-            logDettaglio.append("Non sono riuscito a esaminare i log delle jail")
+            logDettaglio.append(I18n.tr("server.f2b.log.examFailed"))
                         .append(erroreEsame != null ? (": " + erroreEsame) : "")
-                        .append(" — questo controllo non ha guardato niente, e il suo silenzio non "
-                              + "va letto come un via libera");
+                        .append(". ").append(I18n.tr("server.f2b.log.lookedAtNothing"));
         } else if (esame.esaminate.isEmpty()) {
             logOk = false;
-            logDettaglio.append("Fail2ban gira ma non sono riuscito a farmi dire quali file sorvegli "
-                              + "nessuna jail: questo controllo non ha guardato niente");
+            logDettaglio.append(I18n.tr("server.f2b.log.noFiles"));
         } else if (esame.problemi.isEmpty()) {
             logOk = true;
-            logDettaglio.append("Guardate ").append(esame.esaminate.size())
-                        .append(" jail (").append(String.join(", ", esame.esaminate))
-                        .append("): ognuna sorveglia un file che esiste e viene scritto");
+            logDettaglio.append(I18n.tr("server.f2b.log.allOk", Map.of("n", esame.esaminate.size(), "jails", String.join(", ", esame.esaminate))));
             if (!esame.senzaLog.isEmpty())
-                logDettaglio.append(". Senza file di log da sorvegliare, quindi fuori da questo controllo: ")
-                            .append(String.join(", ", esame.senzaLog));
+                logDettaglio.append(". ").append(I18n.tr("server.f2b.log.withoutLog", Map.of("jails", String.join(", ", esame.senzaLog))));
         } else {
             logOk = false;
-            logDettaglio.append("Su ").append(esame.esaminate.size()).append(" jail guardate, ")
-                        .append(esame.problemi.size()).append(" non vedra' mai niente — ");
+            logDettaglio.append(I18n.tr("server.f2b.log.someBlind", Map.of("total", esame.esaminate.size(), "n", esame.problemi.size()))).append(" ");
             boolean primo = true;
             for (Fail2banManager.LogSbagliato sb : esame.problemi) {
                 if (!primo) logDettaglio.append(" | ");
@@ -8348,18 +8423,15 @@ public class SSLMailServer {
         if (rotte == null) rotte = new JSONArray();
         if (!f2bRunning) {
             banEseguibile = false;
-            banDettaglio = "Fail2ban non e' in esecuzione: non ho potuto chiedere a nessuna jail "
-                         + "quale comando esegua per bannare";
+            banDettaglio = I18n.tr("server.f2b.ban.notRunning");
         } else if (rotte.length() == 0) {
             int esaminateBan = diagBan.optInt("esaminate", 0);
             JSONArray nonGiud = diagBan.optJSONArray("non_giudicate");
             if (esaminateBan == 0) {
                 banEseguibile = false;
-                banDettaglio = "Non sono riuscito a giudicare il comando di nessuna jail: questo "
-                             + "controllo non ha guardato niente";
+                banDettaglio = I18n.tr("server.f2b.ban.noneJudged");
             } else {
-                banDettaglio = "Guardate " + esaminateBan + " jail: ognuna banna con un comando che "
-                             + "esiste su questo sistema";
+                banDettaglio = I18n.tr("server.f2b.ban.allOk", Map.of("n", esaminateBan));
                 if (nonGiud != null && nonGiud.length() > 0) {
                     // Non giudicata non e' promossa. Se una jail non riporta la propria azione,
                     // il piu' delle volte e' perche' quell'azione non si e' caricata — cioe' non
@@ -8374,13 +8446,11 @@ public class SSLMailServer {
                         // L'evidenza accanto al verdetto: cosa ha risposto fail2ban, e cosa ha
                         // scritto nel proprio log. Senza, la riga dice solo che non si sa.
                         String u = x.optString("uscita", "");
-                        if (!u.isEmpty()) ng.append(" [fail2ban risponde: ").append(u).append("]");
+                        if (!u.isEmpty()) ng.append(" [").append(I18n.tr("server.f2b.ban.answers", Map.of("answer", u))).append("]");
                         String lg = x.optString("log", "");
                         if (!lg.isEmpty()) ng.append(" [fail2ban.log: ").append(lg.replace("\n", " ⏎ ")).append("]");
                     }
-                    banDettaglio += ". NON giudicate, e quindi non promosse — " + ng
-                                 + ". Una jail che non riporta la propria azione con ogni probabilita' "
-                                 + "non l'ha caricata, e quindi non banna";
+                    banDettaglio += ". " + I18n.tr("server.f2b.ban.notJudged", Map.of("jails", ng.toString()));
                 }
             }
         } else {
@@ -8389,19 +8459,18 @@ public class SSLMailServer {
             for (int i = 0; i < rotte.length(); i++) {
                 JSONObject x = rotte.getJSONObject(i);
                 if (b.length() > 0) b.append(" | ");
-                b.append(x.optString("jail")).append(": banna con \"")
-                 .append(x.optString("eseguibile")).append("\", che su questo sistema non esiste");
+                b.append(x.optString("jail")).append(": ").append(I18n.tr("server.f2b.ban.missingCommand", Map.of("command", x.optString("eseguibile"))));
             }
             banDettaglio = b.toString();
         }
         checks.put(makeCheck("ban-eseguibile",
-            "Il comando di ban esiste su questo sistema",
+            I18n.tr("server.f2b.ban.check"),
             banEseguibile,
             banDettaglio,
             banEseguibile ? null
-                : "Queste jail rilevano gli attacchi e contano i ban, ma il comando che dovrebbe applicarli fallisce ogni volta: nessun indirizzo viene bloccato davvero. A schermo sono indistinguibili da jail che funzionano.",
+                : I18n.tr("server.f2b.ban.impact"),
             (banEseguibile || !f2bRunning) ? null : "ripara_azione_ban",
-            "Dichiara l'azione pf sulle jail del pannello, ricarica, e poi richiede a Fail2ban quale comando esegue per verificare che la correzione abbia preso"));
+            I18n.tr("server.f2b.ban.fix")));
 
         // ========== I ban arrivano davvero a pf? ==========
         // E' il controllo piu' profondo che il pannello sappia fare, e finora viveva soltanto
@@ -8414,7 +8483,7 @@ public class SSLMailServer {
         try {
             if (!f2bRunning) {
                 banApplicati = false;
-                banApplicatiDettaglio = "Fail2ban non e' in esecuzione: non ho potuto confrontare niente";
+                banApplicatiDettaglio = I18n.tr("server.f2b.pf.notRunning");
             } else {
                 Fail2banManager.ConfrontoPf cf = fail2banManager.confrontaBanConPf();
                 int senzaRegola = cf.totaleSenzaRegola();
@@ -8426,48 +8495,44 @@ public class SSLMailServer {
 
                 StringBuilder d = new StringBuilder();
                 if (senzaRegola == 0 && nonApplicati == 0 && nonMisurate == 0) {
-                    d.append("Tutte le ").append(ok).append(" jail hanno tabella e regola pf al loro ")
-                     .append("posto, e ogni indirizzo che Fail2ban dichiara bannato risulta nel firewall");
+                    d.append(I18n.tr("server.f2b.pf.allOk", Map.of("n", ok)));
                 } else {
                     banApplicati = false;
-                    d.append(ok).append(" jail su ").append(cf.jails.size()).append(" verificate a posto");
+                    d.append(I18n.tr("server.f2b.pf.someOk", Map.of("ok", ok, "total", cf.jails.size())));
                     for (Fail2banManager.JailPf j : cf.jails) {
-                        if (!j.letta) { d.append(" | ").append(j.jail).append(": non misurata"); continue; }
-                        if (j.tabellaMancante) { d.append(" | ").append(j.jail).append(": la tabella pf non esiste"); continue; }
+                        if (!j.letta) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notMeasured")); continue; }
+                        if (j.tabellaMancante) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noTable")); continue; }
                         if (j.regolaVerificata && !j.regolaPresente) {
-                            d.append(" | ").append(j.jail).append(": nessuna regola pf legge ")
-                             .append(j.tabella).append(", i ban non bloccano");
+                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noRule", Map.of("table", String.valueOf(j.tabella))));
                             continue;
                         }
                         if (!j.soloInFail2ban.isEmpty())
-                            d.append(" | ").append(j.jail).append(": bannati ma non nel firewall — ")
-                             .append(String.join(", ", j.soloInFail2ban));
+                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notInFirewall", Map.of("ips", String.join(", ", j.soloInFail2ban))));
                     }
                 }
                 banApplicatiDettaglio = d.toString();
             }
         } catch (Exception e) {
             banApplicati = false;
-            banApplicatiDettaglio = "Non sono riuscito a fare il confronto con pf: " + e.getMessage()
-                                  + " — quindi di questo non so dire niente";
+            banApplicatiDettaglio = I18n.tr("server.f2b.pf.compareFailed", Map.of("error", String.valueOf(e.getMessage())));
         }
         checks.put(makeCheck("ban-applicati-in-pf",
-            "I ban risultano davvero nel firewall (tabella e regola pf)",
+            I18n.tr("server.f2b.pf.check"),
             banApplicati,
             banApplicatiDettaglio,
             banApplicati ? null
-                : "Una tabella senza regola, o un indirizzo che Fail2ban dichiara bannato e pf non blocca, valgono zero protezione: il ban risulta eseguito e l'attaccante passa. E' il controllo che fa Fail2ban stesso con pfctl -sr.",
+                : I18n.tr("server.f2b.pf.impact"),
             (banApplicati || !f2bInstalled) ? null : "install_mail_jails",
-            "Rigenera le jail di posta con l'azione pf completa di porta, ricarica e ricrea le jail interessate"));
+            I18n.tr("server.f2b.pf.fix")));
 
         checks.put(makeCheck("mail-jails-logpath",
-            "Le jail sorvegliano i file di log giusti",
+            I18n.tr("server.f2b.log.check"),
             logOk,
             logDettaglio.toString(),
             logOk ? null
-                  : "Una jail che guarda il file sbagliato non bannera' mai nessuno e resta a zero tentativi: e' peggio di una jail spenta, perche' la pagina la mostra attiva e nessuno va a controllare.",
+                  : I18n.tr("server.f2b.log.impact"),
             (logOk || !f2bInstalled) ? null : "install_mail_jails",
-            "Rigenera le jail rileggendo dai servizi il percorso reale dei log, crea i file mancanti e ricarica Fail2ban"));
+            I18n.tr("server.f2b.log.fix")));
 
         // ========== Verifica pf (firewall FreeBSD) ==========
         boolean pfEnabledAtBoot = isPfEnabledAtBoot();
@@ -8485,16 +8550,16 @@ public class SSLMailServer {
         boolean pfModuleLoaded = isPfModuleLoaded();
         boolean inJail = isRunningInsideFreebsdJail();
         checks.put(makeCheck("pf-module-loaded",
-            "Modulo kernel pf caricato",
+            I18n.tr("server.pf.checkModule"),
             pfModuleLoaded,
-            pfModuleLoaded ? "pf.ko presente in kldstat"
-                           : (inJail ? "Il pannello gira dentro una jail FreeBSD: pf NON è gestibile da qui"
-                                     : "Modulo pf non caricato — pfctl non funzionerà"),
+            pfModuleLoaded ? I18n.tr("server.pf.moduleLoaded")
+                           : (inJail ? I18n.tr("server.pf.inJail")
+                                     : I18n.tr("server.pf.moduleMissing")),
             pfModuleLoaded ? null
-                : (inJail ? "Sei in una jail FreeBSD: i ban via pf non funzioneranno. Devi caricare pf sull'host (non qui dentro) con 'kldload pf' e impostare pf_load=YES in /boot/loader.conf dell'host."
-                          : "Senza il modulo pf caricato, l'intero stack firewall non funziona: nessun comando pfctl può girare."),
+                : (inJail ? I18n.tr("server.pf.impactInJail")
+                          : I18n.tr("server.pf.impactModule")),
             (pfModuleLoaded || inJail) ? null : "load_pf_module",
-            "Esegue: kldload pf + aggiunge pf_load=\"YES\" a /boot/loader.conf"));
+            I18n.tr("server.pf.fixModule")));
 
         // ========== L'anchor di Fail2ban viene raggiunta? ==========
         // pf valuta le regole in ordine e "quick" ferma la valutazione alla prima che
@@ -8525,7 +8590,7 @@ public class SSLMailServer {
                     // grida a vuoto smette di essere letto.
                     if (t.startsWith("pass") && t.contains("quick")
                             && !t.matches("^pass\\s+out\\b.*")) {
-                        primaDiF2b.add("riga " + (i + 1) + ": " + t);
+                        primaDiF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + t);
                         continue;
                     }
                     // Un anchor precedente conta solo se contiene davvero un pass quick: lo si
@@ -8539,17 +8604,14 @@ public class SSLMailServer {
                         var reg = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
                             "/sbin/pfctl", "-a", nome.replace("/*", ""), "-sr");
                         if (!reg.success()) {
-                            primaDiF2b.add("riga " + (i + 1) + ": anchor " + nome
-                                + " (non sono riuscito a leggerne le regole, quindi non posso "
-                                + "escludere che ne contenga una che chiude la valutazione)");
+                            primaDiF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + I18n.tr("server.pf.anchorUnreadable", Map.of("anchor", nome)));
                             continue;
                         }
                         for (String rr : reg.output().split("\n")) {
                             String u = rr.trim();
                             if (u.startsWith("pass") && u.contains("quick")
                                     && !u.matches("^pass\\s+out\\b.*")) {
-                                primaDiF2b.add("riga " + (i + 1) + ": anchor " + nome
-                                    + " contiene \"" + u + "\"");
+                                primaDiF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + I18n.tr("server.pf.anchorContains", Map.of("anchor", nome, "rule", u)));
                                 break;
                             }
                         }
@@ -8559,71 +8621,66 @@ public class SSLMailServer {
         } catch (Exception ignored) { }
 
         if (!pfConfExists || !pfAnchorPresent) {
-            ordineDettaglio = "L'anchor f2b non e' in pf.conf: l'ordine si valuta quando c'e'";
+            ordineDettaglio = I18n.tr("server.pf.order.noAnchor");
             ordineOk = pfAnchorPresent;
         } else if (rigaF2b < 0) {
             ordineOk = false;
-            ordineDettaglio = "Non sono riuscito a trovare la riga dell'anchor f2b leggendo pf.conf: "
-                            + "non posso dire in che ordine venga valutata";
+            ordineDettaglio = I18n.tr("server.pf.order.lineNotFound");
         } else if (primaDiF2b.isEmpty()) {
-            ordineDettaglio = "L'anchor f2b (riga " + (rigaF2b + 1) + ") viene valutata prima di "
-                            + "qualunque regola pass quick e di ogni altro anchor: niente puo' "
-                            + "chiudere la valutazione prima che i ban vengano applicati";
+            ordineDettaglio = I18n.tr("server.pf.order.ok", Map.of("n", rigaF2b + 1));
         } else {
             ordineOk = false;
-            ordineDettaglio = "Prima dell'anchor f2b (riga " + (rigaF2b + 1) + ") ci sono "
-                            + primaDiF2b.size() + " regole o anchor che possono chiudere la "
-                            + "valutazione: " + String.join(" | ", primaDiF2b);
+            ordineDettaglio = I18n.tr("server.pf.order.blocked", Map.of("n", rigaF2b + 1, "count", primaDiF2b.size(), "rules", String.join(" | ", primaDiF2b)));
         }
         checks.put(makeCheck("pf-ordine-anchor",
-            "L'anchor Fail2ban viene valutata prima delle regole pass quick",
+            I18n.tr("server.pf.order.check"),
             ordineOk,
             ordineDettaglio,
             ordineOk ? null
-                : "pf si ferma alla prima regola quick che corrisponde. Chi rientra in una di queste regole non arrivera' mai alle regole di ban di Fail2ban: i ban su quelle sorgenti risultano eseguiti e non bloccano niente. Riguarda in particolare la whitelist e la lista geografica del firewall del pannello, che sono pass quick.",
+                : I18n.tr("server.pf.order.impact"),
             null,
             null));
 
         // Check separato per esistenza pf.conf (deve venire prima)
         checks.put(makeCheck("pf-conf-exists",
-            "pf.conf esiste",
+            I18n.tr("server.pf.checkConf"),
             pfConfExists,
-            pfConfExists ? "/etc/pf.conf trovato"
-                         : "/etc/pf.conf NON esiste — pf non è mai stato configurato",
+            pfConfExists ? I18n.tr("server.pf.confFound")
+                         : I18n.tr("server.pf.confMissing"),
             pfConfExists ? null
-                : "Senza pf.conf, pf non può essere avviato e Fail2ban non può applicare ban via firewall.",
+                : I18n.tr("server.pf.impactConf"),
             pfConfExists ? null : "create_pf_conf_minimal",
-            "Crea una pf.conf SICURA (minimal: pass tutto + anchor f2b). Non blocca nulla a parte gli IP banditi da Fail2ban — non rischio lockout."));
+            I18n.tr("server.pf.fixConf")));
 
         checks.put(makeCheck("pf-running",
-            "pf (firewall) attivo",
+            I18n.tr("server.pf.checkRunning"),
             pfRunning,
-            pfRunning ? "pf è in esecuzione e applica regole"
-                      : (pfConfExists ? "pf.conf esiste ma il servizio è fermo"
-                                      : "pf.conf manca — non si può avviare pf finché non lo crei"),
+            pfRunning ? I18n.tr("server.pf.running")
+                      : (pfConfExists ? I18n.tr("server.pf.confButStopped")
+                                      : I18n.tr("server.pf.confMissingCannotStart")),
             pfRunning ? null
-                : "ATTENZIONE: anche se Fail2ban è configurato, senza pf attivo i ban NON vengono applicati. Il pannello pensa di proteggerti ma il firewall non blocca niente.",
+                : I18n.tr("server.pf.impactRunning"),
             (pfRunning || !pfConfExists) ? null : "start_pf",
-            pfConfExists ? "Avvia pf con la configurazione esistente in /etc/pf.conf" : null));
+            pfConfExists ? I18n.tr("server.pf.fixRunning") : null));
 
         checks.put(makeCheck("pf-enabled-boot",
-            "pf si avvia al boot",
+            I18n.tr("server.pf.checkBoot"),
             pfEnabledAtBoot,
-            pfEnabledAtBoot ? "pf_enable=YES in rc.conf" : "pf non si avvia automaticamente al riavvio",
-            pfEnabledAtBoot ? null : "Se il server riparte (reboot), pf non torna su e Fail2ban non blocca più nulla.",
+            pfEnabledAtBoot ? "pf_enable=YES in rc.conf" : I18n.tr("server.pf.noBoot"),
+            pfEnabledAtBoot ? null : I18n.tr("server.pf.impactBoot"),
             (pfEnabledAtBoot || !pfConfExists) ? null : "enable_pf_at_boot",
-            "Esegue: sysrc pf_enable=YES"));
+            I18n.tr("server.runs", Map.of("command", "sysrc pf_enable=YES"))));
 
         checks.put(makeCheck("pf-anchor-f2b",
-            "pf.conf include l'anchor Fail2ban",
+            I18n.tr("server.pf.checkAnchor"),
             pfAnchorPresent,
-            pfAnchorPresent ? "anchor \"f2b/*\" presente in pf.conf"
-                            : (pfConfExists ? "pf.conf c'è ma manca anchor \"f2b/*\""
-                                            : "pf.conf non esiste"),
+            pfAnchorPresent ? I18n.tr("server.pf.anchorPresent")
+                            : (pfConfExists ? I18n.tr("server.pf.anchorMissing")
+                                            : I18n.tr("server.pf.confNotExists")),
             pfAnchorPresent ? null
-                : "Senza l'anchor, Fail2ban non può inserire regole nel firewall: i ban vengono \"applicati\" da fail2ban-client ma pf li ignora.",
+                : I18n.tr("server.pf.impactAnchor"),
             (pfAnchorPresent || !pfConfExists) ? null : "add_pf_anchor",
-            "Aggiunge una sola riga ad /etc/pf.conf:  anchor \"f2b/*\""));
+            I18n.tr("server.pf.fixAnchor")));
 
         // Il verdetto complessivo si legge dai controlli, non da un elenco di booleani scritto
         // a mano. Quell'elenco era una seconda versione della stessa verita', e le due
@@ -8664,17 +8721,17 @@ public class SSLMailServer {
             var v = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
                 "/usr/local/bin/fail2ban-client", "--version");
             if (v.success() && v.output() != null && !v.output().isBlank())
-                b.append("Versione: ").append(v.output().trim().split("\n")[0]);
+                b.append(I18n.tr("server.f2b.versionIs", java.util.Map.of("v", String.valueOf(v.output().trim().split("\n")[0]))));
         } catch (Exception ignored) { }
         try {
             var p2 = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
                 "/usr/sbin/pkg", "query", "%n-%v", "py311-fail2ban");
             if (p2.success() && p2.output() != null && !p2.output().isBlank()) {
                 if (b.length() > 0) b.append(" — ");
-                b.append("Pacchetto: ").append(p2.output().trim().split("\n")[0]);
+                b.append(I18n.tr("server.f2b.packageIs", java.util.Map.of("p", String.valueOf(p2.output().trim().split("\n")[0]))));
             }
         } catch (Exception ignored) { }
-        return b.length() == 0 ? "(non sono riuscito a leggerne la versione)" : b.toString();
+        return b.length() == 0 ? I18n.tr("server.f2b.versionUnknown") : b.toString();
     }
 
     private JSONObject makeCheck(String id, String label, boolean ok, String statusText,
@@ -8723,7 +8780,7 @@ public class SSLMailServer {
     }
 
     private JSONObject installFail2ban() {
-        return sulTurnoPacchetti("installazione di fail2ban", this::eseguiInstallFail2ban);
+        return sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", "fail2ban")), this::eseguiInstallFail2ban);
     }
 
     private JSONObject eseguiInstallFail2ban() {
@@ -8736,15 +8793,15 @@ public class SSLMailServer {
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             boolean done = p.waitFor(180, java.util.concurrent.TimeUnit.SECONDS);
-            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", "Timeout installazione (>3min)"); return r; }
+            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", I18n.tr("server.install.timeout")); return r; }
             int exit = p.exitValue();
             r.put("success", exit == 0);
-            r.put("message", exit == 0 ? "Fail2ban installato con successo" : "pkg install exit=" + exit);
+            r.put("message", exit == 0 ? I18n.tr("server.f2b.installed") : "pkg install exit=" + exit);
             r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
             return r;
         }
     }
@@ -8760,12 +8817,12 @@ public class SSLMailServer {
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
             r.put("success", p.exitValue() == 0);
-            r.put("message", p.exitValue() == 0 ? "Avvio al boot abilitato" : "sysrc exit=" + p.exitValue());
+            r.put("message", p.exitValue() == 0 ? I18n.tr("server.bootEnabled") : "sysrc exit=" + p.exitValue());
             r.put("output", out);
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
             return r;
         }
     }
@@ -8804,12 +8861,12 @@ public class SSLMailServer {
         try {
             if (isRunningInsideFreebsdJail()) {
                 r.put("success", false);
-                r.put("message", "Il pannello sta girando dentro una jail FreeBSD: il modulo kernel pf NON può essere caricato dall'interno di una jail. Carica pf dall'host con 'kldload pf' e abilita 'pf_load=\"YES\"' in /boot/loader.conf, poi riavvia il pannello.");
+                r.put("message", I18n.tr("server.pf.loadInJail"));
                 return r;
             }
             if (isPfModuleLoaded()) {
                 r.put("success", true);
-                r.put("message", "Modulo pf già caricato");
+                r.put("message", I18n.tr("server.pf.alreadyLoaded"));
                 return r;
             }
             // TODO: migrate to Shell.run when touched
@@ -8821,7 +8878,7 @@ public class SSLMailServer {
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
             boolean ok = p.exitValue() == 0 && isPfModuleLoaded();
             r.put("success", ok);
-            r.put("message", ok ? "Modulo pf caricato" : "kldload pf fallito (exit=" + p.exitValue() + ")");
+            r.put("message", ok ? I18n.tr("server.pf.loaded") : I18n.tr("server.pf.loadFailed", Map.of("exit", p.exitValue())));
             r.put("output", out);
 
             // Persistenza: aggiungi pf_load=YES a /boot/loader.conf se manca
@@ -8841,7 +8898,7 @@ public class SSLMailServer {
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
             return r;
         }
     }
@@ -8880,7 +8937,7 @@ public class SSLMailServer {
             java.nio.file.Path pfConfPath = java.nio.file.Paths.get("/etc/pf.conf");
             if (!java.nio.file.Files.exists(pfConfPath)) {
                 r.put("success", false);
-                r.put("message", "/etc/pf.conf non esiste. Crea prima una configurazione pf prima di avviare il servizio (rischio lockout).");
+                r.put("message", I18n.tr("server.pf.startNoConf"));
                 return r;
             }
 
@@ -8895,7 +8952,7 @@ public class SSLMailServer {
             tp.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
             if (tp.exitValue() != 0) {
                 r.put("success", false);
-                r.put("message", "Sintassi /etc/pf.conf NON valida — non avvio pf per evitare lockout. Errori: " + testOut.trim());
+                r.put("message", I18n.tr("server.pf.startBadSyntax", Map.of("errors", testOut.trim())));
                 r.put("output", testOut);
                 return r;
             }
@@ -8912,15 +8969,15 @@ public class SSLMailServer {
             // Verifica che ora sia effettivamente in stato "Enabled"
             if (ok && !isPfRunning()) {
                 ok = false;
-                out += "\n\nATTENZIONE: service pf start exit=0 ma pfctl -si dice ancora Disabled.";
+                out += "\n\n" + I18n.tr("server.pf.stillDisabled");
             }
             r.put("success", ok);
-            r.put("message", ok ? "pf avviato e attivo" : "Avvio pf fallito (exit=" + p.exitValue() + ")");
+            r.put("message", ok ? I18n.tr("server.pf.started") : I18n.tr("server.pf.startFailed", Map.of("exit", p.exitValue())));
             r.put("output", out);
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
             return r;
         }
     }
@@ -8936,12 +8993,12 @@ public class SSLMailServer {
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
             r.put("success", p.exitValue() == 0);
-            r.put("message", p.exitValue() == 0 ? "pf abilitato al boot" : "sysrc exit=" + p.exitValue());
+            r.put("message", p.exitValue() == 0 ? I18n.tr("server.pf.bootEnabled") : "sysrc exit=" + p.exitValue());
             r.put("output", out);
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
             return r;
         }
     }
@@ -8963,26 +9020,26 @@ public class SSLMailServer {
             java.nio.file.Path pfConfPath = java.nio.file.Paths.get("/etc/pf.conf");
             if (java.nio.file.Files.exists(pfConfPath)) {
                 r.put("success", false);
-                r.put("message", "/etc/pf.conf esiste già — uso 'add_pf_anchor' per aggiungere solo l'anchor.");
+                r.put("message", I18n.tr("server.pf.confExistsUseAnchor"));
                 return r;
             }
             String content = ""
-                + "# /etc/pf.conf — generato automaticamente dal mail panel\n"
-                + "# Configurazione MINIMA e SICURA per Fail2ban+pf\n"
-                + "# - Nessun servizio è bloccato (no rischio lockout)\n"
-                + "# - Solo gli IP banditi da Fail2ban vengono bloccati via anchor\n"
+                + "# /etc/pf.conf, generated by the mail panel\n"
+                + "# MINIMAL and SAFE configuration for Fail2ban + pf\n"
+                + "# - No service is blocked (no lockout risk)\n"
+                + "# - Only the IPs banned by Fail2ban are blocked, through the anchor\n"
                 + "#\n"
-                + "# Per personalizzare: modifica questo file e poi 'pfctl -f /etc/pf.conf'.\n"
-                + "# Backup vecchio file (se esiste) salvato come /etc/pf.conf.bak.<timestamp>\n"
+                + "# To customize: edit this file, then 'pfctl -f /etc/pf.conf'.\n"
+                + "# A previous file (if any) is kept as /etc/pf.conf.bak.<timestamp>\n"
                 + "\n"
-                + "# Loopback non filtrato\n"
+                + "# Loopback not filtered\n"
                 + "set skip on lo\n"
                 + "\n"
-                + "# Anchor Fail2ban: contiene i 'block in quick from <bannedIps>'\n"
-                + "# inseriti automaticamente da fail2ban-client. Devono essere PRIMA del pass.\n"
+                + "# Fail2ban anchor: holds the 'block in quick from <bannedIps>' rules\n"
+                + "# added by fail2ban-client. They must come BEFORE the pass.\n"
                 + "anchor \"f2b/*\"\n"
                 + "\n"
-                + "# Default: pass tutto (niente blocco a parte gli anchor sopra)\n"
+                + "# Default: pass everything (nothing blocked apart from the anchor above)\n"
                 + "pass\n";
 
             // Test sintassi prima di scrivere su /etc/pf.conf:
@@ -8999,7 +9056,7 @@ public class SSLMailServer {
             if (tp.exitValue() != 0) {
                 java.nio.file.Files.deleteIfExists(tmp);
                 r.put("success", false);
-                r.put("message", "Sintassi non valida: " + testOut);
+                r.put("message", I18n.tr("server.pf.badSyntax", Map.of("output", testOut)));
                 return r;
             }
             // Tutto OK, scrivi
@@ -9007,11 +9064,11 @@ public class SSLMailServer {
             try { java.nio.file.Files.setPosixFilePermissions(pfConfPath,
                 java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--")); } catch (Exception ignored) {}
             r.put("success", true);
-            r.put("message", "/etc/pf.conf creato (minimo permissivo + anchor f2b)");
+            r.put("message", I18n.tr("server.pf.confCreated"));
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
             return r;
         }
     }
@@ -9040,26 +9097,26 @@ public class SSLMailServer {
         boolean f2bInstalled = java.nio.file.Files.exists(java.nio.file.Paths.get("/usr/local/bin/fail2ban-client"));
         if (!f2bInstalled) {
             JSONObject res = installFail2ban();
-            steps.put(buildStep("install_fail2ban", "Installa pacchetto py311-fail2ban", res));
+            steps.put(buildStep("install_fail2ban", I18n.tr("server.f2bfix.installPkg"), res));
             if (!res.optBoolean("success")) anyFailed = true;
             f2bInstalled = res.optBoolean("success");
         } else {
-            steps.put(buildSkipStep("install_fail2ban", "Fail2ban già installato"));
+            steps.put(buildSkipStep("install_fail2ban", I18n.tr("server.f2bfix.installed")));
         }
 
         // Step 2: enable at boot
         if (f2bInstalled && !isFail2banEnabledAtBoot()) {
             JSONObject res = enableFail2banAtBoot();
-            steps.put(buildStep("enable_fail2ban_at_boot", "Abilita Fail2ban al boot", res));
+            steps.put(buildStep("enable_fail2ban_at_boot", I18n.tr("server.step.enableBoot", Map.of("service", "Fail2ban")), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else if (f2bInstalled) {
-            steps.put(buildSkipStep("enable_fail2ban_at_boot", "Già abilitato al boot"));
+            steps.put(buildSkipStep("enable_fail2ban_at_boot", I18n.tr("server.f2bfix.bootAlready")));
         }
 
         // Step 3: setup mail-panel-auth jail (filter, log, jail entry)
         org.mail_panel.security.Fail2banAutoSetup.run();
-        steps.put(buildStep("setup_mail_panel_jail", "Setup jail mail-panel-auth (filter + jail + log file)",
-            new JSONObject().put("success", true).put("message", "Eseguito (idempotente)")));
+        steps.put(buildStep("setup_mail_panel_jail", I18n.tr("server.f2bfix.panelJail"),
+            new JSONObject().put("success", true).put("message", I18n.tr("server.f2bfix.doneIdempotent"))));
 
         // Step 4: install mail jails (verifica file + runtime)
         try {
@@ -9110,17 +9167,16 @@ public class SSLMailServer {
                 // install_mail_jails è idempotente: safe da chiamare anche se quasi tutto è OK.
                 Fail2banManager.InstallResult res = fail2banManager.installMailJails();
                 JSONObject jres = new JSONObject().put("success", res.success)
-                    .put("message", res.success ? res.message : (res.error != null ? res.error : "Failed"));
+                    .put("message", res.success ? res.message : (res.error != null ? res.error : I18n.tr("server.operationFailed")));
                 steps.put(buildStep("install_mail_jails",
-                    "Configura jail Postfix/Dovecot/Roundcube/Rspamd (rigenera path corretti, crea log file, reload)", jres));
+                    I18n.tr("server.f2bfix.mailJails"), jres));
                 if (!res.success) anyFailed = true;
             } else if (mailFileOk) {
                 steps.put(buildSkipStep("install_mail_jails",
-                    "Jail mail già configurate, attive, ognuna sorveglia un file che viene scritto, "
-                    + "e ognuna ha in pf una regola che legge la propria tabella"));
+                    I18n.tr("server.f2bfix.mailJailsOk")));
             }
         } catch (Exception e) {
-            steps.put(buildErrorStep("install_mail_jails", "Errore: " + e.getMessage()));
+            steps.put(buildErrorStep("install_mail_jails", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
             anyFailed = true;
         }
 
@@ -9136,14 +9192,14 @@ public class SSLMailServer {
             if (daRiparare) {
                 JSONObject rr = org.mail_panel.security.RiparaAzioneBan.ripara();
                 steps.put(buildStep("ripara_azione_ban",
-                    "Dichiara l'azione pf sulle jail che bannavano con un comando inesistente, e verifica dopo il reload", rr));
+                    I18n.tr("server.f2bfix.banAction"), rr));
                 if (!rr.optBoolean("success", false)) anyFailed = true;
             } else {
                 steps.put(buildSkipStep("ripara_azione_ban",
-                    "Ogni jail banna con un comando che esiste su questo sistema"));
+                    I18n.tr("server.f2bfix.banActionOk")));
             }
         } catch (Exception e) {
-            steps.put(buildErrorStep("ripara_azione_ban", "Errore: " + e.getMessage()));
+            steps.put(buildErrorStep("ripara_azione_ban", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
             anyFailed = true;
         }
 
@@ -9151,39 +9207,39 @@ public class SSLMailServer {
         boolean inJail = isRunningInsideFreebsdJail();
         if (inJail) {
             steps.put(buildErrorStep("load_pf_module",
-                "Il pannello gira dentro una jail FreeBSD: pf NON è gestibile da qui. Carica pf sull'host con 'kldload pf' e imposta 'pf_load=\"YES\"' in /boot/loader.conf dell'host. I passi pf successivi vengono saltati."));
+                I18n.tr("server.f2bfix.inJail")));
             // skip tutti i passi pf
             r.put("success", false);
             r.put("steps", steps);
-            r.put("message", "Stack pf non configurabile da una jail FreeBSD — risolto solo Fail2ban-side");
+            r.put("message", I18n.tr("server.f2bfix.inJailDone"));
             return r;
         }
         boolean pfModuleLoaded = isPfModuleLoaded();
         if (!pfModuleLoaded) {
             JSONObject res = loadPfModule();
-            steps.put(buildStep("load_pf_module", "Carica modulo kernel pf + persiste in /boot/loader.conf", res));
+            steps.put(buildStep("load_pf_module", I18n.tr("server.f2bfix.loadModule"), res));
             if (!res.optBoolean("success")) {
                 anyFailed = true;
                 // Senza modulo pf, tutti i passi successivi falliranno: stop qui
                 r.put("success", false);
                 r.put("steps", steps);
-                r.put("message", "Modulo pf non caricato — fix interrotto. Verifica i log del kernel.");
+                r.put("message", I18n.tr("server.f2bfix.moduleFailed"));
                 return r;
             }
             pfModuleLoaded = true;
         } else {
-            steps.put(buildSkipStep("load_pf_module", "Modulo pf già caricato"));
+            steps.put(buildSkipStep("load_pf_module", I18n.tr("server.pf.alreadyLoaded")));
         }
 
         // Step 5b: create /etc/pf.conf if missing
         boolean pfConfExists = java.nio.file.Files.exists(java.nio.file.Paths.get("/etc/pf.conf"));
         if (!pfConfExists) {
             JSONObject res = createPfConfMinimal();
-            steps.put(buildStep("create_pf_conf", "Crea /etc/pf.conf (minimal + anchor f2b)", res));
+            steps.put(buildStep("create_pf_conf", I18n.tr("server.f2bfix.createConf"), res));
             if (!res.optBoolean("success")) anyFailed = true;
             pfConfExists = res.optBoolean("success");
         } else {
-            steps.put(buildSkipStep("create_pf_conf", "/etc/pf.conf esiste già"));
+            steps.put(buildSkipStep("create_pf_conf", I18n.tr("server.f2bfix.confExists")));
         }
 
         // Step 6: add anchor f2b if missing
@@ -9195,43 +9251,43 @@ public class SSLMailServer {
             } catch (Exception ignored) {}
             if (!anchorPresent) {
                 JSONObject res = addPfAnchorF2b();
-                steps.put(buildStep("add_pf_anchor", "Aggiunge anchor f2b a /etc/pf.conf", res));
+                steps.put(buildStep("add_pf_anchor", I18n.tr("server.f2bfix.addAnchor"), res));
                 if (!res.optBoolean("success")) anyFailed = true;
             } else {
-                steps.put(buildSkipStep("add_pf_anchor", "Anchor f2b già presente"));
+                steps.put(buildSkipStep("add_pf_anchor", I18n.tr("server.f2bfix.anchorPresent")));
             }
         }
 
         // Step 7: enable pf at boot
         if (pfConfExists && !isPfEnabledAtBoot()) {
             JSONObject res = enablePfAtBoot();
-            steps.put(buildStep("enable_pf_at_boot", "Abilita pf al boot", res));
+            steps.put(buildStep("enable_pf_at_boot", I18n.tr("server.step.enableBoot", Map.of("service", "pf")), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else if (pfConfExists) {
-            steps.put(buildSkipStep("enable_pf_at_boot", "pf già abilitato al boot"));
+            steps.put(buildSkipStep("enable_pf_at_boot", I18n.tr("server.unbound.step.bootAlready", Map.of("service", "pf"))));
         }
 
         // Step 8: start pf
         if (pfConfExists && !isPfRunning()) {
             JSONObject res = startPfService();
-            steps.put(buildStep("start_pf", "Avvia pf (con pre-flight syntax check)", res));
+            steps.put(buildStep("start_pf", I18n.tr("server.f2bfix.startPf"), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else if (pfConfExists) {
-            steps.put(buildSkipStep("start_pf", "pf già in esecuzione"));
+            steps.put(buildSkipStep("start_pf", I18n.tr("server.unbound.step.running", Map.of("service", "pf"))));
         }
 
         // Step 9: start Fail2ban
         if (f2bInstalled && !isFail2banRunning()) {
             JSONObject res = startFail2banService();
-            steps.put(buildStep("start_fail2ban", "Avvia Fail2ban", res));
+            steps.put(buildStep("start_fail2ban", I18n.tr("server.unbound.step.start", Map.of("service", "Fail2ban")), res));
             if (!res.optBoolean("success")) anyFailed = true;
         } else if (f2bInstalled) {
-            steps.put(buildSkipStep("start_fail2ban", "Fail2ban già in esecuzione"));
+            steps.put(buildSkipStep("start_fail2ban", I18n.tr("server.unbound.step.running", Map.of("service", "Fail2ban"))));
         }
 
         r.put("success", !anyFailed);
         r.put("steps", steps);
-        r.put("message", anyFailed ? "Alcuni passaggi sono falliti — controlla i dettagli" : "Tutto risolto");
+        r.put("message", I18n.tr(anyFailed ? "server.unbound.someFailed" : "server.f2bfix.allDone"));
         return r;
     }
 
@@ -9250,12 +9306,12 @@ public class SSLMailServer {
             .put("label", reason)
             .put("success", true)
             .put("status", "skipped")
-            .put("message", "Già OK, niente da fare");
+            .put("message", I18n.tr("server.f2bfix.nothingToDo"));
     }
     private JSONObject buildErrorStep(String id, String msg) {
         return new JSONObject()
             .put("id", id)
-            .put("label", "Errore inatteso")
+            .put("label", I18n.tr("server.f2bfix.unexpectedError"))
             .put("success", false)
             .put("status", "error")
             .put("message", msg);
@@ -9274,13 +9330,13 @@ public class SSLMailServer {
             java.nio.file.Path pfConfPath = java.nio.file.Paths.get("/etc/pf.conf");
             if (!java.nio.file.Files.exists(pfConfPath)) {
                 r.put("success", false);
-                r.put("message", "/etc/pf.conf non esiste — devi prima creare una pf.conf base.");
+                r.put("message", I18n.tr("server.f2bfix.anchorNoConf"));
                 return r;
             }
             String content = java.nio.file.Files.readString(pfConfPath);
             if (content.contains("anchor \"f2b/*\"") || content.contains("anchor f2b/*")) {
                 r.put("success", true);
-                r.put("message", "Anchor f2b già presente, nessuna modifica.");
+                r.put("message", I18n.tr("server.f2bfix.anchorAlready"));
                 return r;
             }
             // Backup
@@ -9290,7 +9346,7 @@ public class SSLMailServer {
             // è subito dopo le tabelle, prima delle regole filter. Approccio safe:
             // appendiamo in fondo con un commento — pf valuta gli anchor in ordine,
             // e per fail2ban (che fa block) va in fondo va comunque bene.
-            String append = "\n# Fail2ban anchor (auto-aggiunto dal pannello)\nanchor \"f2b/*\"\n";
+            String append = "\n# Fail2ban anchor (added by the panel)\nanchor \"f2b/*\"\n";
             java.nio.file.Files.writeString(pfConfPath,
                 content + append,
                 java.nio.charset.StandardCharsets.UTF_8);
@@ -9308,7 +9364,7 @@ public class SSLMailServer {
                 java.nio.file.Files.copy(java.nio.file.Paths.get(bakPath), pfConfPath,
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 r.put("success", false);
-                r.put("message", "Sintassi pf.conf NON valida dopo l'aggiunta — rollback al backup. Output: " + testOut);
+                r.put("message", I18n.tr("server.f2bfix.anchorBadSyntax", Map.of("output", testOut)));
                 return r;
             }
             // Ricarica live (solo se pf è in esecuzione, altrimenti l'anchor verrà
@@ -9330,20 +9386,20 @@ public class SSLMailServer {
                     // TODO: migrate to Shell.run when touched
                     new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf").redirectErrorStream(true).start().waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
                     r.put("success", false);
-                    r.put("message", "pfctl -f ha fallito il reload — rollback al backup. Output: " + loadOut);
+                    r.put("message", I18n.tr("server.f2bfix.anchorReloadFailed", Map.of("output", loadOut)));
                     return r;
                 }
             } else {
-                loadOut = "(pf non in esecuzione: l'anchor sarà caricato al prossimo avvio di pf)";
+                loadOut = I18n.tr("server.f2bfix.anchorPfStopped");
             }
 
             r.put("success", true);
-            r.put("message", "Anchor f2b aggiunto a /etc/pf.conf (backup salvato in " + bakPath + ")");
+            r.put("message", I18n.tr("server.f2bfix.anchorAdded", Map.of("backup", bakPath)));
             r.put("output", loadOut);
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", "Errore: " + e.getMessage());
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
             return r;
         }
     }
@@ -9353,7 +9409,7 @@ public class SSLMailServer {
      * Controlla in ordine: file, logpath esistente, filter esistente, errori da fail2ban-client.
      */
     private String diagnoseMailJailIssue(String jailName, boolean inFile) {
-        if (!inFile) return "non presente in mail.local";
+        if (!inFile) return I18n.tr("server.f2bfix.diag.notInFile");
 
         // Logpath previsto per ogni jail mail (path di roundcube auto-detected)
         String logpath = switch (jailName) {
@@ -9366,7 +9422,7 @@ public class SSLMailServer {
             default -> null;
         };
         if (logpath != null && !java.nio.file.Files.exists(java.nio.file.Paths.get(logpath))) {
-            return "logpath '" + logpath + "' non esiste (servizio installato?)";
+            return I18n.tr("server.f2bfix.diag.noLogpath", Map.of("path", logpath));
         }
 
         // Filter file
@@ -9376,7 +9432,7 @@ public class SSLMailServer {
         };
         java.nio.file.Path filterPath = java.nio.file.Paths.get("/usr/local/etc/fail2ban/filter.d/" + filterName + ".conf");
         if (!java.nio.file.Files.exists(filterPath)) {
-            return "filter " + filterName + ".conf manca in filter.d";
+            return I18n.tr("server.f2bfix.diag.noFilter", Map.of("filter", filterName));
         }
 
         // Chiedi a fail2ban-client il motivo specifico
@@ -9385,16 +9441,16 @@ public class SSLMailServer {
         String out = r.output();
         if (out.contains("does not exist") || out.contains("not found")
                 || out.contains("Sorry, but the jail")) {
-            return "non caricata (serve reload Fail2ban)";
+            return I18n.tr("server.f2bfix.diag.notLoaded");
         }
         if (!r.success()) {
-            return "exit=" + r.exitCode() + " (" + (out.isBlank() ? "no output" : out.trim().replace('\n', ' ')) + ")";
+            return "exit=" + r.exitCode() + " (" + (out.isBlank() ? I18n.tr("server.f2bfix.diag.noOutput") : out.trim().replace('\n', ' ')) + ")";
         }
         // Se siamo qui, lo status command ha risposto normalmente (con i contatori
         // "Currently failed", "Banned IP list", ecc). La jail E' caricata e attiva,
         // ma per qualche motivo il check chiamante non l'ha rilevata. Non e' un errore
         // della jail: ritorniamo una stringa che fa capire che e' un falso allarme.
-        return "in realta' attiva (rilevamento check fallito — log f2b OK)";
+        return I18n.tr("server.f2bfix.diag.activeAfterAll");
     }
 
     /**
@@ -9428,7 +9484,7 @@ public class SSLMailServer {
     private JSONObject startFail2banService() {
         var r = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(20),
             "/usr/sbin/service", "fail2ban", "start");
-        return shellResultToJson(r, "Servizio avviato", "service start");
+        return shellResultToJson(r, I18n.tr("server.f2bfix.serviceStarted"), "service start");
     }
 
     /**
@@ -9440,7 +9496,7 @@ public class SSLMailServer {
     private JSONObject restartFail2banService() {
         var r = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(30),
             "/usr/sbin/service", "fail2ban", "restart");
-        return shellResultToJson(r, "Fail2ban riavviato (restart pulito)", "service restart");
+        return shellResultToJson(r, I18n.tr("server.f2bfix.restarted"), "service restart");
     }
 
     // ============== ADMIN MANAGEMENT API ==============
@@ -9457,14 +9513,14 @@ public class SSLMailServer {
      * collegati a niente altro.
      */
     private void handleApiAutoDns(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
-        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, "Method not allowed"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed")); return; }
         String body = readRequestBodyWithLimit(exchange);
-        if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+        if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
         String ip = getClientIp(exchange);
         JSONObject req;
         try { req = new JSONObject(body); }
-        catch (Exception e) { sendJsonError(exchange, 400, "JSON non valido"); return; }
+        catch (Exception e) { sendJsonError(exchange, 400, I18n.tr("server.badJson")); return; }
 
         org.mail_panel.security.AutoDns auto =
                 new org.mail_panel.security.AutoDns(Main.mailDatabase,
@@ -9475,51 +9531,51 @@ public class SSLMailServer {
             case "status" -> response = auto.stato(domainId);
             case "create" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 String quale = req.optString("quale", "");
                 // Il predefinito e' "none", non "quarantine": RFC 9989 §5.1.5. Un valore
                 // predefinito che blocca posta e' una trappola per chi preme senza scegliere.
                 response = auto.crea(domainId, quale, req.optString("politica", "none"));
-                logAudit("AUTODNS_CREATE", ip, quale + " su dominio " + domainId
-                        + (response.optBoolean("success") ? " - creato" : " - NON creato: "
+                logAudit("AUTODNS_CREATE", ip, quale + " on domain " + domainId
+                        + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
             case "change_policy" -> {
                 response = auto.cambiaPolitica(domainId, req.optString("politica", ""),
                         "CAMBIA".equals(req.optString("confirm", "")));
                 if ("CAMBIA".equals(req.optString("confirm", "")))
-                    logAudit("AUTODNS_POLITICA", ip, "dominio " + domainId + " -> p="
+                    logAudit("AUTODNS_POLITICA", ip, "domain " + domainId + " -> p="
                             + req.optString("politica", "") + (response.optBoolean("success")
-                            ? " - fatto" : " - NON fatto: " + response.optString("error", "?")));
+                            ? " - done" : " - NOT done: " + response.optString("error", "?")));
             }
             case "mtasts_status" -> response = org.mail_panel.system.MtaSts.stato();
             case "mtasts_mode" -> response = org.mail_panel.system.MtaSts.impostaModo(req.optString("modo", ""));
             case "mtasts_txt" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 response = auto.creaTxtMtaSts(domainId);
                 // I record MTA-STS in piu' che la scrittura toglie sono cancellazioni nel DNS:
                 // restano scritte anche qui, non solo nella risposta.
                 JSONArray tolti = response.optJSONArray("tolti");
-                logAudit("MTASTS_TXT", ip, "dominio " + domainId
-                        + (response.optBoolean("success") ? " - pubblicato" : " - NON pubblicato: "
+                logAudit("MTASTS_TXT", ip, "domain " + domainId
+                        + (response.optBoolean("success") ? " - published" : " - NOT published: "
                            + response.optString("error", "?"))
                         + (tolti == null || tolti.length() == 0 ? ""
-                           : " - tolti " + tolti.length() + " record MTA-STS in piu': " + tolti.join("  ||  ")));
+                           : " - removed " + tolti.length() + " extra MTA-STS records: " + tolti.join("  ||  ")));
             }
             case "create_optional" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 String q = req.optString("quale", "");
                 response = auto.creaOpzionale(domainId, q);
-                logAudit("AUTODNS_OPZIONALE", ip, q + " su dominio " + domainId
-                        + (response.optBoolean("success") ? " - creato" : " - NON creato: "
+                logAudit("AUTODNS_OPZIONALE", ip, q + " on domain " + domainId
+                        + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
             // La pagina DNS deve poter seguire il lavoro che ha appena avviato: senza questo
@@ -9527,49 +9583,49 @@ public class SSLMailServer {
             case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
             case "configura_tutto" -> {
                 if (!"CONFIGURA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 response = UpdateManager.avviaConfiguraDominio(domainId);
-                logAudit("DOMINIO_CONFIGURA", ip, "dominio " + domainId
-                        + " - avviata come lavoro " + response.optString("jobId", ""));
+                logAudit("DOMINIO_CONFIGURA", ip, "domain " + domainId
+                        + " - started as job " + response.optString("jobId", ""));
             }
             case "mailboxes" -> response = auto.caselleDisponibili();
             case "mailbox_create" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 response = auto.creaCasellaRapporti(domainId);
-                logAudit("AUTODNS_CASELLA", ip, "casella dmarc@ dominio " + domainId
-                        + (response.optBoolean("success") ? " - creata" : " - NON creata: "
+                logAudit("AUTODNS_CASELLA", ip, "mailbox dmarc@ domain " + domainId
+                        + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
             case "alias_create" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 String verso = req.optString("verso", "");
                 response = auto.creaAliasRapporti(domainId, verso);
-                logAudit("AUTODNS_ALIAS", ip, "alias dmarc@ dominio " + domainId + " verso " + verso
-                        + (response.optBoolean("success") ? " - creato" : " - NON creato: "
+                logAudit("AUTODNS_ALIAS", ip, "alias dmarc@ domain " + domainId + " to " + verso
+                        + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
-            default -> response = new JSONObject().put("success", false).put("error", "azione sconosciuta");
+            default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
         }
         sendJsonResponse(exchange, response);
     }
 
     private void handleApiReport(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, "Unauthorized"); return; }
-        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, "Method not allowed"); return; }
+        if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
+        if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed")); return; }
         String body = readRequestBodyWithLimit(exchange);
-        if (body == null) { sendJsonError(exchange, 413, "Richiesta troppo grande"); return; }
+        if (body == null) { sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge")); return; }
         String ip = getClientIp(exchange);
         JSONObject req;
         try { req = new JSONObject(body); }
-        catch (Exception e) { sendJsonError(exchange, 400, "JSON non valido"); return; }
+        catch (Exception e) { sendJsonError(exchange, 400, I18n.tr("server.badJson")); return; }
 
         JSONObject response;
         switch (req.optString("action", "")) {
@@ -9582,23 +9638,23 @@ public class SSLMailServer {
                     req.optBoolean("attivo", false));
             case "identity_create" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 response = org.mail_panel.system.RapportoPeriodico.creaIdentita(req.optString("indirizzo", ""));
                 logAudit("REPORT_IDENTITY", ip, req.optString("indirizzo", "")
-                        + (response.optBoolean("success") ? " - creata" : " - NON creata"));
+                        + (response.optBoolean("success") ? " - created" : " - NOT created"));
             }
             case "send" -> {
                 if (!"INVIA".equals(req.optString("confirm", ""))) {
-                    response = new JSONObject().put("success", false).put("error", "Conferma mancante");
+                    response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 response = org.mail_panel.system.RapportoPeriodico.inviaAdesso(req.optString("destinatario", ""));
                 logAudit("REPORT_SEND", ip, req.optString("destinatario", "")
-                        + (response.optBoolean("success") ? " - inviato" : " - NON inviato"));
+                        + (response.optBoolean("success") ? " - sent" : " - NOT sent"));
             }
-            default -> response = new JSONObject().put("success", false).put("error", "azione sconosciuta");
+            default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
         }
         sendJsonResponse(exchange, response);
     }
@@ -9817,7 +9873,7 @@ public class SSLMailServer {
 
     private void handleApiAutoResponder(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -9845,13 +9901,13 @@ public class SSLMailServer {
                         }
                     } else {
                         response.put("success", false);
-                        response.put("error", "mailbox_id richiesto");
+                        response.put("error", I18n.tr("server.mailbox.idRequired"));
                     }
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                     JSONObject req = new JSONObject(body);
@@ -9885,15 +9941,15 @@ public class SSLMailServer {
                                     response.put("success", true);
                                 } catch (Exception e) {
                                     response.put("success", false);
-                                    response.put("error", "Errore: " + e.getMessage());
+                                    response.put("error", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
                                 }
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Email non valida");
+                                response.put("error", I18n.tr("server.badEmail"));
                             }
                         } else {
                             response.put("success", false);
-                            response.put("error", "Mailbox non trovata");
+                            response.put("error", I18n.tr("server.mailbox.notFound"));
                         }
                     } else {
                         // Save auto-responder
@@ -9918,12 +9974,12 @@ public class SSLMailServer {
                             response.put("success", true);
                         } else {
                             response.put("success", false);
-                            response.put("error", "Impossibile salvare auto-responder");
+                            response.put("error", I18n.tr("server.autoresponder.saveFailed"));
                         }
                     }
                 }
                 default -> {
-                    sendJsonError(exchange, 405, "Method not allowed");
+                    sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                     return;
                 }
             }
@@ -9939,7 +9995,7 @@ public class SSLMailServer {
 
     private void handleApiSieve(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -9967,13 +10023,13 @@ public class SSLMailServer {
                         response.put("filters", filters);
                     } else {
                         response.put("success", false);
-                        response.put("error", "mailbox_id richiesto");
+                        response.put("error", I18n.tr("server.mailbox.idRequired"));
                     }
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                     JSONObject req = new JSONObject(body);
@@ -9992,7 +10048,7 @@ public class SSLMailServer {
                                 response.put("success", true);
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Impossibile creare filtro");
+                                response.put("error", I18n.tr("server.filter.createFailed"));
                             }
                         }
                         case "update" -> {
@@ -10009,7 +10065,7 @@ public class SSLMailServer {
                                 response.put("success", true);
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Impossibile aggiornare filtro");
+                                response.put("error", I18n.tr("server.filter.updateFailed"));
                             }
                         }
                         case "delete" -> {
@@ -10021,17 +10077,17 @@ public class SSLMailServer {
                                 response.put("success", true);
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Impossibile eliminare filtro");
+                                response.put("error", I18n.tr("server.filter.deleteFailed"));
                             }
                         }
                         default -> {
                             response.put("success", false);
-                            response.put("error", "Azione sconosciuta");
+                            response.put("error", I18n.tr("server.unknownAction"));
                         }
                     }
                 }
                 default -> {
-                    sendJsonError(exchange, 405, "Method not allowed");
+                    sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                     return;
                 }
             }
@@ -10057,7 +10113,7 @@ public class SSLMailServer {
 
     private void handleApiForwarding(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -10083,13 +10139,13 @@ public class SSLMailServer {
                         response.put("rules", rules);
                     } else {
                         response.put("success", false);
-                        response.put("error", "mailbox_id richiesto");
+                        response.put("error", I18n.tr("server.mailbox.idRequired"));
                     }
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                     JSONObject req = new JSONObject(body);
@@ -10107,7 +10163,7 @@ public class SSLMailServer {
                                 response.put("success", true);
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Impossibile creare regola");
+                                response.put("error", I18n.tr("server.forward.createFailed"));
                             }
                         }
                         case "update" -> {
@@ -10121,7 +10177,7 @@ public class SSLMailServer {
                                 response.put("success", true);
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Impossibile aggiornare regola");
+                                response.put("error", I18n.tr("server.forward.updateFailed"));
                             }
                         }
                         case "delete" -> {
@@ -10132,17 +10188,17 @@ public class SSLMailServer {
                                 response.put("success", true);
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Impossibile eliminare regola");
+                                response.put("error", I18n.tr("server.forward.deleteFailed"));
                             }
                         }
                         default -> {
                             response.put("success", false);
-                            response.put("error", "Azione sconosciuta");
+                            response.put("error", I18n.tr("server.unknownAction"));
                         }
                     }
                 }
                 default -> {
-                    sendJsonError(exchange, 405, "Method not allowed");
+                    sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                     return;
                 }
             }
@@ -10158,7 +10214,7 @@ public class SSLMailServer {
 
     private void handleApiRateLimits(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -10295,7 +10351,7 @@ public class SSLMailServer {
                     }
                 }
                 default -> {
-                    sendJsonError(exchange, 405, "Method not allowed");
+                    sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                     return;
                 }
             }
@@ -10322,7 +10378,7 @@ public class SSLMailServer {
 
     private void handleApiRspamd(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -10371,7 +10427,7 @@ public class SSLMailServer {
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
         if (body == null) {
-            sendJsonError(exchange, 413, "Richiesta troppo grande");
+            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
             return;
         }
                     JSONObject req = new JSONObject(body);
@@ -10420,17 +10476,17 @@ public class SSLMailServer {
                                 response.put("symbols", new JSONArray(result.symbols));
                             } else {
                                 response.put("success", false);
-                                response.put("error", "Scansione fallita");
+                                response.put("error", I18n.tr("server.scanFailed"));
                             }
                         }
                         default -> {
                             response.put("success", false);
-                            response.put("error", "Azione sconosciuta");
+                            response.put("error", I18n.tr("server.unknownAction"));
                         }
                     }
                 }
                 default -> {
-                    sendJsonError(exchange, 405, "Method not allowed");
+                    sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                     return;
                 }
             }
@@ -10446,7 +10502,7 @@ public class SSLMailServer {
 
     private void handleApiStatistics(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -10500,7 +10556,7 @@ public class SSLMailServer {
                 response.put("spam_trained", Main.mailDatabase.getTrainingCount("spam", days));
                 response.put("ham_trained", Main.mailDatabase.getTrainingCount("ham", days));
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
         } catch (Exception e) {
@@ -10530,7 +10586,7 @@ public class SSLMailServer {
 
     private void handleApiTheme(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -10541,7 +10597,7 @@ public class SSLMailServer {
             String username = getSessionUsername(exchange);
             if (username == null || username.isEmpty()) {
                 response.put("success", false);
-                response.put("error", "Utente non trovato");
+                response.put("error", I18n.tr("server.userNotFound"));
                 sendJsonResponse(exchange, response);
                 return;
             }
@@ -10554,7 +10610,7 @@ public class SSLMailServer {
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
                 if (body == null) {
-                    sendJsonError(exchange, 413, "Richiesta troppo grande");
+                    sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                     return;
                 }
                 JSONObject req = new JSONObject(body);
@@ -10570,12 +10626,12 @@ public class SSLMailServer {
                 response.put("success", saved);
                 if (saved) {
                     response.put("theme", theme);
-                    response.put("message", "Tema salvato");
+                    response.put("message", I18n.tr("server.themeSaved"));
                 } else {
-                    response.put("error", "Errore salvataggio tema");
+                    response.put("error", I18n.tr("server.themeSaveFailed"));
                 }
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
         } catch (Exception e) {
@@ -10606,7 +10662,7 @@ public class SSLMailServer {
      */
     private void handleApiHostname(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -10662,7 +10718,7 @@ public class SSLMailServer {
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
                 if (body == null) {
-                    sendJsonError(exchange, 413, "Richiesta troppo grande");
+                    sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                     return;
                 }
                 JSONObject req = new JSONObject(body);
@@ -10682,14 +10738,14 @@ public class SSLMailServer {
                     // Validate hostname format
                     if (newHostname.isEmpty() || !newHostname.contains(".") || newHostname.length() > 253) {
                         response.put("success", false);
-                        response.put("error", "Hostname non valido. Deve essere un FQDN (es: mail.esempio.it)");
+                        response.put("error", I18n.tr("server.hostname.invalid"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
                     // Must match domain pattern (allow subdomain.domain.tld)
                     if (!newHostname.matches("^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")) {
                         response.put("success", false);
-                        response.put("error", "Hostname contiene caratteri non validi");
+                        response.put("error", I18n.tr("server.hostname.badChars"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
@@ -10708,7 +10764,7 @@ public class SSLMailServer {
                     steps.put(new JSONObject()
                             .put("step", "SQLite config.mail_hostname")
                             .put("success", sqliteOk)
-                            .put("detail", sqliteOk ? oldHostname + " -> " + newHostname : "Errore aggiornamento SQLite"));
+                            .put("detail", sqliteOk ? oldHostname + " -> " + newHostname : I18n.tr("server.sqliteUpdateFailed")));
 
                     // Step 2: Update MySQL
                     boolean mysqlOk = false;
@@ -10723,14 +10779,14 @@ public class SSLMailServer {
                     steps.put(new JSONObject()
                             .put("step", "MySQL panel_settings.mail_hostname")
                             .put("success", mysqlOk)
-                            .put("detail", mysqlOk ? oldHostname + " -> " + newHostname : "Errore aggiornamento MySQL"));
+                            .put("detail", mysqlOk ? oldHostname + " -> " + newHostname : I18n.tr("server.hostname.mysqlFailed")));
 
                     // Step 3: Update Postfix main.cf
                     boolean postfixOk = updatePostfixHostname(newHostname);
                     steps.put(new JSONObject()
                             .put("step", "Postfix main.cf (myhostname)")
                             .put("success", postfixOk)
-                            .put("detail", postfixOk ? "myhostname aggiornato a " + newHostname : "File non trovato o errore scrittura"));
+                            .put("detail", postfixOk ? I18n.tr("server.hostname.postfixUpdated", Map.of("name", newHostname)) : I18n.tr("server.hostname.fileWriteFailed")));
 
                     // Step 4: Clean stale MySQL settings
                     boolean cleanOk = false;
@@ -10745,28 +10801,28 @@ public class SSLMailServer {
                         }
                     }
                     steps.put(new JSONObject()
-                            .put("step", "Pulizia metadati SSL/DNS obsoleti")
+                            .put("step", I18n.tr("server.hostname.stepCleanup"))
                             .put("success", cleanOk)
-                            .put("detail", cleanOk ? "ssl_hostname, ssl_domain, dns_challenge_hostname rimossi" : "Errore pulizia"));
+                            .put("detail", cleanOk ? I18n.tr("server.hostname.cleaned") : I18n.tr("server.hostname.cleanFailed")));
 
                     // Step 5: Reload services
                     boolean postfixReload = executeServiceCommand("postfix", "reload");
                     steps.put(new JSONObject()
                             .put("step", "Reload Postfix")
                             .put("success", postfixReload)
-                            .put("detail", postfixReload ? "Postfix ricaricato" : "Postfix non in esecuzione o errore reload"));
+                            .put("detail", postfixReload ? I18n.tr("server.hostname.reloaded", Map.of("service", "Postfix")) : I18n.tr("server.hostname.reloadFailed", Map.of("service", "Postfix"))));
 
                     boolean dovecotReload = executeServiceCommand("dovecot", "reload");
                     steps.put(new JSONObject()
                             .put("step", "Reload Dovecot")
                             .put("success", dovecotReload)
-                            .put("detail", dovecotReload ? "Dovecot ricaricato" : "Dovecot non in esecuzione o errore reload"));
+                            .put("detail", dovecotReload ? I18n.tr("server.hostname.reloaded", Map.of("service", "Dovecot")) : I18n.tr("server.hostname.reloadFailed", Map.of("service", "Dovecot"))));
 
                     boolean nginxReload = executeServiceCommand("nginx", "reload");
                     steps.put(new JSONObject()
                             .put("step", "Reload Nginx")
                             .put("success", nginxReload)
-                            .put("detail", nginxReload ? "Nginx ricaricato" : "Nginx non in esecuzione o errore reload"));
+                            .put("detail", nginxReload ? I18n.tr("server.hostname.reloaded", Map.of("service", "Nginx")) : I18n.tr("server.nginxReloadFailed")));
 
                     // Determine overall success (core steps must succeed)
                     boolean overallSuccess = sqliteOk && mysqlOk;
@@ -10776,39 +10832,36 @@ public class SSLMailServer {
                     JSONArray manualActions = new JSONArray();
 
                     manualActions.put(new JSONObject()
-                            .put("action", "Aggiorna record DNS A")
-                            .put("detail", "Record A per '" + newHostname + "' deve puntare all'IP del server")
+                            .put("action", I18n.tr("server.hostname.actA"))
+                            .put("detail", I18n.tr("server.hostname.actADetail", Map.of("name", newHostname)))
                             .put("type", "dns"));
                     manualActions.put(new JSONObject()
-                            .put("action", "Aggiorna record DNS MX")
-                            .put("detail", "Record MX per '" + domain + "' deve puntare a '" + newHostname + "'")
+                            .put("action", I18n.tr("server.hostname.actMx"))
+                            .put("detail", I18n.tr("server.hostname.actMxDetail", Map.of("domain", domain, "name", newHostname)))
                             .put("type", "dns"));
                     manualActions.put(new JSONObject()
-                            .put("action", "Aggiorna record PTR (Reverse DNS)")
-                            .put("detail", "Contatta il provider hosting per aggiornare il PTR all'IP del server con '" + newHostname + "'")
+                            .put("action", I18n.tr("server.hostname.actPtr"))
+                            .put("detail", I18n.tr("server.hostname.actPtrDetail", Map.of("name", newHostname)))
                             .put("type", "dns"));
                     manualActions.put(new JSONObject()
-                            .put("action", "Aggiorna il CNAME autoconfig")
-                            .put("detail", "autoconfig." + domain + " deve puntare a '" + newHostname + "'")
+                            .put("action", I18n.tr("server.hostname.actAutoconfig"))
+                            .put("detail", I18n.tr("server.hostname.actAutoconfigDetail", Map.of("domain", domain, "name", newHostname)))
                             .put("type", "dns"));
                     manualActions.put(new JSONObject()
-                            .put("action", "Emetti nuovo certificato SSL")
-                            .put("detail", "Vai nella sezione SSL del pannello e genera un nuovo certificato per '" + newHostname + "'. Il vecchio certificato"
-                                    + (!oldHostname.isEmpty() ? " (per '" + oldHostname + "')" : "") + " non sara' valido per il nuovo hostname.")
+                            .put("action", I18n.tr("server.hostname.actCert"))
+                            .put("detail", oldHostname.isEmpty() ? I18n.tr("server.hostname.actCertDetail", Map.of("name", newHostname)) : I18n.tr("server.hostname.actCertDetailOld", Map.of("name", newHostname, "old", oldHostname)))
                             .put("type", "ssl"));
                     manualActions.put(new JSONObject()
-                            .put("action", "Verifica record DNS")
-                            .put("detail", "Dopo aver aggiornato i DNS, vai nella sezione DNS del pannello e clicca 'Verifica' per controllare che tutto sia corretto")
+                            .put("action", I18n.tr("server.hostname.actVerify"))
+                            .put("detail", I18n.tr("server.hostname.actVerifyDetail"))
                             .put("type", "verify"));
 
                     // Roundcube domain reminder
                     String rcDomain = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : "";
                     if (rcDomain != null && !rcDomain.isEmpty()) {
                         manualActions.put(new JSONObject()
-                                .put("action", "Verifica dominio Roundcube (Webmail)")
-                                .put("detail", "Il dominio Roundcube attuale e' '" + rcDomain + "'. "
-                                        + "Se vuoi aggiornarlo, vai nelle Impostazioni e modifica il Dominio Roundcube. "
-                                        + "Ricorda di aggiornare anche il record DNS A per il nuovo dominio.")
+                                .put("action", I18n.tr("server.hostname.actRc"))
+                                .put("detail", I18n.tr("server.hostname.actRcDetail", Map.of("domain", rcDomain)))
                                 .put("type", "roundcube"));
                     }
 
@@ -10830,7 +10883,7 @@ public class SSLMailServer {
                     }
                     if (hostname == null || hostname.isEmpty()) {
                         response.put("success", false);
-                        response.put("error", "Nessun hostname configurato");
+                        response.put("error", I18n.tr("server.hostname.none"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
@@ -10844,8 +10897,8 @@ public class SSLMailServer {
                     checks.put(new JSONObject()
                             .put("type", "A").put("name", hostname)
                             .put("passed", aOk)
-                            .put("current", aResult.isEmpty() ? "Non trovato" : aResult)
-                            .put("expected", serverIp.isEmpty() ? "IP del server" : serverIp));
+                            .put("current", aResult.isEmpty() ? I18n.tr("server.dns.notFound") : aResult)
+                            .put("expected", serverIp.isEmpty() ? I18n.tr("server.dns.serverIp") : serverIp));
 
                     // Check MX record
                     String domain = hostname.contains(".") ? hostname.substring(hostname.indexOf('.') + 1) : hostname;
@@ -10854,7 +10907,7 @@ public class SSLMailServer {
                     checks.put(new JSONObject()
                             .put("type", "MX").put("name", domain)
                             .put("passed", mxOk)
-                            .put("current", mxResult.isEmpty() ? "Non trovato" : mxResult)
+                            .put("current", mxResult.isEmpty() ? I18n.tr("server.dns.notFound") : mxResult)
                             .put("expected", "10 " + hostname + "."));
 
                     // Check PTR record
@@ -10864,9 +10917,9 @@ public class SSLMailServer {
                     }
                     boolean ptrOk = !ptrResult.isEmpty() && ptrResult.toLowerCase().contains(hostname.toLowerCase());
                     checks.put(new JSONObject()
-                            .put("type", "PTR").put("name", serverIp.isEmpty() ? "IP server" : serverIp)
+                            .put("type", "PTR").put("name", serverIp.isEmpty() ? I18n.tr("server.dns.serverIp") : serverIp)
                             .put("passed", ptrOk)
-                            .put("current", ptrResult.isEmpty() ? "Non trovato" : ptrResult)
+                            .put("current", ptrResult.isEmpty() ? I18n.tr("server.dns.notFound") : ptrResult)
                             .put("expected", hostname + "."));
 
                     response.put("success", true);
@@ -10876,11 +10929,11 @@ public class SSLMailServer {
 
                 } else {
                     response.put("success", false);
-                    response.put("error", "Azione non valida. Usa 'change' o 'check_dns'.");
+                    response.put("error", I18n.tr("server.hostname.badAction"));
                 }
 
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
         } catch (Exception e) {
@@ -10896,7 +10949,7 @@ public class SSLMailServer {
      */
     private void handleApiRoundcubeDomain(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, "Unauthorized");
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
         }
 
@@ -10959,7 +11012,7 @@ public class SSLMailServer {
                 response.put("domain", rcDomain);
                 response.put("port", rcPort);
                 response.put("server_ip", serverIp);
-                response.put("dns_result", dnsResult.isEmpty() ? "Non trovato" : dnsResult);
+                response.put("dns_result", dnsResult.isEmpty() ? I18n.tr("server.dns.notFound") : dnsResult);
                 response.put("dns_ok", dnsOk);
                 response.put("dns_proxied", dnsProxied);
                 response.put("nginx_ssl_cert", certPath);
@@ -10971,7 +11024,7 @@ public class SSLMailServer {
             } else if ("POST".equals(method)) {
                 String body = readRequestBodyWithLimit(exchange);
                 if (body == null) {
-                    sendJsonError(exchange, 413, "Richiesta troppo grande");
+                    sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                     return;
                 }
                 JSONObject req = new JSONObject(body);
@@ -10990,13 +11043,13 @@ public class SSLMailServer {
                     // Validate domain format
                     if (newDomain.isEmpty() || !newDomain.contains(".") || newDomain.length() > 253) {
                         response.put("success", false);
-                        response.put("error", "Dominio non valido. Deve essere un FQDN (es: webmail.esempio.it)");
+                        response.put("error", I18n.tr("server.rcdomain.invalid"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
                     if (!newDomain.matches("^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")) {
                         response.put("success", false);
-                        response.put("error", "Dominio contiene caratteri non validi");
+                        response.put("error", I18n.tr("server.rcdomain.badChars"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
@@ -11027,23 +11080,23 @@ public class SSLMailServer {
                     steps.put(new JSONObject()
                             .put("step", "SQLite config.roundcube_domain")
                             .put("success", sqliteOk)
-                            .put("detail", sqliteOk ? oldDomain + " -> " + newDomain : "Errore aggiornamento SQLite"));
+                            .put("detail", sqliteOk ? oldDomain + " -> " + newDomain : I18n.tr("server.sqliteUpdateFailed")));
 
                     // Step 2: Regenerate entire nginx.conf with new domain
                     String rcCert = currentCert != null && !currentCert.isEmpty() ? currentCert : "/usr/local/etc/ssl/mail/fullchain.pem";
                     String rcKey = currentKey != null && !currentKey.isEmpty() ? currentKey : "/usr/local/etc/ssl/mail/privkey.pem";
                     boolean nginxOk = regenerateNginxRoundcubeConfig(newDomain, currentPort, rcCert, rcKey);
                     steps.put(new JSONObject()
-                            .put("step", "Nginx nginx.conf rigenerato")
+                            .put("step", I18n.tr("server.rcdomain.stepNginx"))
                             .put("success", nginxOk)
-                            .put("detail", nginxOk ? "server_name=" + newDomain + ", risponde SOLO a questo dominio" : "Errore scrittura nginx.conf"));
+                            .put("detail", nginxOk ? I18n.tr("server.rcdomain.nginxOnly", Map.of("domain", newDomain)) : I18n.tr("server.nginxConfWriteFailed")));
 
                     // Step 3: Reload Nginx
                     boolean nginxReload = executeServiceCommand("nginx", "reload");
                     steps.put(new JSONObject()
                             .put("step", "Reload Nginx")
                             .put("success", nginxReload)
-                            .put("detail", nginxReload ? "Nginx ricaricato" : "Nginx non in esecuzione o errore reload"));
+                            .put("detail", nginxReload ? I18n.tr("server.hostname.reloaded", Map.of("service", "Nginx")) : I18n.tr("server.nginxReloadFailed")));
 
                     // Step 4: Refresh SSO manager URL
                     boolean ssoOk = false;
@@ -11061,22 +11114,21 @@ public class SSLMailServer {
                         }
                     }
                     steps.put(new JSONObject()
-                            .put("step", "SSO Manager URL aggiornato")
+                            .put("step", I18n.tr("server.rcdomain.stepSso"))
                             .put("success", ssoOk)
-                            .put("detail", ssoOk ? "URL SSO aggiornato per " + newDomain : "Errore aggiornamento SSO"));
+                            .put("detail", ssoOk ? I18n.tr("server.rcdomain.ssoUpdated", Map.of("domain", newDomain)) : I18n.tr("server.rcdomain.ssoFailed")));
 
                     boolean overallSuccess = sqliteOk;
 
                     // Manual actions
                     JSONArray manualActions = new JSONArray();
                     manualActions.put(new JSONObject()
-                            .put("action", "Configura record DNS A")
-                            .put("detail", "Il record A per '" + newDomain + "' deve puntare all'IP del server")
+                            .put("action", I18n.tr("server.rcdomain.actA"))
+                            .put("detail", I18n.tr("server.hostname.actADetail", Map.of("name", newDomain)))
                             .put("type", "dns"));
                     manualActions.put(new JSONObject()
-                            .put("action", "Verifica certificato SSL")
-                            .put("detail", "Assicurati che il certificato SSL copra anche '" + newDomain + "'. "
-                                    + "Se Roundcube usa un certificato separato, rigeneralo per il nuovo dominio.")
+                            .put("action", I18n.tr("server.rcdomain.actCert"))
+                            .put("detail", I18n.tr("server.rcdomain.actCertDetail", Map.of("domain", newDomain)))
                             .put("type", "ssl"));
 
                     response.put("success", overallSuccess);
@@ -11098,13 +11150,13 @@ public class SSLMailServer {
                     // Validate PEM format
                     if (!certContent.isEmpty() && !certContent.contains("BEGIN")) {
                         response.put("success", false);
-                        response.put("error", "Il certificato deve essere in formato PEM");
+                        response.put("error", I18n.tr("server.rcdomain.certPem"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
                     if (!keyContent.isEmpty() && !keyContent.contains("BEGIN")) {
                         response.put("success", false);
-                        response.put("error", "La chiave deve essere in formato PEM");
+                        response.put("error", I18n.tr("server.rcdomain.keyPem"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
@@ -11121,9 +11173,9 @@ public class SSLMailServer {
                         keyPath = "/usr/local/etc/ssl/mail/privkey.pem";
                         chainPath = "";
                         steps.put(new JSONObject()
-                                .put("step", "Usa certificati del mail server")
+                                .put("step", I18n.tr("server.rcdomain.stepUseMailCert"))
                                 .put("success", true)
-                                .put("detail", "fullchain.pem e privkey.pem da /usr/local/etc/ssl/mail/"));
+                                .put("detail", I18n.tr("server.rcdomain.mailCertFiles")));
                     } else {
                         // Save PEM content to /usr/local/etc/ssl/roundcube/
                         certPath = sslDir + "/fullchain.pem";
@@ -11151,20 +11203,20 @@ public class SSLMailServer {
                             // TODO: migrate to Shell.run when touched
                             new ProcessBuilder("chmod", "644", certPath).start().waitFor();
 
-                            String detail = "Salvati in " + sslDir + "/";
+                            String detail = I18n.tr("server.rcdomain.savedIn", Map.of("dir", sslDir + "/"));
                             if (!chainContent.isEmpty()) {
-                                detail += " (chain inclusa nel fullchain.pem)";
+                                detail += " " + I18n.tr("server.rcdomain.chainIncluded");
                             }
 
                             steps.put(new JSONObject()
-                                    .put("step", "Certificati salvati su disco")
+                                    .put("step", I18n.tr("server.rcdomain.stepSaved"))
                                     .put("success", true)
                                     .put("detail", detail));
                         } catch (Exception e) {
                             steps.put(new JSONObject()
-                                    .put("step", "Salvataggio certificati su disco")
+                                    .put("step", I18n.tr("server.rcdomain.stepSaving"))
                                     .put("success", false)
-                                    .put("detail", "Errore: " + e.getMessage()));
+                                    .put("detail", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
                             response.put("success", false);
                             response.put("steps", steps);
                             sendJsonResponse(exchange, response);
@@ -11184,9 +11236,9 @@ public class SSLMailServer {
                         );
                     }
                     steps.put(new JSONObject()
-                            .put("step", "SQLite aggiornato")
+                            .put("step", I18n.tr("server.rcdomain.stepSqlite"))
                             .put("success", sqliteOk)
-                            .put("detail", sqliteOk ? "Percorsi SSL salvati nel database" : "Errore aggiornamento SQLite"));
+                            .put("detail", sqliteOk ? I18n.tr("server.rcdomain.pathsSaved") : I18n.tr("server.sqliteUpdateFailed")));
 
                     // Step 3: Regenerate nginx.conf
                     String currentDomainForSsl = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : "";
@@ -11197,16 +11249,16 @@ public class SSLMailServer {
                         certPath, keyPath
                     );
                     steps.put(new JSONObject()
-                            .put("step", "Nginx rigenerato")
+                            .put("step", I18n.tr("server.rcdomain.stepNginxRegen"))
                             .put("success", nginxOk)
-                            .put("detail", nginxOk ? "nginx.conf aggiornato con i nuovi certificati" : "Errore scrittura nginx.conf"));
+                            .put("detail", nginxOk ? I18n.tr("server.rcdomain.nginxNewCerts") : I18n.tr("server.nginxConfWriteFailed")));
 
                     // Step 4: Reload Nginx
                     boolean nginxReload = executeServiceCommand("nginx", "reload");
                     steps.put(new JSONObject()
                             .put("step", "Reload Nginx")
                             .put("success", nginxReload)
-                            .put("detail", nginxReload ? "Nginx ricaricato" : "Nginx non in esecuzione o errore reload"));
+                            .put("detail", nginxReload ? I18n.tr("server.hostname.reloaded", Map.of("service", "Nginx")) : I18n.tr("server.nginxReloadFailed")));
 
                     response.put("success", sqliteOk && nginxOk);
                     response.put("steps", steps);
@@ -11221,7 +11273,7 @@ public class SSLMailServer {
                     }
                     if (domain == null || domain.isEmpty()) {
                         response.put("success", false);
-                        response.put("error", "Nessun dominio Roundcube configurato");
+                        response.put("error", I18n.tr("server.rcdomain.none"));
                         sendJsonResponse(exchange, response);
                         return;
                     }
@@ -11243,17 +11295,17 @@ public class SSLMailServer {
                     response.put("success", true);
                     response.put("domain", domain);
                     response.put("server_ip", serverIp);
-                    response.put("a_record", aResult.isEmpty() ? "Non trovato" : aResult);
+                    response.put("a_record", aResult.isEmpty() ? I18n.tr("server.dns.notFound") : aResult);
                     response.put("a_ok", aOk);
                     response.put("a_proxied", aProxied);
 
                 } else {
                     response.put("success", false);
-                    response.put("error", "Azione non valida. Usa 'change' o 'check_dns'.");
+                    response.put("error", I18n.tr("server.hostname.badAction"));
                 }
 
             } else {
-                sendJsonError(exchange, 405, "Method not allowed");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
                 return;
             }
         } catch (Exception e) {

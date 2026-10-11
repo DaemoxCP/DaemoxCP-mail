@@ -115,7 +115,7 @@ public class PasswordVault {
                 try {
                     Files.setPosixFilePermissions(backup, PosixFilePermissions.fromString("rw-------"));
                 } catch (Exception ignored) {}
-                LOGGER.info("[PasswordVault] Backup vecchia chiave in " + backup);
+                LOGGER.info("[PasswordVault] Old key backed up to " + backup);
             }
             String b64 = Base64.getEncoder().encodeToString(newKeyBytes);
             Files.writeString(keyPath, b64, StandardCharsets.UTF_8,
@@ -124,7 +124,7 @@ public class PasswordVault {
                 Files.setPosixFilePermissions(keyPath, PosixFilePermissions.fromString("rw-------"));
             } catch (Exception ignored) {}
             this.activeKey = new SecretKeySpec(newKeyBytes, "AES");
-            LOGGER.info("[PasswordVault] Nuova chiave master attiva e salvata in " + KEY_FILE);
+            LOGGER.info("[PasswordVault] New master key active and saved to " + KEY_FILE);
         } catch (Exception e) {
             throw new RuntimeException("persistNewKey failed: " + e.getMessage(), e);
         }
@@ -178,7 +178,7 @@ public class PasswordVault {
         if (encoded == null || encoded.isEmpty()) return null;
         try {
             byte[] data = Base64.getDecoder().decode(encoded);
-            if (data.length <= GCM_IV_LEN) throw new IllegalArgumentException("blob troppo corto");
+            if (data.length <= GCM_IV_LEN) throw new IllegalArgumentException("blob too short");
             byte[] iv = new byte[GCM_IV_LEN];
             byte[] ct = new byte[data.length - GCM_IV_LEN];
             System.arraycopy(data, 0, iv, 0, GCM_IV_LEN);
@@ -330,10 +330,10 @@ public class PasswordVault {
                     keyBytes = raw;
                 }
                 if (keyBytes.length != KEY_SIZE_BYTES) {
-                    throw new RuntimeException("Master key file ha dimensione errata: "
-                        + keyBytes.length + " bytes (atteso: " + KEY_SIZE_BYTES + ")");
+                    throw new RuntimeException("Master key file has the wrong size: "
+                        + keyBytes.length + " bytes (expected: " + KEY_SIZE_BYTES + ")");
                 }
-                LOGGER.info("[PasswordVault] Chiave master caricata da " + KEY_FILE);
+                LOGGER.info("[PasswordVault] Master key loaded from " + KEY_FILE);
                 return new PasswordVault(new SecretKeySpec(keyBytes, "AES"));
             }
 
@@ -355,8 +355,8 @@ public class PasswordVault {
                 // 600 = solo root può leggere
                 Files.setPosixFilePermissions(keyPath, PosixFilePermissions.fromString("rw-------"));
             } catch (Exception ignored) {}
-            LOGGER.warning("[PasswordVault] NUOVA chiave master generata in " + KEY_FILE +
-                " — fai un backup sicuro di questo file! Senza, le password cifrate sono perse.");
+            LOGGER.warning("[PasswordVault] NEW master key generated in " + KEY_FILE +
+                " — keep a safe backup of this file! Without it, the encrypted passwords are lost.");
             return new PasswordVault(new SecretKeySpec(newKey, "AES"));
 
         } catch (Exception e) {

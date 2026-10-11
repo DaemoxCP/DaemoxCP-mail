@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONObject;
+import org.mail_panel.i18n.I18n;
 import org.mail_panel.util.Shell;
 
 import java.nio.file.Files;
@@ -199,21 +200,17 @@ public class ProtezioneWeb {
         Ris dump = esegui("nginx", "-T");
         if (dump.codice != 0)
             return r.put("ok", false)
-                    .put("motivo", "non riesco a leggere la configurazione con \"nginx -T\": "
-                            + dump.uscita.trim());
+                    .put("motivo", I18n.tr("server.pubweb.dumpFailed", java.util.Map.of("out", String.valueOf(dump.uscita.trim()))));
 
         java.util.List<String> incluse = cartelleIncluse(dump.uscita);
         r.put("cartelle", new org.json.JSONArray(incluse));
         String scelta = cartellaScelta(incluse);
         if (scelta == null)
             return r.put("ok", false)
-                    .put("motivo", "nginx non include nessuna cartella con un modello \"*.conf\": qualunque "
-                            + "file aggiuntivo verrebbe ignorato. Serve una riga di include dentro il blocco "
-                            + "http della configurazione principale — posso aggiungerla io, con copia di "
-                            + "sicurezza e validazione.");
+                    .put("motivo", I18n.tr("server.pubweb.noInclude"));
         r.put("cartella", scelta);
         return r.put("ok", true)
-                .put("motivo", "nginx include " + scelta + ": e' li' che scrivo.");
+                .put("motivo", I18n.tr("server.pubweb.includes", java.util.Map.of("dir", String.valueOf(scelta))));
     }
 
     /* ===================================================================
@@ -234,9 +231,7 @@ public class ProtezioneWeb {
             if (chiave == null || chiave.isBlank()) chiave = "/usr/local/etc/ssl/mail/privkey.pem";
             if (!Files.isReadable(Path.of(cert)) || !Files.isReadable(Path.of(chiave)))
                 return r.put("success", false)
-                        .put("error", "Non trovo il certificato (" + cert + ") o la chiave (" + chiave
-                                + "). Senza, nginx non partirebbe e la webmail cadrebbe insieme al resto: "
-                                + "non scrivo niente.");
+                        .put("error", I18n.tr("server.pubweb.noCert", java.util.Map.of("cert", String.valueOf(cert), "key", String.valueOf(chiave))));
             r.put("certificato", cert);
 
             // 1. La politica, prima della configurazione: se nginx partisse puntando a un file
@@ -263,9 +258,7 @@ public class ProtezioneWeb {
             if (prova.codice != 0) {
                 if (prima != null) Files.writeString(f, prima); else Files.deleteIfExists(f);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", "nginx -t ha bocciato la configurazione, quindi l'ho tolta e NON ho "
-                                + "ricaricato niente: la webmail non ha subito interruzioni. Detto da "
-                                + "nginx: " + prova.uscita.trim());
+                        .put("error", I18n.tr("server.pubweb.nginxRejectedRemoved", java.util.Map.of("out", String.valueOf(prova.uscita.trim()))));
             }
 
             Ris ric = esegui("service", "nginx", "reload");
@@ -273,8 +266,7 @@ public class ProtezioneWeb {
                 if (prima != null) Files.writeString(f, prima); else Files.deleteIfExists(f);
                 esegui("service", "nginx", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", "Il reload e' fallito: ho tolto la configurazione e ricaricato. "
-                                + "Detto dal sistema: " + ric.uscita.trim());
+                        .put("error", I18n.tr("server.pubweb.reloadFailedRemoved", java.util.Map.of("out", String.valueOf(ric.uscita.trim()))));
             }
 
             // 4. Non basta che i comandi non abbiano protestato: si prova la porta.
@@ -282,19 +274,13 @@ public class ProtezioneWeb {
             r.put("prova", prova443);
             if (!prova443.optBoolean("ok", false))
                 return r.put("success", false)
-                        .put("error", "Ho scritto e ricaricato, ma la 443 non risponde come dovrebbe: "
-                                + prova443.optString("errore") + " La configurazione e' rimasta in "
-                                + FILE + ": guardala prima di riprovare.");
+                        .put("error", I18n.tr("server.pubweb.443wrong", java.util.Map.of("err", String.valueOf(prova443.optString("errore")), "file", String.valueOf(FILE))));
 
             return r.put("success", true)
-                    .put("nota", "La porta 443 ora serve DUE file e nient'altro. Tutto il resto riceve "
-                            + "404, e i metodi diversi da GET e HEAD un 405. Ci sono un limite di cinque "
-                            + "richieste al secondo per indirizzo e uno di otto connessioni. La politica "
-                            + "MTA-STS e' un file statico: una richiesta li' non raggiunge mai il pannello. "
-                            + "Resta da aprire la 443 nel firewall e, se la usi, su Cloudflare.");
+                    .put("nota", I18n.tr("server.pubweb.installed"));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
-                    .put("error", "errore durante l'installazione: " + e.getMessage());
+                    .put("error", I18n.tr("server.pubweb.installError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -304,8 +290,7 @@ public class ProtezioneWeb {
         String host = MtaSts.hostDiPosta();
         if (host == null || host.isBlank())
             return r.put("success", false)
-                    .put("error", "L'hostname del server di posta non e' configurato: la politica non "
-                            + "saprebbe quale MX dichiarare.");
+                    .put("error", I18n.tr("server.pubweb.noHostname"));
         String modo = MtaSts.modoCorrente();
         String testo = MtaSts.politica(host, modo, MtaSts.maxAgeConsigliato(modo));
         try {
@@ -314,8 +299,7 @@ public class ProtezioneWeb {
             return r.put("success", true).put("modo", modo).put("testo", testo)
                     .put("id", MtaSts.id(testo));
         } catch (Exception e) {
-            return r.put("success", false).put("error", "non riesco a scrivere " + FILE_POLITICA
-                    + ": " + e.getMessage());
+            return r.put("success", false).put("error", I18n.tr("server.pubweb.cannotWrite", java.util.Map.of("file", String.valueOf(FILE_POLITICA), "err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -384,22 +368,19 @@ public class ProtezioneWeb {
             Ris dump = esegui("nginx", "-T");
             if (dump.codice != 0)
                 return r.put("success", false)
-                        .put("error", "non riesco a leggere la configurazione: " + dump.uscita.trim());
+                        .put("error", I18n.tr("server.pubweb.confUnreadable", java.util.Map.of("out", String.valueOf(dump.uscita.trim()))));
 
             String principale = filePrincipale(dump.uscita);
             if (principale == null || !Files.isReadable(Path.of(principale)))
                 return r.put("success", false)
-                        .put("error", "Non riesco a capire quale sia il file principale di nginx: non "
-                                + "modifico un file scelto a caso.");
+                        .put("error", I18n.tr("server.pubweb.noMainFile"));
             r.put("file", principale).put("cartella", CARTELLA_PROPOSTA);
 
             String prima = Files.readString(Path.of(principale));
             String dopo = conInclude(prima, CARTELLA_PROPOSTA);
             if (dopo == null)
                 return r.put("success", false)
-                        .put("error", "Nel file " + principale + " non trovo l'apertura del blocco http, "
-                                + "oppure l'include c'e' gia'. Non inserisco una riga a occhio in una "
-                                + "configurazione che funziona.");
+                        .put("error", I18n.tr("server.pubweb.noHttpBlock", java.util.Map.of("file", String.valueOf(principale))));
 
             Files.createDirectories(Path.of(CARTELLA_PROPOSTA));
             Files.createDirectories(Path.of(COPIA_PRINCIPALE).getParent());
@@ -412,9 +393,7 @@ public class ProtezioneWeb {
             if (prova.codice != 0) {
                 Files.writeString(Path.of(principale), prima);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", "nginx -t ha bocciato la configurazione, quindi ho rimesso quella di "
-                                + "prima e NON ho ricaricato: il sito non ha subito interruzioni. Detto da "
-                                + "nginx: " + prova.uscita.trim());
+                        .put("error", I18n.tr("server.pubweb.nginxRejectedRestored", java.util.Map.of("out", String.valueOf(prova.uscita.trim()))));
             }
 
             Ris ric = esegui("service", "nginx", "reload");
@@ -422,8 +401,7 @@ public class ProtezioneWeb {
                 Files.writeString(Path.of(principale), prima);
                 esegui("service", "nginx", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", "Il reload e' fallito: ho rimesso il file di prima. Detto dal "
-                                + "sistema: " + ric.uscita.trim());
+                        .put("error", I18n.tr("server.pubweb.reloadFailedRestored", java.util.Map.of("out", String.valueOf(ric.uscita.trim()))));
             }
 
             // Si rilegge da nginx, non dal file: conta cosa nginx include davvero.
@@ -432,16 +410,12 @@ public class ProtezioneWeb {
                     && cartelleIncluse(dopoDump.uscita).contains(CARTELLA_PROPOSTA);
             if (!visto)
                 return r.put("success", false)
-                        .put("error", "Ho scritto la riga e ricaricato, ma rileggendo la configurazione "
-                                + "nginx non risulta includere " + CARTELLA_PROPOSTA + ". Guarda "
-                                + principale + " prima di riprovare.");
+                        .put("error", I18n.tr("server.pubweb.includeNotSeen", java.util.Map.of("dir", String.valueOf(CARTELLA_PROPOSTA), "file", String.valueOf(principale))));
 
             return r.put("success", true)
-                    .put("nota", "nginx ora include " + CARTELLA_PROPOSTA + ". La riga e' stata inserita "
-                            + "in cima al blocco http di " + principale + ", con copia di sicurezza in "
-                            + COPIA_PRINCIPALE + ". Ora si puo' installare la configurazione della 443.");
+                    .put("nota", I18n.tr("server.pubweb.includeAdded", java.util.Map.of("dir", String.valueOf(CARTELLA_PROPOSTA), "file", String.valueOf(principale), "copy", String.valueOf(COPIA_PRINCIPALE))));
         } catch (Exception e) {
-            return r.put("success", false).put("error", "errore: " + e.getMessage());
+            return r.put("success", false).put("error", I18n.tr("server.pubweb.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -518,8 +492,7 @@ public class ProtezioneWeb {
             Ris presente = esegui("sh", "-c", "command -v fail2ban-client");
             if (presente.codice != 0)
                 return r.put("success", false)
-                        .put("error", "fail2ban-client non e' raggiungibile dal pannello: non installo "
-                                + "una jail che non verrebbe mai caricata.");
+                        .put("error", I18n.tr("server.pubweb.noF2b"));
 
             Files.createDirectories(Path.of(FILTRO).getParent());
             Files.createDirectories(Path.of(JAIL).getParent());
@@ -531,24 +504,19 @@ public class ProtezioneWeb {
                 Files.deleteIfExists(Path.of(JAIL));
                 esegui("fail2ban-client", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", "fail2ban ha rifiutato la configurazione, quindi ho tolto la jail e "
-                                + "ricaricato: le altre jail non sono state disturbate. Detto da fail2ban: "
-                                + rel.uscita.trim());
+                        .put("error", I18n.tr("server.pubweb.f2bRejected", java.util.Map.of("out", String.valueOf(rel.uscita.trim()))));
             }
 
             // Non basta che il reload sia andato: si chiede a fail2ban se la vede.
             Ris st = esegui("fail2ban-client", "status", "mailpanel-pubblico");
             if (st.codice != 0)
                 return r.put("success", false)
-                        .put("error", "Ho scritto la jail e ricaricato, ma fail2ban non la riporta fra "
-                                + "quelle attive: " + st.uscita.trim());
+                        .put("error", I18n.tr("server.pubweb.jailNotActive", java.util.Map.of("out", String.valueOf(st.uscita.trim()))));
 
             return r.put("success", true).put("stato", st.uscita.trim())
-                    .put("nota", "Jail attiva: chi raccoglie dieci risposte 404, 405 o 429 in dieci minuti "
-                            + "su questa porta viene bannato per un'ora. Guarda solo il log di questo sito, "
-                            + "quindi non puo' bannare per errore chi usa la webmail.");
+                    .put("nota", I18n.tr("server.pubweb.jailActive"));
         } catch (Exception e) {
-            return r.put("success", false).put("error", "errore installando la jail: " + e.getMessage());
+            return r.put("success", false).put("error", I18n.tr("server.pubweb.jailError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -563,8 +531,7 @@ public class ProtezioneWeb {
         r.put("politica", politica);
         if (!politica)
             return r.put("ok", false)
-                    .put("errore", "la politica non torna da https://127.0.0.1/.well-known/mta-sts.txt. "
-                            + "Uscita: " + (a.uscita == null ? "" : a.uscita.trim()));
+                    .put("errore", I18n.tr("server.pubweb.policyNotBack", java.util.Map.of("out", String.valueOf(a.uscita == null ? "" : a.uscita.trim()))));
         return r.put("ok", true);
     }
 

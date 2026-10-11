@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import java.util.ArrayList;
+import org.mail_panel.i18n.I18n;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -264,15 +265,12 @@ public final class RegoleDns {
 
         if (e.quanti == 0) {
             e.valido = false;
-            e.problema = "Nessun record SPF: il dominio non dichiara chi puo' spedire per lui.";
+            e.problema = I18n.tr("server.dnsrules.spfNone");
             return e;
         }
         if (e.quanti > 1) {
             e.valido = false;
-            e.problema = "Ci sono " + e.quanti + " record SPF sullo stesso nome. RFC 7208 §4.5 dice "
-                       + "che in questo caso il risultato e' \"permerror\": SPF non fallisce a meta', "
-                       + "smette di funzionare del tutto. Va lasciato UN SOLO record, unendo a mano "
-                       + "cio' che serve dei due.";
+            e.problema = I18n.tr("server.dnsrules.spfMany", java.util.Map.of("n", String.valueOf(e.quanti)));
             e.record = String.join("  ||  ", spf);
             return e;
         }
@@ -287,19 +285,16 @@ public final class RegoleDns {
         e.chiusura = chiusura(e.record);
 
         if (e.ricercheDirette > 10)
-            e.avvisi.add("Il record fa gia' " + e.ricercheDirette + " ricerche DNS da solo: il limite "
-                       + "di RFC 7208 §4.6.4 e' 10, oltre il quale il risultato e' \"permerror\".");
+            e.avvisi.add(I18n.tr("server.dnsrules.spfLookups", java.util.Map.of("n", String.valueOf(e.ricercheDirette))));
         else if (e.include > 0)
-            e.avvisi.add("Ricerche DNS dirette: " + e.ricercheDirette + " su 10. Il conto vero e' piu' "
-                       + "alto, perche' " + e.include + (e.include == 1 ? " termine porta" : " termini portano")
-                       + " dentro altre ricerche che si contano solo risolvendole.");
+            e.avvisi.add(e.include == 1
+                       ? I18n.tr("server.dnsrules.spfDirect.one", java.util.Map.of("n", String.valueOf(e.ricercheDirette)))
+                       : I18n.tr("server.dnsrules.spfDirect.other", java.util.Map.of("n", String.valueOf(e.ricercheDirette), "inc", String.valueOf(e.include))));
 
         if (e.chiusura == null)
-            e.avvisi.add("Il record non si chiude con \"all\": chi non e' elencato non riceve alcun "
-                       + "giudizio, e SPF non serve piu' a niente.");
+            e.avvisi.add(I18n.tr("server.dnsrules.spfNoAll"));
         else if (e.chiusura.equals("+all"))
-            e.avvisi.add("Il record si chiude con \"+all\": autorizza chiunque a spedire per questo "
-                       + "dominio. E' come non avere SPF, ma con l'aria di averlo.");
+            e.avvisi.add(I18n.tr("server.dnsrules.spfPlusAll"));
 
         return e;
     }
@@ -570,15 +565,12 @@ public final class RegoleDns {
 
         if (e.quanti == 0) {
             e.valido = false;
-            e.problema = "Nessun record DMARC valido. Senza, chiunque puo' scrivere questo dominio nel "
-                       + "campo Da: e nessuno ha istruzioni su cosa farne.";
+            e.problema = I18n.tr("server.dnsrules.dmarcNone");
             return e;
         }
         if (e.quanti > 1) {
             e.valido = false;
-            e.problema = "Ci sono " + e.quanti + " record DMARC sullo stesso nome. RFC 9989 dice che in "
-                       + "questo caso vengono scartati TUTTI: la politica non e' \"la prima delle due\", "
-                       + "non c'e' proprio. Va lasciato un solo record.";
+            e.problema = I18n.tr("server.dnsrules.dmarcMany", java.util.Map.of("n", String.valueOf(e.quanti)));
             e.record = String.join("  ||  ", dm);
             return e;
         }
@@ -592,18 +584,14 @@ public final class RegoleDns {
         e.prova = e.tag.get("t");
 
         if (e.politica == null)
-            e.avvisi.add("Manca il tag \"p\". RFC 9989 lo tratta come \"none\", cioe' nessuna azione: "
-                       + "meglio scriverlo, cosi' si sa cosa si sta chiedendo.");
+            e.avvisi.add(I18n.tr("server.dnsrules.dmarcNoP"));
         else if (!java.util.List.of("none", "quarantine", "reject").contains(e.politica.toLowerCase(Locale.ROOT)))
-            e.avvisi.add("Il tag \"p\" vale \"" + e.politica + "\", che non e' un valore previsto: "
-                       + "i valori sono none, quarantine o reject.");
+            e.avvisi.add(I18n.tr("server.dnsrules.dmarcBadP", java.util.Map.of("p", String.valueOf(e.politica))));
 
         for (String morto : TAG_RIMOSSI)
             if (e.tag.containsKey(morto))
-                e.avvisi.add("Il record contiene \"" + morto + "=" + e.tag.get(morto) + "\", che RFC 9989 "
-                           + "ha rimosso: oggi non fa piu' nulla."
-                           + ("pct".equals(morto) ? " Chi voleva applicare la politica a poco a poco ora usa "
-                                                  + "\"t=y\", che la applica un livello piu' blanda." : ""));
+                e.avvisi.add(I18n.tr("server.dnsrules.dmarcRemovedTag", java.util.Map.of("tag", String.valueOf(morto + "=" + e.tag.get(morto))))
+                           + ("pct".equals(morto) ? " " + I18n.tr("server.dnsrules.dmarcPct") : ""));
 
         for (String tag : e.tag.keySet()) {
             boolean noto = false;
@@ -611,21 +599,18 @@ public final class RegoleDns {
             boolean rimosso = false;
             for (String n : TAG_RIMOSSI) if (n.equals(tag)) { rimosso = true; break; }
             if (!noto && !rimosso)
-                e.avvisi.add("Tag \"" + tag + "\" non previsto da RFC 9989. La specifica dice di ignorare "
-                           + "i tag sconosciuti, quindi non rompe niente, ma non fa neanche niente.");
+                e.avvisi.add(I18n.tr("server.dnsrules.dmarcUnknownTag", java.util.Map.of("tag", String.valueOf(tag))));
         }
 
         String rua = e.tag.get("rua");
         if (rua == null || rua.isBlank()) {
-            e.avvisi.add("Manca il tag \"rua\": senza, non arriva alcun rapporto e non c'e' modo di "
-                       + "sapere chi spedisce a nome di questo dominio. RFC 9989 §5.1.4 parte proprio "
-                       + "da qui, prima ancora di scegliere una politica.");
+            e.avvisi.add(I18n.tr("server.dnsrules.dmarcNoRua"));
         } else {
             for (String ind : indirizziRapporti(rua)) {
                 e.rua.add(ind);
                 String host = hostDi(ind);
                 if (host.isEmpty()) {
-                    e.avvisi.add("L'indirizzo \"" + ind + "\" in rua non ha un dominio.");
+                    e.avvisi.add(I18n.tr("server.dnsrules.ruaNoDomain", java.util.Map.of("addr", String.valueOf(ind))));
                 } else if (serveAutorizzazione(dominio, host)) {
                     e.daAutorizzare.add(nomeAutorizzazioneRapporti(dominio, host));
                 }
@@ -633,9 +618,7 @@ public final class RegoleDns {
         }
 
         if (e.prova != null && e.prova.equalsIgnoreCase("y"))
-            e.avvisi.add("C'e' \"t=y\": la politica dichiarata viene applicata un livello piu' blanda "
-                       + "(reject diventa quarantine, quarantine diventa none). E' la modalita' di prova, "
-                       + "va tolta quando si vuole che la politica valga davvero.");
+            e.avvisi.add(I18n.tr("server.dnsrules.dmarcTest"));
 
         return e;
     }

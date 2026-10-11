@@ -104,7 +104,7 @@ public class PackageCatalogTest {
         c = CatalogoPkg.data(pkg2.toString(), accesi, ADESSO);
         esigi("oggi, e FreeBSD-ports-kmods fra i mancanti", c.optLong("giorni") == 0
                 && c.getJSONArray("mancanti").toList().equals(List.of("FreeBSD-ports-kmods")));
-        esigi("la nota lo dice", CatalogoPkg.nota(c).contains("Il repository FreeBSD-ports-kmods e' acceso ma non ha"));
+        esigi("la nota lo dice", CatalogoPkg.nota(c).contains("Il repository FreeBSD-ports-kmods è acceso ma non ha"));
         Path pkg3 = radice.resolve("db3");
         Files.createDirectories(pkg3);
         c = CatalogoPkg.data(pkg3.toString(), accesi, ADESSO);
@@ -113,7 +113,7 @@ public class PackageCatalogTest {
                 c.optLong("giorni") == -1 && nota.contains("repos/FreeBSD-ports/db"));
         c = CatalogoPkg.data(pkg.toString(), List.of(), ADESSO);
         esigi("tutti spenti: lo dice, invece di \"non so\": " + CatalogoPkg.nota(c),
-                CatalogoPkg.nota(c).startsWith("Nessun repository di pkg e' acceso"));
+                CatalogoPkg.nota(c).startsWith("Nessun repository di pkg è acceso"));
 
         System.out.println("\n== pkg vecchio, pkg -vv muto, nome strano, orologio indietro ==");
         Path pkg4 = radice.resolve("db4");
@@ -136,12 +136,12 @@ public class PackageCatalogTest {
                 .put("catalogo", c).put("catalogoGiorni", c.optLong("giorni")).put("catalogoData", c.optString("data"))
                 .put("catalogoRinfrescato", true).put("vulnDbGiorni", 0),
                 "freebsd", "noreply@esempio.it", "admin@esempio.it");
-        String riga = t.lines().filter(l -> l.startsWith("Database delle vulnerabilita'")).findFirst().orElse("");
+        String riga = t.lines().filter(l -> l.startsWith("Database delle vulnerabilità")).findFirst().orElse("");
         System.out.println("  " + riga);
         esigi("il rapporto dice quando e' stato pubblicato, e che e' stato controllato adesso",
                 riga.contains("Catalogo dei pacchetti: pubblicato 2 giorni fa (") && riga.contains("controllato adesso"));
-        esigi("e con due repository aggiunge la frase intera", t.contains("I conteggi sono freschi quanto il piu' vecchio"));
-        esigi("niente piu' \"eta' sconosciuta\" per il catalogo", !riga.contains("Catalogo dei pacchetti: eta' sconosciuta"));
+        esigi("e con due repository aggiunge la frase intera", t.contains("I conteggi sono freschi quanto il più vecchio"));
+        esigi("niente piu' \"eta' sconosciuta\" per il catalogo", !riga.contains("Catalogo dei pacchetti: età sconosciuta"));
 
         System.out.println("\n== dove guardava prima ==");
         esigi("su FreeBSD 15 /var/db/pkg/repo-FreeBSD.sqlite non c'e': di qui \"eta' sconosciuta\"",

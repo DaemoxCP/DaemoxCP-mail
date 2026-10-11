@@ -157,7 +157,7 @@ public class VersionsApiTest {
             HttpResponse<String> ignoto = chiedi("POST", "/api/service",
                     "{\"service\":\"sshd\",\"action\":\"stop\",\"csrf_token\":\"" + csrf + "\"}", true);
             vero("con il token giusto passa: un servizio che non si governa da qui e' 400", ignoto.statusCode() == 400
-                    && ignoto.body().contains("Servizio non valido"));
+                    && ignoto.body().contains("Invalid service"));
             vero("senza sessione, anche con il token: 401", chiediAParte("POST", "/api/service",
                     "{\"service\":\"redis\",\"action\":\"restart\",\"csrf_token\":\"" + csrf + "\"}", false).statusCode() == 401);
 
@@ -168,7 +168,7 @@ public class VersionsApiTest {
             vero("redis restart: risposta 200 (qui fallisce, non c'e' redis)", azione.statusCode() == 200
                     && !new JSONObject(azione.body()).getBoolean("success"));
             vero("nel registro: SERVICE_RESTART di redis, non riuscito", aspettaRiga(registro, "SERVICE_RESTART")
-                    && aspettaRiga(registro, "Servizio: redis (non riuscito)"));
+                    && aspettaRiga(registro, "service=redis (failed)"));
             String dopo = new JSONObject(chiedi("GET", "/api/versioni", null, true).body()).getString("letteAlle");
             vero("dopo l'azione le versioni si rileggono, anche senza fresco: " + dopo, !dopo.equals(lette));
         } finally {

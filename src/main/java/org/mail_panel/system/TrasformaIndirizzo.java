@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.database.MailDatabase;
 import org.mail_panel.webserver.SecurityUtils;
@@ -281,12 +282,11 @@ public final class TrasformaIndirizzo {
     public static String motivoNoCasella(Stato s) {
         String a = s.indirizzo();
         if (a != null && a.startsWith("@"))
-            return a + " e' una raccolta (catch-all): prende la posta di tutti gli indirizzi del dominio, "
-                 + "non e' un indirizzo, e una casella ha bisogno di un nome prima della @.";
-        if (!indirizzoValido(a) || cartella(vmail, a) == null) return "Non e' un indirizzo che una casella puo' avere.";
-        if (!s.dominioDelPannello()) return "Il dominio di " + a + " non e' fra i domini del pannello.";
-        if (s.casella() != null) return a + " e' gia' una casella.";
-        if (s.conQuestaSorgente().isEmpty()) return a + " non ha alias: non c'e' niente da trasformare.";
+            return I18n.tr("server.convert.catchAll", java.util.Map.of("a", String.valueOf(a)));
+        if (!indirizzoValido(a) || cartella(vmail, a) == null) return I18n.tr("server.convert.notMailboxAddress");
+        if (!s.dominioDelPannello()) return I18n.tr("server.convert.notPanelDomain", java.util.Map.of("a", String.valueOf(a)));
+        if (s.casella() != null) return I18n.tr("server.convert.alreadyMailbox", java.util.Map.of("a", String.valueOf(a)));
+        if (s.conQuestaSorgente().isEmpty()) return I18n.tr("server.convert.noAlias", java.util.Map.of("a", String.valueOf(a)));
         return null;
     }
 
@@ -309,7 +309,7 @@ public final class TrasformaIndirizzo {
     public static JSONObject anteprimaAAlias(Stato s, ZoneId zona) {
         JSONObject o = new JSONObject().put("indirizzo", s.indirizzo());
         MailDatabase.Mailbox m = s.casella();
-        if (m == null) return o.put("possibile", false).put("motivo", s.indirizzo() + " non e' una casella.");
+        if (m == null) return o.put("possibile", false).put("motivo", I18n.tr("server.convert.notMailbox", java.util.Map.of("a", String.valueOf(s.indirizzo()))));
         Perdite p = s.perdite() == null ? new Perdite(false, List.of(), 0) : s.perdite();
         JSONArray gia = new JSONArray();
         boolean copia = false;
@@ -341,20 +341,18 @@ public final class TrasformaIndirizzo {
         for (int k = 0; richieste != null && k < richieste.length(); k++) {
             String x = richieste.optString(k, "").trim().toLowerCase(Locale.ROOT);
             if (x.isEmpty() || d.contains(x)) continue;
-            if (!indirizzoValido(x)) throw new IllegalArgumentException("\"" + x + "\" non e' un indirizzo valido.");
+            if (!indirizzoValido(x)) throw new IllegalArgumentException(I18n.tr("server.convert.badAddress", java.util.Map.of("x", String.valueOf(x))));
             if (x.equals(indirizzo))
-                throw new IllegalArgumentException("La destinazione non puo' essere " + indirizzo
-                        + " stesso: senza la casella non porterebbe da nessuna parte.");
+                throw new IllegalArgumentException(I18n.tr("server.convert.selfDest", java.util.Map.of("a", String.valueOf(indirizzo))));
             d.add(x);
         }
-        if (d.isEmpty()) throw new IllegalArgumentException("Serve almeno una destinazione: dove deve andare la posta per " + indirizzo + "?");
-        if (d.size() > MASSIMO_DESTINAZIONI) throw new IllegalArgumentException("Al massimo " + MASSIMO_DESTINAZIONI + " destinazioni.");
+        if (d.isEmpty()) throw new IllegalArgumentException(I18n.tr("server.convert.needDest", java.util.Map.of("a", String.valueOf(indirizzo))));
+        if (d.size() > MASSIMO_DESTINAZIONI) throw new IllegalArgumentException(I18n.tr("server.convert.maxDest", java.util.Map.of("n", String.valueOf(MASSIMO_DESTINAZIONI))));
         for (String x : d) {
             String dom = dominio(x);
             if (rete.dominioDelPannello(dom) && !rete.riceve(x) && rete.destinazioniAttive(x).isEmpty()
                     && rete.destinazioniAttive("@" + dom).isEmpty())
-                throw new IllegalArgumentException(x + " e' su un tuo dominio ma non e' una casella che riceve, ne' un alias attivo: "
-                        + "la posta verrebbe rifiutata.");
+                throw new IllegalArgumentException(I18n.tr("server.convert.deadDest", java.util.Map.of("x", String.valueOf(x))));
         }
         // Dopo, la posta per l'indirizzo andra' alle destinazioni nuove e a quelle che ha gia'.
         Set<String> tutte = new LinkedHashSet<>(d);
@@ -362,8 +360,7 @@ public final class TrasformaIndirizzo {
         for (String x : tutte) {
             String giro = giro(x, indirizzo, rete);
             if (giro != null)
-                throw new IllegalArgumentException("Da " + x + " la posta tornerebbe a " + indirizzo + " (" + giro
-                        + "): un giro senza fine, che Postfix rifiuta. Togli prima quell'alias, o scegli un'altra destinazione.");
+                throw new IllegalArgumentException(I18n.tr("server.convert.loop", java.util.Map.of("x", String.valueOf(x), "a", String.valueOf(indirizzo), "loop", String.valueOf(giro))));
         }
         return d;
     }

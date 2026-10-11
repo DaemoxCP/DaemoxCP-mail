@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import org.mail_panel.util.Shell;
+import org.mail_panel.i18n.I18n;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -112,9 +113,9 @@ public class PfFirewallManager {
                 try {
                     LOGGER.info("Auto-apply firewall config al boot (mode=" + state.mode + ")");
                     ApplyResult r = applyConfiguration();
-                    LOGGER.info("Auto-apply al boot: " + (r.success ? "OK" : "FAIL — " + r.message));
+                    LOGGER.info("Auto-apply at boot: " + (r.success ? "OK" : "FAIL — " + r.message));
                 } catch (Exception e) {
-                    LOGGER.warning("Auto-apply al boot fallito: " + e.getMessage());
+                    LOGGER.warning("Auto-apply at boot failed: " + e.getMessage());
                 }
             }, 10, java.util.concurrent.TimeUnit.SECONDS);
         }
@@ -158,7 +159,7 @@ public class PfFirewallManager {
                     state.lastAutoSyncRun = System.currentTimeMillis();
                     saveState();
                 }
-                LOGGER.info("Auto-sync completato: " + done + " paesi aggiornati");
+                LOGGER.info("Auto-sync completed: " + done + " countries updated");
             }
         } catch (Exception e) {
             LOGGER.warning("Auto-sync tick failed: " + e.getMessage());
@@ -379,7 +380,7 @@ public class PfFirewallManager {
         SyncResult res = new SyncResult();
         res.country = cc;
         if (!isValidCountryCode(cc)) {
-            res.error = "Codice paese non valido";
+            res.error = I18n.tr("server.pffw.badCountry");
             return res;
         }
         try {
@@ -400,7 +401,7 @@ public class PfFirewallManager {
                 java.net.http.HttpResponse.BodyHandlers.ofString());
 
             if (resp.statusCode() != 200) {
-                res.error = "HTTP " + resp.statusCode() + " da ipdeny.com";
+                res.error = I18n.tr("server.pffw.httpFrom", java.util.Map.of("c", String.valueOf(resp.statusCode())));
                 return res;
             }
             String body = resp.body();
@@ -411,7 +412,7 @@ public class PfFirewallManager {
                 if (!t.isEmpty() && !t.startsWith("#") && t.matches("^[0-9a-fA-F:.]+/\\d+\\s*$")) cidrLines++;
             }
             if (cidrLines == 0) {
-                res.error = "Risposta vuota o non valida";
+                res.error = I18n.tr("server.pffw.emptyAnswer");
                 return res;
             }
             Files.writeString(target, body, StandardCharsets.UTF_8);
@@ -421,7 +422,7 @@ public class PfFirewallManager {
             }
             res.success = true;
             res.cidrCount = cidrLines;
-            res.message = "OK — " + cidrLines + " CIDR scaricati per " + cc;
+            res.message = I18n.tr("server.pffw.downloaded", java.util.Map.of("n", String.valueOf(cidrLines), "cc", String.valueOf(cc)));
         } catch (Exception e) {
             res.error = e.getMessage();
         }
@@ -620,9 +621,9 @@ public class PfFirewallManager {
                 Files.copy(sysctl, Paths.get(sysctl + ".bak." + System.currentTimeMillis()));
             }
             Files.writeString(sysctl, cleanedStr, StandardCharsets.UTF_8);
-            LOGGER.info("net.pf.request_maxcount alzato a " + target + " (era " + current + ")");
+            LOGGER.info("net.pf.request_maxcount raised to " + target + " (was " + current + ")");
         } catch (Exception e) {
-            LOGGER.warning("ensurePfRequestMaxcount fallito: " + e.getMessage());
+            LOGGER.warning("ensurePfRequestMaxcount failed: " + e.getMessage());
         }
     }
 
@@ -650,7 +651,7 @@ public class PfFirewallManager {
                 "/sbin/pfctl", "-nf", tempFile.toString());
             if (!check.success()) {
                 r.success = false;
-                r.message = "Syntax check fallito: " + check.output();
+                r.message = I18n.tr("server.pffw.syntaxFailed", java.util.Map.of("out", String.valueOf(check.output())));
                 Files.deleteIfExists(tempFile);
                 return r;
             }
@@ -674,7 +675,7 @@ public class PfFirewallManager {
                 "/sbin/pfctl", "-a", "panel-fw", "-f", ANCHOR_FILE);
             if (!load.success()) {
                 r.success = false;
-                r.message = "pfctl load fallito: " + load.output();
+                r.message = I18n.tr("server.pffw.loadFailed", java.util.Map.of("out", String.valueOf(load.output())));
                 return r;
             }
 
@@ -682,11 +683,11 @@ public class PfFirewallManager {
             saveState();
 
             r.success = true;
-            r.message = "Anchor panel-fw applicato (mode=" + state.mode + ")";
+            r.message = I18n.tr("server.pffw.applied", java.util.Map.of("mode", String.valueOf(state.mode)));
             r.anchorContent = newContent;
         } catch (Exception e) {
             r.success = false;
-            r.message = "Errore: " + e.getMessage();
+            r.message = I18n.tr("server.pffw.error", java.util.Map.of("err", String.valueOf(e.getMessage())));
         }
         return r;
     }
@@ -783,9 +784,9 @@ public class PfFirewallManager {
         // Reload pf.conf — adesso senza "load anchor" il reload e' solo per set limit + struttura
         Shell.Result reload = Shell.run(Duration.ofSeconds(30), "/sbin/pfctl", "-f", PF_CONF);
         if (!reload.success()) {
-            LOGGER.warning("Reload pf.conf fallito: " + reload.output());
+            LOGGER.warning("pf.conf reload failed: " + reload.output());
         } else {
-            LOGGER.info("pf.conf reload OK con anchor panel-fw (vuoto) + table-entries limit " + targetLimit);
+            LOGGER.info("pf.conf reload OK with anchor panel-fw (empty) + table-entries limit " + targetLimit);
         }
     }
 

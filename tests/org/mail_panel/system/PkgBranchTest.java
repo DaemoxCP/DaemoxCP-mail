@@ -225,7 +225,7 @@ public class PkgBranchTest {
         vero("il file del pannello c'e', con la marca", f.cartella.get("zz-pannello-ramo.conf").startsWith(RamoPkg.MARCA));
         vero("catalogo scaricato una volta", f.aggiornamenti == 1);
         vero("conta gli aggiornabili dal catalogo nuovo (2), senza aggiornarli", r.getInt("aggiornabili") == 2
-                && r.getString("messaggio").contains("Nessun pacchetto e' stato cambiato"));
+                && r.getString("messaggio").contains("Nessun pacchetto è stato cambiato"));
 
         System.out.println("\n== Cambiare: latest -> quarterly (il file del pannello si toglie) ==");
         imp = RamoPkg.stato(f).getString("impronta");

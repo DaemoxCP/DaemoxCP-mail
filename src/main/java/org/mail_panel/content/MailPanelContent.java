@@ -69,6 +69,7 @@ public class MailPanelContent {
             writeFile(adminDir + "/paths.html", getPathsHtml());
             writeFile(adminDir + "/install.html", getInstallHtml());
             writeFile(adminDir + "/settings.html", getSettingsHtml());
+            writeFile(adminDir + "/account.html", getAccountHtml());
             writeFile(adminDir + "/statistics.html", getStatisticsHtml());
             writeFile(adminDir + "/admins.html", getAdminsHtml());
             writeFile(adminDir + "/ratelimits.html", getRateLimitsHtml());
@@ -277,6 +278,12 @@ public class MailPanelContent {
         /* Campo password (campoPassword): su un telefono, accanto ai tre pulsanti, una password di
            20 caratteri deve vedersi tutta. */
         @media (max-width: 575.98px) { .campo-password { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
+        /* I ruoli, con lo stesso colore ovunque: barra in alto, pagina Amministratori. */
+        .role-badge { color: #fff; font-weight: 500; }
+        .role-badge.superadmin { background-color: #dc3545; }
+        .role-badge.admin { background-color: #0d6efd; }
+        .role-badge.operator { background-color: #198754; }
+        .role-badge.viewer { background-color: #6c757d; }
         """;
     }
 
@@ -5976,7 +5983,20 @@ public class MailPanelContent {
 
         // ----- conferma d'identita' per le operazioni delicate: passkey o codice via email -----
         let stepUpResolve = null;
-        function confirmIdentity() {
+        // Passkey ed email dell'account, per sapere quali conferme offrire: la finestra si apre
+        // anche da pagine che non mostrano l'account (Impostazioni, per il vault).
+        async function accState() {
+            try {
+                const d = await (await fetch('/api/account')).json();
+                if (d.success) {
+                    acc.passkeysAvailable = !!d.passkeysAvailable;
+                    acc.hasEmail = !!d.email;
+                    acc.hasPasskeys = (d.passkeys || []).length > 0;
+                }
+            } catch (e) { /* restano i valori di prima: al peggio i pulsanti sono spenti */ }
+        }
+        async function confirmIdentity() {
+            await accState();
             return new Promise(resolve => {
                 stepUpResolve = resolve;
                 document.getElementById('stepUpCodeBox').classList.add('d-none');
@@ -7841,7 +7861,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
             <div class="row">
                 <div class="col-md-6">
-""" + getAccountCards() + getChangeUsernameCard() + getVaultManagementCard() + """
+""" + getVaultManagementCard() + """
                 </div>
 
                 <div class="col-md-6">
@@ -8059,7 +8079,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + getSettingsHostnameJs() + """
         // Load on page load
 """ + risorsa("pagine/rapporto.js") + """
-        loadAccount();
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
         repCarica();
@@ -9682,13 +9701,124 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """;
     }
 
+    // ============== RUOLI: CHI PUO' FARE COSA ==============
+    /**
+     * Le aree del pannello nella tabella dei ruoli: la chiave del nome, il permesso per vedere e
+     * quello per cambiare ("" se nell'area non c'e' niente da cambiare).
+     */
+    private static final String[][] AREE_RUOLI = {
+        {"adm.area.home", "home.view", ""},
+        {"adm.area.mailboxes", "mail.view", "mailboxes.manage"},
+        {"adm.area.domains", "mail.view", "domains.manage"},
+        {"adm.area.queue", "queue.view", "queue.manage"},
+        {"adm.area.dns", "dns.view", "dns.manage"},
+        {"adm.area.security", "security.view", "security.manage"},
+        {"adm.area.system", "system.view", "system.manage"},
+        {"adm.area.settings", "settings.manage", "settings.manage"},
+        {"adm.area.admins", "admins.manage", "admins.manage"},
+    };
+
+    /** Il nome di un ruolo nei file di lingua (adm.rSuperadmin, adm.rAdmin...). */
+    private static String roleKey(String role) {
+        return "adm.r" + Character.toUpperCase(role.charAt(0)) + role.substring(1);
+    }
+
+    /**
+     * La tabella "chi puo' fare cosa", costruita dai permessi veri (AuthStore): non puo' dire una
+     * cosa diversa da quella che il server applica.
+     */
+    static String roleMatrix() {
+        StringBuilder head = new StringBuilder();
+        for (String role : org.mail_panel.security.AuthStore.ROLES)
+            head.append("<th scope=\"col\" class=\"text-center\"><span class=\"badge role-badge ").append(role)
+                .append("\">{{t:").append(roleKey(role)).append("}}</span></th>");
+        StringBuilder rows = new StringBuilder();
+        for (String[] area : AREE_RUOLI) {
+            rows.append("<tr><th scope=\"row\">{{t:").append(area[0]).append("}}</th>");
+            for (String role : org.mail_panel.security.AuthStore.ROLES) {
+                java.util.Set<String> p = org.mail_panel.security.AuthStore.permissionsOf(role);
+                String cell = !area[2].isEmpty() && p.contains(area[2])
+                        ? "<i class=\"fas fa-pen text-success\" aria-hidden=\"true\"></i><span class=\"ms-1 matrix-label\">{{t:adm.can.manage}}</span>"
+                        : p.contains(area[1])
+                        ? "<i class=\"fas fa-eye text-primary\" aria-hidden=\"true\"></i><span class=\"ms-1 matrix-label\">{{t:adm.can.view}}</span>"
+                        : "<i class=\"fas fa-minus text-muted\" aria-hidden=\"true\"></i><span class=\"ms-1 text-muted matrix-label\">{{t:adm.can.none}}</span>";
+                rows.append("<td class=\"text-center\" data-role=\"").append(role).append("\">").append(cell).append("</td>");
+            }
+            rows.append("</tr>\n");
+        }
+        return "<div class=\"table-responsive\"><table class=\"table table-sm align-middle mb-0\" id=\"roleMatrix\">"
+             + "<thead><tr><th scope=\"col\">{{t:adm.area}}</th>" + head + "</tr></thead><tbody>" + rows + "</tbody></table></div>"
+             + "<p class=\"small text-muted mt-2 mb-0 d-sm-none\" aria-hidden=\"true\">"
+             + "<i class=\"fas fa-pen text-success\"></i> {{t:adm.can.manage}} &middot; "
+             + "<i class=\"fas fa-eye text-primary\"></i> {{t:adm.can.view}} &middot; "
+             + "<i class=\"fas fa-minus\"></i> {{t:adm.can.none}}</p>";
+    }
+
+    // ============== ACCOUNT.HTML ==============
+    /**
+     * Il proprio account: email di accesso, passkey, sessioni e nome utente. Ogni ruolo ci arriva
+     * dal pulsante col proprio nome in alto. Prima stava dentro Impostazioni, che ora e' solo del
+     * superadmin.
+     */
+    public static String getAccountHtml() {
+        return getHead("nav.account", "account", "") + """
+    <div id="main" tabindex="-1" class="content container mt-4">
+        <div class="content-container">
+            <h2><i class="fas fa-user-gear me-2" aria-hidden="true"></i>{{t:nav.account}}</h2>
+            <p class="text-muted">{{t:acc.pageIntro}}</p>
+            <div class="row">
+                <div class="col-lg-6">
+""" + getAccountCards() + """
+                </div>
+                <div class="col-lg-6">
+""" + getChangeUsernameCard() + """
+                </div>
+            </div>
+        </div>
+    </div>
+""" + getAccountModals() + getFooterSection() + """
+    <script>
+""" + getWebAuthnScript() + getSettingsAuthJs() + """
+        loadAccount();
+        let csrfToken = document.getElementById('csrf_token').value;
+    </script>
+</body>
+</html>
+""";
+    }
+
+    // ============== ACCESSO NEGATO ==============
+    /** La pagina che risponde, con 403, a chi apre una pagina che il suo ruolo non puo' vedere. */
+    public static String getForbiddenHtml() {
+        return getHead("access.title", "forbidden", "") + """
+    <div id="main" tabindex="-1" class="content container mt-4">
+        <div class="content-container">
+            <div class="text-center py-5">
+                <i class="fas fa-ban fa-3x text-danger mb-3" aria-hidden="true"></i>
+                <h2>{{t:access.title}}</h2>
+                <p class="text-muted mx-auto" style="max-width: 36rem">{{t:access.text}}</p>
+                <a class="btn btn-primary mt-2" href="/home"><i class="fas fa-gauge-high me-1" aria-hidden="true"></i>{{t:access.home}}</a>
+            </div>
+        </div>
+    </div>
+""" + getFooterSection() + """
+</body>
+</html>
+""";
+    }
+
     // ============== ADMINS.HTML ==============
     public static String getAdminsHtml() {
+        // Sul telefono cinque colonne di parole non ci stanno: nella tabella dei ruoli restano le
+        // icone (il testo lo leggono gli screen reader, sotto c'e' la legenda) e i nomi dei ruoli
+        // in testa alle colonne vanno in verticale.
         String extraStyles = """
-        .role-badge.superadmin { background-color: #dc3545; }
-        .role-badge.admin { background-color: #0d6efd; }
-        .role-badge.operator { background-color: #198754; }
-        .role-badge.viewer { background-color: #6c757d; }
+        @media (max-width: 575.98px) {
+            #roleMatrix td { position: relative; }
+            #roleMatrix .matrix-label { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+            #roleMatrix thead .role-badge { writing-mode: vertical-rl; transform: rotate(180deg); padding: .45em .3em; }
+            #roleMatrix th[scope="row"] { font-weight: 500; font-size: .85rem; }
+        }
         """;
         return getHead("nav.admins", "admins", extraStyles) + """
     <div id="main" tabindex="-1" class="content container mt-4">
@@ -9723,6 +9853,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
+
             <!-- Admins Table -->
             <div class="card">
                 <div class="card-body">
@@ -9744,6 +9875,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+            <div class="card mb-4">
+                <div class="card-header"><i class="fas fa-user-shield me-2" aria-hidden="true"></i>{{t:adm.matrixTitle}}</div>
+                <div class="card-body">
+""" + roleMatrix() + """
+                    <p class="small text-muted mt-3 mb-0">{{t:adm.matrixNote}}</p>
                 </div>
             </div>
         </div>
@@ -12093,6 +12231,34 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return d.innerHTML;
         }
 
+        // I verdetti arrivano come codici: il server e la pagina li confrontano cosi' come sono,
+        // e il testo da leggere si sceglie qui, nella lingua della pagina.
+        function updVerdetto(v) {
+            return ({
+                "IL LIVELLO E' INDIETRO": t('up.vLevelBehind'),
+                'ALLINEATO': t('up.vAligned'),
+                'LOG NON LEGGIBILE': t('up.vLogUnreadable'),
+                'CI SONO ANALISI INTERROTTE': t('up.vScansInterrupted'),
+                'NESSUNA ANALISI INTERROTTA': t('up.vNoScanInterrupted'),
+                "NESSUNA TRACCIA, MA IL LOG E' CORTO": t('up.vNoTraceShortLog'),
+                "C'E' UN COSTRUTTO NON PIU' VALIDO": t('up.vInvalidConstruct'),
+                'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE': t('up.vBehaviorDiffs'),
+                'NIENTE DA SEGNALARE': t('up.vNothingToReport'),
+                'CI SONO RIFERIMENTI CHE SI ROMPEREBBERO': t('up.vRefsWouldBreak'),
+                'NESSUN RIFERIMENTO CHE SI ROMPA': t('up.vNoRefBreaks'),
+                'NON DETERMINABILE': t('up.vUndetermined'),
+                "NON NE USA I COMANDI, MA E' UNA LIBRERIA": t('up.vLibraryOnly'),
+                'IL PANNELLO NON LO USA': t('up.vPanelDoesNotUse'),
+                'LI NOMINA, MA NON SONO I SUOI': t('up.vNamesNotTheirs'),
+                "LO USA, E NON C'E' RICAMBIO": t('up.vUsesNoSpare'),
+                'LO USA': t('up.vUses'),
+                'IN USO ADESSO': t('up.vInUseNow'),
+                'RICHIESTO': t('up.vRequired'),
+                "IL COMANDO E' SUO": t('up.vCommandIsIts'),
+                'NESSUNO LO USA': t('up.vNobodyUses')
+            })[v] || v;
+        }
+
         function updBadge(level) {
             if (level === 'ok') return '<span class="badge upd-badge-ok">OK</span>';
             // "NOTA" e' diverso da "VERIFICA": VERIFICA chiede qualcosa a chi legge, NOTA
@@ -12167,8 +12333,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else {
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.pfLine', { pkg: pf.package, version: pf.version, repo: pf.repoVersion || '?', level: pf.livello || '?' }))
                    + ' ' + escHtml(pf.livelloEsplicito ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
-                   + '<div class="alert alert-' + (pf.verdetto === 'NIENTE IN SOSPESO' ? 'success' : 'warning')
-                   + ' py-2 small mb-2"><strong>' + updEsc(pf.verdetto) + '</strong> &mdash; '
+                   + '<div class="alert alert-' + (pf.verdetto === 'ALLINEATO' ? 'success' : 'warning')
+                   + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(pf.verdetto)) + '</strong> &mdash; '
                    + updEsc(pf.spiegazione) + '</div>';
                 const cb = pf.cambi || [];
                 if (cb.length) {
@@ -12226,9 +12392,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="small text-muted">' + updEsc(rs.note || t('up.notInstalled')) + '</div>';
             } else {
                 const cls = rs.verdetto === 'NIENTE DA SEGNALARE' ? 'success'
-                          : (rs.verdetto === 'SOLO DIFFERENZE DI COMPORTAMENTO' ? 'info' : 'danger');
+                          : (rs.verdetto === 'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE' ? 'info' : 'danger');
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.fileLetti })) + '</div>'
-                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(rs.verdetto)
+                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(rs.verdetto))
                    + '</strong> &mdash; ' + updEsc(rs.spiegazione) + '</div>';
                 const is = rs.issues || [];
                 if (is.length) {
@@ -12827,7 +12993,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // "IL COMANDO E' SUO" e "NON DETERMINABILE" restano gialli: non sono un divieto,
             // ma nemmeno un via libera.
             let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
-                  + '<strong>' + updEsc(r.verdetto) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
+                  + '<strong>' + updEsc(updVerdetto(r.verdetto)) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
                   + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.nota) + '</div>'
                   + (r.percheEQui
                      ? '<div class="alert alert-secondary py-2 small mb-2"><strong>' + escHtml(t('up.whyHere')) + '</strong> '
@@ -12945,7 +13111,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const cls = r.verdetto === 'NESSUNA ANALISI INTERROTTA' ? 'success'
                       : (r.verdetto === 'CI SONO ANALISI INTERROTTE' ? 'danger'
                       : (r.verdetto === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
-            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(r.verdetto)
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(r.verdetto))
                   + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
             if (r.avvisa) {
                 h += '<div class="small text-muted mb-1">task_timeout <code>' + updEsc(r.taskTimeout)
@@ -13125,7 +13291,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       : r.verdetto === 'LO USA' ? 'warning'
                       : r.verdetto === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info'
                       : r.verdetto === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
-            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(r.verdetto)
+            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdetto(r.verdetto))
                   + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
             const lb = r.fornisceLibrerie || [];
             if (lb.length) {
@@ -13185,7 +13351,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('deep_scan', { nome: nome });
             if (!r.success) { el.innerHTML = '<span class="text-danger small">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="alert alert-' + (r.bloccante ? 'danger' : 'success') + ' py-2 small mb-1">'
-                  + '<strong>' + updEsc(r.verdetto) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
+                  + '<strong>' + updEsc(updVerdetto(r.verdetto)) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
                   + '<div class="small text-muted mb-1">' + escHtml(t('up.searchedRefs')) + ' '
                   + (r.cercati || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
 

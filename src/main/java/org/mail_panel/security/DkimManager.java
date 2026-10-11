@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import org.mail_panel.database.MailDatabase;
+import org.mail_panel.i18n.I18n;
 
 import java.io.*;
 import java.nio.file.*;
@@ -283,14 +284,14 @@ public class DkimManager {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
             if (d == null) {
-                r.success = false; r.message = "Dominio non trovato"; return r;
+                r.success = false; r.message = I18n.tr("server.dkimm.domainNotFound"); return r;
             }
             r.domain = d.domain;
             r.selector = d.dkimSelector;
             r.dnsRecordName = (d.dkimSelector == null ? "mail" : d.dkimSelector) + "._domainkey." + d.domain;
 
             if (!d.hasDkim || d.dkimPublicKey == null) {
-                r.success = false; r.message = "Nessuna chiave DKIM configurata su questo dominio";
+                r.success = false; r.message = I18n.tr("server.dkimm.noKey");
                 logEvent(d, "key_verified", d.dkimSelector, null, false, r.message);
                 return r;
             }
@@ -333,7 +334,7 @@ public class DkimManager {
             if (foundPublicKey == null) {
                 r.success = true;
                 r.match = false;
-                r.message = "Record TXT non trovato in DNS pubblico per " + r.dnsRecordName;
+                r.message = I18n.tr("server.dkimm.txtNotFound", java.util.Map.of("n", String.valueOf(r.dnsRecordName)));
                 logEvent(d, "key_verified", d.dkimSelector, null, false, r.message);
                 return r;
             }
@@ -344,16 +345,16 @@ public class DkimManager {
             r.match = expected.equals(actual);
             r.success = true;
             if (r.match) {
-                r.message = "Chiave in DNS (via " + resolverUsed + ") corrisponde ESATTAMENTE alla chiave attiva nel pannello";
+                r.message = I18n.tr("server.dkimm.keyMatches", java.util.Map.of("r", String.valueOf(resolverUsed)));
             } else {
-                r.message = "ATTENZIONE: la chiave in DNS non corrisponde a quella attiva nel pannello (potrebbe essere ancora una vecchia chiave o un valore manomesso)";
+                r.message = I18n.tr("server.dkimm.keyMismatch");
             }
             logEvent(d, "key_verified", d.dkimSelector, null, r.match, r.message);
             return r;
 
         } catch (Exception e) {
             r.success = false;
-            r.message = "Errore: " + e.getMessage();
+            r.message = I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
             return r;
         }
     }
@@ -387,8 +388,7 @@ public class DkimManager {
                         // Niente chiave vuol dire niente firma: e' il caso piu' grave e non
                         // deve nascondersi in mezzo a righe che parlano di rotazioni.
                         j.put("stato", "assente");
-                        j.put("nota", "Nel pannello non esiste una chiave DKIM per questo dominio: "
-                                + "la posta parte senza firma.");
+                        j.put("nota", I18n.tr("server.dkimm.noPanelKey"));
                         righe.put(j);
                         continue;
                     }
@@ -430,13 +430,13 @@ public class DkimManager {
                     }
                 } catch (Exception e) {
                     nonVerificabili++;
-                    j.put("stato", "incerto").put("messaggio", "errore: " + e.getMessage());
+                    j.put("stato", "incerto").put("messaggio", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
                 }
                 righe.put(j);
             }
         } catch (Exception e) {
             return new org.json.JSONObject().put("success", false)
-                    .put("error", "non riesco a leggere l'elenco dei domini: " + e.getMessage());
+                    .put("error", I18n.tr("server.dkimm.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
         r.put("domini", righe);
         r.put("senzaChiave", senzaChiave).put("nonVerificabili", nonVerificabili)
@@ -462,15 +462,15 @@ public class DkimManager {
     public ScheduleResult setRotationSchedule(int domainId, int intervalDays) {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
-            if (d == null) return new ScheduleResult(false, "Dominio non trovato", 0, null, null);
+            if (d == null) return new ScheduleResult(false, I18n.tr("server.dkimm.domainNotFound"), 0, null, null);
             int v = Math.max(0, intervalDays);
             database.setDkimRotationInterval(domainId, v);
             logEvent(d, "schedule_changed", d.dkimSelector, null, true,
-                v == 0 ? "Rotazione programmata DISATTIVATA"
-                       : "Rotazione programmata impostata ogni " + v + " giorni");
+                v == 0 ? "Scheduled rotation DISABLED"
+                       : "Scheduled rotation set every " + v + " days");
             return getRotationSchedule(domainId);
         } catch (Exception e) {
-            return new ScheduleResult(false, "Errore: " + e.getMessage(), 0, null, null);
+            return new ScheduleResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), 0, null, null);
         }
     }
 
@@ -478,7 +478,7 @@ public class DkimManager {
     public ScheduleResult getRotationSchedule(int domainId) {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
-            if (d == null) return new ScheduleResult(false, "Dominio non trovato", 0, null, null);
+            if (d == null) return new ScheduleResult(false, I18n.tr("server.dkimm.domainNotFound"), 0, null, null);
             ScheduleResult r = new ScheduleResult(true, "OK", d.dkimRotationIntervalDays, d.dkimLastRotationAt, null);
             if (d.dkimRotationIntervalDays > 0 && d.dkimLastRotationAt != null) {
                 long nextMs = d.dkimLastRotationAt.getTime() + (long) d.dkimRotationIntervalDays * 24L * 60L * 60L * 1000L;
@@ -489,7 +489,7 @@ public class DkimManager {
             }
             return r;
         } catch (Exception e) {
-            return new ScheduleResult(false, "Errore: " + e.getMessage(), 0, null, null);
+            return new ScheduleResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), 0, null, null);
         }
     }
 
@@ -522,22 +522,22 @@ public class DkimManager {
         OrphanScanResult result = new OrphanScanResult();
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
-            if (d == null) { result.success = false; result.message = "Dominio non trovato"; return result; }
+            if (d == null) { result.success = false; result.message = I18n.tr("server.dkimm.domainNotFound"); return result; }
             result.domain = d.domain;
             result.currentSelector = d.dkimSelector;
             result.pendingSelector = d.dkimPendingSelector;
             result.previousSelector = d.dkimPreviousSelector;
 
-            if (cloudflare == null) { result.success = false; result.message = "CloudflareManager non disponibile"; return result; }
+            if (cloudflare == null) { result.success = false; result.message = I18n.tr("server.dkimm.noCfManager"); return result; }
             MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
-            if (acct == null) { result.success = false; result.message = "Nessun account Cloudflare assegnato a questo dominio"; return result; }
+            if (acct == null) { result.success = false; result.message = I18n.tr("server.dkimm.noAccount"); return result; }
             result.cloudflareAccountLabel = acct.label;
 
             // Trova lo zone_id
             String zoneId = d.dkimDnsZoneId;
             if (zoneId == null) {
                 CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
-                if (!zl.found) { result.success = false; result.message = "Zona DNS non trovata: " + zl.error; return result; }
+                if (!zl.found) { result.success = false; result.message = I18n.tr("server.dkimm.zoneNotFound", java.util.Map.of("e", String.valueOf(zl.error))); return result; }
                 zoneId = zl.zoneId;
             }
             result.zoneId = zoneId;
@@ -597,7 +597,7 @@ public class DkimManager {
             return result;
         } catch (Exception e) {
             result.success = false;
-            result.message = "Errore: " + e.getMessage();
+            result.message = I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
             return result;
         }
     }
@@ -609,10 +609,10 @@ public class DkimManager {
     public RotationActionResult deleteDkimRecordById(int domainId, String recordId) {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
-            if (d == null) return new RotationActionResult(false, "Dominio non trovato");
-            if (cloudflare == null) return new RotationActionResult(false, "CloudflareManager non disponibile");
+            if (d == null) return new RotationActionResult(false, I18n.tr("server.dkimm.domainNotFound"));
+            if (cloudflare == null) return new RotationActionResult(false, I18n.tr("server.dkimm.noCfManager"));
             MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
-            if (acct == null) return new RotationActionResult(false, "Nessun account Cloudflare assegnato");
+            if (acct == null) return new RotationActionResult(false, I18n.tr("server.dkimm.noAccountShort"));
 
             // ENFORCEMENT GRACE PERIOD per cancellazione manuale di record orfani.
             // Scansiona prima i record per identificare quello da cancellare e
@@ -623,21 +623,13 @@ public class DkimManager {
                     if (recordId.equals(entry.recordId)) {
                         // Protezione 1: blocca cancellazione di record current/pending/previous
                         if (entry.isCurrent || entry.isPending || entry.isPrevious) {
-                            return new RotationActionResult(false,
-                                "Operazione bloccata: il record con selector '" + entry.selector +
-                                "' è una chiave " + (entry.isCurrent ? "ATTIVA" : entry.isPending ? "PENDING" : "PREVIOUS") +
-                                " — non rimovibile.");
+                            return new RotationActionResult(false, I18n.tr("server.dkimm.blockedActive", java.util.Map.of("s", String.valueOf(entry.selector), "stato", String.valueOf(entry.isCurrent ? I18n.tr("server.dkimm.stateActive") : entry.isPending ? "PENDING" : "PREVIOUS"))));
                         }
                         // Protezione 2: blocca cancellazione di orfani ancora in grace period
                         if (entry.inGracePeriod && entry.gracePeriodEndsAt != null) {
                             long remainingMs = entry.gracePeriodEndsAt.getTime() - System.currentTimeMillis();
                             long remainingDays = (remainingMs + 24L * 60L * 60L * 1000L - 1) / (24L * 60L * 60L * 1000L);
-                            return new RotationActionResult(false,
-                                "Operazione bloccata: il selector '" + entry.selector +
-                                "' è stato disattivato meno di " + DkimRotationScheduler.GRACE_PERIOD_DAYS +
-                                " giorni fa e il suo record DNS è ancora in grace period. " +
-                                "Rimuoverlo ora causerebbe DKIM-fail su email in transito. " +
-                                "Riprova tra circa " + remainingDays + " giorn" + (remainingDays == 1 ? "o" : "i") + ".");
+                            return new RotationActionResult(false, I18n.tr("server.dkimm.blockedGrace", java.util.Map.of("s", String.valueOf(entry.selector), "g", String.valueOf(DkimRotationScheduler.GRACE_PERIOD_DAYS), "n", String.valueOf(remainingDays))));
                         }
                         break;
                     }
@@ -647,16 +639,16 @@ public class DkimManager {
             String zoneId = d.dkimDnsZoneId;
             if (zoneId == null) {
                 CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
-                if (!zl.found) return new RotationActionResult(false, "Zona DNS non trovata: " + zl.error);
+                if (!zl.found) return new RotationActionResult(false, I18n.tr("server.dkimm.zoneNotFound", java.util.Map.of("e", String.valueOf(zl.error))));
                 zoneId = zl.zoneId;
             }
             CloudflareManager.RecordOp op = cloudflare.deleteRecord(acct.apiToken, zoneId, recordId);
-            if (!op.success) return new RotationActionResult(false, "Errore Cloudflare: " + op.error);
+            if (!op.success) return new RotationActionResult(false, I18n.tr("server.dkimm.cfError", java.util.Map.of("e", String.valueOf(op.error))));
             logEvent(d, "orphan_record_deleted", null, null, true,
-                "Record DKIM orfano cancellato da Cloudflare (id " + recordId + ", account '" + acct.label + "')");
-            return new RotationActionResult(true, "Record cancellato con successo.");
+                "Orphan DKIM record deleted from Cloudflare (id " + recordId + ", account '" + acct.label + "')");
+            return new RotationActionResult(true, I18n.tr("server.dkimm.recordDeleted"));
         } catch (Exception e) {
-            return new RotationActionResult(false, "Errore: " + e.getMessage());
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -714,15 +706,15 @@ public class DkimManager {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
             if (d == null) {
-                return new RotationStartResult(false, null, null, null, "Dominio non trovato");
+                return new RotationStartResult(false, null, null, null, I18n.tr("server.dkimm.domainNotFound"));
             }
             if (!d.hasDkim) {
                 return new RotationStartResult(false, null, null, null,
-                    "Il dominio non ha ancora DKIM configurato: usa Genera DKIM (prima rotazione non applicabile)");
+                    I18n.tr("server.dkimm.noDkimYet"));
             }
             if (d.dkimRotationState != null) {
                 return new RotationStartResult(false, null, null, null,
-                    "Rotazione già in corso (stato: " + d.dkimRotationState + "). Annullala o completala prima di avviarne un'altra.");
+                    I18n.tr("server.dkimm.inProgress", java.util.Map.of("s", String.valueOf(d.dkimRotationState))));
             }
 
             // Nuovo selector con suffisso "rYYYYMMDD" (univoco, leggibile, ordinato)
@@ -761,8 +753,8 @@ public class DkimManager {
 
             // Log: rotazione avviata
             logEvent(d, "rotation_started", newSelector, automatic ? "automatic" : "manual", true,
-                "Nuova chiave RSA " + RSA_KEY_SIZE + " generata. Selector pending: " + newSelector
-                + ". Vecchio selector attivo: " + d.dkimSelector);
+                "New RSA " + RSA_KEY_SIZE + " key generated. Pending selector: " + newSelector
+                + ". Old active selector: " + d.dkimSelector);
 
             // FASE B: se richiesto e il dominio ha un account CF assegnato, pubblica subito il record
             if (automatic && cloudflare != null) {
@@ -770,29 +762,26 @@ public class DkimManager {
                     MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
                     if (acct == null) {
                         return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
-                            "Chiave generata, ma nessun account Cloudflare assegnato a questo dominio. Pubblica il record TXT manualmente.");
+                            I18n.tr("server.dkimm.genNoAccount"));
                     }
                     CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
                     if (!zl.found) {
                         return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
-                            "Chiave generata, ma l'account Cloudflare '" + acct.label + "' non vede la zona: " + zl.error
-                            + ". Pubblica il record TXT manualmente.");
+                            I18n.tr("server.dkimm.genNoZone", java.util.Map.of("a", String.valueOf(acct.label), "e", String.valueOf(zl.error))));
                     }
                     CloudflareManager.RecordOp op = cloudflare.createTxtRecord(acct.apiToken, zl.zoneId, dnsRecordName, dnsRecordValue, 300);
                     if (!op.success) {
                         return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
-                            "Chiave generata, ma errore Cloudflare ('" + acct.label + "'): " + op.error
-                            + ". Pubblica il record TXT manualmente.");
+                            I18n.tr("server.dkimm.genCfError", java.util.Map.of("a", String.valueOf(acct.label), "e", String.valueOf(op.error))));
                     }
                     // Record creato: salva zoneId + recordId e passa a stato "propagated"
                     database.setDkimPendingCloudflareIds(domainId, zl.zoneId, op.recordId);
                     database.setDkimRotationState(domainId, "propagated");
                     logEvent(d, "dns_published", newSelector, "automatic", true,
-                        "Record TXT creato in Cloudflare (zone " + zl.zoneName + ", record id " + op.recordId + "). Stato → propagated.");
+                        "TXT record created in Cloudflare (zone " + zl.zoneName + ", record id " + op.recordId + "). State → propagated.");
                 } catch (Exception cfErr) {
                     return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
-                        "Chiave generata, ma errore Cloudflare: " + cfErr.getMessage()
-                        + ". Pubblica il record TXT manualmente.");
+                        I18n.tr("server.dkimm.genCfException", java.util.Map.of("e", String.valueOf(cfErr.getMessage()))));
                 }
             }
 
@@ -814,10 +803,10 @@ public class DkimManager {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
             if (d == null) {
-                return new PropagationCheckResult(false, false, "Dominio non trovato", null);
+                return new PropagationCheckResult(false, false, I18n.tr("server.dkimm.domainNotFound"), null);
             }
             if (d.dkimPendingSelector == null || d.dkimPendingPublicKey == null) {
-                return new PropagationCheckResult(false, false, "Nessuna rotazione in corso", null);
+                return new PropagationCheckResult(false, false, I18n.tr("server.dkimm.noRotation"), null);
             }
 
             String recordName = d.dkimPendingSelector + "._domainkey." + d.domain;
@@ -859,19 +848,19 @@ public class DkimManager {
                 if ("pending_dns".equals(d.dkimRotationState)) {
                     database.setDkimRotationState(domainId, "propagated");
                     logEvent(d, "dns_propagated", d.dkimPendingSelector, null, true,
-                        "Record TXT pending verificato in DNS pubblico (1.1.1.1/8.8.8.8). Stato → propagated.");
+                        "Pending TXT record verified in public DNS (1.1.1.1/8.8.8.8). State → propagated.");
                 }
                 return new PropagationCheckResult(true, true,
-                    "Record DNS propagato e corrispondente alla chiave pending", lastRaw);
+                    I18n.tr("server.dkimm.propagated"), lastRaw);
             } else {
                 return new PropagationCheckResult(true, false,
                     lastRaw.isEmpty()
-                        ? "Record DNS non ancora trovato — il provider DNS potrebbe non averlo ancora pubblicato"
-                        : "Record trovato ma non corrisponde alla chiave pending — verifica il valore TXT",
+                        ? I18n.tr("server.dkimm.notYetFound")
+                        : I18n.tr("server.dkimm.foundMismatch"),
                     lastRaw);
             }
         } catch (Exception e) {
-            return new PropagationCheckResult(false, false, "Errore: " + e.getMessage(), null);
+            return new PropagationCheckResult(false, false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -886,13 +875,13 @@ public class DkimManager {
     public RotationActionResult activatePending(int domainId, boolean force) {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
-            if (d == null) return new RotationActionResult(false, "Dominio non trovato");
+            if (d == null) return new RotationActionResult(false, I18n.tr("server.dkimm.domainNotFound"));
             if (d.dkimPendingSelector == null) {
-                return new RotationActionResult(false, "Nessuna rotazione in corso");
+                return new RotationActionResult(false, I18n.tr("server.dkimm.noRotation"));
             }
             if (!force && !"propagated".equals(d.dkimRotationState)) {
                 return new RotationActionResult(false,
-                    "Il record DNS non risulta ancora propagato. Esegui prima la verifica, oppure forza l'attivazione.");
+                    I18n.tr("server.dkimm.notPropagated"));
             }
 
             String oldSelector = d.dkimSelector;
@@ -908,14 +897,12 @@ public class DkimManager {
             updateRspamdConfig();
 
             logEventWithPrevious(d, "key_activated", newSelector, oldSelector, force ? "forced" : null, true,
-                "Chiave promossa: " + oldSelector + " → " + newSelector + ". Rspamd ricaricato. Vecchia chiave conservata per grace period.");
+                "Key promoted: " + oldSelector + " → " + newSelector + ". Rspamd reloaded. Old key kept for the grace period.");
 
             return new RotationActionResult(true,
-                "Chiave attivata. Le nuove email saranno firmate con il selector " + newSelector
-                    + ". La vecchia chiave (" + oldSelector + ") resta in DNS durante il grace period "
-                    + "(consigliato: 7 giorni) per validare le mail già spedite.");
+                I18n.tr("server.dkimm.activated", java.util.Map.of("nuovo", String.valueOf(newSelector), "vecchio", String.valueOf(oldSelector))));
         } catch (Exception e) {
-            return new RotationActionResult(false, "Errore: " + e.getMessage());
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -927,9 +914,9 @@ public class DkimManager {
     public RotationActionResult completeRotation(int domainId) {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
-            if (d == null) return new RotationActionResult(false, "Dominio non trovato");
+            if (d == null) return new RotationActionResult(false, I18n.tr("server.dkimm.domainNotFound"));
             if (d.dkimPreviousSelector == null) {
-                return new RotationActionResult(false, "Nessuna chiave precedente da rimuovere");
+                return new RotationActionResult(false, I18n.tr("server.dkimm.noPrevious"));
             }
 
             // ENFORCEMENT GRACE PERIOD (server-side, non bypassabile dalla UI).
@@ -944,12 +931,10 @@ public class DkimManager {
                     long remainingDays = (remainingMs + 24L * 60L * 60L * 1000L - 1) / (24L * 60L * 60L * 1000L);
                     long remainingHours = (remainingMs + 60L * 60L * 1000L - 1) / (60L * 60L * 1000L);
                     String remainingText = remainingDays >= 1
-                        ? (remainingDays + " giorn" + (remainingDays == 1 ? "o" : "i"))
-                        : (remainingHours + " or" + (remainingHours == 1 ? "a" : "e"));
+                        ? (remainingDays == 1 ? I18n.tr("server.dkimm.days.one") : I18n.tr("server.dkimm.days.other", java.util.Map.of("n", String.valueOf(remainingDays))))
+                        : (remainingHours == 1 ? I18n.tr("server.dkimm.hours.one") : I18n.tr("server.dkimm.hours.other", java.util.Map.of("n", String.valueOf(remainingHours))));
                     return new RotationActionResult(false,
-                        "Grace period non ancora terminato. La rotazione non può essere completata prima di " + remainingText + ". " +
-                        "Questo è obbligatorio: rimuovere la vecchia chiave troppo presto causerebbe DKIM-fail su email in transito firmate con la vecchia chiave. " +
-                        "Il completamento avverrà automaticamente al termine.");
+                        I18n.tr("server.dkimm.graceNotOver", java.util.Map.of("t", String.valueOf(remainingText))));
                 }
             }
 
@@ -991,10 +976,10 @@ public class DkimManager {
                         if (recordId != null) {
                             CloudflareManager.RecordOp op = cloudflare.deleteRecord(acct.apiToken, zoneId, recordId);
                             cfNote = op.success
-                                ? " Record DNS '" + prevRecordName + "' rimosso automaticamente via Cloudflare (account '" + acct.label + "')."
-                                : " Avviso: cancellazione Cloudflare fallita (" + op.error + "); rimuovi il record manualmente.";
+                                ? " " + I18n.tr("server.dkimm.cfRemoved", java.util.Map.of("n", String.valueOf(prevRecordName), "a", String.valueOf(acct.label)))
+                                : " " + I18n.tr("server.dkimm.cfRemoveFailed", java.util.Map.of("e", String.valueOf(op.error)));
                         } else {
-                            cfNote = " Nota: record DNS '" + prevRecordName + "' non trovato in Cloudflare — probabilmente è già stato rimosso o non era mai esistito.";
+                            cfNote = " " + I18n.tr("server.dkimm.cfNotFound", java.util.Map.of("n", String.valueOf(prevRecordName)));
                         }
                     }
                 }
@@ -1004,15 +989,14 @@ public class DkimManager {
             database.clearDkimPrevious(domainId);
 
             logEvent(d, "rotation_completed", d.dkimSelector, null, true,
-                "Vecchia chiave (" + prevSelector + ") rimossa dal pannello." + cfNote);
+                "Old key (" + prevSelector + ") removed from the panel." + cfNote);
 
             return new RotationActionResult(true,
-                "Rotazione completata." + (cfNote.isEmpty()
-                    ? " Puoi ora rimuovere il record DNS "
-                        + prevRecordName + " (vecchia chiave)."
+                I18n.tr("server.dkimm.completed") + (cfNote.isEmpty()
+                    ? " " + I18n.tr("server.dkimm.removeOld", java.util.Map.of("n", String.valueOf(prevRecordName)))
                     : cfNote));
         } catch (Exception e) {
-            return new RotationActionResult(false, "Errore: " + e.getMessage());
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -1024,13 +1008,13 @@ public class DkimManager {
     public RotationActionResult cancelRotation(int domainId) {
         try {
             MailDatabase.Domain d = database.getDomain(domainId);
-            if (d == null) return new RotationActionResult(false, "Dominio non trovato");
+            if (d == null) return new RotationActionResult(false, I18n.tr("server.dkimm.domainNotFound"));
             if (d.dkimPendingSelector == null) {
-                return new RotationActionResult(false, "Nessuna rotazione da annullare");
+                return new RotationActionResult(false, I18n.tr("server.dkimm.nothingToCancel"));
             }
             if ("active_grace".equals(d.dkimRotationState)) {
                 return new RotationActionResult(false,
-                    "La rotazione è già stata attivata. Per finalizzarla usa 'Completa rotazione'.");
+                    I18n.tr("server.dkimm.alreadyActivated"));
             }
 
             String pendingSelector = d.dkimPendingSelector;
@@ -1066,8 +1050,8 @@ public class DkimManager {
                         if (recordId != null) {
                             CloudflareManager.RecordOp op = cloudflare.deleteRecord(acct.apiToken, zoneId, recordId);
                             cfNote = op.success
-                                ? " Record DNS '" + pendingRecordName + "' rimosso automaticamente via Cloudflare (account '" + acct.label + "')."
-                                : " Avviso: cancellazione Cloudflare fallita (" + op.error + "); rimuovi il record manualmente.";
+                                ? " " + I18n.tr("server.dkimm.cfRemoved", java.util.Map.of("n", String.valueOf(pendingRecordName), "a", String.valueOf(acct.label)))
+                                : " " + I18n.tr("server.dkimm.cfRemoveFailed", java.util.Map.of("e", String.valueOf(op.error)));
                         }
                     }
                 }
@@ -1076,15 +1060,14 @@ public class DkimManager {
             database.clearDkimPending(domainId);
 
             logEvent(d, "rotation_cancelled", pendingSelector, null, true,
-                "Chiave pending eliminata prima dell'attivazione." + cfNote);
+                "Pending key deleted before activation." + cfNote);
 
             return new RotationActionResult(true,
-                "Rotazione annullata." + (cfNote.isEmpty()
-                    ? " Puoi rimuovere il record DNS "
-                        + pendingRecordName + " (chiave non più necessaria)."
+                I18n.tr("server.dkimm.cancelled") + (cfNote.isEmpty()
+                    ? " " + I18n.tr("server.dkimm.removePending", java.util.Map.of("n", String.valueOf(pendingRecordName)))
                     : cfNote));
         } catch (Exception e) {
-            return new RotationActionResult(false, "Errore: " + e.getMessage());
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
     }
 

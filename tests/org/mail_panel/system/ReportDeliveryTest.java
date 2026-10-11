@@ -268,7 +268,7 @@ public class ReportDeliveryTest {
         vero("solo mailwrapper disponibile: errore, nessun ripiego",
             !s.optBoolean("success") && s.optString("error").contains("mailwrapper"));
         s = RapportoPeriodico.sceltaSendmail(fermo.toString(), nessuno, mw.toString());
-        vero("non eseguibile e inesistente: errore", !s.optBoolean("success") && s.optString("error").contains("non c'e'"));
+        vero("non eseguibile e inesistente: errore", !s.optBoolean("success") && s.optString("error").contains("non c'è"));
         vero("hard link a mailwrapper: riconosciuto", RapportoPeriodico.nonEPostfix(fisico.toString(), mw.toString()) != null);
         vero("un sendmail vero: accettato", RapportoPeriodico.nonEPostfix(postfix.toString(), mw.toString()) == null);
         vero("mailwrapper assente (non FreeBSD): non blocca",

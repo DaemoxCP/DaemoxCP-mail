@@ -90,22 +90,22 @@ public final class InputValidator {
      * Da usare come gate prima di mettere una stringa in un comando shell.
      */
     public static String requireHostname(String s) {
-        if (!isValidHostname(s)) throw new IllegalArgumentException("Hostname non valido: " + s);
+        if (!isValidHostname(s)) throw new IllegalArgumentException("Invalid hostname: " + s);
         return s;
     }
 
     public static String requireIp(String s) {
-        if (!isValidIp(s)) throw new IllegalArgumentException("IP non valido: " + s);
+        if (!isValidIp(s)) throw new IllegalArgumentException("Invalid IP: " + s);
         return s;
     }
 
     public static String requireJailName(String s) {
-        if (!isValidJailName(s)) throw new IllegalArgumentException("Jail name non valido: " + s);
+        if (!isValidJailName(s)) throw new IllegalArgumentException("Invalid jail name: " + s);
         return s;
     }
 
     public static String requireSqlIdentifier(String s) {
-        if (!isValidSqlIdentifier(s)) throw new IllegalArgumentException("SQL identifier non valido: " + s);
+        if (!isValidSqlIdentifier(s)) throw new IllegalArgumentException("Invalid SQL identifier: " + s);
         return s;
     }
 }

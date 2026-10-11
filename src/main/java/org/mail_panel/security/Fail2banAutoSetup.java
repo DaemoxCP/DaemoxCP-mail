@@ -57,7 +57,7 @@ public final class Fail2banAutoSetup {
             }
         } catch (Throwable t) {
             // Non propagare mai — il setup non deve far crashare il pannello
-            LOGGER.warning("[Fail2banAutoSetup] Setup non riuscito: " + t.getMessage());
+            LOGGER.warning("[Fail2banAutoSetup] Setup failed: " + t.getMessage());
         }
     }
 
@@ -81,7 +81,7 @@ public final class Fail2banAutoSetup {
                     Files.setPosixFilePermissions(file,
                         java.nio.file.attribute.PosixFilePermissions.fromString("rw-r-----"));
                 } catch (Exception ignored) {}
-                LOGGER.info("[Fail2banAutoSetup] Creato " + Fail2banManager.PERMABAN_FILE);
+                LOGGER.info("[Fail2banAutoSetup] Created " + Fail2banManager.PERMABAN_FILE);
             }
 
             // 2. Anchor / tabella in pf.conf
@@ -117,7 +117,7 @@ public final class Fail2banAutoSetup {
                     String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                     tp.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
                     if (tp.exitValue() != 0) {
-                        LOGGER.warning("[Fail2banAutoSetup] pf.conf permaban check fallito, NON applicato: " + testOut);
+                        LOGGER.warning("[Fail2banAutoSetup] pf.conf permaban check failed, NOT applied: " + testOut);
                         Files.deleteIfExists(tmp);
                     } else {
                         Files.move(tmp, pfConf, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
@@ -130,7 +130,7 @@ public final class Fail2banAutoSetup {
                             Process lp = loadPb.start();
                             lp.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
                         } catch (Exception ignored) {}
-                        LOGGER.info("[Fail2banAutoSetup] Anchor permaban aggiunto a /etc/pf.conf");
+                        LOGGER.info("[Fail2banAutoSetup] Permaban anchor added to /etc/pf.conf");
                     }
                 }
             }
@@ -147,7 +147,7 @@ public final class Fail2banAutoSetup {
             } catch (Exception ignored) {}
 
         } catch (Exception e) {
-            LOGGER.warning("[Fail2banAutoSetup] ensurePermabanSetup fallito: " + e.getMessage());
+            LOGGER.warning("[Fail2banAutoSetup] ensurePermabanSetup failed: " + e.getMessage());
         }
     }
 
@@ -161,7 +161,7 @@ public final class Fail2banAutoSetup {
                     Files.createDirectories(parent);
                 }
                 Files.createFile(logPath);
-                LOGGER.info("[Fail2banAutoSetup] Creato " + LOG_FILE);
+                LOGGER.info("[Fail2banAutoSetup] Created " + LOG_FILE);
             }
             // Setta sempre i perms (640 = rw-r-----)
             try {
@@ -174,7 +174,7 @@ public final class Fail2banAutoSetup {
                 // FS non POSIX — ignora
             }
         } catch (IOException e) {
-            LOGGER.warning("[Fail2banAutoSetup] Impossibile creare " + LOG_FILE + ": " + e.getMessage());
+            LOGGER.warning("[Fail2banAutoSetup] Cannot create " + LOG_FILE + ": " + e.getMessage());
         }
     }
 
@@ -183,7 +183,7 @@ public final class Fail2banAutoSetup {
         try {
             Path filterDir = Paths.get(FILTER_DIR);
             if (!Files.isDirectory(filterDir)) {
-                LOGGER.info("[Fail2banAutoSetup] " + FILTER_DIR + " non esiste — Fail2ban non installato? Salto.");
+                LOGGER.info("[Fail2banAutoSetup] " + FILTER_DIR + " does not exist — Fail2ban not installed? Skipping.");
                 return false;
             }
             Path filterPath = Paths.get(FILTER_FILE);
@@ -192,10 +192,10 @@ public final class Fail2banAutoSetup {
             }
             Files.writeString(filterPath, FILTER_CONTENT, StandardCharsets.UTF_8);
             try { Files.setPosixFilePermissions(filterPath, PosixFilePermissions.fromString("rw-r--r--")); } catch (Exception ignored) {}
-            LOGGER.info("[Fail2banAutoSetup] Scritto " + FILTER_FILE);
+            LOGGER.info("[Fail2banAutoSetup] Wrote " + FILTER_FILE);
             return true;
         } catch (IOException e) {
-            LOGGER.warning("[Fail2banAutoSetup] Impossibile scrivere filter: " + e.getMessage());
+            LOGGER.warning("[Fail2banAutoSetup] Cannot write filter: " + e.getMessage());
             return false;
         }
     }
@@ -220,7 +220,7 @@ public final class Fail2banAutoSetup {
             if (!Files.exists(jailPath)) {
                 Path parent = jailPath.getParent();
                 if (parent != null && !Files.exists(parent)) {
-                    LOGGER.info("[Fail2banAutoSetup] " + parent + " non esiste — Fail2ban non installato? Salto jail.");
+                    LOGGER.info("[Fail2banAutoSetup] " + parent + " does not exist — Fail2ban not installed? Skipping jail.");
                     return false;
                 }
                 Files.writeString(jailPath, JAIL_BLOCK, StandardCharsets.UTF_8);
@@ -229,10 +229,10 @@ public final class Fail2banAutoSetup {
                     StandardOpenOption.APPEND);
             }
             try { Files.setPosixFilePermissions(jailPath, PosixFilePermissions.fromString("rw-r--r--")); } catch (Exception ignored) {}
-            LOGGER.info("[Fail2banAutoSetup] Aggiunta jail [mail-panel-auth] a " + JAIL_LOCAL);
+            LOGGER.info("[Fail2banAutoSetup] Added jail [mail-panel-auth] to " + JAIL_LOCAL);
             return true;
         } catch (IOException e) {
-            LOGGER.warning("[Fail2banAutoSetup] Impossibile modificare jail.local: " + e.getMessage());
+            LOGGER.warning("[Fail2banAutoSetup] Cannot modify jail.local: " + e.getMessage());
             return false;
         }
     }
@@ -247,9 +247,9 @@ public final class Fail2banAutoSetup {
             String content = "# Log rotation per mail-panel auth log (auto-generato dal pannello)\n"
                 + "/var/log/mail-panel-auth.log    root:wheel    640    7    1024    *    JC\n";
             Files.writeString(conf, content, StandardCharsets.UTF_8);
-            LOGGER.info("[Fail2banAutoSetup] Scritto " + NEWSYSLOG_CONF);
+            LOGGER.info("[Fail2banAutoSetup] Wrote " + NEWSYSLOG_CONF);
         } catch (IOException e) {
-            LOGGER.warning("[Fail2banAutoSetup] Impossibile scrivere newsyslog conf: " + e.getMessage());
+            LOGGER.warning("[Fail2banAutoSetup] Cannot write newsyslog conf: " + e.getMessage());
         }
     }
 
@@ -257,7 +257,7 @@ public final class Fail2banAutoSetup {
     private static void reloadFail2ban() {
         try {
             if (!Files.isExecutable(Paths.get(FAIL2BAN_CLIENT))) {
-                LOGGER.info("[Fail2banAutoSetup] " + FAIL2BAN_CLIENT + " non eseguibile — salto reload");
+                LOGGER.info("[Fail2banAutoSetup] " + FAIL2BAN_CLIENT + " not executable — skipping reload");
                 return;
             }
             // TODO: migrate to Shell.run when touched
@@ -278,7 +278,7 @@ public final class Fail2banAutoSetup {
                 LOGGER.warning("[Fail2banAutoSetup] Reload Fail2ban exit=" + exit);
             }
         } catch (Exception e) {
-            LOGGER.warning("[Fail2banAutoSetup] Reload Fail2ban fallito: " + e.getMessage());
+            LOGGER.warning("[Fail2banAutoSetup] Fail2ban reload failed: " + e.getMessage());
         }
     }
 

@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.database.MailDatabase;
 
@@ -56,20 +57,20 @@ public class CloudflareManager {
     public AddAccountResult addAccount(String label, String email, String apiToken) {
         try {
             if (label == null || label.isBlank()) {
-                return new AddAccountResult(false, -1, "Label richiesta");
+                return new AddAccountResult(false, -1, I18n.tr("server.cfm.labelRequired"));
             }
             if (apiToken == null || apiToken.isBlank()) {
-                return new AddAccountResult(false, -1, "Token richiesto");
+                return new AddAccountResult(false, -1, I18n.tr("server.cfm.tokenRequired"));
             }
             TokenCheck tc = verifyToken(apiToken);
             if (!tc.valid) {
-                return new AddAccountResult(false, -1, "Token non valido: " + tc.message);
+                return new AddAccountResult(false, -1, I18n.tr("server.cfm.tokenInvalid", java.util.Map.of("m", String.valueOf(tc.message))));
             }
             int newId = database.addCloudflareAccount(label.trim(),
                 email == null ? null : email.trim(), apiToken.trim());
-            return new AddAccountResult(true, newId, "Account aggiunto e token verificato");
+            return new AddAccountResult(true, newId, I18n.tr("server.cfm.added"));
         } catch (Exception e) {
-            return new AddAccountResult(false, -1, "Errore: " + e.getMessage());
+            return new AddAccountResult(false, -1, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -83,7 +84,7 @@ public class CloudflareManager {
     public AddAccountResult updateAccount(int id, String label, String email, String newToken) {
         try {
             MailDatabase.CloudflareAccount a = database.getCloudflareAccount(id);
-            if (a == null) return new AddAccountResult(false, id, "Account non trovato");
+            if (a == null) return new AddAccountResult(false, id, I18n.tr("server.cfm.notFound"));
 
             boolean labelOrEmailUpdated = false;
             if (label != null && !label.isBlank()) {
@@ -94,7 +95,7 @@ public class CloudflareManager {
             // Token: caso null/vuoto → nessun cambio token, ok
             if (newToken == null || newToken.isBlank()) {
                 return new AddAccountResult(true, id,
-                    labelOrEmailUpdated ? "Etichetta/email aggiornate. Token invariato." : "Nessuna modifica.");
+                    labelOrEmailUpdated ? I18n.tr("server.cfm.labelUpdated") : I18n.tr("server.cfm.noChange"));
             }
 
             String trimmed = newToken.trim();
@@ -103,20 +104,20 @@ public class CloudflareManager {
             if (a.apiToken != null && trimmed.equals(a.apiToken)) {
                 return new AddAccountResult(true, id,
                     labelOrEmailUpdated
-                        ? "Il token inserito è IDENTICO a quello già salvato — token invariato. Etichetta/email aggiornate."
-                        : "Il token inserito è IDENTICO a quello già salvato — nessuna modifica effettuata.");
+                        ? I18n.tr("server.cfm.sameTokenLabel")
+                        : I18n.tr("server.cfm.sameToken"));
             }
 
             // Token davvero nuovo → verifica e salva
             TokenCheck tc = verifyToken(trimmed);
-            if (!tc.valid) return new AddAccountResult(false, id, "Token non valido: " + tc.message);
+            if (!tc.valid) return new AddAccountResult(false, id, I18n.tr("server.cfm.tokenInvalid", java.util.Map.of("m", String.valueOf(tc.message))));
             database.updateCloudflareAccountToken(id, trimmed);
             return new AddAccountResult(true, id,
-                labelOrEmailUpdated ? "Account aggiornato (etichetta/email + nuovo token verificato e salvato)."
-                                    : "Nuovo token verificato e salvato.");
+                labelOrEmailUpdated ? I18n.tr("server.cfm.updatedAll")
+                                    : I18n.tr("server.cfm.tokenSaved"));
 
         } catch (Exception e) {
-            return new AddAccountResult(false, id, "Errore: " + e.getMessage());
+            return new AddAccountResult(false, id, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -155,9 +156,9 @@ public class CloudflareManager {
             if (!"active".equalsIgnoreCase(status)) {
                 return new TokenCheck(false, "Token status: " + status, status);
             }
-            return new TokenCheck(true, "Token attivo e valido", status);
+            return new TokenCheck(true, I18n.tr("server.cfm.tokenActive"), status);
         } catch (Exception e) {
-            return new TokenCheck(false, "Errore: " + e.getMessage(), null);
+            return new TokenCheck(false, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))), null);
         }
     }
 
@@ -167,7 +168,7 @@ public class CloudflareManager {
      */
     public ZoneLookup findZone(String token, String domain) {
         try {
-            if (token == null || token.isBlank()) return new ZoneLookup(false, null, null, "Token non fornito");
+            if (token == null || token.isBlank()) return new ZoneLookup(false, null, null, I18n.tr("server.cfm.noToken"));
 
             String candidate = domain;
             while (candidate != null && candidate.contains(".")) {
@@ -187,9 +188,9 @@ public class CloudflareManager {
                 if (dot < 0) break;
                 candidate = candidate.substring(dot + 1);
             }
-            return new ZoneLookup(false, null, null, "Nessuna zona attiva trovata per " + domain + " su questo account Cloudflare");
+            return new ZoneLookup(false, null, null, I18n.tr("server.cfm.noZone", java.util.Map.of("d", String.valueOf(domain))));
         } catch (Exception e) {
-            return new ZoneLookup(false, null, null, "Errore: " + e.getMessage());
+            return new ZoneLookup(false, null, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -213,7 +214,7 @@ public class CloudflareManager {
             }
             return new RecordOp(false, null, extractErrorMessage(body));
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -256,7 +257,7 @@ public class CloudflareManager {
      */
     public RecordOp findTxtRecord(String token, String zoneId, String name) {
         try {
-            if (token == null || token.isBlank()) return new RecordOp(false, null, "Token non fornito");
+            if (token == null || token.isBlank()) return new RecordOp(false, null, I18n.tr("server.cfm.noToken"));
             String path = "/zones/" + zoneId + "/dns_records?type=TXT&name="
                 + URLEncoder.encode(name, StandardCharsets.UTF_8);
             HttpResponse<String> resp = call("GET", path, token, null);
@@ -270,7 +271,7 @@ public class CloudflareManager {
             }
             return new RecordOp(false, null, "not found");
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -343,7 +344,7 @@ public class CloudflareManager {
             payload.put("comment", "Creato dal pannello di posta");
             return esito(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -369,7 +370,7 @@ public class CloudflareManager {
             payload.put("comment", "Creato dal pannello di posta");
             return esito(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -393,7 +394,7 @@ public class CloudflareManager {
             return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -414,7 +415,7 @@ public class CloudflareManager {
             return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -428,7 +429,7 @@ public class CloudflareManager {
             return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -443,7 +444,7 @@ public class CloudflareManager {
             return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -535,7 +536,7 @@ public class CloudflareManager {
             }
             return new RecordOp(false, null, extractErrorMessage(body));
         } catch (Exception e) {
-            return new RecordOp(false, null, "Errore: " + e.getMessage());
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -563,9 +564,9 @@ public class CloudflareManager {
         JSONArray errors = body.optJSONArray("errors");
         if (errors != null && errors.length() > 0) {
             JSONObject e = errors.getJSONObject(0);
-            return e.optString("message", "Errore Cloudflare sconosciuto") + " (code " + e.optInt("code", 0) + ")";
+            return e.optString("message", I18n.tr("server.cfm.unknown")) + " (code " + e.optInt("code", 0) + ")";
         }
-        return "Errore Cloudflare sconosciuto";
+        return I18n.tr("server.cfm.unknown");
     }
 
     /** Maschera un token mostrando solo gli ultimi 4 caratteri. */

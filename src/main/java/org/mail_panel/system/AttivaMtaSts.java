@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.Main;
 import org.mail_panel.database.MailDatabase;
@@ -87,13 +88,13 @@ public class AttivaMtaSts {
         JSONObject web = ProtezioneWeb.stato();
         JSONObject inc = web.optJSONObject("include");
         boolean includeOk = inc != null && inc.optBoolean("ok", false);
-        passi.add(passo("include", "nginx legge una cartella di configurazioni aggiuntive",
+        passi.add(passo("include", I18n.tr("server.sts.stepInclude"),
                 inc == null ? "" : inc.optString("motivo", ""),
                 includeOk ? "fatto" : "da fare", null));
-        passi.add(passo("config443", "La 443 serve i due file e nient'altro",
+        passi.add(passo("config443", I18n.tr("server.sts.step443"),
                 web.optString("file", ""),
                 web.optBoolean("installato", false) ? "fatto" : "da fare", null));
-        passi.add(passo("jail", "Jail fail2ban sul log della 443", "",
+        passi.add(passo("jail", I18n.tr("server.sts.stepJail"), "",
                 jailAttiva() ? "fatto" : "da fare", null));
 
         // 4 e 4-bis: i CNAME. Una sola lettura della zona per entrambi i passi, cosi' non
@@ -109,41 +110,32 @@ public class AttivaMtaSts {
                      ciechi = rip.ciechi, inPropagazione = rip.inPropagazione;
         boolean proxyDaJolly = rip.proxyDaJolly;
         if (esami.size() < quantiDomini)
-            ciechi.add((quantiDomini - esami.size()) + " domini non esaminati: non sono riuscito "
-                     + "a leggerne l'elenco o a interrogare Cloudflare");
+            ciechi.add(I18n.tr("server.sts.notExamined", java.util.Map.of("n", String.valueOf((quantiDomini - esami.size())))));
         List<String> guaiCname = new ArrayList<>(assenti); guaiCname.addAll(storti);
         String dettCname;
-        if (!guaiCname.isEmpty()) dettCname = "da sistemare: " + String.join("; ", guaiCname);
-        else if (!ciechi.isEmpty()) dettCname = "non verificabili: " + String.join("; ", ciechi);
+        if (!guaiCname.isEmpty()) dettCname = I18n.tr("server.sts.toFix", java.util.Map.of("elenco", String.valueOf(String.join("; ", guaiCname))));
+        else if (!ciechi.isEmpty()) dettCname = I18n.tr("server.sts.unverifiable", java.util.Map.of("elenco", String.valueOf(String.join("; ", ciechi))));
         else if (!inPropagazione.isEmpty())
-            dettCname = "creati, in attesa di propagazione: " + String.join(", ", inPropagazione);
+            dettCname = I18n.tr("server.sts.propagating", java.util.Map.of("elenco", String.valueOf(String.join(", ", inPropagazione))));
         else if (!proxati.isEmpty())
-            dettCname = "tutti presenti; resta il proxy, che e' il passo qui sotto";
-        else dettCname = "tutti presenti e giusti";
-        passi.add(passo("cname", "Un CNAME mta-sts per ogni dominio", dettCname,
+            dettCname = I18n.tr("server.sts.allPresentProxy");
+        else dettCname = I18n.tr("server.sts.allPresentOk");
+        passi.add(passo("cname", I18n.tr("server.sts.stepCname"), dettCname,
                 !guaiCname.isEmpty() ? "da fare" : (ciechi.isEmpty() ? "fatto" : "incerto"),
                 ciechi.isEmpty() ? null
-                    : "Su questi domini il pannello non arriva al DNS: se la politica risponde "
-                    + "lo dira' la prova qui sotto, che e' una verifica vera. Ma \"non ho potuto "
-                    + "controllare\" non e' \"va tutto bene\", quindi non lo segno come fatto."));
+                    : I18n.tr("server.sts.blindDns")));
 
         // 4-bis: i record che devono puntare DRITTI al server
         boolean cieco = !ciechi.isEmpty();
-        passi.add(passo("proxy", "I nomi mta-sts puntano dritti al server",
-                !proxati.isEmpty() ? "passano da Cloudflare: " + String.join(", ", proxati)
-                        : (cieco ? "verificato solo sui domini che il pannello vede"
-                                 : "nessuno passa da Cloudflare"),
+        passi.add(passo("proxy", I18n.tr("server.sts.stepProxy"),
+                !proxati.isEmpty() ? I18n.tr("server.sts.viaCf", java.util.Map.of("elenco", String.valueOf(String.join(", ", proxati))))
+                        : (cieco ? I18n.tr("server.sts.checkedVisible")
+                                 : I18n.tr("server.sts.noneViaCf")),
                 !proxati.isEmpty() ? "da fare" : (cieco ? "incerto" : "fatto"),
                 proxati.isEmpty() ? null
-                    : "Con il proxy acceso chi legge la politica parla con Cloudflare, che deve a sua "
-                    + "volta validare il certificato del tuo server: un secondo pezzo che deve "
-                    + "funzionare, e che quando non funziona risponde 526 senza dire cosa manchi. "
-                    + "Dove il proxy sta su un record mta-sts, il pannello lo rimette su \"Solo DNS\"."
+                    : I18n.tr("server.sts.proxyWhy")
                     + (proxyDaJolly
-                        ? " Dove invece a rispondere e' un JOLLY, il pannello non lo tocca: quel "
-                        + "record non e' suo, e' il DNS del sito, e spegnerne il proxy scoprirebbe "
-                        + "il sito. Crea il record mta-sts esplicito, che ha la precedenza sul "
-                        + "jolly e punta dritto al server: il jolly resta esattamente com'e'."
+                        ? " " + I18n.tr("server.sts.wildcardWhy")
                         : "")));
 
         // 5: il certificato
@@ -151,13 +143,11 @@ public class AttivaMtaSts {
         List<String> scoperti = new ArrayList<>();
         for (String n : nomiServiti) if (!certificatoCopre(n)) scoperti.add(n);
         List<String> esclusi = dominiSuAltroAccount();
-        passi.add(passo("certificato", "Il certificato copre i nomi mta-sts",
-                scoperti.isEmpty() ? "tutti coperti" : "scoperti: " + String.join(", ", scoperti),
+        passi.add(passo("certificato", I18n.tr("server.sts.stepCert"),
+                scoperti.isEmpty() ? I18n.tr("server.sts.allCovered") : I18n.tr("server.sts.uncovered", java.util.Map.of("elenco", String.valueOf(String.join(", ", scoperti)))),
                 scoperti.isEmpty() ? "fatto" : "da fare",
                 esclusi.isEmpty() ? null
-                    : "Questi domini stanno su un altro account Cloudflare e non possono entrare nello "
-                    + "stesso certificato, perche' acme.sh valida tutti i nomi con un solo token: "
-                    + String.join(", ", esclusi)));
+                    : I18n.tr("server.sts.otherAccount", java.util.Map.of("elenco", String.valueOf(String.join(", ", esclusi))))));
 
         // 6-7: la prova e il record
         List<EsameTxt> esamiTxt = new ArrayList<>();
@@ -187,15 +177,14 @@ public class AttivaMtaSts {
         // ha potuto controllare — sarebbe bastato da solo a dichiarare "attivo su tutti i domini".
         boolean completo = daFare == 0 && incerti == 0;
         r.put("completo", completo);
-        String quantiIncerti = incerti + (incerti == 1 ? " passo" : " passi");
+        String quantiIncerti = incerti == 1 ? I18n.tr("server.sts.steps.one") : I18n.tr("server.sts.steps.other", java.util.Map.of("n", String.valueOf(incerti)));
         r.put("nota", completo
-                ? "MTA-STS e' attivo su tutti i domini che il pannello puo' coprire."
+                ? I18n.tr("server.sts.complete")
                 : daFare == 0
-                  ? quantiIncerti + " che il pannello non ha potuto verificare: non c'e' niente da "
-                    + "eseguire, ma nemmeno una conferma."
-                  : daFare + (daFare == 1 ? " passo manca" : " passi mancano")
-                    + (incerti > 0 ? ", piu' " + quantiIncerti + " che non e' stato possibile verificare" : "")
-                    + ". Il pulsante li esegue nell'ordine e si ferma al primo che non riesce.");
+                  ? I18n.tr("server.sts.onlyUncertain", java.util.Map.of("passi", String.valueOf(quantiIncerti)))
+                  : (daFare == 1 ? I18n.tr("server.sts.missing.one") : I18n.tr("server.sts.missing.other", java.util.Map.of("n", String.valueOf(daFare))))
+                    + (incerti > 0 ? ", " + I18n.tr("server.sts.plusUncertain", java.util.Map.of("passi", String.valueOf(quantiIncerti))) : "")
+                    + ". " + I18n.tr("server.sts.buttonRuns"));
         return r;
     }
 
@@ -234,48 +223,38 @@ public class AttivaMtaSts {
                 case TROPPI -> troppi.add(d + " (" + txt.valori.size() + " record: "
                         + String.join("  ||  ", txt.valori) + ")");
                 case PRESENTE -> {
-                    if (!atteso.equals(txt.contenuto)) senzaTxt.add(d + " (id da aggiornare)");
+                    if (!atteso.equals(txt.contenuto)) senzaTxt.add(d + " " + I18n.tr("server.sts.idToUpdate"));
                 }
             }
         }
         List<Passo> passi = new ArrayList<>();
-        passi.add(passo("prova", "La politica risponde davvero sul nome pubblico",
+        passi.add(passo("prova", I18n.tr("server.sts.stepTest"),
                 nonRisponde.isEmpty()
-                    ? "risponde per tutti (richiesta HTTPS vera: prova DNS, certificato e cio' che "
-                    + "viene servito; parte pero' da questo server, quindi non dimostra la "
-                    + "raggiungibilita' da altre reti)"
-                    : "non risponde per: " + String.join(", ", nonRisponde),
+                    ? I18n.tr("server.sts.answersAll")
+                    : I18n.tr("server.sts.noAnswerFor", java.util.Map.of("elenco", String.valueOf(String.join(", ", nonRisponde)))),
                 nonRisponde.isEmpty() ? "fatto" : "da fare", null));
 
         String dettTxt, statoTxt, motivoTxt = null;
         if (!nonMantenuti.isEmpty()) {
-            dettTxt = "pubblicato ma NON mantenuto: " + String.join("; ", nonMantenuti);
+            dettTxt = I18n.tr("server.sts.notKept", java.util.Map.of("elenco", String.valueOf(String.join("; ", nonMantenuti))));
             statoTxt = "da fare";
-            motivoTxt = "Su questi domini il record c'e' gia' e dice a tutti i mittenti di andare a "
-                      + "leggere la politica — che pero' non risponde. E' esattamente la "
-                      + "dichiarazione non mantenuta per cui questa sequenza pubblica il TXT per "
-                      + "ultimo. Non si perde posta (senza una politica leggibile i mittenti "
-                      + "proseguono senza MTA-STS, RFC 8461), ma va chiusa: sistemati i passi qui "
-                      + "sopra, la sequenza riscrive il record con l'id giusto. Se la politica non "
-                      + "si puo' far rispondere, allora il record va tolto.";
+            motivoTxt = I18n.tr("server.sts.notKeptWhy");
         } else if (!troppi.isEmpty()) {
-            dettTxt = "piu' di un record v=STSv1: " + String.join(", ", troppi);
+            dettTxt = I18n.tr("server.sts.moreThanOne", java.util.Map.of("elenco", String.valueOf(String.join(", ", troppi))));
             statoTxt = "da fare";
-            motivoTxt = "Con piu' di un record v=STSv1 sullo stesso nome i mittenti fanno come se "
-                      + "MTA-STS non ci fosse (RFC 8461 §3.1): la politica risponde, ma nessuno la "
-                      + "legge. La sequenza lascia un record solo, con l'id giusto, e toglie gli altri.";
+            motivoTxt = I18n.tr("server.sts.moreThanOneWhy");
         } else if (!txtIgnoti.isEmpty()) {
             dettTxt = "non so se c'e' per: " + String.join(", ", txtIgnoti);
             statoTxt = "incerto";
-            motivoTxt = "\"Non ho potuto controllare\" non e' \"va tutto bene\": non lo segno come fatto.";
+            motivoTxt = I18n.tr("server.sts.notMarkedDone");
         } else if (!nonRisponde.isEmpty()) {
-            dettTxt = "in attesa dei passi precedenti"; statoTxt = "da fare";
+            dettTxt = I18n.tr("server.sts.waitingPrev"); statoTxt = "da fare";
         } else if (!senzaTxt.isEmpty()) {
-            dettTxt = "mancano: " + String.join(", ", senzaTxt); statoTxt = "da fare";
+            dettTxt = I18n.tr("server.sts.missingList", java.util.Map.of("elenco", String.valueOf(String.join(", ", senzaTxt)))); statoTxt = "da fare";
         } else {
-            dettTxt = "tutti pubblicati"; statoTxt = "fatto";
+            dettTxt = I18n.tr("server.sts.allPublished"); statoTxt = "fatto";
         }
-        passi.add(passo("txt", "Il record _mta-sts e' pubblicato", dettTxt, statoTxt, motivoTxt));
+        passi.add(passo("txt", I18n.tr("server.sts.stepTxt"), dettTxt, statoTxt, motivoTxt));
         return passi;
     }
 
@@ -310,8 +289,7 @@ public class AttivaMtaSts {
                 boolean daJolly = e.stato == StatoNome.ASSENTE;
                 if (daJolly) r.proxyDaJolly = true;
                 r.proxati.add(e.dominio + (daJolly
-                        ? " (non c'e' il record, risponde il jolly *." + e.dominio
-                          + " che sta dietro Cloudflare)" : ""));
+                        ? " " + I18n.tr("server.sts.wildcardAnswers", java.util.Map.of("d", String.valueOf(e.dominio))) : ""));
             }
             switch (e.stato) {
                 case ASSENTE -> r.assenti.add(e.dominio + " (" + e.motivo + ")");
@@ -359,13 +337,12 @@ public class AttivaMtaSts {
         while (true) {
             restano.removeIf(risponde);
             if (restano.isEmpty() || orologio.adesso() >= scadenza) break;
-            log.accept("    non rispondono ancora: " + String.join(", ", restano)
-                     + " — riprovo fra " + (intervalloMs / 1000) + "s");
+            log.accept("    " + I18n.tr("server.sts.stillNotAnswering", java.util.Map.of("elenco", String.valueOf(String.join(", ", restano)), "s", String.valueOf((intervalloMs / 1000)))));
             try {
                 orologio.dormi(intervalloMs);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
-                log.accept("    attesa interrotta.");
+                log.accept("    " + I18n.tr("server.sts.waitInterrupted"));
                 break;
             }
         }
@@ -423,8 +400,8 @@ public class AttivaMtaSts {
     public static JSONObject esegui(UpdateManager.Job job, String soloDominio) {
         JSONObject r = new JSONObject();
         JSONArray fatti = new JSONArray();
-        if (job != null) job.scrivi("=== Attivazione MTA-STS ==="
-                + (soloDominio == null ? "" : " (solo " + soloDominio + ")"));
+        if (job != null) job.scrivi("=== " + I18n.tr("server.sts.jobTitle") + " ==="
+                + (soloDominio == null ? "" : " " + I18n.tr("server.sts.onlyDomain", java.util.Map.of("d", String.valueOf(soloDominio)))));
 
         // Un nome che non corrisponde a nessun dominio non deve produrre una sequenza che
         // "riesce": i cicli per dominio girerebbero a vuoto, nessun passo fallirebbe, e
@@ -433,11 +410,9 @@ public class AttivaMtaSts {
         if (soloDominio != null) {
             try {
                 if (dominiDaToccare(soloDominio).isEmpty())
-                    return fermati(r, fatti, "Il dominio \"" + soloDominio + "\" non e' fra quelli "
-                            + "del pannello: non c'e' niente da configurare e non voglio riportare "
-                            + "un successo per un lavoro che non ho fatto.");
+                    return fermati(r, fatti, I18n.tr("server.sts.notPanelDomain", java.util.Map.of("d", String.valueOf(soloDominio))));
             } catch (Exception e) {
-                return fermati(r, fatti, "non riesco a leggere l'elenco dei domini: " + e.getMessage());
+                return fermati(r, fatti, I18n.tr("server.sts.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
             }
         }
 
@@ -446,21 +421,20 @@ public class AttivaMtaSts {
         JSONObject inc = web.optJSONObject("include");
         if (inc == null || !inc.optBoolean("ok", false)) {
             JSONObject e = ProtezioneWeb.aggiungiInclude();
-            fatti.put(esito("include", "Riga di include in nginx", e));
-            if (job != null) job.scrivi("[1/8] include in nginx: " + (e.optBoolean("success", false) ? "fatto" : "FALLITO"));
+            fatti.put(esito("include", I18n.tr("server.sts.includeTitle"), e));
+            if (job != null) job.scrivi("[1/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.includeOk") : I18n.tr("server.sts.includeFail")));
             if (!e.optBoolean("success", false)) return fermati(r, fatti,
-                    "Senza la riga di include, la configurazione della 443 finirebbe in un file che "
-                  + "nginx non legge: mi fermo qui.");
-        } else fatti.put(gia("include", "Riga di include in nginx"));
+                    I18n.tr("server.sts.noIncludeStop"));
+        } else fatti.put(gia("include", I18n.tr("server.sts.includeTitle")));
 
         // 2. la 443
         if (!ProtezioneWeb.stato().optBoolean("installato", false)) {
             JSONObject e = ProtezioneWeb.installa("", "");
-            fatti.put(esito("config443", "Configurazione della 443", e));
-            if (job != null) job.scrivi("[2/8] configurazione 443: " + (e.optBoolean("success", false) ? "fatta" : "FALLITA"));
+            fatti.put(esito("config443", I18n.tr("server.sts.config443Title"), e));
+            if (job != null) job.scrivi("[2/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.c443Ok") : I18n.tr("server.sts.c443Fail")));
             if (!e.optBoolean("success", false)) return fermati(r, fatti,
-                    "Senza la 443 configurata la politica non puo' rispondere: mi fermo.");
-        } else fatti.put(gia("config443", "Configurazione della 443"));
+                    I18n.tr("server.sts.no443Stop"));
+        } else fatti.put(gia("config443", I18n.tr("server.sts.config443Title")));
 
         // 3. la jail
         if (!jailAttiva()) {
@@ -490,11 +464,8 @@ public class AttivaMtaSts {
                     // Dominio non su Cloudflare: non e' un errore, ma nemmeno una conferma.
                     boolean risponde = risolve("mta-sts." + d.domain);
                     cname.put(nota(d.domain, risponde,
-                            risponde ? "il nome risponde, ma il dominio non e' su Cloudflare: non posso "
-                                     + "verificare che il record punti a questo server. Lo conferma "
-                                     + "semmai la prova della politica qui sotto."
-                                     : "il nome non risponde e il dominio non e' su Cloudflare: "
-                                     + "il CNAME va creato a mano dove sta il DNS di questo dominio."));
+                            risponde ? I18n.tr("server.sts.answersNoCf")
+                                     : I18n.tr("server.sts.noAnswerNoCf")));
                     continue;
                 }
                 if (e.optBoolean("success", false) && !e.optBoolean("invariato", false))
@@ -503,11 +474,11 @@ public class AttivaMtaSts {
                         e.optString("nota", e.optString("error", ""))));
             }
         } catch (Exception e) {
-            cname.put(nota("", false, "errore: " + e.getMessage()));
+            cname.put(nota("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
         fatti.put(new JSONObject().put("chiave", "cname").put("titolo", "CNAME mta-sts")
                 .put("dettaglio", cname));
-        if (job != null) { job.avanza(4, 8); job.scrivi("[4/8] CNAME mta-sts: " + cname.length() + " domini esaminati"); }
+        if (job != null) { job.avanza(4, 8); job.scrivi("[4/8] " + I18n.tr("server.sts.cnameExamined", java.util.Map.of("n", String.valueOf(cname.length())))); }
 
         // 4-bis. I nomi mta-sts devono puntare dritti al server.
         // Ogni dominio riporta COSA HO VISTO. Prima questo passo diceva "era gia' a posto"
@@ -523,15 +494,13 @@ public class AttivaMtaSts {
                 MailDatabase.CloudflareAccount a = cf.getAccountForDomain(d.id);
                 if (a == null) {
                     ciechi++;
-                    proxy.put(nota(d.domain, false, "non collegato a Cloudflare: non posso "
-                            + "controllare se il nome passa dal proxy"));
+                    proxy.put(nota(d.domain, false, I18n.tr("server.sts.notLinkedCf")));
                     continue;
                 }
                 CloudflareManager.ZoneLookup zl = cf.findZone(a.apiToken, d.domain);
                 if (!zl.found) {
                     ciechi++;
-                    proxy.put(nota(d.domain, false, "zona non trovata su Cloudflare: non posso "
-                            + "controllare se il nome passa dal proxy"));
+                    proxy.put(nota(d.domain, false, I18n.tr("server.sts.zoneNotFoundCf")));
                     continue;
                 }
                 String nome = ("mta-sts." + d.domain).toLowerCase(Locale.ROOT);
@@ -539,9 +508,7 @@ public class AttivaMtaSts {
                         cf.listRecords(a.apiToken, zl.zoneId);
                 if (tutti.isEmpty()) {
                     ciechi++;
-                    proxy.put(nota(d.domain, false, "Cloudflare non ha restituito nessun record "
-                            + "per questa zona: non posso controllare, e una lista vuota non "
-                            + "vuol dire che vada tutto bene"));
+                    proxy.put(nota(d.domain, false, I18n.tr("server.sts.emptyZone")));
                     continue;
                 }
                 boolean visto = false;
@@ -550,35 +517,29 @@ public class AttivaMtaSts {
                     visto = true;
                     if (!t.proxied) {
                         dritti++;
-                        proxy.put(nota(d.domain, true, "il record " + t.type
-                                + " punta dritto al server (Solo DNS)"));
+                        proxy.put(nota(d.domain, true, I18n.tr("server.sts.pointsStraight", java.util.Map.of("tipo", String.valueOf(t.type)))));
                         continue;
                     }
                     CloudflareManager.RecordOp op = cf.impostaProxy(a.apiToken, zl.zoneId, t.id, false);
                     boolean fatto = op != null && op.success;
                     if (fatto) { sistemati++; appenaCambiati.add(d.domain); }
                     proxy.put(nota(d.domain, fatto,
-                            fatto ? "il record " + t.type + " era dietro Cloudflare (nuvola "
-                                    + "arancione), l'ho messo su Solo DNS"
-                                  : "il record " + t.type + " e' dietro Cloudflare e non sono "
-                                    + "riuscito a toglierlo: "
-                                    + (op == null ? "nessuna risposta" : op.error)));
+                            fatto ? I18n.tr("server.sts.proxyRemoved", java.util.Map.of("tipo", String.valueOf(t.type)))
+                                  : I18n.tr("server.sts.proxyNotRemoved", java.util.Map.of("tipo", String.valueOf(t.type), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error)))));
                 }
                 if (!visto) {
                     ciechi++;
-                    proxy.put(nota(d.domain, false, "nessun record chiamato " + nome
-                            + " nella zona: il CNAME non e' stato creato o sta in un'altra zona"));
+                    proxy.put(nota(d.domain, false, I18n.tr("server.sts.noRecordNamed", java.util.Map.of("nome", String.valueOf(nome)))));
                 }
             }
         } catch (Exception e) {
             ciechi++;
-            proxy.put(nota("", false, "errore nel controllo: " + e.getMessage()));
+            proxy.put(nota("", false, I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
         fatti.put(new JSONObject().put("chiave", "proxy")
-                .put("titolo", "I nomi mta-sts puntano dritti al server")
+                .put("titolo", I18n.tr("server.sts.stepProxy"))
                 .put("dettaglio", proxy));
-        if (job != null) job.scrivi("[5/8] Proxy: " + dritti + " gia' dritti, "
-                + sistemati + " sistemati, " + ciechi + " non verificabili");
+        if (job != null) job.scrivi("[5/8] " + I18n.tr("server.sts.proxySummary", java.util.Map.of("d", String.valueOf(dritti), "s", String.valueOf(sistemati), "c", String.valueOf(ciechi))));
 
         // 5. il certificato
         //
@@ -598,9 +559,7 @@ public class AttivaMtaSts {
             // ci sono gia': Let's Encrypt concede 5 emissioni a settimana per lo stesso
             // insieme di nomi, e un pulsante che riemette a ogni pressione consuma quel
             // margine lasciando senza rinnovo proprio quando servirebbe.
-            if (job != null) { job.avanza(6, 8); job.scrivi("[6/8] Emetto il certificato con "
-                    + nomi.size() + " nomi (" + scoperti.size()
-                    + " mancano da quello in uso). Puo' richiedere un minuto..."); }
+            if (job != null) { job.avanza(6, 8); job.scrivi("[6/8] " + I18n.tr("server.sts.issuingCert", java.util.Map.of("n", String.valueOf(nomi.size()), "m", String.valueOf(scoperti.size())))); }
             AcmeManager.CertificateResult cr = acme.emettiConNomi(host, nomi);
             // "Emissione fallita" da solo non serve a nessuno: la ragione vera sta nell'uscita
             // di acme.sh — un dominio che il token non copre, un limite di Let's Encrypt, una
@@ -609,7 +568,7 @@ public class AttivaMtaSts {
             if (dettaglio.length() > 4000) dettaglio = dettaglio.substring(dettaglio.length() - 4000);
             JSONObject e = new JSONObject().put("success", cr.success)
                     .put("nota", cr.message).put("error", cr.message);
-            JSONObject riga = esito("certificato", "Certificato con i nomi mta-sts", e);
+            JSONObject riga = esito("certificato", I18n.tr("server.sts.certTitle"), e);
             riga.put("nomi", new JSONArray(nomi));
             // L'uscita si mostra SEMPRE, non solo quando fallisce. Buttarla via quando il
             // comando "riesce" toglie la prova proprio nel caso peggiore: quello in cui
@@ -617,14 +576,13 @@ public class AttivaMtaSts {
             riga.put("uscita", dettaglio);
             fatti.put(riga);
             if (job != null) {
-                job.scrivi("--- uscita di acme.sh ---");
+                job.scrivi("--- " + I18n.tr("server.sts.acmeOutput") + " ---");
                 for (String r2 : dettaglio.split("\n")) job.scrivi("  " + r2);
-                job.scrivi("--- fine uscita ---");
+                job.scrivi("--- " + I18n.tr("server.sts.outputEnd") + " ---");
             }
             if (!cr.success) return fermati(r, fatti,
-                    "Senza un certificato che copra mta-sts.<dominio>, chi va a leggere la politica si "
-                  + "ferma all'errore TLS. Mi fermo prima di pubblicare il record.");
-        } else fatti.put(gia("certificato", "Certificato con i nomi mta-sts"));
+                    I18n.tr("server.sts.noCertStop"));
+        } else fatti.put(gia("certificato", I18n.tr("server.sts.certTitle")));
 
         // 6-bis. L'attesa della propagazione, e solo dove serve.
         //
@@ -640,18 +598,15 @@ public class AttivaMtaSts {
         // prima di dormire, e si smette appena rispondono: un'attesa che non finisce mai
         // quando l'esito e' gia' buono e' un difetto tanto quanto non aspettare.
         if (!appenaCambiati.isEmpty()) {
-            if (job != null) job.scrivi("[7/8] " + appenaCambiati.size() + " domini appena modificati. "
-                    + "Aspetto che il DNS propaghi, al massimo " + (ATTESA_MAX_MS / 60000)
-                    + " minuti: chi ha in cache la risposta di prima la tiene per il suo TTL.");
+            if (job != null) job.scrivi("[7/8] " + I18n.tr("server.sts.waitingDns", java.util.Map.of("n", String.valueOf(appenaCambiati.size()), "min", String.valueOf((ATTESA_MAX_MS / 60000)))));
             List<String> restano = attendiPropagazione(
                     new ArrayList<>(appenaCambiati),
                     dom -> MtaSts.provaPubblica(dom).optBoolean("ok", false),
                     OROLOGIO_VERO, ATTESA_MAX_MS, ATTESA_INTERVALLO_MS,
                     riga -> { if (job != null) job.scrivi(riga); });
             if (job != null) job.scrivi(restano.isEmpty()
-                    ? "    tutti i domini modificati rispondono."
-                    : "    dopo l'attesa non rispondono ancora: " + String.join(", ", restano)
-                      + ". Per questi il record TXT non viene pubblicato.");
+                    ? "    " + I18n.tr("server.sts.allAnswer")
+                    : "    " + I18n.tr("server.sts.stillNot", java.util.Map.of("elenco", String.valueOf(String.join(", ", restano)))));
         }
 
         // 6-7. la prova e il record, dominio per dominio
@@ -661,9 +616,7 @@ public class AttivaMtaSts {
             for (MailDatabase.Domain d : dominiDaToccare(soloDominio)) {
                 JSONObject prova = MtaSts.provaPubblica(d.domain);
                 if (!prova.optBoolean("ok", false)) {
-                    finali.put(nota(d.domain, false, "la politica non risponde ancora: "
-                            + prova.optString("errore", "") + " Il record TXT NON viene pubblicato: "
-                            + "sarebbe una dichiarazione che non mantieni."));
+                    finali.put(nota(d.domain, false, I18n.tr("server.sts.policyNotYet", java.util.Map.of("e", String.valueOf(prova.optString("errore", ""))))));
                     continue;
                 }
                 // Non si salta piu' quando il record c'e': va controllato che l'id corrisponda
@@ -674,20 +627,14 @@ public class AttivaMtaSts {
                         e.optString("nota", e.optString("error", ""))));
             }
         } catch (Exception e) {
-            finali.put(nota("", false, "errore: " + e.getMessage()));
+            finali.put(nota("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
-        if (job != null) { job.avanza(8, 8); job.scrivi("[7-8/8] Prova della politica e record TXT: "
-                + finali.length() + " domini esaminati"); }
-        fatti.put(new JSONObject().put("chiave", "txt").put("titolo", "Prova della politica e record TXT")
+        if (job != null) { job.avanza(8, 8); job.scrivi("[7-8/8] " + I18n.tr("server.sts.finalExamined", java.util.Map.of("n", String.valueOf(finali.length())))); }
+        fatti.put(new JSONObject().put("chiave", "txt").put("titolo", I18n.tr("server.sts.finalTitle"))
                 .put("dettaglio", finali));
 
         return r.put("success", true).put("passi", fatti)
-                .put("nota", "Sequenza completata. Dove ha creato o corretto un record, la sequenza ha "
-                        + "gia' aspettato che il DNS propagasse prima di provare la politica, quindi "
-                        + "quello che leggi qui e' un esito, non una fotografia a meta'. Se un dominio "
-                        + "risulta ancora \"non risponde\", la cache di qualche resolver non era ancora "
-                        + "scaduta: guarda lo Stato fra qualche minuto e, se e' rientrato, ripremi "
-                        + "Attiva per pubblicare il suo record TXT.");
+                .put("nota", I18n.tr("server.sts.sequenceDone"));
     }
 
     /**
@@ -731,7 +678,7 @@ public class AttivaMtaSts {
                     .put("messaggio", String.join(" | ", righe)));
         }
         if (!esito.optBoolean("success", false) && !esito.optString("error", "").isEmpty())
-            voci.put(new JSONObject().put("titolo", "Sequenza interrotta").put("ok", false)
+            voci.put(new JSONObject().put("titolo", I18n.tr("server.sts.interrupted")).put("ok", false)
                     .put("messaggio", esito.getString("error")));
         return voci;
     }
@@ -748,7 +695,7 @@ public class AttivaMtaSts {
 
     private static JSONObject gia(String chiave, String titolo) {
         return new JSONObject().put("chiave", chiave).put("titolo", titolo)
-                .put("ok", true).put("messaggio", "era gia' a posto");
+                .put("ok", true).put("messaggio", I18n.tr("server.sts.alreadyOk"));
     }
 
     private static JSONObject nota(String dominio, boolean ok, String messaggio) {
@@ -871,21 +818,19 @@ public class AttivaMtaSts {
                 MailDatabase.CloudflareAccount a = cf.getAccountForDomain(d.id);
                 if (a == null) {
                     out.add(new EsameNome(d.domain, StatoNome.CIECO,
-                            "non e' collegato a un account Cloudflare: il record non lo posso "
-                            + "ne' vedere ne' creare", risolve));
+                            I18n.tr("server.sts.blindNoAccount"), risolve));
                     continue;
                 }
                 CloudflareManager.ZoneLookup zl = cf.findZone(a.apiToken, d.domain);
                 if (!zl.found) {
                     out.add(new EsameNome(d.domain, StatoNome.CIECO,
-                            "la zona non e' visibile con questo token Cloudflare", risolve));
+                            I18n.tr("server.sts.blindZone"), risolve));
                     continue;
                 }
                 List<CloudflareManager.DnsRecordInfo> tutti = cf.listRecords(a.apiToken, zl.zoneId);
                 if (tutti.isEmpty()) {
                     out.add(new EsameNome(d.domain, StatoNome.CIECO,
-                            "Cloudflare non ha restituito nessun record per la zona: una lista "
-                            + "vuota non vuol dire che vada tutto bene", risolve));
+                            I18n.tr("server.sts.blindEmpty"), risolve));
                     continue;
                 }
                 CloudflareManager.DnsRecordInfo trovato = null;
@@ -910,17 +855,14 @@ public class AttivaMtaSts {
                     if (jolly != null)
                         // Niente parentesi qui dentro: questo motivo viene mostrato gia' dentro
                         // una parentesi, e due livelli annidati si leggono male.
-                        perche = ", e a rispondere al posto suo e' il jolly *." + d.domain
-                               + ", un record " + jolly.type + " verso \"" + jolly.content + "\""
-                               + (jolly.proxied
-                                    ? " dietro Cloudflare: e' da li' che arriva il 526"
-                                    : " che punta dritto al server");
+                        perche = ", " + (jolly.proxied
+                                ? I18n.tr("server.sts.wildcardProxied", java.util.Map.of("d", String.valueOf(d.domain), "tipo", String.valueOf(jolly.type), "v", String.valueOf(jolly.content)))
+                                : I18n.tr("server.sts.wildcardStraight", java.util.Map.of("d", String.valueOf(d.domain), "tipo", String.valueOf(jolly.type), "v", String.valueOf(jolly.content))));
                     else if (risolve)
-                        perche = ", eppure il nome risponde e nella zona non c'e' nemmeno un jolly "
-                               + "*." + d.domain + ": la risposta arriva da fuori di questa zona";
+                        perche = ", " + I18n.tr("server.sts.answersFromOutside", java.util.Map.of("d", String.valueOf(d.domain)));
                     else perche = "";
                     out.add(new EsameNome(d.domain, StatoNome.ASSENTE,
-                            "nella zona non c'e' nessun record con questo nome" + perche, risolve,
+                            I18n.tr("server.sts.noRecordInZone") + perche, risolve,
                             jolly != null && jolly.proxied, false));
                     continue;
                 }
@@ -928,21 +870,21 @@ public class AttivaMtaSts {
                 List<String> male = new ArrayList<>();
                 boolean storto = false;
                 if (!"CNAME".equalsIgnoreCase(trovato.type)) {
-                    male.add("e' un record " + trovato.type + " invece di un CNAME");
+                    male.add(I18n.tr("server.sts.notCname", java.util.Map.of("tipo", String.valueOf(trovato.type))));
                     storto = true;
                 } else if (!RegoleDns.stessoNome(trovato.content, bersaglio)) {
-                    male.add("punta a \"" + trovato.content + "\" invece che a \"" + bersaglio + "\"");
+                    male.add(I18n.tr("server.sts.pointsElsewhere", java.util.Map.of("v", String.valueOf(trovato.content), "b", String.valueOf(bersaglio))));
                     storto = true;
                 }
                 if (trovato.proxied)
-                    male.add("passa da Cloudflare invece di puntare dritto al server");
+                    male.add(I18n.tr("server.sts.viaCfInstead"));
                 out.add(male.isEmpty()
-                        ? new EsameNome(d.domain, StatoNome.GIUSTO, "punta dritto a " + bersaglio, risolve)
+                        ? new EsameNome(d.domain, StatoNome.GIUSTO, I18n.tr("server.sts.pointsStraightTo", java.util.Map.of("b", String.valueOf(bersaglio))), risolve)
                         : new EsameNome(d.domain, StatoNome.DA_CORREGGERE, String.join("; ", male),
                                         risolve, trovato.proxied, storto));
             } catch (Exception e) {
                 out.add(new EsameNome(d.domain, StatoNome.CIECO,
-                        "errore nel controllo: " + e.getMessage(), risolve));
+                        I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage()))), risolve));
             }
         }
         return out;
@@ -1030,7 +972,7 @@ public class AttivaMtaSts {
             return interpretaTxt(p.waitFor(), out);
         } catch (Exception e) {
             // dig che non c'e' o non parte: non ho chiesto niente a nessuno.
-            return ignoto("dig non parte");
+            return ignoto(I18n.tr("server.sts.digNoStart"));
         }
     }
 
@@ -1056,13 +998,13 @@ public class AttivaMtaSts {
     public static LetturaTxt interpretaTxt(int uscitaDig, String stampato) {
         // dig torna 0 anche quando il nome non esiste: un'uscita diversa da zero vuol dire
         // che non ho CHIESTO, non che la risposta sia "niente". Sono cose opposte.
-        if (uscitaDig == 9) return ignoto("nessun DNS risponde");
-        if (uscitaDig != 0 || stampato == null) return ignoto("dig esce con " + uscitaDig);
+        if (uscitaDig == 9) return ignoto(I18n.tr("server.sts.noDnsAnswers"));
+        if (uscitaDig != 0 || stampato == null) return ignoto(I18n.tr("server.sts.digExit", java.util.Map.of("c", String.valueOf(uscitaDig))));
         Matcher stato = STATO_DIG.matcher(stampato);
         String s = stato.find() ? stato.group(1) : "";
         if (s.equals("NXDOMAIN")) return trovati(List.of());
-        if (s.isEmpty()) return ignoto("dig non dice lo stato della risposta");
-        if (!s.equals("NOERROR")) return ignoto("il DNS risponde " + s);
+        if (s.isEmpty()) return ignoto(I18n.tr("server.sts.digNoStatus"));
+        if (!s.equals("NOERROR")) return ignoto(I18n.tr("server.sts.dnsAnswers", java.util.Map.of("s", String.valueOf(s))));
         // Tutti i TXT del nome, non il primo che va bene: il conto dei record v=STSv1 e' parte
         // della risposta.
         List<String> txt = new ArrayList<>();

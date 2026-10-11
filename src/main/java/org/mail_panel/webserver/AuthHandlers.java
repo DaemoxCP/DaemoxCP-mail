@@ -110,7 +110,7 @@ final class AuthHandlers {
         server.logAudit("LOGIN_SUCCESS", ip, "user=" + admin.username() + " method=" + how);
         boolean noPasskey = AuthStore.passkeysOf(admin.id()).isEmpty();
         return new JSONObject().put("success", true).put("csrf_token", WebSessions.csrfToken(token))
-                .put("redirect", noPasskey ? "/settings?setup=passkey" : "/home");
+                .put("redirect", noPasskey ? "/account?setup=passkey" : "/home");
     }
 
     // ===================== Prima del login =====================

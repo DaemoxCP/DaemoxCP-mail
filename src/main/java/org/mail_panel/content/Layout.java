@@ -3,6 +3,7 @@ package org.mail_panel.content;
 import org.mail_panel.i18n.I18n;
 
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,45 +20,63 @@ import java.util.regex.Pattern;
  * restavano solo icone; e quattro pagine (coda, limiti di invio, statistiche, amministratori) non
  * erano raggiungibili da nessun link.
  *
+ * Ogni voce dice quale permesso serve per vederla e quale per cambiare qualcosa (gli stessi della
+ * sua rotta in SSLMailServer.setupRoutes): il menu mostra solo le voci che il ruolo di chi guarda
+ * puo' aprire, e nella barra in alto una pagina che il ruolo puo' solo guardare porta "Sola lettura".
+ *
  * Per aggiungere una pagina al menu: una riga in MENU, nella sezione giusta, con la chiave del
  * nome in lang/it.json e lang/en.json.
  */
 public final class Layout {
 
-    /** Una voce: la pagina (quella che passa a getHead), l'indirizzo, l'icona, la chiave del nome. */
-    public record Item(String page, String href, String icon, String key) {}
+    /**
+     * Una voce: la pagina (quella che passa a getHead), l'indirizzo, l'icona, la chiave del nome, il
+     * permesso per vederla e quello per cambiare (o null se la pagina non cambia niente).
+     */
+    public record Item(String page, String href, String icon, String key, String view, String manage) {}
+
+    /** Chi guarda la pagina: il nome, il ruolo e i permessi del ruolo. */
+    public record Viewer(String username, String role, Set<String> permissions) {
+        public static final Viewer NOBODY = new Viewer(null, null, Set.of());
+
+        public boolean may(String permission) {
+            return permission == null || permissions.contains(permission);
+        }
+    }
 
     /** Una sezione del menu, con la chiave del titolo (null: le voci stanno in cima, senza titolo). */
     public record Section(String key, List<Item> items) {}
 
     public static final List<Section> MENU = List.of(
         new Section(null, List.of(
-            new Item("home", "/home", "fas fa-gauge-high", "nav.home"))),
+            new Item("home", "/home", "fas fa-gauge-high", "nav.home", "home.view", null))),
         new Section("nav.section.mail", List.of(
-            new Item("domains", "/domains", "fas fa-globe", "nav.domains"),
-            new Item("mailboxes", "/mailboxes", "fas fa-inbox", "nav.mailboxes"),
-            new Item("aliases", "/aliases", "fas fa-share", "nav.aliases"),
-            new Item("queue", "/queue", "fas fa-list-ol", "nav.queue"),
-            new Item("ratelimits", "/ratelimits", "fas fa-stopwatch", "nav.rateLimits"),
-            new Item("statistics", "/statistics", "fas fa-chart-line", "nav.statistics"))),
+            new Item("domains", "/domains", "fas fa-globe", "nav.domains", "mail.view", "domains.manage"),
+            new Item("mailboxes", "/mailboxes", "fas fa-inbox", "nav.mailboxes", "mail.view", "mailboxes.manage"),
+            new Item("aliases", "/aliases", "fas fa-share", "nav.aliases", "mail.view", "domains.manage"),
+            new Item("queue", "/queue", "fas fa-list-ol", "nav.queue", "queue.view", "queue.manage"),
+            new Item("ratelimits", "/ratelimits", "fas fa-stopwatch", "nav.rateLimits", "mail.view", "domains.manage"),
+            new Item("statistics", "/statistics", "fas fa-chart-line", "nav.statistics", "mail.view", null))),
         new Section("nav.section.dns", List.of(
-            new Item("dns", "/dns", "fas fa-sitemap", "nav.dns"),
-            new Item("ssl", "/ssl", "fas fa-lock", "nav.ssl"),
-            new Item("cloudflare", "/cloudflare", "fas fa-cloud icona-cloudflare", "nav.cloudflare"))),
+            new Item("dns", "/dns", "fas fa-sitemap", "nav.dns", "dns.view", "dns.manage"),
+            new Item("ssl", "/ssl", "fas fa-lock", "nav.ssl", "dns.view", "dns.manage"),
+            new Item("cloudflare", "/cloudflare", "fas fa-cloud icona-cloudflare", "nav.cloudflare", "dns.view", "dns.manage"))),
         new Section("nav.section.security", List.of(
-            new Item("security", "/security", "fas fa-shield-halved", "nav.security"),
-            new Item("firewall", "/firewall", "fas fa-fire", "nav.firewall"))),
+            new Item("security", "/security", "fas fa-shield-halved", "nav.security", "security.view", "security.manage"),
+            new Item("firewall", "/firewall", "fas fa-fire", "nav.firewall", "security.view", "security.manage"))),
         new Section("nav.section.system", List.of(
-            new Item("updates", "/updates", "fas fa-arrow-up-right-dots", "nav.updates"),
-            new Item("logs", "/logs", "fas fa-file-lines", "nav.logs"),
-            new Item("paths", "/paths", "fas fa-folder-tree", "nav.paths"),
-            new Item("admins", "/admins", "fas fa-users-gear", "nav.admins"),
-            new Item("settings", "/settings", "fas fa-gear", "nav.settings")))
+            new Item("updates", "/updates", "fas fa-arrow-up-right-dots", "nav.updates", "system.view", "system.manage"),
+            new Item("logs", "/logs", "fas fa-file-lines", "nav.logs", "system.view", "system.manage"),
+            new Item("paths", "/paths", "fas fa-folder-tree", "nav.paths", "system.view", null),
+            new Item("admins", "/admins", "fas fa-users-gear", "nav.admins", "admins.manage", "admins.manage"),
+            new Item("settings", "/settings", "fas fa-gear", "nav.settings", "settings.manage", "settings.manage")))
     );
 
     /** Le pagine fuori dal menu che hanno comunque un nome nella barra in alto. */
     private static final List<Item> OTHER_PAGES = List.of(
-        new Item("install", "/install", "fas fa-download", "nav.install"));
+        new Item("install", "/install", "fas fa-download", "nav.install", null, null),
+        new Item("account", "/account", "fas fa-user-gear", "nav.account", "account.self", null),
+        new Item("forbidden", "/home", "fas fa-ban", "access.title", null, null));
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{LAYOUT:([a-z_]{0,40})\\}\\}");
     /** Le pagine senza cornice (accesso e installazione) mettono qui solo i pulsanti della lingua. */
@@ -70,13 +89,18 @@ public final class Layout {
         return "{{LAYOUT:" + page + "}}";
     }
 
-    /** La cornice al posto del segnaposto, nella lingua di questa richiesta. */
-    public static String expand(String html, String lang) {
+    /** La cornice al posto del segnaposto, per chi guarda e nella lingua di questa richiesta. */
+    public static String expand(String html, String lang, Viewer viewer) {
         if (html.contains(LANGUAGE_SWITCH)) html = html.replace(LANGUAGE_SWITCH, languageSwitch(lang) + LANGUAGE_SCRIPT);
         Matcher m = PLACEHOLDER.matcher(html);
         if (!m.find()) return html;
-        String frame = sidebar(m.group(1)) + topbar(m.group(1), lang);
+        String frame = sidebar(m.group(1), viewer) + topbar(m.group(1), lang, viewer);
         return html.substring(0, m.start()) + frame + html.substring(m.end());
+    }
+
+    /** Un testo nell'HTML: niente tag e niente {{ che il passo della lingua leggerebbe come una chiave. */
+    private static String text(String s) {
+        return I18n.escapeHtml(s == null ? "" : s).replace("{", "&#123;").replace("}", "&#125;");
     }
 
     /** I pulsanti IT/EN, con premuto quello della lingua attuale. */
@@ -116,17 +140,19 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
 </script>
 """;
 
-    static String sidebar(String page) {
+    static String sidebar(String page, Viewer viewer) {
         StringBuilder menu = new StringBuilder();
         int n = 0;
         for (Section section : MENU) {
             StringBuilder links = new StringBuilder();
             for (Item item : section.items()) {
+                if (item.view() == null || !viewer.may(item.view())) continue;
                 boolean active = item.page().equals(page);
                 links.append("<li><a class=\"sidebar-link").append(active ? " active\" aria-current=\"page" : "")
                      .append("\" href=\"").append(item.href()).append("\"><i class=\"").append(item.icon())
                      .append("\" aria-hidden=\"true\"></i><span>{{t:").append(item.key()).append("}}</span></a></li>\n");
             }
+            if (links.isEmpty()) continue;
             if (section.key() == null) {
                 menu.append(links);
             } else {
@@ -155,21 +181,36 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
 """;
     }
 
-    static String topbar(String page, String lang) {
+    static String topbar(String page, String lang, Viewer viewer) {
         String section = null;
-        String title = null;
+        Item current = null;
         for (Section s : MENU) {
             for (Item item : s.items()) {
                 if (item.page().equals(page)) {
                     section = s.key();
-                    title = item.key();
+                    current = item;
                 }
             }
         }
-        for (Item item : OTHER_PAGES) if (item.page().equals(page)) title = item.key();
+        for (Item item : OTHER_PAGES) if (item.page().equals(page)) current = item;
         String where = (section == null ? "" : "<span class=\"topbar-section\">{{t:" + section + "}}</span> "
                 + "<span class=\"topbar-sep\" aria-hidden=\"true\">&rsaquo;</span> ")
-                + (title == null ? "" : "<span class=\"topbar-page\">{{t:" + title + "}}</span>");
+                + (current == null ? "" : "<span class=\"topbar-page\">{{t:" + current.key() + "}}</span>");
+        // La pagina si vede ma non si cambia: si dice subito, invece di far scoprire il divieto a ogni pulsante.
+        if (current != null && current.manage() != null && viewer.may(current.view()) && !viewer.may(current.manage())) {
+            where += " <span class=\"badge rounded-pill text-bg-secondary topbar-readonly\" title=\"{{t:layout.readOnlyHint}}\">"
+                    + "<i class=\"fas fa-eye me-1\" aria-hidden=\"true\"></i>{{t:layout.readOnly}}</span>";
+        }
+        boolean account = page.equals("account");
+        // Chi e' collegato e con che ruolo, sul pulsante del proprio account.
+        String who = viewer.username() == null ? "{{t:nav.account}}" : text(viewer.username());
+        String role = viewer.role() == null || !org.mail_panel.security.AuthStore.ROLES.contains(viewer.role()) ? ""
+                : "<span class=\"badge role-badge " + viewer.role() + " ms-1 d-none d-lg-inline-block\">{{t:adm.r"
+                  + Character.toUpperCase(viewer.role().charAt(0)) + viewer.role().substring(1) + "}}</span>";
+        String accountButton = viewer.username() == null ? "" : "<a class=\"btn btn-sm btn-outline-secondary"
+                + (account ? " active\" aria-current=\"page" : "") + "\" href=\"/account\" title=\"{{t:nav.account}}\">"
+                + "<i class=\"fas fa-user-gear\" aria-hidden=\"true\"></i><span class=\"d-none d-md-inline ms-1\">" + who + "</span>"
+                + role + "</a>";
         return """
 <header class="topbar">
     <button type="button" class="btn topbar-toggle d-lg-none" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar" aria-label="{{t:layout.openMenu}}"><i class="fas fa-bars" aria-hidden="true"></i></button>
@@ -178,6 +219,7 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
     <div class="topbar-actions">
         """ + languageSwitch(lang) + """
         <button type="button" class="theme-toggle" id="themeToggle" title="{{t:layout.theme}}" aria-label="{{t:layout.theme}}"><i class="fas fa-sun" id="themeIcon" aria-hidden="true"></i></button>
+        """ + accountButton + """
         <a class="btn btn-sm btn-logout text-white" href="#" id="logoutButton" title="{{t:nav.logout}}"><i class="fas fa-right-from-bracket" aria-hidden="true"></i><span class="d-none d-md-inline ms-1">{{t:nav.logout}}</span></a>
     </div>
 </header>

@@ -2,6 +2,8 @@ package org.mail_panel.security;
 
 import java.util.*;
 
+import org.mail_panel.i18n.I18n;
+
 /**
  * Catalogo paesi ISO-3166-1 alpha-2 con nome italiano e flag emoji.
  *
@@ -14,10 +16,17 @@ import java.util.*;
 public final class CountryCatalog {
 
     public record Country(String code, String name, String flag, boolean common) {
+        /** Il nome nella lingua della richiesta: in italiano quello della tabella, altrimenti quello di Java (CLDR). */
+        public String localName() {
+            if ("it".equals(I18n.current())) return name;
+            String n = Locale.of("", code.toUpperCase(Locale.ROOT)).getDisplayCountry(Locale.ENGLISH);
+            return n.isEmpty() || n.equalsIgnoreCase(code) ? name : n;
+        }
+
         public org.json.JSONObject toJson() {
             return new org.json.JSONObject()
                 .put("code", code)
-                .put("name", name)
+                .put("name", localName())
                 .put("flag", flag)
                 .put("common", common);
         }
@@ -280,9 +289,9 @@ public final class CountryCatalog {
         public org.json.JSONObject toJson() {
             return new org.json.JSONObject()
                 .put("id", id)
-                .put("label", label)
+                .put("label", I18n.tr(label))
                 .put("icon", icon)
-                .put("description", description)
+                .put("description", I18n.tr(description))
                 .put("codes", new org.json.JSONArray(codes));
         }
     }
@@ -322,20 +331,20 @@ public final class CountryCatalog {
     private static final List<String> ITALY_ONLY = List.of("it");
 
     private static final List<CountryGroup> GROUPS = List.of(
-        new CountryGroup("italy",    "Solo Italia",        "🇮🇹", ITALY_ONLY,
-            "Solo IP italiani"),
-        new CountryGroup("eu27",     "Unione Europea (27)", "🇪🇺", EU27,
-            "Tutti i 27 stati membri UE"),
-        new CountryGroup("eu_efta",  "EU + EFTA (Schengen)", "🇪🇺", EU_PLUS_EFTA,
-            "UE + Svizzera, Norvegia, Islanda, Liechtenstein (31 paesi)"),
-        new CountryGroup("g7",       "G7",                 "🌐", G7,
-            "Italia, Francia, Germania, UK, USA, Canada, Giappone"),
-        new CountryGroup("nato",     "NATO (32)",          "🛡", NATO,
-            "Tutti gli stati membri NATO"),
-        new CountryGroup("usa",      "Stati Uniti",        "🇺🇸", USA_ONLY,
-            "Solo USA"),
-        new CountryGroup("north_am", "Nord America",       "🌎", NORTH_AMERICA,
-            "USA, Canada, Messico")
+        new CountryGroup("italy",    "server.cgroup.italy.label",        "🇮🇹", ITALY_ONLY,
+            "server.cgroup.italy.desc"),
+        new CountryGroup("eu27",     "server.cgroup.eu27.label", "🇪🇺", EU27,
+            "server.cgroup.eu27.desc"),
+        new CountryGroup("eu_efta",  "server.cgroup.eu_efta.label", "🇪🇺", EU_PLUS_EFTA,
+            "server.cgroup.eu_efta.desc"),
+        new CountryGroup("g7",       "server.cgroup.g7.label",                 "🌐", G7,
+            "server.cgroup.g7.desc"),
+        new CountryGroup("nato",     "server.cgroup.nato.label",          "🛡", NATO,
+            "server.cgroup.nato.desc"),
+        new CountryGroup("usa",      "server.cgroup.usa.label",        "🇺🇸", USA_ONLY,
+            "server.cgroup.usa.desc"),
+        new CountryGroup("north_am", "server.cgroup.north_am.label",       "🌎", NORTH_AMERICA,
+            "server.cgroup.north_am.desc")
     );
 
     public static List<CountryGroup> getGroups() {

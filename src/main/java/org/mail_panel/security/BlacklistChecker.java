@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import java.io.BufferedReader;
+import org.mail_panel.i18n.I18n;
 import java.io.InputStreamReader;
 import java.util.*;
 import java.util.concurrent.*;
@@ -32,7 +33,7 @@ public class BlacklistChecker {
     private static final List<DnsblEntry> IP_BLACKLISTS = Arrays.asList(
         new DnsblEntry("zen.spamhaus.org",            "Spamhaus ZEN",      "https://check.spamhaus.org/"),
         new DnsblEntry("bl.spamcop.net",              "SpamCop",           "https://www.spamcop.net/w3m?action=checkblock&ip=", /*webOnly=*/ true,
-            "Verifica manuale via web (il loro NS DNS è cronicamente irraggiungibile)"),
+            "server.bl.spamcopWebOnly"),
         new DnsblEntry("b.barracudacentral.org",      "Barracuda BRBL",    "https://www.barracudacentral.org/lookups/lookup-reputation"),
         new DnsblEntry("dnsbl.sorbs.net",             "SORBS DNSBL",       "https://www.sorbs.net/lookup.shtml"),
         new DnsblEntry("psbl.surriel.com",            "PSBL",              "https://psbl.org/"),
@@ -121,7 +122,7 @@ public class BlacklistChecker {
                 // Genera direttamente un risultato "web-only" senza eseguire query DNS
                 final DnsblEntry blFinal = bl;
                 final String ipFinal = ip;
-                futures.add(pool.submit(() -> {
+                futures.add(pool.submit(I18n.withCurrentCallable(() -> {
                     CheckResult cr = new CheckResult();
                     cr.blacklistName = blFinal.name;
                     cr.blacklistZone = blFinal.zone;
@@ -129,12 +130,12 @@ public class BlacklistChecker {
                     cr.lookupUrl = blFinal.lookupUrl + (blFinal.lookupUrl.endsWith("=") ? ipFinal : "");
                     cr.webOnly = true;
                     cr.message = blFinal.webOnlyMessage != null
-                        ? blFinal.webOnlyMessage
-                        : "Verifica manuale via web";
+                        ? I18n.tr(blFinal.webOnlyMessage)
+                        : I18n.tr("server.bl.webOnly");
                     return cr;
-                }));
+                })));
             } else {
-                futures.add(pool.submit(() -> queryDnsbl(reversed + "." + bl.zone, bl)));
+                futures.add(pool.submit(I18n.withCurrentCallable(() -> queryDnsbl(reversed + "." + bl.zone, bl))));
             }
         }
         for (Future<CheckResult> f : futures) {
@@ -175,7 +176,7 @@ public class BlacklistChecker {
         List<Future<CheckResult>> futures = new ArrayList<>();
 
         for (DnsblEntry bl : DOMAIN_BLACKLISTS) {
-            futures.add(pool.submit(() -> queryDnsbl(domain + "." + bl.zone, bl)));
+            futures.add(pool.submit(I18n.withCurrentCallable(() -> queryDnsbl(domain + "." + bl.zone, bl))));
         }
         for (Future<CheckResult> f : futures) {
             try {
@@ -211,11 +212,11 @@ public class BlacklistChecker {
         // NS server lenti o intermittenti dalla nostra rete
         if (r.error && r.message != null && r.message.toLowerCase().contains("timeout")) {
             CheckResult retry = queryDnsblOnce(queryHost, bl, 8, 3);
-            if (!retry.error || (retry.message != null && retry.message.equals("Pulito"))) {
+            if (!retry.error || (retry.message != null && retry.message.equals(I18n.tr("server.bl.clean")))) {
                 return retry;
             }
             // Se anche il secondo tentativo fallisce, aggiorna il messaggio
-            r.message = "Timeout dopo 2 tentativi (~25s totali) — il DNSBL sembra irraggiungibile";
+            r.message = I18n.tr("server.bl.timeout2");
         }
         return r;
     }
@@ -272,15 +273,15 @@ public class BlacklistChecker {
                 if (digError != null) {
                     r.error = true;
                     if (digError.toLowerCase().contains("timed out")) {
-                        r.message = "Timeout — il resolver DNS non risponde (probabile rate limit del DNSBL)";
+                        r.message = I18n.tr("server.bl.timeout");
                     } else if (digError.toLowerCase().contains("connection refused")) {
-                        r.message = "Connessione rifiutata dal resolver DNS";
+                        r.message = I18n.tr("server.bl.refused");
                     } else {
-                        r.message = "Errore DNS: " + digError;
+                        r.message = I18n.tr("server.bl.dnsError", java.util.Map.of("err", String.valueOf(digError)));
                     }
                 } else {
                     r.listed = false;
-                    r.message = "Pulito";
+                    r.message = I18n.tr("server.bl.clean");
                 }
                 return r;
             }
@@ -298,25 +299,25 @@ public class BlacklistChecker {
                 r.error = true;
                 r.responseCode = firstLine;
                 String specific = switch (firstLine) {
-                    case "127.255.255.252" -> "Errore interno Spamhaus";
-                    case "127.255.255.253" -> "Tipo query non permesso";
-                    case "127.255.255.254" -> "Resolver DNS pubblico bloccato (usa resolver locale tipo unbound)";
-                    case "127.255.255.255" -> "Rate limit / quota superata — usa resolver locale";
-                    default -> "Errore blacklist (codice " + firstLine + ")";
+                    case "127.255.255.252" -> I18n.tr("server.bl.shInternal");
+                    case "127.255.255.253" -> I18n.tr("server.bl.shType");
+                    case "127.255.255.254" -> I18n.tr("server.bl.shPublic");
+                    case "127.255.255.255" -> I18n.tr("server.bl.shRate");
+                    default -> I18n.tr("server.bl.blError", java.util.Map.of("c", String.valueOf(firstLine)));
                 };
                 r.message = specific;
             } else if (firstLine.startsWith("127.")) {
                 r.listed = true;
                 r.responseCode = firstLine;
-                r.message = "LISTED (" + firstLine + ")";
+                r.message = I18n.tr("server.bl.listed", java.util.Map.of("c", String.valueOf(firstLine)));
             } else {
                 // Risposta inattesa
                 r.error = true;
-                r.message = "Risposta inattesa: " + firstLine;
+                r.message = I18n.tr("server.bl.unexpected", java.util.Map.of("c", String.valueOf(firstLine)));
             }
         } catch (Exception e) {
             r.error = true;
-            r.message = "Errore: " + e.getMessage();
+            r.message = I18n.tr("server.bl.error", java.util.Map.of("err", String.valueOf(e.getMessage())));
         }
         return r;
     }

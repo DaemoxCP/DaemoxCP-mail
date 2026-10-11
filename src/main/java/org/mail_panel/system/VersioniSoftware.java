@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.util.Shell;
 
@@ -105,26 +106,26 @@ public final class VersioniSoftware {
 
     private static Pattern riga(String re) { return Pattern.compile(re, Pattern.MULTILINE); }
 
-    static final Voce POSTFIX = new Voce("postfix", "Postfix", "Server SMTP", "/usr/local/sbin/postconf",
+    static final Voce POSTFIX = new Voce("postfix", "Postfix", "server.ver.role.postfix", "/usr/local/sbin/postconf",
             new String[]{"/usr/local/sbin/postconf", "-h", "mail_version"}, riga("^" + V), "/var/spool/postfix/pid/master.pid");
-    static final Voce DOVECOT = new Voce("dovecot", "Dovecot", "IMAP e POP3, consegna nelle caselle", "/usr/local/sbin/dovecot",
+    static final Voce DOVECOT = new Voce("dovecot", "Dovecot", "server.ver.role.dovecot", "/usr/local/sbin/dovecot",
             new String[]{"/usr/local/sbin/dovecot", "--version"}, riga("^" + V), "/var/run/dovecot/master.pid");
-    static final Voce RSPAMD = new Voce("rspamd", "Rspamd", "Antispam e firma DKIM", "/usr/local/bin/rspamd",
+    static final Voce RSPAMD = new Voce("rspamd", "Rspamd", "server.ver.role.rspamd", "/usr/local/bin/rspamd",
             new String[]{"/usr/local/bin/rspamd", "--version"}, riga("[Vv]ersion\\s+" + V), "/var/run/rspamd/rspamd.pid");
-    static final Voce REDIS = new Voce("redis", "Redis", "Archivio dati di Rspamd", "/usr/local/bin/redis-server",
+    static final Voce REDIS = new Voce("redis", "Redis", "server.ver.role.redis", "/usr/local/bin/redis-server",
             new String[]{"/usr/local/bin/redis-server", "--version"}, riga("\\bv=" + V), "/var/run/redis/redis.pid");
-    static final Voce NGINX = new Voce("nginx", "nginx", "Web server: webmail, MTA-STS, configurazione automatica dei client",
+    static final Voce NGINX = new Voce("nginx", "nginx", "server.ver.role.nginx",
             "/usr/local/sbin/nginx", new String[]{"/usr/local/sbin/nginx", "-v"}, riga("nginx/" + V), "/var/run/nginx.pid");
-    static final Voce PHP = new Voce("php", "PHP-FPM", "Esegue la webmail", "/usr/local/sbin/php-fpm",
+    static final Voce PHP = new Voce("php", "PHP-FPM", "server.ver.role.php", "/usr/local/sbin/php-fpm",
             new String[]{"/usr/local/sbin/php-fpm", "-v"}, riga("^PHP " + V), null);
-    static final Voce PIGEONHOLE = new Voce("pigeonhole", "Pigeonhole", "Filtri Sieve e risposte automatiche",
+    static final Voce PIGEONHOLE = new Voce("pigeonhole", "Pigeonhole", "server.ver.role.pigeonhole",
             "/usr/local/bin/sievec", null, null, null);
-    static final Voce FAIL2BAN = new Voce("fail2ban", "fail2ban", "Blocca chi sbaglia l'accesso troppe volte",
+    static final Voce FAIL2BAN = new Voce("fail2ban", "fail2ban", "server.ver.role.fail2ban",
             "/usr/local/bin/fail2ban-client", null, null, "/var/run/fail2ban/fail2ban.pid");
-    static final Voce UNBOUND = new Voce("unbound", "Unbound", "Risolutore DNS locale (liste di blocco di Rspamd)",
+    static final Voce UNBOUND = new Voce("unbound", "Unbound", "server.ver.role.unbound",
             "/usr/local/sbin/unbound", new String[]{"/usr/local/sbin/unbound", "-V"}, riga("^Version " + V), null);
     /** Quello del sistema base c'e' su ogni FreeBSD: si mostra solo se gira (il pidfile serve a questo). */
-    static final Voce LOCAL_UNBOUND = new Voce("local_unbound", "Unbound del sistema base", "Risolutore DNS locale (liste di blocco di Rspamd)",
+    static final Voce LOCAL_UNBOUND = new Voce("local_unbound", "server.ver.name.localUnbound", "server.ver.role.unbound",
             "/usr/sbin/local-unbound", new String[]{"/usr/sbin/local-unbound", "-V"}, riga("^Version " + V), null);
     static final String PIDFILE_LOCAL_UNBOUND = "/var/run/local_unbound.pid";
 
@@ -159,9 +160,9 @@ public final class VersioniSoftware {
 
         JSONArray altro = new JSONArray();
         altro.put(l.freebsd());
-        altro.put(l.openssl(OPENSSL_BASE, "openssl", "OpenSSL", "Libreria TLS del sistema base: la usano i pacchetti ufficiali"));
+        altro.put(l.openssl(OPENSSL_BASE, "openssl", "OpenSSL", "server.ver.role.openssl"));
         if (s.esiste(OPENSSL_PKG))
-            altro.put(l.openssl(OPENSSL_PKG, "openssl_pkg", "OpenSSL (pacchetto)", "Libreria TLS installata da pkg, per chi e' compilato per usarla"));
+            altro.put(l.openssl(OPENSSL_PKG, "openssl_pkg", "server.ver.name.opensslPkg", "server.ver.role.opensslPkg"));
         altro.put(l.daBinario(NGINX));
         altro.put(l.daBinario(PHP));
         altro.put(l.daBinario(PIGEONHOLE));
@@ -196,7 +197,7 @@ public final class VersioniSoftware {
             String ver = v.comando() == null ? null : estrai(v.versione(), s.esegui(v.comando()));
             if (ver != null) r.put("versione", ver).put("fonte", String.join(" ", v.comando()));
             else if (!pkg.isEmpty()) r.put("versione", upstream(pkg)).put("fonte", "pkg which " + v.binario());
-            if (v.pidfile() != null && !pkg.isEmpty()) avvioEInstallazione(r, v.pidfile(), nome(pkg), v.nome());
+            if (v.pidfile() != null && !pkg.isEmpty()) avvioEInstallazione(r, v.pidfile(), nome(pkg), I18n.tr(v.nome()));
             return r;
         }
 
@@ -207,8 +208,7 @@ public final class VersioniSoftware {
             Long installato = installatoIl.get(nomePacchetto);
             if (avvio == null || installato == null) return;
             if (avvio.getEpochSecond() < installato) {
-                r.put("riavvio", true).put("notaRiavvio", chi + " e' partito il " + data(avvio) + ", prima dell'installazione del pacchetto ("
-                        + data(Instant.ofEpochSecond(installato)) + "): sta eseguendo la versione di prima. Riavvialo per usare quella installata.");
+                r.put("riavvio", true).put("notaRiavvio", I18n.tr("server.ver.startedBefore", java.util.Map.of("who", String.valueOf(chi), "start", String.valueOf(data(avvio)), "inst", String.valueOf(data(Instant.ofEpochSecond(installato))))));
             }
         }
 
@@ -222,29 +222,29 @@ public final class VersioniSoftware {
             String a = numeri(inEsecuzione), b = numeri(installata);
             if (a.isEmpty() || b.isEmpty() || a.equals(b)) return;
             r.put("riavvio", true).put("installata", installata)
-             .put("notaRiavvio", chi + " in esecuzione e' la " + inEsecuzione + ", quella installata la " + installata + ": " + rimedio + ".");
+             .put("notaRiavvio", I18n.tr("server.ver.runningVsInstalled", java.util.Map.of("who", String.valueOf(chi), "run", String.valueOf(inEsecuzione), "inst", String.valueOf(installata), "fix", String.valueOf(rimedio))));
         }
 
         JSONObject mysql() {
-            JSONObject r = voce("mysql", "MySQL", "Database: domini, caselle, alias e il pannello");
+            JSONObject r = voce("mysql", "MySQL", "server.ver.role.mysql");
             String pkg = pacchetto(MYSQLD);
             String vivo = valida(s.versioneMysql());
             if (vivo == null && !s.esiste(MYSQLD)) return r;
             r.put("installato", true);
             if (!pkg.isEmpty()) r.put("pacchetto", pkg);
             if (vivo != null) {
-                r.put("versione", vivo).put("fonte", "SELECT VERSION() sulla connessione del pannello").put("inEsecuzione", true);
-                if (!pkg.isEmpty()) confronta(r, vivo, upstream(pkg), "MySQL", "riavvia MySQL per usare quella installata");
+                r.put("versione", vivo).put("fonte", I18n.tr("server.ver.srcMysql")).put("inEsecuzione", true);
+                if (!pkg.isEmpty()) confronta(r, vivo, upstream(pkg), "MySQL", I18n.tr("server.ver.fixMysql"));
                 return r;
             }
             String ver = estrai(riga("\\bVer\\s+" + V), s.esegui(MYSQLD, "--version"));
             if (ver != null) r.put("versione", ver).put("fonte", MYSQLD + " --version");
             else if (!pkg.isEmpty()) r.put("versione", upstream(pkg)).put("fonte", "pkg which " + MYSQLD);
-            return r.put("avviso", "MySQL non risponde alla connessione del pannello: questa e' la versione installata, non quella in esecuzione.");
+            return r.put("avviso", I18n.tr("server.ver.mysqlDown"));
         }
 
         JSONObject clamav() {
-            JSONObject r = voce("clamav", "ClamAV", "Antivirus");
+            JSONObject r = voce("clamav", "ClamAV", "server.ver.role.clamav");
             if (!s.esiste(CLAMD)) return r;
             r.put("installato", true);
             String pkg = pacchetto(CLAMD);
@@ -256,24 +256,26 @@ public final class VersioniSoftware {
                 if (!pkg.isEmpty()) r.put("versione", upstream(pkg)).put("fonte", "pkg which " + CLAMD);
                 return r;
             }
-            r.put("versione", c.motore()).put("fonte", daDemone ? "VERSION al demone clamd (" + SOCKET_CLAMD + ")" : CLAMD + " --version");
+            r.put("versione", c.motore()).put("fonte", daDemone ? I18n.tr("server.ver.srcClamd", java.util.Map.of("sock", String.valueOf(SOCKET_CLAMD))) : CLAMD + " --version");
             if (daDemone) r.put("inEsecuzione", true);
             if (c.firme() != null) {
                 r.put("firme", c.firme());
-                r.put("dettaglio", "firme " + c.firme() + (c.del() != null ? " del " + data(c.del()) : ""));
+                r.put("dettaglio", c.del() != null
+                        ? I18n.tr("server.ver.sigsOf", java.util.Map.of("n", String.valueOf(c.firme()), "date", String.valueOf(data(c.del()))))
+                        : I18n.tr("server.ver.sigs", java.util.Map.of("n", String.valueOf(c.firme()))));
                 if (c.del() != null) {
                     long giorni = ChronoUnit.DAYS.between(c.del(), s.adesso());
                     if (giorni > GIORNI_FIRME)
-                        r.put("avviso", "Le firme hanno " + giorni + " giorni: freshclam non le sta aggiornando, e i virus nuovi passano.");
+                        r.put("avviso", I18n.tr("server.ver.sigsOld", java.util.Map.of("d", String.valueOf(giorni))));
                 }
             }
             if (daDemone && !pkg.isEmpty())
-                confronta(r, c.motore(), upstream(pkg), "clamd", "riavvia ClamAV per usare quella installata");
+                confronta(r, c.motore(), upstream(pkg), "clamd", I18n.tr("server.ver.fixClamav"));
             return r;
         }
 
         JSONObject roundcube() {
-            JSONObject r = voce("roundcube", "Roundcube", "Webmail");
+            JSONObject r = voce("roundcube", "Roundcube", "server.ver.role.roundcube");
             String indice = ROUNDCUBE + "/index.php";
             if (!s.esiste(indice)) return r;
             r.put("installato", true);
@@ -286,20 +288,20 @@ public final class VersioniSoftware {
         }
 
         JSONObject java(String javaBin) {
-            JSONObject r = voce("java", "Java", "Esegue questo pannello").put("installato", true);
+            JSONObject r = voce("java", "Java", "server.ver.role.java").put("installato", true);
             String ver = valida(s.versioneJava());
             if (ver == null) return r;
-            r.put("versione", ver).put("fonte", "Runtime.version() del pannello").put("inEsecuzione", true);
+            r.put("versione", ver).put("fonte", I18n.tr("server.ver.srcJava")).put("inEsecuzione", true);
             String pkg = pacchetto(javaBin);
             if (!pkg.isEmpty()) {
                 r.put("pacchetto", pkg);
-                confronta(r, ver, upstream(pkg), "La Java del pannello", "riavvia il pannello per usare quella installata");
+                confronta(r, ver, upstream(pkg), I18n.tr("server.ver.panelJava"), I18n.tr("server.ver.fixPanel"));
             }
             return r;
         }
 
         JSONObject freebsd() {
-            JSONObject r = voce("freebsd", "FreeBSD", "Sistema operativo");
+            JSONObject r = voce("freebsd", "FreeBSD", "server.ver.role.freebsd");
             if (!s.esiste(FREEBSD_VERSION)) return r;
             String userland = valida(prima(s.esegui(FREEBSD_VERSION, "-u")));
             if (userland == null) return r;
@@ -308,11 +310,10 @@ public final class VersioniSoftware {
             r.put("installato", true).put("versione", userland).put("fonte", "freebsd-version -u");
             // Kernel e userland possono avere patch diverse per buone ragioni (una correzione che
             // tocca solo l'una o l'altro): si dice, ma non e' un problema.
-            if (inEsecuzione != null && !inEsecuzione.equals(userland)) r.put("dettaglio", "kernel in esecuzione " + inEsecuzione);
+            if (inEsecuzione != null && !inEsecuzione.equals(userland)) r.put("dettaglio", I18n.tr("server.ver.kernelRunning", java.util.Map.of("v", String.valueOf(inEsecuzione))));
             // L'Handbook: kernel installato diverso da quello in esecuzione vuol dire riavvio mancante.
             if (installato != null && inEsecuzione != null && !installato.equals(inEsecuzione)) {
-                r.put("riavvio", true).put("installata", installato).put("notaRiavvio", "Il kernel installato e' " + installato
-                        + ", quello in esecuzione " + inEsecuzione + ": serve un riavvio del server.");
+                r.put("riavvio", true).put("installata", installato).put("notaRiavvio", I18n.tr("server.ver.kernelReboot", java.util.Map.of("inst", String.valueOf(installato), "run", String.valueOf(inEsecuzione))));
             }
             return r;
         }
@@ -331,7 +332,7 @@ public final class VersioniSoftware {
                 if (m.group(2) != null) {
                     try {
                         LocalDate d = LocalDate.parse(m.group(2), DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH));
-                        r.put("dettaglio", "rilasciata il " + d.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+                        r.put("dettaglio", I18n.tr("server.ver.released", java.util.Map.of("date", String.valueOf(d.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))))));
                     } catch (Exception ignorata) { /* la data e' un di piu' */ }
                 }
             } else if (!pkg.isEmpty()) {
@@ -344,7 +345,7 @@ public final class VersioniSoftware {
     }
 
     private static JSONObject voce(String chiave, String nome, String ruolo) {
-        return new JSONObject().put("chiave", chiave).put("nome", nome).put("ruolo", ruolo).put("installato", false);
+        return new JSONObject().put("chiave", chiave).put("nome", I18n.tr(nome)).put("ruolo", I18n.tr(ruolo)).put("installato", false);
     }
 
     /** Il primo gruppo del modello nell'uscita, se e' una versione; altrimenti null. */

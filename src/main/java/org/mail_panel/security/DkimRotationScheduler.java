@@ -55,7 +55,7 @@ public class DkimRotationScheduler {
     /** Avvia lo scheduler. Chiamare una volta sola all'avvio del server. */
     public void start() {
         scheduler.scheduleAtFixedRate(this::tick, 60, 3600, TimeUnit.SECONDS);
-        System.out.println("[DKIM-Rotation] Scheduler avviato (tick orario: propagation, auto-activate, auto-complete, scheduled rotation)");
+        System.out.println("[DKIM-Rotation] Scheduler started (hourly tick: propagation, auto-activate, auto-complete, scheduled rotation)");
     }
 
     public void stop() {
@@ -77,7 +77,7 @@ public class DkimRotationScheduler {
                     handleDomainInRotation(d);
                 }
             } catch (Exception e) {
-                System.err.println("[DKIM-Rotation] Errore nel tick (in-rotation): " + e.getMessage());
+                System.err.println("[DKIM-Rotation] Tick error (in-rotation): " + e.getMessage());
             }
 
             // 4): rotazione programmata
@@ -86,7 +86,7 @@ public class DkimRotationScheduler {
                     handleScheduledRotation(d);
                 }
             } catch (Exception e) {
-                System.err.println("[DKIM-Rotation] Errore nel tick (schedule): " + e.getMessage());
+                System.err.println("[DKIM-Rotation] Tick error (schedule): " + e.getMessage());
             }
         } finally {
             DkimManager.CURRENT_TRIGGER.remove();
@@ -101,7 +101,7 @@ public class DkimRotationScheduler {
             if ("pending_dns".equals(state)) {
                 DkimManager.PropagationCheckResult res = dkim.checkPropagation(d.id);
                 if (res.success && res.propagated) {
-                    System.out.println("[DKIM-Rotation] " + d.domain + ": chiave pending '" + d.dkimPendingSelector + "' propagata in DNS");
+                    System.out.println("[DKIM-Rotation] " + d.domain + ": pending key '" + d.dkimPendingSelector + "' propagated in DNS");
                 }
                 return;
             }
@@ -129,7 +129,7 @@ public class DkimRotationScheduler {
                 System.out.println("[DKIM-Rotation] " + d.domain + ": auto-complete -> " + r.message);
             }
         } catch (Exception e) {
-            System.err.println("[DKIM-Rotation] Errore su " + d.domain + ": " + e.getMessage());
+            System.err.println("[DKIM-Rotation] Error on " + d.domain + ": " + e.getMessage());
         }
     }
 
@@ -156,16 +156,16 @@ public class DkimRotationScheduler {
             }
             if (!due) return;
 
-            System.out.println("[DKIM-Rotation] " + d.domain + ": rotazione programmata dovuta (interval="
-                + d.dkimRotationIntervalDays + "d, last=" + d.dkimLastRotationAt + ") — avvio automatico");
+            System.out.println("[DKIM-Rotation] " + d.domain + ": scheduled rotation due (interval="
+                + d.dkimRotationIntervalDays + "d, last=" + d.dkimLastRotationAt + ") — starting automatically");
             DkimManager.RotationStartResult res = dkim.startRotation(d.id, true);
             if (!res.success) {
-                System.err.println("[DKIM-Rotation] " + d.domain + ": rotazione programmata fallita: " + res.error);
+                System.err.println("[DKIM-Rotation] " + d.domain + ": scheduled rotation failed: " + res.error);
             } else {
-                System.out.println("[DKIM-Rotation] " + d.domain + ": nuova chiave pending '" + res.pendingSelector + "' creata via schedule");
+                System.out.println("[DKIM-Rotation] " + d.domain + ": new pending key '" + res.pendingSelector + "' created by the schedule");
             }
         } catch (Exception e) {
-            System.err.println("[DKIM-Rotation] Errore schedule su " + d.domain + ": " + e.getMessage());
+            System.err.println("[DKIM-Rotation] Schedule error on " + d.domain + ": " + e.getMessage());
         }
     }
 

@@ -28,6 +28,10 @@ import java.lang.reflect.Method;
  *   then the script blocks are extracted and passed to "node --check" (see README.md).
  */
 public class PageGenerator {
+
+    /** The pages as a superadmin sees them: every menu item. */
+    static final Layout.Viewer SUPERADMIN = new Layout.Viewer("admin", "superadmin",
+            org.mail_panel.security.AuthStore.permissionsOf("superadmin"));
     public static void main(String[] a) throws Exception {
         File dir = new File(a[0]);
         new File(dir, "i18n").mkdirs();
@@ -41,7 +45,7 @@ public class PageGenerator {
                 String html = String.valueOf(m.invoke(null));
                 String name = n.substring(3, n.length() - 4).toLowerCase();
                 for (String lang : I18n.LANGUAGES) {
-                    String ready = I18n.render(Layout.expand(html, lang), lang);
+                    String ready = I18n.render(Layout.expand(html, lang, SUPERADMIN), lang);
                     write(new File(dir, name + (lang.equals("it") ? "" : "." + lang) + ".html"), ready);
                 }
                 System.out.println("  " + name + ".html  " + html.length());

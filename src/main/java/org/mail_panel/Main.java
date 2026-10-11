@@ -298,7 +298,7 @@ public class Main {
             String ripristino = org.mail_panel.system.UpdateManager.ripristinaLockDopoCrash();
             if (!ripristino.isEmpty()) System.out.println(ripristino);
         } catch (Exception e) {
-            System.out.println("Ripristino protezione pacchetti non riuscito: " + e.getMessage());
+            System.out.println("Restoring package locks failed: " + e.getMessage());
         }
 
         // Initialize database BEFORE screen to avoid warnings during GUI
@@ -348,8 +348,8 @@ public class Main {
         boolean soloWeb = false;
         for (String a1 : args) if ("--web".equals(a1)) soloWeb = true;
         if (soloWeb) {
-            System.out.println("Avvio in modalita' solo-web: nessun menu a schermo.");
-            System.out.println("Per rivedere il menu: ferma questo processo e rilancialo senza --web.");
+            System.out.println("Starting in web-only mode: no on-screen menu.");
+            System.out.println("To see the menu again: stop this process and start it again without --web.");
             startWebServer(true);
             return;
         }
@@ -358,7 +358,11 @@ public class Main {
         // per riaccendersi da solo (la riga di riavvio la ricostruisce dal processo vivo).
         // Se pero' non c'e', se lo scrive, cosi' esiste un modo breve per avviare --web a mano.
         try {
-            String creato = org.mail_panel.system.UpdateManager.creaRunSh();
+            // La console e' in inglese: il messaggio condiviso con il pannello si chiede in inglese.
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            String creato;
+            try { creato = org.mail_panel.system.UpdateManager.creaRunSh(); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
             if (!creato.isEmpty()) System.out.println(creato);
         } catch (Exception e) {
             // Se non si puo' scrivere accanto al jar non e' un problema: serviva solo a comodita'.
@@ -761,23 +765,23 @@ public class Main {
                     server = new SSLMailServer(port, certContent, keyContent);
                 } catch (java.net.BindException be) {
                     System.out.println();
-                    System.out.println(ANSI_YELLOW + "La porta " + port + " e' gia' occupata: "
-                            + "il pannello e' molto probabilmente GIA' IN ESECUZIONE." + ANSI_RESET);
+                    System.out.println(ANSI_YELLOW + "Port " + port + " is already in use: "
+                            + "the panel is most likely ALREADY RUNNING." + ANSI_RESET);
                     String chi = "";
                     try {
                         chi = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(20),
                                 "sockstat -46l -p " + port + " 2>/dev/null | grep -v '^USER'").outputTrim();
                     } catch (Exception ignored) { }
                     if (!chi.isEmpty()) {
-                        System.out.println("Chi la occupa:");
+                        System.out.println("Who is using it:");
                         System.out.println(chi);
                         System.out.println();
-                        System.out.println("Per fermarlo:  kill <PID>    (il PID e' la terza colonna)");
+                        System.out.println("To stop it:  kill <PID>    (the PID is the third column)");
                     }
-                    System.out.println("Oppure aprilo nel browser: https://" + host + ":" + port);
+                    System.out.println("Or open it in the browser: https://" + host + ":" + port);
                     System.out.println();
-                    System.out.println(ANSI_YELLOW + "Non ho avviato niente: il pannello che gira "
-                            + "non e' stato toccato." + ANSI_RESET);
+                    System.out.println(ANSI_YELLOW + "Nothing was started: the running panel "
+                            + "was not touched." + ANSI_RESET);
                     waitForEnter();
                     return;
                 }
@@ -801,7 +805,7 @@ public class Main {
                     // Senza terminale, System.in e' /dev/null: readLine() tornerebbe subito null
                     // e il server si spegnerebbe un istante dopo essersi acceso. Qui si resta
                     // fermi finche' non arriva un segnale, e a quello pensa lo shutdown hook.
-                    System.out.println("In ascolto. Per fermarlo: kill " + ProcessHandle.current().pid());
+                    System.out.println("Listening. To stop it: kill " + ProcessHandle.current().pid());
                     System.out.flush();
                     try { new java.util.concurrent.CountDownLatch(1).await(); }
                     catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
@@ -869,7 +873,7 @@ public class Main {
 
         try (ResultSet result = dbManager.get_data_config()) {
             if (!result.next()) {
-                System.out.println(ANSI_RED + "Nessuna configurazione MySQL: database non toccato." + ANSI_RESET);
+                System.out.println(ANSI_RED + "No MySQL configuration: database not touched." + ANSI_RESET);
                 return false;
             }
             String mysqlHost = result.getString("mysql_host");
@@ -885,7 +889,7 @@ public class Main {
             mailDatabase.setDatabase(mysqlDatabase);
 
             if (!mailDatabase.connect()) {
-                System.out.println(ANSI_RED + "Failed to connect to MySQL: database non toccato." + ANSI_RESET);
+                System.out.println(ANSI_RED + "Failed to connect to MySQL: database not touched." + ANSI_RESET);
                 return false;
             }
             String errore = null;
@@ -899,18 +903,18 @@ public class Main {
                 // Anche dopo un reset non riuscito: il pannello ritrova le tabelle che mancano.
                 mailDatabase.createSchema();
             } catch (java.sql.SQLException e) {
-                errore = (errore == null ? "" : errore + " ") + "Tabelle non ricreate: " + e.getMessage();
+                errore = (errore == null ? "" : errore + " ") + "Tables not recreated: " + e.getMessage();
             }
             if (errore != null) {
-                System.out.println(ANSI_RED + "Database NON azzerato. " + errore + ANSI_RESET);
+                System.out.println(ANSI_RED + "Database NOT reset. " + errore + ANSI_RESET);
                 return false;
             }
-            System.out.println("Tabelle cancellate: "
-                    + (cancellate.isEmpty() ? "nessuna, il database era gia' vuoto" : String.join(", ", cancellate)));
+            System.out.println("Tables dropped: "
+                    + (cancellate.isEmpty() ? "none, the database was already empty" : String.join(", ", cancellate)));
             System.out.println(ANSI_GREEN + "Database reset completed!" + ANSI_RESET);
             return true;
         } catch (Exception e) {
-            System.out.println(ANSI_RED + "Database NON azzerato: " + e.getMessage() + ANSI_RESET);
+            System.out.println(ANSI_RED + "Database NOT reset: " + e.getMessage() + ANSI_RESET);
             return false;
         }
     }
@@ -945,8 +949,8 @@ public class Main {
             System.out.println(ANSI_GREEN + "Full reset completed!" + ANSI_RESET);
             System.out.println(ANSI_YELLOW + "You can now reinstall services from the menu." + ANSI_RESET);
         } else {
-            System.out.println(ANSI_RED + "Reset NON completo: servizi fermati e configurazioni tolte, "
-                    + "ma il database del pannello non e' stato azzerato (vedi sopra)." + ANSI_RESET);
+            System.out.println(ANSI_RED + "Reset NOT complete: services stopped and configurations removed, "
+                    + "but the panel database was not reset (see above)." + ANSI_RESET);
         }
 
         waitForEnter();

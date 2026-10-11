@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 
 import java.net.URI;
@@ -44,12 +45,12 @@ public class Sorveglianza {
      * numero | cosa governa nel pannello | sostituito-da noti | aggiornato-da noti
      */
     private static final String[][] STANDARD = {
-        { "7208", "SPF: chi puo' spedire per un dominio",                 "",                  "7372,8553,8616" },
-        { "6376", "DKIM: la firma dei messaggi in uscita",                "",                  "8301,8463,8553,8616" },
-        { "8301", "DKIM: algoritmi e lunghezza minima delle chiavi",      "",                  "" },
-        { "9989", "DMARC: il record _dmarc e la politica",                "",                  "" },
-        { "9990", "DMARC: i rapporti aggregati che arrivano a rua",       "",                  "" },
-        { "9991", "DMARC: i rapporti di fallimento",                      "",                  "" },
+        { "7208", "server.watch.std.7208",                 "",                  "7372,8553,8616" },
+        { "6376", "server.watch.std.6376",                "",                  "8301,8463,8553,8616" },
+        { "8301", "server.watch.std.8301",      "",                  "" },
+        { "9989", "server.watch.std.9989",                "",                  "" },
+        { "9990", "server.watch.std.9990",       "",                  "" },
+        { "9991", "server.watch.std.9991",                      "",                  "" },
         // Questi tre aggiornamenti li ha trovati la sorveglianza stessa alla prima esecuzione,
         // il 01/09/2026. Sono segnati come noti solo DOPO averli letti e verificati:
         //  - RFC 8553 sposta i nomi con underscore in un registro: non cambia nulla per noi.
@@ -57,10 +58,10 @@ public class Sorveglianza {
         //  - RFC 8997 deprecia TLS 1.0 e 1.1 per posta in invio e in lettura. Verificato:
         //    Dovecot ha ssl_min_protocol = TLSv1.2 e Postfix esclude !TLSv1, !TLSv1.1.
         //    Gia' conforme, niente da fare — ma lo sappiamo perche' l'abbiamo guardato.
-        { "6186", "I record SRV con cui i client trovano server e porte", "",                  "8314,8553" },
-        { "6409", "Sottomissione: l'obbligo di autenticare (porte 587/465)", "",               "8314" },
-        { "8314", "TLS implicito sulla porta 465",                        "",                  "8997" },
-        { "8461", "MTA-STS: perche' il pannello non lo crea da solo",     "",                  "" },
+        { "6186", "server.watch.std.6186", "",                  "8314,8553" },
+        { "6409", "server.watch.std.6409", "",               "8314" },
+        { "8314", "server.watch.std.8314",                        "",                  "8997" },
+        { "8461", "server.watch.std.8461",     "",                  "" },
     };
 
     private Sorveglianza() {}
@@ -108,7 +109,7 @@ public class Sorveglianza {
                 .build();
 
         for (String[] s : STANDARD) {
-            JSONObject o = new JSONObject().put("rfc", s[0]).put("governa", s[1]);
+            JSONObject o = new JSONObject().put("rfc", s[0]).put("governa", I18n.tr(s[1]));
             try {
                 HttpRequest req = HttpRequest.newBuilder()
                         .uri(URI.create("https://www.rfc-editor.org/rfc/rfc" + s[0] + ".json"))
@@ -117,7 +118,7 @@ public class Sorveglianza {
                         .GET().build();
                 HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() != 200) {
-                    o.put("letto", false).put("problema", "il RFC Editor risponde " + resp.statusCode());
+                    o.put("letto", false).put("problema", I18n.tr("server.watch.editorStatus", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
                     nonLetti++; righe.put(o); continue;
                 }
                 JSONObject j = new JSONObject(resp.body());
@@ -133,22 +134,17 @@ public class Sorveglianza {
                 o.put("aggiornatoDa", new JSONArray(nuoviUpd));
                 if (!nuoviObs.isEmpty()) {
                     sostituiti++;
-                    o.put("gravita", 2).put("commento", "RFC " + s[0] + " e' stato SOSTITUITO da "
-                            + descrivi(nuoviObs) + ". La parte del pannello che riguarda \"" + s[1]
-                            + "\" e' scritta su un documento che non e' piu' in vigore: va riletta.");
+                    o.put("gravita", 2).put("commento", I18n.tr("server.watch.obsoleted", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(descrivi(nuoviObs)), "topic", String.valueOf(I18n.tr(s[1])))));
                 } else if (!nuoviUpd.isEmpty()) {
                     aggiornati++;
-                    o.put("gravita", 1).put("commento", "RFC " + s[0] + " e' stato aggiornato da "
-                            + descrivi(nuoviUpd) + ": non e' sostituito, ma qualcosa e' cambiato su \""
-                            + s[1] + "\".");
+                    o.put("gravita", 1).put("commento", I18n.tr("server.watch.updated", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(descrivi(nuoviUpd)), "topic", String.valueOf(I18n.tr(s[1])))));
                 } else {
-                    o.put("gravita", 0).put("commento", "Nessuna novita'.");
+                    o.put("gravita", 0).put("commento", I18n.tr("server.watch.nothingNew"));
                 }
             } catch (Exception e) {
                 // Un controllo che non e' riuscito non e' un "tutto a posto".
                 o.put("letto", false).put("gravita", 3)
-                 .put("problema", "non sono riuscito a interrogare il RFC Editor: "
-                         + e.getClass().getSimpleName());
+                 .put("problema", I18n.tr("server.watch.editorFailed", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
                 nonLetti++;
             }
             righe.put(o);
@@ -158,15 +154,13 @@ public class Sorveglianza {
          .put("aggiornati", aggiornati).put("nonLetti", nonLetti);
         r.put("fonte", "https://www.rfc-editor.org/rfc/rfcNNNN.json");
         r.put("nota", sostituiti > 0
-                ? sostituiti + (sostituiti == 1 ? " specifica e' stata sostituita" : " specifiche sono state sostituite")
-                  + ": il pannello va riletto su quelle parti."
+                ? (sostituiti == 1 ? I18n.tr("server.watch.sumObsoleted.one")
+                                   : I18n.tr("server.watch.sumObsoleted.other", java.util.Map.of("n", String.valueOf(sostituiti))))
                 : aggiornati > 0
-                ? "Nessuna sostituzione, ma " + aggiornati + " specifiche hanno ricevuto aggiornamenti che il "
-                  + "pannello non conosceva."
+                ? I18n.tr("server.watch.sumUpdated", java.util.Map.of("n", String.valueOf(aggiornati)))
                 : nonLetti > 0
-                ? "Non ho potuto controllare " + nonLetti + " documenti: non vuol dire che vada tutto bene, "
-                  + "vuol dire che non lo so."
-                : "Tutte le specifiche su cui il pannello e' costruito sono ancora quelle in vigore.");
+                ? I18n.tr("server.watch.sumUnread", java.util.Map.of("n", String.valueOf(nonLetti)))
+                : I18n.tr("server.watch.sumAllCurrent"));
         return r;
     }
 
@@ -304,7 +298,7 @@ public class Sorveglianza {
         JSONObject r = new JSONObject().put("rfc", normalizza(numero));
         String n = normalizza(numero);
         if (!n.matches("[0-9]{1,5}"))
-            return r.put("success", false).put("error", "numero di RFC non valido");
+            return r.put("success", false).put("error", I18n.tr("server.watch.badNumber"));
         try {
             HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
             HttpRequest req = HttpRequest.newBuilder()
@@ -313,42 +307,35 @@ public class Sorveglianza {
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200)
                 return r.put("success", false)
-                        .put("error", "il RFC Editor risponde " + resp.statusCode());
+                        .put("error", I18n.tr("server.watch.editorStatus", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
             String testo = resp.body();
             r.put("success", true).put("byte", testo.length());
 
             String cambi = elencoCambiamenti(testo);
             if (cambi != null) {
                 r.put("tipo", "elenco").put("testo", cambi)
-                 .put("nota", "Questo e' l'elenco che gli autori del documento hanno scritto "
-                         + "per dire cosa e' cambiato. E' copiato alla lettera, non riassunto.");
+                 .put("nota", I18n.tr("server.watch.changeList"));
                 // Incrocio con cio' che il pannello usa davvero.
                 List<String> tocca = righeCheToccano(cambi, identificatoriDi(rifermento));
                 r.put("tiRiguarda", new JSONArray(tocca));
                 r.put("notaIncrocio", tocca.isEmpty()
-                        ? "Nessuna riga nomina qualcosa che questo pannello scrive o riconosce. Non vuol "
-                          + "dire che non ti riguardi: un cambiamento descritto a parole, senza nominare "
-                          + "il tag, qui non si vede. Vuol dire solo che non ho trovato riscontri diretti."
-                        : tocca.size() + (tocca.size() == 1 ? " riga nomina" : " righe nominano")
-                          + " qualcosa che il pannello usa davvero: sono quelle da leggere per prime. "
-                          + "L'elenco completo resta qui sotto, perche' l'incrocio dice \"queste ti "
-                          + "riguardano di sicuro\", non \"solo queste\".");
+                        ? I18n.tr("server.watch.crossNone")
+                        : tocca.size() == 1
+                          ? I18n.tr("server.watch.crossSome.one")
+                          : I18n.tr("server.watch.crossSome.other", java.util.Map.of("n", String.valueOf(tocca.size()))));
                 return r;
             }
 
             String ab = abstractDi(testo);
             if (ab != null)
                 return r.put("tipo", "abstract").put("testo", ab)
-                        .put("nota", "Questo documento non ha un'appendice con l'elenco dei cambiamenti: "
-                                + "qui sotto c'e' il suo abstract, che dice di cosa si occupa. Per sapere "
-                                + "cosa cambia esattamente va letto.");
+                        .put("nota", I18n.tr("server.watch.abstract"));
 
             return r.put("success", false)
-                    .put("error", "Il documento e' stato scaricato ma non ne ricavo ne' l'elenco dei "
-                            + "cambiamenti ne' l'abstract: va aperto a mano.");
+                    .put("error", I18n.tr("server.watch.noChangesNoAbstract"));
         } catch (Exception e) {
             return r.put("success", false)
-                    .put("error", "non sono riuscito a scaricare il documento: " + e.getClass().getSimpleName());
+                    .put("error", I18n.tr("server.watch.downloadFailed", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
         }
     }
 

@@ -111,9 +111,9 @@ public class AddressConversionTest {
         vero("\"..@domain-d.test\" no: come percorso uscirebbe da /var/vmail",
                 TrasformaIndirizzo.motivoNoCasella(stato("..@domain-d.test", true, null, una, List.of())) != null);
         vero("un dominio che non e' del pannello no",
-                TrasformaIndirizzo.motivoNoCasella(stato("dmarc@altro.it", false, null, una, List.of())).contains("non e' fra i domini"));
+                TrasformaIndirizzo.motivoNoCasella(stato("dmarc@altro.it", false, null, una, List.of())).contains("non è fra i domini"));
         vero("un indirizzo che e' gia' una casella no",
-                TrasformaIndirizzo.motivoNoCasella(stato("dmarc@domain-d.test", true, casella(5, "dmarc@domain-d.test"), una, List.of())).contains("gia' una casella"));
+                TrasformaIndirizzo.motivoNoCasella(stato("dmarc@domain-d.test", true, casella(5, "dmarc@domain-d.test"), una, List.of())).contains("già una casella"));
         vero("un indirizzo senza alias no",
                 TrasformaIndirizzo.motivoNoCasella(stato("dmarc@domain-d.test", true, null, List.of(), List.of())).contains("non ha alias"));
         TrasformaIndirizzo.Stato ok = stato("dmarc@domain-d.test", true, null,
@@ -155,7 +155,7 @@ public class AddressConversionTest {
         r.con("vendite@domain-d.test", "owner@domain-d.test");
         vero("nessuna destinazione: no", errore(s, new JSONArray(), r).contains("almeno una"));
         vero("l'indirizzo stesso: no", errore(s, new JSONArray().put("info@domain-d.test"), r).contains("stesso"));
-        vero("un indirizzo non valido: no", errore(s, new JSONArray().put("non un indirizzo"), r).contains("non e' un indirizzo valido"));
+        vero("un indirizzo non valido: no", errore(s, new JSONArray().put("non un indirizzo"), r).contains("non è un indirizzo valido"));
         vero("su un tuo dominio ma inesistente: no (la posta verrebbe rifiutata)",
                 errore(s, new JSONArray().put("nessuno@domain-d.test"), r).contains("verrebbe rifiutata"));
         vero("una tua casella: si'", errore(s, new JSONArray().put("owner@domain-d.test"), r) == null);

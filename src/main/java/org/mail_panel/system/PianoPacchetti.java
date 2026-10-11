@@ -1,6 +1,7 @@
 package org.mail_panel.system;
 
 import org.json.JSONArray;
+import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.util.Shell;
 
@@ -147,8 +148,7 @@ public final class PianoPacchetti {
 
         if (illeggibili.length() > 0)
             return r.put("misurato", false).put("illeggibili", illeggibili)
-                    .put("errore", "Nel piano di pkg ci sono " + illeggibili.length() + " righe che non so leggere: "
-                            + "non lo presento come completo. Prima riga: " + illeggibili.getString(0));
+                    .put("errore", I18n.tr("server.plan.unreadableLines", java.util.Map.of("n", String.valueOf(illeggibili.length()), "first", String.valueOf(illeggibili.getString(0)))));
         // pkg stampa un totale per ogni tipo che compare: i due conti devono coincidere, in
         // entrambe le direzioni. Un tipo contato senza totale e' un totale che non ho letto.
         Set<String> tipi = new LinkedHashSet<>(contati.keySet());
@@ -157,8 +157,7 @@ public final class PianoPacchetti {
             int a = contati.getOrDefault(tipo, 0), b = dichiarati.getOrDefault(tipo, -1);
             if (a != b)
                 return r.put("misurato", false)
-                        .put("errore", "pkg dichiara " + (b < 0 ? "nessun totale" : b) + " pacchetti di tipo \"" + tipo
-                                + "\", io ne ho letti " + a + ". I conti non tornano: non presento il piano come completo.");
+                        .put("errore", I18n.tr("server.plan.countMismatch", java.util.Map.of("b", String.valueOf(b < 0 ? I18n.tr("server.plan.noTotal") : String.valueOf(b)), "kind", String.valueOf(tipo), "a", String.valueOf(a))));
         }
         return r.put("misurato", true);
     }
@@ -232,7 +231,7 @@ public final class PianoPacchetti {
                     .digest(String.join("\n", righe).getBytes(StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(h).substring(0, 16);
         } catch (Exception e) {
-            throw new IllegalStateException("SHA-256 non disponibile", e);
+            throw new IllegalStateException("SHA-256 not available", e);
         }
     }
 
@@ -266,8 +265,8 @@ public final class PianoPacchetti {
      * prima di mostrare lo stato; qui conta che la simulazione e l'esecuzione usino lo STESSO.
      */
     public static JSONObject simula(List<String> daSbloccare, List<String> pacchetti) {
-        for (String n : daSbloccare) if (!nomeValido(n)) return fallito("nome di pacchetto non valido: " + n);
-        for (String n : pacchetti) if (!nomeValido(n)) return fallito("nome di pacchetto non valido: " + n);
+        for (String n : daSbloccare) if (!nomeValido(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
+        for (String n : pacchetti) if (!nomeValido(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
         String elenco = pacchetti.isEmpty() ? "" : " " + String.join(" ", pacchetti);
         String prefisso = "pkg";
         String copia = null;
@@ -276,22 +275,21 @@ public final class PianoPacchetti {
                 String db = cartellaDb();
                 long kb = numero(sh("du -sk " + db + " 2>/dev/null | cut -f1", 120));
                 long liberi = numero(sh("df -k /var/tmp 2>/dev/null | tail -1 | awk '{print $4}'", 30));
-                if (kb <= 0) return fallito("non riesco a misurare " + db + ": senza sapere quanto pesa non ne faccio una copia");
+                if (kb <= 0) return fallito(I18n.tr("server.plan.cannotMeasure", java.util.Map.of("db", String.valueOf(db))));
                 if (liberi < kb * 2)
-                    return fallito("per simulare serve una copia del database di pkg (" + (kb / 1024) + " MB) in /var/tmp, "
-                            + "dove ci sono " + (liberi / 1024) + " MB liberi: ne servono almeno il doppio.");
+                    return fallito(I18n.tr("server.plan.noSpace", java.util.Map.of("mb", String.valueOf(kb / 1024), "free", String.valueOf(liberi / 1024))));
                 copia = sh("mktemp -d /var/tmp/pannello-simulazione.XXXXXX 2>/dev/null", 30);
                 if (!copia.matches("/var/tmp/pannello-simulazione\\.[A-Za-z0-9]{6,}")) {
                     String cartellaStrana = copia;
                     copia = null;
-                    return fallito("mktemp non ha creato la cartella per la simulazione: " + cartellaStrana);
+                    return fallito(I18n.tr("server.plan.mktempFailed", java.util.Map.of("d", String.valueOf(cartellaStrana))));
                 }
                 Shell.Result cp = Shell.runShell(Duration.ofSeconds(600), "cp -Rp " + db + "/. " + copia + "/ 2>&1");
-                if (!cp.success()) return fallito("copia del database di pkg non riuscita: " + cp.outputTrim());
+                if (!cp.success()) return fallito(I18n.tr("server.plan.copyFailed", java.util.Map.of("out", String.valueOf(cp.outputTrim()))));
                 prefisso = "pkg -o PKG_DBDIR=" + copia;
                 for (String n : daSbloccare) {
                     Shell.Result u = Shell.runShell(Duration.ofSeconds(60), prefisso + " unlock -y " + n + " 2>&1");
-                    if (!u.success()) return fallito("nella copia non riesco a sbloccare " + n + ": " + u.outputTrim());
+                    if (!u.success()) return fallito(I18n.tr("server.plan.unlockFailed", java.util.Map.of("n", String.valueOf(n), "out", String.valueOf(u.outputTrim()))));
                 }
             }
             Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefisso + " upgrade -n -U" + elenco + " 2>&1");
@@ -352,7 +350,7 @@ public final class PianoPacchetti {
                 String n = blocco.getString("nome");
                 if (sblocca.contains(n)) continue;
                 String no = !protetti.contains(n)
-                        ? "pkg lo considera protetto, ma non risulta nell'elenco dei protetti letto prima: rileggi lo stato"
+                        ? I18n.tr("server.plan.lockedUnknown")
                         : motivoPerNonSbloccare.apply(blocco);
                 if (no != null) { impedimenti.put(new JSONObject().put("nome", n).put("motivo", no)); continue; }
                 sblocca.add(n);
@@ -383,7 +381,7 @@ public final class PianoPacchetti {
             for (int i = 0; i < cambi.length(); i++) if ("pkg".equals(cambi.getJSONObject(i).optString("nome"))) gia = true;
             if (!gia) {
                 JSONArray conPkg = new JSONArray().put(voce("aggiorna", "pkg", prima.getString("da"), prima.getString("a"),
-                        "pkg aggiorna prima se stesso, da solo, e poi prosegue con il resto", "", false));
+                        I18n.tr("server.plan.pkgFirst"), "", false));
                 for (int i = 0; i < cambi.length(); i++) conPkg.put(cambi.get(i));
                 piano.put("cambi", conPkg);
                 cambi = conPkg;
@@ -428,8 +426,8 @@ public final class PianoPacchetti {
             String ora = sh("pkg query %v " + nome + " 2>/dev/null", 30);
             String atteso = "rimuove".equals(x.optString("tipo")) ? "" : x.optString("a");
             esito.put(new JSONObject().put("nome", nome).put("tipo", x.optString("tipo"))
-                    .put("atteso", atteso.isEmpty() ? "(rimosso)" : atteso)
-                    .put("trovato", ora.isEmpty() ? "(non installato)" : ora)
+                    .put("atteso", atteso.isEmpty() ? I18n.tr("server.plan.removed") : atteso)
+                    .put("trovato", ora.isEmpty() ? I18n.tr("server.plan.notInstalled") : ora)
                     .put("ok", atteso.equals(ora)));
         }
         return esito;
@@ -455,14 +453,14 @@ public final class PianoPacchetti {
         Map<String, Integer> gia = new HashMap<>();
         return (a, b) -> {
             if (!versioneValida(a) || !versioneValida(b))
-                throw new IllegalArgumentException("versione non confrontabile: " + a + " / " + b);
+                throw new IllegalArgumentException("version not comparable: " + a + " / " + b);
             return gia.computeIfAbsent(a + " " + b, k -> {
                 String o = sh("pkg version -t '" + a + "' '" + b + "'", 15);
                 return switch (o) {
                     case "<" -> -1;
                     case "=" -> 0;
                     case ">" -> 1;
-                    default -> throw new IllegalStateException("pkg version -t ha risposto \"" + o + "\"");
+                    default -> throw new IllegalStateException("pkg version -t answered \"" + o + "\"");
                 };
             });
         };
@@ -611,48 +609,38 @@ public final class PianoPacchetti {
             String verdetto, spiega;
             if (illeggibile) {
                 verdetto = "non-so";
-                spiega = "Per almeno un problema non riesco a collocare la versione installata negli intervalli di "
-                        + "VuXML: non dico niente che non so. Il collegamento VuXML di ogni problema e' qui sotto.";
+                spiega = I18n.tr("server.plan.v.unknownRange");
             } else if (catalogoPiuNuovo && ancoraApertiNelCatalogo.isEmpty()) {
                 verdetto = "si-risolve-aggiornando";
-                spiega = "Si': aggiornando alla " + catalogo + ", che il tuo catalogo offre, il problema e' corretto. "
-                        + "VuXML non considera vulnerabile quella versione.";
+                spiega = I18n.tr("server.plan.v.fixedByUpgrade", java.util.Map.of("v", String.valueOf(catalogo)));
             } else if (catalogoPiuNuovo) {
                 verdetto = "aggiornamento-non-basta";
-                spiega = "Il catalogo offre la " + catalogo + ", ma VuXML la considera ancora vulnerabile per: "
-                        + String.join("; ", ancoraApertiNelCatalogo) + "."
-                        + (primaCorretta != null ? " La correzione e' dalla " + primaCorretta + " in poi." : "");
+                spiega = I18n.tr("server.plan.v.upgradeNotEnough", java.util.Map.of("v", String.valueOf(catalogo), "list", String.valueOf(String.join("; ", ancoraApertiNelCatalogo))))
+                        + (primaCorretta != null ? " " + I18n.tr("server.plan.v.fixedFrom", java.util.Map.of("v", String.valueOf(primaCorretta))) : "");
             } else if (senzaLimite) {
                 verdetto = "nessuna-correzione";
-                spiega = "No: VuXML considera vulnerabili tutte le versioni pubblicate, senza un limite superiore. "
-                        + "Una versione corretta non esiste ancora, in nessun ramo.";
+                spiega = I18n.tr("server.plan.v.noFix");
             } else if (finoA != null && primaCorretta == null) {
                 verdetto = "correzione-non-indicata";
-                spiega = "VuXML dice che sono vulnerabili le versioni fino alla " + finoA + " compresa, ma non indica "
-                        + "la prima corretta. Il tuo catalogo arriva alla " + vuotoSe(catalogo, installata) + ".";
+                spiega = I18n.tr("server.plan.v.fixNotStated", java.util.Map.of("upTo", String.valueOf(finoA), "cat", String.valueOf(vuotoSe(catalogo, installata))));
             } else if (soloQuesta && primaCorretta == null) {
                 verdetto = "correzione-fuori-dal-ramo";
-                spiega = "VuXML considera vulnerabile proprio la " + installata + ": qualunque altra versione e' "
-                        + "corretta, ma il tuo catalogo non ne offre una piu' recente.";
+                spiega = I18n.tr("server.plan.v.onlyThis", java.util.Map.of("v", String.valueOf(installata)));
             } else if (primaCorretta != null) {
                 verdetto = "correzione-fuori-dal-ramo";
-                spiega = "Si', la correzione esiste: dalla versione " + primaCorretta + " in poi, secondo VuXML. "
-                        + "Il tuo catalogo pero' arriva alla " + vuotoSe(catalogo, installata) + ", cioe' non ce l'ha "
-                        + "ancora: la protezione non c'entra, anche sbloccando non arriverebbe. Arrivera' nel tuo ramo "
-                        + "quando qualcuno ce la porta; il ramo \"latest\" di solito la riceve prima.";
+                spiega = I18n.tr("server.plan.v.fixOutsideBranch", java.util.Map.of("fixed", String.valueOf(primaCorretta), "cat", String.valueOf(vuotoSe(catalogo, installata))));
             } else {
                 verdetto = "non-so";
-                spiega = "Gli intervalli di VuXML non indicano una versione corretta che io sappia confrontare.";
+                spiega = I18n.tr("server.plan.v.noComparable");
             }
             return r.put("verdetto", verdetto).put("spiegazione", spiega);
         } catch (RuntimeException e) {
-            return r.put("verdetto", "non-so").put("spiegazione", "Il confronto delle versioni non ha risposto: "
-                    + e.getMessage() + ". Non dico niente che non ho potuto verificare.");
+            return r.put("verdetto", "non-so").put("spiegazione", I18n.tr("server.plan.v.compareFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
     private static String vuotoSe(String catalogo, String installata) {
-        return catalogo == null || catalogo.isEmpty() ? installata + " (nessuna versione piu' recente)" : catalogo;
+        return catalogo == null || catalogo.isEmpty() ? installata + " " + I18n.tr("server.plan.noNewer") : catalogo;
     }
 
     /**
@@ -666,11 +654,11 @@ public final class PianoPacchetti {
         String out = a.output();
         if (out == null || out.indexOf('{') < 0)
             return new JSONObject().put("success", false)
-                    .put("error", "pkg audit -Rjson non ha prodotto un elenco leggibile (codice " + a.exitCode() + ")");
+                    .put("error", I18n.tr("server.plan.auditUnreadable", java.util.Map.of("c", String.valueOf(a.exitCode()))));
         JSONObject vul;
         try { vul = leggiAudit(out); }
         catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", "JSON di pkg audit illeggibile: " + e.getMessage());
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.plan.auditJson", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
         Confronto c = confrontoPkg();
         JSONObject per = new JSONObject();

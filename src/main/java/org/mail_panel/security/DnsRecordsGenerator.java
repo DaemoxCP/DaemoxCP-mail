@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import org.mail_panel.database.MailDatabase;
+import org.mail_panel.i18n.I18n;
 
 import java.io.*;
 import java.net.*;
@@ -60,10 +61,10 @@ public class DnsRecordsGenerator {
             DnsRecord dkimPlaceholder = new DnsRecord();
             dkimPlaceholder.type = "TXT";
             dkimPlaceholder.name = "mail._domainkey";
-            dkimPlaceholder.value = "(Da generare)";
+            dkimPlaceholder.value = I18n.tr("server.dnsg.toGenerate");
             dkimPlaceholder.ttl = DEFAULT_TTL;
             dkimPlaceholder.dnsZone = domain;
-            dkimPlaceholder.description = "DKIM - Firma digitale email (da configurare)";
+            dkimPlaceholder.description = I18n.tr("server.dnsg.descDkimTodo");
             // Anche il segnaposto dichiara la sua verifica: senza, sarebbe l'unico record a
             // ripiegare sull'appaiamento per nome, cioe' proprio sul difetto appena corretto.
             dkimPlaceholder.checkType = "DKIM";
@@ -113,7 +114,7 @@ public class DnsRecordsGenerator {
         record.ttl = DEFAULT_TTL;
         record.priority = DEFAULT_MX_PRIORITY;
         record.dnsZone = domain;
-        record.description = "Mail Exchange - Indica quale server gestisce la posta per " + domain;
+        record.description = I18n.tr("server.dnsg.descMx", java.util.Map.of("d", String.valueOf(domain)));
         record.checkType = "MX";
         record.valoreCompleto = DEFAULT_MX_PRIORITY + " " + mailServer;
         record.required = true;
@@ -151,7 +152,7 @@ public class DnsRecordsGenerator {
         record.value = ip;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = parentDomain;
-        record.description = "Indirizzo IP del server mail (" + hostname + ")";
+        record.description = I18n.tr("server.dnsg.descA", java.util.Map.of("h", String.valueOf(hostname)));
         record.checkType = "A";
         record.required = true;
         record.explanation = """
@@ -185,7 +186,7 @@ public class DnsRecordsGenerator {
         record.value = spfValue;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
-        record.description = "SPF - Definisce quali server possono inviare email per " + domain;
+        record.description = I18n.tr("server.dnsg.descSpf", java.util.Map.of("d", String.valueOf(domain)));
         record.checkType = "SPF";
         record.required = true;
         record.explanation = """
@@ -222,7 +223,7 @@ public class DnsRecordsGenerator {
         record.value = dkimValue;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
-        record.description = "DKIM - Firma digitale per autenticare le email";
+        record.description = I18n.tr("server.dnsg.descDkim");
         record.checkType = "DKIM";
         record.required = true;
         record.configured = true;
@@ -255,7 +256,7 @@ public class DnsRecordsGenerator {
         record.value = dmarcValue;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
-        record.description = "DMARC - Policy per email non autenticate";
+        record.description = I18n.tr("server.dnsg.descDmarc");
         record.checkType = "DMARC";
         record.required = true;
         record.explanation = """
@@ -297,7 +298,7 @@ public class DnsRecordsGenerator {
         autoconfig.value = mailServer;
         autoconfig.ttl = DEFAULT_TTL;
         autoconfig.dnsZone = domain;
-        autoconfig.description = "Autoconfig per Thunderbird (autoconfig." + domain + ")";
+        autoconfig.description = I18n.tr("server.dnsg.descAutoconfig", java.util.Map.of("d", String.valueOf(domain)));
         autoconfig.checkType = "Autoconfig";
         autoconfig.required = false;
         autoconfig.explanation = """
@@ -323,7 +324,7 @@ public class DnsRecordsGenerator {
         srvImap.priority = 0;
         srvImap.ttl = DEFAULT_TTL;
         srvImap.dnsZone = domain;
-        srvImap.description = "SRV per IMAP SSL (_imaps._tcp." + domain + ")";
+        srvImap.description = I18n.tr("server.dnsg.descSrvImap", java.util.Map.of("d", String.valueOf(domain)));
         srvImap.checkType = "SRV (_imaps)";
         // Un SRV non e' scrivibile senza priorita', peso e porta: qui c'e' il record intero.
         srvImap.valoreCompleto = "0 1 993 " + mailServer;
@@ -351,7 +352,7 @@ public class DnsRecordsGenerator {
         srvSmtp.priority = 0;
         srvSmtp.ttl = DEFAULT_TTL;
         srvSmtp.dnsZone = domain;
-        srvSmtp.description = "SRV per SMTP submission (_submission._tcp." + domain + ")";
+        srvSmtp.description = I18n.tr("server.dnsg.descSrvSmtp", java.util.Map.of("d", String.valueOf(domain)));
         srvSmtp.checkType = "SRV (_submission)";
         srvSmtp.valoreCompleto = "0 1 587 " + mailServer;
         srvSmtp.required = false;
@@ -384,7 +385,7 @@ public class DnsRecordsGenerator {
         record.value = hostname;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = "(Provider Hosting)";
-        record.description = "PTR - Reverse DNS (NON si configura su Cloudflare)";
+        record.description = I18n.tr("server.dnsg.descPtr");
         record.checkType = "PTR";
         record.required = true;
         record.explanation = """
@@ -582,11 +583,11 @@ public class DnsRecordsGenerator {
         // valore inventato. Ma una casella "Content" vuota nelle istruzioni non aiuta nessuno,
         // quindi si dice a parole cosa ci andra', senza suggerire di incollare una sciocchezza.
         if (mtaStsValue == null || mtaStsValue.isBlank())
-            mtaStsValue = "v=STSv1; id=<lo genera il pannello quando pubblica il record>";
+            mtaStsValue = "v=STSv1; id=<" + I18n.tr("server.dnsg.idByPanel") + ">";
         record.value = mtaStsValue;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
-        record.description = "MTA-STS (avanzato, opzionale)";
+        record.description = I18n.tr("server.dnsg.descSts");
         record.checkType = "MTA-STS";
         record.required = false;
         record.explanation = """
@@ -636,14 +637,14 @@ public class DnsRecordsGenerator {
                 aCheck.message = "OK: " + mailHostname + " → " + serverIp;
             } else {
                 aCheck.passed = false;
-                aCheck.message = "IP errato: " + foundIp + " (atteso: " + serverIp + ")";
+                aCheck.message = I18n.tr("server.dnsg.wrongIp", java.util.Map.of("trovato", String.valueOf(foundIp), "atteso", String.valueOf(serverIp)));
             }
-        } else if (aCheck.message == null || !aCheck.message.startsWith("Errore")) {
+        } else if (aCheck.message == null || aCheck.message.equals(I18n.tr("server.dnsg.notFound"))) {
             // Solo se la query e' andata a buon fine e non ha trovato niente. Se invece era
             // fallita, il messaggio preciso c'e' gia' e sovrascriverlo con "non trovato"
             // trasforma uno strumento rotto in un record DNS mancante: due problemi con due
             // rimedi opposti, e chi legge va a cercare nel posto sbagliato.
-            aCheck.message = "Record A non trovato per " + mailHostname;
+            aCheck.message = I18n.tr("server.dnsg.noA", java.util.Map.of("h", String.valueOf(mailHostname)));
         }
         result.checks.add(aCheck);
         if (!aCheck.passed) result.allPassed = false;
@@ -668,14 +669,13 @@ public class DnsRecordsGenerator {
             }
             if (nostro) {
                 mxCheck.passed = true;
-                mxCheck.message = "OK: punta a " + mailHostname
-                        + (altrove.isEmpty() ? "" : ". Ci sono anche altri MX (" + String.join(", ", altrove)
-                           + "): se non sono voluti, ricevono posta al posto di questo server.");
+                mxCheck.message = I18n.tr("server.dnsg.mxOk", java.util.Map.of("h", String.valueOf(mailHostname)))
+                        + (altrove.isEmpty() ? "" : ". " + I18n.tr("server.dnsg.mxOthers", java.util.Map.of("elenco", String.valueOf(String.join(", ", altrove)))));
             } else {
                 mxCheck.passed = false;
-                mxCheck.message = "Nessun MX punta a " + mailHostname
-                        + (altrove.isEmpty() ? "." : ": puntano a " + String.join(", ", altrove)
-                           + ". La posta in arrivo va li', non qui.");
+                mxCheck.message = altrove.isEmpty()
+                        ? I18n.tr("server.dnsg.mxNone", java.util.Map.of("h", String.valueOf(mailHostname)))
+                        : I18n.tr("server.dnsg.mxElsewhere", java.util.Map.of("h", String.valueOf(mailHostname), "elenco", String.valueOf(String.join(", ", altrove))));
             }
         }
         result.checks.add(mxCheck);
@@ -701,29 +701,27 @@ public class DnsRecordsGenerator {
             } else {
                 spfCheck.passed = true;
                 if (e.autorizzaEsplicito) {
-                    spfCheck.message = "OK: autorizza esplicitamente " + serverIp;
+                    spfCheck.message = I18n.tr("server.dnsg.spfOkIp", java.util.Map.of("ip", String.valueOf(serverIp)));
                 } else if (e.viaMx) {
-                    spfCheck.message = "OK tramite il meccanismo \"mx\": vale finche' l'MX punta qui "
-                                     + "(vedi il controllo MX qui sopra).";
+                    spfCheck.message = I18n.tr("server.dnsg.spfOkMx");
                 } else if (e.viaA) {
-                    spfCheck.message = "OK tramite il meccanismo \"a\": vale finche' il record A punta qui.";
+                    spfCheck.message = I18n.tr("server.dnsg.spfOkA");
                 } else if (e.include > 0) {
                     // Ne' promosso ne' bocciato: detto com'e'. Bocciare un SPF che delega a
                     // terzi porterebbe a "sistemare" un record che funziona.
-                    spfCheck.message = "Non determinabile da qui: l'autorizzazione dipende da "
-                                     + e.include + (e.include == 1 ? " termine che rimanda" : " termini che rimandano")
-                                     + " ad altri record. Il server non e' elencato direttamente.";
+                    spfCheck.message = e.include == 1
+                            ? I18n.tr("server.dnsg.spfInclude.one")
+                            : I18n.tr("server.dnsg.spfInclude.other", java.util.Map.of("n", String.valueOf(e.include)));
                 } else {
                     spfCheck.passed = false;
-                    spfCheck.message = "L'SPF non autorizza questo server: non contiene l'IP " + serverIp
-                                     + " ne' un meccanismo \"mx\" o \"a\".";
+                    spfCheck.message = I18n.tr("server.dnsg.spfNotAuth", java.util.Map.of("ip", String.valueOf(serverIp)));
                 }
             }
             if (!e.avvisi.isEmpty())
                 spfCheck.message = (spfCheck.message == null ? "" : spfCheck.message + " ")
                                  + String.join(" ", e.avvisi);
-        } else if (spfCheck.message != null && spfCheck.message.startsWith("Record non trovato")) {
-            spfCheck.message = "Nessun record SPF: il dominio non dichiara chi puo' spedire per lui.";
+        } else if (spfCheck.message != null && spfCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
+            spfCheck.message = I18n.tr("server.dnsg.noSpf");
         }
         result.checks.add(spfCheck);
         if (!spfCheck.passed) result.allPassed = false;
@@ -759,35 +757,30 @@ public class DnsRecordsGenerator {
 
             if (chiavi.isEmpty()) {
                 dkimCheck.passed = false;
-                dkimCheck.message = "Su quel nome c'e' un TXT, ma non e' una chiave DKIM: manca il tag \"p=\".";
+                dkimCheck.message = I18n.tr("server.dnsg.dkimNotKey");
             } else if (chiavi.size() > 1) {
                 dkimCheck.passed = false;
-                dkimCheck.message = "Ci sono " + chiavi.size() + " chiavi DKIM sullo stesso selector: "
-                        + "chi verifica la firma non sa quale usare. Va lasciata una sola.";
+                dkimCheck.message = I18n.tr("server.dnsg.dkimMany", java.util.Map.of("n", String.valueOf(chiavi.size())));
             } else {
                 dkimCheck.currentValue = chiavi.get(0);
                 String pubblicata = RegoleDns.chiaveDkim(chiavi.get(0));
                 dkimCheck.passed = true;
                 if (pubblicata == null || pubblicata.isEmpty()) {
                     dkimCheck.passed = false;
-                    dkimCheck.message = "Il record ha il tag \"p=\" ma vuoto: e' il modo di dichiarare una "
-                            + "chiave REVOCATA, e le firme fatte con quel selector vengono rifiutate.";
+                    dkimCheck.message = I18n.tr("server.dnsg.dkimRevoked");
                 } else if (attesa == null) {
-                    dkimCheck.message = "Chiave pubblicata (il pannello non ne ha una da confrontare).";
+                    dkimCheck.message = I18n.tr("server.dnsg.dkimPublished");
                 } else if (pubblicata.equals(attesa)) {
                     // Confronto INTERO, non i primi 50 caratteri: una chiave giusta all'inizio
                     // e corrotta in fondo passava il vecchio controllo e non firmava niente.
-                    dkimCheck.message = "OK: la chiave pubblicata e' esattamente quella del pannello.";
+                    dkimCheck.message = I18n.tr("server.dnsg.dkimOk");
                 } else {
                     dkimCheck.passed = false;
-                    dkimCheck.message = "La chiave pubblicata NON e' quella del pannello: le firme non "
-                            + "verranno verificate. Pubblicata " + pubblicata.length() + " caratteri, "
-                            + "attesa " + attesa.length() + ".";
+                    dkimCheck.message = I18n.tr("server.dnsg.dkimMismatch", java.util.Map.of("p", String.valueOf(pubblicata.length()), "a", String.valueOf(attesa.length())));
                 }
             }
-        } else if (dkimCheck.message != null && dkimCheck.message.startsWith("Record non trovato")) {
-            dkimCheck.message = "Nessun record DKIM su " + selector + "._domainkey." + domain
-                    + ": la posta parte firmata, ma nessuno puo' verificare la firma.";
+        } else if (dkimCheck.message != null && dkimCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
+            dkimCheck.message = I18n.tr("server.dnsg.noDkim", java.util.Map.of("nome", String.valueOf(selector + "._domainkey." + domain)));
         }
         result.checks.add(dkimCheck);
         if (!dkimCheck.passed) result.allPassed = false;
@@ -811,14 +804,13 @@ public class DnsRecordsGenerator {
                 dmarcCheck.passed = true;
                 String p = e.politica == null ? "none" : e.politica.toLowerCase();
                 if (p.equals("none"))
-                    dmarcCheck.message = "OK: p=none, modalita' di osservazione. E' il punto di partenza "
-                                       + "previsto: si leggono i rapporti e poi si irrigidisce.";
+                    dmarcCheck.message = I18n.tr("server.dnsg.dmarcNone");
                 else if (p.equals("quarantine"))
-                    dmarcCheck.message = "OK: p=quarantine, chi non si autentica finisce in quarantena.";
+                    dmarcCheck.message = I18n.tr("server.dnsg.dmarcQuarantine");
                 else if (p.equals("reject"))
-                    dmarcCheck.message = "OK: p=reject, chi non si autentica viene rifiutato.";
+                    dmarcCheck.message = I18n.tr("server.dnsg.dmarcReject");
                 else
-                    dmarcCheck.message = "DMARC presente.";
+                    dmarcCheck.message = I18n.tr("server.dnsg.dmarcPresent");
 
                 // RFC 9990 §4: se il rua punta fuori dominio serve l'autorizzazione, altrimenti
                 // i rapporti non partono e nessuno se ne accorge. Qui non si indovina: si guarda.
@@ -833,23 +825,17 @@ public class DnsRecordsGenerator {
                         // appartengono allo stesso dominio organizzativo e non richiedono nulla.
                         // Senza quel calcolo, bocciare significherebbe dichiarare rotto un DMARC
                         // che funziona, e spingere a "sistemare" cio' che va gia' bene.
-                        dmarcCheck.message += " DA CONTROLLARE: l'indirizzo dei rapporti sta su un altro "
-                                + "dominio e non trovo l'autorizzazione. Se i due domini appartengono a "
-                                + "organizzazioni diverse, "
-                                + "va pubblicato un TXT su " + nomeAut + " con valore \"v=DMARC1\" "
-                                + "(RFC 9990 §4), altrimenti i rapporti non vengono nemmeno inviati. Se "
-                                + "invece sono due nomi della stessa organizzazione, non serve nulla.";
+                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaCheck", java.util.Map.of("nome", String.valueOf(nomeAut)));
                     } else {
-                        dmarcCheck.message += " Autorizzazione rapporti fuori dominio presente su " + nomeAut + ".";
+                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaAuthOk", java.util.Map.of("nome", String.valueOf(nomeAut)));
                     }
                 }
             }
             if (!e.avvisi.isEmpty())
                 dmarcCheck.message = (dmarcCheck.message == null ? "" : dmarcCheck.message + " ")
                                    + String.join(" ", e.avvisi);
-        } else if (dmarcCheck.message != null && dmarcCheck.message.startsWith("Record non trovato")) {
-            dmarcCheck.message = "Nessun record DMARC: chiunque puo' scrivere questo dominio nel campo Da: "
-                               + "e nessuno ha istruzioni su cosa farne.";
+        } else if (dmarcCheck.message != null && dmarcCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
+            dmarcCheck.message = I18n.tr("server.dnsg.noDmarc");
         }
         result.checks.add(dmarcCheck);
         if (!dmarcCheck.passed) result.allPassed = false;
@@ -865,14 +851,12 @@ public class DnsRecordsGenerator {
                 autoconfigCheck.message = "OK: autoconfig → " + mailHostname;
             } else {
                 autoconfigCheck.passed = false;
-                autoconfigCheck.message = "Punta a " + puntaA + " invece di " + mailHostname + ".";
+                autoconfigCheck.message = I18n.tr("server.dnsg.pointsInstead", java.util.Map.of("a", String.valueOf(puntaA), "h", String.valueOf(mailHostname)));
             }
-        } else if (autoconfigCheck.message != null && autoconfigCheck.message.startsWith("Record non trovato")) {
+        } else if (autoconfigCheck.message != null && autoconfigCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
             autoconfigCheck.passed = false;
             autoconfigCheck.informativo = true;
-            autoconfigCheck.message = "Non configurato. Serve solo a Thunderbird, e richiede un sito "
-                    + "raggiungibile su https://autoconfig." + domain + " (porta 443). Apple Mail non lo "
-                    + "usa: per quello c'e' il profilo di configurazione nella pagina Caselle.";
+            autoconfigCheck.message = I18n.tr("server.dnsg.autoconfigOff", java.util.Map.of("d", String.valueOf(domain)));
         } else {
             // NON si sovrascrive un errore preciso ("dig non raggiungibile") con "non
             // configurato": sono due guasti diversi e mandano a cercare in posti opposti.
@@ -903,13 +887,13 @@ public class DnsRecordsGenerator {
         DnsCheck srvImapCheck = verifyRecord("_imaps._tcp." + domain, "SRV");
         srvImapCheck.recordType = "SRV (_imaps)";
         srvImapCheck.expectedValue = "0 1 993 " + mailHostname + ".";
-        controllaSrv(srvImapCheck, mailHostname, 993, "posta in arrivo");
+        controllaSrv(srvImapCheck, mailHostname, 993, I18n.tr("server.dnsg.incoming"));
         result.checks.add(srvImapCheck);
 
         DnsCheck srvSmtpCheck = verifyRecord("_submission._tcp." + domain, "SRV");
         srvSmtpCheck.recordType = "SRV (_submission)";
         srvSmtpCheck.expectedValue = "0 1 587 " + mailHostname + ".";
-        controllaSrv(srvSmtpCheck, mailHostname, 587, "posta in uscita");
+        controllaSrv(srvSmtpCheck, mailHostname, 587, I18n.tr("server.dnsg.outgoing"));
         result.checks.add(srvSmtpCheck);
 
         // Il punteggio conta i record indispensabili: A, MX, SPF, DKIM, DMARC.
@@ -960,7 +944,7 @@ public class DnsRecordsGenerator {
 
         if (serverIp == null || serverIp.isEmpty()) {
             check.passed = false;
-            check.message = "IP server non rilevato";
+            check.message = I18n.tr("server.dnsg.ipNotDetected");
             return check;
         }
 
@@ -983,8 +967,7 @@ public class DnsRecordsGenerator {
             if (revOut.isEmpty()) {
                 check.passed = false;
                 check.currentValue = null;
-                check.message = "Nessun record PTR per " + serverIp +
-                    " — Gmail/Outlook spammano le tue mail. Va configurato dal provider hosting.";
+                check.message = I18n.tr("server.dnsg.noPtr", java.util.Map.of("ip", String.valueOf(serverIp)));
                 return check;
             }
 
@@ -998,8 +981,7 @@ public class DnsRecordsGenerator {
             boolean ptrMatches = ptr.equalsIgnoreCase(mailHostname);
             if (!ptrMatches) {
                 check.passed = false;
-                check.message = "PTR è '" + ptr + "' ma il mail hostname è '" + mailHostname
-                    + "'. Gmail richiede match esatto. Chiedi al provider di aggiornarlo.";
+                check.message = I18n.tr("server.dnsg.ptrMismatch", java.util.Map.of("ptr", String.valueOf(ptr), "h", String.valueOf(mailHostname)));
                 return check;
             }
 
@@ -1027,19 +1009,17 @@ public class DnsRecordsGenerator {
 
             if (!fcrdnsOk) {
                 check.passed = false;
-                check.message = "FCrDNS NON valido: PTR " + ptr + " punta a " + serverIp
-                    + " ma " + ptr + " risolve a '" + fwdOut.replace("\n", ", ") + "'. "
-                    + "Il forward A record deve combaciare col PTR.";
+                check.message = I18n.tr("server.dnsg.fcrdnsBad", java.util.Map.of("ptr", String.valueOf(ptr), "ip", String.valueOf(serverIp), "fwd", String.valueOf(fwdOut.replace("\n", ", "))));
                 return check;
             }
 
             check.passed = true;
-            check.message = "OK: PTR " + ptr + " ↔ " + serverIp + " (FCrDNS valido)";
+            check.message = I18n.tr("server.dnsg.ptrOk", java.util.Map.of("ptr", String.valueOf(ptr), "ip", String.valueOf(serverIp)));
             return check;
 
         } catch (Exception e) {
             check.passed = false;
-            check.message = "Errore verifica PTR: " + e.getMessage();
+            check.message = I18n.tr("server.dnsg.ptrError", java.util.Map.of("m", String.valueOf(e.getMessage())));
             return check;
         }
     }
@@ -1055,33 +1035,30 @@ public class DnsRecordsGenerator {
     private void controllaSrv(DnsCheck check, String mailHostname, int portaAttesa, String aCosaServe) {
         if (check.currentValue == null) {
             check.passed = false;
-            if (check.message != null && check.message.startsWith("Record non trovato"))
-                check.message = "Non configurato (opzionale)";
+            if (check.message != null && check.message.startsWith(I18n.tr("server.dnsg.notFound")))
+                check.message = I18n.tr("server.dnsg.optionalOff");
             return;
         }
         RegoleDns.Srv s = RegoleDns.analizzaSrv(check.currentValue.trim().split("\n")[0]);
         if (s == null) {
             check.passed = false;
-            check.message = "Il record c'e' ma non ha la forma di un SRV: " + check.currentValue.trim();
+            check.message = I18n.tr("server.dnsg.notSrv", java.util.Map.of("v", String.valueOf(check.currentValue.trim())));
             return;
         }
         boolean host = RegoleDns.stessoNome(s.destinazione, mailHostname);
         boolean porta = s.porta == portaAttesa;
         if (host && porta) {
             check.passed = true;
-            check.message = "OK: " + aCosaServe + " su " + mailHostname + ":" + portaAttesa + ".";
+            check.message = I18n.tr("server.dnsg.srvOk", java.util.Map.of("cosa", String.valueOf(aCosaServe), "h", String.valueOf(mailHostname), "porta", String.valueOf(portaAttesa)));
             return;
         }
         check.passed = false;
         if (!host && !porta)
-            check.message = "Punta a " + s.destinazione + " sulla porta " + s.porta
-                    + ", invece che a " + mailHostname + " sulla " + portaAttesa + ".";
+            check.message = I18n.tr("server.dnsg.srvBoth", java.util.Map.of("dest", String.valueOf(s.destinazione), "porta", String.valueOf(s.porta), "h", String.valueOf(mailHostname), "attesa", String.valueOf(portaAttesa)));
         else if (!host)
-            check.message = "La porta e' giusta, ma punta a " + s.destinazione
-                    + " invece che a " + mailHostname + ".";
+            check.message = I18n.tr("server.dnsg.srvHost", java.util.Map.of("dest", String.valueOf(s.destinazione), "h", String.valueOf(mailHostname)));
         else
-            check.message = "L'host e' giusto, ma la porta e' " + s.porta + " invece di " + portaAttesa
-                    + ": i client proverebbero a collegarsi dove non risponde nessuno.";
+            check.message = I18n.tr("server.dnsg.srvPort", java.util.Map.of("porta", String.valueOf(s.porta), "attesa", String.valueOf(portaAttesa)));
     }
 
     /**
@@ -1107,23 +1084,14 @@ public class DnsRecordsGenerator {
             org.json.JSONObject prova = provaPubblica.apply(domain);
             if (prova.optBoolean("ok", false)) {
                 mtaStsCheck.passed = true;
-                mtaStsCheck.message = "Attivo: il record c'e' e la politica risponde.";
+                mtaStsCheck.message = I18n.tr("server.dnsg.stsActive");
             } else {
                 mtaStsCheck.passed = false;
-                mtaStsCheck.message = "IL RECORD C'E' MA LA POLITICA NON RISPONDE. Stai dichiarando "
-                        + "pubblicamente di avere MTA-STS, e chi va a leggerlo su https://mta-sts."
-                        + domain + "/.well-known/mta-sts.txt non trova niente: "
-                        + prova.optString("errore", "irraggiungibile")
-                        + " I mittenti proseguono come se non l'avessi (RFC 8461 §3.3), quindi non "
-                        + "rompe la posta — ma e' una dichiarazione che non mantieni. O la si serve, "
-                        + "o si toglie il record.";
+                mtaStsCheck.message = I18n.tr("server.dnsg.stsNotServed", java.util.Map.of("d", String.valueOf(domain), "e", String.valueOf(prova.optString("errore", I18n.tr("server.dnsg.unreachable")))));
             }
         } else if (txtSts.esito == org.mail_panel.system.AttivaMtaSts.EsitoTxt.TROPPI) {
             mtaStsCheck.passed = false;
-            mtaStsCheck.message = "Ci sono " + txtSts.valori.size() + " record v=STSv1 su _mta-sts." + domain
-                    + ": per i mittenti e' come non averne nessuno (RFC 8461 §3.1), quindi MTA-STS non e' "
-                    + "attivo. Ne deve restare uno solo: quando la politica risponde, la sequenza "
-                    + "\"Attiva MTA-STS\" lascia quello con l'id giusto e toglie gli altri.";
+            mtaStsCheck.message = I18n.tr("server.dnsg.stsMany", java.util.Map.of("n", String.valueOf(txtSts.valori.size()), "d", String.valueOf(domain)));
         } else if (txtSts.esito == org.mail_panel.system.AttivaMtaSts.EsitoTxt.NON_CHIESTO) {
             // NON si scrive "non attivo" su una domanda rimasta senza risposta: sono due guasti
             // diversi e mandano a cercare in posti opposti (come per autoconfig, in verifyAllRecords).
@@ -1132,10 +1100,7 @@ public class DnsRecordsGenerator {
         } else {
             mtaStsCheck.passed = false;
             mtaStsCheck.informativo = true;
-            mtaStsCheck.message = "Non attivo. Non e' una dimenticanza: MTA-STS richiede che la politica "
-                    + "sia raggiungibile da tutto il mondo su https://mta-sts." + domain + " (porta 443), "
-                    + "perche' la leggono i server mittenti. Su un server chiuso agli IP esterni non "
-                    + "puo' funzionare, e pubblicare il solo record dichiarerebbe una protezione assente.";
+            mtaStsCheck.message = I18n.tr("server.dnsg.stsOff", java.util.Map.of("d", String.valueOf(domain)));
         }
         return mtaStsCheck;
     }
@@ -1165,11 +1130,11 @@ public class DnsRecordsGenerator {
             String result = output.toString().trim();
             if (result.isEmpty()) {
                 check.passed = false;
-                check.message = "Record non trovato";
+                check.message = I18n.tr("server.dnsg.notFound");
                 check.currentValue = null;
             } else {
                 check.passed = true;
-                check.message = "Record trovato";
+                check.message = I18n.tr("server.dnsg.found");
                 check.currentValue = result;
             }
 
@@ -1177,11 +1142,8 @@ public class DnsRecordsGenerator {
             check.passed = false;
             String m = e.getMessage() == null ? "" : e.getMessage();
             check.message = m.contains("Cannot run program")
-                    ? "Errore: il programma dig non e' raggiungibile dal pannello. Non e' un "
-                      + "problema di DNS: e' il pacchetto bind-tools, oppure il PATH con cui il "
-                      + "pannello e' stato avviato. Guarda la scheda \"Ambiente del pannello\" "
-                      + "negli Aggiornamenti."
-                    : "Errore verifica: " + m;
+                    ? I18n.tr("server.dnsg.noDig")
+                    : I18n.tr("server.dnsg.checkError", java.util.Map.of("m", String.valueOf(m)));
         }
 
         return check;

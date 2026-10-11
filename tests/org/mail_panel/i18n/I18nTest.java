@@ -27,6 +27,12 @@ public class I18nTest {
 
     static int failed = 0;
 
+    static final Layout.Viewer SUPERADMIN = viewer("boss", "superadmin");
+
+    static Layout.Viewer viewer(String name, String role) {
+        return new Layout.Viewer(name, role, org.mail_panel.security.AuthStore.permissionsOf(role));
+    }
+
     static void check(String what, boolean ok) {
         System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
@@ -55,6 +61,14 @@ public class I18nTest {
         }
         check("no empty text" + (blank.isEmpty() ? "" : ": " + blank), blank.isEmpty());
         check("the same {values} in both languages" + (differentValues.isEmpty() ? "" : ": " + differentValues), differentValues.isEmpty());
+        List<String> badPatterns = new ArrayList<>();
+        for (Map<String, String> bundle : List.of(it, en))
+            for (Map.Entry<String, String> e : bundle.entrySet())
+                if (e.getValue().contains("yyyy")) {
+                    try { java.time.format.DateTimeFormatter.ofPattern(e.getValue()); }
+                    catch (IllegalArgumentException x) { badPatterns.add(e.getKey() + " = " + e.getValue()); }
+                }
+        check("every date pattern is a valid DateTimeFormatter pattern" + (badPatterns.isEmpty() ? "" : ": " + badPatterns), badPatterns.isEmpty());
         List<String> plurals = new ArrayList<>();
         for (String k : it.keySet()) {
             if (k.endsWith(".one") && !it.containsKey(k.substring(0, k.length() - 4) + ".other")) plurals.add(k);
@@ -99,7 +113,7 @@ public class I18nTest {
             pageCount++;
             sources.add(html);
             for (String lang : I18n.LANGUAGES) {
-                String ready = I18n.render(Layout.expand(html, lang), lang);
+                String ready = I18n.render(Layout.expand(html, lang, SUPERADMIN), lang);
                 Matcher r = Pattern.compile("\\{\\{(t:[^}]*|LAYOUT:[^}]*|LANGUAGE_SWITCH|lang|i18nVersion)\\}\\}").matcher(ready);
                 while (r.find()) leftovers.add(name + " (" + lang + "): " + r.group());
             }
@@ -107,7 +121,7 @@ public class I18nTest {
             while (s.find()) if (s.group(1).contains("{{t:")) inScripts.add(name);
         }
         // La cornice e' una pagina anche lei: le sue keys stanno in Layout
-        sources.add(Layout.expand(Layout.placeholder("home"), "it"));
+        sources.add(Layout.expand(Layout.placeholder("home"), "it", SUPERADMIN));
         for (String html : sources) {
             Matcher m = PLACEHOLDER.matcher(html);
             while (m.find()) {
@@ -226,7 +240,7 @@ public class I18nTest {
         check("the fingerprint changes with the language", !I18n.version("it").equals(I18n.version("en")) && I18n.version("it").length() == 12);
 
         System.out.println("\n== The frame ==");
-        String frame = Layout.expand(Layout.placeholder("queue"), "it");
+        String frame = Layout.expand(Layout.placeholder("queue"), "it", SUPERADMIN);
         check("four sections", frame.contains("{{t:nav.section.mail}}") && frame.contains("{{t:nav.section.dns}}")
                 && frame.contains("{{t:nav.section.security}}") && frame.contains("{{t:nav.section.system}}"));
         check("every page served by the panel is in the menu", java.util.stream.Stream.of("/home", "/domains", "/mailboxes", "/aliases",
@@ -240,9 +254,27 @@ public class I18nTest {
                 && frame.contains("data-set-lang=\"en\" lang=\"en\" aria-pressed=\"false\""));
         check("the theme and logout buttons keep the ids the page script binds", frame.contains("id=\"themeToggle\"")
                 && frame.contains("id=\"themeIcon\"") && frame.contains("id=\"logoutButton\""));
-        check("the login page gets only the language buttons", Layout.expand("<b>{{LANGUAGE_SWITCH}}</b>", "en").contains("data-set-lang=\"en\" lang=\"en\" aria-pressed=\"true\"")
-                && !Layout.expand("<b>{{LANGUAGE_SWITCH}}</b>", "en").contains("sidebar"));
-        check("a page without placeholder stays as it is", Layout.expand("<p>nothing</p>", "it").equals("<p>nothing</p>"));
+        check("the login page gets only the language buttons", Layout.expand("<b>{{LANGUAGE_SWITCH}}</b>", "en", Layout.Viewer.NOBODY).contains("data-set-lang=\"en\" lang=\"en\" aria-pressed=\"true\"")
+                && !Layout.expand("<b>{{LANGUAGE_SWITCH}}</b>", "en", Layout.Viewer.NOBODY).contains("sidebar"));
+        check("a page without placeholder stays as it is", Layout.expand("<p>nothing</p>", "it", SUPERADMIN).equals("<p>nothing</p>"));
+
+        System.out.println("\n== The frame by role ==");
+        String asViewer = Layout.expand(Layout.placeholder("mailboxes"), "it", viewer("guest", "viewer"));
+        check("viewer: no administrators or settings in the menu", !asViewer.contains("href=\"/admins\"") && !asViewer.contains("href=\"/settings\""));
+        check("viewer: still sees mail, DNS, security and system pages", asViewer.contains("href=\"/mailboxes\"")
+                && asViewer.contains("href=\"/dns\"") && asViewer.contains("href=\"/firewall\"") && asViewer.contains("href=\"/updates\""));
+        check("viewer on mailboxes: read-only badge", asViewer.contains("{{t:layout.readOnly}}"));
+        check("operator on mailboxes: no read-only badge", !Layout.expand(Layout.placeholder("mailboxes"), "it", viewer("op", "operator"))
+                .contains("{{t:layout.readOnly}}"));
+        check("operator on domains: read-only badge", Layout.expand(Layout.placeholder("domains"), "it", viewer("op", "operator"))
+                .contains("{{t:layout.readOnly}}"));
+        check("the account button shows the name and the role", frame.contains(">boss</span>") && frame.contains("{{t:adm.rSuperadmin}}")
+                && frame.contains("href=\"/account\""));
+        String odd = Layout.expand(Layout.placeholder("home"), "it", viewer("<b>{{t:x}}</b>", "viewer"));
+        check("the name is escaped: no tags and no {{ for the language step", !odd.contains("<b>") && !odd.contains("{{t:x}}"));
+        check("an unknown role: no menu items", !Layout.expand(Layout.placeholder("home"), "it", viewer("x", "nobody")).contains("class=\"sidebar-link"));
+        check("no session: no menu items and no account button", !Layout.expand(Layout.placeholder("home"), "it", Layout.Viewer.NOBODY)
+                .contains("class=\"sidebar-link") && !Layout.expand(Layout.placeholder("home"), "it", Layout.Viewer.NOBODY).contains("href=\"/account\""));
 
         System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);

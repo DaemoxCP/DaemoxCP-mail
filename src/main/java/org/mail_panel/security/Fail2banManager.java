@@ -1,6 +1,7 @@
 package org.mail_panel.security;
 
 import java.io.*;
+import org.mail_panel.i18n.I18n;
 import java.nio.file.*;
 import java.time.*;
 import java.time.format.*;
@@ -544,15 +545,13 @@ public class Fail2banManager {
                     org.mail_panel.util.Shell.Result rs = org.mail_panel.util.Shell.run(
                         java.time.Duration.ofSeconds(60), FAIL2BAN_CLIENT, "reload", "--restart");
                     int dopo = confrontaBanConPf().totaleSenzaRegola();
-                    esitoRiavvio = " Dopo il reload " + senzaRegola + " jail avevano una tabella pf "
-                        + "che nessuna regola legge, quindi ho ricreato le jail con "
-                        + "\"fail2ban-client reload --restart\" (senza --unban): adesso "
-                        + (dopo == 0 ? "ognuna ha la sua regola."
-                                     : "ne restano " + dopo + " senza regola — la causa e' nel log di fail2ban.")
-                        + (rs.success() ? "" : " Il comando ha riportato: " + rs.output().trim());
+                    esitoRiavvio = " " + I18n.tr("server.f2bm.reloadRecreated", java.util.Map.of("n", String.valueOf(senzaRegola))) + " "
+                        + (dopo == 0 ? I18n.tr("server.f2bm.eachHasRule")
+                                     : I18n.tr("server.f2bm.someWithout", java.util.Map.of("n", String.valueOf(dopo))))
+                        + (rs.success() ? "" : " " + I18n.tr("server.f2bm.cmdReported", java.util.Map.of("o", String.valueOf(rs.output().trim()))));
                 }
             } catch (Exception e) {
-                esitoRiavvio = " Non sono riuscito a verificare le regole pf dopo il reload: " + e.getMessage();
+                esitoRiavvio = " " + I18n.tr("server.f2bm.cannotVerifyPf", java.util.Map.of("m", String.valueOf(e.getMessage())));
             }
 
             result.success = true;
@@ -657,12 +656,12 @@ public class Fail2banManager {
         try {
             String installPath = detectRoundcubeInstallPath();
             if (installPath == null) {
-                System.out.println("[Fail2banManager] Roundcube non trovato in nessuno dei path standard");
+                System.out.println("[Fail2banManager] Roundcube not found in any of the standard paths");
                 return;
             }
             Path configPath = Paths.get(installPath + "/config/config.inc.php");
             if (!Files.exists(configPath)) {
-                System.out.println("[Fail2banManager] Roundcube config non trovata in " + configPath);
+                System.out.println("[Fail2banManager] Roundcube config not found in " + configPath);
                 return;
             }
             String config = Files.readString(configPath, java.nio.charset.StandardCharsets.UTF_8);
@@ -690,7 +689,7 @@ public class Fail2banManager {
                         + "\n// === Login logging abilitato dal mail panel per Fail2ban ===\n"
                         + additions.toString(),
                     java.nio.charset.StandardCharsets.UTF_8);
-                System.out.println("[Fail2banManager] Roundcube config aggiornata (log_logins/log_driver/log_dir)");
+                System.out.println("[Fail2banManager] Roundcube config updated (log_logins/log_driver/log_dir)");
             }
 
             // Crea il file userlogins vuoto se non esiste, perms www:www 640
@@ -700,19 +699,19 @@ public class Fail2banManager {
             Path userlogins = Paths.get(getRoundcubeUserloginsPath());
             if (!Files.exists(userlogins)) {
                 Files.createFile(userlogins);
-                System.out.println("[Fail2banManager] Creato " + userlogins);
+                System.out.println("[Fail2banManager] Created " + userlogins);
             }
             try { executeCommand("chown www:www " + userlogins); } catch (Exception ignored) {}
             try { executeCommand("chmod 640 " + userlogins); } catch (Exception ignored) {}
 
             // Verifica post-operazione
             if (!Files.exists(userlogins)) {
-                System.err.println("[Fail2banManager] ATTENZIONE: " + userlogins + " ancora inesistente dopo il setup!");
+                System.err.println("[Fail2banManager] WARNING: " + userlogins + " still missing after the setup!");
             } else {
-                System.out.println("[Fail2banManager] " + userlogins + " esiste ed è pronto per Fail2ban");
+                System.out.println("[Fail2banManager] " + userlogins + " exists and is ready for Fail2ban");
             }
         } catch (Exception e) {
-            System.err.println("[Fail2banManager] ensureRoundcubeLoggingEnabled fallito: " + e.getMessage());
+            System.err.println("[Fail2banManager] ensureRoundcubeLoggingEnabled failed: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -961,8 +960,8 @@ public class Fail2banManager {
     public BulkJailConfigResult updateAllJailsConfig(int maxRetry, int findTime, int banTime) {
         BulkJailConfigResult res = new BulkJailConfigResult();
         Fail2banStatus st = getStatus();
-        if (!st.installed) { res.error = "Fail2ban non installato"; return res; }
-        if (!st.running)   { res.error = "Fail2ban non in esecuzione"; return res; }
+        if (!st.installed) { res.error = I18n.tr("server.f2bm.notInstalled"); return res; }
+        if (!st.running)   { res.error = I18n.tr("server.f2bm.notRunning"); return res; }
         for (String jail : st.activeJails) {
             BanAction a = updateJailConfig(jail, maxRetry, findTime, banTime);
             res.results.add(new JailConfigOutcome(jail, a.success, a.message));
@@ -1092,7 +1091,7 @@ public class Fail2banManager {
         r.jail = jailName;
         if (!isValidJailName(jailName)) {
             r.success = false;
-            r.message = "Nome jail non valido";
+            r.message = I18n.tr("server.f2bm.badJail");
             return r;
         }
         // Validation: il filter name deve essere alfanumerico, con dash/underscore,
@@ -1100,7 +1099,7 @@ public class Fail2banManager {
         if (newFilter == null || newFilter.isBlank()
                 || !newFilter.matches("^[a-zA-Z0-9_\\-]+(?:\\[[a-zA-Z0-9_=,\\-\\s]*\\])?$")) {
             r.success = false;
-            r.message = "Filter non valido (atteso: nome[opzione=valore])";
+            r.message = I18n.tr("server.f2bm.badFilter");
             return r;
         }
         try {
@@ -1140,15 +1139,14 @@ public class Fail2banManager {
 
                 reloadFail2banQuiet();
                 r.success = true;
-                r.message = "Filter aggiornato a '" + newFilter + "' in " + path.getFileName()
-                          + " (backup creato). Fail2ban reload eseguito.";
+                r.message = I18n.tr("server.f2bm.filterUpdated", java.util.Map.of("f", String.valueOf(newFilter), "file", String.valueOf(path.getFileName())));
                 return r;
             }
             r.success = false;
-            r.message = "Sezione [" + jailName + "] non trovata in jail.local o jail.d/";
+            r.message = I18n.tr("server.f2bm.sectionNotFound", java.util.Map.of("j", String.valueOf(jailName)));
         } catch (Exception e) {
             r.success = false;
-            r.message = "Errore: " + e.getMessage();
+            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
         }
         return r;
     }
@@ -1188,12 +1186,12 @@ public class Fail2banManager {
         r.ip = ip;
         if (!isValidJailName(jailName)) {
             r.success = false;
-            r.message = "Nome jail non valido";
+            r.message = I18n.tr("server.f2bm.badJail");
             return r;
         }
         if (!isValidIpOrCidr(ip)) {
             r.success = false;
-            r.message = "IP/CIDR non valido";
+            r.message = I18n.tr("server.f2bm.badIp");
             return r;
         }
         try {
@@ -1202,10 +1200,10 @@ public class Fail2banManager {
             // 2. Persistenza: appende a ignoreip nella sezione [jailName] di jail.local
             persistIgnoreIpAdd(jailName, ip);
             r.success = true;
-            r.message = "IP " + ip + " aggiunto a ignoreip di " + jailName + " (runtime + persistente)";
+            r.message = I18n.tr("server.f2bm.ignoreAdded", java.util.Map.of("ip", String.valueOf(ip), "j", String.valueOf(jailName)));
         } catch (Exception e) {
             r.success = false;
-            r.message = "Errore: " + e.getMessage();
+            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
         }
         return r;
     }
@@ -1220,22 +1218,22 @@ public class Fail2banManager {
         r.ip = ip;
         if (!isValidJailName(jailName)) {
             r.success = false;
-            r.message = "Nome jail non valido";
+            r.message = I18n.tr("server.f2bm.badJail");
             return r;
         }
         if (!isValidIpOrCidr(ip)) {
             r.success = false;
-            r.message = "IP/CIDR non valido";
+            r.message = I18n.tr("server.f2bm.badIp");
             return r;
         }
         try {
             executeCommand(FAIL2BAN_CLIENT + " set " + jailName + " delignoreip " + ip);
             persistIgnoreIpRemove(jailName, ip);
             r.success = true;
-            r.message = "IP " + ip + " rimosso da ignoreip di " + jailName;
+            r.message = I18n.tr("server.f2bm.ignoreRemoved", java.util.Map.of("ip", String.valueOf(ip), "j", String.valueOf(jailName)));
         } catch (Exception e) {
             r.success = false;
-            r.message = "Errore: " + e.getMessage();
+            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
         }
         return r;
     }
@@ -1485,7 +1483,7 @@ public class Fail2banManager {
             info.geoSource = (whoisCountry != null) ? "ipapi.co + whois" : "ipapi.co";
         } catch (Exception e) {
             // Non fatale — whois data resta disponibile
-            if (whoisCountry != null) info.geoSource = "whois (geoip non raggiungibile)";
+            if (whoisCountry != null) info.geoSource = "whois " + I18n.tr("server.f2bm.geoipDown");
         }
     }
 
@@ -1571,15 +1569,15 @@ public class Fail2banManager {
         FiltroCheck c = new FiltroCheck();
         c.jail = jailName;
         try {
-            if (!isValidJailName(jailName)) { c.messaggio = "nome di jail non valido"; return c; }
+            if (!isValidJailName(jailName)) { c.messaggio = I18n.tr("server.f2bm.badJailLower"); return c; }
 
             java.util.List<String> logs = logPathDi(jailName);
-            if (logs.isEmpty()) { c.messaggio = "questa jail non sorveglia un file di log"; return c; }
+            if (logs.isEmpty()) { c.messaggio = I18n.tr("server.f2bm.noLog"); return c; }
             String log = logs.get(0);
             c.log = log;
 
             java.io.File f = new java.io.File(log);
-            if (!f.canRead()) { c.messaggio = "il log non e' leggibile dal pannello: " + log; return c; }
+            if (!f.canRead()) { c.messaggio = I18n.tr("server.f2bm.logUnreadable", java.util.Map.of("l", String.valueOf(log))); return c; }
             c.righeLog = contaRighe(f);
             if (c.righeLog == 0) {
                 // Un log vuoto ha una terza spiegazione, ed e' la piu' insidiosa: il file
@@ -1588,15 +1586,10 @@ public class Fail2banManager {
                 // trasforma un dubbio in una diagnosi.
                 String vicino = vicinoScritto(new java.io.File(log));
                 if (vicino != null) {
-                    c.messaggio = "il log sorvegliato e' VUOTO, ma nella stessa cartella c'e' "
-                                + vicino + ", che invece e' scritto. Quasi certamente la jail "
-                                + "sorveglia il file sbagliato: cosi' non vedra' mai niente, e "
-                                + "resterebbe a zero tentativi per sempre sembrando a posto.";
+                    c.messaggio = I18n.tr("server.f2bm.logEmptyNeighbor", java.util.Map.of("v", String.valueOf(vicino)));
                     return c;
                 }
-                c.messaggio = "il log e' vuoto e nella stessa cartella non c'e' un file simile gia' "
-                            + "scritto: non c'e' niente su cui il filtro possa corrispondere, quindi "
-                            + "lo zero di questa jail non dice ne' che funziona ne' che non funziona.";
+                c.messaggio = I18n.tr("server.f2bm.logEmpty");
                 return c;
             }
 
@@ -1607,15 +1600,13 @@ public class Fail2banManager {
             if (uscita == null || !uscita.contains("Lines:")) {
                 String fr = primaFailregex(jailName);
                 if (fr == null) {
-                    c.messaggio = "non sono riuscito a ottenere ne' il filtro ne' la failregex: "
-                                + "non posso dire se la jail agganci qualcosa.";
+                    c.messaggio = I18n.tr("server.f2bm.noFilter");
                     return c;
                 }
                 uscita = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, fr));
             }
             if (uscita == null || !uscita.contains("Lines:")) {
-                c.messaggio = "fail2ban-regex non ha risposto in modo leggibile: non posso dire "
-                            + "se la jail agganci qualcosa.";
+                c.messaggio = I18n.tr("server.f2bm.regexUnreadable");
                 return c;
             }
             c.uscita = uscita.length() > 3000 ? uscita.substring(uscita.length() - 3000) : uscita;
@@ -1624,15 +1615,11 @@ public class Fail2banManager {
             c.agganci = m.find() ? Integer.parseInt(m.group(1)) : 0;
             c.verificato = true;
             c.messaggio = c.agganci > 0
-                ? "Il filtro aggancia " + c.agganci + " righe di questo log: la jail vede, e lo zero "
-                  + "dei ban vuol dire che non ci sono stati abbastanza tentativi, non che sia cieca."
-                : "Il log ha " + c.righeLog + " righe e il filtro non ne aggancia NESSUNA. La jail e' "
-                  + "accesa ma non vede niente: o quel log non contiene tentativi falliti, o il filtro "
-                  + "non corrisponde al formato che ci viene scritto. In questo secondo caso i ban non "
-                  + "scatterebbero mai, e lo zero a schermo sembrerebbe una buona notizia.";
+                ? I18n.tr("server.f2bm.filterMatches", java.util.Map.of("n", String.valueOf(c.agganci)))
+                : I18n.tr("server.f2bm.filterNoMatch", java.util.Map.of("n", String.valueOf(c.righeLog)));
             return c;
         } catch (Exception e) {
-            c.messaggio = "errore durante la verifica: " + e.getMessage();
+            c.messaggio = I18n.tr("server.f2bm.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())));
             return c;
         }
     }
@@ -1826,15 +1813,14 @@ public class Fail2banManager {
                 java.io.File f = new java.io.File(log);
                 if (!f.exists()) {
                     e.problemi.add(new LogSbagliato(jail, log, null,
-                        "sorveglia " + log + ", che non esiste: non potra' vedere niente"));
+                        I18n.tr("server.f2bm.watchesMissing", java.util.Map.of("l", String.valueOf(log)))));
                     continue;
                 }
                 if (f.length() > 0) continue;
                 String vicino = vicinoScritto(f);
                 if (vicino != null)
                     e.problemi.add(new LogSbagliato(jail, log, vicino,
-                        "sorveglia " + log + ", vuoto, mentre accanto c'e' " + vicino
-                        + " che viene scritto: sta guardando il file sbagliato"));
+                        I18n.tr("server.f2bm.watchesWrong", java.util.Map.of("l", String.valueOf(log), "v", String.valueOf(vicino)))));
             }
         }
         return e;
@@ -1920,16 +1906,13 @@ public class Fail2banManager {
                 // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
                 // quel comando su questo sistema non fa niente.
                 j.nota = j.nonRaggiungibile
-                    ? "fail2ban non ha risposto: si sta riavviando. Riprova fra qualche secondo — "
-                      + "non e' un difetto di questa jail"
+                    ? I18n.tr("server.f2bm.restarting")
                     : j.comandiBan.isEmpty()
-                    ? "non sono riuscito a farmi dire quale comando esegue per bannare: di questa "
-                      + "jail non posso dire se i ban siano applicati."
-                      + (j.azioniViste.isEmpty() ? "" : " Azioni lette: " + String.join(", ", j.azioniViste) + ".")
-                      + (j.azioniScartate.isEmpty() ? "" : " Scartate: " + String.join(", ", j.azioniScartate) + ".")
-                      + " Alla richiesta delle azioni fail2ban ha risposto: " + j.uscitaAzioni
-                    : "il suo comando di ban non nomina una tabella pf, quindi non posso "
-                      + "confrontarlo con il firewall. Esegue: " + String.join(" ; ", j.comandiBan);
+                    ? I18n.tr("server.f2bm.noBanCmd")
+                      + (j.azioniViste.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsRead", java.util.Map.of("elenco", String.valueOf(String.join(", ", j.azioniViste)))))
+                      + (j.azioniScartate.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsDropped", java.util.Map.of("elenco", String.valueOf(String.join(", ", j.azioniScartate)))))
+                      + " " + I18n.tr("server.f2bm.actionsAnswer", java.util.Map.of("o", String.valueOf(j.uscitaAzioni)))
+                    : I18n.tr("server.f2bm.noPfTable", java.util.Map.of("cmd", String.valueOf(String.join(" ; ", j.comandiBan))));
                 c.jails.add(j);
                 continue;
             }
@@ -1949,10 +1932,9 @@ public class Fail2banManager {
                 if (prova.letta && !prova.mancante) { t = prova; ancoraUsata = cand; break; }
                 if (t == null) { t = prova; ancoraUsata = cand; }   // il primo esito, se nessuno trova
             }
-            j.ancora = ancoraUsata == null ? "(ruleset principale)" : ancoraUsata;
+            j.ancora = ancoraUsata == null ? I18n.tr("server.f2bm.mainRuleset") : ancoraUsata;
             if (!t.letta) {
-                j.nota = "non sono riuscito a leggere la tabella " + b.tabella + ": di questa jail "
-                       + "non posso dire se i ban siano applicati davvero" + (t.errore.isEmpty() ? "" : " (" + t.errore + ")");
+                j.nota = I18n.tr("server.f2bm.tableUnreadable", java.util.Map.of("t", String.valueOf(b.tabella))) + (t.errore.isEmpty() ? "" : " (" + t.errore + ")");
                 c.jails.add(j);
                 continue;
             }
@@ -2053,7 +2035,7 @@ public class Fail2banManager {
                 j.comandiBan.add(cmd.replace("\n", " "));
             }
         } catch (Exception e) {
-            j.uscitaAzioni = "errore leggendo le azioni: " + e.getMessage();
+            j.uscitaAzioni = I18n.tr("server.f2bm.actionsError", java.util.Map.of("m", String.valueOf(e.getMessage())));
         }
     }
 
@@ -2087,7 +2069,7 @@ public class Fail2banManager {
             }
             t.letta = true;
         } catch (Exception e) {
-            t.errore = e.getMessage() == null ? "errore di lettura" : e.getMessage();
+            t.errore = e.getMessage() == null ? I18n.tr("server.f2bm.readError") : e.getMessage();
         }
         return t;
     }
@@ -2304,7 +2286,7 @@ public class Fail2banManager {
         JailLiveState s = new JailLiveState();
         s.name = jailName;
         if (!isValidJailName(jailName)) {
-            s.error = "Nome jail non valido: " + jailName;
+            s.error = I18n.tr("server.f2bm.badJailNamed", java.util.Map.of("j", String.valueOf(jailName)));
             return s;
         }
         // PARALLELIZZAZIONE: ognuno dei 5 "fail2ban-client get" + lo "status" parte su
@@ -2312,14 +2294,14 @@ public class Fail2banManager {
         // (~150ms) invece della somma (~900ms).
         // Usiamo CompletableFuture + virtual threads (API stabile, no preview flags).
         try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
-            var maxretryF = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "maxretry"), executor);
-            var findtimeF = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "findtime"), executor);
-            var bantimeF  = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "bantime"),  executor);
-            var logpathF  = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "logpath"),  executor);
-            var ignoreipF = java.util.concurrent.CompletableFuture.supplyAsync(() -> runGetCommand(jailName, "ignoreip"), executor);
+            var maxretryF = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "maxretry")), executor);
+            var findtimeF = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "findtime")), executor);
+            var bantimeF  = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "bantime")),  executor);
+            var logpathF  = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "logpath")),  executor);
+            var ignoreipF = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> runGetCommand(jailName, "ignoreip")), executor);
             // Nota: `fail2ban-client get <jail> filter` non e' supportato in tutte
             // le versioni di fail2ban-client. Leggiamo da config (file I/O, veloce).
-            var filterF   = java.util.concurrent.CompletableFuture.supplyAsync(() -> readFilterNameFromConfig(jailName), executor);
+            var filterF   = java.util.concurrent.CompletableFuture.supplyAsync(I18n.withCurrentSupplier(() -> readFilterNameFromConfig(jailName)), executor);
             // Status: testo multilinea, lo manteniamo intero per il parsing
             var statusF   = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
                 try { return executeCommand(FAIL2BAN_CLIENT + " status " + jailName); }
@@ -2355,7 +2337,7 @@ public class Fail2banManager {
             // Esempio: get <jail> ignoreip può ritornare "127.0.0.1/8\n::1"
             return trimmed;
         } catch (Exception e) {
-            return "(errore: " + e.getMessage() + ")";
+            return "(" + I18n.tr("server.f2bm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))) + ")";
         }
     }
 
@@ -2425,7 +2407,7 @@ public class Fail2banManager {
                 }
             } catch (Exception ignored) {}
         }
-        return sectionFound ? "(default: " + jailName + ")" : "(non trovato nei file di config)";
+        return sectionFound ? "(default: " + jailName + ")" : I18n.tr("server.f2bm.notInConfig");
     }
 
     private int parseIntSafe(String s) {
@@ -2561,7 +2543,7 @@ public class Fail2banManager {
      * Ritorna true se l'IP è stato effettivamente aggiunto (false se già presente).
      */
     public synchronized boolean addPermaban(String ip) throws Exception {
-        if (!isValidIp(ip)) throw new IllegalArgumentException("IP non valido: " + ip);
+        if (!isValidIp(ip)) throw new IllegalArgumentException("Invalid IP: " + ip);
 
         ensurePermabanFile();
         java.util.Set<String> current = readPermabanFile();
@@ -2588,7 +2570,7 @@ public class Fail2banManager {
      * Ritorna true se rimosso, false se non era presente.
      */
     public synchronized boolean removePermaban(String ip) throws Exception {
-        if (!isValidIp(ip)) throw new IllegalArgumentException("IP non valido: " + ip);
+        if (!isValidIp(ip)) throw new IllegalArgumentException("Invalid IP: " + ip);
 
         java.util.Set<String> current = readPermabanFile();
         if (!current.contains(ip)) return false;

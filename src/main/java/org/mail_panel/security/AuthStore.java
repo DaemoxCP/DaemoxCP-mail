@@ -53,19 +53,50 @@ public final class AuthStore {
 
     // ===================== Permessi =====================
 
-    /** Cosa puo' fare ciascun ruolo: si chiede un permesso per nome, mai un livello di ruolo. */
-    private static final Map<String, Set<String>> PERMISSIONS = Map.of(
-        "superadmin", Set.of("admins.manage", "vault.manage"),
-        "admin", Set.of(),
-        "operator", Set.of(),
-        "viewer", Set.of()
-    );
-
-    public static boolean may(Admin admin, String permission) {
-        return admin != null && PERMISSIONS.getOrDefault(admin.role(), Set.of()).contains(permission);
+    /**
+     * Cosa puo' fare ciascun ruolo. Le rotte chiedono un permesso per nome (Access, controllato
+     * prima del gestore), mai un livello di ruolo: un ruolo nuovo si scrive solo qui.
+     *
+     *  - "x.view": vedere le pagine e gli stati di quell'area, senza cambiare niente;
+     *  - "x.manage": cambiare. Rivelare la password di una casella, aprire la sua webmail e
+     *    leggere un messaggio in coda sono "manage": vuol dire leggere la posta di qualcuno;
+     *  - sicurezza, sistema, impostazioni, amministratori e vault sono solo del superadmin: chi
+     *    li ha (firewall, aggiornamenti come root) puo' darsi qualunque altro permesso.
+     */
+    private static final Map<String, Set<String>> PERMISSIONS;
+    static {
+        Set<String> viewer = Set.of("home.view", "mail.view", "queue.view", "dns.view", "security.view", "system.view", "account.self");
+        Set<String> operator = union(viewer, Set.of("mailboxes.manage", "queue.manage"));
+        Set<String> admin = union(operator, Set.of("domains.manage", "dns.manage"));
+        Set<String> superadmin = union(admin, Set.of("security.manage", "system.manage", "settings.manage", "admins.manage", "vault.manage"));
+        Map<String, Set<String>> m = new java.util.LinkedHashMap<>();
+        m.put("superadmin", superadmin);
+        m.put("admin", admin);
+        m.put("operator", operator);
+        m.put("viewer", viewer);
+        PERMISSIONS = java.util.Collections.unmodifiableMap(m);
     }
 
-    public static final Set<String> ROLES = PERMISSIONS.keySet();
+    private static Set<String> union(Set<String> a, Set<String> b) {
+        Set<String> u = new java.util.HashSet<>(a);
+        u.addAll(b);
+        return Set.copyOf(u);
+    }
+
+    /** Vero se l'amministratore ha il permesso. Un ruolo sconosciuto non ne ha nessuno. */
+    public static boolean may(Admin admin, String permission) {
+        return admin != null && permission != null && permissionsOf(admin.role()).contains(permission);
+    }
+
+    public static Set<String> permissionsOf(String role) {
+        return role == null ? Set.of() : PERMISSIONS.getOrDefault(role, Set.of());
+    }
+
+    /** I ruoli, dal piu' ampio al piu' ristretto (l'ordine delle pagine). */
+    public static final List<String> ROLES = List.copyOf(PERMISSIONS.keySet());
+
+    /** Ogni permesso che qualche ruolo da': le rotte possono chiedere solo uno di questi. */
+    public static final Set<String> ALL_PERMISSIONS = PERMISSIONS.get("superadmin");
 
     // ===================== Migrazione =====================
 
