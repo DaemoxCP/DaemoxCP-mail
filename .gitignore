@@ -1,0 +1,8 @@
+# Prodotti della compilazione: li rigenera "mvn package", non vanno in git.
+# Prima di questo file il repository ne seguiva 289, fra cui 32 MB di jar: ogni
+# diff se li portava dietro e tre volte in una sessione hanno impedito un
+# "git checkout" e un "git rebase" perche' risultavano modificati.
+target/
+
+# Rumore di macOS, uno per cartella visitata dal Finder.
+.DS_Store
