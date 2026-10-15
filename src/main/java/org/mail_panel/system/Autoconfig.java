@@ -389,7 +389,7 @@ public class Autoconfig {
             String testo = Files.readString(p);
             r.put("conf", conf);
 
-            Path copia = Path.of("/var/db/mailpanel/nginx-prima-di-autoconfig.conf");
+            Path copia = Path.of("/var/db/mailpanel/nginx-before-autoconfig.conf");
             Files.createDirectories(copia.getParent());
             Files.writeString(copia, testo);
             r.put("copia", copia.toString());

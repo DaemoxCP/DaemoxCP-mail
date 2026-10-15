@@ -539,7 +539,7 @@ public final class BanActionRepair {
         return null;
     }
 
-    private static final String BACKUP_FOLDER = "/var/db/mail-panel/copie-fail2ban";
+    private static final String BACKUP_FOLDER = "/var/db/mail-panel/fail2ban-backups";
 
     /**
      * La copia di sicurezza va FUORI da jail.d.

@@ -51,8 +51,8 @@ public class WebProtection {
 
     private static final String PREFISSO_NGINX = "/usr/local/etc/nginx";
     private static final String FILE_NAME = "mailpanel-pubblico.conf";
-    private static final String COPIA = "/var/db/mailpanel/mailpanel-pubblico.conf-precedente";
-    public static final String DIR_PUBBLICA = "/var/db/mailpanel/pubblico";
+    private static final String COPIA = "/var/db/mailpanel/mailpanel-public.conf-previous";
+    public static final String DIR_PUBBLICA = "/var/db/mailpanel/public";
     public static final String FILE_POLITICA = DIR_PUBBLICA + "/mta-sts.txt";
     public static final String LOG_ACCESSI = "/var/log/nginx/mailpanel-pubblico-access.log";
 
@@ -308,7 +308,7 @@ public class WebProtection {
      * =================================================================== */
 
     public static final String PROPOSED_FOLDER = PREFISSO_NGINX + "/conf.d";
-    private static final String COPIA_PRINCIPALE = "/var/db/mailpanel/nginx.conf-prima-di-include";
+    private static final String COPIA_PRINCIPALE = "/var/db/mailpanel/nginx.conf-before-include";
 
     /**
      * Il file principale, ricavato da "nginx -T": la prima riga "# configuration file X:"

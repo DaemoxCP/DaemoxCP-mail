@@ -222,7 +222,7 @@ public class PkgBranchTest {
         JSONObject r = PkgBranch.cambia(f, nel(f), "latest", imp);
         vero("riuscito: " + r.optString("messaggio", r.optString("error")), r.getBoolean("success") && r.getString("ramo").equals("latest"));
         vero("pkg ora vede latest, anche per i moduli", f.ramoVisto().equals("latest"));
-        vero("il file del pannello c'e', con la marca", f.cartella.get("zz-pannello-ramo.conf").startsWith(PkgBranch.MARCA));
+        vero("il file del pannello c'e', con la marca", f.cartella.get("zz-panel-branch.conf").startsWith(PkgBranch.MARCA));
         vero("catalogo scaricato una volta", f.aggiornamenti == 1);
         vero("conta gli aggiornabili dal catalogo nuovo (2), senza aggiornarli", r.getInt("aggiornabili") == 2
                 && r.getString("messaggio").contains("Nessun pacchetto è stato cambiato"));
@@ -231,7 +231,7 @@ public class PkgBranchTest {
         imp = PkgBranch.stato(f).getString("impronta");
         r = PkgBranch.cambia(f, nel(f), "quarterly", imp);
         vero("riuscito", r.getBoolean("success") && f.ramoVisto().equals("quarterly"));
-        vero("di serie e' gia' quarterly: il file del pannello e' tolto, non riscritto", !f.cartella.containsKey("zz-pannello-ramo.conf"));
+        vero("di serie e' gia' quarterly: il file del pannello e' tolto, non riscritto", !f.cartella.containsKey("zz-panel-branch.conf"));
         vero("i pacchetti piu' nuovi del ramo sono detti, e restano come sono: " + r.getJSONArray("piuRecenti"),
                 r.getJSONArray("piuRecenti").length() == 2 && r.getString("messaggio").contains("restano come sono"));
 
@@ -242,7 +242,7 @@ public class PkgBranchTest {
         imp = PkgBranch.stato(u).getString("impronta");
         r = PkgBranch.cambia(u, nel(u), "quarterly", imp);
         vero("latest dal suo FreeBSD.conf -> quarterly: riuscito con un file del pannello, letto dopo il suo", r.getBoolean("success")
-                && u.ramoVisto().equals("quarterly") && u.cartella.get("zz-pannello-ramo.conf").contains("/quarterly\""));
+                && u.ramoVisto().equals("quarterly") && u.cartella.get("zz-panel-branch.conf").contains("/quarterly\""));
         vero("il suo FreeBSD.conf e' intatto", suo.equals(u.cartella.get("FreeBSD.conf")));
 
         System.out.println("\n== Quando non riesce, torna tutto com'era ==");
@@ -253,7 +253,7 @@ public class PkgBranchTest {
         r = PkgBranch.cambia(dopo, nel(dopo), "latest", imp);
         vero("un file letto dopo quello del pannello rimette quarterly: rifiutato, e lo nomina — " + r.optString("error"),
                 !r.getBoolean("success") && r.getString("error").contains("zzz-mio.conf"));
-        vero("il file del pannello non e' rimasto, il catalogo non si e' scaricato", !dopo.cartella.containsKey("zz-pannello-ramo.conf")
+        vero("il file del pannello non e' rimasto, il catalogo non si e' scaricato", !dopo.cartella.containsKey("zz-panel-branch.conf")
                 && dopo.aggiornamenti == 0 && dopo.ramoVisto().equals("quarterly"));
 
         FakeSystem rete = new FakeSystem();
@@ -263,17 +263,17 @@ public class PkgBranchTest {
         vero("il catalogo dei moduli latest non si scarica: rifiutato — " + r.optString("error"),
                 !r.getBoolean("success") && r.getString("error").contains("non si scarica"));
         vero("la configurazione e' tornata quarterly e il file del pannello non c'e'", rete.ramoVisto().equals("quarterly")
-                && !rete.cartella.containsKey("zz-pannello-ramo.conf"));
+                && !rete.cartella.containsKey("zz-panel-branch.conf"));
         vero("nel registro c'e' l'errore di pkg", String.join("\n", rete.registro).contains("Not Found"));
 
         FakeSystem giaLatest = new FakeSystem();
-        giaLatest.cartella.put("zz-pannello-ramo.conf", PkgBranch.contenuto(PkgBranch.repository(new FakeSystem().pkgVv()), "latest", giaLatest.adesso()));
-        String primaDelGuasto = giaLatest.cartella.get("zz-pannello-ramo.conf");
+        giaLatest.cartella.put("zz-panel-branch.conf", PkgBranch.contenuto(PkgBranch.repository(new FakeSystem().pkgVv()), "latest", giaLatest.adesso()));
+        String primaDelGuasto = giaLatest.cartella.get("zz-panel-branch.conf");
         giaLatest.nonRaggiungibile = "/quarterly";
         imp = PkgBranch.stato(giaLatest).getString("impronta");
         r = PkgBranch.cambia(giaLatest, nel(giaLatest), "quarterly", imp);
         vero("latest (dal pannello) -> quarterly che non si scarica: il file del pannello torna, identico", !r.getBoolean("success")
-                && primaDelGuasto.equals(giaLatest.cartella.get("zz-pannello-ramo.conf")) && giaLatest.ramoVisto().equals("latest"));
+                && primaDelGuasto.equals(giaLatest.cartella.get("zz-panel-branch.conf")) && giaLatest.ramoVisto().equals("latest"));
 
         FakeSystem ro = new FakeSystem();
         ro.scritturaRotta = true;
@@ -288,21 +288,21 @@ public class PkgBranchTest {
         cambiato.cartella.put("FreeBSD.conf", "FreeBSD-ports-kmods: { enabled: no }\n");
         r = PkgBranch.cambia(cambiato, nel(cambiato), "latest", imp);
         vero("la configurazione cambia dopo l'anteprima: rifiutato senza toccare niente", !r.getBoolean("success")
-                && r.getString("error").contains("dopo l'anteprima") && !cambiato.cartella.containsKey("zz-pannello-ramo.conf"));
+                && r.getString("error").contains("dopo l'anteprima") && !cambiato.cartella.containsKey("zz-panel-branch.conf"));
 
         System.out.println("\n== Il file vero, su disco ==");
         Path dir = Files.createTempDirectory("ramo-prova");
         PkgBranch.Sistema vero = PkgBranch.reale();
-        Path p = dir.resolve("zz-pannello-ramo.conf");
+        Path p = dir.resolve("zz-panel-branch.conf");
         vero.scrivi(p, "prova\n");
         vero("scritto, con i permessi rw-r--r--, senza file temporanei rimasti", "prova\n".equals(vero.leggi(p))
                 && java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(p)).equals("rw-r--r--")
-                && vero.fileConf(dir).equals(List.of("zz-pannello-ramo.conf")) && Files.list(dir).count() == 1);
+                && vero.fileConf(dir).equals(List.of("zz-panel-branch.conf")) && Files.list(dir).count() == 1);
         Files.writeString(dir.resolve("FreeBSD.conf"), "x");
         Files.writeString(dir.resolve("FreeBSD.conf.prima"), "x");
         Files.writeString(dir.resolve(".nascosto.conf"), "x");
         vero("i .conf come li legge pkg: in ordine, senza nascosti e altre estensioni: " + vero.fileConf(dir),
-                vero.fileConf(dir).equals(List.of("FreeBSD.conf", "zz-pannello-ramo.conf")));
+                vero.fileConf(dir).equals(List.of("FreeBSD.conf", "zz-panel-branch.conf")));
         vero.elimina(p);
         vero("eliminato", vero.leggi(p) == null);
         try (var s = Files.list(dir)) { s.forEach(x -> x.toFile().delete()); }

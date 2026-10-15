@@ -3008,7 +3008,7 @@ public final class UpdateManager {
      * cominciare: e' quello che e' successo il 31/08/2026, scoperto al passo 2 invece che qui.
      */
     private static JSONObject provaCopia() {
-        String tmp = "/var/db/mailpanel/prova-copia.sql";
+        String tmp = "/var/db/mailpanel/test-dump.sql";
         ok("mkdir -p /var/db/mailpanel", 20);
         JSONObject d = dsnRoundcube();
         if (!d.optBoolean("ok"))
@@ -3751,7 +3751,7 @@ public final class UpdateManager {
 
     private static final String JDK_DIR = "/var/db/mailpanel/jdk";
     /** Dove finisce cio' che il pannello scrive quando riparte staccato dal terminale. */
-    private static final String LOG_PANNELLO = "/var/db/mailpanel/pannello.log";
+    private static final String LOG_PANNELLO = "/var/db/mailpanel/panel.log";
 
     /**
      * La riga di comando che riavvia QUESTO pannello, ricostruita dal processo vivo.
@@ -7580,7 +7580,7 @@ public final class UpdateManager {
             if (shutdown.isEmpty() || daemon.isEmpty())
                 return r.put("success", false)
                         .put("error", I18n.tr("server.um.x.noShutdownCmd", java.util.Map.of("cmd", String.valueOf(shutdown.isEmpty() ? "shutdown" : "daemon"))));
-            String logR = "/var/db/mailpanel/riavvio.log";
+            String logR = "/var/db/mailpanel/reboot.log";
             ok("mkdir -p /var/db/mailpanel", 20);
             ok("rm -f " + logR, 15);
             // Staccato: shutdown con un tempo futuro non torna finche' non e' ora. E con -o
@@ -7898,7 +7898,7 @@ public final class UpdateManager {
             String valore = prima.optString("valoreSysrc", "").trim();
             boolean variabileEsiste = !valore.isEmpty();
 
-            String copia = "/var/db/mailpanel/mailpanel.rc.rimosso";
+            String copia = "/var/db/mailpanel/mailpanel.rc.removed";
             r.put("percorso", percorso).put("copia", copia)
              .put("installato", installato).put("variabileEsiste", variabileEsiste);
 
@@ -8044,7 +8044,7 @@ public final class UpdateManager {
 
             // Verifica la sintassi PRIMA di metterlo dove il sistema lo eseguira' all'avvio:
             // uno script rc.d rotto puo' fermare la sequenza di boot.
-            String tmp = "/var/db/mailpanel/mailpanel.rc.prova";
+            String tmp = "/var/db/mailpanel/mailpanel.rc.test";
             ok("mkdir -p /var/db/mailpanel", 20);
             Files.writeString(Paths.get(tmp), testo);
             String sint = sh("sh -n " + tmp + " 2>&1", 30).trim();
@@ -8321,7 +8321,7 @@ public final class UpdateManager {
 
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
-            String bk = "/var/db/mailpanel/sistema/" + ts;
+            String bk = "/var/db/mailpanel/system/" + ts;
             if (!ok("mkdir -p " + bk, 30)) throw new IllegalStateException("cannot create " + bk);
 
             job.avanza(2, TOT);
@@ -8505,7 +8505,7 @@ public final class UpdateManager {
     // ===================== proseguimento guidato del salto di release =====================
 
     /** Dove il pannello ricorda a che punto e' del salto, per ritrovarlo dopo un riavvio. */
-    private static final String VERSION_JUMP_STATE = "/var/db/mailpanel/sistema/salto.json";
+    private static final String VERSION_JUMP_STATE = "/var/db/mailpanel/system/version-jump.json";
 
     /**
      * Cosa dice di fare freebsd-update, letto da chi lo esegue invece che dall'utente.
@@ -8546,7 +8546,7 @@ public final class UpdateManager {
 
     private static void scriviStatoSalto(JSONObject st) {
         try {
-            ok("mkdir -p /var/db/mailpanel/sistema", 20);
+            ok("mkdir -p /var/db/mailpanel/system", 20);
             Files.writeString(Paths.get(VERSION_JUMP_STATE), st.toString(2));
         } catch (Exception ignored) { }
     }
@@ -8824,7 +8824,7 @@ public final class UpdateManager {
         JSONObject r = new JSONObject();
         JSONArray checks = new JSONArray();
         try {
-            String dir = sh("ls -1dt /var/db/mailpanel/sistema/*/ 2>/dev/null | head -1", 30).trim();
+            String dir = sh("ls -1dt /var/db/mailpanel/system/*/ 2>/dev/null | head -1", 30).trim();
             if (dir.isEmpty())
                 return r.put("success", false)
                         .put("error", I18n.tr("server.um.verifyAfterUpdate.1"));

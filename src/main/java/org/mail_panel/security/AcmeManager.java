@@ -441,7 +441,7 @@ public class AcmeManager {
             // irreversibile su qualcosa che funziona non si fa senza una via di ritorno.
             java.util.Map<String, String> salvati = new java.util.HashMap<>();
             try {
-                Path dirCopia = Paths.get("/var/db/mailpanel/ssl-precedente");
+                Path dirCopia = Paths.get("/var/db/mailpanel/ssl-previous");
                 Files.createDirectories(dirCopia);
                 for (String f : new String[] { CERT_FILE, KEY_FILE, FULLCHAIN_FILE, CA_FILE }) {
                     Path orig = Paths.get(f);

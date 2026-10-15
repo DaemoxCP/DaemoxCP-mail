@@ -1635,7 +1635,7 @@ public class Fail2banManager {
      * non e' una garanzia sufficiente.
      */
     private Path copiaDiSicurezza(Path originale) throws Exception {
-        Path dir = Paths.get("/var/db/mail-panel/copie-fail2ban");
+        Path dir = Paths.get("/var/db/mail-panel/fail2ban-backups");
         Files.createDirectories(dir);
         return dir.resolve(originale.getFileName().toString() + ".bak."
             + java.time.LocalDateTime.now().format(

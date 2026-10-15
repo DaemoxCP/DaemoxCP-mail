@@ -12766,7 +12766,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.servicesStopping')) + '</strong></td><td>'
                   + (r.servizi || []).map(updEsc).join(', ') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.commandRun')) + '</strong></td><td><code>'
-                  + updEsc(r.percorsoDaemon) + ' -f -o /var/db/mailpanel/riavvio.log '
+                  + updEsc(r.percorsoDaemon) + ' -f -o /var/db/mailpanel/reboot.log '
                   + updEsc(r.percorsoShutdown) + ' -r +1</code></td></tr>' 
                   + '</tbody></table></div>'
                   + '<div class="alert alert-warning py-2">' + updEsc(r.effetto) + '</div>';

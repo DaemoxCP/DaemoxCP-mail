@@ -52,7 +52,7 @@ public final class PkgBranch {
 
     public static final Path FOLDER = Path.of("/usr/local/etc/pkg/repos");
     /** "zz": pkg legge i file in ordine alfabetico e l'ultimo vince. */
-    public static final Path FILE = FOLDER.resolve("zz-pannello-ramo.conf");
+    public static final Path FILE = FOLDER.resolve("zz-panel-branch.conf");
     static final String MARCA = "# Scritto dal pannello";
     static final String PKG = "/usr/local/sbin/pkg";
     public static final List<String> RAMI = List.of("quarterly", "latest");
