@@ -42,10 +42,10 @@ public final class PackageQueue {
      * se il processo muore (riavvio del pannello, kill, crash della JVM): questo file e' l'unica
      * cosa che sopravvive, e all'avvio il pannello riprotegge cio' che c'e' scritto.
      */
-    public static final String STATO = "/var/db/mail-panel-maintenance-locks";
+    public static final String STATE_PATH = "/var/db/mail-panel-maintenance-locks";
 
     /** Dove sta l'elenco. E' una variabile solo perche' le prove non scrivano in /var/db. */
-    static Path list = Path.of(STATO);
+    static Path list = Path.of(STATE_PATH);
 
     private record Turno(String id, String descrizione, long inizio) {}
 

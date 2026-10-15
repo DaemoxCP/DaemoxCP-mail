@@ -50,7 +50,7 @@ import java.nio.file.Path;
 public class WebProtection {
 
     private static final String PREFISSO_NGINX = "/usr/local/etc/nginx";
-    private static final String NOME_FILE = "mailpanel-pubblico.conf";
+    private static final String FILE_NAME = "mailpanel-pubblico.conf";
     private static final String COPIA = "/var/db/mailpanel/mailpanel-pubblico.conf-precedente";
     public static final String DIR_PUBBLICA = "/var/db/mailpanel/pubblico";
     public static final String FILE_POLITICA = DIR_PUBBLICA + "/mta-sts.txt";
@@ -173,7 +173,7 @@ public class WebProtection {
         JSONObject r = new JSONObject().put("success", true);
         JSONObject incPrima = includeAttivo();
         String cartella = incPrima.optString("cartella", "");
-        String file = cartella.isEmpty() ? "" : cartella + "/" + NOME_FILE;
+        String file = cartella.isEmpty() ? "" : cartella + "/" + FILE_NAME;
         r.put("file", file).put("filePolitica", FILE_POLITICA);
         try {
             r.put("installato", !file.isEmpty() && Files.exists(Path.of(file)));
@@ -224,7 +224,7 @@ public class WebProtection {
             if (!inc.optBoolean("ok", false))
                 return r.put("success", false).put("error", inc.optString("motivo"));
             String cartella = inc.getString("cartella");
-            final String FILE = cartella + "/" + NOME_FILE;
+            final String FILE = cartella + "/" + FILE_NAME;
             r.put("file", FILE).put("cartella", cartella);
 
             if (cert == null || cert.isBlank()) cert = "/usr/local/etc/ssl/mail/fullchain.pem";
@@ -307,7 +307,7 @@ public class WebProtection {
      * Aggiungere la riga di include
      * =================================================================== */
 
-    public static final String CARTELLA_PROPOSTA = PREFISSO_NGINX + "/conf.d";
+    public static final String PROPOSED_FOLDER = PREFISSO_NGINX + "/conf.d";
     private static final String COPIA_PRINCIPALE = "/var/db/mailpanel/nginx.conf-prima-di-include";
 
     /**
@@ -374,15 +374,15 @@ public class WebProtection {
             if (principale == null || !Files.isReadable(Path.of(principale)))
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.noMainFile"));
-            r.put("file", principale).put("cartella", CARTELLA_PROPOSTA);
+            r.put("file", principale).put("cartella", PROPOSED_FOLDER);
 
             String prima = Files.readString(Path.of(principale));
-            String dopo = conInclude(prima, CARTELLA_PROPOSTA);
+            String dopo = conInclude(prima, PROPOSED_FOLDER);
             if (dopo == null)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.noHttpBlock", java.util.Map.of("file", String.valueOf(principale))));
 
-            Files.createDirectories(Path.of(CARTELLA_PROPOSTA));
+            Files.createDirectories(Path.of(PROPOSED_FOLDER));
             Files.createDirectories(Path.of(COPIA_PRINCIPALE).getParent());
             Files.writeString(Path.of(COPIA_PRINCIPALE), prima);
             r.put("copia", COPIA_PRINCIPALE);
@@ -407,13 +407,13 @@ public class WebProtection {
             // Si rilegge da nginx, non dal file: conta cosa nginx include davvero.
             Ris dopoDump = esegui("nginx", "-T");
             boolean visto = dopoDump.codice == 0
-                    && cartelleIncluse(dopoDump.uscita).contains(CARTELLA_PROPOSTA);
+                    && cartelleIncluse(dopoDump.uscita).contains(PROPOSED_FOLDER);
             if (!visto)
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.pubweb.includeNotSeen", java.util.Map.of("dir", String.valueOf(CARTELLA_PROPOSTA), "file", String.valueOf(principale))));
+                        .put("error", I18n.tr("server.pubweb.includeNotSeen", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(principale))));
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.pubweb.includeAdded", java.util.Map.of("dir", String.valueOf(CARTELLA_PROPOSTA), "file", String.valueOf(principale), "copy", String.valueOf(COPIA_PRINCIPALE))));
+                    .put("nota", I18n.tr("server.pubweb.includeAdded", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(principale), "copy", String.valueOf(COPIA_PRINCIPALE))));
         } catch (Exception e) {
             return r.put("success", false).put("error", I18n.tr("server.pubweb.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }

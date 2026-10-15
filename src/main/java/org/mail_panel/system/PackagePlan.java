@@ -76,7 +76,7 @@ public final class PackagePlan {
     private static final String VULNERABILE = " (vulnerable!)";
 
     private static final Pattern DA_A = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
-    private static final Pattern NOME_VERSIONE_REPO = Pattern.compile("^(\\S+): (\\S+)(?: \\[([^\\]]+)\\])?$");
+    private static final Pattern REPO_VERSION_NAME = Pattern.compile("^(\\S+): (\\S+)(?: \\[([^\\]]+)\\])?$");
     private static final Pattern REINSTALLA = Pattern.compile("^(\\S+)-([^\\s-]+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
     private static final Pattern RIMUOVE = Pattern.compile("^(\\S+): (\\S+)(?: \\((.*)\\))?$");
     private static final Pattern PROTETTO_NEL_PIANO = Pattern.compile(
@@ -174,7 +174,7 @@ public final class PackagePlan {
                 cambi.put(voce(sezione, m.group(1), m.group(2), m.group(3), "", m.group(4), vulnerabile));
             }
             case "installa" -> {
-                m = NOME_VERSIONE_REPO.matcher(s);
+                m = REPO_VERSION_NAME.matcher(s);
                 if (!m.find()) return false;
                 cambi.put(voce(sezione, m.group(1), "", m.group(2), "", m.group(3), vulnerabile));
             }

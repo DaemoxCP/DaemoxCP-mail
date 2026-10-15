@@ -790,16 +790,16 @@ public final class PeriodicReport {
     /** Chi ha scritto una riga del log (programma e pid: "postfix/smtp[81242]") e che cosa. */
     record Riga(String processo, String testo) {}
 
-    private static final java.util.regex.Pattern RIGA_5424 = java.util.regex.Pattern.compile(
+    private static final java.util.regex.Pattern LINE_5424 = java.util.regex.Pattern.compile(
             "^<\\d{1,3}>1 \\S+ \\S+ (\\S+) ([0-9]+) \\S+ (?:-|(?:\\[[^\\]]*\\])+) ?(.*)$");
-    private static final java.util.regex.Pattern RIGA_CLASSICA = java.util.regex.Pattern.compile(
+    private static final java.util.regex.Pattern LINE_CLASSIC = java.util.regex.Pattern.compile(
             "(?:^|\\s)([^\\s\\[\\]]+)\\[([0-9]+)\\]: (.*)$");
 
     /** La riga scomposta, nel formato classico di syslog o in RFC 5424; null se non e' nessuno dei due. */
     static Riga riga(String r) {
-        java.util.regex.Matcher m = RIGA_5424.matcher(r);
+        java.util.regex.Matcher m = LINE_5424.matcher(r);
         if (!m.find()) {
-            m = RIGA_CLASSICA.matcher(r);
+            m = LINE_CLASSIC.matcher(r);
             if (!m.find()) return null;
         }
         return new Riga(m.group(1) + "[" + m.group(2) + "]", m.group(3));

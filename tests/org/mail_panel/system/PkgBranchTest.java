@@ -115,7 +115,7 @@ public class PkgBranchTest {
             return o.toString();
         }
         public String leggi(Path p) {
-            return p.getParent().equals(PkgBranch.CARTELLA) ? cartella.get(p.getFileName().toString()) : null;
+            return p.getParent().equals(PkgBranch.FOLDER) ? cartella.get(p.getFileName().toString()) : null;
         }
         public List<String> fileConf(Path c) {
             List<String> l = new ArrayList<>();

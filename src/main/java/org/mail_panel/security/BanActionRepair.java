@@ -539,7 +539,7 @@ public final class BanActionRepair {
         return null;
     }
 
-    private static final String CARTELLA_COPIE = "/var/db/mail-panel/copie-fail2ban";
+    private static final String BACKUP_FOLDER = "/var/db/mail-panel/copie-fail2ban";
 
     /**
      * La copia di sicurezza va FUORI da jail.d.
@@ -551,7 +551,7 @@ public final class BanActionRepair {
      * decide chi entra non ci deve essere.
      */
     private static Path copia(Path f) throws Exception {
-        Path dir = Paths.get(CARTELLA_COPIE);
+        Path dir = Paths.get(BACKUP_FOLDER);
         Files.createDirectories(dir);
         Path c = dir.resolve(f.getFileName().toString() + ".prima-di-pf-"
             + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")));

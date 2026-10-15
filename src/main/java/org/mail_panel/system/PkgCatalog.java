@@ -46,7 +46,7 @@ public final class PkgCatalog {
 
 
     /** Un nome di repository finisce in un percorso: solo questi caratteri, e non troppi. */
-    private static final Pattern NOME_REPO = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
+    private static final Pattern REPO_NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
 
     /** Legge davvero: cartella di pkg, repository accesi, date dei cataloghi. Nessuna rete. */
     public static JSONObject leggi() {
@@ -118,7 +118,7 @@ public final class PkgCatalog {
         for (String nome : nomi) {
             JSONObject o = new JSONObject().put("nome", nome);
             list.put(o);
-            if (!NOME_REPO.matcher(nome).matches()) {
+            if (!REPO_NAME.matcher(nome).matches()) {
                 o.put("trovato", false).put("errore", I18n.tr("server.catalog.badRepoName"));
                 mancanti.put(nome);
                 continue;

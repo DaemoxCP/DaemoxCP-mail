@@ -67,11 +67,11 @@ public final class AddressTransform {
     /** La posta messa da parte: sotto /var/vmail (stesso disco, lo spostamento e' istantaneo), con un nome che nessun dominio puo' avere. */
     static Path archivio() { return vmail.resolve(".archivio-pannello"); }
 
-    static final int MASSIMO_DESTINAZIONI = 20;
+    static final int MAX_DESTINATIONS = 20;
     /** Oltre, il conto dei messaggi si ferma e si dice "almeno". */
-    static final int MASSIMO_FILE_CONTATI = 200_000;
+    static final int MAX_COUNTED_FILES = 200_000;
 
-    private static final DateTimeFormatter NOME_ARCHIVIO = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
+    private static final DateTimeFormatter ARCHIVE_NAME = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     // ===================== Lo stato di un indirizzo =====================
@@ -190,7 +190,7 @@ public final class AddressTransform {
                 } catch (IOException ignorata) {
                     continue;   // un file sparito mentre si conta
                 }
-                if (messaggi >= MASSIMO_FILE_CONTATI) { almeno = true; break; }
+                if (messaggi >= MAX_COUNTED_FILES) { almeno = true; break; }
             }
         } catch (IOException | java.io.UncheckedIOException e) {
             // Illeggibile: c'e', ma non si sa quanta.
@@ -205,7 +205,7 @@ public final class AddressTransform {
      */
     public static List<Path[]> archivia(String indirizzo, long adessoMs) throws IOException {
         List<Path[]> fatti = new ArrayList<>();
-        String quando = NOME_ARCHIVIO.format(Instant.ofEpochMilli(adessoMs).atOffset(ZoneOffset.UTC));
+        String quando = ARCHIVE_NAME.format(Instant.ofEpochMilli(adessoMs).atOffset(ZoneOffset.UTC));
         String nome = indirizzo.substring(0, indirizzo.lastIndexOf('@'));
         Path base = archivio().resolve(dominio(indirizzo));
         try {
@@ -347,7 +347,7 @@ public final class AddressTransform {
             d.add(x);
         }
         if (d.isEmpty()) throw new IllegalArgumentException(I18n.tr("server.convert.needDest", java.util.Map.of("a", String.valueOf(indirizzo))));
-        if (d.size() > MASSIMO_DESTINAZIONI) throw new IllegalArgumentException(I18n.tr("server.convert.maxDest", java.util.Map.of("n", String.valueOf(MASSIMO_DESTINAZIONI))));
+        if (d.size() > MAX_DESTINATIONS) throw new IllegalArgumentException(I18n.tr("server.convert.maxDest", java.util.Map.of("n", String.valueOf(MAX_DESTINATIONS))));
         for (String x : d) {
             String dom = dominio(x);
             if (rete.dominioDelPannello(dom) && !rete.riceve(x) && rete.destinazioniAttive(x).isEmpty()

@@ -52,14 +52,14 @@ public class MtaStsSetup {
      * misurato vale 300 secondi. Sotto i cinque minuti l'attesa non servirebbe a niente; sei
      * lasciano il margine perche' la cache scada davvero.
      */
-    private static final long ATTESA_MAX_MS = 6 * 60 * 1000L;
+    private static final long MAX_WAIT_MS = 6 * 60 * 1000L;
 
     /**
      * Ogni quanto si riprova. Trenta secondi perche' la JVM tiene in cache le risoluzioni
      * riuscite per trenta secondi: riprovare piu' spesso vorrebbe dire rileggere la propria
      * cache e credere di aver interrogato il DNS.
      */
-    private static final long ATTESA_INTERVALLO_MS = 30 * 1000L;
+    private static final long WAIT_INTERVAL_MS = 30 * 1000L;
 
     public static class Passo {
         public String chiave, titolo, dettaglio, stato, motivo;
@@ -598,11 +598,11 @@ public class MtaStsSetup {
         // prima di dormire, e si smette appena rispondono: un'attesa che non finisce mai
         // quando l'esito e' gia' buono e' un difetto tanto quanto non aspettare.
         if (!appenaCambiati.isEmpty()) {
-            if (job != null) job.scrivi("[7/8] " + I18n.tr("server.sts.waitingDns", java.util.Map.of("n", String.valueOf(appenaCambiati.size()), "min", String.valueOf((ATTESA_MAX_MS / 60000)))));
+            if (job != null) job.scrivi("[7/8] " + I18n.tr("server.sts.waitingDns", java.util.Map.of("n", String.valueOf(appenaCambiati.size()), "min", String.valueOf((MAX_WAIT_MS / 60000)))));
             List<String> restano = attendiPropagazione(
                     new ArrayList<>(appenaCambiati),
                     dom -> MtaSts.provaPubblica(dom).optBoolean("ok", false),
-                    OROLOGIO_VERO, ATTESA_MAX_MS, ATTESA_INTERVALLO_MS,
+                    OROLOGIO_VERO, MAX_WAIT_MS, WAIT_INTERVAL_MS,
                     riga -> { if (job != null) job.scrivi(riga); });
             if (job != null) job.scrivi(restano.isEmpty()
                     ? "    " + I18n.tr("server.sts.allAnswer")
@@ -977,9 +977,9 @@ public class MtaStsSetup {
     }
 
     // ";; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 55131"
-    private static final Pattern STATO_DIG = Pattern.compile("->>HEADER<<-.*\\bstatus:\\s*([A-Z]+)");
+    private static final Pattern DIG_STATE = Pattern.compile("->>HEADER<<-.*\\bstatus:\\s*([A-Z]+)");
     // "_mta-sts.domain-d.test.  3600  IN  TXT  "v=STSv1; id=..."": nome, TTL e classe, poi il tipo
-    private static final Pattern RIGA_TXT = Pattern.compile("^\\S+\\s+(?:\\d+\\s+)?(?:IN\\s+)?TXT\\s+(.+)$",
+    private static final Pattern LINE_TXT = Pattern.compile("^\\S+\\s+(?:\\d+\\s+)?(?:IN\\s+)?TXT\\s+(.+)$",
             Pattern.CASE_INSENSITIVE);
 
     /**
@@ -1000,7 +1000,7 @@ public class MtaStsSetup {
         // che non ho CHIESTO, non che la risposta sia "niente". Sono cose opposte.
         if (uscitaDig == 9) return ignoto(I18n.tr("server.sts.noDnsAnswers"));
         if (uscitaDig != 0 || stampato == null) return ignoto(I18n.tr("server.sts.digExit", java.util.Map.of("c", String.valueOf(uscitaDig))));
-        Matcher stato = STATO_DIG.matcher(stampato);
+        Matcher stato = DIG_STATE.matcher(stampato);
         String s = stato.find() ? stato.group(1) : "";
         if (s.equals("NXDOMAIN")) return trovati(List.of());
         if (s.isEmpty()) return ignoto(I18n.tr("server.sts.digNoStatus"));
@@ -1011,7 +1011,7 @@ public class MtaStsSetup {
         for (String riga : stampato.split("\n")) {
             String t = riga.trim();
             if (t.isEmpty() || t.startsWith(";")) continue;
-            Matcher m = RIGA_TXT.matcher(t);          // un CNAME davanti al TXT si salta
+            Matcher m = LINE_TXT.matcher(t);          // un CNAME davanti al TXT si salta
             if (m.matches()) txt.addAll(DnsRules.recordTxt(m.group(1)));
         }
         return trovati(DnsRules.soloMtaSts(txt));

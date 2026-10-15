@@ -37,7 +37,7 @@ import java.util.Locale;
 public class MtaSts {
 
     /** Il percorso fisso previsto da RFC 8461 §3.2. */
-    public static final String PERCORSO = "/.well-known/mta-sts.txt";
+    public static final String PATH = "/.well-known/mta-sts.txt";
 
     private MtaSts() {}
 
@@ -154,7 +154,7 @@ public class MtaSts {
         JSONObject r = new JSONObject().put("success", true);
         String host = hostDiPosta();
         String modo = modoCorrente();
-        r.put("hostDiPosta", host).put("modo", modo).put("percorso", PERCORSO);
+        r.put("hostDiPosta", host).put("modo", modo).put("percorso", PATH);
         if (host == null || host.isBlank())
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.mtasts.noHostname"));
@@ -231,7 +231,7 @@ public class MtaSts {
 
     private static JSONObject provaPolitica(String nomeWeb, String mailHost, String modo) {
         JSONObject r = new JSONObject();
-        String url = "https://" + nomeWeb + PERCORSO;
+        String url = "https://" + nomeWeb + PATH;
         r.put("url", url);
         try {
             var http = java.net.http.HttpClient.newBuilder()
@@ -283,7 +283,7 @@ public class MtaSts {
             return r.put("pubblicabile", true)
                     .put("valore", recordTxt(politica(host, modo, maxAgeConsigliato(modo))));
         return r.put("pubblicabile", false)
-                .put("motivo", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + dominio + PERCORSO), "err", String.valueOf(prova.optString("errore", I18n.tr("server.mtasts.unknownReason"))))));
+                .put("motivo", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + dominio + PATH), "err", String.valueOf(prova.optString("errore", I18n.tr("server.mtasts.unknownReason"))))));
     }
 
     /** I domini gestiti, per l'interfaccia. */

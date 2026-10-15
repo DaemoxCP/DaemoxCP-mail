@@ -50,9 +50,9 @@ public final class PkgBranch {
 
     private PkgBranch() {}
 
-    public static final Path CARTELLA = Path.of("/usr/local/etc/pkg/repos");
+    public static final Path FOLDER = Path.of("/usr/local/etc/pkg/repos");
     /** "zz": pkg legge i file in ordine alfabetico e l'ultimo vince. */
-    public static final Path FILE = CARTELLA.resolve("zz-pannello-ramo.conf");
+    public static final Path FILE = FOLDER.resolve("zz-pannello-ramo.conf");
     static final String MARCA = "# Scritto dal pannello";
     static final String PKG = "/usr/local/sbin/pkg";
     public static final List<String> RAMI = List.of("quarterly", "latest");
@@ -87,7 +87,7 @@ public final class PkgBranch {
             Pattern.compile("^pkg\\+https?://pkg\\.freebsd\\.org/[^/]+/([A-Za-z0-9_]+)/?$", Pattern.CASE_INSENSITIVE);
     private static final Pattern MODULI = Pattern.compile("^kmods_(quarterly|latest)(_\\d+)?$");
     private static final Pattern BASE = Pattern.compile("^base_(release|latest|weekly)(_\\d+)?$");
-    private static final Pattern NOME = Pattern.compile("[A-Za-z0-9._-]{1,64}");
+    private static final Pattern NAME_PATTERN = Pattern.compile("[A-Za-z0-9._-]{1,64}");
 
     /** I repository dall'uscita di pkg -vv (print_repository in src/utils.c). */
     static List<Repo> repository(String pkgVv) {
@@ -111,7 +111,7 @@ public final class PkgBranch {
             Matcher mi = Pattern.compile("^\\s*ip_version\\s*:\\s*([46])").matcher(riga);
             if (mi.find()) ip = mi.group(1);
             if (riga.trim().startsWith("}")) {
-                if (url != null && NOME.matcher(nome).matches()) list.add(classifica(nome, url, acceso, priorita, ip));
+                if (url != null && NAME_PATTERN.matcher(nome).matches()) list.add(classifica(nome, url, acceso, priorita, ip));
                 nome = null;
             }
         }
@@ -220,7 +220,7 @@ public final class PkgBranch {
     static List<String> fileDopo(Sistema s) {
         List<String> dopo = new ArrayList<>();
         String nostro = FILE.getFileName().toString();
-        for (String f : s.fileConf(CARTELLA)) if (f.compareTo(nostro) > 0) dopo.add(f);
+        for (String f : s.fileConf(FOLDER)) if (f.compareTo(nostro) > 0) dopo.add(f);
         return dopo;
     }
 
@@ -288,7 +288,7 @@ public final class PkgBranch {
             avvisi.put(I18n.tr("server.branch.onLatest"));
         JSONArray dopo = st.optJSONArray("fileDopo");
         if (dopo != null && !dopo.isEmpty())
-            avvisi.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(CARTELLA), "elenco", String.valueOf(String.join(", ", strings(dopo))))));
+            avvisi.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(FOLDER), "elenco", String.valueOf(String.join(", ", strings(dopo))))));
         return r.put("possibile", true).put("cambi", cambi).put("avvisi", avvisi).put("file", FILE.toString())
                 .put("contenuto", contenuto(repos, verso, s.adesso()))
                 .put("comeTorna", st.optBoolean("fileDelPannello")
@@ -359,7 +359,7 @@ public final class PkgBranch {
             }
         } catch (IOException e) {
             try { ripristina(s, prima); } catch (IOException ignorata) { /* detto sotto */ }
-            return errore(log, I18n.tr("server.branch.cannotWrite", java.util.Map.of("dir", String.valueOf(CARTELLA), "m", String.valueOf(e.getMessage()))));
+            return errore(log, I18n.tr("server.branch.cannotWrite", java.util.Map.of("dir", String.valueOf(FOLDER), "m", String.valueOf(e.getMessage()))));
         }
         // Cosa cambia per i pacchetti installati, dal catalogo appena scaricato.
         int aggiornabili = 0;

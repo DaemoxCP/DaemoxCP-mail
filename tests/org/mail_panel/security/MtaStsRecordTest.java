@@ -27,7 +27,7 @@ public class MtaStsRecordTest {
         if (!condizione) falliti++;
     }
 
-    static final String NOME = "_mta-sts.domain-d.test";
+    static final String NAME_PATTERN = "_mta-sts.domain-d.test";
     static final String GIUSTO = "v=STSv1; id=0fec393151a7c577266a";
     static final String VECCHIO = "v=STSv1; id=1700000000000";
 
@@ -92,19 +92,19 @@ public class MtaStsRecordTest {
         List<String> mtaSts() {
             List<String> c = new ArrayList<>();
             for (TxtRecordInfo t : zona.values())
-                if (t.name.equals(NOME)) c.add(DnsRules.contenutoCloudflare(t.content));
+                if (t.name.equals(NAME_PATTERN)) c.add(DnsRules.contenutoCloudflare(t.content));
             return DnsRules.soloMtaSts(c);
         }
 
         long altriTxt() {
             return zona.values().stream()
-                    .filter(t -> !(t.name.equals(NOME) && DnsRules.eMtaSts(DnsRules.contenutoCloudflare(t.content))))
+                    .filter(t -> !(t.name.equals(NAME_PATTERN) && DnsRules.eMtaSts(DnsRules.contenutoCloudflare(t.content))))
                     .count();
         }
     }
 
     static JSONObject scrivi(FakeCloudflare cf) {
-        return new AutoDns(null, cf).allineaTxtMtaSts("token", "zona", NOME, GIUSTO, new JSONObject());
+        return new AutoDns(null, cf).allineaTxtMtaSts("token", "zona", NAME_PATTERN, GIUSTO, new JSONObject());
     }
 
     static String tolti(JSONObject r) {
@@ -129,19 +129,19 @@ public class MtaStsRecordTest {
         esigi("sul nome c'e' un record, quello giusto: " + cf.mtaSts(), cf.mtaSts().equals(List.of(GIUSTO)));
 
         System.out.println("\n== un record giusto: non si tocca niente ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + GIUSTO + "\"");
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + GIUSTO + "\"");
         r = scrivi(cf);
         esigi("invariato", r.optBoolean("success") && r.optBoolean("invariato"));
         esigi("nessuna operazione su Cloudflare: " + cf.operazioni, cf.operazioni.isEmpty());
 
         System.out.println("\n== un record con l'id vecchio: si aggiorna ==");
-        cf = new FakeCloudflare().metti(NOME, VECCHIO);   // senza virgolette, come a volte lo da' Cloudflare
+        cf = new FakeCloudflare().metti(NAME_PATTERN, VECCHIO);   // senza virgolette, come a volte lo da' Cloudflare
         r = scrivi(cf);
         esigi("riuscito e aggiornato", r.optBoolean("success") && r.optBoolean("aggiornato"));
         esigi("resta un record, quello giusto: " + cf.mtaSts(), cf.mtaSts().equals(List.of(GIUSTO)));
 
         System.out.println("\n== due record, il primo gia' giusto (il caso che prima diceva \"invariato\") ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + GIUSTO + "\"").metti(NOME, "\"" + VECCHIO + "\"");
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + GIUSTO + "\"").metti(NAME_PATTERN, "\"" + VECCHIO + "\"");
         r = scrivi(cf);
         esigi("riuscito: " + r.optString("nota", r.optString("error")), r.optBoolean("success"));
         esigi("NON dice invariato", !r.optBoolean("invariato"));
@@ -151,14 +151,14 @@ public class MtaStsRecordTest {
         esigi("e lo dice nella risposta: " + tolti(r), tolti(r).contains(VECCHIO));
 
         System.out.println("\n== due record, il giusto e' il secondo ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + VECCHIO + "\"").metti(NOME, "\"" + GIUSTO + "\"");
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + VECCHIO + "\"").metti(NAME_PATTERN, "\"" + GIUSTO + "\"");
         r = scrivi(cf);
         esigi("tiene il giusto e toglie l'altro: " + cf.operazioni,
                 r.optBoolean("success") && cf.operazioni.equals(List.of("togli r1")));
         esigi("resta un record solo: " + cf.mtaSts(), cf.mtaSts().equals(List.of(GIUSTO)));
 
         System.out.println("\n== due record, nessuno giusto ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + VECCHIO + "\"").metti(NOME, "\"v=STSv1; id=2\"");
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + VECCHIO + "\"").metti(NAME_PATTERN, "\"v=STSv1; id=2\"");
         r = scrivi(cf);
         esigi("prima toglie l'altro, poi aggiorna quello che resta: " + cf.operazioni,
                 cf.operazioni.equals(List.of("togli r2", "aggiorna r1")));
@@ -166,8 +166,8 @@ public class MtaStsRecordTest {
                 r.optBoolean("success") && cf.mtaSts().equals(List.of(GIUSTO)));
 
         System.out.println("\n== tre record, uno scritto in maiuscolo, e TXT che non c'entrano ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + VECCHIO + "\"").metti(NOME, "\"V=STSV1; id=9\"")
-                .metti(NOME, "\"google-site-verification=abc\"").metti(NOME, "\"" + GIUSTO + "\"")
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + VECCHIO + "\"").metti(NAME_PATTERN, "\"V=STSV1; id=9\"")
+                .metti(NAME_PATTERN, "\"google-site-verification=abc\"").metti(NAME_PATTERN, "\"" + GIUSTO + "\"")
                 .metti("domain-d.test", "\"v=spf1 mx -all\"").metti("_mta-sts.altro.it", "\"" + VECCHIO + "\"");
         r = scrivi(cf);
         esigi("riuscito, con un record solo e giusto: " + cf.mtaSts(),
@@ -178,7 +178,7 @@ public class MtaStsRecordTest {
                 cf.altriTxt() == 3);
 
         System.out.println("\n== Cloudflare rifiuta di togliere il record in piu' ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + GIUSTO + "\"").metti(NOME, "\"" + VECCHIO + "\"");
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + GIUSTO + "\"").metti(NAME_PATTERN, "\"" + VECCHIO + "\"");
         cf.rifiutaCancellazioneDi = "r2";
         r = scrivi(cf);
         esigi("NON riuscito", !r.optBoolean("success"));
@@ -186,7 +186,7 @@ public class MtaStsRecordTest {
                 r.optString("error").contains(VECCHIO) && r.optString("error").contains("RFC 8461"));
 
         System.out.println("\n== Cloudflare rifiuta l'aggiornamento, dopo aver tolto l'altro ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + VECCHIO + "\"").metti(NOME, "\"v=STSv1; id=2\"");
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + VECCHIO + "\"").metti(NAME_PATTERN, "\"v=STSv1; id=2\"");
         cf.rifiutaAggiornamento = true;
         r = scrivi(cf);
         esigi("NON riuscito", !r.optBoolean("success"));
@@ -196,7 +196,7 @@ public class MtaStsRecordTest {
                 cf.mtaSts().equals(List.of(VECCHIO)));
 
         System.out.println("\n== la prima lettura torna vuota per un errore, e c'era gia' un record ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + VECCHIO + "\"");
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + VECCHIO + "\"");
         cf.primaLetturaVuota = true;
         r = scrivi(cf);
         esigi("si accorge che ora i record sono due: " + r.optString("error"),
@@ -206,8 +206,8 @@ public class MtaStsRecordTest {
         // Letture costruite da uscite di dig nella forma vera, e una politica finta che
         // risponde o no: niente DNS, niente rete.
         String testa = ";; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 32535\n;; ANSWER SECTION:\n";
-        String rigaGiusta = NOME + ".\t3498\tIN\tTXT\t\"" + GIUSTO + "\"\n";
-        String rigaVecchia = NOME + ".\t3498\tIN\tTXT\t\"" + VECCHIO + "\"\n";
+        String rigaGiusta = NAME_PATTERN + ".\t3498\tIN\tTXT\t\"" + GIUSTO + "\"\n";
+        String rigaVecchia = NAME_PATTERN + ".\t3498\tIN\tTXT\t\"" + VECCHIO + "\"\n";
         java.util.function.Function<String, JSONObject> risponde = d -> new JSONObject().put("ok", true);
         java.util.function.Function<String, JSONObject> tace =
                 d -> new JSONObject().put("ok", false).put("errore", "526 (finto).");
@@ -235,7 +235,7 @@ public class MtaStsRecordTest {
         esigi("nessun record: grigio, \"Non attivo\"", !c.passed && c.informativo && c.message.startsWith("Non attivo"));
 
         System.out.println("\n== la scrittura di prima, davanti al caso dei due record ==");
-        cf = new FakeCloudflare().metti(NOME, "\"" + GIUSTO + "\"").metti(NOME, "\"" + VECCHIO + "\"");
+        cf = new FakeCloudflare().metti(NAME_PATTERN, "\"" + GIUSTO + "\"").metti(NAME_PATTERN, "\"" + VECCHIO + "\"");
         String prima = comeScrivevaPrima(cf);
         System.out.println("  diceva: " + prima + "; sul nome restavano " + cf.mtaSts().size() + " record");
         esigi("prima diceva \"invariato\" e lasciava due record: i controlli qui sopra lo vedono",
@@ -248,14 +248,14 @@ public class MtaStsRecordTest {
     /** Il ciclo di AutoDns.creaTxtMtaSts com'era prima, ridotto all'esito. */
     static String comeScrivevaPrima(FakeCloudflare cf) {
         for (CloudflareManager.TxtRecordInfo t : cf.listTxtRecordsContaining("token", "zona", null)) {
-            if (!t.name.equals(NOME)) continue;
+            if (!t.name.equals(NAME_PATTERN)) continue;
             String c = DnsRules.contenutoCloudflare(t.content);
             if (!c.toLowerCase(java.util.Locale.ROOT).startsWith("v=stsv1")) continue;
             if (c.trim().equals(GIUSTO.trim())) return "invariato";
-            cf.updateTxtRecord("token", "zona", t.id, NOME, GIUSTO, 3600);
+            cf.updateTxtRecord("token", "zona", t.id, NAME_PATTERN, GIUSTO, 3600);
             return "aggiornato";
         }
-        cf.createTxtRecord("token", "zona", NOME, GIUSTO, 3600);
+        cf.createTxtRecord("token", "zona", NAME_PATTERN, GIUSTO, 3600);
         return "creato";
     }
 }

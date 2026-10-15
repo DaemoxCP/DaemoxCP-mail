@@ -43,7 +43,7 @@ public final class UpdateManager {
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
 
     /** Elenco dei pacchetti sbloccati durante una manutenzione, per rimetterli a posto dopo un crash. */
-    private static final String STATO_MANUTENZIONE = PackageQueue.STATO;
+    private static final String MAINTENANCE_STATE = PackageQueue.STATE_PATH;
 
     private UpdateManager() {}
 
@@ -102,7 +102,7 @@ public final class UpdateManager {
      * esattamente l'errore che gli script di installazione di questo pannello contengono
      * gia'. Qui si parte da cio' che e' davvero installato e lo si classifica.
      */
-    private static final String[][] RUOLI = {
+    private static final String[][] ROLES = {
         {"^postfix(-.*)?$",            "SMTP (Postfix)"},
         {"^dovecot[0-9]*$",            "IMAP/POP3 (Dovecot)"},
         {"^dovecot[0-9]*-pigeonhole(-.*)?$", "server.um.role.sieve"},
@@ -126,7 +126,7 @@ public final class UpdateManager {
 
     /** Ruolo del pacchetto nello stack di posta, o null se non lo riguarda. */
     private static String ruoloDi(String nome) {
-        for (String[] r : RUOLI) if (nome.matches(r[0])) return I18n.tr(r[1]);
+        for (String[] r : ROLES) if (nome.matches(r[0])) return I18n.tr(r[1]);
         return null;
     }
 
@@ -141,7 +141,7 @@ public final class UpdateManager {
      * spegnesse verrebbe dichiarato riuscito. E' successo: php-fpm con il trattino non e' mai
      * stato trovato, quindi la webmail non era sorvegliata affatto.
      */
-    public static final String[][] SERVIZI = {
+    public static final String[][] SERVICES = {
         {"postfix"}, {"dovecot"}, {"rspamd"}, {"redis"},
         // Entrambe le grafie: il pannello stesso, in Main.java, prova "clamav_clamd" e poi
         // "clamav-clamd", segno che il nome dello script rc.d cambia fra le versioni del port.
@@ -165,7 +165,7 @@ public final class UpdateManager {
     /** Quali servizi risultano attivi adesso. Solo quelli davvero presenti sul sistema. */
     private static Map<String, Boolean> statoServizi() {
         Map<String, Boolean> m = new LinkedHashMap<>();
-        for (String[] candidati : SERVIZI) {
+        for (String[] candidati : SERVICES) {
             // Un servizio non installato non e' "caduto": va distinto, altrimenti la verifica
             // finale segnalerebbe come guasto qualcosa che non c'e' mai stato. La presenza si
             // decide dallo script rc.d, non dall'esito di "status": quello e' diverso da zero
@@ -297,7 +297,7 @@ public final class UpdateManager {
      * senza l'elenco degli sblocchi voluti bloccherebbe anche quelli.
      */
     public static String applicaPoliticaBlocchi() {
-        if (Files.exists(Paths.get(STATO_MANUTENZIONE)) || org.mail_panel.Main.mailDatabase == null) return "";
+        if (Files.exists(Paths.get(MAINTENANCE_STATE)) || org.mail_panel.Main.mailDatabase == null) return "";
         Set<String> aMano = sbloccatiAMano();
         List<String> bloccati = new ArrayList<>(), falliti = new ArrayList<>();
         JSONArray st = packagesStatus().getJSONArray("packages");
@@ -448,7 +448,7 @@ public final class UpdateManager {
      * e socket, ma per entrambi la prima cifra non si muove. Trattarli da "aggiornamenti
      * minori normalmente sicuri" sarebbe falso proprio sui due casi piu' pericolosi.
      */
-    private static final String[][] PROFONDITA_VERSIONE = {
+    private static final String[][] VERSION_DEPTH = {
         {"^dovecot.*",           "2"},   // 2.3 -> 2.4: configurazione incompatibile
         {"^php[0-9]+.*",         "2"},   // 8.4 -> 8.5: percorsi, socket, nome dei pacchetti
         {"^mysql[0-9]+-.*",      "2"},   // 8.0 -> 8.4: data dictionary, opzioni rimosse
@@ -460,7 +460,7 @@ public final class UpdateManager {
     /** Confronta le prime N cifre di due versioni: true se sono cambiate. */
     static boolean saltoSignificativo(String nome, String da, String a) {
         int cifre = 1;
-        for (String[] r : PROFONDITA_VERSIONE) if (nome.matches(r[0])) { cifre = Integer.parseInt(r[1]); break; }
+        for (String[] r : VERSION_DEPTH) if (nome.matches(r[0])) { cifre = Integer.parseInt(r[1]); break; }
         return !prefissoVersione(da, cifre).equals(prefissoVersione(a, cifre));
     }
 
@@ -487,10 +487,10 @@ public final class UpdateManager {
      * Trattarlo con la regola generale "i salti minori sono sicuri" significa annullare la
      * protezione proprio nel caso per cui e' stata scritta.
      */
-    private static final String[] SEMPRE_ATTENDI = { "^openjdk[0-9]*$" };
+    private static final String[] ALWAYS_WAIT = { "^openjdk[0-9]*$" };
 
     private static boolean rischioIndipendenteDallaVersione(String nome) {
-        for (String r : SEMPRE_ATTENDI) if (nome.matches(r)) return true;
+        for (String r : ALWAYS_WAIT) if (nome.matches(r)) return true;
         return false;
     }
 
@@ -1675,7 +1675,7 @@ public final class UpdateManager {
      * gia' protetto non ha effetti, quindi e' sicuro anche se in realta' era andato tutto bene.
      */
     public static String restoreLocksAfterCrash() {
-        Path f = Paths.get(STATO_MANUTENZIONE);
+        Path f = Paths.get(MAINTENANCE_STATE);
         if (!Files.exists(f)) return "";
         StringBuilder log = new StringBuilder();
         int fatti = 0, totali = 0, saltati = 0;
@@ -4814,7 +4814,7 @@ public final class UpdateManager {
                         ? I18n.tr("server.um.x.reprotectAll", java.util.Map.of("n", String.valueOf(fatti)))
                         : I18n.tr("server.um.x.reprotectSome", java.util.Map.of("elenco", String.valueOf(String.join(", ", falliti)))));
                 if (falliti.isEmpty()) pulisciStato();
-                else job.scrivi(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(STATO_MANUTENZIONE))));
+                else job.scrivi(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
                 if (daRibloccare.isEmpty() && !sbloccati.isEmpty()) {
                     job.scrivi(I18n.tr("server.um.x.unlockedNotReplaced", java.util.Map.of("elenco", String.valueOf(String.join(", ", sbloccati)))));
                 }
@@ -5229,7 +5229,7 @@ public final class UpdateManager {
      * file gia' caricati in memoria. Senza riavviare, la vulnerabilita' resta aperta pur
      * risultando corretta.
      */
-    private static final String[][] SERVIZIO_DI = {
+    private static final String[][] SERVICE_OF = {
         {"^postfix.*",                        "postfix"},
         {"^dovecot[0-9]*(-[a-z]+)?$",         "dovecot"},
         {"^dovecot[0-9]*-pigeonhole.*",       "dovecot"},
@@ -5248,7 +5248,7 @@ public final class UpdateManager {
             "^(openssl[0-9]*|expat|libxml2|zlib|libiconv|pcre2?|curl|libssh2|nghttp2|icu|libsodium)$";
 
     private static String servizioDiretto(String pacchetto) {
-        for (String[] r : SERVIZIO_DI) if (pacchetto.matches(r[0])) return r[1];
+        for (String[] r : SERVICE_OF) if (pacchetto.matches(r[0])) return r[1];
         return null;
     }
 
@@ -5274,7 +5274,7 @@ public final class UpdateManager {
 
     /** Nome effettivo dello script rc.d fra i candidati, o null se il servizio non c'e'. */
     private static String nomeServizioReale(String logico) {
-        for (String[] candidati : SERVIZI) {
+        for (String[] candidati : SERVICES) {
             boolean appartiene = false;
             for (String c : candidati) if (c.equals(logico)) appartiene = true;
             if (!appartiene) continue;
@@ -5326,7 +5326,7 @@ public final class UpdateManager {
      * ed e' una disparita' senza motivo: nginx fra la 1.28 e la 1.30 puo' cambiare direttive,
      * e Postfix cambia i predefiniti fra versioni.
      */
-    private static final String[][] PROVA_CONFIG = {
+    private static final String[][] CONFIG_TEST = {
         {"nginx",        "nginx -t"},
         {"postfix",      "postfix check"},
         {"dovecot",      "doveconf -n >/dev/null"},
@@ -5335,7 +5335,7 @@ public final class UpdateManager {
     };
 
     private static String provaConfigDi(String service) {
-        for (String[] r : PROVA_CONFIG) if (r[0].equals(service)) return r[1];
+        for (String[] r : CONFIG_TEST) if (r[0].equals(service)) return r[1];
         return null;
     }
 
@@ -5348,12 +5348,12 @@ public final class UpdateManager {
      * finche' lo spam non ricomincia a passare. Era scritto nella mia avvertenza e non lo
      * controllava niente: un'avvertenza che non verifica e' solo una frase.
      */
-    private static final String[][] PROVA_DOPO = {
+    private static final String[][] TEST_AFTER = {
         {"redis", "redis-cli DBSIZE 2>/dev/null", "server.um.provaConfigDi.1"},
     };
 
     private static String[] provaDopoDi(String service) {
-        for (String[] r : PROVA_DOPO) if (r[0].equals(service)) return r;
+        for (String[] r : TEST_AFTER) if (r[0].equals(service)) return r;
         return null;
     }
 
@@ -5484,9 +5484,9 @@ public final class UpdateManager {
                        : I18n.tr("server.um.x.noSvcSome", java.util.Map.of("n", String.valueOf(dipTrovati.length()), "elenco", String.valueOf(String.join(", ", jsonArrayToList(dipTrovati))))))
                     : I18n.tr("server.um.packagePreflight.11", java.util.Map.of("length", String.valueOf(servizi.length()))));
 
-        if (Files.exists(Paths.get(STATO_MANUTENZIONE))) {
+        if (Files.exists(Paths.get(MAINTENANCE_STATE))) {
             aggiungiCheck(checks, "stato", I18n.tr("server.um.packagePreflight.12"), "block",
-                    I18n.tr("server.um.packagePreflight.13", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(STATO_MANUTENZIONE))));
+                    I18n.tr("server.um.packagePreflight.13", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
             block = true;
         }
 
@@ -5760,7 +5760,7 @@ public final class UpdateManager {
                 String errStato = PackageQueue.scriviStato(protetti);
                 if (errStato != null)
                     throw new IllegalStateException("I could not save the list for the restore, so I did not unlock anything: " + errStato);
-                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.7", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(STATO_MANUTENZIONE))));
+                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.7", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
                 // Da riproteggere tutti, anche uno sblocco fallito o scaduto a meta': pkg lock su un
                 // pacchetto gia' protetto non cambia niente, e cosi' l'elenco su disco si chiude
                 // solo quando tutti risultano protetti.
@@ -5946,7 +5946,7 @@ public final class UpdateManager {
                 job.scrivi("  " + rip + "/" + daRiproteggere.size() + " riprotetti");
                 if (rip == daRiproteggere.size()) pulisciStato();
                 else {
-                    job.scrivi(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(STATO_MANUTENZIONE))));
+                    job.scrivi(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
                     if ("completed".equals(job.status)) {
                         job.status = "error";
                         job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.42");
@@ -7249,7 +7249,7 @@ public final class UpdateManager {
         {"15.0", "30/09/2026", "server.um.mysqlClientDiagnostics.8"},
         {"14.4", "31/12/2026", "server.um.mysqlClientDiagnostics.9"},
     };
-    private static final String FONTE_SUPPORTO =
+    private static final String SUPPORT_SOURCE =
         "server.um.mysqlClientDiagnostics.10";
 
     /**
@@ -7261,7 +7261,7 @@ public final class UpdateManager {
      * da una prosa scritta per un essere umano — e' lo stesso errore per cui il piano MTA-STS
      * cercava la parola "Cloudflare" dentro un motivo.
      */
-    private static final String FONTE_SUPPORTO_LETTA = "31/08/2026";
+    private static final String SUPPORT_SOURCE_READ = "31/08/2026";
 
     /**
      * Stato del sistema operativo di base: versione, livello di patch, riavvio necessario,
@@ -7302,8 +7302,8 @@ public final class UpdateManager {
             // dove voleva farsi notare.
             r.put("serie", serie).put("fineSupporto", eol).put("noteSupporto", noteEol)
              .put("serieConosciuta", !eol.isEmpty())
-             .put("fonteSupportoLetta", FONTE_SUPPORTO_LETTA)
-             .put("fonteSupporto", I18n.tr(FONTE_SUPPORTO));
+             .put("fonteSupportoLetta", SUPPORT_SOURCE_READ)
+             .put("fonteSupporto", I18n.tr(SUPPORT_SOURCE));
 
             boolean release = userland.contains("-RELEASE");
             r.put("aggiornabileConFreebsdUpdate", release);
@@ -7550,7 +7550,7 @@ public final class UpdateManager {
 
             // Cosa si ferma: elencarlo prima e' meglio che scoprirlo dopo.
             JSONArray servizi = new JSONArray();
-            for (String[] cand : SERVIZI) {
+            for (String[] cand : SERVICES) {
                 String svc = null;
                 for (String c : cand)
                     if (ok("test -f /usr/local/etc/rc.d/" + c + " -o -f /etc/rc.d/" + c, 10)) { svc = c; break; }
@@ -7669,11 +7669,11 @@ public final class UpdateManager {
             // Cloudflare pubblica da anni almeno 15 intervalli IPv4 e 7 IPv6. La soglia sta
             // sotto apposta: deve scattare su una risposta rotta, non su un aggiornamento
             // legittimo della lista.
-            final int MINIMO_V4 = 10, MINIMO_V6 = 5;
-            if (v4.size() < MINIMO_V4 || v6.size() < MINIMO_V6)
+            final int MIN_V4 = 10, MIN_V6 = 5;
+            if (v4.size() < MIN_V4 || v6.size() < MIN_V6)
                 return r.put("success", false).put("verificato", false)
                         .put("ufficialiV4", v4.size()).put("ufficialiV6", v6.size())
-                        .put("error", I18n.tr("server.um.cloudflareRanges.1", java.util.Map.of("size", String.valueOf(v4.size()), "size2", String.valueOf(v6.size()), "mINIMO_V4", String.valueOf(MINIMO_V4), "mINIMO_V6", String.valueOf(MINIMO_V6))));
+                        .put("error", I18n.tr("server.um.cloudflareRanges.1", java.util.Map.of("size", String.valueOf(v4.size()), "size2", String.valueOf(v6.size()), "mINIMO_V4", String.valueOf(MIN_V4), "mINIMO_V6", String.valueOf(MIN_V6))));
 
             java.util.List<String> miaV4 = org.mail_panel.security.TrustedProxy.cloudflareV4();
             java.util.List<String> miaV6 = org.mail_panel.security.TrustedProxy.cloudflareV6();
@@ -8121,7 +8121,7 @@ public final class UpdateManager {
             }
             return new JSONObject().put("success", true).put("attuale", serie)
                     .put("versioni", fuori)
-                    .put("fonte", I18n.tr(FONTE_SUPPORTO))
+                    .put("fonte", I18n.tr(SUPPORT_SOURCE))
                     .put("nota", fuori.length() == 0
                         ? I18n.tr("server.um.targetVersions.2", java.util.Map.of("serie", String.valueOf(serie)))
                         : I18n.tr("server.um.targetVersions.3", java.util.Map.of("magAtt", String.valueOf(magAtt), "p", String.valueOf((magAtt + 1)))));
@@ -8248,7 +8248,7 @@ public final class UpdateManager {
 
             // I servizi che devono tornare su: si annotano ORA per poterli confrontare DOPO.
             JSONArray servizi = new JSONArray();
-            for (String[] cand : SERVIZI) {
+            for (String[] cand : SERVICES) {
                 String svc = null;
                 for (String c : cand)
                     if (ok("test -f /usr/local/etc/rc.d/" + c + " -o -f /etc/rc.d/" + c, 10)) { svc = c; break; }
@@ -8505,7 +8505,7 @@ public final class UpdateManager {
     // ===================== proseguimento guidato del salto di release =====================
 
     /** Dove il pannello ricorda a che punto e' del salto, per ritrovarlo dopo un riavvio. */
-    private static final String STATO_SALTO = "/var/db/mailpanel/sistema/salto.json";
+    private static final String VERSION_JUMP_STATE = "/var/db/mailpanel/sistema/salto.json";
 
     /**
      * Cosa dice di fare freebsd-update, letto da chi lo esegue invece che dall'utente.
@@ -8539,15 +8539,15 @@ public final class UpdateManager {
 
     private static JSONObject leggiStatoSalto() {
         try {
-            if (!ok("test -f " + STATO_SALTO, 10)) return new JSONObject();
-            return new JSONObject(Files.readString(Paths.get(STATO_SALTO)));
+            if (!ok("test -f " + VERSION_JUMP_STATE, 10)) return new JSONObject();
+            return new JSONObject(Files.readString(Paths.get(VERSION_JUMP_STATE)));
         } catch (Exception e) { return new JSONObject(); }
     }
 
     private static void scriviStatoSalto(JSONObject st) {
         try {
             ok("mkdir -p /var/db/mailpanel/sistema", 20);
-            Files.writeString(Paths.get(STATO_SALTO), st.toString(2));
+            Files.writeString(Paths.get(VERSION_JUMP_STATE), st.toString(2));
         } catch (Exception ignored) { }
     }
 
@@ -9021,7 +9021,7 @@ public final class UpdateManager {
             }
 
             t.append("\n--- ").append(I18n.tr("server.um.x.repServices")).append(" ---\n");
-            for (String[] cand : SERVIZI) {
+            for (String[] cand : SERVICES) {
                 String svc = null;
                 for (String c : cand)
                     if (ok("test -f /usr/local/etc/rc.d/" + c + " -o -f /etc/rc.d/" + c, 10)) { svc = c; break; }
@@ -9497,9 +9497,9 @@ public final class UpdateManager {
         Set<String> protettiPrima = new TreeSet<>();
         Map<String, Boolean> serviziPrima = new LinkedHashMap<>();
         try {
-            if (Files.exists(Paths.get(STATO_MANUTENZIONE))) {
+            if (Files.exists(Paths.get(MAINTENANCE_STATE))) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMaintenanceJob.1", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(STATO_MANUTENZIONE)));
+                job.errorMessage = I18n.tr("server.um.runMaintenanceJob.1", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE)));
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.2", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.3"));
                 job.fine = System.currentTimeMillis();
@@ -9575,7 +9575,7 @@ public final class UpdateManager {
                     return;
                 }
                 statoScritto = true;
-                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.7", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(STATO_MANUTENZIONE))));
+                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.7", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
             }
             for (String n : daRibloccare) ok("pkg unlock -y " + n, 30);
 
@@ -9643,7 +9643,7 @@ public final class UpdateManager {
             if (fatti == daRibloccare.size()) { if (statoScritto) pulisciStato(); }
             else {
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.18"));
-                job.scrivi(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(STATO_MANUTENZIONE))));
+                job.scrivi(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
             }
 
             // === Verifica del proprio operato: non basta aver eseguito i passi. ===

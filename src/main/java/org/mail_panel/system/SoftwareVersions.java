@@ -91,8 +91,8 @@ public final class SoftwareVersions {
     static final String OPENSSL_PKG = "/usr/local/bin/openssl";
 
     /** Una versione: solo caratteri stampabili senza spazi, come le scrivono i programmi e pkg. */
-    private static final Pattern VERSIONE_VALIDA = Pattern.compile("[0-9A-Za-z.+_,:~-]{1,40}");
-    private static final Pattern PERCORSO_VALIDO = Pattern.compile("/[0-9A-Za-z._/+-]{1,200}");
+    private static final Pattern VALID_VERSION = Pattern.compile("[0-9A-Za-z.+_,:~-]{1,40}");
+    private static final Pattern VALID_PATH = Pattern.compile("/[0-9A-Za-z._/+-]{1,200}");
     private static final String V = "(\\d[0-9A-Za-z.+_~-]*)";
     private static final DateTimeFormatter DATA_ORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     /** Con i secondi sempre: toString() li omette quando sono zero, e la pagina li taglia per posizione. */
@@ -178,7 +178,7 @@ public final class SoftwareVersions {
     /** Il binario della Java che esegue il pannello, se il percorso e' di quelli che ci si aspetta. */
     private static String javaBin(Sistema s) {
         String home = s.cartellaJava();
-        if (home == null || !PERCORSO_VALIDO.matcher(home).matches() || home.contains("..")) return null;
+        if (home == null || !VALID_PATH.matcher(home).matches() || home.contains("..")) return null;
         return home + "/bin/java";
     }
 
@@ -358,7 +358,7 @@ public final class SoftwareVersions {
     static String valida(String v) {
         if (v == null) return null;
         String t = v.strip();
-        return VERSIONE_VALIDA.matcher(t).matches() ? t : null;
+        return VALID_VERSION.matcher(t).matches() ? t : null;
     }
 
     private static String prima(String uscita) {
