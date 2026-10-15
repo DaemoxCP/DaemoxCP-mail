@@ -108,7 +108,7 @@ public class MtaSts {
         if (p > 0) r = r.substring(0, p);
         if (r.isEmpty()) return null;
         // Stessa ragione dell'autoconfig: rotta pubblica, nessuna query per richiesta.
-        return DominiInCache.gestito(r);
+        return DomainCache.gestito(r);
     }
 
     public static String hostDiPosta() {

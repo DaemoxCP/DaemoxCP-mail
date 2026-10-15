@@ -44,9 +44,9 @@ import java.util.regex.Pattern;
  * src/version.c), non quelli ricordati: una riga interpretata male qui vuol dire promettere
  * un aggiornamento diverso da quello che avverra'.
  */
-public final class PianoPacchetti {
+public final class PackagePlan {
 
-    private PianoPacchetti() {}
+    private PackagePlan() {}
 
     // ===================== leggere il piano di pkg =====================
 
@@ -238,7 +238,7 @@ public final class PianoPacchetti {
     // ===================== chiedere il piano a pkg =====================
 
     /** Solo nomi di pacchetto plausibili: finiscono in una riga di comando. */
-    static boolean nomeValido(String n) {
+    static boolean isValidName(String n) {
         return n != null && n.matches("[A-Za-z0-9._+-]{1,64}");
     }
 
@@ -265,8 +265,8 @@ public final class PianoPacchetti {
      * prima di mostrare lo stato; qui conta che la simulazione e l'esecuzione usino lo STESSO.
      */
     public static JSONObject simula(List<String> daSbloccare, List<String> pacchetti) {
-        for (String n : daSbloccare) if (!nomeValido(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
-        for (String n : pacchetti) if (!nomeValido(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
+        for (String n : daSbloccare) if (!isValidName(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
+        for (String n : pacchetti) if (!isValidName(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
         String elenco = pacchetti.isEmpty() ? "" : " " + String.join(" ", pacchetti);
         String prefisso = "pkg";
         String copia = null;
@@ -422,7 +422,7 @@ public final class PianoPacchetti {
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
             String nome = x.optString("nome");
-            if (!nomeValido(nome)) continue;
+            if (!isValidName(nome)) continue;
             String ora = sh("pkg query %v " + nome + " 2>/dev/null", 30);
             String atteso = "rimuove".equals(x.optString("tipo")) ? "" : x.optString("a");
             esito.put(new JSONObject().put("nome", nome).put("tipo", x.optString("tipo"))
@@ -663,7 +663,7 @@ public final class PianoPacchetti {
         Confronto c = confrontoPkg();
         JSONObject per = new JSONObject();
         for (String nome : vul.keySet()) {
-            if (!nomeValido(nome)) continue;
+            if (!isValidName(nome)) continue;
             JSONObject v = vul.getJSONObject(nome);
             String catalogo = "";
             for (String riga : sh("pkg rquery -U %v " + nome + " 2>/dev/null", 60).split("\n")) {

@@ -31,9 +31,9 @@ import java.util.List;
  * configurato. Chi ha gia' deciso dove vuole i rapporti non deve deciderlo di nuovo a ogni
  * dominio; e se non c'e' un precedente da cui copiare, quel passo si salta dicendolo.
  */
-public class ConfiguraDominio {
+public class DomainSetup {
 
-    private ConfiguraDominio() {}
+    private DomainSetup() {}
 
     public static JSONObject esegui(int domainId) { return esegui(domainId, null); }
 
@@ -103,7 +103,7 @@ public class ConfiguraDominio {
             // stessa cosa divergono sempre, e quella che si preme di rado resta indietro
             // senza che nessuno se ne accorga.
             if (job != null) job.scrivi("--- MTA-STS: " + I18n.tr("server.cfgdom.stsChain") + " ---");
-            JSONArray mtasts = AttivaMtaSts.comeVoci(AttivaMtaSts.esegui(job, d.domain));
+            JSONArray mtasts = MtaStsSetup.comeVoci(MtaStsSetup.esegui(job, d.domain));
             for (int i = 0; i < mtasts.length(); i++) passi.put(mtasts.get(i));
 
             int riusciti = 0;

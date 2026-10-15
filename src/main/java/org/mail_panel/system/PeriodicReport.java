@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
  *     suo Message-ID, e registra cosa ha risposto il server del destinatario: non "sendmail
  *     ha detto 0", che non vuol dire niente.
  */
-public final class RapportoPeriodico {
+public final class PeriodicReport {
 
     /** Data e ora nella lingua del rapporto ("alle" / "at"). */
     private static DateTimeFormatter data() {
@@ -49,7 +49,7 @@ public final class RapportoPeriodico {
 
     private final ScheduledExecutorService scheduler;
 
-    public RapportoPeriodico() {
+    public PeriodicReport() {
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "Rapporto-Periodico");
             t.setDaemon(true);
@@ -193,7 +193,7 @@ public final class RapportoPeriodico {
     public static JSONObject anteprima() {
         try {
             // L'anteprima non tocca la rete: la scheda promette una lettura, e deve restarlo.
-            JSONObject dati = UpdateManager.datiPerRapporto(false);
+            JSONObject dati = UpdateManager.reportData(false);
             JSONObject cert = avvisoCertificato();
             if (cert != null) {
                 JSONArray df = dati.optJSONArray("daFare");
@@ -454,7 +454,7 @@ public final class RapportoPeriodico {
             return r.put("success", false).put("error", I18n.tr("server.rp.badSenderLower", java.util.Map.of("m", String.valueOf(mittente))));
 
         JSONObject dati;
-        try { dati = UpdateManager.datiPerRapporto(); }
+        try { dati = UpdateManager.reportData(); }
         catch (Exception e) { return r.put("success", false).put("error", I18n.tr("server.rp.collectFailed", java.util.Map.of("m", String.valueOf(e.getMessage())))); }
         // Il certificato lo conosce solo questa classe: si aggiunge qui alle cose da fare,
         // e si riordina, altrimenti "scade fra 3 giorni" finirebbe in fondo all'elenco.
@@ -926,7 +926,7 @@ public final class RapportoPeriodico {
     static java.util.List<JSONObject> avvisiSorveglianza() {
         java.util.List<JSONObject> fuori = new java.util.ArrayList<>();
         try {
-            JSONObject c = Sorveglianza.controlla();
+            JSONObject c = StandardsWatch.controlla();
             JSONArray st = c.optJSONArray("standard");
             if (st != null) for (int i = 0; i < st.length(); i++) {
                 JSONObject o = st.getJSONObject(i);
@@ -951,7 +951,7 @@ public final class RapportoPeriodico {
         }
 
         try {
-            JSONObject o = ScadenzaOpenssl.stato();
+            JSONObject o = OpensslExpiry.stato();
             JSONArray inst = o.optJSONArray("installazioni");
             if (inst != null) for (int i = 0; i < inst.length(); i++) {
                 JSONObject x = inst.getJSONObject(i);
@@ -1032,10 +1032,10 @@ public final class RapportoPeriodico {
          .append(gv < 0 ? I18n.tr("server.rp.c.ageUnknown") : (gv == 0 ? I18n.tr("server.rp.c.updatedToday") : I18n.tr("server.rp.c.daysAgo", java.util.Map.of("n", String.valueOf(gv)))))
          .append(" ").append(d.optBoolean("vulnDbAggiornatoOra", false) ? I18n.tr("server.rp.c.downloadedNow") : I18n.tr("server.rp.c.notDownloadedNow"))
          // Del catalogo si dice quando e' stato PUBBLICATO sul server di pkg: e' la data che pkg
-         // da' al file (vedi CatalogoPkg), e non cambia se il server non ha niente di nuovo.
+         // da' al file (vedi PkgCatalog), e non cambia se il server non ha niente di nuovo.
          .append(". ").append(I18n.tr("server.rp.c.catalog")).append(" ")
          .append(gc < 0 ? I18n.tr("server.rp.c.catalogUnknown")
-                        : I18n.tr("server.rp.c.published", java.util.Map.of("quanto", String.valueOf(CatalogoPkg.quanto(gc)), "data", String.valueOf(d.optString("catalogoData")))))
+                        : I18n.tr("server.rp.c.published", java.util.Map.of("quanto", String.valueOf(PkgCatalog.quanto(gc)), "data", String.valueOf(d.optString("catalogoData")))))
          .append(d.optBoolean("catalogoRinfrescato", false) ? ", " + I18n.tr("server.rp.c.checkedNow") : "")
          .append(".\n");
         // Piu' repository, uno senza catalogo, o nessuna data: la frase intera, che dice quale e perche'.

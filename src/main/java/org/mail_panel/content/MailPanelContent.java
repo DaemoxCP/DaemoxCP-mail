@@ -1327,13 +1327,13 @@ public class MailPanelContent {
     }
 
     /**
-     * Le versioni nella Home (VersioniSoftware sul server): la colonna Versione di "Servizi Mail"
+     * Le versioni nella Home (SoftwareVersions sul server): la colonna Versione di "Servizi Mail"
      * e la tabella "Altro software". Tutto con textContent: le versioni arrivano da programmi e
      * file del server, e non devono poter diventare HTML.
      */
     private static String getVersioniJs() {
         return """
-        // ===== Versioni del software (VersioniSoftware sul server) =====
+        // ===== Versioni del software (SoftwareVersions sul server) =====
         function verCella(cella, v) {
             cella.textContent = '';
             if (!v || !v.installato) {
@@ -2005,7 +2005,7 @@ public class MailPanelContent {
 """;
     }
 
-    /** Finestra "Trasforma in casella" della pagina Alias (TrasformaIndirizzo sul server). */
+    /** Finestra "Trasforma in casella" della pagina Alias (AddressTransform sul server). */
     private static String getAliasACasellaModal() {
         return """
     <div class="modal fade" id="aCasellaModal" tabindex="-1" aria-labelledby="aCasellaTitolo" aria-hidden="true">
@@ -2071,7 +2071,7 @@ public class MailPanelContent {
     /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua impronta. */
     private static String getAliasACasellaJs() {
         return """
-        // ===== Trasforma in casella (decide il server: TrasformaIndirizzo) =====
+        // ===== Trasforma in casella (decide il server: AddressTransform) =====
         let acDati = null;
         function acMostra(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
         function acData(iso) { return iso ? iso.substring(8, 10) + '/' + iso.substring(5, 7) + '/' + iso.substring(0, 4) : ''; }
@@ -2188,7 +2188,7 @@ public class MailPanelContent {
 """;
     }
 
-    /** Finestra "Trasforma in alias" della pagina Caselle (TrasformaIndirizzo sul server). */
+    /** Finestra "Trasforma in alias" della pagina Caselle (AddressTransform sul server). */
     private static String getCasellaAAliasModal() {
         return """
     <div class="modal fade" id="aAliasModal" tabindex="-1" aria-labelledby="aAliasTitolo" aria-hidden="true">
@@ -2233,7 +2233,7 @@ public class MailPanelContent {
     /** Lo script di "Trasforma in alias": anteprima di cosa si perde e cosa resta, conferma scritta. */
     private static String getCasellaAAliasJs() {
         return """
-        // ===== Trasforma in alias (decide il server: TrasformaIndirizzo) =====
+        // ===== Trasforma in alias (decide il server: AddressTransform) =====
         let aaDati = null;
         function aaMostra(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
         function aaVoce(lista, testo) {

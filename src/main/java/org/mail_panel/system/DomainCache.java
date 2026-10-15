@@ -22,14 +22,14 @@ import java.util.Set;
  * L'elenco dei domini cambia raramente — quando se ne aggiunge uno — quindi trenta secondi di
  * ritardo non danno alcun fastidio: un dominio appena creato risponde mezzo minuto dopo.
  */
-public class DominiInCache {
+public class DomainCache {
 
     private static final long VALIDITA_MS = 30_000;
 
     private static volatile Set<String> elenco = null;
     private static volatile long scadenza = 0;
 
-    private DominiInCache() {}
+    private DomainCache() {}
 
     /** I domini gestiti, in minuscolo. Rilegge dal database solo quando la copia e' scaduta. */
     public static Set<String> domini() {

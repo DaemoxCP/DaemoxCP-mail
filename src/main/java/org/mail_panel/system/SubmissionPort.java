@@ -28,7 +28,7 @@ import java.util.List;
  * qui si tocca UNA sola voce, individuata dal primo campo della riga e non cercando la
  * parola "smtps" nel file: quella parola compare anche dentro le opzioni (syslog_name).
  */
-public class PortaSottomissione {
+public class SubmissionPort {
 
     public static final String RESTRIZIONE = "smtpd_client_restrictions=permit_sasl_authenticated,reject";
     private static final String MASTER = "/usr/local/etc/postfix/master.cf";
@@ -37,7 +37,7 @@ public class PortaSottomissione {
     /** I nomi con cui la porta 465 puo' comparire in master.cf. */
     private static final List<String> NOMI = List.of("smtps", "submissions");
 
-    private PortaSottomissione() {}
+    private SubmissionPort() {}
 
     /* ===================================================================
      * La parte che si puo' provare senza server

@@ -31,11 +31,11 @@ import java.util.logging.Logger;
  * piano e di ogni sblocco. Si rilascia quando il lavoro finisce, qualunque cosa succeda. Chi lo
  * trova preso non parte, e sa chi lo tiene.
  */
-public final class TurnoPacchetti {
+public final class PackageJobLock {
 
-    private static final Logger LOGGER = Logger.getLogger(TurnoPacchetti.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(PackageJobLock.class.getName());
 
-    private TurnoPacchetti() {}
+    private PackageJobLock() {}
 
     /**
      * L'elenco dei pacchetti che un lavoro in corso ha sbloccato. Il finally di un lavoro non gira

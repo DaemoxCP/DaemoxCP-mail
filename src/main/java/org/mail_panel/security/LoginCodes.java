@@ -52,7 +52,7 @@ public final class LoginCodes {
     }
 
     public static Mailer mailer = (to, subject, body) -> {
-        if (!org.mail_panel.system.RapportoPeriodico.inviaMessaggioPannello(to, subject, body))
+        if (!org.mail_panel.system.PeriodicReport.inviaMessaggioPannello(to, subject, body))
             throw new IllegalStateException("Postfix did not accept the message");
     };
 

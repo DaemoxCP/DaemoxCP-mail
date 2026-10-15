@@ -33,7 +33,7 @@ import java.util.Set;
  * non dice cosa e' cambiato. Dice che sono usciti e su quale parte del pannello incidono.
  * Leggerli resta un lavoro da fare a mano, ma almeno si sa che va fatto.
  */
-public class Sorveglianza {
+public class StandardsWatch {
 
     /**
      * Le regole su cui il pannello e' costruito, con cio' che gia' sappiamo di loro.
@@ -64,7 +64,7 @@ public class Sorveglianza {
         { "8461", "server.watch.std.8461",     "",                  "" },
     };
 
-    private Sorveglianza() {}
+    private StandardsWatch() {}
 
     /* ===================================================================
      * Parte pura: si prova senza rete

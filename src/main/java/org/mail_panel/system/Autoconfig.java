@@ -100,8 +100,8 @@ public class Autoconfig {
         if (p > 0) r = r.substring(0, p);
         if (r.isEmpty()) return null;
         // Non si interroga il database a ogni richiesta: questa rotta e' pubblica e chiunque
-        // puo' chiamarla in continuazione. Vedi DominiInCache.
-        return DominiInCache.gestito(r);
+        // puo' chiamarla in continuazione. Vedi DomainCache.
+        return DomainCache.gestito(r);
     }
 
     /** Il dominio della casella indicata nel parametro emailaddress, se c'e'. */
@@ -172,7 +172,7 @@ public class Autoconfig {
         // Se la superficie pubblica sulla 443 e' installata, quei nomi sono suoi e questa
         // scheda non deve nemmeno offrire di toccare nginx: un pulsante che, premuto, si
         // rifiuta, e' un pulsante che non andava mostrato.
-        r.put("superficie443", ProtezioneWeb.stato().optBoolean("installato", false));
+        r.put("superficie443", WebProtection.stato().optBoolean("installato", false));
 
         // Il certificato: se non copre autoconfig.<dominio>, Thunderbird sbatte su un errore
         // TLS prima ancora di leggere il file.
@@ -375,7 +375,7 @@ public class Autoconfig {
             //
             // "nginx -t" non se ne accorgerebbe: e' una rottura di significato, non di
             // sintassi. Quindi la decisione va presa qui, prima di scrivere.
-            if (ProtezioneWeb.stato().optBoolean("installato", false))
+            if (WebProtection.stato().optBoolean("installato", false))
                 return r.put("success", false).put("giaAltrove", true)
                         .put("error", I18n.tr("server.autoconf.publicSurface") + " " + st.optString("perche", ""));
 

@@ -40,9 +40,9 @@ import java.util.regex.Pattern;
  * entra nel confronto. Se sono piu' d'uno vale il piu' vecchio, perche' un conteggio e' fresco
  * quanto il suo elenco meno fresco.
  */
-public final class CatalogoPkg {
+public final class PkgCatalog {
 
-    private CatalogoPkg() {}
+    private PkgCatalog() {}
 
 
     /** Un nome di repository finisce in un percorso: solo questi caratteri, e non troppi. */

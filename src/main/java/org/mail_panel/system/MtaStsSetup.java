@@ -8,7 +8,7 @@ import org.mail_panel.database.MailDatabase;
 import org.mail_panel.security.AcmeManager;
 import org.mail_panel.security.AutoDns;
 import org.mail_panel.security.CloudflareManager;
-import org.mail_panel.security.RegoleDns;
+import org.mail_panel.security.DnsRules;
 import org.mail_panel.util.Shell;
 
 import java.nio.file.Files;
@@ -40,9 +40,9 @@ import java.util.regex.Pattern;
  * fallisce ci si ferma spiegando cosa manca: proseguire dopo un fallimento vorrebbe dire
  * costruire sul vuoto.
  */
-public class AttivaMtaSts {
+public class MtaStsSetup {
 
-    private AttivaMtaSts() {}
+    private MtaStsSetup() {}
 
     /**
      * Quanto la sequenza aspetta, al massimo, che un record DNS appena creato diventi visibile.
@@ -85,7 +85,7 @@ public class AttivaMtaSts {
         List<Passo> passi = new ArrayList<>();
 
         // 1-2-3: la superficie sulla 443
-        JSONObject web = ProtezioneWeb.stato();
+        JSONObject web = WebProtection.stato();
         JSONObject inc = web.optJSONObject("include");
         boolean includeOk = inc != null && inc.optBoolean("ok", false);
         passi.add(passo("include", I18n.tr("server.sts.stepInclude"),
@@ -417,10 +417,10 @@ public class AttivaMtaSts {
         }
 
         // 1. include
-        JSONObject web = ProtezioneWeb.stato();
+        JSONObject web = WebProtection.stato();
         JSONObject inc = web.optJSONObject("include");
         if (inc == null || !inc.optBoolean("ok", false)) {
-            JSONObject e = ProtezioneWeb.aggiungiInclude();
+            JSONObject e = WebProtection.aggiungiInclude();
             fatti.put(esito("include", I18n.tr("server.sts.includeTitle"), e));
             if (job != null) job.scrivi("[1/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.includeOk") : I18n.tr("server.sts.includeFail")));
             if (!e.optBoolean("success", false)) return fermati(r, fatti,
@@ -428,8 +428,8 @@ public class AttivaMtaSts {
         } else fatti.put(gia("include", I18n.tr("server.sts.includeTitle")));
 
         // 2. la 443
-        if (!ProtezioneWeb.stato().optBoolean("installato", false)) {
-            JSONObject e = ProtezioneWeb.installa("", "");
+        if (!WebProtection.stato().optBoolean("installato", false)) {
+            JSONObject e = WebProtection.installa("", "");
             fatti.put(esito("config443", I18n.tr("server.sts.config443Title"), e));
             if (job != null) job.scrivi("[2/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.c443Ok") : I18n.tr("server.sts.c443Fail")));
             if (!e.optBoolean("success", false)) return fermati(r, fatti,
@@ -438,7 +438,7 @@ public class AttivaMtaSts {
 
         // 3. la jail
         if (!jailAttiva()) {
-            JSONObject e = ProtezioneWeb.installaJail();
+            JSONObject e = WebProtection.installaJail();
             fatti.put(esito("jail", "Jail fail2ban", e));
             // Una jail mancante non impedisce a MTA-STS di funzionare: si annota e si prosegue.
         } else fatti.put(gia("jail", "Jail fail2ban"));
@@ -872,7 +872,7 @@ public class AttivaMtaSts {
                 if (!"CNAME".equalsIgnoreCase(trovato.type)) {
                     male.add(I18n.tr("server.sts.notCname", java.util.Map.of("tipo", String.valueOf(trovato.type))));
                     storto = true;
-                } else if (!RegoleDns.stessoNome(trovato.content, bersaglio)) {
+                } else if (!DnsRules.stessoNome(trovato.content, bersaglio)) {
                     male.add(I18n.tr("server.sts.pointsElsewhere", java.util.Map.of("v", String.valueOf(trovato.content), "b", String.valueOf(bersaglio))));
                     storto = true;
                 }
@@ -918,7 +918,7 @@ public class AttivaMtaSts {
      * DNS che risponde con un errore (SERVFAIL, REFUSED) invece che con il contenuto del nome.
      *
      * TROPPI vuol dire piu' di un record v=STSv1 sullo stesso nome: per i mittenti e' come non
-     * averne nessuno (RFC 8461 §3.1, vedi RegoleDns.soloMtaSts). Prima si leggeva il primo e si
+     * averne nessuno (RFC 8461 §3.1, vedi DnsRules.soloMtaSts). Prima si leggeva il primo e si
      * diceva PRESENTE, e il passo poteva risultare fatto su un MTA-STS che nessuno usa.
      *
      * E' pubblica perche' la stessa lettura serve alla pagina DNS: due letture dello stesso
@@ -1012,9 +1012,9 @@ public class AttivaMtaSts {
             String t = riga.trim();
             if (t.isEmpty() || t.startsWith(";")) continue;
             Matcher m = RIGA_TXT.matcher(t);          // un CNAME davanti al TXT si salta
-            if (m.matches()) txt.addAll(RegoleDns.recordTxt(m.group(1)));
+            if (m.matches()) txt.addAll(DnsRules.recordTxt(m.group(1)));
         }
-        return trovati(RegoleDns.soloMtaSts(txt));
+        return trovati(DnsRules.soloMtaSts(txt));
     }
 
     /**

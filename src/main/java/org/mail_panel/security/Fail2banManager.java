@@ -1899,9 +1899,9 @@ public class Fail2banManager {
                 // capire: cosa risponde fail2ban, cosa ha scritto nel log dopo l'ultimo reload,
                 // e quali file definiscono questa jail. Le tre cose insieme rispondono a "cosa
                 // vede fail2ban", che non e' la stessa domanda di "cosa ho scritto io".
-                j.logFail2ban = RiparaAzioneBan.erroriLogPer(jail);
-                j.sezioni = RiparaAzioneBan.sezioniCheDefiniscono(jail);
-                j.dump = RiparaAzioneBan.configurazioneLetta(jail);
+                j.logFail2ban = BanActionRepair.erroriLogPer(jail);
+                j.sezioni = BanActionRepair.sezioniCheDefiniscono(jail);
+                j.dump = BanActionRepair.configurazioneLetta(jail);
                 // Non si conclude "non banna via pf": non e' stato misurato. Si dice cosa
                 // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
                 // quel comando su questo sistema non fa niente.

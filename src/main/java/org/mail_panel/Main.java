@@ -295,7 +295,7 @@ public class Main {
         // finche' un aggiornamento successivo non porta via un pezzo dello stack di posta.
         // Il ripristino va fatto qui, all'avvio, prima che il pannello torni utilizzabile.
         try {
-            String ripristino = org.mail_panel.system.UpdateManager.ripristinaLockDopoCrash();
+            String ripristino = org.mail_panel.system.UpdateManager.restoreLocksAfterCrash();
             if (!ripristino.isEmpty()) System.out.println(ripristino);
         } catch (Exception e) {
             System.out.println("Restoring package locks failed: " + e.getMessage());
@@ -361,7 +361,7 @@ public class Main {
             // La console e' in inglese: il messaggio condiviso con il pannello si chiede in inglese.
             org.mail_panel.i18n.I18n.setCurrent("en");
             String creato;
-            try { creato = org.mail_panel.system.UpdateManager.creaRunSh(); }
+            try { creato = org.mail_panel.system.UpdateManager.createRunSh(); }
             finally { org.mail_panel.i18n.I18n.clearCurrent(); }
             if (!creato.isEmpty()) System.out.println(creato);
         } catch (Exception e) {

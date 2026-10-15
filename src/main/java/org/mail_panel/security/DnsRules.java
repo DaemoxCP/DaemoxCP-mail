@@ -31,9 +31,9 @@ import java.util.Locale;
  * nuovo toglierle il TLS. Per questo il pannello deve saperli riconoscere prima di creare un
  * record, non dopo.
  */
-public final class RegoleDns {
+public final class DnsRules {
 
-    private RegoleDns() {}
+    private DnsRules() {}
 
     /* ===================================================================
      * Record TXT grezzi

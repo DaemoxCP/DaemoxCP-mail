@@ -25,9 +25,9 @@ import java.util.Locale;
  * Questa classe non modifica nulla. Legge, e quando un comando fallisce lo dice invece di
  * concludere: "non ho potuto guardare" e "va tutto bene" sono due risposte opposte.
  */
-public class DiagnosiWeb {
+public class WebDiagnostics {
 
-    private DiagnosiWeb() {}
+    private WebDiagnostics() {}
 
     /* ===================================================================
      * Il parser, come funzione pura

@@ -44,14 +44,14 @@ import java.util.UUID;
  * l'indirizzo COMPLETO, perche' Dovecot interroga il database con WHERE email='%s'. La
  * documentazione descrive cosa fa il client; cosa serve al server lo dice il server.
  */
-public class ProfiloApple {
+public class AppleProfile {
 
     /** IMAP su TLS diretto: inet_listener imaps di Dovecot. */
     public static final int PORTA_IMAP = 993;
     /** smtps in master.cf, con smtpd_tls_wrappermode=yes. */
     public static final int PORTA_SMTP = 465;
 
-    private ProfiloApple() {}
+    private AppleProfile() {}
 
     /**
      * Il file .mobileconfig per una casella.

@@ -25,7 +25,7 @@ import java.time.temporal.ChronoUnit;
  * supportate; il port segue il calendario di upstream. Confonderli fa suonare un allarme che
  * non c'e', o tacere uno che c'e'.
  */
-public class ScadenzaOpenssl {
+public class OpensslExpiry {
 
     /** ramo -> fine del supporto upstream. Trascritte da openssl-library.org. */
     private static final String[][] SCADENZE = {
@@ -41,7 +41,7 @@ public class ScadenzaOpenssl {
         { "1.0.2", "2019-12-31", "si"  },
     };
 
-    private ScadenzaOpenssl() {}
+    private OpensslExpiry() {}
 
     /* ===================================================================
      * Parte pura, provabile senza server

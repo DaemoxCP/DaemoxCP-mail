@@ -21,9 +21,9 @@ import java.util.Map;
  *
  * Le note e gli errori sono per chi usa il pannello: nella lingua della richiesta (server.size.*).
  */
-public class LimiteDimensione {
+public class MessageSizeLimit {
 
-    private LimiteDimensione() {}
+    private MessageSizeLimit() {}
 
     public static final int MEGA = 1024 * 1024;
 

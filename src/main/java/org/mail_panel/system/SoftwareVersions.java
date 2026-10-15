@@ -54,9 +54,9 @@ import java.util.regex.Pattern;
  * non si controlla cosi': il suo reload rilancia il binario nuovo nello stesso processo, che
  * conserva l'ora di avvio, e dopo un reload l'avviso sarebbe falso.
  */
-public final class VersioniSoftware {
+public final class SoftwareVersions {
 
-    private VersioniSoftware() {}
+    private SoftwareVersions() {}
 
     /** Il sistema da interrogare: quello vero del server, o uno finto nelle prove. */
     public interface Sistema {

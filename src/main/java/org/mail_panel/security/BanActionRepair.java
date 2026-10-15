@@ -37,13 +37,13 @@ import java.util.List;
  * e' esattamente il genere di conferma che ha lasciato passare il guasto per tutto questo tempo.
  * Se qualcosa va storto ripristina la copia e ricarica.
  */
-public final class RiparaAzioneBan {
+public final class BanActionRepair {
 
     private static final String JAIL_LOCAL = "/usr/local/etc/fail2ban/jail.local";
     private static final String JAIL_PUBBLICO = "/usr/local/etc/fail2ban/jail.d/mailpanel-pubblico.conf";
     private static final String CLIENT = "/usr/local/bin/fail2ban-client";
 
-    private RiparaAzioneBan() { }
+    private BanActionRepair() { }
 
     /** Le jail il cui comando di ban non e' eseguibile su questo sistema. Legge e basta. */
     public static JSONObject diagnosi() {
@@ -99,7 +99,7 @@ public final class RiparaAzioneBan {
             Path pub = Paths.get(JAIL_PUBBLICO);
             if (Files.exists(pub)) {
                 String prima = Files.readString(pub, StandardCharsets.UTF_8);
-                String dopo = org.mail_panel.system.ProtezioneWeb.jail();
+                String dopo = org.mail_panel.system.WebProtection.jail();
                 // Riscrivere il file intero e' lecito solo se e' il file che scrive il pannello.
                 // Se qualcuno lo ha sostituito con il proprio, sovrascriverlo cancellerebbe il
                 // suo lavoro senza avvisare — e questo e' un rimedio, non un ripristino.
@@ -566,7 +566,7 @@ public final class RiparaAzioneBan {
     private static void ripristina(List<Path> fatte) {
         for (Path c : fatte) {
             try {
-                Path orig = RiparaAzioneBan.copie.get(c);
+                Path orig = BanActionRepair.copie.get(c);
                 if (orig != null) Files.copy(c, orig, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception ignora) { }
         }

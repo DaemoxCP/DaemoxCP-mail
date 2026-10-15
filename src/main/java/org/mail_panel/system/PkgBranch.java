@@ -46,9 +46,9 @@ import java.util.stream.Stream;
  * tutto torna com'era. Nessun pacchetto viene aggiornato: gli aggiornamenti si decidono dopo, dal
  * loro piano. I file degli altri non si toccano mai, e il sistema base (FreeBSD-base) nemmeno.
  */
-public final class RamoPkg {
+public final class PkgBranch {
 
-    private RamoPkg() {}
+    private PkgBranch() {}
 
     public static final Path CARTELLA = Path.of("/usr/local/etc/pkg/repos");
     /** "zz": pkg legge i file in ordine alfabetico e l'ultimo vince. */
@@ -309,7 +309,7 @@ public final class RamoPkg {
     }
 
     /**
-     * Cambia ramo. Va chiamato sul turno dei lavori sui pacchetti (TurnoPacchetti). Ogni passo
+     * Cambia ramo. Va chiamato sul turno dei lavori sui pacchetti (PackageJobLock). Ogni passo
      * finisce nel registro; se un passo non riesce, il file del pannello torna com'era.
      */
     public static JSONObject cambia(Sistema s, Registro log, String verso, String impronta) {

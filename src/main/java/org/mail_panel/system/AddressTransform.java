@@ -57,9 +57,9 @@ import java.util.stream.Stream;
  * L'anteprima consegna un'impronta dello stato: se fra anteprima e conferma qualcosa cambia (un
  * alias, la casella, la posta che compare sul disco), la trasformazione non parte.
  */
-public final class TrasformaIndirizzo {
+public final class AddressTransform {
 
-    private TrasformaIndirizzo() {}
+    private AddressTransform() {}
 
     /** Dove Dovecot tiene la posta e i filtri. Le prove li spostano in una cartella temporanea. */
     static Path vmail = Path.of("/var/vmail");

@@ -109,9 +109,9 @@ public class AutoDns {
 
         List<CloudflareManager.TxtRecordInfo> tutti = txtAlNome(token, zoneId, nome);
         List<String> contenuti = new ArrayList<>();
-        for (CloudflareManager.TxtRecordInfo t : tutti) contenuti.add(RegoleDns.contenutoCloudflare(t.content));
+        for (CloudflareManager.TxtRecordInfo t : tutti) contenuti.add(DnsRules.contenutoCloudflare(t.content));
 
-        List<String> pertinenti = spf ? RegoleDns.soloSpf(contenuti) : RegoleDns.soloDmarc(contenuti);
+        List<String> pertinenti = spf ? DnsRules.soloSpf(contenuti) : DnsRules.soloDmarc(contenuti);
         o.put("quanti", pertinenti.size())
          .put("esiste", !pertinenti.isEmpty())
          .put("altriTxt", tutti.size() - pertinenti.size());
@@ -119,7 +119,7 @@ public class AutoDns {
         if (!pertinenti.isEmpty()) {
             o.put("contenuto", String.join("  ||  ", pertinenti));
             for (CloudflareManager.TxtRecordInfo t : tutti)
-                if (pertinenti.contains(RegoleDns.contenutoCloudflare(t.content))) { o.put("recordId", t.id); break; }
+                if (pertinenti.contains(DnsRules.contenutoCloudflare(t.content))) { o.put("recordId", t.id); break; }
         }
 
         JSONArray avvisi = new JSONArray();
@@ -130,12 +130,12 @@ public class AutoDns {
 
         if (!pertinenti.isEmpty()) {
             if (spf) {
-                RegoleDns.EsitoSpf e = RegoleDns.analizzaSpf(contenuti, ipDelServer());
+                DnsRules.EsitoSpf e = DnsRules.analizzaSpf(contenuti, ipDelServer());
                 for (String x : e.avvisi) avvisi.put(x);
                 if (e.valido && !e.autorizzaEsplicito && !e.viaMx && !e.viaA && e.include == 0)
                     avvisi.put(I18n.tr("server.adns.spfNotAuth", java.util.Map.of("ip", String.valueOf(ipDelServer()))));
             } else {
-                RegoleDns.EsitoDmarc e = RegoleDns.analizzaDmarc(contenuti, d.domain);
+                DnsRules.EsitoDmarc e = DnsRules.analizzaDmarc(contenuti, d.domain);
                 if (e.valido) o.put("politicaAttuale", e.politica == null ? "none" : e.politica);
                 for (String x : e.avvisi) avvisi.put(x);
                 if (!e.daAutorizzare.isEmpty())
@@ -182,8 +182,8 @@ public class AutoDns {
 
             List<CloudflareManager.TxtRecordInfo> tutti = txtAlNome(acct.apiToken, zl.zoneId, nome);
             List<String> contenuti = new ArrayList<>();
-            for (CloudflareManager.TxtRecordInfo t : tutti) contenuti.add(RegoleDns.contenutoCloudflare(t.content));
-            List<String> pertinenti = spf ? RegoleDns.soloSpf(contenuti) : RegoleDns.soloDmarc(contenuti);
+            for (CloudflareManager.TxtRecordInfo t : tutti) contenuti.add(DnsRules.contenutoCloudflare(t.content));
+            List<String> pertinenti = spf ? DnsRules.soloSpf(contenuti) : DnsRules.soloDmarc(contenuti);
 
             // Il controllo che vale piu' di tutti gli altri, ora fatto sul contenuto.
             if (!pertinenti.isEmpty())
@@ -261,8 +261,8 @@ public class AutoDns {
             for (CloudflareManager.TxtRecordInfo t : cloudflare.listTxtRecordsContaining(acct.apiToken, zl.zoneId, null)) {
                 String nm = t.name == null ? "" : t.name.toLowerCase(java.util.Locale.ROOT).replaceAll("\\.$", "");
                 if (!nm.equals(nome.toLowerCase(java.util.Locale.ROOT))) continue;
-                String contenuto = RegoleDns.contenutoCloudflare(t.content);
-                if (RegoleDns.eDmarc(contenuto)) { dmarc.add(contenuto); bersaglio = t; }
+                String contenuto = DnsRules.contenutoCloudflare(t.content);
+                if (DnsRules.eDmarc(contenuto)) { dmarc.add(contenuto); bersaglio = t; }
             }
 
             if (dmarc.isEmpty())
@@ -272,8 +272,8 @@ public class AutoDns {
                 return r.put("success", false)
                         .put("error", I18n.tr("server.adns.manyDmarcEdit", java.util.Map.of("nome", String.valueOf(nome), "n", String.valueOf(dmarc.size()))));
 
-            String prima = RegoleDns.contenutoCloudflare(bersaglio.content);
-            String dopo = RegoleDns.cambiaPolitica(prima, n);
+            String prima = DnsRules.contenutoCloudflare(bersaglio.content);
+            String dopo = DnsRules.cambiaPolitica(prima, n);
             if (dopo == null)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.adns.cannotEdit", java.util.Map.of("v", String.valueOf(prima))));
@@ -298,8 +298,8 @@ public class AutoDns {
             for (CloudflareManager.TxtRecordInfo t : cloudflare.listTxtRecordsContaining(acct.apiToken, zl.zoneId, null)) {
                 String nm = t.name == null ? "" : t.name.toLowerCase(java.util.Locale.ROOT).replaceAll("\\.$", "");
                 if (nm.equals(nome.toLowerCase(java.util.Locale.ROOT))) {
-                    String c = RegoleDns.contenutoCloudflare(t.content);
-                    if (RegoleDns.eDmarc(c)) verificato = c;
+                    String c = DnsRules.contenutoCloudflare(t.content);
+                    if (DnsRules.eDmarc(c)) verificato = c;
                 }
             }
             if (verificato == null || !verificato.equals(dopo))
@@ -371,7 +371,7 @@ public class AutoDns {
     JSONObject allineaTxtMtaSts(String token, String zoneId, String nome, String valore, JSONObject r) {
         List<CloudflareManager.TxtRecordInfo> sts = new ArrayList<>();
         for (CloudflareManager.TxtRecordInfo t : txtAlNome(token, zoneId, nome))
-            if (RegoleDns.eMtaSts(RegoleDns.contenutoCloudflare(t.content))) sts.add(t);
+            if (DnsRules.eMtaSts(DnsRules.contenutoCloudflare(t.content))) sts.add(t);
 
         List<String> tolti = new ArrayList<>();
         String prima = null;
@@ -385,14 +385,14 @@ public class AutoDns {
             // Si tiene quello gia' giusto, se c'e'; se no il primo, da aggiornare.
             CloudflareManager.TxtRecordInfo tieni = sts.get(0);
             for (CloudflareManager.TxtRecordInfo t : sts)
-                if (RegoleDns.contenutoCloudflare(t.content).trim().equals(valore.trim())) { tieni = t; break; }
+                if (DnsRules.contenutoCloudflare(t.content).trim().equals(valore.trim())) { tieni = t; break; }
 
             // Prima si tolgono gli altri, poi si aggiorna. Se l'aggiornamento fallisse resterebbe
             // un record solo con l'id vecchio: i mittenti lo leggono e scaricano la politica di
             // adesso. Due record, invece, non li legge nessuno.
             for (CloudflareManager.TxtRecordInfo t : sts) {
                 if (t == tieni) continue;
-                String c = RegoleDns.contenutoCloudflare(t.content);
+                String c = DnsRules.contenutoCloudflare(t.content);
                 CloudflareManager.RecordOp del = cloudflare.deleteRecord(token, zoneId, t.id);
                 if (del == null || !del.success)
                     return r.put("success", false).put("tolti", new JSONArray(tolti))
@@ -401,7 +401,7 @@ public class AutoDns {
                 tolti.add(c);
             }
 
-            String c = RegoleDns.contenutoCloudflare(tieni.content);
+            String c = DnsRules.contenutoCloudflare(tieni.content);
             if (!c.trim().equals(valore.trim())) {
                 // L'id NON e' decorativo: e' il segnale con cui i mittenti si accorgono che la
                 // politica e' cambiata. Un id fermo — per esempio un orologio scritto una volta
@@ -426,8 +426,8 @@ public class AutoDns {
         // vecchio, e sarebbero due.
         List<String> restano = new ArrayList<>();
         for (CloudflareManager.TxtRecordInfo t : txtAlNome(token, zoneId, nome)) {
-            String c = RegoleDns.contenutoCloudflare(t.content);
-            if (RegoleDns.eMtaSts(c)) restano.add(c.trim());
+            String c = DnsRules.contenutoCloudflare(t.content);
+            if (DnsRules.eMtaSts(c)) restano.add(c.trim());
         }
         if (!tolti.isEmpty()) r.put("tolti", new JSONArray(tolti));
         if (prima != null) r.put("aggiornato", true).put("prima", prima).put("dopo", valore);
@@ -821,7 +821,7 @@ public class AutoDns {
 
     static boolean coincide(CloudflareManager.DnsRecordInfo t, boolean srv, String bersaglio, int porta) {
         String c = t.content == null ? "" : t.content.trim();
-        if (!srv) return RegoleDns.stessoNome(c, bersaglio);
+        if (!srv) return DnsRules.stessoNome(c, bersaglio);
         // Per un SRV si guardano i campi STRUTTURATI di Cloudflare, non la stringa "content".
         //
         // In "content" Cloudflare mette tre valori — peso, porta, destinazione — mentre
@@ -831,11 +831,11 @@ public class AutoDns {
         // "puntava a X invece che a Y" confrontando due formati diversi della stessa cosa.
         // Una scrittura in produzione fatta per niente, ripetuta a ogni passaggio.
         if (t.srvPorta != null && t.srvDestinazione != null)
-            return t.srvPorta == porta && RegoleDns.stessoNome(t.srvDestinazione, bersaglio);
+            return t.srvPorta == porta && DnsRules.stessoNome(t.srvDestinazione, bersaglio);
         // Solo se Cloudflare non desse i campi strutturati si torna alla stringa, e si
         // accettano ENTRAMBE le forme in cui quella stringa puo' arrivare.
-        RegoleDns.Srv s = RegoleDns.analizzaSrv(c);
-        if (s != null) return s.porta == porta && RegoleDns.stessoNome(s.destinazione, bersaglio);
+        DnsRules.Srv s = DnsRules.analizzaSrv(c);
+        if (s != null) return s.porta == porta && DnsRules.stessoNome(s.destinazione, bersaglio);
         // Quattro campi non ce n'erano: proviamo la forma a tre, "peso porta destinazione",
         // che e' quella osservata in produzione nel content di Cloudflare. Non serve la
         // priorita': qui si confrontano porta e destinazione, e la priorita' non e' mai
@@ -844,7 +844,7 @@ public class AutoDns {
         if (pezzi.length == 3) {
             try {
                 return Integer.parseInt(pezzi[1]) == porta
-                    && RegoleDns.stessoNome(pezzi[2], bersaglio);
+                    && DnsRules.stessoNome(pezzi[2], bersaglio);
             } catch (NumberFormatException ignora) {
                 return false;
             }
@@ -866,7 +866,7 @@ public class AutoDns {
      * La conclusione giusta non era aggiornare quella frase: era togliere l'eccezione. La
      * regola che proteggeva — il TXT non si pubblica finche' la politica non risponde — vive
      * adesso dove deve, dentro la sequenza, che quella condizione la MISURA invece di
-     * dichiararla una volta per tutte. Vedi creaTxtMtaSts() qui sopra e AttivaMtaSts.
+     * dichiararla una volta per tutte. Vedi creaTxtMtaSts() qui sopra e MtaStsSetup.
      */
 
     /* ===================================================================

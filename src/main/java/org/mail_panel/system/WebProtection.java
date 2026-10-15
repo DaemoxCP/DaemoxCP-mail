@@ -47,7 +47,7 @@ import java.nio.file.Path;
  *  - **Log dedicato**, cosi' fail2ban puo' guardare solo questo e non confondersi con la
  *    webmail.
  */
-public class ProtezioneWeb {
+public class WebProtection {
 
     private static final String PREFISSO_NGINX = "/usr/local/etc/nginx";
     private static final String NOME_FILE = "mailpanel-pubblico.conf";
@@ -56,7 +56,7 @@ public class ProtezioneWeb {
     public static final String FILE_POLITICA = DIR_PUBBLICA + "/mta-sts.txt";
     public static final String LOG_ACCESSI = "/var/log/nginx/mailpanel-pubblico-access.log";
 
-    private ProtezioneWeb() {}
+    private WebProtection() {}
 
     /* ===================================================================
      * La configurazione, come funzione pura

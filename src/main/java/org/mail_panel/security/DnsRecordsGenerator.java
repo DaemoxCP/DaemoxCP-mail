@@ -664,7 +664,7 @@ public class DnsRecordsGenerator {
                 if (t.isEmpty()) continue;
                 String[] campi = t.split("\\s+");
                 String bersaglio = campi.length >= 2 ? campi[1] : campi[0];
-                if (RegoleDns.stessoNome(bersaglio, mailHostname)) nostro = true;
+                if (DnsRules.stessoNome(bersaglio, mailHostname)) nostro = true;
                 else altrove.add(bersaglio);
             }
             if (nostro) {
@@ -693,7 +693,7 @@ public class DnsRecordsGenerator {
         spfCheck.recordName = domain;
         spfCheck.expectedValue = expectedSpf;
         if (spfCheck.currentValue != null) {
-            RegoleDns.EsitoSpf e = RegoleDns.analizzaSpf(RegoleDns.recordTxt(spfCheck.currentValue), serverIp);
+            DnsRules.EsitoSpf e = DnsRules.analizzaSpf(DnsRules.recordTxt(spfCheck.currentValue), serverIp);
             if (e.record != null) spfCheck.currentValue = e.record;
             if (!e.valido) {
                 spfCheck.passed = false;
@@ -752,8 +752,8 @@ public class DnsRecordsGenerator {
             // Le chiavi da 2048 bit superano i 255 caratteri, quindi in DNS stanno in piu'
             // stringhe che vanno unite senza spazi (RFC 7208 §3.3). Confrontare l'uscita
             // grezza di dig significherebbe confrontare anche le virgolette in mezzo.
-            java.util.List<String> txt = RegoleDns.recordTxt(dkimCheck.currentValue);
-            java.util.List<String> chiavi = RegoleDns.soloDkim(txt);
+            java.util.List<String> txt = DnsRules.recordTxt(dkimCheck.currentValue);
+            java.util.List<String> chiavi = DnsRules.soloDkim(txt);
 
             if (chiavi.isEmpty()) {
                 dkimCheck.passed = false;
@@ -763,7 +763,7 @@ public class DnsRecordsGenerator {
                 dkimCheck.message = I18n.tr("server.dnsg.dkimMany", java.util.Map.of("n", String.valueOf(chiavi.size())));
             } else {
                 dkimCheck.currentValue = chiavi.get(0);
-                String pubblicata = RegoleDns.chiaveDkim(chiavi.get(0));
+                String pubblicata = DnsRules.chiaveDkim(chiavi.get(0));
                 dkimCheck.passed = true;
                 if (pubblicata == null || pubblicata.isEmpty()) {
                     dkimCheck.passed = false;
@@ -794,8 +794,8 @@ public class DnsRecordsGenerator {
         dmarcCheck.recordName = "_dmarc." + domain;
         dmarcCheck.expectedValue = "v=DMARC1; p=none; rua=mailto:dmarc@" + domain;
         if (dmarcCheck.currentValue != null) {
-            RegoleDns.EsitoDmarc e = RegoleDns.analizzaDmarc(
-                    RegoleDns.recordTxt(dmarcCheck.currentValue), domain);
+            DnsRules.EsitoDmarc e = DnsRules.analizzaDmarc(
+                    DnsRules.recordTxt(dmarcCheck.currentValue), domain);
             if (e.record != null) dmarcCheck.currentValue = e.record;
             if (!e.valido) {
                 dmarcCheck.passed = false;
@@ -817,7 +817,7 @@ public class DnsRecordsGenerator {
                 for (String nomeAut : e.daAutorizzare) {
                     DnsCheck aut = verifyRecord(nomeAut, "TXT");
                     boolean concessa = aut.currentValue != null
-                            && !RegoleDns.soloDmarc(RegoleDns.recordTxt(aut.currentValue)).isEmpty();
+                            && !DnsRules.soloDmarc(DnsRules.recordTxt(aut.currentValue)).isEmpty();
                     if (!concessa) {
                         // Si SEGNALA senza bocciare. Per sapere se l'autorizzazione serve davvero
                         // occorre confrontare i domini ORGANIZZATIVI, che RFC 9989 §4.10 ricava con
@@ -846,7 +846,7 @@ public class DnsRecordsGenerator {
         autoconfigCheck.expectedValue = mailHostname + ".";
         if (autoconfigCheck.currentValue != null) {
             String puntaA = autoconfigCheck.currentValue.trim().split("\\s+")[0];
-            if (RegoleDns.stessoNome(puntaA, mailHostname)) {
+            if (DnsRules.stessoNome(puntaA, mailHostname)) {
                 autoconfigCheck.passed = true;
                 autoconfigCheck.message = "OK: autoconfig → " + mailHostname;
             } else {
@@ -876,7 +876,7 @@ public class DnsRecordsGenerator {
         // 9. Check MTA-STS (optional but recommended)
         // Note: MTA-STS ID is just a version timestamp, doesn't need to match exactly
         DnsCheck mtaStsCheck = controlloMtaSts(domain,
-                org.mail_panel.system.AttivaMtaSts.leggiTxt(domain),
+                org.mail_panel.system.MtaStsSetup.leggiTxt(domain),
                 org.mail_panel.system.MtaSts::provaPubblica);
         mtaStsCheck.expectedValue = org.mail_panel.system.MtaSts.recordTxtCorrente();
         result.checks.add(mtaStsCheck);
@@ -1039,13 +1039,13 @@ public class DnsRecordsGenerator {
                 check.message = I18n.tr("server.dnsg.optionalOff");
             return;
         }
-        RegoleDns.Srv s = RegoleDns.analizzaSrv(check.currentValue.trim().split("\n")[0]);
+        DnsRules.Srv s = DnsRules.analizzaSrv(check.currentValue.trim().split("\n")[0]);
         if (s == null) {
             check.passed = false;
             check.message = I18n.tr("server.dnsg.notSrv", java.util.Map.of("v", String.valueOf(check.currentValue.trim())));
             return;
         }
-        boolean host = RegoleDns.stessoNome(s.destinazione, mailHostname);
+        boolean host = DnsRules.stessoNome(s.destinazione, mailHostname);
         boolean porta = s.porta == portaAttesa;
         if (host && porta) {
             check.passed = true;
@@ -1065,18 +1065,18 @@ public class DnsRecordsGenerator {
      * La riga MTA-STS della pagina DNS, da cio' che dice il DNS del record e da come risponde
      * la politica.
      *
-     * Il record si legge con la stessa funzione del piano MTA-STS (AttivaMtaSts.leggiTxt).
+     * Il record si legge con la stessa funzione del piano MTA-STS (MtaStsSetup.leggiTxt).
      * Prima qui bastava che "v=STSv1" comparisse nell'uscita di "dig +short": due record, che
      * per i mittenti valgono zero (RFC 8461 §3.1), davano "Attivo", e un SERVFAIL dava "Non
      * attivo". Sta da sola perche' le prove la verifichino senza DNS e senza la politica vera.
      */
-    static DnsCheck controlloMtaSts(String domain, org.mail_panel.system.AttivaMtaSts.LetturaTxt txtSts,
+    static DnsCheck controlloMtaSts(String domain, org.mail_panel.system.MtaStsSetup.LetturaTxt txtSts,
                                     java.util.function.Function<String, org.json.JSONObject> provaPubblica) {
         DnsCheck mtaStsCheck = new DnsCheck();
         mtaStsCheck.recordName = "_mta-sts." + domain;
         mtaStsCheck.recordType = "MTA-STS";
         if (!txtSts.valori.isEmpty()) mtaStsCheck.currentValue = String.join("  ||  ", txtSts.valori);
-        if (txtSts.esito == org.mail_panel.system.AttivaMtaSts.EsitoTxt.PRESENTE) {
+        if (txtSts.esito == org.mail_panel.system.MtaStsSetup.EsitoTxt.PRESENTE) {
             // Il record c'e': ora si va a CHIEDERE la politica. Guardare solo il TXT diceva
             // "fatto" su domini che dichiarano pubblicamente una protezione e poi non la
             // servono. E' una promessa non mantenuta, e il pannello la mostrava come esito
@@ -1089,10 +1089,10 @@ public class DnsRecordsGenerator {
                 mtaStsCheck.passed = false;
                 mtaStsCheck.message = I18n.tr("server.dnsg.stsNotServed", java.util.Map.of("d", String.valueOf(domain), "e", String.valueOf(prova.optString("errore", I18n.tr("server.dnsg.unreachable")))));
             }
-        } else if (txtSts.esito == org.mail_panel.system.AttivaMtaSts.EsitoTxt.TROPPI) {
+        } else if (txtSts.esito == org.mail_panel.system.MtaStsSetup.EsitoTxt.TROPPI) {
             mtaStsCheck.passed = false;
             mtaStsCheck.message = I18n.tr("server.dnsg.stsMany", java.util.Map.of("n", String.valueOf(txtSts.valori.size()), "d", String.valueOf(domain)));
-        } else if (txtSts.esito == org.mail_panel.system.AttivaMtaSts.EsitoTxt.NON_CHIESTO) {
+        } else if (txtSts.esito == org.mail_panel.system.MtaStsSetup.EsitoTxt.NON_CHIESTO) {
             // NON si scrive "non attivo" su una domanda rimasta senza risposta: sono due guasti
             // diversi e mandano a cercare in posti opposti (come per autoconfig, in verifyAllRecords).
             mtaStsCheck.passed = false;
