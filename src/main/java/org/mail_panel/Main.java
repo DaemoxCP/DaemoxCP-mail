@@ -121,6 +121,18 @@ import java.sql.ResultSet;
  */
 public class Main {
 
+    // I comandi esterni partono con fork(), non con jspawnhelper. Con il meccanismo predefinito
+    // ogni comando passa da jspawnhelper, che controlla di essere della stessa versione della
+    // JVM in memoria: appena pkg aggiorna il JDK sotto il pannello acceso, ogni avvio fallisce
+    // ("Failed to exec spawn helper") e il pannello non legge piu' niente finche' non lo si
+    // riavvia. Provato su FreeBSD 15.1 con openjdk25 25.0.2 -> 25.0.4: con FORK i comandi
+    // continuano a partire. La proprieta' si legge una volta sola, al primo processo lanciato:
+    // per questo sta qui, prima di qualunque altra cosa.
+    static {
+        if (System.getProperty("jdk.lang.Process.launchMechanism") == null)
+            System.setProperty("jdk.lang.Process.launchMechanism", "FORK");
+    }
+
     public static dataBaseManager dbManager;         // SQLite for panel config
     public static MailDatabase mailDatabase;         // MySQL for mail data
     public static WebSessions sessions = new WebSessions();
@@ -786,6 +798,15 @@ public class Main {
                     return;
                 }
                 server.start();
+
+                // La regola dei blocchi: i pacchetti dello stack di posta restano bloccati,
+                // tranne quelli sbloccati apposta da un amministratore.
+                try {
+                    String politica = org.mail_panel.system.UpdateManager.applicaPoliticaBlocchi();
+                    if (!politica.isEmpty()) System.out.println(politica);
+                } catch (Exception e) {
+                    System.out.println("Applying the package lock rule failed: " + e.getMessage());
+                }
 
                 System.out.println(ANSI_GREEN + "Mail Panel Server started on port " + port + ANSI_RESET);
                 System.out.println(ANSI_GREEN + "Open your browser: https://" + host + ":" + port + ANSI_RESET);

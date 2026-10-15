@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Le versioni del software nella Home (VersioniSoftware).
+ * Le versioni del software nella Home (SoftwareVersions).
  *
  * Un sistema finto risponde con le uscite VERE dei programmi su FreeBSD (postconf, dovecot,
  * rspamd, redis-server, nginx, php-fpm, openssl, freebsd-version, clamd, mysqld, pkg which,
@@ -47,7 +47,7 @@ public class SoftwareVersionsTest {
     static final ZoneId ROMA = ZoneId.of("Europe/Rome");
 
     /** Un server finto: file che esistono, uscite dei comandi, pidfile e ore di avvio. */
-    static class FakeSystem implements VersioniSoftware.Sistema {
+    static class FakeSystem implements SoftwareVersions.Sistema {
         final Set<String> file = new HashSet<>();
         final Map<String, String> uscite = new HashMap<>();
         final Map<String, String> contenuti = new HashMap<>();
@@ -59,7 +59,7 @@ public class SoftwareVersionsTest {
         public String esegui(String... argv) {
             String k = String.join(" ", argv);
             lanciati.add(k);
-            if (k.startsWith(VersioniSoftware.PKG + " which ")) return uscite.get("pkg which");
+            if (k.startsWith(SoftwareVersions.PKG + " which ")) return uscite.get("pkg which");
             return uscite.get(k);
         }
         public boolean esiste(String p) { return file.contains(p); }
@@ -78,11 +78,11 @@ public class SoftwareVersionsTest {
     /** Un server di posta completo come lo installa il pannello, con qualche servizio da riavviare. */
     static FakeSystem completo() {
         FakeSystem f = new FakeSystem();
-        f.file.addAll(Arrays.asList(VersioniSoftware.PKG, "/usr/local/sbin/postconf", "/usr/local/sbin/dovecot",
-                "/usr/local/bin/rspamd", "/usr/local/bin/redis-server", VersioniSoftware.CLAMD, VersioniSoftware.MYSQLD,
+        f.file.addAll(Arrays.asList(SoftwareVersions.PKG, "/usr/local/sbin/postconf", "/usr/local/sbin/dovecot",
+                "/usr/local/bin/rspamd", "/usr/local/bin/redis-server", SoftwareVersions.CLAMD, SoftwareVersions.MYSQLD,
                 "/usr/local/www/roundcube/index.php", "/usr/local/sbin/nginx", "/usr/local/sbin/php-fpm", "/usr/local/bin/sievec",
-                "/usr/local/bin/fail2ban-client", "/usr/sbin/local-unbound", VersioniSoftware.OPENSSL_BASE,
-                VersioniSoftware.FREEBSD_VERSION, "/usr/local/openjdk25/bin/java"));
+                "/usr/local/bin/fail2ban-client", "/usr/sbin/local-unbound", SoftwareVersions.OPENSSL_BASE,
+                SoftwareVersions.FREEBSD_VERSION, "/usr/local/openjdk25/bin/java"));
         // pkg which: un file che nessun pacchetto possiede (local-unbound e' del sistema base).
         f.uscite.put("pkg which", String.join("\n",
                 "/usr/local/sbin/postconf was installed by package postfix-mysql-3.10.4,1",
@@ -98,7 +98,7 @@ public class SoftwareVersionsTest {
                 "/usr/local/bin/fail2ban-client was installed by package py311-fail2ban-1.1.0_3",
                 "/usr/sbin/local-unbound was not found in the database",
                 "/usr/local/openjdk25/bin/java was installed by package openjdk25-25.0.1+8.1", ""));
-        f.uscite.put(VersioniSoftware.PKG + " query %n %t", String.join("\n",
+        f.uscite.put(SoftwareVersions.PKG + " query %n %t", String.join("\n",
                 "postfix-mysql " + epoca("2026-10-02T07:00:00Z"),
                 "dovecot-mysql " + epoca("2026-09-20T07:00:00Z"),
                 "rspamd " + epoca("2026-09-20T07:00:00Z"),
@@ -113,10 +113,10 @@ public class SoftwareVersionsTest {
         f.uscite.put("/usr/local/sbin/nginx -v", "nginx version: nginx/1.28.0\n");
         f.uscite.put("/usr/local/sbin/php-fpm -v", "PHP 8.4.13 (fpm-fcgi) (built: Sep 25 2025 01:23:45)\nCopyright (c) The PHP Group\nZend Engine v4.4.13, Copyright (c) Zend Technologies\n");
         f.uscite.put("/usr/sbin/local-unbound -V", "Version 1.22.0\n\nConfigure line: --with-ssl=/usr --with-libexpat=/usr\nLinked libs: libevent 2.1.12-stable (it uses kqueue), OpenSSL 3.5.1 1 Jul 2025\n");
-        f.uscite.put(VersioniSoftware.OPENSSL_BASE + " version", "OpenSSL 3.5.1 1 Jul 2025\n");
-        f.uscite.put(VersioniSoftware.FREEBSD_VERSION + " -u", "15.0-RELEASE-p3\n");
-        f.uscite.put(VersioniSoftware.FREEBSD_VERSION + " -r", "15.0-RELEASE-p2\n");
-        f.uscite.put(VersioniSoftware.FREEBSD_VERSION + " -k", "15.0-RELEASE-p3\n");
+        f.uscite.put(SoftwareVersions.OPENSSL_BASE + " version", "OpenSSL 3.5.1 1 Jul 2025\n");
+        f.uscite.put(SoftwareVersions.FREEBSD_VERSION + " -u", "15.0-RELEASE-p3\n");
+        f.uscite.put(SoftwareVersions.FREEBSD_VERSION + " -r", "15.0-RELEASE-p2\n");
+        f.uscite.put(SoftwareVersions.FREEBSD_VERSION + " -k", "15.0-RELEASE-p3\n");
         f.contenuti.put("/usr/local/www/roundcube/program/include/iniset.php",
                 "<?php\n\n// application constants\ndefine('RCMAIL_VERSION', '1.6.11');\ndefine('RCMAIL_START', microtime(true));\n");
         // Postfix: partito prima dell'aggiornamento del 02/10. Dovecot: dopo l'ultima installazione.
@@ -131,7 +131,7 @@ public class SoftwareVersionsTest {
         f.processi.put(1300L, Instant.parse("2026-09-01T08:00:00Z"));
         f.contenuti.put("/var/run/fail2ban/fail2ban.pid", "1400\n");
         f.processi.put(1400L, Instant.parse("2026-09-02T08:00:00Z"));
-        f.contenuti.put(VersioniSoftware.PIDFILE_LOCAL_UNBOUND, "700\n");
+        f.contenuti.put(SoftwareVersions.PIDFILE_LOCAL_UNBOUND, "700\n");
         f.processi.put(700L, Instant.parse("2026-09-01T05:00:00Z"));
         f.clamd = "ClamAV 1.4.3/27780/Fri Oct  2 08:24:28 2026";
         f.mysql = "8.0.42";
@@ -147,43 +147,43 @@ public class SoftwareVersionsTest {
     public static void main(String[] args) throws Exception {
         System.out.println("\n== Le parti: pacchetti, versioni, pid, clamd ==");
         vero("versione del programma dal pacchetto: postfix-mysql-3.10.4,1 -> 3.10.4",
-                VersioniSoftware.upstream("postfix-mysql-3.10.4,1").equals("3.10.4"));
+                SoftwareVersions.upstream("postfix-mysql-3.10.4,1").equals("3.10.4"));
         vero("senza revisione del port: dovecot-mysql-2.3.21.1_8 -> 2.3.21.1",
-                VersioniSoftware.upstream("dovecot-mysql-2.3.21.1_8").equals("2.3.21.1"));
+                SoftwareVersions.upstream("dovecot-mysql-2.3.21.1_8").equals("2.3.21.1"));
         vero("revisione ed epoca insieme: roundcube-php84-1.6.11_1,1 -> 1.6.11",
-                VersioniSoftware.upstream("roundcube-php84-1.6.11_1,1").equals("1.6.11"));
+                SoftwareVersions.upstream("roundcube-php84-1.6.11_1,1").equals("1.6.11"));
         vero("nome con trattini: roundcube-php84-1.6.11,1 -> roundcube-php84",
-                VersioniSoftware.nome("roundcube-php84-1.6.11,1").equals("roundcube-php84"));
+                SoftwareVersions.nome("roundcube-php84-1.6.11,1").equals("roundcube-php84"));
         vero("parte numerica per confrontare: 8.0.43-debug -> 8.0.43, 25.0.1+8-LTS -> 25.0.1",
-                VersioniSoftware.numeri("8.0.43-debug").equals("8.0.43") && VersioniSoftware.numeri("25.0.1+8-LTS").equals("25.0.1")
-                && VersioniSoftware.numeri("abc").isEmpty());
-        vero("pidfile di Postfix (allineato a destra): 812", Long.valueOf(812).equals(VersioniSoftware.pid("        812\n")));
+                SoftwareVersions.numeri("8.0.43-debug").equals("8.0.43") && SoftwareVersions.numeri("25.0.1+8-LTS").equals("25.0.1")
+                && SoftwareVersions.numeri("abc").isEmpty());
+        vero("pidfile di Postfix (allineato a destra): 812", Long.valueOf(812).equals(SoftwareVersions.pid("        812\n")));
         vero("pidfile non validi: testo, 1 (init), 0, undici cifre",
-                VersioniSoftware.pid("abc") == null && VersioniSoftware.pid("1") == null && VersioniSoftware.pid("0") == null
-                && VersioniSoftware.pid("12345678901") == null && VersioniSoftware.pid(null) == null);
-        VersioniSoftware.Clamd c = VersioniSoftware.clamd("ClamAV 1.4.3/27780/Fri Oct  2 08:24:28 2026", ROMA);
+                SoftwareVersions.pid("abc") == null && SoftwareVersions.pid("1") == null && SoftwareVersions.pid("0") == null
+                && SoftwareVersions.pid("12345678901") == null && SoftwareVersions.pid(null) == null);
+        SoftwareVersions.Clamd c = SoftwareVersions.clamd("ClamAV 1.4.3/27780/Fri Oct  2 08:24:28 2026", ROMA);
         vero("clamd: motore, firme e data (giorno a una cifra, due spazi)", c != null && c.motore().equals("1.4.3")
                 && c.firme().equals("27780") && c.del().equals(Instant.parse("2026-10-02T06:24:28Z")));
-        c = VersioniSoftware.clamd("ClamAV 1.4.3/27791/Mon Oct 12 18:01:02 2026", ROMA);
+        c = SoftwareVersions.clamd("ClamAV 1.4.3/27791/Mon Oct 12 18:01:02 2026", ROMA);
         vero("clamd: giorno a due cifre", c != null && c.del().equals(Instant.parse("2026-10-12T16:01:02Z")));
-        c = VersioniSoftware.clamd("ClamAV 1.0.9", ROMA);
+        c = SoftwareVersions.clamd("ClamAV 1.0.9", ROMA);
         vero("clamd senza firme caricate: solo il motore", c != null && c.motore().equals("1.0.9") && c.firme() == null && c.del() == null);
-        vero("risposta che non e' di clamd: niente", VersioniSoftware.clamd("ERROR: unknown command", ROMA) == null);
-        Map<String, String> p = VersioniSoftware.proprietari("/a/b was installed by package uno-1.0\n/c was not found in the database\n"
+        vero("risposta che non e' di clamd: niente", SoftwareVersions.clamd("ERROR: unknown command", ROMA) == null);
+        Map<String, String> p = SoftwareVersions.proprietari("/a/b was installed by package uno-1.0\n/c was not found in the database\n"
                 + "/d was installed by package due due-1.0\n/e was installed by package <script>-1\n");
         vero("pkg which: solo le righe valide (" + p + ")", p.size() == 1 && "uno-1.0".equals(p.get("/a/b")));
-        Map<String, Long> t = VersioniSoftware.installazioni("rspamd 1790000000\nrotta\nnginx abc\n");
+        Map<String, Long> t = SoftwareVersions.installazioni("rspamd 1790000000\nrotta\nnginx abc\n");
         vero("pkg query %n %t: nome e secondi", t.size() == 1 && t.get("rspamd") == 1790000000L);
-        vero("una versione non si accetta se ha spazi o simboli", VersioniSoftware.valida("1.2 3") == null
-                && VersioniSoftware.valida("<b>1</b>") == null && VersioniSoftware.valida("3.10.4").equals("3.10.4"));
+        vero("una versione non si accetta se ha spazi o simboli", SoftwareVersions.valida("1.2 3") == null
+                && SoftwareVersions.valida("<b>1</b>") == null && SoftwareVersions.valida("3.10.4").equals("3.10.4"));
 
         System.out.println("\n== Server completo, con qualcosa da riavviare ==");
         FakeSystem f = completo();
-        JSONObject r = VersioniSoftware.leggi(f);
+        JSONObject r = SoftwareVersions.leggi(f);
         JSONObject s = r.getJSONObject("servizi");
         vero("letteAlle con i secondi anche quando sono zero, nell'ora del server: " + r.getString("letteAlle"),
                 r.getString("letteAlle").equals("2026-10-03T14:00:00+02:00"));
-        long chiamatePkg = f.lanciati.stream().filter(x -> x.startsWith(VersioniSoftware.PKG)).count();
+        long chiamatePkg = f.lanciati.stream().filter(x -> x.startsWith(SoftwareVersions.PKG)).count();
         vero("pkg si chiama due volte in tutto (which e query), non una per programma: " + chiamatePkg, chiamatePkg == 2);
         JSONObject pf = s.getJSONObject("postfix");
         vero("Postfix: 3.10.4 da postconf, pacchetto postfix-mysql (non \"postfix\")", pf.getString("versione").equals("3.10.4")
@@ -238,26 +238,26 @@ public class SoftwareVersionsTest {
         System.out.println("\n== Server appena installato: niente ==");
         FakeSystem vuoto = new FakeSystem();
         vuoto.cartellaJava = "/usr/local/openjdk25";
-        r = VersioniSoftware.leggi(vuoto);
+        r = SoftwareVersions.leggi(vuoto);
         s = r.getJSONObject("servizi");
         boolean tuttiAssenti = true;
         for (String k : s.keySet()) tuttiAssenti &= !s.getJSONObject(k).getBoolean("installato");
         vero("i sette servizi ci sono tutti, come non installati: " + s.keySet(), s.length() == 7 && tuttiAssenti);
-        vero("senza pkg non si chiama pkg", vuoto.lanciati.stream().noneMatch(x -> x.startsWith(VersioniSoftware.PKG)));
+        vero("senza pkg non si chiama pkg", vuoto.lanciati.stream().noneMatch(x -> x.startsWith(SoftwareVersions.PKG)));
         vero("Java c'e' sempre (e' quella che fa girare il pannello)", altro(r, "java").getBoolean("installato"));
         vero("fail2ban e Unbound non installati: non compaiono", altro(r, "fail2ban") == null && altro(r, "local_unbound") == null);
 
         System.out.println("\n== Casi storti ==");
         FakeSystem st = completo();
         st.clamd = null;
-        st.uscite.put(VersioniSoftware.CLAMD + " --version", "ClamAV 1.4.3/27700/Mon Sep 14 08:00:00 2026\n");
+        st.uscite.put(SoftwareVersions.CLAMD + " --version", "ClamAV 1.4.3/27700/Mon Sep 14 08:00:00 2026\n");
         st.mysql = null;
-        st.uscite.put(VersioniSoftware.MYSQLD + " --version", "/usr/local/libexec/mysqld  Ver 8.0.43 for FreeBSD15.0 on amd64 (Source distribution)\n");
+        st.uscite.put(SoftwareVersions.MYSQLD + " --version", "/usr/local/libexec/mysqld  Ver 8.0.43 for FreeBSD15.0 on amd64 (Source distribution)\n");
         st.uscite.put("/usr/local/sbin/postconf -h mail_version", "postconf: fatal: open /usr/local/etc/postfix/main.cf: No such file or directory\n");
         st.uscite.put("/usr/local/sbin/dovecot --version", "<script>alert(1)</script>\n");
         st.uscite.put("pkg which", st.uscite.get("pkg which").replace("openjdk25-25.0.1+8.1", "openjdk25-25.0.2+10.1"));
         st.contenuti.put("/usr/local/www/roundcube/program/include/iniset.php", "<?php // senza costante\n");
-        r = VersioniSoftware.leggi(st);
+        r = SoftwareVersions.leggi(st);
         s = r.getJSONObject("servizi");
         cl = s.getJSONObject("clamav");
         vero("clamd non risponde: versione dal binario, non \"in esecuzione\"", cl.getString("versione").equals("1.4.3")
@@ -279,13 +279,13 @@ public class SoftwareVersionsTest {
                 jv.optBoolean("riavvio") && jv.getString("notaRiavvio").contains("riavvia il pannello"));
         FakeSystem strana = completo();
         strana.cartellaJava = "/usr/local/openjdk25/../../etc";
-        r = VersioniSoftware.leggi(strana);
+        r = SoftwareVersions.leggi(strana);
         vero("java.home con \"..\": non si chiede a pkg", strana.lanciati.stream().noneMatch(x -> x.contains("..")));
 
         System.out.println("\n== Il socket di clamd, vero ==");
         Path cartella = Files.createTempDirectory("clamd-prova");
         Path sock = cartella.resolve("clamd.sock");
-        vero("nessun socket: niente, subito", VersioniSoftware.chiediAClamd(sock) == null);
+        vero("nessun socket: niente, subito", SoftwareVersions.chiediAClamd(sock) == null);
         try (ServerSocketChannel srv = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
             srv.bind(UnixDomainSocketAddress.of(sock));
             Thread demone = Thread.ofVirtual().start(() -> {
@@ -297,7 +297,7 @@ public class SoftwareVersionsTest {
                     ch.write(ByteBuffer.wrap(risposta.getBytes(StandardCharsets.US_ASCII)));
                 } catch (Exception ignorata) { }
             });
-            String risposta = VersioniSoftware.chiediAClamd(sock);
+            String risposta = SoftwareVersions.chiediAClamd(sock);
             demone.join();
             vero("clamd risponde a zVERSION: " + risposta, "ClamAV 1.4.3/27780/Fri Oct  2 08:24:28 2026".equals(risposta));
 
@@ -307,7 +307,7 @@ public class SoftwareVersionsTest {
                 } catch (Exception ignorata) { }
             });
             long t0 = System.nanoTime();
-            String nulla = VersioniSoftware.chiediAClamd(sock);
+            String nulla = SoftwareVersions.chiediAClamd(sock);
             long ms = (System.nanoTime() - t0) / 1_000_000;
             vero("clamd muto: si arrende in circa tre secondi (" + ms + " ms) e non dice niente", nulla == null && ms >= 2900 && ms < 4500);
             muto.interrupt();
@@ -317,7 +317,7 @@ public class SoftwareVersionsTest {
         }
 
         System.out.println("\n== Il sistema vero, per quello che si puo' qui ==");
-        VersioniSoftware.Sistema sistema = VersioniSoftware.reale(() -> "8.0.46");
+        SoftwareVersions.Sistema sistema = SoftwareVersions.reale(() -> "8.0.46");
         vero("un comando che non esiste: null", sistema.esegui("/nonesiste/davvero", "-v") == null);
         vero("un comando che esce con errore: la sua uscita c'e' comunque", sistema.esegui("sh", "-c", "echo versione; exit 3").contains("versione"));
         vero("l'ora di avvio di questo processo si legge", sistema.avvio(ProcessHandle.current().pid()) != null);
@@ -337,8 +337,8 @@ public class SoftwareVersionsTest {
             db.setConnection("127.0.0.1", Integer.parseInt(porta), System.getProperty("mysql.database", "mailpanel_prova"));
             vero("connessione", db.connect());
             String v = db.versioneServer();
-            vero("versioneServer(): " + v, v != null && VersioniSoftware.numeri(v).matches("\\d+\\.\\d+\\.\\d+"));
-            JSONObject tutto = VersioniSoftware.leggi(VersioniSoftware.reale(db::versioneServer));
+            vero("versioneServer(): " + v, v != null && SoftwareVersions.numeri(v).matches("\\d+\\.\\d+\\.\\d+"));
+            JSONObject tutto = SoftwareVersions.leggi(SoftwareVersions.reale(db::versioneServer));
             JSONObject riga = tutto.getJSONObject("servizi").getJSONObject("mysql");
             vero("la riga MySQL la mostra in esecuzione: " + riga.optString("versione"), v != null && v.equals(riga.optString("versione"))
                     && riga.optBoolean("inEsecuzione") && riga.getBoolean("installato"));

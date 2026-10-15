@@ -9,7 +9,7 @@ import org.json.JSONObject;
  */
 public class CloudflareRangesTest {
     public static void main(String[] a) {
-        JSONObject r = UpdateManager.intervalliCloudflare();
+        JSONObject r = UpdateManager.cloudflareRanges();
         System.out.println("verificato:  " + r.optBoolean("verificato", false));
         if (!r.optBoolean("success", false)) {
             System.out.println("ERRORE: " + r.optString("error", ""));

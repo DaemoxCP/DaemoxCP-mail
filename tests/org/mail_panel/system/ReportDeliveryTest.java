@@ -36,7 +36,7 @@ public class ReportDeliveryTest {
             "Sep 25 17:52:11 mail postfix/smtp[81242]: Trusted TLS connection established to gmail-smtp-in.l.google.com[142.250.102.27]:25: TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits) key-exchange X25519 server-signature ECDSA (P-256) server-digest SHA256",
             "Sep 25 17:52:12 mail postfix/smtp[81242]: 4hB2Kq3Xz9zB6: to=<owner@example.com>, relay=gmail-smtp-in.l.google.com[142.250.102.27]:25, delay=1.6, delays=0.1/0.01/0.52/0.97, dsn=2.0.0, status=sent (250 2.0.0 OK  1727279532 5b1f17b1804b1-42cb5a5ba8esi12345f9.123 - gsmtp)",
             "Sep 25 17:52:12 mail postfix/qmgr[1022]: 4hB2Kq3Xz9zB6: removed");
-        JSONObject e = RapportoPeriodico.esitoNelLog(gmail, ID, A);
+        JSONObject e = PeriodicReport.esitoNelLog(gmail, ID, A);
         vero("gmail: trova il numero di coda dal Message-ID", "4hB2Kq3Xz9zB6".equals(e.optString("coda")));
         vero("gmail: consegnato", "consegnato".equals(e.optString("stato")));
         vero("gmail: relay giusto", "gmail-smtp-in.l.google.com[142.250.102.27]:25".equals(e.optString("relay")));
@@ -44,7 +44,7 @@ public class ReportDeliveryTest {
         vero("gmail: TLS letto dalla riga di smtp", "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(e.optString("tls")));
         vero("gmail: le righe dell'altro messaggio restano fuori",
             !e.getJSONArray("righe").toString().contains("4hB2Kr0ABCzB7"));
-        JSONObject v = RapportoPeriodico.verdetto(e);
+        JSONObject v = PeriodicReport.verdetto(e);
         vero("gmail: verdetto riuscito e senza avviso", v.optBoolean("success") && !v.optBoolean("avviso"));
         vero("gmail: l'esito registrato dice dove e con quale TLS",
             v.optString("esito").startsWith("consegnato a gmail-smtp-in.l.google.com") && v.optString("esito").contains("TLSv1.3"));
@@ -66,10 +66,10 @@ public class ReportDeliveryTest {
             "Sep 25 19:00:02 mail postfix/smtp[500]: 4ALTRO0001: to=<altro@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)");
         vero("tls: la prova contiene davvero un'apertura TLS verso lo stesso relay",
             altroProcesso.get(1).contains("TLS connection established to " + R + ": "));
-        e = RapportoPeriodico.esitoNelLog(altroProcesso, ID, A);
+        e = PeriodicReport.esitoNelLog(altroProcesso, ID, A);
         vero("tls di un altro processo: consegnato", "consegnato".equals(e.optString("stato")));
         vero("tls di un altro processo: NON attribuito al rapporto", !e.has("tls"));
-        v = RapportoPeriodico.verdetto(e);
+        v = PeriodicReport.verdetto(e);
         vero("tls di un altro processo: l'esito non dice TLS", !v.optString("esito").contains("TLS"));
         vero("tls di un altro processo: la sua riga resta fuori dall'estratto",
             !e.getJSONArray("righe").toString().contains("smtp[500]"));
@@ -81,14 +81,14 @@ public class ReportDeliveryTest {
             "Sep 25 19:00:01 mail postfix/smtp[81243]: " + apertura12,
             "Sep 25 19:00:02 mail postfix/smtp[81242]: " + consegnato);
         vero("tls intrecciati: vale quello del processo che ha consegnato",
-            "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(RapportoPeriodico.esitoNelLog(intrecciate, ID, A).optString("tls")));
+            "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(PeriodicReport.esitoNelLog(intrecciate, ID, A).optString("tls")));
         List<String> intrecciateAlContrario = List.of(
             cleanup,
             "Sep 25 19:00:01 mail postfix/smtp[81243]: " + apertura12,
             "Sep 25 19:00:01 mail postfix/smtp[81242]: " + apertura13,
             "Sep 25 19:00:02 mail postfix/smtp[81243]: " + consegnato);
         vero("tls intrecciati, al contrario: vale ancora quello di chi ha consegnato",
-            "TLSv1.2 (ECDHE-RSA-AES128-GCM-SHA256)".equals(RapportoPeriodico.esitoNelLog(intrecciateAlContrario, ID, A).optString("tls")));
+            "TLSv1.2 (ECDHE-RSA-AES128-GCM-SHA256)".equals(PeriodicReport.esitoNelLog(intrecciateAlContrario, ID, A).optString("tls")));
 
         // Stesso processo: prima un altro messaggio su una connessione cifrata, poi il rapporto su
         // una connessione nuova, in chiaro (senza conn_use). L'apertura e' della connessione di prima.
@@ -97,14 +97,14 @@ public class ReportDeliveryTest {
             "Sep 25 19:00:01 mail postfix/smtp[600]: " + apertura13,
             "Sep 25 19:00:01 mail postfix/smtp[600]: 4ALTRO0002: to=<altro@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
             "Sep 25 19:00:02 mail postfix/smtp[600]: " + consegnato);
-        vero("stesso processo, connessione precedente: niente TLS", !RapportoPeriodico.esitoNelLog(connessionePrima, ID, A).has("tls"));
+        vero("stesso processo, connessione precedente: niente TLS", !PeriodicReport.esitoNelLog(connessionePrima, ID, A).has("tls"));
 
         // Connessione riusata: e' stata aperta prima, per un altro messaggio.
         List<String> riusata = List.of(
             cleanup,
             "Sep 25 19:00:01 mail postfix/smtp[700]: " + apertura13,
             "Sep 25 19:00:02 mail postfix/smtp[700]: " + consegnato.replace(", delay=1,", ", conn_use=2, delay=1,"));
-        vero("connessione riusata (conn_use): niente TLS", !RapportoPeriodico.esitoNelLog(riusata, ID, A).has("tls"));
+        vero("connessione riusata (conn_use): niente TLS", !PeriodicReport.esitoNelLog(riusata, ID, A).has("tls"));
 
         // TLS caduto a meta' e ripiego in chiaro verso lo STESSO server (smtp_tls_security_level=may):
         // l'apertura c'e', il relay e' lo stesso, ma il messaggio e' partito sulla connessione dopo.
@@ -113,7 +113,7 @@ public class ReportDeliveryTest {
             "Sep 25 19:00:01 mail postfix/smtp[800]: " + apertura13,
             "Sep 25 19:00:02 mail postfix/smtp[800]: 4TLS00001: lost connection with " + R.substring(0, R.lastIndexOf(':')) + " while sending end of data -- message may be sent more than once",
             "Sep 25 19:00:03 mail postfix/smtp[800]: " + consegnato);
-        vero("ripiego in chiaro dopo un TLS caduto: niente TLS", !RapportoPeriodico.esitoNelLog(ripiego, ID, A).has("tls"));
+        vero("ripiego in chiaro dopo un TLS caduto: niente TLS", !PeriodicReport.esitoNelLog(ripiego, ID, A).has("tls"));
 
         // Primo MX cifrato che rifiuta, secondo MX in chiaro: l'apertura e' verso un altro relay.
         List<String> altroMx = List.of(
@@ -121,7 +121,7 @@ public class ReportDeliveryTest {
             "Sep 25 19:00:01 mail postfix/smtp[900]: Trusted TLS connection established to alt1.gmail-smtp-in.l.google.com[142.250.150.27]:25: TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)",
             "Sep 25 19:00:01 mail postfix/smtp[900]: 4TLS00001: host alt1.gmail-smtp-in.l.google.com[142.250.150.27] said: 421 4.7.0 Try again later (in reply to MAIL FROM command)",
             "Sep 25 19:00:02 mail postfix/smtp[900]: " + consegnato);
-        vero("apertura verso un altro MX: niente TLS", !RapportoPeriodico.esitoNelLog(altroMx, ID, A).has("tls"));
+        vero("apertura verso un altro MX: niente TLS", !PeriodicReport.esitoNelLog(altroMx, ID, A).has("tls"));
 
         // smtp_tls_loglevel 2: dopo l'apertura il processo scrive righe della sessione TLS, e il
         // messaggio va anche a un secondo destinatario sulla stessa connessione. La prova regge.
@@ -132,7 +132,7 @@ public class ReportDeliveryTest {
             "Sep 25 19:00:01 mail postfix/smtp[1000]: save session smtp&gmail.com&gmail-smtp-in.l.google.com&142.250.102.27&&3C7A5B to smtp cache",
             "Sep 25 19:00:02 mail postfix/smtp[1000]: 4TLS00001: to=<altro@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
             "Sep 25 19:00:02 mail postfix/smtp[1000]: " + consegnato);
-        e = RapportoPeriodico.esitoNelLog(loglevel2, ID, A);
+        e = PeriodicReport.esitoNelLog(loglevel2, ID, A);
         vero("loglevel 2 e due destinatari: TLS riconosciuto", "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(e.optString("tls")));
         vero("loglevel 2: l'apertura e' nell'estratto", e.getJSONArray("righe").toString().contains("TLS connection established"));
 
@@ -142,10 +142,10 @@ public class ReportDeliveryTest {
             "<22>1 2026-09-25T19:00:00.000001+02:00 mail postfix/cleanup 1 - - 4TLS00001: message-id=<" + ID + ">",
             t5424 + "81242 - - " + apertura13,
             t5424 + "81242 - - " + consegnato);
-        vero("rfc 5424, stesso pid: TLS", "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(RapportoPeriodico.esitoNelLog(tls5424, ID, A).optString("tls")));
+        vero("rfc 5424, stesso pid: TLS", "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(PeriodicReport.esitoNelLog(tls5424, ID, A).optString("tls")));
         List<String> tls5424altro = List.of(tls5424.get(0), t5424 + "81243 - - " + apertura13, tls5424.get(2));
-        vero("rfc 5424, pid diverso: niente TLS", !RapportoPeriodico.esitoNelLog(tls5424altro, ID, A).has("tls"));
-        RapportoPeriodico.Riga rr = RapportoPeriodico.riga("Sep  5 07:02:11 mail postfix/smtp[81242]: " + consegnato);
+        vero("rfc 5424, pid diverso: niente TLS", !PeriodicReport.esitoNelLog(tls5424altro, ID, A).has("tls"));
+        PeriodicReport.Riga rr = PeriodicReport.riga("Sep  5 07:02:11 mail postfix/smtp[81242]: " + consegnato);
         vero("riga classica con il giorno a una cifra: processo e testo",
             rr != null && "postfix/smtp[81242]".equals(rr.processo()) && consegnato.equals(rr.testo()));
 
@@ -157,9 +157,9 @@ public class ReportDeliveryTest {
             "Sep 25 17:40:01 mail dma[2c1a4.2a0b5c048000]: <owner@example.com> trying delivery",
             "Sep 25 17:40:01 mail dma[2c1a4.2a0b5c048000]: trying remote delivery to gmail-smtp-in.l.google.com [142.250.102.27] pref 5",
             "Sep 25 17:40:02 mail dma[2c1a4.2a0b5c048000]: <owner@example.com> delivery successful");
-        e = RapportoPeriodico.esitoNelLog(dma, ID, A);
+        e = PeriodicReport.esitoNelLog(dma, ID, A);
         vero("dma: Postfix non l'ha visto", e.optString("stato").isEmpty() && !e.has("coda"));
-        v = RapportoPeriodico.verdetto(e);
+        v = PeriodicReport.verdetto(e);
         vero("dma: il verdetto e' un avviso, non 'consegnato'",
             v.optBoolean("avviso") && !v.optString("esito").startsWith("consegnato"));
 
@@ -167,10 +167,10 @@ public class ReportDeliveryTest {
         List<String> rimandato = List.of(
             "Sep 25 18:00:00 mail postfix/cleanup[1]: 4ABCDEF123: message-id=<" + ID + ">",
             "Sep 25 18:00:30 mail postfix/smtp[2]: 4ABCDEF123: to=<owner@example.com>, relay=none, delay=30, delays=0.02/0.01/30/0, dsn=4.4.1, status=deferred (connect to gmail-smtp-in.l.google.com[142.250.102.27]:25: Connection timed out)");
-        e = RapportoPeriodico.esitoNelLog(rimandato, ID, A);
+        e = PeriodicReport.esitoNelLog(rimandato, ID, A);
         vero("rimandato: stato", "rimandato".equals(e.optString("stato")));
         vero("rimandato: motivo", e.optString("risposta").contains("Connection timed out"));
-        v = RapportoPeriodico.verdetto(e);
+        v = PeriodicReport.verdetto(e);
         vero("rimandato: riuscito con avviso, cosi' lo scheduler non lo rimanda",
             v.optBoolean("success") && v.optBoolean("avviso"));
 
@@ -178,36 +178,36 @@ public class ReportDeliveryTest {
         List<String> poiConsegnato = new java.util.ArrayList<>(rimandato);
         poiConsegnato.add("Sep 25 18:05:00 mail postfix/smtp[3]: 4ABCDEF123: to=<owner@example.com>, relay=alt1.gmail-smtp-in.l.google.com[142.250.150.27]:25, delay=300, delays=299/0/0.4/0.6, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)");
         vero("rimandato e poi consegnato: consegnato",
-            "consegnato".equals(RapportoPeriodico.esitoNelLog(poiConsegnato, ID, A).optString("stato")));
+            "consegnato".equals(PeriodicReport.esitoNelLog(poiConsegnato, ID, A).optString("stato")));
 
         // --- Respinto da Gmail per DMARC: la risposta ha parentesi dentro le parentesi ---
         List<String> respinto = List.of(
             "Sep 25 18:10:00 mail postfix/cleanup[1]: 4ABCDEF124: message-id=<" + ID + ">",
             "Sep 25 18:10:01 mail postfix/smtp[2]: 4ABCDEF124: to=<owner@example.com>, relay=gmail-smtp-in.l.google.com[142.250.102.27]:25, delay=1.1, delays=0.05/0/0.4/0.6, dsn=5.7.26, status=bounced (host gmail-smtp-in.l.google.com[142.250.102.27] said: 550-5.7.26 Unauthenticated email from domain-b.test is not accepted due to domain's 550-5.7.26 DMARC policy. (in reply to end of DATA command))",
             "Sep 25 18:10:01 mail postfix/bounce[3]: 4ABCDEF124: sender non-delivery notification: 4ABCDEF125");
-        e = RapportoPeriodico.esitoNelLog(respinto, ID, A);
+        e = PeriodicReport.esitoNelLog(respinto, ID, A);
         vero("respinto: stato", "respinto".equals(e.optString("stato")));
         vero("respinto: risposta intera, parentesi comprese", e.optString("risposta").endsWith("(in reply to end of DATA command)"));
-        v = RapportoPeriodico.verdetto(e);
+        v = PeriodicReport.verdetto(e);
         vero("respinto: NON riuscito", !v.optBoolean("success"));
         vero("respinto: l'errore dice da chi", v.optString("error").startsWith("respinto da gmail-smtp-in.l.google.com"));
-        v = RapportoPeriodico.verdetto(new JSONObject().put("stato", "respinto").put("relay", "none").put("risposta", "x"));
+        v = PeriodicReport.verdetto(new JSONObject().put("stato", "respinto").put("relay", "none").put("risposta", "x"));
         vero("respinto senza relay: niente 'da none'", "respinto: x".equals(v.optString("error")));
 
         // --- Rifiutato dal milter prima di partire; se il codice e' 4.x.x, e' solo rimandato ---
         List<String> milter5 = List.of(
             "Sep 25 18:20:00 mail postfix/cleanup[1]: 4ABCDEF126: message-id=<" + ID + ">",
             "Sep 25 18:20:00 mail postfix/cleanup[1]: 4ABCDEF126: milter-reject: END-OF-MESSAGE from localhost[127.0.0.1]: 5.7.1 Spam message rejected; from=<noreply-mailserver@domain-b.test> to=<owner@example.com>");
-        e = RapportoPeriodico.esitoNelLog(milter5, ID, A);
+        e = PeriodicReport.esitoNelLog(milter5, ID, A);
         vero("milter 5.7.1: rifiutato", "rifiutato".equals(e.optString("stato")));
-        vero("milter 5.7.1: NON riuscito", !RapportoPeriodico.verdetto(e).optBoolean("success"));
+        vero("milter 5.7.1: NON riuscito", !PeriodicReport.verdetto(e).optBoolean("success"));
         List<String> milter4 = List.of(milter5.get(0), milter5.get(1).replace("5.7.1 Spam message rejected", "4.7.1 Try again later"));
-        vero("milter 4.7.1: rimandato", "rimandato".equals(RapportoPeriodico.esitoNelLog(milter4, ID, A).optString("stato")));
+        vero("milter 4.7.1: rimandato", "rimandato".equals(PeriodicReport.esitoNelLog(milter4, ID, A).optString("stato")));
 
         // --- Visto da Postfix, esito non ancora scritto ---
-        e = RapportoPeriodico.esitoNelLog(gmail.subList(0, 3), ID, A);
+        e = PeriodicReport.esitoNelLog(gmail.subList(0, 3), ID, A);
         vero("in coda: stato", "in coda".equals(e.optString("stato")));
-        v = RapportoPeriodico.verdetto(e);
+        v = PeriodicReport.verdetto(e);
         vero("in coda: riuscito con avviso e il comando per cercarlo",
             v.optBoolean("success") && v.optBoolean("avviso") && v.optString("nota").contains("grep 4hB2Kq3Xz9zB6"));
 
@@ -217,31 +217,31 @@ public class ReportDeliveryTest {
             "Sep 25 18:30:00 mail postfix/cleanup[1]: 4ABCDEF127: message-id=<" + ID + ">",
             "Sep 25 18:30:02 mail postfix/smtp[2]: 4ABCDEF127: to=<owner@example.com>, orig_to=<owner@domain-b.test>, relay=gmail-smtp-in.l.google.com[142.250.102.27]:25, delay=2, delays=0.1/0/1/0.9, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
             "Sep 25 18:30:02 mail postfix/lmtp[3]: 4ABCDEF127: to=<archivio@domain-b.test>, relay=127.0.0.1[127.0.0.1]:24, delay=2, delays=0.1/0/0/0.1, dsn=4.2.2, status=deferred (host 127.0.0.1[127.0.0.1] said: 452 4.2.2 Mailbox is full (in reply to end of DATA command))");
-        e = RapportoPeriodico.esitoNelLog(alias, ID, mio);
+        e = PeriodicReport.esitoNelLog(alias, ID, mio);
         vero("alias: conta orig_to, non la copia per l'archivio", "consegnato".equals(e.optString("stato")));
 
         // --- Formato RFC 5424, se syslogd lo usa ---
         List<String> rfc5424 = List.of(
             "<22>1 2026-09-25T17:52:10.123456+02:00 mail postfix/cleanup 81240 - - 4hB2Kq3Xz9zB6: message-id=<" + ID + ">",
             "<22>1 2026-09-25T17:52:12.654321+02:00 mail postfix/smtp 81242 - - 4hB2Kq3Xz9zB6: to=<owner@example.com>, relay=gmail-smtp-in.l.google.com[142.250.102.27]:25, delay=1.6, delays=0.1/0.01/0.52/0.97, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)");
-        vero("rfc 5424: consegnato", "consegnato".equals(RapportoPeriodico.esitoNelLog(rfc5424, ID, A).optString("stato")));
+        vero("rfc 5424: consegnato", "consegnato".equals(PeriodicReport.esitoNelLog(rfc5424, ID, A).optString("stato")));
 
         // --- Confronti letterali, non espressioni regolari ---
         // Nel Message-ID il punto e' un punto: "rapportoX..." non e' il nostro messaggio.
         List<String> quasi = List.of(
             "Sep 25 18:40:00 mail postfix/cleanup[1]: 4ABCDEF128: message-id=<" + ID.replace("rapporto.", "rapportoX") + ">",
             "Sep 25 18:40:01 mail postfix/smtp[2]: 4ABCDEF128: to=<owner@example.com>, relay=x[1.2.3.4]:25, delay=1, delays=0/0/0/1, dsn=2.0.0, status=sent (250 ok)");
-        vero("un Message-ID quasi uguale non e' il nostro", RapportoPeriodico.esitoNelLog(quasi, ID, A).optString("stato").isEmpty());
+        vero("un Message-ID quasi uguale non e' il nostro", PeriodicReport.esitoNelLog(quasi, ID, A).optString("stato").isEmpty());
         // Un numero di coda che finisce come il nostro non e' il nostro.
         List<String> suffisso = List.of(
             "Sep 25 18:50:00 mail postfix/cleanup[1]: 4ABC12: message-id=<" + ID + ">",
             "Sep 25 18:50:01 mail postfix/smtp[2]: X4ABC12: to=<owner@example.com>, relay=x[1.2.3.4]:25, delay=1, delays=0/0/0/1, dsn=5.0.0, status=bounced (no)");
         vero("un numero di coda che finisce come il nostro non conta",
-            "in coda".equals(RapportoPeriodico.esitoNelLog(suffisso, ID, A).optString("stato")));
+            "in coda".equals(PeriodicReport.esitoNelLog(suffisso, ID, A).optString("stato")));
 
         // --- Il Message-ID che il pannello genera ---
-        String id1 = RapportoPeriodico.nuovoMessageId("noreply-mailserver@domain-b.test");
-        String id2 = RapportoPeriodico.nuovoMessageId("noreply-mailserver@domain-b.test");
+        String id1 = PeriodicReport.nuovoMessageId("noreply-mailserver@domain-b.test");
+        String id2 = PeriodicReport.nuovoMessageId("noreply-mailserver@domain-b.test");
         vero("Message-ID: forma", id1.matches("rapporto\\.\\d{14}\\.[0-9a-f]{32}@domain-b\\.test"));
         vero("Message-ID: due invii, due identificativi", !id1.equals(id2));
 
@@ -255,24 +255,24 @@ public class ReportDeliveryTest {
         Path fermo = Files.writeString(d.resolve("non-eseguibile"), "x");
         String nessuno = d.resolve("non-esiste").toString();
 
-        JSONObject s = RapportoPeriodico.sceltaSendmail(simbolico.toString(), postfix.toString(), mw.toString());
+        JSONObject s = PeriodicReport.sceltaSendmail(simbolico.toString(), postfix.toString(), mw.toString());
         vero("sendmail_path che punta a mailwrapper: si usa quello del port",
             s.optBoolean("success") && postfix.toString().equals(s.optString("percorso")));
-        s = RapportoPeriodico.sceltaSendmail(altro.toString(), postfix.toString(), mw.toString());
+        s = PeriodicReport.sceltaSendmail(altro.toString(), postfix.toString(), mw.toString());
         vero("vale quello che dice postconf", altro.toString().equals(s.optString("percorso")));
-        s = RapportoPeriodico.sceltaSendmail("", postfix.toString(), mw.toString());
+        s = PeriodicReport.sceltaSendmail("", postfix.toString(), mw.toString());
         vero("postconf muto: si usa quello del port", postfix.toString().equals(s.optString("percorso")));
-        s = RapportoPeriodico.sceltaSendmail("postconf: warning: /usr/local/etc/postfix/main.cf: unused parameter", postfix.toString(), mw.toString());
+        s = PeriodicReport.sceltaSendmail("postconf: warning: /usr/local/etc/postfix/main.cf: unused parameter", postfix.toString(), mw.toString());
         vero("postconf che dice altro: ignorato", postfix.toString().equals(s.optString("percorso")));
-        s = RapportoPeriodico.sceltaSendmail(simbolico.toString(), fisico.toString(), mw.toString());
+        s = PeriodicReport.sceltaSendmail(simbolico.toString(), fisico.toString(), mw.toString());
         vero("solo mailwrapper disponibile: errore, nessun ripiego",
             !s.optBoolean("success") && s.optString("error").contains("mailwrapper"));
-        s = RapportoPeriodico.sceltaSendmail(fermo.toString(), nessuno, mw.toString());
+        s = PeriodicReport.sceltaSendmail(fermo.toString(), nessuno, mw.toString());
         vero("non eseguibile e inesistente: errore", !s.optBoolean("success") && s.optString("error").contains("non c'è"));
-        vero("hard link a mailwrapper: riconosciuto", RapportoPeriodico.nonEPostfix(fisico.toString(), mw.toString()) != null);
-        vero("un sendmail vero: accettato", RapportoPeriodico.nonEPostfix(postfix.toString(), mw.toString()) == null);
+        vero("hard link a mailwrapper: riconosciuto", PeriodicReport.nonEPostfix(fisico.toString(), mw.toString()) != null);
+        vero("un sendmail vero: accettato", PeriodicReport.nonEPostfix(postfix.toString(), mw.toString()) == null);
         vero("mailwrapper assente (non FreeBSD): non blocca",
-            RapportoPeriodico.nonEPostfix(postfix.toString(), nessuno) == null);
+            PeriodicReport.nonEPostfix(postfix.toString(), nessuno) == null);
 
         System.out.println(falliti == 0 ? "\nTUTTO OK" : "\n" + falliti + " PROVE FALLITE");
         if (falliti > 0) System.exit(1);

@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Prova la data del catalogo dei pacchetti (CatalogoPkg) e la riga che ne fa il rapporto.
+ * Prova la data del catalogo dei pacchetti (PkgCatalog) e la riga che ne fa il rapporto.
  *
  * Lavora su una cartella di pkg costruita qui, con la disposizione di FreeBSD 15 e le date
  * decise dalla prova: dove sta il catalogo e che data ha lo dice il sorgente di pkg
@@ -73,13 +73,13 @@ public class PackageCatalogTest {
 
     static void prove(Path radice) throws Exception {
         System.out.println("\n== pkg -vv: quali repository sono accesi ==");
-        List<String> accesi = CatalogoPkg.accesi(PKG_VV);
+        List<String> accesi = PkgCatalog.accesi(PKG_VV);
         esigi("accesi FreeBSD-ports e FreeBSD-ports-kmods (anche \"yes (overridden by pkg)\"): " + accesi,
                 List.of("FreeBSD-ports", "FreeBSD-ports-kmods").equals(accesi));
         esigi("un'uscita senza repository e' \"non so\" (null), non \"nessuno\"",
-                CatalogoPkg.accesi("pkg: errore qualsiasi\n") == null);
+                PkgCatalog.accesi("pkg: errore qualsiasi\n") == null);
         esigi("repository tutti spenti: elenco vuoto, non null",
-                CatalogoPkg.accesi("Repositories:\n" + blocco("FreeBSD-ports", "x", "no")).isEmpty());
+                PkgCatalog.accesi("Repositories:\n" + blocco("FreeBSD-ports", "x", "no")).isEmpty());
 
         System.out.println("\n== FreeBSD 15: due accesi, uno spento, il vecchio FreeBSD, local.sqlite ==");
         Path pkg = radice.resolve("db1");
@@ -88,11 +88,11 @@ public class PackageCatalogTest {
         file(pkg.resolve("repos/FreeBSD-base/db"), 24 * 90);
         file(pkg.resolve("repos/FreeBSD/db"), 24 * 400);
         file(pkg.resolve("local.sqlite"), 0);
-        JSONObject c = CatalogoPkg.data(pkg.toString(), accesi, ADESSO);
+        JSONObject c = PkgCatalog.data(pkg.toString(), accesi, ADESSO);
         esigi("vale il piu' vecchio fra gli accesi: " + c.optString("piuVecchio") + ", " + c.optLong("giorni") + " giorni",
                 "FreeBSD-ports-kmods".equals(c.optString("piuVecchio")) && c.optLong("giorni") == 2 && c.optLong("ore") == 50);
         esigi("solo i due accesi", c.getJSONArray("repository").length() == 2);
-        String nota = CatalogoPkg.nota(c);
+        String nota = PkgCatalog.nota(c);
         System.out.println("  nota: " + nota);
         esigi("la nota ha le due date, \"ieri\" e \"2 giorni fa\"", nota.contains("FreeBSD-ports il ")
                 && nota.contains("(ieri)") && nota.contains("(2 giorni fa)"));
@@ -101,38 +101,38 @@ public class PackageCatalogTest {
         System.out.println("\n== un acceso senza catalogo; nessun catalogo; repository tutti spenti ==");
         Path pkg2 = radice.resolve("db2");
         file(pkg2.resolve("repos/FreeBSD-ports/db"), 3);
-        c = CatalogoPkg.data(pkg2.toString(), accesi, ADESSO);
+        c = PkgCatalog.data(pkg2.toString(), accesi, ADESSO);
         esigi("oggi, e FreeBSD-ports-kmods fra i mancanti", c.optLong("giorni") == 0
                 && c.getJSONArray("mancanti").toList().equals(List.of("FreeBSD-ports-kmods")));
-        esigi("la nota lo dice", CatalogoPkg.nota(c).contains("Il repository FreeBSD-ports-kmods è acceso ma non ha"));
+        esigi("la nota lo dice", PkgCatalog.nota(c).contains("Il repository FreeBSD-ports-kmods è acceso ma non ha"));
         Path pkg3 = radice.resolve("db3");
         Files.createDirectories(pkg3);
-        c = CatalogoPkg.data(pkg3.toString(), accesi, ADESSO);
-        nota = CatalogoPkg.nota(c);
+        c = PkgCatalog.data(pkg3.toString(), accesi, ADESSO);
+        nota = PkgCatalog.nota(c);
         esigi("nessun catalogo: giorni -1, e la nota dice dove ha guardato: " + nota,
                 c.optLong("giorni") == -1 && nota.contains("repos/FreeBSD-ports/db"));
-        c = CatalogoPkg.data(pkg.toString(), List.of(), ADESSO);
-        esigi("tutti spenti: lo dice, invece di \"non so\": " + CatalogoPkg.nota(c),
-                CatalogoPkg.nota(c).startsWith("Nessun repository di pkg è acceso"));
+        c = PkgCatalog.data(pkg.toString(), List.of(), ADESSO);
+        esigi("tutti spenti: lo dice, invece di \"non so\": " + PkgCatalog.nota(c),
+                PkgCatalog.nota(c).startsWith("Nessun repository di pkg è acceso"));
 
         System.out.println("\n== pkg vecchio, pkg -vv muto, nome strano, orologio indietro ==");
         Path pkg4 = radice.resolve("db4");
         file(pkg4.resolve("repo-FreeBSD.sqlite"), 30);
-        c = CatalogoPkg.data(pkg4.toString(), List.of("FreeBSD"), ADESSO);
+        c = PkgCatalog.data(pkg4.toString(), List.of("FreeBSD"), ADESSO);
         esigi("repo-<nome>.sqlite ancora riconosciuto", c.optString("file").endsWith("repo-FreeBSD.sqlite"));
-        c = CatalogoPkg.data(pkg.toString(), null, ADESSO);
+        c = PkgCatalog.data(pkg.toString(), null, ADESSO);
         esigi("senza pkg -vv si prendono i cataloghi che ci sono (4)", c.getJSONArray("repository").length() == 4);
-        c = CatalogoPkg.data(pkg.toString(), List.of("../../etc"), ADESSO);
+        c = PkgCatalog.data(pkg.toString(), List.of("../../etc"), ADESSO);
         esigi("un nome con ../ non finisce in un percorso", c.getJSONArray("repository").getJSONObject(0).has("errore"));
         Path pkg5 = radice.resolve("db5");
         file(pkg5.resolve("repos/FreeBSD-ports/db"), -2);
-        c = CatalogoPkg.data(pkg5.toString(), List.of("FreeBSD-ports"), ADESSO);
+        c = PkgCatalog.data(pkg5.toString(), List.of("FreeBSD-ports"), ADESSO);
         esigi("data nel futuro: oggi, non un'eta' negativa", c.optLong("giorni") == 0);
 
         System.out.println("\n== il rapporto ==");
-        c = CatalogoPkg.data(pkg.toString(), accesi, ADESSO);
-        c.put("nota", CatalogoPkg.nota(c));
-        String t = RapportoPeriodico.componi(new JSONObject()
+        c = PkgCatalog.data(pkg.toString(), accesi, ADESSO);
+        c.put("nota", PkgCatalog.nota(c));
+        String t = PeriodicReport.componi(new JSONObject()
                 .put("catalogo", c).put("catalogoGiorni", c.optLong("giorni")).put("catalogoData", c.optString("data"))
                 .put("catalogoRinfrescato", true).put("vulnDbGiorni", 0),
                 "freebsd", "noreply@esempio.it", "admin@esempio.it");

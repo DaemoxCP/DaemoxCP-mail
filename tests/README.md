@@ -118,7 +118,7 @@ v=STSv1 non deve diventarlo, perche' per i mittenti due record valgono zero (RFC
 Prima la lettura prendeva il primo record: se era quello giusto, il passo risultava fatto.
 
 **MtaStsRecordTest** — il record `_mta-sts` dal lato di Cloudflare e della pagina DNS, senza
-rete. La regola comune (`RegoleDns.eMtaSts`: conta ogni record che almeno un mittente vero
+rete. La regola comune (`DnsRules.eMtaSts`: conta ogni record che almeno un mittente vero
 conta, anche scritto in maiuscolo). La scrittura, `AutoDns.allineaTxtMtaSts()`, contro un
 Cloudflare finto con la zona in memoria: crea, lascia stare, aggiorna, e con piu' record ne
 lascia uno solo e giusto senza toccare gli altri TXT; con Cloudflare che rifiuta una
@@ -128,7 +128,7 @@ errore, la rilettura finale si accorge dei due record. La riga MTA-STS della pag
 rimette la scrittura di prima davanti ai due record, uno gia' giusto: diceva "invariato" e li
 lasciava tutti e due, e la prova lo vede.
 
-**PackageCatalogTest** — di quando e' il catalogo dei pacchetti (`CatalogoPkg`). Home e rapporto
+**PackageCatalogTest** — di quando e' il catalogo dei pacchetti (`PkgCatalog`). Home e rapporto
 dicevano "eta' sconosciuta" perche' guardavano `/var/db/pkg/repo-FreeBSD.sqlite`: il nome delle
 versioni vecchie di pkg e del repository "FreeBSD" di prima di FreeBSD 15. Oggi il catalogo di
 ogni repository e' `$PKG_DBDIR/repos/<nome>/db`, e pkg gli da' la data di pubblicazione sul
@@ -138,7 +138,7 @@ una cartella di pkg con date scelte da lei e controlla: solo i repository accesi
 vecchio, un acceso senza catalogo e' detto, senza cataloghi si dice dove si e' guardato,
 repository tutti spenti non e' "non so", il nome vecchio e' ancora riconosciuto, un nome con
 `../` non finisce in un percorso, un orologio indietro non da' eta' negative. Poi la riga vera
-del rapporto, da `RapportoPeriodico.componi()`.
+del rapporto, da `PeriodicReport.componi()`.
 
 **PropagationWaitTest** — l'attesa della propagazione, con un orologio finto invece di sei minuti
 veri. Verifica le tre proprieta' che devono valere: non si aspetta se i domini rispondono
@@ -180,6 +180,10 @@ stampa (sezioni, totali in fondo, `(vulnerable!)`, intervalli di VuXML come ">= 
 rifiuta di chiamare completo un piano con una riga che non capisce o con i conti che non tornano.
 Dentro c'e' il caso che l'ha motivata: nginx 1.30.4,3 con il catalogo fermo alla stessa e VuXML
 "< 1.30.5,3" — la correzione esiste, il ramo non ce l'ha, e il lock non c'entra.
+In fondo le letture della scheda Pacchetti: le righe "<" di `pkg version -U -vRL=` (con righe vere
+di FreeBSD 15.1: i "?" e i ">" non sono aggiornamenti, una versione con caratteri strani resta
+fuori), `pkg query '%n\t%v\t%k'` con versione e blocco, il tipo di cambiamento nella lingua di
+chi legge.
 
 **PackageQueueTest** — un lavoro alla volta sui pacchetti, e l'elenco per riproteggerli
 scritto davvero prima di sbloccarli. Nasce da una revisione sul pannello web, e il
@@ -207,7 +211,7 @@ regola sia rimasta quella di prima carattere per carattere, che le password dell
 vogliano almeno 12 (il login dell'admin resta com'era: alzarlo avrebbe chiuso fuori chi ha una
 password piu' corta), e finisce riproducendo il rifiuto con i simboli vecchi.
 
-**AddressConversionTest** — trasformare un alias in casella e una casella in alias (TrasformaIndirizzo
+**AddressConversionTest** — trasformare un alias in casella e una casella in alias (AddressTransform
 e MailDatabase), solo quando si puo' davvero. Senza database: i rifiuti (raccolta @dominio,
 indirizzo che e' gia' una casella, dominio che non e' del pannello, nomi che uscirebbero da
 /var/vmail, come "..@dominio"), le destinazioni (valide, esistenti se sono sui domini del pannello, al
@@ -230,7 +234,7 @@ vuote; sul database gia' vuoto non da' errori; se una tabella d'altri punta a do
 non si cancella niente (un DROP solo, atomico) e l'errore dice cosa resta. Senza collegamento il
 reset non parte.
 
-**SoftwareVersionsTest** — le versioni della Home (VersioniSoftware). Un sistema finto risponde con le
+**SoftwareVersionsTest** — le versioni della Home (SoftwareVersions). Un sistema finto risponde con le
 uscite vere dei programmi su FreeBSD (postconf, dovecot, rspamd, redis-server, nginx, php-fpm,
 openssl, freebsd-version, clamd, mysqld, pkg which, pkg query) e si controlla: ogni versione
 riconosciuta; il pacchetto trovato dal binario anche quando si chiama postfix-mysql o
@@ -251,7 +255,7 @@ e' 403 e finisce nel registro di audit; con il token giusto la richiesta passa; 
 servizio (redis, che qui non c'e': il comando fallisce senza toccare niente) va nel registro e fa
 rileggere le versioni.
 
-**PkgBranchTest** — il ramo dei pacchetti, quarterly o latest (RamoPkg). Il sistema finto fa
+**PkgBranchTest** — il ramo dei pacchetti, quarterly o latest (PkgBranch). Il sistema finto fa
 quello che fa pkg (libpkg/pkg_config.c, letto il 03/10/2026): parte dal /etc/pkg/FreeBSD.conf di
 FreeBSD 15.0 RELEASE (quarterly, moduli del kernel con la versione minore, FreeBSD-base spento) e
 legge i file di /usr/local/etc/pkg/repos in ordine alfabetico, con ogni blocco che sovrascrive i
@@ -270,6 +274,17 @@ rimasto, i .conf elencati come li legge pkg.
 sola, nomi e indirizzi solo come testo, l'anteprima, il nome del ramo scritto a mano per
 confermare, impronta e token CSRF nella richiesta, il lavoro seguito fino all'esito, l'errore di
 un cambio che non parte; tema scuro e telefono.
+
+**packages-browser-test.js** — la scheda Pacchetti della pagina Aggiornamenti, con il server
+simulato: si legge da sola; il riepilogo; l'avviso sui pacchetti dello stack non bloccati con il
+pulsante per bloccarli; per ogni riga versione installata e del catalogo, verdetto sulla
+vulnerabilita' (testo, mai HTML), blocco; "Aggiorna" anche su un pacchetto bloccato, "trattenuto"
+dove l'avvertenza dice di aspettare, il JDK del pannello che rimanda alla procedura di Java;
+Blocca/Sblocca con nome e token CSRF. La finestra di aggiornamento: piano esatto, i passi in
+chiaro, il pulsante spento finche' il nome del pacchetto non e' scritto giusto, la richiesta con
+conferma e impronta, il lavoro seguito fino all'esito. E nella scheda Aggiornamenti l'intestazione
+di una vulnerabilita' che dice lo stesso verdetto del dettaglio (era "l'aggiornamento la corregge"
+sopra un "l'aggiornamento non basta"), con il pulsante Aggiorna accanto.
 
 **address-conversion-browser-test.js** — le finestre "Trasforma in casella" (pagina Alias) e "Trasforma
 in alias" (pagina Caselle): l'anteprima, la password proposta dal generatore, la scelta

@@ -132,6 +132,12 @@ const API = {
             { gruppo: 'fase', lettera: 'A', titolo: 'Lock the stack', stato: 'fatto', situazione: 'Locked.', perche: 'So nothing replaces it.' },
             { gruppo: 'pacchetto', titolo: 'curl', stato: 'dafare', situazione: '8.9 to 8.10', perche: 'Fixes a CVE.', azione: { tipo: 'package_update', package: 'curl' } }],
             senzaRimedio: ['libfoo'] },
+        packages_overview: { success: true, summary: { updates: 2, stackUpdates: 1, vulnerable: 1, fixable: 1, locked: 1, stackUnlocked: 1, panelRestart: true },
+            packages: [{ name: 'postfix', installed: '3.9', available: '3.10', update: true, locked: true, stack: true, role: 'SMTP', canUpdate: true, whyNot: '',
+                         vuln: { verdetto: 'aggiornamento-non-basta', catalogo: '3.10', spiegazione: 'Not enough.', problemi: [] } },
+                       { name: 'openjdk25', installed: '25.0.1', available: '25.0.2', update: true, locked: true, stack: true, role: 'Java', javaFlow: true,
+                         inUse: 'the panel runs on it', panelRestart: 'Restart the panel.', canUpdate: false, whyNot: 'Own procedure.' }],
+            others: [{ name: 'curl', installed: '8.9', available: '8.10' }] },
         packages_status: { success: true, lockedCount: 1, installedCount: 2, packages: [
             { name: 'postfix', role: 'SMTP', version: '3.9', locked: true }, { name: 'dovecot', role: 'IMAP', version: '2.3', locked: false }] },
         updates_status: { success: true, rebootPending: true, kernel: '15.0-p3', running: '15.0-p2', dryRun: 'Nothing to do.',
@@ -248,7 +254,7 @@ const VISITS = [
     { path: '/setup' },
     { path: '/updates', prepare: async page => {
         await page.waitForSelector('#ramo-body table');
-        for (const [fn, sel] of [['osStato', '#os-body table'], ['planLoad', '#plan-body .border'], ['updPackages', '#upd-packages table'],
+        for (const [fn, sel] of [['osStato', '#os-body table'], ['planLoad', '#plan-body .border'], ['pkOverview', '#pk-body table'],
                                  ['updStatus', '#upd-status .alert-danger'], ['defCheck', '#def-body table'], ['envCheck', '#env-body table']]) {
             await page.evaluate(f => window[f](), fn);
             await page.waitForSelector(sel);

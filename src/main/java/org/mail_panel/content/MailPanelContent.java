@@ -11874,6 +11874,53 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
+            <div class="card mb-4" id="pacchetti">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span><i class="fas fa-cubes me-2" aria-hidden="true"></i><strong>{{t:pkgs.title}}</strong></span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="pkOverview()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:pkgs.intro.html}}</p>
+                    <div id="pk-body" role="status" aria-live="polite"><span class="text-muted">{{t:pkgs.loading}}</span></div>
+                    <div id="pk-result" class="mt-2"></div>
+                </div>
+                <div class="card-footer">
+                    <div class="small text-muted mb-2">{{t:pkgs.bulk.intro.html}}</div>
+                    <div class="d-flex flex-wrap gap-1">
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:pkgs.bulk.lockAll}}</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updLockAll(false)"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>{{t:pkgs.bulk.unlockAll}}</button>
+                        <a class="btn btn-sm btn-outline-primary" href="#aggiornamenti"><i class="fas fa-arrow-down me-1" aria-hidden="true"></i>{{t:pkgs.bulk.goUpdates}}</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="pkUpdModal" tabindex="-1" aria-labelledby="pkUpdTitle" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="pkUpdTitle"></h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="pkUpdBody"></div>
+                            <div id="pkUpdConfirm" class="mt-3" hidden>
+                                <label for="pkUpdName" class="form-label small" id="pkUpdNameLabel"></label>
+                                <input type="text" id="pkUpdName" class="form-control" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64">
+                            </div>
+                            <div class="progress mt-3" id="pkUpdProgress" hidden role="progressbar" aria-label="{{t:pkgs.m.progress}}" aria-valuemin="0" aria-valuemax="100">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div>
+                            </div>
+                            <div id="pkUpdResult" class="mt-2" role="status" aria-live="polite"></div>
+                            <pre id="pkUpdLog" class="upd-log mt-2 mb-0" hidden></pre>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.close}}</button>
+                            <button type="button" class="btn btn-danger" id="pkUpdGo" disabled hidden onclick="pkUpdRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>{{t:pkgs.m.go}}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
 """ + risorsa("pagine/ramo-card.html") + """
             <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -12061,22 +12108,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-shield-halved me-2" aria-hidden="true"></i><strong>{{t:up.locks}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.locksSub}}</span></span>
-                    <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-success me-1" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:up.lockAll}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="updLockAll(false)"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>{{t:up.unlockAll}}</button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="updPackages()"><i class="fas fa-sync-alt me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div id="upd-packages"><span class="text-muted">{{t:up.phLocks}}</span></div>
-                </div>
-            </div>
 
-            <div class="card mb-4">
+            <div class="card mb-4" id="aggiornamenti">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-download me-2" aria-hidden="true"></i><strong>{{t:up.updates}}</strong>
                         <span class="small text-muted ms-2">{{t:up.updatesSub}}</span></span>
@@ -12158,19 +12191,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-route me-2" aria-hidden="true"></i><strong>{{t:up.guid}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.guidSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="guidList()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates2}}</button>
-                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-protetto-tog" onclick="procApri('proc-protetto')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
-                </div>
-                <div class="card-body" id="proc-protetto" style="display:none">
-                    <p class="small text-muted mb-2">{{t:up.guidIntro.html}}</p>
-                    <div id="guid-list"><span class="text-muted">{{t:up.phGuid}}</span></div>
-                    <div id="guid-detail" class="mt-3"></div>
-                </div>
-            </div>
         </div>
     </div>
 """ + getFooterSection() + """
@@ -12187,7 +12207,232 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
-        return getUpdatesScript1() + getUpdatesScript2() + risorsa("pagine/ramo.js");
+        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPacchetti() + risorsa("pagine/ramo.js");
+    }
+
+    /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
+    private static String getUpdatesScriptPacchetti() {
+        return """
+        // ================= il quadro dei pacchetti =================
+        // Una tabella sola: versione installata e del catalogo, vulnerabilita' con il verdetto
+        // sulla correzione, blocco, e su ogni riga i pulsanti per agire. Si carica da sola.
+
+        /* Il verdetto sulla vulnerabilita', in una parola e un colore. */
+        function pkVulnBadge(v) {
+            if (!v) return '<span class="text-muted small">' + escHtml(t('pkgs.noVuln')) + '</span>';
+            const m = { 'si-risolve-aggiornando': ['bg-warning text-dark', 'pkgs.v.fixable'],
+                        'aggiornamento-non-basta': ['bg-danger', 'pkgs.v.notEnough'],
+                        'correzione-fuori-dal-ramo': ['bg-danger', 'pkgs.v.outOfBranch'],
+                        'correzione-non-indicata': ['bg-danger', 'pkgs.v.noFix'],
+                        'nessuna-correzione': ['bg-danger', 'pkgs.v.noFix'] }[v.verdetto] || ['bg-secondary', 'pkgs.v.unknown'];
+            return '<span class="badge ' + m[0] + '"><i class="fas fa-bug me-1" aria-hidden="true"></i>' + escHtml(t(m[1])) + '</span>';
+        }
+
+        /* Il dettaglio di una riga: il perche' della vulnerabilita', le CVE, l'avvertenza. */
+        function pkDettaglio(p) {
+            let h = '';
+            if (p.vuln) {
+                h += '<div class="small mb-1">' + escHtml(p.vuln.spiegazione || '') + '</div>';
+                (p.vuln.problemi || []).forEach(x => {
+                    const url = String(x.url || '');
+                    const cves = (x.cve || []).join(', ') || 'VuXML';
+                    h += '<div class="small">' + (url.indexOf('https://') === 0
+                            ? '<a href="' + escHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escHtml(cves) + '</a>'
+                            : '<code>' + escHtml(cves) + '</code>') + ' &mdash; ' + escHtml(x.descrizione || '') + '</div>';
+                });
+            }
+            if (p.advisory && p.advisory.text) h += '<div class="small mt-1"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>' + escHtml(p.advisory.text) + '</div>';
+            if (p.whyNot) h += '<div class="small mt-1 text-danger"><i class="fas fa-hand me-1" aria-hidden="true"></i>' + escHtml(p.whyNot) + '</div>';
+            if (p.panelRestart) h += '<div class="small mt-1 text-warning"><i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(p.panelRestart) + '</div>';
+            return h;
+        }
+
+        async function pkOverview() {
+            const el = document.getElementById('pk-body');
+            if (!el) return;
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.loading'));
+            let r;
+            try { r = await updApi('packages_overview'); }
+            catch (e) { r = { success: false, error: t('common.networkError', { message: e.message }) }; }
+            // Un'altra lettura della pagina e' in corso: si riprova fra poco invece di mostrare un errore.
+            if (!r.success && r.error === t('up.busy')) { setTimeout(pkOverview, 1500); return; }
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
+            const s = r.summary || {};
+            let h = '<div class="d-flex flex-wrap gap-1 mb-2">'
+                  + '<span class="badge ' + (s.updates ? 'bg-primary' : 'bg-success') + '">' + escHtml(tn('pkgs.sum.updates', s.updates || 0)) + '</span>'
+                  + '<span class="badge ' + (s.vulnerable ? 'bg-danger' : 'bg-success') + '">' + escHtml(tn('pkgs.sum.vulnerable', s.vulnerable || 0)) + '</span>'
+                  + (s.fixable ? '<span class="badge bg-warning text-dark">' + escHtml(tn('pkgs.sum.fixable', s.fixable)) + '</span>' : '')
+                  + '<span class="badge bg-secondary">' + escHtml(tn('pkgs.sum.locked', s.locked || 0)) + '</span></div>';
+            if (s.panelRestart) h += '<div class="alert alert-warning py-2 small"><i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.panelRestart')) + '</div>';
+            if (r.catalogError) h += '<div class="alert alert-danger py-2 small">' + escHtml(t('pkgs.catalogError', { error: r.catalogError })) + '</div>';
+            if (r.vulnError) h += '<div class="alert alert-secondary py-2 small">' + escHtml(t('pkgs.vulnError', { error: r.vulnError })) + '</div>';
+            if (s.stackUnlocked > 0) {
+                h += '<div class="alert alert-warning py-2 small d-flex flex-wrap align-items-center gap-2"><span><i class="fas fa-lock-open me-1" aria-hidden="true"></i>'
+                   + escHtml(tn('pkgs.stackUnlocked', s.stackUnlocked)) + '</span>'
+                   + '<button type="button" class="btn btn-sm btn-success" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.bulk.lockAll')) + '</button></div>';
+            }
+            h += '<div class="table-responsive"><table class="table tabella-schede table-sm align-middle mb-2"><thead><tr>'
+               + '<th scope="col">' + escHtml(t('pkgs.colPackage')) + '</th><th scope="col">' + escHtml(t('pkgs.colInstalled')) + '</th><th scope="col">' + escHtml(t('pkgs.colAvailable')) + '</th>'
+               + '<th scope="col">' + escHtml(t('pkgs.colSecurity')) + '</th><th scope="col">' + escHtml(t('pkgs.colLock')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th></tr></thead><tbody>';
+            (r.packages || []).forEach((p, i) => {
+                const det = pkDettaglio(p);
+                let azioni = '';
+                if (p.update) {
+                    if (p.canUpdate) {
+                        azioni += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
+                                + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: p.available })) + '</button>';
+                    } else if (p.javaFlow) {
+                        azioni += '<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1 text-nowrap" onclick="pkVaiJava()">'
+                                + '<i class="fab fa-java me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.javaFlow')) + '</button>';
+                    } else {
+                        azioni += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
+                    }
+                }
+                azioni += '<button type="button" class="btn btn-sm btn-outline-secondary mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" onclick="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
+                        + '<i class="fas ' + (p.locked ? 'fa-lock-open' : 'fa-lock') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.unlock') : t('pkgs.lock')) + '</button>';
+                h += '<tr class="upd-cell' + (p.vuln ? ' table-danger' : '') + '">'
+                   + '<td data-label="' + escHtml(t('pkgs.colPackage')) + '"><code>' + escHtml(p.name) + '</code>'
+                   + (p.role ? '<div class="small text-muted">' + escHtml(p.role) + '</div>' : '')
+                   + (p.inUse ? '<span class="badge bg-info text-dark">' + escHtml(p.inUse) + '</span>' : '') + '</td>'
+                   + '<td data-label="' + escHtml(t('pkgs.colInstalled')) + '" class="small">' + escHtml(p.installed) + '</td>'
+                   + '<td data-label="' + escHtml(t('pkgs.colAvailable')) + '" class="small">' + (p.update ? '<strong>' + escHtml(p.available) + '</strong>'
+                        + (p.majorJump ? ' <span class="badge bg-danger">' + escHtml(t('pkgs.majorJump')) + '</span>' : '')
+                        : '<span class="text-muted">' + escHtml(t('pkgs.upToDate')) + '</span>') + '</td>'
+                   + '<td data-label="' + escHtml(t('pkgs.colSecurity')) + '">' + pkVulnBadge(p.vuln)
+                   + (det ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" onclick="pkDet(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
+                   + '<td data-label="' + escHtml(t('pkgs.colLock')) + '"><span class="badge ' + (p.locked ? 'bg-success' : 'bg-warning text-dark') + '"><i class="fas '
+                   + (p.locked ? 'fa-lock' : 'fa-lock-open') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.locked') : t('pkgs.unlocked')) + '</span></td>'
+                   + '<td class="text-end">' + azioni + '</td></tr>';
+                if (det) h += '<tr id="pk-det-' + i + '" hidden><td colspan="6" class="small">' + det + '</td></tr>';
+            });
+            h += '</tbody></table></div>';
+            if ((r.others || []).length) {
+                h += '<details class="small"><summary>' + escHtml(tn('pkgs.others', r.others.length)) + '</summary>'
+                   + '<p class="text-muted mt-2 mb-1">' + escHtml(t('pkgs.othersHint')) + '</p><ul class="mb-0">'
+                   + r.others.map(o => '<li><code>' + escHtml(o.name) + '</code> ' + escHtml(o.installed) + ' &rarr; ' + escHtml(o.available) + '</li>').join('')
+                   + '</ul></details>';
+            }
+            el.innerHTML = h;
+        }
+
+        function pkDet(btn, i) {
+            const row = document.getElementById('pk-det-' + i);
+            if (!row) return;
+            row.hidden = !row.hidden;
+            btn.setAttribute('aria-expanded', String(!row.hidden));
+        }
+
+        /* Il JDK del pannello ha la sua procedura: si apre la sua scheda. */
+        function pkVaiJava() {
+            procApri('proc-jvm', true);
+            const c = document.getElementById('proc-jvm');
+            if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function pkLock(name, lock) {
+            const el = document.getElementById('pk-result');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(lock ? t('up.locking') : t('up.unlocking'));
+            const r = await updApi('packages_lock', { lock: lock, package: name });
+            el.innerHTML = r.success
+                ? '<div class="small text-success">' + escHtml((r.output || '').trim()) + '</div>'
+                : '<div class="small text-danger">' + escHtml(r.error || t('common.unknownError')) + '</div>';
+            pkOverview();
+        }
+
+        // ---------- l'aggiornamento di un pacchetto, in una finestra ----------
+        let pkUpd = { name: '', firma: '', job: '' };
+
+        function pkUpdModal() { return bootstrap.Modal.getOrCreateInstance(document.getElementById('pkUpdModal')); }
+
+        async function pkUpdOpen(name) {
+            pkUpd = { name: name, firma: '', job: '' };
+            document.getElementById('pkUpdTitle').textContent = t('pkgs.m.title', { name: name });
+            const body = document.getElementById('pkUpdBody');
+            body.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.m.planning'));
+            ['pkUpdConfirm', 'pkUpdProgress', 'pkUpdLog'].forEach(id => document.getElementById(id).hidden = true);
+            document.getElementById('pkUpdResult').innerHTML = '';
+            const go = document.getElementById('pkUpdGo');
+            go.hidden = true; go.disabled = true;
+            pkUpdModal().show();
+            const r = await updApi('package_preflight', { package: name });
+            if (!r.success) { body.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
+            pkUpd.firma = r.firma || '';
+            const blocchi = (r.checks || []).filter(c => c.level === 'block');
+            const avvisi = (r.checks || []).filter(c => c.level === 'verifica' || c.level === 'warn' || c.level === 'attendi');
+            const servizi = (r.services || []).map(x => typeof x === 'string' ? x : x.name);
+            let h = '<p class="mb-2"><code>' + escHtml(r.name) + '</code> ' + escHtml(r.current) + ' &rarr; <strong>' + escHtml(r.available || '?') + '</strong></p>';
+            if ((r.cve || []).length) h += '<div class="small mb-2"><strong>' + escHtml(t('up.closes')) + '</strong> ' + r.cve.map(c => '<span class="badge bg-dark me-1">' + escHtml(c) + '</span>').join('') + '</div>';
+            if (blocchi.length) {
+                h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(t('pkgs.m.blocked')) + '</strong><ul class="mb-0">'
+                   + blocchi.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul></div>';
+            }
+            const sbl = (r.piano && r.piano.sbloccati) || [];
+            h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.steps')) + '</h6><ol class="small">'
+               + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepUnlock', { list: sbl.join(', ') }) : t('pkgs.m.stepNoUnlock')) + '</li>'
+               + '<li>' + escHtml(t('pkgs.m.stepUpgrade')) + '</li>'
+               + '<li>' + escHtml(servizi.length ? t('pkgs.m.stepRestart', { list: servizi.join(', ') }) : t('pkgs.m.stepNoRestart')) + '</li>'
+               + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepRelock') : t('pkgs.m.stepCheck')) + '</li></ol>'
+               + updPianoHtml(r.piano, r.firma);
+            if (avvisi.length) {
+                h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.warnings')) + '</h6><ul class="small">'
+                   + avvisi.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul>';
+            }
+            body.innerHTML = h;
+            if (!blocchi.length && !r.blocked) {
+                const inp = document.getElementById('pkUpdName');
+                document.getElementById('pkUpdNameLabel').textContent = t('pkgs.m.confirm', { name: name });
+                inp.value = '';
+                inp.oninput = () => { go.disabled = inp.value !== name; };
+                document.getElementById('pkUpdConfirm').hidden = false; go.hidden = false; go.disabled = true;
+                inp.focus();
+            }
+        }
+
+        async function pkUpdRun() {
+            const go = document.getElementById('pkUpdGo');
+            go.disabled = true;
+            const res = document.getElementById('pkUpdResult');
+            const r = await updApi('package_update', { package: pkUpd.name, confirm: document.getElementById('pkUpdName').value, firma: pkUpd.firma });
+            if (!r.success) { res.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; go.disabled = false; return; }
+            pkUpd.job = r.jobId;
+            go.hidden = true;
+            document.getElementById('pkUpdConfirm').hidden = true;
+            document.getElementById('pkUpdProgress').hidden = false;
+            document.getElementById('pkUpdLog').hidden = false;
+            res.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.m.running')) + '</span>';
+            pkUpdPoll(r.jobId);
+        }
+
+        async function pkUpdPoll(id) {
+            if (pkUpd.job !== id) return;
+            const s = await updApi('job_status', { jobId: id });
+            const res = document.getElementById('pkUpdResult');
+            if (s.success && s.job) {
+                const log = document.getElementById('pkUpdLog');
+                log.textContent = s.job.consoleLog || '';
+                log.scrollTop = log.scrollHeight;
+                const bar = document.querySelector('#pkUpdProgress .progress-bar');
+                const pct = s.job.percent || 0;
+                bar.style.width = pct + '%';
+                document.getElementById('pkUpdProgress').setAttribute('aria-valuenow', String(pct));
+                if (s.job.status === 'completed') {
+                    bar.classList.remove('progress-bar-animated'); bar.classList.add('bg-success'); bar.style.width = '100%';
+                    res.innerHTML = '<div class="alert alert-success py-2 small mb-0"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.m.done', { name: pkUpd.name })) + '</div>';
+                    pkOverview();
+                    return;
+                }
+                if (s.job.status === 'error') {
+                    bar.classList.remove('progress-bar-animated'); bar.classList.add('bg-danger');
+                    res.innerHTML = '<div class="alert alert-danger py-2 small mb-0"><i class="fas fa-times me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.m.failed', { error: s.job.errorMessage || '' })) + '</div>';
+                    pkOverview();
+                    return;
+                }
+            }
+            setTimeout(() => pkUpdPoll(id), 3000);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => { if (document.getElementById('pk-body')) pkOverview(); });
+        """;
     }
 
     private static String getUpdatesScript1() {
@@ -13574,20 +13819,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (!updConferma('', t('up.wUpgrade'))) return;
                 r = await updApi('updates_apply', { confirm: 'AGGIORNA' });
             } else if (azione.tipo === 'package_update') {
-                // Il server esegue solo il piano che si e' visto: prima il piano esatto, con la sua
-                // impronta, poi la conferma. Senza impronta l'aggiornamento viene rifiutato.
-                const pf = await updApi('package_preflight', { package: azione.package });
-                if (!pf.success) { alert(pf.error || t('up.planFailed')); return; }
-                if (pf.blocked) {
-                    alert(t('up.cannotStart') + '\\n' + (pf.checks || []).filter(c => c.level === 'block')
-                          .map(c => '- ' + c.label + ': ' + c.detail).join('\\n'));
-                    return;
-                }
-                const cambi = ((pf.piano && pf.piano.cambi) || []).map(c => '  ' + c.tipo + ' ' + c.nome + ' ' + c.da
-                              + (c.a && c.a !== c.da ? ' -> ' + c.a : ''));
-                if (prompt(t('up.exactPlan', { sig: pf.firma || '?' }) + '\\n' + cambi.join('\\n')
-                           + '\\n\\n' + t('up.typePkgName', { pkg: azione.package })) !== azione.package) return;
-                r = await updApi('package_update', { package: azione.package, confirm: azione.package, firma: pf.firma || '' });
+                // L'aggiornamento di un pacchetto passa sempre dalla sua finestra: piano esatto,
+                // conferma con il nome, avanzamento.
+                pkUpdOpen(azione.package);
+                return;
             } else if (azione.tipo === 'rspamd_clean_cache') {
                 if (!updConferma('', t('up.wDeleteCache'))) return;
                 r = await updApi('rspamd_clean_cache', { confirm: 'ELIMINA CACHE' });
@@ -13898,9 +14133,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- aggiornamento guidato ----------
-        // L'impronta del piano che ogni scheda ha mostrato: parte con la conferma, e il pannello
-        // aggiorna solo se il piano ricalcolato e' ancora quello.
-        const guidFirme = {};
         let updFirmaManutenzione = '';
 
         /* Il piano esatto di pkg: ogni pacchetto che cambia, da quale versione a quale. */
@@ -13943,102 +14175,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return h;
         }
 
-        async function guidList() {
-            const el = document.getElementById('guid-list');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingLockedUpd')) + '';
-            const r = await updApi('maintenance_preview');
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const pk = r.packages || [];
-            if (!pk.length) { el.innerHTML = '<span class="text-muted">' + escHtml(t('up.noLockedUpd')) + '</span>'; return; }
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr>'
-                  + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th><th scope="col" class="text-end"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th></tr></thead><tbody>';
-            pk.forEach(p => {
-                const a = p.advisory;
-                const bloccante = a && a.level === 'attendi';
-                h += '<tr class="upd-cell"><td><code>' + updEsc(p.name) + '</code><br>'
-                   + '<span class="small text-muted">' + updEsc(p.role || '') + '</span></td>'
-                   + '<td class="small">' + updEsc(p.current) + '</td>'
-                   + '<td class="small">' + updEsc(p.available) + '</td>'
-                   + '<td>' + (a ? updBadge(a.level) : '<span class="badge bg-secondary">-</span>') + '</td>'
-                   + '<td class="text-end">'
-                   + (bloccante
-                        ? '<span class="small text-muted">' + escHtml(t('up.pManual')) + '</span>'
-                        : '<button class="btn btn-sm btn-outline-primary" data-pkg="' + escHtml(p.name) + '" onclick="guidPreflight(this.dataset.pkg)">'
-                          + '<i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>' + escHtml(t('up.prepare')) + '</button>')
-                   + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            el.innerHTML = h;
-        }
-
-        async function guidPreflight(nome) {
-            const el = document.getElementById('guid-detail');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.checksOn', { pkg: nome }));
-            const r = await updApi('package_preflight', { package: nome });
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<hr><h6><i class="fas fa-cube me-1" aria-hidden="true"></i>' + updEsc(r.name) + ' &mdash; '
-                  + updEsc(r.current) + ' &rarr; ' + updEsc(r.available) + '</h6>';
-            h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2">'
-               + '<thead><tr><th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if ((r.cve || []).length) {
-                h += '<div class="small mb-2"><strong>' + escHtml(t('up.closes')) + '</strong> <span class="badge bg-dark me-1">'
-                   + r.cve.map(c => updEsc(c)).join('</span><span class="badge bg-dark me-1">') + '</span></div>';
-            }
-            if ((r.services || []).length) {
-                h += '<div class="small mb-2"><strong>' + escHtml(t('up.servicesRestart')) + '</strong> '
-                   + r.services.map(s => updEsc(s.name) + (s.running ? '' : ' (' + escHtml(t('up.stoppedNotStarted')) + ')')).join(', ')
-                   + '</div>';
-            }
-            h += updPianoHtml(r.piano, r.firma);
-            guidFirme[r.name] = r.firma || '';
-            if (r.blocked) {
-                h += '<div class="alert alert-danger py-2 small mb-0">' + escHtml(t('up.cannotStartAbove')) + '</div>';
-            } else {
-                h += '<button class="btn btn-danger" data-pkg="' + escHtml(r.name) + '" onclick="guidRun(this.dataset.pkg)">'
-                   + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradePkg', { pkg: r.name })) + '</button>';
-            }
-            el.innerHTML = h;
-        }
-
-        async function guidRun(nome) {
-            if (prompt(t('up.typePkgName', { pkg: nome })) !== nome) return;
-            const el = document.getElementById('guid-detail');
-            const pre = document.getElementById('upd-log');
-            const r = await updApi('package_update', { package: nome, confirm: nome, firma: guidFirme[nome] || '' });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingPkg', { pkg: nome })) + '</span>';
-            pre.style.display = 'block';
-            updPoll(r.jobId, el, pre);
-        }
-
         // ---------- protezione pacchetti ----------
-        async function updPackages() {
-            const el = document.getElementById('upd-packages');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingPkgs')) + '';
-            const r = await updApi('packages_status');
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let rows = '';
-            (r.packages || []).forEach(p => {
-                rows += '<tr class="upd-cell"><td><code>' + updEsc(p.name) + '</code></td>'
-                      + '<td class="small">' + updEsc(p.role) + '</td>'
-                      + '<td class="small">' + updEsc(p.version) + '</td>'
-                      + '<td>' + (p.locked
-                          ? '<span class="badge upd-badge-ok"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('up.locked')) + '</span>'
-                          : '<span class="badge upd-badge-warn"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>' + escHtml(t('up.unlocked')) + '</span>') + '</td>'
-                      + '<td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '"'
-                      + ' onclick="updLockOne(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
-                      + escHtml(p.locked ? t('up.unlock') : t('up.lock')) + '</button></td></tr>';
-            });
-            el.innerHTML = '<div class="small text-muted mb-2">' + escHtml(t('up.lockedCount', { n: r.lockedCount, total: r.installedCount })) + '</div>'
-                         + '<div class="table-responsive"><table class="table table-sm table-striped"><thead><tr>'
-                         + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colRoleShort')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col">' + escHtml(t('set.colState')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th></tr></thead><tbody>'
-                         + rows + '</tbody></table></div>';
-        }
+        // La tabella dei pacchetti e' una sola, nella scheda Pacchetti: chi chiedeva di rileggere
+        // le protezioni rilegge quella.
+        function updPackages() { pkOverview(); }
 
         async function updLockOne(nome, blocca) {
             const r = await updApi('packages_lock', { lock: blocca, package: nome });
@@ -14072,13 +14212,24 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (vuln.length) {
                 h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(tn('up.vulnPkgs', vuln.length)) + '</strong><ul class="mb-0 mt-1">';
                 vuln.forEach(v => {
-                    h += '<li class="mb-2"><code>' + updEsc(v.name) + '</code>'
+                    // L'intestazione dice lo stesso verdetto del dettaglio: quando c'e' il confronto
+                    // con VuXML, sa se l'aggiornamento basta o no. Il blocco e' un'informazione a
+                    // parte, non un verdetto: il pulsante aggiorna anche un pacchetto bloccato.
+                    const vc0 = v.correzione;
+                    const aggiornabile = vc0 && (vc0.verdetto === 'si-risolve-aggiornando' || vc0.verdetto === 'aggiornamento-non-basta');
+                    h += '<li class="mb-2"><div class="d-flex flex-wrap align-items-center gap-1"><code>' + updEsc(v.name) + '</code>'
                        + (v.role ? ' <span class="text-muted">(' + updEsc(v.role) + ')</span>' : '')
-                       + (v.locked
-                            ? (v.aggiornamentoDisponibile
-                                ? ' &mdash; ' + t('up.lockedHasUpdate.html')
-                                : ' &mdash; ' + t('up.lockedNoUpdate.html'))
-                            : ' &mdash; ' + escHtml(v.fixedByUpgrade ? t('up.fixedByUpgrade') : t('up.noUpdateInCatalog')));
+                       + (vc0 && vc0.verdetto
+                            ? ' ' + pkVulnBadge(vc0)
+                            : (v.locked
+                                ? (v.aggiornamentoDisponibile
+                                    ? ' &mdash; ' + t('up.lockedHasUpdate.html')
+                                    : ' &mdash; ' + t('up.lockedNoUpdate.html'))
+                                : ' &mdash; ' + escHtml(v.fixedByUpgrade ? t('up.fixedByUpgrade') : t('up.noUpdateInCatalog'))))
+                       + (v.locked && vc0 && vc0.verdetto ? ' <span class="badge bg-secondary"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.locked')) + '</span>' : '')
+                       + (aggiornabile ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
+                            + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: vc0.catalogo || '' })) + '</button>' : '')
+                       + '</div>';
                     if ((v.cve || []).length) {
                         h += '<br><span class="badge bg-dark me-1">'
                            + v.cve.map(c => updEsc(c)).join('</span><span class="badge bg-dark me-1">')
@@ -14089,21 +14240,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     }
                     // La domanda vera: la correzione c'e'? La dicono gli intervalli di VuXML
                     // messi accanto alla versione che il catalogo offre.
-                    if (v.correzione) {
-                        const vc = v.correzione;
-                        const vcls = vc.verdetto === 'si-risolve-aggiornando' ? 'bg-success'
-                                   : (vc.verdetto === 'correzione-fuori-dal-ramo' || vc.verdetto === 'aggiornamento-non-basta')
-                                     ? 'bg-warning text-dark'
-                                   : vc.verdetto === 'nessuna-correzione' ? 'bg-danger' : 'bg-secondary';
-                        const veti = { 'si-risolve-aggiornando': t('up.vFixedByUpgrade'),
-                                       'aggiornamento-non-basta': t('up.vUpgradeNotEnough'),
-                                       'correzione-fuori-dal-ramo': t('up.vFixOtherBranch'),
-                                       'correzione-non-indicata': t('up.vFixNotStated'),
-                                       'nessuna-correzione': t('up.vNoFix'),
-                                       'non-so': t('up.vUnknown') };
-                        h += '<br><span class="badge ' + vcls + ' me-1">' + updEsc(veti[vc.verdetto] || vc.verdetto) + '</span>'
-                           + '<span>' + updEsc(vc.spiegazione || '') + '</span>';
-                    }
+                    if (v.correzione) h += '<br><span>' + updEsc(v.correzione.spiegazione || '') + '</span>';
                     (v.riferimenti || []).forEach(u => {
                         h += '<br><a href="' + updEsc(u) + '" target="_blank" rel="noopener noreferrer" class="small">'
                            + updEsc(u) + '</a>';

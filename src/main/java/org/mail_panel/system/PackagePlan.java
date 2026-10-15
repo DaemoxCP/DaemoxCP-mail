@@ -238,6 +238,18 @@ public final class PackagePlan {
     // ===================== chiedere il piano a pkg =====================
 
     /** Solo nomi di pacchetto plausibili: finiscono in una riga di comando. */
+    /** Il tipo di cambiamento ("aggiorna", "rimuove"...) detto nella lingua di chi legge. */
+    public static String typeName(String tipo) {
+        return switch (tipo == null ? "" : tipo) {
+            case "aggiorna" -> I18n.tr("up.tUpgrade");
+            case "installa" -> I18n.tr("up.tInstall");
+            case "reinstalla" -> I18n.tr("up.tReinstall");
+            case "rimuove" -> I18n.tr("up.tRemove");
+            case "retrocede" -> I18n.tr("up.tDowngrade");
+            default -> String.valueOf(tipo);
+        };
+    }
+
     static boolean isValidName(String n) {
         return n != null && n.matches("[A-Za-z0-9._+-]{1,64}");
     }
@@ -678,6 +690,45 @@ public final class PackagePlan {
     }
 
     // ===================== utilita' =====================
+
+    // ===================== il quadro dei pacchetti =====================
+
+    private static final Pattern DA_AGGIORNARE = Pattern.compile("^(\\S+)-([^\\s-]+)\\s+<\\s.*\\(remote has ([^)]+)\\)\\s*$");
+
+    /**
+     * Le righe "<" di {@code pkg version -U -vRL=}: nome -> versione del catalogo. Le altre
+     * ("?" fuori catalogo, ">" piu' nuovo del catalogo, "!" non confrontabile) non sono
+     * aggiornamenti disponibili e restano fuori.
+     */
+    public static Map<String, String> daAggiornare(String uscita) {
+        Map<String, String> r = new java.util.TreeMap<>();
+        for (String riga : (uscita == null ? "" : uscita).split("\n")) {
+            Matcher m = DA_AGGIORNARE.matcher(riga.trim());
+            if (m.find() && isValidName(m.group(1)) && versioneValida(m.group(3))) r.put(m.group(1), m.group(3));
+        }
+        return r;
+    }
+
+    /** Da {@code pkg query '%n\t%v\t%k'}: nome -> {versione, "1" se bloccato}. */
+    public static Map<String, String[]> installati(String uscita) {
+        Map<String, String[]> r = new java.util.TreeMap<>();
+        for (String riga : (uscita == null ? "" : uscita).split("\n")) {
+            String[] c = riga.split("\t");
+            if (c.length == 3 && isValidName(c[0].trim()) && versioneValida(c[1].trim()))
+                r.put(c[0].trim(), new String[]{c[1].trim(), c[2].trim()});
+        }
+        return r;
+    }
+
+    /** I pacchetti installati, letti adesso. */
+    public static Map<String, String[]> installati() {
+        return installati(Shell.runShell(Duration.ofSeconds(60), "pkg query '%n\t%v\t%k' 2>/dev/null").output());
+    }
+
+    /** Gli aggiornamenti disponibili nel catalogo gia' scaricato: -U, nessuna rete. */
+    public static Shell.Result leggiDaAggiornare() {
+        return Shell.runShell(Duration.ofSeconds(180), "pkg version -U -vRL= 2>&1");
+    }
 
     private static JSONObject fallito(String errore) {
         return new JSONObject().put("success", false).put("misurato", false).put("error", errore)

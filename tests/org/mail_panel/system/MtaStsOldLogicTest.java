@@ -10,16 +10,16 @@ import java.util.List;
  */
 public class MtaStsOldLogicTest {
     public static void main(String[] a) {
-        List<AttivaMtaSts.EsameNome> casi = List.of(
-            new AttivaMtaSts.EsameNome("domain-d.test", AttivaMtaSts.StatoNome.ASSENTE,
+        List<MtaStsSetup.EsameNome> casi = List.of(
+            new MtaStsSetup.EsameNome("domain-d.test", MtaStsSetup.StatoNome.ASSENTE,
                 "nella zona non c'e' nessun record con questo nome", true),
-            new AttivaMtaSts.EsameNome("x.it", AttivaMtaSts.StatoNome.DA_CORREGGERE,
+            new MtaStsSetup.EsameNome("x.it", MtaStsSetup.StatoNome.DA_CORREGGERE,
                 "punta a \"altro.host\" invece che a \"mail.domain-b.test\"; passa da Cloudflare", true));
 
         List<String> assenti = new ArrayList<>(), storti = new ArrayList<>(),
                      proxati = new ArrayList<>(), ciechi = new ArrayList<>(),
                      inPropagazione = new ArrayList<>();
-        for (AttivaMtaSts.EsameNome e : casi) {
+        for (MtaStsSetup.EsameNome e : casi) {
             switch (e.stato) {
                 case ASSENTE -> assenti.add(e.dominio + " (" + e.motivo + ")");
                 case CIECO -> ciechi.add(e.dominio + " (" + e.motivo + ")");

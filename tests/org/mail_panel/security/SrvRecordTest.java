@@ -71,9 +71,9 @@ public class SrvRecordTest {
         System.out.println("\n== e la logica VECCHIA sullo stesso caso vero ==");
         // Com'era: solo analizzaSrv() sul content. Se passasse anche qui, il primo
         // controllo di questa prova non starebbe verificando niente.
-        RegoleDns.Srv vecchia = RegoleDns.analizzaSrv("1 993 mail.domain-b.test");
+        DnsRules.Srv vecchia = DnsRules.analizzaSrv("1 993 mail.domain-b.test");
         boolean vecchioEsito = vecchia != null && vecchia.porta == 993
-                && RegoleDns.stessoNome(vecchia.destinazione, HOST);
+                && DnsRules.stessoNome(vecchia.destinazione, HOST);
         System.out.println("  analizzaSrv(\"1 993 mail.domain-b.test\") -> "
                 + (vecchia == null ? "null (non riconosciuto)" : "riconosciuto"));
         esigi("la logica vecchia BOCCIA il record giusto: il difetto si riproduce", !vecchioEsito);

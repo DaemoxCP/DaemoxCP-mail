@@ -4,7 +4,7 @@
 # Il punto da dimostrare non si vede leggendo il codice: che lo sblocco avvenga nella copia e
 # non nel database vero, che le dipendenze protette nominate da pkg vengano aggiunte, e che la
 # copia sparisca alla fine. Sul server non si prova giocando con i lock veri; qui un pkg finto
-# risponde solo ai comandi che PianoPacchetti usa e tiene i "lock" come file in $FINTO_DB/locked.
+# risponde solo ai comandi che PackagePlan usa e tiene i "lock" come file in $FINTO_DB/locked.
 #
 # Da eseguire dalla radice del progetto, DOPO aver costruito il jar e compilato le prove.
 set -e

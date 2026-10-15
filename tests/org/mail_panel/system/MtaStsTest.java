@@ -27,8 +27,8 @@ public class MtaStsTest {
         if (!condizione) falliti++;
     }
 
-    static void caso(String cosa, int uscitaDig, String stampato, AttivaMtaSts.EsitoTxt esito, String contenuto) {
-        AttivaMtaSts.LetturaTxt l = AttivaMtaSts.interpretaTxt(uscitaDig, stampato);
+    static void caso(String cosa, int uscitaDig, String stampato, MtaStsSetup.EsitoTxt esito, String contenuto) {
+        MtaStsSetup.LetturaTxt l = MtaStsSetup.interpretaTxt(uscitaDig, stampato);
         esigi(cosa + " -> " + l.esito + (l.contenuto.isEmpty() ? "" : " \"" + l.contenuto + "\""),
                 l.esito == esito && l.contenuto.equals(contenuto));
     }
@@ -64,23 +64,23 @@ public class MtaStsTest {
     }
 
     /** Il passo "txt" fra quelli che passiProvaETxt() restituisce. */
-    static AttivaMtaSts.Passo passoTxt(List<AttivaMtaSts.EsameTxt> esami, String atteso) {
-        for (AttivaMtaSts.Passo p : AttivaMtaSts.passiProvaETxt(esami, atteso))
+    static MtaStsSetup.Passo passoTxt(List<MtaStsSetup.EsameTxt> esami, String atteso) {
+        for (MtaStsSetup.Passo p : MtaStsSetup.passiProvaETxt(esami, atteso))
             if ("txt".equals(p.chiave)) return p;
         throw new IllegalStateException("manca il passo txt");
     }
 
-    static AttivaMtaSts.EsameNome e(String d, AttivaMtaSts.StatoNome s, String m,
+    static MtaStsSetup.EsameNome e(String d, MtaStsSetup.StatoNome s, String m,
                                     boolean risolve, boolean proxy, boolean storto) {
-        return new AttivaMtaSts.EsameNome(d, s, m, risolve, proxy, storto);
+        return new MtaStsSetup.EsameNome(d, s, m, risolve, proxy, storto);
     }
 
     public static void main(String[] a) throws Exception {
 
         System.out.println("\n== ripartisci(): il caso vero di domain-d.test ==");
         // Nella zona non c'e' mta-sts.domain-d.test; risponde il jolly *.domain-d.test, proxato.
-        var rip = AttivaMtaSts.ripartisci(List.of(
-                e("domain-d.test", AttivaMtaSts.StatoNome.ASSENTE, "nella zona non c'e'", true, true, false)));
+        var rip = MtaStsSetup.ripartisci(List.of(
+                e("domain-d.test", MtaStsSetup.StatoNome.ASSENTE, "nella zona non c'e'", true, true, false)));
         esigi("il dominio finisce fra gli assenti", rip.assenti.size() == 1);
         esigi("e ANCHE fra quelli che passano dal proxy (era il falso verde)", rip.proxati.size() == 1);
         esigi("il piano sa che il proxy viene da un jolly", rip.proxyDaJolly);
@@ -89,8 +89,8 @@ public class MtaStsTest {
         System.out.println("\n== ripartisci(): record insieme SBAGLIATO e PROXATO ==");
         // Prima finiva nel solo conto del proxy, perche' il motivo conteneva "Cloudflare":
         // il passo dei CNAME dichiarava "tutti presenti e giusti" un record che puntava altrove.
-        rip = AttivaMtaSts.ripartisci(List.of(
-                e("x.it", AttivaMtaSts.StatoNome.DA_CORREGGERE,
+        rip = MtaStsSetup.ripartisci(List.of(
+                e("x.it", MtaStsSetup.StatoNome.DA_CORREGGERE,
                   "punta a \"altro.host\" invece che a \"mail.domain-b.test\"; passa da Cloudflare",
                   true, true, true)));
         esigi("compare fra gli storti", rip.storti.size() == 1);
@@ -98,16 +98,16 @@ public class MtaStsTest {
         esigi("il proxy non viene da un jolly", !rip.proxyDaJolly);
 
         System.out.println("\n== ripartisci(): record giusto ma proxato ==");
-        rip = AttivaMtaSts.ripartisci(List.of(
-                e("y.it", AttivaMtaSts.StatoNome.DA_CORREGGERE, "passa da Cloudflare", true, true, false)));
+        rip = MtaStsSetup.ripartisci(List.of(
+                e("y.it", MtaStsSetup.StatoNome.DA_CORREGGERE, "passa da Cloudflare", true, true, false)));
         esigi("non e' storto", rip.storti.isEmpty());
         esigi("e' proxato", rip.proxati.size() == 1);
 
         System.out.println("\n== ripartisci(): cieco, propagazione, tutto a posto ==");
-        rip = AttivaMtaSts.ripartisci(List.of(
-                e("c.it", AttivaMtaSts.StatoNome.CIECO, "zona non visibile", false, false, false),
-                e("p.it", AttivaMtaSts.StatoNome.GIUSTO, "punta dritto", false, false, false),
-                e("ok.it", AttivaMtaSts.StatoNome.GIUSTO, "punta dritto", true, false, false)));
+        rip = MtaStsSetup.ripartisci(List.of(
+                e("c.it", MtaStsSetup.StatoNome.CIECO, "zona non visibile", false, false, false),
+                e("p.it", MtaStsSetup.StatoNome.GIUSTO, "punta dritto", false, false, false),
+                e("ok.it", MtaStsSetup.StatoNome.GIUSTO, "punta dritto", true, false, false)));
         esigi("il cieco resta cieco", rip.ciechi.size() == 1);
         esigi("il giusto che non risolve ancora e' in propagazione", rip.inPropagazione.size() == 1);
         esigi("il giusto che risolve non compare da nessuna parte",
@@ -122,84 +122,84 @@ public class MtaStsTest {
         String senzaTxt = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 19074\n;; flags: qr rd ra ad; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n";
         String irraggiungibile = ";; communications error to 192.0.2.1#53: connection refused\n;; no servers could be reached\n";
         caso("domain-d.test, record pubblicato", 0, domainD,
-                AttivaMtaSts.EsitoTxt.PRESENTE, "v=STSv1; id=0fec393151a7c577266a");
+                MtaStsSetup.EsitoTxt.PRESENTE, "v=STSv1; id=0fec393151a7c577266a");
         caso("dnssec-failed.org, SERVFAIL: il DNS non dice che cosa c'e'", 0, servfail,
-                AttivaMtaSts.EsitoTxt.NON_CHIESTO, "");
-        caso("nome inesistente (NXDOMAIN)", 0, nxdomain, AttivaMtaSts.EsitoTxt.ASSENTE, "");
-        caso("example.com, il nome c'e' ma senza TXT", 0, senzaTxt, AttivaMtaSts.EsitoTxt.ASSENTE, "");
-        caso("DNS che non risponde (dig esce con 9)", 9, irraggiungibile, AttivaMtaSts.EsitoTxt.NON_CHIESTO, "");
+                MtaStsSetup.EsitoTxt.NON_CHIESTO, "");
+        caso("nome inesistente (NXDOMAIN)", 0, nxdomain, MtaStsSetup.EsitoTxt.ASSENTE, "");
+        caso("example.com, il nome c'e' ma senza TXT", 0, senzaTxt, MtaStsSetup.EsitoTxt.ASSENTE, "");
+        caso("DNS che non risponde (dig esce con 9)", 9, irraggiungibile, MtaStsSetup.EsitoTxt.NON_CHIESTO, "");
         // Il piano scrive il perche' accanto al dominio: un SERVFAIL si cerca nella zona, un
         // DNS che non risponde nella rete di questo server.
-        String perche = AttivaMtaSts.interpretaTxt(0, servfail).motivo;
+        String perche = MtaStsSetup.interpretaTxt(0, servfail).motivo;
         esigi("il piano dice che il DNS ha risposto SERVFAIL: \"" + perche + "\"", perche.contains("SERVFAIL"));
-        perche = AttivaMtaSts.interpretaTxt(9, irraggiungibile).motivo;
+        perche = MtaStsSetup.interpretaTxt(9, irraggiungibile).motivo;
         esigi("e che nessun DNS ha risposto: \"" + perche + "\"", perche.equals("nessun DNS risponde"));
         // Varianti costruite sulla risposta vera di domain-d.test.
         String riga = "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=0fec393151a7c577266a\"";
         caso("record spezzato in due stringhe", 0,
                 domainD.replace(riga, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; \" \"id=0fec393151a7c577266a\""),
-                AttivaMtaSts.EsitoTxt.PRESENTE, "v=STSv1; id=0fec393151a7c577266a");
+                MtaStsSetup.EsitoTxt.PRESENTE, "v=STSv1; id=0fec393151a7c577266a");
         caso("accanto a un altro TXT sullo stesso nome", 0,
                 domainD.replace(riga, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\"\n" + riga),
-                AttivaMtaSts.EsitoTxt.PRESENTE, "v=STSv1; id=0fec393151a7c577266a");
+                MtaStsSetup.EsitoTxt.PRESENTE, "v=STSv1; id=0fec393151a7c577266a");
         caso("dietro un CNAME", 0,
                 domainD.replace(riga, "_mta-sts.domain-d.test.\t300\tIN\tCNAME\t_mta-sts.altro.net.\n_mta-sts.altro.net.\t300\tIN\tTXT\t\"v=STSv1; id=7\""),
-                AttivaMtaSts.EsitoTxt.PRESENTE, "v=STSv1; id=7");
+                MtaStsSetup.EsitoTxt.PRESENTE, "v=STSv1; id=7");
         caso("maiuscole", 0, domainD.replace("v=STSv1; id=0fec393151a7c577266a", "V=STSV1; id=2"),
-                AttivaMtaSts.EsitoTxt.PRESENTE, "V=STSV1; id=2");
+                MtaStsSetup.EsitoTxt.PRESENTE, "V=STSV1; id=2");
         caso("solo altri TXT", 0, domainD.replace(riga, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\""),
-                AttivaMtaSts.EsitoTxt.ASSENTE, "");
-        caso("REFUSED", 0, servfail.replace("SERVFAIL", "REFUSED"), AttivaMtaSts.EsitoTxt.NON_CHIESTO, "");
-        caso("uscita senza lo stato della risposta", 0, "qualcosa che non e' dig\n", AttivaMtaSts.EsitoTxt.NON_CHIESTO, "");
+                MtaStsSetup.EsitoTxt.ASSENTE, "");
+        caso("REFUSED", 0, servfail.replace("SERVFAIL", "REFUSED"), MtaStsSetup.EsitoTxt.NON_CHIESTO, "");
+        caso("uscita senza lo stato della risposta", 0, "qualcosa che non e' dig\n", MtaStsSetup.EsitoTxt.NON_CHIESTO, "");
         // Con "dig +short" (com'era) SERVFAIL e NXDOMAIN stampano la stessa cosa, cioe' niente:
         // per questo la lettura chiede lo stato della risposta.
-        caso("l'uscita di dig +short di un SERVFAIL non basta a dire ASSENTE", 0, "", AttivaMtaSts.EsitoTxt.NON_CHIESTO, "");
+        caso("l'uscita di dig +short di un SERVFAIL non basta a dire ASSENTE", 0, "", MtaStsSetup.EsitoTxt.NON_CHIESTO, "");
 
         System.out.println("\n== interpretaTxt(): due record v=STSv1 sullo stesso nome ==");
         // Per i mittenti valgono zero (RFC 8461 §3.1). Prima la lettura prendeva il primo e
         // diceva PRESENTE: qui il primo e' proprio quello giusto, il caso piu' ingannevole.
         String vecchio = "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=1700000000000\"";
         String due = domainD.replace(riga, riga + "\n" + vecchio);
-        caso("il giusto e uno con l'id vecchio", 0, due, AttivaMtaSts.EsitoTxt.TROPPI, "");
-        AttivaMtaSts.LetturaTxt l2 = AttivaMtaSts.interpretaTxt(0, due);
+        caso("il giusto e uno con l'id vecchio", 0, due, MtaStsSetup.EsitoTxt.TROPPI, "");
+        MtaStsSetup.LetturaTxt l2 = MtaStsSetup.interpretaTxt(0, due);
         esigi("e li riporta tutti e due: " + l2.valori,
                 l2.valori.equals(List.of("v=STSv1; id=0fec393151a7c577266a", "v=STSv1; id=1700000000000")));
         caso("uno scritto in maiuscolo (mailauth lo conta)", 0,
                 domainD.replace(riga, riga + "\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"V=STSV1; id=2\""),
-                AttivaMtaSts.EsitoTxt.TROPPI, "");
+                MtaStsSetup.EsitoTxt.TROPPI, "");
         caso("due record e un TXT che non c'entra", 0,
                 domainD.replace(riga, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\"\n"
                         + riga + "\n" + vecchio),
-                AttivaMtaSts.EsitoTxt.TROPPI, "");
+                MtaStsSetup.EsitoTxt.TROPPI, "");
         caso("stesso testo, ma due record (uno spezzato): sono due", 0,
                 domainD.replace(riga, riga + "\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; \" \"id=0fec393151a7c577266a\""),
-                AttivaMtaSts.EsitoTxt.TROPPI, "");
+                MtaStsSetup.EsitoTxt.TROPPI, "");
         caso("due record dietro un CNAME", 0,
                 domainD.replace(riga, "_mta-sts.domain-d.test.\t300\tIN\tCNAME\t_mta-sts.altro.net.\n"
                         + "_mta-sts.altro.net.\t300\tIN\tTXT\t\"v=STSv1; id=7\"\n"
                         + "_mta-sts.altro.net.\t300\tIN\tTXT\t\"v=STSv1; id=8\""),
-                AttivaMtaSts.EsitoTxt.TROPPI, "");
+                MtaStsSetup.EsitoTxt.TROPPI, "");
 
         System.out.println("\n== passiProvaETxt(): il passo del record nel piano ==");
         String atteso = "v=STSv1; id=0fec393151a7c577266a";
-        AttivaMtaSts.LetturaTxt uno = AttivaMtaSts.interpretaTxt(0, domainD);
-        AttivaMtaSts.Passo p = passoTxt(List.of(
-                new AttivaMtaSts.EsameTxt("domain-d.test", true, uno)), atteso);
+        MtaStsSetup.LetturaTxt uno = MtaStsSetup.interpretaTxt(0, domainD);
+        MtaStsSetup.Passo p = passoTxt(List.of(
+                new MtaStsSetup.EsameTxt("domain-d.test", true, uno)), atteso);
         esigi("un record giusto e la politica che risponde: fatto (" + p.dettaglio + ")", "fatto".equals(p.stato));
-        p = passoTxt(List.of(new AttivaMtaSts.EsameTxt("domain-d.test", true, l2)), atteso);
+        p = passoTxt(List.of(new MtaStsSetup.EsameTxt("domain-d.test", true, l2)), atteso);
         esigi("due record, anche col primo giusto: NON fatto -> " + p.stato + " (" + p.dettaglio + ")",
                 "da fare".equals(p.stato));
         esigi("il dettaglio nomina tutti e due i record",
                 p.dettaglio.contains("id=0fec393151a7c577266a") && p.dettaglio.contains("id=1700000000000"));
         esigi("e il motivo dice perche' conta", p.motivo != null && p.motivo.contains("RFC 8461"));
-        p = passoTxt(List.of(new AttivaMtaSts.EsameTxt("domain-d.test", true, l2),
-                             new AttivaMtaSts.EsameTxt("domain-a.test", true, uno)), atteso);
+        p = passoTxt(List.of(new MtaStsSetup.EsameTxt("domain-d.test", true, l2),
+                             new MtaStsSetup.EsameTxt("domain-a.test", true, uno)), atteso);
         esigi("un dominio a posto non copre quello con due record: " + p.stato, "da fare".equals(p.stato));
-        p = passoTxt(List.of(new AttivaMtaSts.EsameTxt("domain-d.test", false, l2)), atteso);
+        p = passoTxt(List.of(new MtaStsSetup.EsameTxt("domain-d.test", false, l2)), atteso);
         esigi("due record e la politica che non risponde: segnalati come non mantenuti (" + p.dettaglio + ")",
                 "da fare".equals(p.stato) && p.dettaglio.contains("NON mantenuto"));
-        p = passoTxt(List.of(new AttivaMtaSts.EsameTxt("domain-d.test", true,
-                AttivaMtaSts.interpretaTxt(0, servfail))), atteso);
+        p = passoTxt(List.of(new MtaStsSetup.EsameTxt("domain-d.test", true,
+                MtaStsSetup.interpretaTxt(0, servfail))), atteso);
         esigi("un SERVFAIL resta incerto, col motivo (" + p.dettaglio + ")",
                 "incerto".equals(p.stato) && p.dettaglio.contains("SERVFAIL"));
 
@@ -207,23 +207,23 @@ public class MtaStsTest {
         if (digRisponde()) {
             for (String d : new String[]{"domain-d.test", "domain-a.test", "domain-b.test",
                                          "nome-che-non-esiste-99887.invalid"}) {
-                AttivaMtaSts.LetturaTxt l = AttivaMtaSts.leggiTxt(d);
+                MtaStsSetup.LetturaTxt l = MtaStsSetup.leggiTxt(d);
                 System.out.println("  " + d + " -> " + l.esito + "  \"" + l.contenuto + "\"");
                 if (d.equals("domain-d.test")) {
                     esigi("su domain-d.test il TXT viene VISTO (prima il piano non ci arrivava)",
-                            l.esito == AttivaMtaSts.EsitoTxt.PRESENTE);
+                            l.esito == MtaStsSetup.EsitoTxt.PRESENTE);
                     esigi("e se ne legge il contenuto", l.contenuto.startsWith("v=STSv1"));
                 }
                 if (d.endsWith(".invalid"))
                     esigi("un nome inesistente e' ASSENTE, non NON_CHIESTO",
-                            l.esito == AttivaMtaSts.EsitoTxt.ASSENTE);
+                            l.esito == MtaStsSetup.EsitoTxt.ASSENTE);
             }
             // dnssec-failed.org ha il DNSSEC rotto apposta: un resolver che lo convalida risponde
             // SERVFAIL. Se questo lo fa, la lettura deve dire NON_CHIESTO, non ASSENTE.
             if (statoDig("_mta-sts.dnssec-failed.org").equals("SERVFAIL")) {
-                AttivaMtaSts.LetturaTxt l = AttivaMtaSts.leggiTxt("dnssec-failed.org");
+                MtaStsSetup.LetturaTxt l = MtaStsSetup.leggiTxt("dnssec-failed.org");
                 System.out.println("  dnssec-failed.org -> " + l.esito + " (" + l.motivo + ")");
-                esigi("un SERVFAIL e' NON_CHIESTO, non ASSENTE", l.esito == AttivaMtaSts.EsitoTxt.NON_CHIESTO);
+                esigi("un SERVFAIL e' NON_CHIESTO, non ASSENTE", l.esito == MtaStsSetup.EsitoTxt.NON_CHIESTO);
             } else {
                 System.out.println("  (il resolver di questa macchina non convalida DNSSEC: SERVFAIL provato solo qui sopra)");
             }
@@ -232,9 +232,9 @@ public class MtaStsTest {
             // dirlo. Un ASSENTE qui farebbe proporre di pubblicare un record che forse c'e' gia'.
             System.out.println("  da qui dig non arriva a un DNS: la lettura deve dire NON_CHIESTO");
             for (String d : new String[]{"domain-d.test", "nome-che-non-esiste-99887.invalid"}) {
-                AttivaMtaSts.LetturaTxt l = AttivaMtaSts.leggiTxt(d);
+                MtaStsSetup.LetturaTxt l = MtaStsSetup.leggiTxt(d);
                 esigi(d + " -> " + l.esito + ", non ASSENTE ne' PRESENTE",
-                        l.esito == AttivaMtaSts.EsitoTxt.NON_CHIESTO);
+                        l.esito == MtaStsSetup.EsitoTxt.NON_CHIESTO);
             }
         }
 

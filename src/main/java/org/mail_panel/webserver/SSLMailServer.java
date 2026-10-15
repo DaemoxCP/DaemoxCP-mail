@@ -127,7 +127,7 @@ public class SSLMailServer {
 
     /** /api/updates: le azioni che leggono (anteprime, stati, diagnosi). Tutte le altre cambiano il sistema. */
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
-        "packages_status", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
+        "packages_status", "packages_overview", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
         "mysql84_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "ramo_stato", "ramo_anteprima",
         "system_report", "os_status", "reboot_preview", "rc_stato", "riepilogo_sistema", "cf_intervalli",
         "rc_remove_preview", "rc_preview", "os_upgrade_targets", "os_upgrade_preflight", "os_upgrade_instructions",
@@ -6927,6 +6927,7 @@ public class SSLMailServer {
 
             switch (action) {
                 case "packages_status" -> response = UpdateManager.packagesStatus();
+                case "packages_overview" -> response = UpdateManager.packagesOverview();
                 case "updates_status" -> response = UpdateManager.updatesStatus();
                 case "compatibility" -> response = UpdateManager.compatibilityReport();
                 case "dovecot_config_dump" -> response = UpdateManager.dumpDovecotConfig();

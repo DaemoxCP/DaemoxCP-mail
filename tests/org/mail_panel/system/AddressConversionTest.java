@@ -19,7 +19,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Trasformare un alias in casella e una casella in alias (TrasformaIndirizzo e MailDatabase).
+ * Trasformare un alias in casella e una casella in alias (AddressTransform e MailDatabase).
  *
  * Prima parte, senza database: quando si puo' e quando no (raccolte, nomi che uscirebbero da
  * /var/vmail, domini non del pannello, indirizzi che sono gia' caselle), le destinazioni (valide,
@@ -58,14 +58,14 @@ public class AddressConversionTest {
         return m;
     }
 
-    static TrasformaIndirizzo.Stato stato(String indirizzo, boolean delPannello, MailDatabase.Mailbox m,
+    static AddressTransform.Stato stato(String indirizzo, boolean delPannello, MailDatabase.Mailbox m,
                                           List<MailDatabase.Alias> sorgente, List<MailDatabase.Alias> verso) {
-        return new TrasformaIndirizzo.Stato(indirizzo, delPannello, m, sorgente, verso, TrasformaIndirizzo.Posta.NESSUNA,
-                m == null ? null : new TrasformaIndirizzo.Perdite(false, List.of(), 0));
+        return new AddressTransform.Stato(indirizzo, delPannello, m, sorgente, verso, AddressTransform.Posta.NESSUNA,
+                m == null ? null : new AddressTransform.Perdite(false, List.of(), 0));
     }
 
     /** Una rete finta: domini del pannello, caselle che ricevono, alias attivi. */
-    static final class FakeNetwork implements TrasformaIndirizzo.Rete {
+    static final class FakeNetwork implements AddressTransform.Rete {
         final Set<String> domini;
         final Set<String> caselle;
         final Map<String, List<String>> alias = new HashMap<>();
@@ -76,9 +76,9 @@ public class AddressConversionTest {
         @Override public List<String> destinazioniAttive(String s) { return alias.getOrDefault(s, List.of()); }
     }
 
-    static String errore(TrasformaIndirizzo.Stato s, JSONArray d, TrasformaIndirizzo.Rete r) {
+    static String errore(AddressTransform.Stato s, JSONArray d, AddressTransform.Rete r) {
         try {
-            TrasformaIndirizzo.destinazioni(s, d, r);
+            AddressTransform.destinazioni(s, d, r);
             return null;
         } catch (IllegalArgumentException e) {
             return e.getMessage();
@@ -90,8 +90,8 @@ public class AddressConversionTest {
     public static void main(String[] a) throws Exception {
         Path radice = Files.createTempDirectory("prova-trasforma");
         try {
-            TrasformaIndirizzo.vmail = radice.resolve("vmail");
-            TrasformaIndirizzo.sieve = radice.resolve("sieve");
+            AddressTransform.vmail = radice.resolve("vmail");
+            AddressTransform.sieve = radice.resolve("sieve");
             regole();
             destinazioni();
             disco(radice);
@@ -107,37 +107,37 @@ public class AddressConversionTest {
         System.out.println("\n== Alias -> casella: quando si puo' ==");
         List<MailDatabase.Alias> una = List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true));
         vero("una raccolta (@domain-d.test) no: non ha un nome prima della @",
-                TrasformaIndirizzo.motivoNoCasella(stato("@domain-d.test", true, null, una, List.of())).contains("raccolta"));
+                AddressTransform.motivoNoCasella(stato("@domain-d.test", true, null, una, List.of())).contains("raccolta"));
         vero("\"..@domain-d.test\" no: come percorso uscirebbe da /var/vmail",
-                TrasformaIndirizzo.motivoNoCasella(stato("..@domain-d.test", true, null, una, List.of())) != null);
+                AddressTransform.motivoNoCasella(stato("..@domain-d.test", true, null, una, List.of())) != null);
         vero("un dominio che non e' del pannello no",
-                TrasformaIndirizzo.motivoNoCasella(stato("dmarc@altro.it", false, null, una, List.of())).contains("non è fra i domini"));
+                AddressTransform.motivoNoCasella(stato("dmarc@altro.it", false, null, una, List.of())).contains("non è fra i domini"));
         vero("un indirizzo che e' gia' una casella no",
-                TrasformaIndirizzo.motivoNoCasella(stato("dmarc@domain-d.test", true, casella(5, "dmarc@domain-d.test"), una, List.of())).contains("già una casella"));
+                AddressTransform.motivoNoCasella(stato("dmarc@domain-d.test", true, casella(5, "dmarc@domain-d.test"), una, List.of())).contains("già una casella"));
         vero("un indirizzo senza alias no",
-                TrasformaIndirizzo.motivoNoCasella(stato("dmarc@domain-d.test", true, null, List.of(), List.of())).contains("non ha alias"));
-        TrasformaIndirizzo.Stato ok = stato("dmarc@domain-d.test", true, null,
+                AddressTransform.motivoNoCasella(stato("dmarc@domain-d.test", true, null, List.of(), List.of())).contains("non ha alias"));
+        AddressTransform.Stato ok = stato("dmarc@domain-d.test", true, null,
                 List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "vecchio@x.it", false)),
                 List.of(alias(3, "postmaster@domain-d.test", "dmarc@domain-d.test", true)));
-        vero("dmarc@domain-d.test -> owner@example.net: si puo'", TrasformaIndirizzo.motivoNoCasella(ok) == null);
-        JSONObject ant = TrasformaIndirizzo.anteprimaACasella(ok, ZoneId.of("Europe/Rome"));
+        vero("dmarc@domain-d.test -> owner@example.net: si puo'", AddressTransform.motivoNoCasella(ok) == null);
+        JSONObject ant = AddressTransform.anteprimaACasella(ok, ZoneId.of("Europe/Rome"));
         vero("l'anteprima elenca le destinazioni (anche quella disattiva) e chi arriva qui", ant.getBoolean("possibile")
                 && ant.getJSONArray("destinazioni").length() == 2 && ant.getJSONArray("versoQui").getJSONObject(0).getString("sorgente").equals("postmaster@domain-d.test"));
-        String prima = TrasformaIndirizzo.impronta(ok);
-        TrasformaIndirizzo.Stato cambiato = stato("dmarc@domain-d.test", true, null,
+        String prima = AddressTransform.impronta(ok);
+        AddressTransform.Stato cambiato = stato("dmarc@domain-d.test", true, null,
                 List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "vecchio@x.it", true)),
                 ok.versoQui());
-        vero("l'impronta cambia se un alias cambia (riattivato)", !prima.equals(TrasformaIndirizzo.impronta(cambiato)));
-        vero("e non cambia se non cambia niente", prima.equals(TrasformaIndirizzo.impronta(ok)));
+        vero("l'impronta cambia se un alias cambia (riattivato)", !prima.equals(AddressTransform.impronta(cambiato)));
+        vero("e non cambia se non cambia niente", prima.equals(AddressTransform.impronta(ok)));
 
         System.out.println("\n== Casella -> alias: cosa si perde ==");
         MailDatabase.Mailbox m = casella(7, "info@domain-d.test");
         m.receiveEnabled = false;
-        TrasformaIndirizzo.Stato c = new TrasformaIndirizzo.Stato("info@domain-d.test", true, m,
+        AddressTransform.Stato c = new AddressTransform.Stato("info@domain-d.test", true, m,
                 List.of(alias(4, "info@domain-d.test", "info@domain-d.test", true), alias(5, "info@domain-d.test", "capo@x.it", true)),
-                List.of(), TrasformaIndirizzo.Posta.NESSUNA,
-                new TrasformaIndirizzo.Perdite(true, List.of("owner@example.net", "info@domain-d.test"), 3));
-        JSONObject aa = TrasformaIndirizzo.anteprimaAAlias(c, ZoneId.of("Europe/Rome"));
+                List.of(), AddressTransform.Posta.NESSUNA,
+                new AddressTransform.Perdite(true, List.of("owner@example.net", "info@domain-d.test"), 3));
+        JSONObject aa = AddressTransform.anteprimaAAlias(c, ZoneId.of("Europe/Rome"));
         JSONObject per = aa.getJSONObject("perdite");
         vero("risposta automatica, 3 filtri, inoltri e solo invio", per.getBoolean("rispostaAutomatica") && per.getInt("filtri") == 3
                 && per.getJSONArray("inoltri").length() == 2 && per.getBoolean("soloInvio"));
@@ -145,12 +145,12 @@ public class AddressConversionTest {
                 aa.getJSONArray("proposte").toList().equals(List.of("owner@example.net")));
         vero("l'alias su se stessa e' segnalato (se ne andra'), gli altri restano", aa.getBoolean("copia")
                 && aa.getJSONArray("giaInoltrata").getJSONObject(0).getString("destinazione").equals("capo@x.it"));
-        vero("su un alias (non casella): non si puo'", !TrasformaIndirizzo.anteprimaAAlias(ok, ZoneId.of("Europe/Rome")).getBoolean("possibile"));
+        vero("su un alias (non casella): non si puo'", !AddressTransform.anteprimaAAlias(ok, ZoneId.of("Europe/Rome")).getBoolean("possibile"));
     }
 
     static void destinazioni() {
         System.out.println("\n== Casella -> alias: le destinazioni ==");
-        TrasformaIndirizzo.Stato s = stato("info@domain-d.test", true, casella(7, "info@domain-d.test"), List.of(), List.of());
+        AddressTransform.Stato s = stato("info@domain-d.test", true, casella(7, "info@domain-d.test"), List.of(), List.of());
         FakeNetwork r = new FakeNetwork(Set.of("domain-d.test", "domain-c.test"), Set.of("owner@domain-d.test", "info@domain-d.test"));
         r.con("vendite@domain-d.test", "owner@domain-d.test");
         vero("nessuna destinazione: no", errore(s, new JSONArray(), r).contains("almeno una"));
@@ -171,12 +171,12 @@ public class AddressConversionTest {
         vero("un alias che riporta all'indirizzo: no, con la strada: " + g, g != null && g.contains("giro@domain-d.test -> info@domain-d.test"));
         r.con("a@domain-d.test", "b@domain-d.test").con("b@domain-d.test", "info@domain-d.test");
         vero("anche a due passi", errore(s, new JSONArray().put("a@domain-d.test"), r).contains("a@domain-d.test -> b@domain-d.test -> info@domain-d.test"));
-        TrasformaIndirizzo.Stato conAlias = stato("info@domain-d.test", true, casella(7, "info@domain-d.test"),
+        AddressTransform.Stato conAlias = stato("info@domain-d.test", true, casella(7, "info@domain-d.test"),
                 List.of(alias(9, "info@domain-d.test", "giro@domain-d.test", true)), List.of());
         vero("e anche se il giro passa da un alias che l'indirizzo ha gia'",
                 errore(conAlias, new JSONArray().put("owner@example.net"), r).contains("giro@domain-d.test"));
         try {
-            List<String> d = TrasformaIndirizzo.destinazioni(s, new JSONArray().put(" Owner@Domain-d.test ").put("owner@domain-d.test"), r);
+            List<String> d = AddressTransform.destinazioni(s, new JSONArray().put(" Owner@Domain-d.test ").put("owner@domain-d.test"), r);
             vero("spazi e maiuscole tolti, doppioni una volta sola: " + d, d.equals(List.of("owner@domain-d.test")));
         } catch (Exception e) {
             vero("spazi e maiuscole: " + e.getMessage(), false);
@@ -185,31 +185,31 @@ public class AddressConversionTest {
 
     static void disco(Path radice) throws Exception {
         System.out.println("\n== La posta sul disco ==");
-        Path dir = TrasformaIndirizzo.vmail.resolve("domain-d.test").resolve("dmarc");
+        Path dir = AddressTransform.vmail.resolve("domain-d.test").resolve("dmarc");
         for (String f : new String[] { "cur/1.M1", "new/2.M2", ".Archivio/cur/3.M3", ".Archivio/new/4.M4", "dovecot-uidlist", "tmp/5.M5" }) {
             Path p = dir.resolve(f);
             Files.createDirectories(p.getParent());
             Files.writeString(p, "x".repeat(100));
         }
-        Path filtri = TrasformaIndirizzo.sieve.resolve("domain-d.test").resolve("dmarc").resolve(".dovecot.sieve");
+        Path filtri = AddressTransform.sieve.resolve("domain-d.test").resolve("dmarc").resolve(".dovecot.sieve");
         Files.createDirectories(filtri.getParent());
         Files.writeString(filtri, "redirect \"vecchio@x.it\";\n");
-        TrasformaIndirizzo.Posta p = TrasformaIndirizzo.posta("dmarc@domain-d.test");
+        AddressTransform.Posta p = AddressTransform.posta("dmarc@domain-d.test");
         vero("4 messaggi (cur e new, anche nelle cartelle; non tmp, non i file di Dovecot), 400 byte, e i filtri: "
                 + p.messaggi() + ", " + p.byteTotali(), p.presente() && p.messaggi() == 4 && p.byteTotali() == 400 && p.filtri());
-        vero("un indirizzo senza cartella: niente", !TrasformaIndirizzo.posta("nessuno@domain-d.test").presente());
-        vero("\"..@domain-d.test\" non diventa un percorso", TrasformaIndirizzo.cartella(TrasformaIndirizzo.vmail, "..@domain-d.test") == null
-                && TrasformaIndirizzo.cartella(TrasformaIndirizzo.vmail, ".a@domain-d.test") == null);
-        List<Path[]> spostate = TrasformaIndirizzo.archivia("dmarc@domain-d.test", 1_790_000_000_000L);
+        vero("un indirizzo senza cartella: niente", !AddressTransform.posta("nessuno@domain-d.test").presente());
+        vero("\"..@domain-d.test\" non diventa un percorso", AddressTransform.cartella(AddressTransform.vmail, "..@domain-d.test") == null
+                && AddressTransform.cartella(AddressTransform.vmail, ".a@domain-d.test") == null);
+        List<Path[]> spostate = AddressTransform.archivia("dmarc@domain-d.test", 1_790_000_000_000L);
         vero("messa da parte: posta e filtri in .archivio-pannello, con la data", spostate.size() == 2 && !Files.exists(dir)
                 && spostate.get(0)[1].toString().contains(".archivio-pannello/domain-d.test/dmarc-20260921T")
                 && Files.exists(spostate.get(0)[1].resolve("cur/1.M1")) && Files.exists(spostate.get(1)[1].resolve(".dovecot.sieve")));
-        TrasformaIndirizzo.rimetti(spostate);
+        AddressTransform.rimetti(spostate);
         vero("e rimessa a posto, se il resto non riesce", Files.exists(dir.resolve("cur/1.M1")) && Files.exists(filtri));
-        List<Path[]> primo = TrasformaIndirizzo.archivia("dmarc@domain-d.test", 1_790_000_000_000L);
+        List<Path[]> primo = AddressTransform.archivia("dmarc@domain-d.test", 1_790_000_000_000L);
         Files.createDirectories(dir.resolve("cur"));
         Files.writeString(dir.resolve("cur/6.M6"), "y");
-        List<Path[]> secondo = TrasformaIndirizzo.archivia("dmarc@domain-d.test", 1_790_000_000_000L);
+        List<Path[]> secondo = AddressTransform.archivia("dmarc@domain-d.test", 1_790_000_000_000L);
         vero("due archiviazioni nello stesso secondo non si sovrascrivono: " + secondo.get(0)[1].getFileName(),
                 !primo.get(0)[1].equals(secondo.get(0)[1]) && Files.exists(primo.get(0)[1].resolve("cur/1.M1"))
                 && Files.exists(secondo.get(0)[1].resolve("cur/6.M6")));
@@ -330,18 +330,18 @@ public class AddressConversionTest {
                 postfixAlias(c, "postmaster@domain-d.test").equals("dmarc@domain-d.test"));
 
         System.out.println("\n== Andata e ritorno, con lo stato letto dal database ==");
-        TrasformaIndirizzo.Stato s = TrasformaIndirizzo.stato(db, "dmarc@domain-d.test");
-        vero("dmarc@ si puo' ritrasformare in casella", TrasformaIndirizzo.motivoNoCasella(s) == null && s.versoQui().size() == 1);
-        TrasformaIndirizzo.Stato si = TrasformaIndirizzo.stato(db, "info@domain-d.test");
+        AddressTransform.Stato s = AddressTransform.stato(db, "dmarc@domain-d.test");
+        vero("dmarc@ si puo' ritrasformare in casella", AddressTransform.motivoNoCasella(s) == null && s.versoQui().size() == 1);
+        AddressTransform.Stato si = AddressTransform.stato(db, "info@domain-d.test");
         try {
-            TrasformaIndirizzo.destinazioni(si, new JSONArray().put("postmaster@domain-d.test"), TrasformaIndirizzo.rete(db));
+            AddressTransform.destinazioni(si, new JSONArray().put("postmaster@domain-d.test"), AddressTransform.rete(db));
             vero("info@ verso postmaster@ (che va a dmarc@, alias): si' dal database", true);
         } catch (IllegalArgumentException e) {
             vero("info@ verso postmaster@: " + e.getMessage(), false);
         }
         db.addAlias(dom, "giro@domain-d.test", "info@domain-d.test");
         try {
-            TrasformaIndirizzo.destinazioni(si, new JSONArray().put("giro@domain-d.test"), TrasformaIndirizzo.rete(db));
+            AddressTransform.destinazioni(si, new JSONArray().put("giro@domain-d.test"), AddressTransform.rete(db));
             vero("info@ verso giro@ (che torna a info@): doveva essere rifiutato", false);
         } catch (IllegalArgumentException e) {
             vero("info@ verso giro@ (che torna a info@): rifiutato dal database", e.getMessage().contains("giro@domain-d.test -> info@domain-d.test"));

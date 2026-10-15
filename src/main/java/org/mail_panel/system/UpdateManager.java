@@ -231,11 +231,13 @@ public final class UpdateManager {
         }
         StringBuilder log = new StringBuilder();
         int fatti = 0;
+        boolean trovato = false;
         JSONArray st = packagesStatus().getJSONArray("packages");
         for (int i = 0; i < st.length(); i++) {
             JSONObject p = st.getJSONObject(i);
             String nome = p.getString("name");
             if (!soloQuesto.isEmpty() && !soloQuesto.equals(nome)) continue;
+            trovato = true;
             if (p.getBoolean("locked") == blocca) {
                 log.append("  ").append(nome).append(": ").append(I18n.tr("server.um.x.lockAlready")).append("\n");
                 continue;
@@ -243,9 +245,157 @@ public final class UpdateManager {
             boolean fatto = ok("pkg " + (blocca ? "lock" : "unlock") + " -y " + nome);
             log.append("  ").append(nome).append(": ")
                .append(fatto ? (blocca ? I18n.tr("server.um.x.lockDone") : I18n.tr("server.um.x.unlockDone")) : I18n.tr("server.um.x.lockFailed")).append("\n");
-            if (fatto) fatti++;
+            if (fatto) { fatti++; ricordaSblocco(nome, !blocca); }
+        }
+        // Un pacchetto che non e' dello stack (una dipendenza vulnerabile, uno bloccato a mano):
+        // la tabella pacchetti lo mostra con il suo pulsante, quindi si blocca o sblocca come gli altri.
+        if (!soloQuesto.isEmpty() && !trovato) {
+            String[] iv = PackagePlan.installati().get(soloQuesto);
+            if (iv == null) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.ov.notInstalled", java.util.Map.of("name", soloQuesto)));
+            if ("1".equals(iv[1]) == blocca) log.append("  ").append(soloQuesto).append(": ").append(I18n.tr("server.um.x.lockAlready")).append("\n");
+            else {
+                boolean fatto = ok("pkg " + (blocca ? "lock" : "unlock") + " -y " + soloQuesto);
+                log.append("  ").append(soloQuesto).append(": ")
+                   .append(fatto ? (blocca ? I18n.tr("server.um.x.lockDone") : I18n.tr("server.um.x.unlockDone")) : I18n.tr("server.um.x.lockFailed")).append("\n");
+                if (fatto) { fatti++; ricordaSblocco(soloQuesto, !blocca); }
+            }
         }
         return new JSONObject().put("success", true).put("changed", fatti).put("output", log.toString());
+    }
+
+    // ===================== la regola dei blocchi =====================
+
+    /**
+     * I pacchetti dello stack di posta restano bloccati: e' cosi' che un pkg upgrade, da qui o
+     * da SSH, non li sostituisce senza i controlli dell'aggiornamento guidato. Fanno eccezione
+     * solo quelli che un amministratore ha sbloccato con il pannello: quella scelta si ricorda
+     * (impostazione pkg.unlocked_by_admin) e si rispetta.
+     */
+    static final String SBLOCCATI_A_MANO = "pkg.unlocked_by_admin";
+
+    static Set<String> sbloccatiAMano() {
+        Set<String> r = new TreeSet<>();
+        if (org.mail_panel.Main.mailDatabase == null) return r;
+        for (String n : org.mail_panel.Main.mailDatabase.getSetting(SBLOCCATI_A_MANO, "").split(","))
+            if (isValidName(n.trim())) r.add(n.trim());
+        return r;
+    }
+
+    /** Ricorda (o dimentica) che un amministratore ha sbloccato questo pacchetto apposta. */
+    static synchronized void ricordaSblocco(String nome, boolean sbloccato) {
+        if (org.mail_panel.Main.mailDatabase == null) return;
+        Set<String> r = sbloccatiAMano();
+        if (sbloccato) r.add(nome); else r.remove(nome);
+        if (r.isEmpty()) org.mail_panel.Main.mailDatabase.deleteSetting(SBLOCCATI_A_MANO);
+        else org.mail_panel.Main.mailDatabase.setSetting(SBLOCCATI_A_MANO, String.join(",", r));
+    }
+
+    /**
+     * All'avvio: blocca ogni pacchetto dello stack installato e non bloccato, tranne quelli
+     * sbloccati apposta da un amministratore. Non fa niente se c'e' lo stato di un lavoro
+     * interrotto (prima va ripristinato quello) o se il database del pannello non risponde:
+     * senza l'elenco degli sblocchi voluti bloccherebbe anche quelli.
+     */
+    public static String applicaPoliticaBlocchi() {
+        if (Files.exists(Paths.get(STATO_MANUTENZIONE)) || org.mail_panel.Main.mailDatabase == null) return "";
+        Set<String> aMano = sbloccatiAMano();
+        List<String> bloccati = new ArrayList<>(), falliti = new ArrayList<>();
+        JSONArray st = packagesStatus().getJSONArray("packages");
+        for (int i = 0; i < st.length(); i++) {
+            JSONObject p = st.getJSONObject(i);
+            String n = p.getString("name");
+            if (p.getBoolean("locked") || aMano.contains(n) || !isValidName(n)) continue;
+            if (ok("pkg lock -y " + n)) bloccati.add(n); else falliti.add(n);
+        }
+        if (bloccati.isEmpty() && falliti.isEmpty()) return "";
+        String msg = "Mail stack packages locked at startup: " + (bloccati.isEmpty() ? "none" : String.join(", ", bloccati))
+                + (falliti.isEmpty() ? "" : "; could not lock: " + String.join(", ", falliti));
+        LOGGER.info(msg);
+        return msg;
+    }
+
+    // ===================== il quadro dei pacchetti =====================
+
+    /**
+     * Il quadro unico dei pacchetti per la pagina Aggiornamenti: per ognuno versione
+     * installata e del catalogo, blocco, vulnerabilita' con il verdetto sulla correzione, e se
+     * si puo' aggiornare da qui. Sola lettura e senza rete. Dentro: i pacchetti dello stack di
+     * posta, piu' ogni altro pacchetto vulnerabile o bloccato; gli altri con un aggiornamento
+     * (librerie, dipendenze) solo elencati a parte.
+     */
+    public static JSONObject packagesOverview() {
+        JSONObject r = new JSONObject();
+        Map<String, String[]> inst = PackagePlan.installati();
+        if (inst.isEmpty()) return r.put("success", false).put("error", I18n.tr("server.um.ov.noPkgDb"));
+        Shell.Result ev = PackagePlan.leggiDaAggiornare();
+        Map<String, String> agg = PackagePlan.daAggiornare(ev.output());
+        if (ev.exitCode() != 0 && agg.isEmpty())
+            r.put("catalogError", "pkg version -U -vRL= (" + ev.exitCode() + ")" + (ev.output().isBlank() ? "" : ": " + ev.output().trim()));
+        JSONObject corr = PackagePlan.correzioni();
+        JSONObject vul = corr.optBoolean("success") ? corr.getJSONObject("pacchetti") : new JSONObject();
+        if (!corr.optBoolean("success")) r.put("vulnError", corr.optString("error"));
+
+        String jvm = pacchettoDellaJvm();
+        java.util.LinkedHashSet<String> nomi = new java.util.LinkedHashSet<>();
+        for (Map.Entry<String, String[]> e : inst.entrySet())
+            if (ruoloDi(e.getKey()) != null) nomi.add(e.getKey());
+        for (Map.Entry<String, String[]> e : inst.entrySet())
+            if (vul.has(e.getKey()) || "1".equals(e.getValue()[1])) nomi.add(e.getKey());
+
+        JSONArray rows = new JSONArray();
+        int aggiornabili = 0, vulnerabili = 0, risolvibili = 0, bloccati = 0, stackSbloccati = 0;
+        boolean riavvioPannello = false;
+        for (String n : nomi) {
+            String[] iv = inst.get(n);
+            String ruolo = ruoloDi(n);
+            boolean locked = "1".equals(iv[1]);
+            String disp = agg.getOrDefault(n, "");
+            JSONObject row = new JSONObject().put("name", n).put("installed", iv[0]).put("available", disp)
+                    .put("update", !disp.isEmpty()).put("locked", locked).put("stack", ruolo != null)
+                    .put("role", ruolo == null ? "" : ruolo);
+            if (locked) bloccati++;
+            if (ruolo != null && !locked) stackSbloccati++;
+            String perche = "";
+            boolean eJvm = n.equals(jvm);
+            if (!disp.isEmpty()) {
+                aggiornabili++;
+                boolean salto = saltoSignificativo(n, iv[0], disp);
+                row.put("majorJump", salto);
+                JSONObject ad = avvertenzaPer(n, salto);
+                if (ad != null) {
+                    row.put("advisory", ad);
+                    if ("attendi".equals(ad.optString("level"))) perche = ad.optString("text");
+                }
+            }
+            if (eJvm) {
+                row.put("panelRuntime", true).put("inUse", I18n.tr("server.um.ov.panelRuns"));
+                // Il JDK del pannello ha la sua procedura: ferma il pannello, aggiorna, riaccende.
+                if (!disp.isEmpty()) { perche = I18n.tr("server.um.ov.javaFlow"); row.put("javaFlow", true); }
+                String inUso = System.getProperty("java.version", "");
+                String pacchetto = iv[0].replaceAll("[+_].*$", "");
+                if (!inUso.isEmpty() && !pacchetto.isEmpty() && !pacchetto.equals(inUso)) {
+                    riavvioPannello = true;
+                    row.put("panelRestart", I18n.tr("server.um.ov.panelRestart", java.util.Map.of("running", inUso, "installed", iv[0])));
+                }
+            }
+            row.put("canUpdate", !disp.isEmpty() && perche.isEmpty()).put("whyNot", perche);
+            JSONObject v = vul.optJSONObject(n);
+            if (v != null) {
+                vulnerabili++;
+                if ("si-risolve-aggiornando".equals(v.optString("verdetto"))) risolvibili++;
+                row.put("vuln", v);
+            }
+            rows.put(row);
+        }
+        JSONArray altri = new JSONArray();
+        for (Map.Entry<String, String> e : agg.entrySet()) {
+            if (nomi.contains(e.getKey()) || !inst.containsKey(e.getKey())) continue;
+            altri.put(new JSONObject().put("name", e.getKey()).put("installed", inst.get(e.getKey())[0]).put("available", e.getValue()));
+        }
+        return r.put("success", true).put("packages", rows).put("others", altri)
+                .put("summary", new JSONObject().put("updates", aggiornabili + altri.length()).put("stackUpdates", aggiornabili)
+                        .put("vulnerable", vulnerabili).put("fixable", risolvibili).put("locked", bloccati)
+                        .put("stackUnlocked", stackSbloccati).put("panelRestart", riavvioPannello));
     }
 
     // ===================== avvertenze specifiche dello stack di posta =====================
@@ -5575,7 +5725,7 @@ public final class UpdateManager {
             JSONArray cambiPiano = piano.getJSONArray("cambi");
             for (int i = 0; i < cambiPiano.length(); i++) {
                 JSONObject c = cambiPiano.getJSONObject(i);
-                job.scrivi("    " + c.getString("tipo") + " " + c.getString("nome") + " "
+                job.scrivi("    " + PackagePlan.typeName(c.getString("tipo")) + " " + c.getString("nome") + " "
                         + (c.getString("da").isEmpty() ? "" : c.getString("da"))
                         + (c.getString("a").isEmpty() || c.getString("a").equals(c.getString("da")) ? "" : " -> " + c.getString("a")));
             }
@@ -9401,7 +9551,7 @@ public final class UpdateManager {
             JSONArray cambiPiano = piano.getJSONArray("cambi");
             for (int i = 0; i < cambiPiano.length(); i++) {
                 JSONObject c = cambiPiano.getJSONObject(i);
-                job.scrivi("    " + c.getString("tipo") + " " + c.getString("nome") + " " + c.getString("da")
+                job.scrivi("    " + PackagePlan.typeName(c.getString("tipo")) + " " + c.getString("nome") + " " + c.getString("da")
                         + (c.getString("a").isEmpty() || c.getString("a").equals(c.getString("da")) ? "" : " -> " + c.getString("a")));
             }
             job.scrivi("  " + I18n.tr("server.um.x.willRelock", java.util.Map.of("n", String.valueOf(daRibloccare.size()))));

@@ -25,19 +25,19 @@ public class PackageQueueTest {
         // L'elenco in una cartella di prova, non in /var/db.
         Path d = Files.createTempDirectory("prova-turno");
         Path f = d.resolve("mail-panel-maintenance-locks");
-        TurnoPacchetti.elenco = f;
+        PackageJobLock.elenco = f;
 
         // --- Il turno ---
-        vero("libero all'inizio", TurnoPacchetti.chi() == null);
-        vero("il primo lo prende", TurnoPacchetti.prendi("a", "manutenzione") == null);
-        String no = TurnoPacchetti.prendi("b", "aggiornamento di kafka");
+        vero("libero all'inizio", PackageJobLock.chi() == null);
+        vero("il primo lo prende", PackageJobLock.prendi("a", "manutenzione") == null);
+        String no = PackageJobLock.prendi("b", "aggiornamento di kafka");
         vero("il secondo no, e il messaggio dice chi lo tiene", no != null && no.contains("(manutenzione"));
         vero("nemmeno per le protezioni, mentre un lavoro gira",
-            TurnoPacchetti.prendiPerLeProtezioni("c", "protezione dei pacchetti") != null);
-        TurnoPacchetti.rilascia("b");
-        vero("chi non lo tiene non puo' liberarlo", TurnoPacchetti.chi() != null);
-        TurnoPacchetti.rilascia("a");
-        vero("chi lo tiene lo libera", TurnoPacchetti.chi() == null);
+            PackageJobLock.prendiPerLeProtezioni("c", "protezione dei pacchetti") != null);
+        PackageJobLock.rilascia("b");
+        vero("chi non lo tiene non puo' liberarlo", PackageJobLock.chi() != null);
+        PackageJobLock.rilascia("a");
+        vero("chi lo tiene lo libera", PackageJobLock.chi() == null);
 
         // Molti nello stesso istante: uno solo lo prende.
         int n = 64;
@@ -48,7 +48,7 @@ public class PackageQueueTest {
             Thread.ofPlatform().start(() -> {
                 try {
                     via.await();
-                    if (TurnoPacchetti.prendi(id, "lavoro " + id) == null) presi.incrementAndGet();
+                    if (PackageJobLock.prendi(id, "lavoro " + id) == null) presi.incrementAndGet();
                 } catch (InterruptedException ignored) {
                 } finally { finiti.countDown(); }
             });
@@ -56,50 +56,50 @@ public class PackageQueueTest {
         via.countDown();
         finiti.await(10, TimeUnit.SECONDS);
         vero(n + " insieme: uno solo prende il turno", presi.get() == 1);
-        String tiene = TurnoPacchetti.chi();
-        TurnoPacchetti.rilascia(tiene.substring("lavoro ".length(), tiene.indexOf(',')));
-        vero("e poi lo libera", TurnoPacchetti.chi() == null);
+        String tiene = PackageJobLock.chi();
+        PackageJobLock.rilascia(tiene.substring("lavoro ".length(), tiene.indexOf(',')));
+        vero("e poi lo libera", PackageJobLock.chi() == null);
 
         // avvia: il turno si libera quando il lavoro finisce, anche se fallisce.
         CountDownLatch dentro = new CountDownLatch(1), esci = new CountDownLatch(1);
-        vero("lavoro lungo: prende il turno", TurnoPacchetti.prendi("lungo", "lavoro lungo") == null);
-        TurnoPacchetti.avvia("lungo", "prova-lungo", () -> {
+        vero("lavoro lungo: prende il turno", PackageJobLock.prendi("lungo", "lavoro lungo") == null);
+        PackageJobLock.avvia("lungo", "prova-lungo", () -> {
             dentro.countDown();
             try { esci.await(); } catch (InterruptedException ignored) { }
         });
         dentro.await(5, TimeUnit.SECONDS);
-        vero("mentre gira, il turno resta suo", TurnoPacchetti.prendi("altro", "altro") != null);
+        vero("mentre gira, il turno resta suo", PackageJobLock.prendi("altro", "altro") != null);
         esci.countDown();
         vero("finito il lavoro, il turno si libera", attendiLibero());
 
         Thread.setDefaultUncaughtExceptionHandler((t, x) -> { });   // l'eccezione voluta non sporca l'uscita
-        vero("lavoro che fallisce: prende il turno", TurnoPacchetti.prendi("rotto", "lavoro rotto") == null);
-        TurnoPacchetti.avvia("rotto", "prova-rotto", () -> { throw new IllegalStateException("prova"); });
+        vero("lavoro che fallisce: prende il turno", PackageJobLock.prendi("rotto", "lavoro rotto") == null);
+        PackageJobLock.avvia("rotto", "prova-rotto", () -> { throw new IllegalStateException("prova"); });
         vero("anche se fallisce, il turno si libera", attendiLibero());
 
         // --- L'elenco su disco ---
-        vero("elenco nuovo: scritto", TurnoPacchetti.scriviStato(List.of("kafka", "librdkafka")) == null);
+        vero("elenco nuovo: scritto", PackageJobLock.scriviStato(List.of("kafka", "librdkafka")) == null);
         vero("elenco nuovo: contenuto giusto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
-        String e = TurnoPacchetti.scriviStato(f, List.of("nginx"));
+        String e = PackageJobLock.scriviStato(f, List.of("nginx"));
         vero("elenco gia' presente: rifiutato", e != null && e.contains("esiste già"));
         vero("elenco gia' presente: NON sovrascritto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
         Path senzaCartella = d.resolve("non-esiste").resolve("mail-panel-maintenance-locks");
-        e = TurnoPacchetti.scriviStato(senzaCartella, List.of("nginx"));
+        e = PackageJobLock.scriviStato(senzaCartella, List.of("nginx"));
         vero("cartella che non c'e': rifiutato, e dice perche'", e != null && e.startsWith("non riesco a scrivere"));
         vero("cartella che non c'e': nessun file lasciato", !Files.exists(senzaCartella));
 
         // Con l'elenco di un lavoro non chiuso su disco, quei pacchetti potrebbero essere ancora
         // sbloccati: nessun lavoro che installa o aggiorna parte. Rimettere le protezioni si',
         // perche' e' proprio il rimedio.
-        String e2 = TurnoPacchetti.prendi("upd", "aggiornamento dei pacchetti non protetti");
+        String e2 = PackageJobLock.prendi("upd", "aggiornamento dei pacchetti non protetti");
         vero("elenco aperto: un aggiornamento non parte", e2 != null && e2.contains("non si è chiuso"));
-        vero("elenco aperto: e il turno non resta preso", TurnoPacchetti.chi() == null);
+        vero("elenco aperto: e il turno non resta preso", PackageJobLock.chi() == null);
         vero("elenco aperto: le protezioni si possono rimettere",
-            TurnoPacchetti.prendiPerLeProtezioni("lock", "protezione dei pacchetti") == null);
-        TurnoPacchetti.rilascia("lock");
-        TurnoPacchetti.cancellaStato();
-        vero("elenco chiuso: l'aggiornamento parte", TurnoPacchetti.prendi("upd", "aggiornamento") == null);
-        TurnoPacchetti.rilascia("upd");
+            PackageJobLock.prendiPerLeProtezioni("lock", "protezione dei pacchetti") == null);
+        PackageJobLock.rilascia("lock");
+        PackageJobLock.cancellaStato();
+        vero("elenco chiuso: l'aggiornamento parte", PackageJobLock.prendi("upd", "aggiornamento") == null);
+        PackageJobLock.rilascia("upd");
 
         Files.delete(d);
         System.out.println(falliti == 0 ? "\nTUTTO OK" : "\n" + falliti + " PROVE FALLITE");
@@ -107,8 +107,8 @@ public class PackageQueueTest {
     }
 
     private static boolean attendiLibero() throws InterruptedException {
-        for (int i = 0; i < 100 && TurnoPacchetti.chi() != null; i++) Thread.sleep(50);
-        return TurnoPacchetti.chi() == null;
+        for (int i = 0; i < 100 && PackageJobLock.chi() != null; i++) Thread.sleep(50);
+        return PackageJobLock.chi() == null;
     }
 
     private static void vero(String nome, boolean ok) {

@@ -92,13 +92,13 @@ public class MtaStsRecordTest {
         List<String> mtaSts() {
             List<String> c = new ArrayList<>();
             for (TxtRecordInfo t : zona.values())
-                if (t.name.equals(NOME)) c.add(RegoleDns.contenutoCloudflare(t.content));
-            return RegoleDns.soloMtaSts(c);
+                if (t.name.equals(NOME)) c.add(DnsRules.contenutoCloudflare(t.content));
+            return DnsRules.soloMtaSts(c);
         }
 
         long altriTxt() {
             return zona.values().stream()
-                    .filter(t -> !(t.name.equals(NOME) && RegoleDns.eMtaSts(RegoleDns.contenutoCloudflare(t.content))))
+                    .filter(t -> !(t.name.equals(NOME) && DnsRules.eMtaSts(DnsRules.contenutoCloudflare(t.content))))
                     .count();
         }
     }
@@ -115,12 +115,12 @@ public class MtaStsRecordTest {
     public static void main(String[] a) {
 
         System.out.println("\n== la regola: cosa conta come record MTA-STS ==");
-        esigi("\"v=STSv1; id=1\" conta", RegoleDns.eMtaSts("v=STSv1; id=1"));
-        esigi("\"V=STSV1; id=1\" conta (mailauth ignora le maiuscole)", RegoleDns.eMtaSts("V=STSV1; id=1"));
-        esigi("\" v=STSv1; id=1\" conta (mailauth toglie gli spazi ai bordi)", RegoleDns.eMtaSts(" v=STSv1; id=1"));
-        esigi("un SPF non conta", !RegoleDns.eMtaSts("v=spf1 -all"));
-        esigi("una verifica di Google non conta", !RegoleDns.eMtaSts("google-site-verification=abc"));
-        esigi("null non conta", !RegoleDns.eMtaSts(null));
+        esigi("\"v=STSv1; id=1\" conta", DnsRules.eMtaSts("v=STSv1; id=1"));
+        esigi("\"V=STSV1; id=1\" conta (mailauth ignora le maiuscole)", DnsRules.eMtaSts("V=STSV1; id=1"));
+        esigi("\" v=STSv1; id=1\" conta (mailauth toglie gli spazi ai bordi)", DnsRules.eMtaSts(" v=STSv1; id=1"));
+        esigi("un SPF non conta", !DnsRules.eMtaSts("v=spf1 -all"));
+        esigi("una verifica di Google non conta", !DnsRules.eMtaSts("google-site-verification=abc"));
+        esigi("null non conta", !DnsRules.eMtaSts(null));
 
         System.out.println("\n== nessun record: si crea ==");
         FakeCloudflare cf = new FakeCloudflare();
@@ -212,25 +212,25 @@ public class MtaStsRecordTest {
         java.util.function.Function<String, JSONObject> tace =
                 d -> new JSONObject().put("ok", false).put("errore", "526 (finto).");
         DnsRecordsGenerator.DnsCheck c = DnsRecordsGenerator.controlloMtaSts("domain-d.test",
-                org.mail_panel.system.AttivaMtaSts.interpretaTxt(0, testa + rigaGiusta), risponde);
+                org.mail_panel.system.MtaStsSetup.interpretaTxt(0, testa + rigaGiusta), risponde);
         esigi("un record e la politica che risponde: verde (" + c.message + ")", c.passed);
         c = DnsRecordsGenerator.controlloMtaSts("domain-d.test",
-                org.mail_panel.system.AttivaMtaSts.interpretaTxt(0, testa + rigaGiusta + rigaVecchia), risponde);
+                org.mail_panel.system.MtaStsSetup.interpretaTxt(0, testa + rigaGiusta + rigaVecchia), risponde);
         esigi("due record, anche con la politica che risponde: NON verde", !c.passed);
         esigi("il messaggio dice perche': " + c.message, c.message.contains("RFC 8461") && c.message.contains("2 record"));
         esigi("e mostra tutti e due i record: " + c.currentValue,
                 c.currentValue.contains(GIUSTO) && c.currentValue.contains(VECCHIO));
         esigi("non e' grigio (informativo): e' un guasto", !c.informativo);
         c = DnsRecordsGenerator.controlloMtaSts("domain-d.test",
-                org.mail_panel.system.AttivaMtaSts.interpretaTxt(0, testa + rigaGiusta), tace);
+                org.mail_panel.system.MtaStsSetup.interpretaTxt(0, testa + rigaGiusta), tace);
         esigi("un record e la politica che non risponde: rosso (" + c.message.substring(0, 40) + "...)", !c.passed);
         c = DnsRecordsGenerator.controlloMtaSts("domain-d.test",
-                org.mail_panel.system.AttivaMtaSts.interpretaTxt(0,
+                org.mail_panel.system.MtaStsSetup.interpretaTxt(0,
                         ";; ->>HEADER<<- opcode: QUERY, status: SERVFAIL, id: 37005\n"), risponde);
         esigi("un SERVFAIL: non \"Non attivo\", ma il motivo vero (" + c.message + ")",
                 !c.passed && !c.informativo && c.message.contains("SERVFAIL"));
         c = DnsRecordsGenerator.controlloMtaSts("domain-d.test",
-                org.mail_panel.system.AttivaMtaSts.interpretaTxt(0,
+                org.mail_panel.system.MtaStsSetup.interpretaTxt(0,
                         ";; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 2902\n"), risponde);
         esigi("nessun record: grigio, \"Non attivo\"", !c.passed && c.informativo && c.message.startsWith("Non attivo"));
 
@@ -249,7 +249,7 @@ public class MtaStsRecordTest {
     static String comeScrivevaPrima(FakeCloudflare cf) {
         for (CloudflareManager.TxtRecordInfo t : cf.listTxtRecordsContaining("token", "zona", null)) {
             if (!t.name.equals(NOME)) continue;
-            String c = RegoleDns.contenutoCloudflare(t.content);
+            String c = DnsRules.contenutoCloudflare(t.content);
             if (!c.toLowerCase(java.util.Locale.ROOT).startsWith("v=stsv1")) continue;
             if (c.trim().equals(GIUSTO.trim())) return "invariato";
             cf.updateTxtRecord("token", "zona", t.id, NOME, GIUSTO, 3600);
