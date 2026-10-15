@@ -2241,7 +2241,7 @@ public class SSLMailServer {
 
     /**
      * Esegue un'installazione di pacchetti sul turno dei lavori sui pacchetti (vedi
-     * PackageJobLock): uno alla volta. Se un altro lavoro sta cambiando i pacchetti, o c'e'
+     * PackageQueue): uno alla volta. Se un altro lavoro sta cambiando i pacchetti, o c'e'
      * l'elenco di uno che non si e' chiuso, non parte e la risposta dice perche'.
      */
     /** Un fuso per MySQL: offset (+02:00), SYSTEM o un nome IANA (Europe/Rome). */
@@ -2250,10 +2250,10 @@ public class SSLMailServer {
 
     private static JSONObject sulTurnoPacchetti(String descrizione, java.util.function.Supplier<JSONObject> lavoro) {
         String id = "installa-" + System.nanoTime();
-        String rifiuto = org.mail_panel.system.PackageJobLock.prendi(id, descrizione);
+        String rifiuto = org.mail_panel.system.PackageQueue.prendi(id, descrizione);
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto).put("message", rifiuto);
         try { return lavoro.get(); }
-        finally { org.mail_panel.system.PackageJobLock.rilascia(id); }
+        finally { org.mail_panel.system.PackageQueue.rilascia(id); }
     }
 
     private void handleApiInstall(HttpExchange exchange) throws IOException {
@@ -6942,7 +6942,7 @@ public class SSLMailServer {
                     logAudit("DOVECOT_CONFIG_REGEN", ip, response.optString("jobId", ""));
                 }
                 case "maintenance_preview" -> {
-                    String adesso = org.mail_panel.system.PackageJobLock.pianoNonAdesso();
+                    String adesso = org.mail_panel.system.PackageQueue.pianoNonAdesso();
                     response = adesso != null ? new JSONObject().put("success", false).put("error", adesso)
                              : UpdateManager.maintenancePreview();
                 }
@@ -7216,7 +7216,7 @@ public class SSLMailServer {
                     logAudit("MYSQL84_MIGRATION_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "package_preflight" -> {
-                    String adesso = org.mail_panel.system.PackageJobLock.pianoNonAdesso();
+                    String adesso = org.mail_panel.system.PackageQueue.pianoNonAdesso();
                     response = adesso != null ? new JSONObject().put("success", false).put("error", adesso)
                              : UpdateManager.packagePreflight(req.optString("package", ""));
                 }

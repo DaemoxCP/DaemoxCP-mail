@@ -43,7 +43,7 @@ public final class UpdateManager {
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
 
     /** Elenco dei pacchetti sbloccati durante una manutenzione, per rimetterli a posto dopo un crash. */
-    private static final String STATO_MANUTENZIONE = PackageJobLock.STATO;
+    private static final String STATO_MANUTENZIONE = PackageQueue.STATO;
 
     private UpdateManager() {}
 
@@ -219,10 +219,10 @@ public final class UpdateManager {
      */
     public static JSONObject packagesLock(boolean blocca, String soloQuesto) {
         String id = "lock-" + System.nanoTime();
-        String rifiuto = PackageJobLock.prendiPerLeProtezioni(id, I18n.tr("server.um.packagesLock.1"));
+        String rifiuto = PackageQueue.prendiPerLeProtezioni(id, I18n.tr("server.um.packagesLock.1"));
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         try { return cambiaProtezioni(blocca, soloQuesto); }
-        finally { PackageJobLock.rilascia(id); }
+        finally { PackageQueue.rilascia(id); }
     }
 
     private static JSONObject cambiaProtezioni(boolean blocca, String soloQuesto) {
@@ -1661,12 +1661,12 @@ public final class UpdateManager {
      * nessuno se ne accorgerebbe finche' un aggiornamento successivo non porta via un
      * servizio. Questo file e' l'unica cosa che sopravvive.
      *
-     * Si scrive con PackageJobLock.scriviStato, che dice se c'e' riuscito: prima un errore di
+     * Si scrive con PackageQueue.scriviStato, che dice se c'e' riuscito: prima un errore di
      * scrittura finiva in un avviso e il lavoro sbloccava lo stesso. Chi non riesce a scriverlo
      * non sblocca niente.
      */
     private static void pulisciStato() {
-        PackageJobLock.cancellaStato();
+        PackageQueue.cancellaStato();
     }
 
     /**
@@ -2274,7 +2274,7 @@ public final class UpdateManager {
 
     /**
      * Avvia un lavoro sui pacchetti nel suo thread, dopo aver preso il turno: uno alla volta
-     * (vedi PackageJobLock). Se il turno e' di un altro, o c'e' l'elenco di un lavoro che non si
+     * (vedi PackageQueue). Se il turno e' di un altro, o c'e' l'elenco di un lavoro che non si
      * e' chiuso, il lavoro non parte e la risposta dice perche'.
      */
     /**
@@ -2286,10 +2286,10 @@ public final class UpdateManager {
     }
 
     private static JSONObject avviaSulTurno(String id, Job j, String descrizione, String nomeThread, Runnable lavoro) {
-        String rifiuto = PackageJobLock.prendi(id, descrizione);
+        String rifiuto = PackageQueue.prendi(id, descrizione);
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         JOBS.put(id, j);
-        PackageJobLock.avvia(id, nomeThread, lavoro);
+        PackageQueue.avvia(id, nomeThread, lavoro);
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
     }
 
@@ -3623,7 +3623,7 @@ public final class UpdateManager {
             job.scrivi(I18n.tr("server.um.runAggiornamentoRoundcube.5", java.util.Map.of("tOT", String.valueOf(TOT))));
             if (bloccato(sh("pkg lock -l 2>/dev/null"), pkg)) {
                 // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
-                String errStato = PackageJobLock.scriviStato(java.util.List.of(pkg));
+                String errStato = PackageQueue.scriviStato(java.util.List.of(pkg));
                 if (errStato != null)
                     throw new IllegalStateException("I could not save the list for the restore, so I do not unlock " + pkg + ": " + errStato);
                 // Da qui il finally riprotegge e chiude l'elenco, anche se lo sblocco fallisse a meta'.
@@ -3996,10 +3996,10 @@ public final class UpdateManager {
         // da li' in avanti lo copre l'elenco su disco, che ferma ogni altro lavoro sui pacchetti
         // finche' il pannello riacceso non lo chiude.
         String id = "jdk-" + System.nanoTime();
-        String rifiuto = PackageJobLock.prendi(id, I18n.tr("server.um.startJavaUpdate.1"));
+        String rifiuto = PackageQueue.prendi(id, I18n.tr("server.um.startJavaUpdate.1"));
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         try { return avviaAggiornamentoJavaOra(); }
-        finally { PackageJobLock.rilascia(id); }
+        finally { PackageQueue.rilascia(id); }
     }
 
     private static JSONObject avviaAggiornamentoJavaOra() {
@@ -4039,7 +4039,7 @@ public final class UpdateManager {
             // avvio restoreLocksAfterCrash() li riprotegge da solo. Se l'elenco non si scrive,
             // lo script non parte. Finche' l'elenco c'e', nessun altro lavoro sui pacchetti parte:
             // lo script lavora fuori dal pannello, e il turno del pannello non lo vede.
-            String errStato = PackageJobLock.scriviStato(java.util.List.of(pkg));
+            String errStato = PackageQueue.scriviStato(java.util.List.of(pkg));
             if (errStato != null)
                 return new JSONObject().put("success", false)
                         .put("error", I18n.tr("server.um.avviaAggiornamentoJavaOra.5", java.util.Map.of("errStato", String.valueOf(errStato))));
@@ -4525,10 +4525,10 @@ public final class UpdateManager {
     public static JSONObject pythonLeftovers(boolean esegui) {
         if (!esegui) return restiPythonOra(false);
         String id = "restipy-" + System.nanoTime();
-        String rifiuto = PackageJobLock.prendi(id, I18n.tr("server.um.pythonLeftovers.1"));
+        String rifiuto = PackageQueue.prendi(id, I18n.tr("server.um.pythonLeftovers.1"));
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         try { return restiPythonOra(true); }
-        finally { PackageJobLock.rilascia(id); }
+        finally { PackageQueue.rilascia(id); }
     }
 
     private static JSONObject restiPythonOra(boolean esegui) {
@@ -4698,7 +4698,7 @@ public final class UpdateManager {
             // non si tocca niente.
             java.util.List<String> daElencare = new ArrayList<>(daSbloccare);
             for (String n : nuovi) if (isValidName(n) && !daElencare.contains(n)) daElencare.add(n);
-            String errStato = PackageJobLock.scriviStato(daElencare);
+            String errStato = PackageQueue.scriviStato(daElencare);
             if (errStato != null)
                 throw new IllegalStateException("I could not save the list for the restore, so I did not touch anything: " + errStato);
             elencoSuDisco.addAll(daElencare);
@@ -5757,7 +5757,7 @@ public final class UpdateManager {
                 // niente: un'interruzione li lascerebbe sbloccati senza traccia.
                 for (String m : protetti)
                     if (!isValidName(m)) throw new IllegalStateException("invalid package name in the plan: " + m);
-                String errStato = PackageJobLock.scriviStato(protetti);
+                String errStato = PackageQueue.scriviStato(protetti);
                 if (errStato != null)
                     throw new IllegalStateException("I could not save the list for the restore, so I did not unlock anything: " + errStato);
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.7", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(STATO_MANUTENZIONE))));
@@ -6354,14 +6354,14 @@ public final class UpdateManager {
      * guardando il sistema, non il codice di uscita di pkg: il pacchetto e' sparito davvero,
      * nessun altro pacchetto e' rimasto senza una libreria, i servizi sono ancora su.
      *
-     * Aspetta il turno dei lavori sui pacchetti (vedi PackageJobLock).
+     * Aspetta il turno dei lavori sui pacchetti (vedi PackageQueue).
      */
     public static JSONObject removePackage(String nome) {
         String id = "rimuovi-" + System.nanoTime();
-        String rifiuto = PackageJobLock.prendi(id, I18n.tr("server.um.removePackage.1", java.util.Map.of("nome", String.valueOf(nome))));
+        String rifiuto = PackageQueue.prendi(id, I18n.tr("server.um.removePackage.1", java.util.Map.of("nome", String.valueOf(nome))));
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         try { return rimuoviPacchettoOra(nome); }
-        finally { PackageJobLock.rilascia(id); }
+        finally { PackageQueue.rilascia(id); }
     }
 
     private static JSONObject rimuoviPacchettoOra(String nome) {
@@ -9205,7 +9205,7 @@ public final class UpdateManager {
                 j.scrivi(I18n.tr("server.um.startForeignClientCleanup.6", java.util.Map.of("corretto", String.valueOf(corretto))));
                 if (bloccato(sh("pkg lock -l 2>/dev/null"), corretto)) {
                     // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
-                    String errStato = PackageJobLock.scriviStato(java.util.List.of(corretto));
+                    String errStato = PackageQueue.scriviStato(java.util.List.of(corretto));
                     if (errStato != null)
                         throw new IllegalStateException("I could not save the list for the restore, so I do not unlock " + corretto + ": " + errStato);
                     // Da qui il finally riprotegge e chiude l'elenco, anche se lo sblocco fallisse a meta'.
@@ -9309,7 +9309,7 @@ public final class UpdateManager {
             for (String n : nomi) if (bloccato(lock, n)) daSbloccare.add(n);
             if (!daSbloccare.isEmpty()) {
                 // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
-                String errStato = PackageJobLock.scriviStato(daSbloccare);
+                String errStato = PackageQueue.scriviStato(daSbloccare);
                 if (errStato != null)
                     throw new IllegalStateException("I could not save the list for the restore, so I did not unlock anything: " + errStato);
                 // Da riproteggere tutti, anche uno sblocco fallito: cosi' l'elenco su disco si chiude.
@@ -9566,7 +9566,7 @@ public final class UpdateManager {
             // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il ripristino
             // all'avvio sa cosa riproteggere. Se non si scrive, non si sblocca niente.
             if (!daRibloccare.isEmpty()) {
-                String errStato = PackageJobLock.scriviStato(daRibloccare);
+                String errStato = PackageQueue.scriviStato(daRibloccare);
                 if (errStato != null) {
                     daRibloccare.clear();   // non si e' sbloccato niente: niente da riproteggere
                     job.status = "error";

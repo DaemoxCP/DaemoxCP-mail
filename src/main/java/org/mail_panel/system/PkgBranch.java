@@ -309,7 +309,7 @@ public final class PkgBranch {
     }
 
     /**
-     * Cambia ramo. Va chiamato sul turno dei lavori sui pacchetti (PackageJobLock). Ogni passo
+     * Cambia ramo. Va chiamato sul turno dei lavori sui pacchetti (PackageQueue). Ogni passo
      * finisce nel registro; se un passo non riesce, il file del pannello torna com'era.
      */
     public static JSONObject cambia(Sistema s, Registro log, String verso, String impronta) {
