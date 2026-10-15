@@ -543,7 +543,7 @@
         // quella che si guarda meno resta indietro.
         //
         // Ritorna: 'in_corso' | 'dovuta' | 'programmata' | 'disattivata' | 'mai'
-        function statoProssimaRotazione(data) {
+        function nextRotationStatus(data) {
             if (data.rotation_state) return 'in_corso';
             if (!(data.interval_days > 0)) return 'disattivata';
             const ts = pickTs(data, 'next_rotation_at');
@@ -611,7 +611,7 @@
             // e' promettere al futuro una cosa gia' accaduta — ed e' esattamente cio' che
             // questo riquadro faceva. La data prossima tornera' ad avere senso a rotazione
             // conclusa, quando "ultima rotazione" sara' quella nuova.
-            const quando = statoProssimaRotazione(data);
+            const quando = nextRotationStatus(data);
             if (quando === 'in_corso') {
                 const passi = {
                     'pending_dns': t('dns.stepPendingDns'),
@@ -711,7 +711,7 @@
                         html += '<span class="text-warning">' + escHtml(t('dns.noRotationYet')) + '</span> ';
                     }
                     // Stessa domanda, stessa risposta del riquadro qui sopra.
-                    const quandoQui = statoProssimaRotazione(data);
+                    const quandoQui = nextRotationStatus(data);
                     if (quandoQui === 'in_corso') {
                         html += escHtml(t('dns.alreadyRunning'))
                              + (data.rotation_pending_selector

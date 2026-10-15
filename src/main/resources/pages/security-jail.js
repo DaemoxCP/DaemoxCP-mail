@@ -42,7 +42,7 @@
                     // un lavoro che sta qui dentro.
                     body.innerHTML = '<div class="alert alert-warning m-2 mb-0">'
                         + '<strong>' + escHtml(t('sj.notRunning')) + '</strong> ' + escHtml(t('sj.notRunningHint')) + ''
-                        + '<button class="btn btn-sm btn-warning ms-2" onclick="avviaFail2banDalPannello()">'
+                        + '<button class="btn btn-sm btn-warning ms-2" onclick="startFail2banFromPanel()">'
                         + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('sj.startNow')) + '</button></div>';
                     return;
                 }
@@ -469,7 +469,7 @@
 
         // Avvio di fail2ban dal pannello. Esiste gia' l'azione start_service: quello che
         // mancava era il modo di premerla dalla pagina dove il problema si vede.
-        function avviaFail2banDalPannello() {
+        function startFail2banFromPanel() {
             // La barra rovesciata va DOPPIA qui dentro. Dentro un text block Java la sequenza
             // barra-n e' un a capo VERO: arriva al browser come un ritorno a capo dentro una
             // stringa JavaScript, la stringa non si chiude, il parser si ferma e l'INTERO blocco
@@ -495,7 +495,7 @@
 
         // Distingue "nessuno ha attaccato" da "la jail non vede niente": a schermo sono lo
         // stesso zero, ma vogliono dire il contrario. Legge e basta.
-        async function verificaFiltroJail(nome) {
+        async function checkJailFilter(nome) {
             const box = document.getElementById('filtro-' + nome);
             if (!box) return;
             box.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.regexRunning')) + '</span>';

@@ -1021,7 +1021,7 @@ public class MailPanelContent {
                     <tbody id="altroSoftware"><tr><td colspan="3" class="text-muted small">{{t:home.readingVersions}}</td></tr></tbody>
                 </table>
             </div>
-""" + risorsa("pagine/home-stato-card.html") + """
+""" + risorsa("pages/home-status-card.html") + """
         </div>
     </div>
 """ + getFooterSection() + getScriptStart() + """
@@ -1303,7 +1303,7 @@ public class MailPanelContent {
         }
 
         checkStatus();
-""" + getVersioniJs() + risorsa("pagine/home-stato.js") + getScriptEnd();
+""" + getVersioniJs() + risorsa("pages/home-status.js") + getScriptEnd();
     }
 
     /**
@@ -2852,7 +2852,7 @@ public class MailPanelContent {
                     </tbody>
                 </table>
             </div>
-""" + risorsa("pagine/profilo-apple-card.html") + """
+""" + risorsa("pages/apple-profile-card.html") + """
         </div>
     </div>
 
@@ -3838,7 +3838,7 @@ public class MailPanelContent {
             });
         }
 
-""" + risorsa("pagine/profilo-apple.js") + """
+""" + risorsa("pages/apple-profile.js") + """
         loadDomains();
         loadMailboxes();
         paCarica();
@@ -6198,7 +6198,7 @@ public class MailPanelContent {
                     </div>
                 </div>
 
-""" + risorsa("pagine/autodns-card.html") + risorsa("pagine/autoconfig-card.html") + risorsa("pagine/mtasts-card.html") + """
+""" + risorsa("pages/autodns-card.html") + risorsa("pages/autoconfig-card.html") + risorsa("pages/mtasts-card.html") + """
             </div>
 
             <!-- DNS Records -->
@@ -6264,7 +6264,7 @@ public class MailPanelContent {
                 </div>
             </div>
 
-""" + risorsa("pagine/dkim-riepilogo-card.html") + """
+""" + risorsa("pages/dkim-summary-card.html") + """
             <!-- DKIM Section -->
             <div class="card mt-4">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
@@ -6497,7 +6497,7 @@ public class MailPanelContent {
             loadDnsRecords();
         });
 
-""" + getDnsJsTzDiag() + risorsa("pagine/dns.js") + getDnsJsPart3() + getDnsJsPart2() + risorsa("pagine/autodns.js") + risorsa("pagine/autoconfig.js") + risorsa("pagine/mtasts.js") + """
+""" + getDnsJsTzDiag() + risorsa("pages/dns.js") + getDnsJsPart3() + getDnsJsPart2() + risorsa("pages/autodns.js") + risorsa("pages/autoconfig.js") + risorsa("pages/mtasts.js") + """
     </script>
 </body>
 </html>
@@ -7853,7 +7853,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <p class="text-muted">{{t:set.intro}}</p>
 
             <div class="card mb-4 mb-4 border-success">
-""" + risorsa("pagine/rapporto-card.html") + """
+""" + risorsa("pages/report-card.html") + """
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:set.reportIntro.html}}</p>
                     <div id="rep-body" aria-live="polite"><span class="text-muted">{{t:set.reportPress}}</span></div>
@@ -8078,7 +8078,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + getWebAuthnScript() + getSettingsAuthJs() + """
 """ + getSettingsHostnameJs() + """
         // Load on page load
-""" + risorsa("pagine/rapporto.js") + """
+""" + risorsa("pages/report.js") + """
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
         repCarica();
@@ -9106,7 +9106,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         </div>
                     </div>
 
-""" + risorsa("pagine/confronto-pf-card.html") + """
+""" + risorsa("pages/pf-comparison-card.html") + """
 
                     <!-- Permaban list (via pf, independent from Fail2ban) -->
                     <div class="card">
@@ -9411,10 +9411,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
 """ + getJailConfigurationJs() + """
-""" + risorsa("pagine/security-jail.js") + risorsa("pagine/confronto-pf.js") + """
+""" + risorsa("pages/security-jail.js") + risorsa("pages/pf-comparison.js") + """
 """;
         String jsPart2 = """
-""" + risorsa("pagine/security-health.js") + """
+""" + risorsa("pages/security-health.js") + """
 """ + """
     </script>
 </body>
@@ -11921,7 +11921,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-""" + risorsa("pagine/ramo-card.html") + """
+""" + risorsa("pages/branch-card.html") + """
             <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i><strong>{{t:up.release}}</strong>
@@ -12054,7 +12054,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div id="upd-ams"><span class="text-muted">{{t:up.phState}}</span></div>
                 </div>
             </div>
-""" + risorsa("pagine/cf-ranges-card.html") + """
+""" + risorsa("pages/cf-ranges-card.html") + """
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -12207,7 +12207,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
-        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPacchetti() + risorsa("pagine/ramo.js");
+        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPacchetti() + risorsa("pages/branch.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
@@ -12514,7 +12514,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.bWait')) + '</span>';
         }
 
-""" + risorsa("pagine/porta465.js") + risorsa("pagine/sorveglianza.js") + risorsa("pagine/diagnosi-web.js") + risorsa("pagine/web443.js") + risorsa("pagine/attiva-mtasts.js") + risorsa("pagine/cf-ranges.js") + """
+""" + risorsa("pages/port465.js") + risorsa("pages/standards-watch.js") + risorsa("pages/web-diagnostics.js") + risorsa("pages/web443.js") + risorsa("pages/enable-mtasts.js") + risorsa("pages/cf-ranges.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');

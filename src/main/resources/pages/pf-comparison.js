@@ -3,7 +3,7 @@
         // Le due differenze non sono simmetriche e non vanno mescolate: un indirizzo che sta
         // solo in Fail2ban e' un ban che non morde, uno che sta solo in pf e' un blocco rimasto
         // dopo lo sban. Il primo e' un buco, il secondo una scoria.
-        function caricaConfrontoPf() {
+        function loadPfComparison() {
             const corpo = document.getElementById('cpfBody');
             const badge = document.getElementById('cpfBadge');
             const btn = document.getElementById('btnCpf');
