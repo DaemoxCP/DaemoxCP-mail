@@ -174,15 +174,15 @@ public final class PkgBranch {
         String ramo = ramo(repos);
         String nostro = s.leggi(FILE);
         JSONObject r = new JSONObject().put("success", true).put("ramo", ramo).put("spiegazione", spiegazione(ramo))
-                .put("repository", json(repos)).put("file", FILE.toString()).put("fileDelPannello", nostro != null)
-                .put("impronta", impronta(repos, nostro));
-        if (nostro != null) r.put("contenutoFile", nostro.length() > 4000 ? nostro.substring(0, 4000) : nostro);
+                .put("repository", json(repos)).put("file", FILE.toString()).put("panelOwnedFile", nostro != null)
+                .put("fingerprint", fingerprint(repos, nostro));
+        if (nostro != null) r.put("fileContent", nostro.length() > 4000 ? nostro.substring(0, 4000) : nostro);
         List<String> dopo = fileDopo(s);
         if (!dopo.isEmpty()) r.put("fileDopo", new JSONArray(dopo));
         Repo base = acceso(repos, "base");
         if (base != null) r.put("base", I18n.tr("server.branch.baseFromPkg", java.util.Map.of("r", String.valueOf(base.ramo()))));
         String motivo = motivoNo(repos);
-        r.put("cambiabile", motivo == null);
+        r.put("changeable", motivo == null);
         if (motivo != null) r.put("motivo", motivo);
         else {
             JSONArray verso = new JSONArray();
@@ -225,7 +225,7 @@ public final class PkgBranch {
     }
 
     /** Impronta di cio' che l'anteprima ha letto: se cambia prima della conferma, non si procede. */
-    static String impronta(List<Repo> repos, String fileNostro) {
+    static String fingerprint(List<Repo> repos, String fileNostro) {
         StringBuilder b = new StringBuilder();
         for (Repo r : repos) b.append(r.nome()).append('|').append(r.url()).append('|').append(r.acceso()).append('\n');
         b.append(fileNostro == null ? "-" : fileNostro);
@@ -271,27 +271,27 @@ public final class PkgBranch {
         if (!st.optBoolean("success")) return st;
         if (!RAMI.contains(verso)) return new JSONObject().put("success", false).put("error", I18n.tr("server.branch.badBranch"));
         JSONObject r = new JSONObject().put("success", true).put("da", st.getString("ramo")).put("verso", verso)
-                .put("impronta", st.getString("impronta"));
-        if (!st.optBoolean("cambiabile")) return r.put("possibile", false).put("motivo", st.getString("motivo"));
+                .put("fingerprint", st.getString("fingerprint"));
+        if (!st.optBoolean("changeable")) return r.put("possibile", false).put("motivo", st.getString("motivo"));
         if (verso.equals(st.getString("ramo"))) return r.put("possibile", false).put("motivo", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
         List<Repo> repos = repository(s.pkgVv());
-        JSONArray cambi = new JSONArray();
+        JSONArray changes = new JSONArray();
         for (String tipo : List.of("pacchetti", "moduli")) {
             Repo x = acceso(repos, tipo);
-            if (x != null) cambi.put(new JSONObject().put("nome", x.nome()).put("da", x.url()).put("a", indirizzo(x, verso)));
+            if (x != null) changes.put(new JSONObject().put("nome", x.nome()).put("da", x.url()).put("a", indirizzo(x, verso)));
         }
-        JSONArray avvisi = new JSONArray();
-        avvisi.put(I18n.tr("server.branch.noUpdate", java.util.Map.of("r", String.valueOf(verso))));
+        JSONArray warnings = new JSONArray();
+        warnings.put(I18n.tr("server.branch.noUpdate", java.util.Map.of("r", String.valueOf(verso))));
         if (verso.equals("quarterly"))
-            avvisi.put(I18n.tr("server.branch.backToQuarterly"));
+            warnings.put(I18n.tr("server.branch.backToQuarterly"));
         else
-            avvisi.put(I18n.tr("server.branch.onLatest"));
+            warnings.put(I18n.tr("server.branch.onLatest"));
         JSONArray dopo = st.optJSONArray("fileDopo");
         if (dopo != null && !dopo.isEmpty())
-            avvisi.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(FOLDER), "elenco", String.valueOf(String.join(", ", strings(dopo))))));
-        return r.put("possibile", true).put("cambi", cambi).put("avvisi", avvisi).put("file", FILE.toString())
+            warnings.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(FOLDER), "elenco", String.valueOf(String.join(", ", strings(dopo))))));
+        return r.put("possibile", true).put("changes", changes).put("warnings", warnings).put("file", FILE.toString())
                 .put("contenuto", contenuto(repos, verso, s.adesso()))
-                .put("comeTorna", st.optBoolean("fileDelPannello")
+                .put("comeTorna", st.optBoolean("panelOwnedFile")
                         ? I18n.tr("server.branch.removeInstead", java.util.Map.of("r", String.valueOf(verso)))
                         : "");
     }
@@ -312,12 +312,12 @@ public final class PkgBranch {
      * Cambia ramo. Va chiamato sul turno dei lavori sui pacchetti (PackageQueue). Ogni passo
      * finisce nel registro; se un passo non riesce, il file del pannello torna com'era.
      */
-    public static JSONObject cambia(Sistema s, Registro log, String verso, String impronta) {
+    public static JSONObject cambia(Sistema s, Registro log, String verso, String fingerprint) {
         JSONObject st = stato(s);
         if (!st.optBoolean("success")) return st;
         if (!RAMI.contains(verso)) return errore(log, I18n.tr("server.branch.badBranch"));
-        if (!st.optBoolean("cambiabile")) return errore(log, st.getString("motivo"));
-        if (!st.getString("impronta").equals(impronta))
+        if (!st.optBoolean("changeable")) return errore(log, st.getString("motivo"));
+        if (!st.getString("fingerprint").equals(fingerprint))
             return errore(log, I18n.tr("server.branch.changedSincePreview"));
         String da = st.getString("ramo");
         if (verso.equals(da)) return errore(log, I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));

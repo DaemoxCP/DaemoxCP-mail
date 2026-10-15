@@ -122,27 +122,27 @@ public class AutoDns {
                 if (pertinenti.contains(DnsRules.contenutoCloudflare(t.content))) { o.put("recordId", t.id); break; }
         }
 
-        JSONArray avvisi = new JSONArray();
+        JSONArray warnings = new JSONArray();
         if (pertinenti.size() > 1)
-            avvisi.put(spf
+            warnings.put(spf
                 ? I18n.tr("server.adns.multiSpf", java.util.Map.of("n", String.valueOf(pertinenti.size())))
                 : I18n.tr("server.adns.multiDmarc", java.util.Map.of("n", String.valueOf(pertinenti.size()))));
 
         if (!pertinenti.isEmpty()) {
             if (spf) {
                 DnsRules.EsitoSpf e = DnsRules.analizzaSpf(contenuti, ipDelServer());
-                for (String x : e.avvisi) avvisi.put(x);
+                for (String x : e.warnings) warnings.put(x);
                 if (e.valido && !e.autorizzaEsplicito && !e.viaMx && !e.viaA && e.include == 0)
-                    avvisi.put(I18n.tr("server.adns.spfNotAuth", java.util.Map.of("ip", String.valueOf(ipDelServer()))));
+                    warnings.put(I18n.tr("server.adns.spfNotAuth", java.util.Map.of("ip", String.valueOf(ipDelServer()))));
             } else {
                 DnsRules.EsitoDmarc e = DnsRules.analizzaDmarc(contenuti, d.domain);
                 if (e.valido) o.put("politicaAttuale", e.politica == null ? "none" : e.politica);
-                for (String x : e.avvisi) avvisi.put(x);
+                for (String x : e.warnings) warnings.put(x);
                 if (!e.daAutorizzare.isEmpty())
-                    avvisi.put(I18n.tr("server.adns.ruaOutside", java.util.Map.of("r", String.valueOf(String.join(", ", e.daAutorizzare)))));
+                    warnings.put(I18n.tr("server.adns.ruaOutside", java.util.Map.of("r", String.valueOf(String.join(", ", e.daAutorizzare)))));
             }
         }
-        o.put("avvisi", avvisi);
+        o.put("warnings", warnings);
         return o;
     }
 

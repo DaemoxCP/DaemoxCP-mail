@@ -1,7 +1,7 @@
 // La scheda "Ramo dei pacchetti" della pagina Aggiornamenti in Chromium, con il server simulato:
 // la logica vera (pkg -vv, il file del pannello, i ripristini) la prova PkgBranchTest. Qui si
 // controlla che la scheda si legga da sola, mostri ramo e repository solo come testo, chieda
-// l'anteprima, pretenda il nome del ramo scritto a mano, mandi impronta e token CSRF, segua il
+// l'anteprima, pretenda il nome del ramo scritto a mano, mandi fingerprint e token CSRF, segua il
 // lavoro fino all'esito e dica gli errori.
 //
 // Uso (dalla radice del progetto, dopo mvn package):
@@ -26,11 +26,11 @@ const richieste = [];
 let ramoAdesso = 'quarterly', cambioRiesce = true, letture = 0, giri = 0;
 function stato() {
     const latest = ramoAdesso === 'latest';
-    return { success: true, ramo: ramoAdesso, cambiabile: true, verso: [latest ? 'quarterly' : 'latest'],
+    return { success: true, ramo: ramoAdesso, changeable: true, verso: [latest ? 'quarterly' : 'latest'],
         spiegazione: latest ? 'Ramo continuo: le versioni arrivano appena il port e\' aggiornato e compilato.'
                             : 'Ramo trimestrale: si stacca dallo sviluppo dei port a gennaio, aprile, luglio e ottobre.',
-        impronta: latest ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa',
-        file: '/usr/local/etc/pkg/repos/zz-pannello-ramo.conf', fileDelPannello: latest,
+        fingerprint: latest ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa',
+        file: '/usr/local/etc/pkg/repos/zz-pannello-ramo.conf', panelOwnedFile: latest,
         repository: [
             { nome: 'FreeBSD-ports', ruolo: 'Pacchetti (port)', ramo: ramoAdesso, acceso: true, tipo: 'pacchetti',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/' + ramoAdesso },
@@ -67,9 +67,9 @@ async function servi(route) {
     switch (corpo.action) {
         case 'ramo_stato': letture++; return json(route, stato());
         case 'ramo_anteprima': return json(route, { success: true, possibile: true, da: ramoAdesso, verso: corpo.verso,
-            impronta: stato().impronta, file: '/usr/local/etc/pkg/repos/zz-pannello-ramo.conf',
-            cambi: [{ nome: 'FreeBSD-ports', da: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', a: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
-            avvisi: ['Non si aggiorna nessun pacchetto: cambia da dove pkg li prende.', 'Su latest il prossimo aggiornamento puo\' portare versioni maggiori nuove.'],
+            fingerprint: stato().fingerprint, file: '/usr/local/etc/pkg/repos/zz-pannello-ramo.conf',
+            changes: [{ nome: 'FreeBSD-ports', da: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', a: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
+            warnings: ['Non si aggiorna nessun pacchetto: cambia da dove pkg li prende.', 'Su latest il prossimo aggiornamento puo\' portare versioni maggiori nuove.'],
             contenuto: '# Scritto dal pannello\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', comeTorna: '' });
         case 'ramo_cambia':
             if (!cambioRiesce) return json(route, { success: false, error: 'C\'e\' gia\' un lavoro sui pacchetti in corso (aggiornamento di nginx).' });
@@ -112,7 +112,7 @@ async function servi(route) {
     await page.click('#ramo-body button:has-text("Passa al ramo latest")');
     await page.waitForSelector('#ramo-conferma');
     const ant = await page.textContent('#ramo-anteprima');
-    vero('l\'anteprima: cosa cambia, gli avvisi, il file che si scrive', ant.includes('Passare dal ramo quarterly al ramo latest')
+    vero('l\'anteprima: cosa cambia, gli warnings, il file che si scrive', ant.includes('Passare dal ramo quarterly al ramo latest')
         && ant.includes('pkg+https://pkg.FreeBSD.org/${ABI}/latest') && ant.includes('Non si aggiorna nessun pacchetto')
         && ant.includes('zz-pannello-ramo.conf'));
     vero('"Cambia ramo" spento finche\' non si scrive latest', await page.isDisabled('#ramo-via'));
@@ -125,8 +125,8 @@ async function servi(route) {
     console.log('\n== Il cambio, seguito fino all\'esito ==');
     await page.click('#ramo-via');
     const post = richieste.find(r => r.corpo && r.corpo.action === 'ramo_cambia');
-    vero('la richiesta: ramo, conferma, impronta dell\'anteprima, token CSRF', post && post.corpo.verso === 'latest'
-        && post.corpo.confirm === 'latest' && post.corpo.impronta === 'aaaaaaaaaaaaaaaa' && post.corpo.csrf_token === 'csrf-prova');
+    vero('la richiesta: ramo, conferma, fingerprint dell\'anteprima, token CSRF', post && post.corpo.verso === 'latest'
+        && post.corpo.confirm === 'latest' && post.corpo.fingerprint === 'aaaaaaaaaaaaaaaa' && post.corpo.csrf_token === 'csrf-prova');
     await page.waitForFunction(() => document.getElementById('ramo-esito').textContent.includes('Adesso i pacchetti arrivano'), null, { timeout: 15000 });
     vero('il registro del lavoro si vede', (await page.textContent('#ramo-log')).includes('All repositories are up to date'));
     vero('l\'esito, in verde', await page.locator('#ramo-esito .alert-success').count() === 1);

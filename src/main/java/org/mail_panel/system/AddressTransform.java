@@ -54,7 +54,7 @@ import java.util.stream.Stream;
  * automatica, i filtri e gli inoltri della casella, e l'anteprima li elenca. La posta gia' arrivata
  * resta dov'e'.
  *
- * L'anteprima consegna un'impronta dello stato: se fra anteprima e conferma qualcosa cambia (un
+ * L'anteprima consegna un'fingerprint dello stato: se fra anteprima e conferma qualcosa cambia (un
  * alias, la casella, la posta che compare sul disco), la trasformazione non parte.
  */
 public final class AddressTransform {
@@ -253,7 +253,7 @@ public final class AddressTransform {
     // ===================== Impronta =====================
 
     /** Lo stato che l'anteprima ha mostrato. Il numero dei messaggi non conta: in una casella cambia di continuo. */
-    public static String impronta(Stato s) {
+    public static String fingerprint(Stato s) {
         StringBuilder t = new StringBuilder(s.indirizzo()).append('|').append(s.dominioDelPannello()).append('|');
         MailDatabase.Mailbox m = s.mailbox();
         t.append(m == null ? "-" : m.id + "," + m.email + "," + m.active + "," + m.receiveEnabled).append('|');
@@ -301,7 +301,7 @@ public final class AddressTransform {
             dest.put(new JSONObject().put("destinazione", a.destination).put("attivo", a.active));
         }
         return o.put("possibile", true).put("destinazioni", dest).put("copia", copia)
-                .put("versoQui", versoQui(s)).put("posta", posta(s.posta(), zona)).put("impronta", impronta(s));
+                .put("versoQui", versoQui(s)).put("posta", posta(s.posta(), zona)).put("fingerprint", fingerprint(s));
     }
 
     // ===================== Casella -> alias =====================
@@ -327,7 +327,7 @@ public final class AddressTransform {
         return o.put("possibile", true).put("perdite", perdite).put("proposte", new JSONArray(proposte))
                 .put("giaInoltrata", gia).put("copia", copia).put("versoQui", versoQui(s))
                 .put("posta", posta(s.posta(), zona)).put("cartella", cartellaPosta(s.indirizzo()))
-                .put("impronta", impronta(s));
+                .put("fingerprint", fingerprint(s));
     }
 
     /**

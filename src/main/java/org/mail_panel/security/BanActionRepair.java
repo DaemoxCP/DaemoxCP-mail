@@ -26,7 +26,7 @@ import java.util.List;
  * finche' non si guarda il firewall.
  *
  * Perche' non basta correggere il codice. Il file di mailpanel-pubblico lo riscrive il pannello
- * a ogni installazione, quindi li' la correzione arriva da sola. La sezione [mail-panel-auth] no:
+ * a ogni installazione, quindi li' la fix arriva da sola. La sezione [mail-panel-auth] no:
  * viene aggiunta a jail.local una volta sola e poi mai piu' toccata, per non calpestare le
  * modifiche di chi la personalizza. Ottima regola, che pero' significa che su un'installazione
  * gia' fatta quella sezione resterebbe con iptables per sempre. Serve un intervento che la
@@ -45,7 +45,7 @@ public final class BanActionRepair {
 
     private BanActionRepair() { }
 
-    /** Le jail il cui comando di ban non e' eseguibile su questo sistema. Legge e basta. */
+    /** Le jail il cui comando di ban non e' runnable su questo sistema. Legge e basta. */
     public static JSONObject diagnosi() {
         JSONObject r = new JSONObject();
         JSONArray rotte = new JSONArray();
@@ -65,8 +65,8 @@ public final class BanActionRepair {
                     .put("dump", configurazioneLetta(jail)));
                 continue;
             }
-            String eseguibile = primoEseguibile(cmd);
-            if (eseguibile == null) {
+            String runnable = primoEseguibile(cmd);
+            if (runnable == null) {
                 // Salto deliberato: la riga non nomina chiaramente un programma. Va DETTO, non
                 // taciuto — una jail saltata in silenzio fa diventare verde un controllo che
                 // semplicemente non l'ha guardata, che e' il difetto che qui si sta cercando.
@@ -76,9 +76,9 @@ public final class BanActionRepair {
                 continue;
             }
             esaminate++;
-            if (esiste(eseguibile)) continue;
+            if (esiste(runnable)) continue;
             rotte.put(new JSONObject()
-                .put("jail", jail).put("comando", cmd).put("eseguibile", eseguibile));
+                .put("jail", jail).put("comando", cmd).put("runnable", runnable));
         }
         return r.put("success", true).put("rotte", rotte)
                 .put("esaminate", esaminate)
@@ -332,7 +332,7 @@ public final class BanActionRepair {
     }
 
     /**
-     * Il primo comando eseguibile nominato da un comando di ban, o null se non si puo' dire.
+     * Il primo comando runnable nominato da un comando di ban, o null se non si puo' dire.
      *
      * Null non e' un fallimento ma una risposta: su questo si costruisce l'accusa "questa jail
      * banna con un comando che non esiste", e un'accusa sbagliata farebbe premere un pulsante
@@ -363,11 +363,11 @@ public final class BanActionRepair {
         "case", "esac", "test", "[", "[[", "echo", "true", "false", ":", "exec",
         "eval", "export", "set", "unset", "local", "return", "exit", "printf", "cd");
 
-    private static boolean esiste(String eseguibile) {
-        if (eseguibile.startsWith("/")) return Files.isExecutable(Paths.get(eseguibile));
+    private static boolean esiste(String runnable) {
+        if (runnable.startsWith("/")) return Files.isExecutable(Paths.get(runnable));
         for (String dir : new String[] { "/sbin", "/bin", "/usr/sbin", "/usr/bin",
                                          "/usr/local/sbin", "/usr/local/bin" })
-            if (Files.isExecutable(Paths.get(dir, eseguibile))) return true;
+            if (Files.isExecutable(Paths.get(dir, runnable))) return true;
         return false;
     }
 

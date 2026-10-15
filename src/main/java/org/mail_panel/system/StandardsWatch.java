@@ -311,12 +311,12 @@ public class StandardsWatch {
             String testo = resp.body();
             r.put("success", true).put("byte", testo.length());
 
-            String cambi = elencoCambiamenti(testo);
-            if (cambi != null) {
-                r.put("tipo", "elenco").put("testo", cambi)
+            String changes = elencoCambiamenti(testo);
+            if (changes != null) {
+                r.put("tipo", "elenco").put("testo", changes)
                  .put("nota", I18n.tr("server.watch.changeList"));
                 // Incrocio con cio' che il pannello usa davvero.
-                List<String> tocca = righeCheToccano(cambi, identificatoriDi(rifermento));
+                List<String> tocca = righeCheToccano(changes, identificatoriDi(rifermento));
                 r.put("tiRiguarda", new JSONArray(tocca));
                 r.put("notaIncrocio", tocca.isEmpty()
                         ? I18n.tr("server.watch.crossNone")

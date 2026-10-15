@@ -255,7 +255,7 @@ public final class DnsRules {
         public boolean autorizzaEsplicito, viaMx, viaA;
         public int ricercheDirette, include;
         public String chiusura;
-        public final List<String> avvisi = new ArrayList<>();
+        public final List<String> warnings = new ArrayList<>();
     }
 
     public static EsitoSpf analizzaSpf(List<String> recordTxt, String ipServer) {
@@ -285,16 +285,16 @@ public final class DnsRules {
         e.chiusura = chiusura(e.record);
 
         if (e.ricercheDirette > 10)
-            e.avvisi.add(I18n.tr("server.dnsrules.spfLookups", java.util.Map.of("n", String.valueOf(e.ricercheDirette))));
+            e.warnings.add(I18n.tr("server.dnsrules.spfLookups", java.util.Map.of("n", String.valueOf(e.ricercheDirette))));
         else if (e.include > 0)
-            e.avvisi.add(e.include == 1
+            e.warnings.add(e.include == 1
                        ? I18n.tr("server.dnsrules.spfDirect.one", java.util.Map.of("n", String.valueOf(e.ricercheDirette)))
                        : I18n.tr("server.dnsrules.spfDirect.other", java.util.Map.of("n", String.valueOf(e.ricercheDirette), "inc", String.valueOf(e.include))));
 
         if (e.chiusura == null)
-            e.avvisi.add(I18n.tr("server.dnsrules.spfNoAll"));
+            e.warnings.add(I18n.tr("server.dnsrules.spfNoAll"));
         else if (e.chiusura.equals("+all"))
-            e.avvisi.add(I18n.tr("server.dnsrules.spfPlusAll"));
+            e.warnings.add(I18n.tr("server.dnsrules.spfPlusAll"));
 
         return e;
     }
@@ -555,7 +555,7 @@ public final class DnsRules {
         public LinkedHashMap<String, String> tag = new LinkedHashMap<>();
         public final List<String> rua = new ArrayList<>();
         public final List<String> daAutorizzare = new ArrayList<>();
-        public final List<String> avvisi = new ArrayList<>();
+        public final List<String> warnings = new ArrayList<>();
     }
 
     public static EsitoDmarc analizzaDmarc(List<String> recordTxt, String dominio) {
@@ -584,13 +584,13 @@ public final class DnsRules {
         e.prova = e.tag.get("t");
 
         if (e.politica == null)
-            e.avvisi.add(I18n.tr("server.dnsrules.dmarcNoP"));
+            e.warnings.add(I18n.tr("server.dnsrules.dmarcNoP"));
         else if (!java.util.List.of("none", "quarantine", "reject").contains(e.politica.toLowerCase(Locale.ROOT)))
-            e.avvisi.add(I18n.tr("server.dnsrules.dmarcBadP", java.util.Map.of("p", String.valueOf(e.politica))));
+            e.warnings.add(I18n.tr("server.dnsrules.dmarcBadP", java.util.Map.of("p", String.valueOf(e.politica))));
 
         for (String morto : TAG_RIMOSSI)
             if (e.tag.containsKey(morto))
-                e.avvisi.add(I18n.tr("server.dnsrules.dmarcRemovedTag", java.util.Map.of("tag", String.valueOf(morto + "=" + e.tag.get(morto))))
+                e.warnings.add(I18n.tr("server.dnsrules.dmarcRemovedTag", java.util.Map.of("tag", String.valueOf(morto + "=" + e.tag.get(morto))))
                            + ("pct".equals(morto) ? " " + I18n.tr("server.dnsrules.dmarcPct") : ""));
 
         for (String tag : e.tag.keySet()) {
@@ -599,18 +599,18 @@ public final class DnsRules {
             boolean rimosso = false;
             for (String n : TAG_RIMOSSI) if (n.equals(tag)) { rimosso = true; break; }
             if (!noto && !rimosso)
-                e.avvisi.add(I18n.tr("server.dnsrules.dmarcUnknownTag", java.util.Map.of("tag", String.valueOf(tag))));
+                e.warnings.add(I18n.tr("server.dnsrules.dmarcUnknownTag", java.util.Map.of("tag", String.valueOf(tag))));
         }
 
         String rua = e.tag.get("rua");
         if (rua == null || rua.isBlank()) {
-            e.avvisi.add(I18n.tr("server.dnsrules.dmarcNoRua"));
+            e.warnings.add(I18n.tr("server.dnsrules.dmarcNoRua"));
         } else {
             for (String ind : indirizziRapporti(rua)) {
                 e.rua.add(ind);
                 String host = hostDi(ind);
                 if (host.isEmpty()) {
-                    e.avvisi.add(I18n.tr("server.dnsrules.ruaNoDomain", java.util.Map.of("addr", String.valueOf(ind))));
+                    e.warnings.add(I18n.tr("server.dnsrules.ruaNoDomain", java.util.Map.of("addr", String.valueOf(ind))));
                 } else if (serveAutorizzazione(dominio, host)) {
                     e.daAutorizzare.add(nomeAutorizzazioneRapporti(dominio, host));
                 }
@@ -618,7 +618,7 @@ public final class DnsRules {
         }
 
         if (e.prova != null && e.prova.equalsIgnoreCase("y"))
-            e.avvisi.add(I18n.tr("server.dnsrules.dmarcTest"));
+            e.warnings.add(I18n.tr("server.dnsrules.dmarcTest"));
 
         return e;
     }

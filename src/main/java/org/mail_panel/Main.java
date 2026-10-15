@@ -800,8 +800,8 @@ public class Main {
                 }
                 server.start();
 
-                // La regola dei blocchi: i pacchetti dello stack di posta restano bloccati,
-                // tranne quelli sbloccati apposta da un amministratore.
+                // La regola dei blocchi: i pacchetti dello stack di posta restano lockedPackages,
+                // tranne quelli unlockedPackages apposta da un amministratore.
                 try {
                     String politica = org.mail_panel.system.UpdateManager.applicaPoliticaBlocchi();
                     if (!politica.isEmpty()) System.out.println(politica);

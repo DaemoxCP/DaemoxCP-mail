@@ -589,7 +589,7 @@ public class MailPanelContent {
         .login-links { display: flex; justify-content: space-between; gap: 1rem; margin-top: 1rem; font-size: .9rem; }
         .login-links a, .login-link { color: #e94560; }
         .passkey-prompt { text-align: center; padding: 26px 20px 22px; }
-        /* L'impronta stava sospesa nel vuoto. Dentro un cerchio diventa un oggetto, e si
+        /* L'fingerprint stava sospesa nel vuoto. Dentro un cerchio diventa un oggetto, e si
            legge come "il dispositivo sta chiedendo" invece che come una decorazione. */
         .passkey-prompt .passkey-badge {
             width: 76px; height: 76px; margin: 0 auto 18px;
@@ -2068,7 +2068,7 @@ public class MailPanelContent {
 """;
     }
 
-    /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua impronta. */
+    /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua fingerprint. */
     private static String getAliasACasellaJs() {
         return """
         // ===== Trasforma in casella (decide il server: AddressTransform) =====
@@ -2079,7 +2079,7 @@ public class MailPanelContent {
         function apriACasella(id) {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
-            acDati = { indirizzo: a.source, impronta: '', posta: false };
+            acDati = { indirizzo: a.source, fingerprint: '', posta: false };
             document.getElementById('aCasellaTitolo').textContent = t('ac.titleFor', { address: a.source });
             document.getElementById('acErr').textContent = '';
             acMostra('acCaricamento', true);
@@ -2102,7 +2102,7 @@ public class MailPanelContent {
                     acMostra('acNo', true);
                     return;
                 }
-                acDati.impronta = d.impronta;
+                acDati.fingerprint = d.fingerprint;
                 acDati.posta = !!(d.posta && d.posta.presente);
                 document.getElementById('acIndirizzo').textContent = d.indirizzo;
                 const box = document.getElementById('acDestinazioni');
@@ -2165,7 +2165,7 @@ public class MailPanelContent {
                     action: 'trasforma_in_casella', source: acDati.indirizzo, password: pass.value,
                     name: document.getElementById('acNome').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
                     tieni_inoltri: document.getElementById('acTieni').checked, posta_vecchia: posta,
-                    impronta: acDati.impronta, csrf_token: csrfToken
+                    fingerprint: acDati.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 btn.disabled = false;
@@ -2253,7 +2253,7 @@ public class MailPanelContent {
         }
 
         function apriAAlias(id) {
-            aaDati = { id: id, indirizzo: '', impronta: '' };
+            aaDati = { id: id, indirizzo: '', fingerprint: '' };
             document.getElementById('aaErr').textContent = '';
             document.getElementById('aaDest').value = '';
             document.getElementById('aaConferma').value = '';
@@ -2272,7 +2272,7 @@ public class MailPanelContent {
                     return;
                 }
                 aaDati.indirizzo = d.indirizzo;
-                aaDati.impronta = d.impronta;
+                aaDati.fingerprint = d.fingerprint;
                 document.getElementById('aAliasTitolo').textContent = t('aa.titleFor', { address: d.indirizzo });
                 document.getElementById('aaIndirizzo').textContent = d.indirizzo;
                 document.getElementById('aaIndirizzoConferma').textContent = d.indirizzo;
@@ -2303,7 +2303,7 @@ public class MailPanelContent {
         }
 
         function aaControlla() {
-            document.getElementById('aaVia').disabled = !aaDati || !aaDati.impronta
+            document.getElementById('aaVia').disabled = !aaDati || !aaDati.fingerprint
                 || document.getElementById('aaConferma').value.trim().toLowerCase() !== aaDati.indirizzo;
         }
 
@@ -2319,7 +2319,7 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'trasforma_in_alias', id: aaDati.id, destinazioni: dest,
-                    conferma: document.getElementById('aaConferma').value.trim(), impronta: aaDati.impronta, csrf_token: csrfToken
+                    conferma: document.getElementById('aaConferma').value.trim(), fingerprint: aaDati.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 if (d.success) {
@@ -4657,7 +4657,7 @@ public class MailPanelContent {
                 // account, leggere "trovati 1 record DKIM totali nell'account Pietro" porta a
                 // concludere che gli altri quattro non hanno DKIM — mentre ce l'hanno. Un
                 // conteggio giusto sotto un'etichetta che promette un perimetro piu' largo di
-                // quello misurato e' un numero falso.
+                // quello measured e' un numero falso.
                 let html = '<div class="alert ' + (removableCount > 0 ? 'alert-warning' : 'alert-success') + ' py-2 mb-2"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>'
                     + escHtml(t('dns.orphSummary', { zone: data.domain || '?', total: records.length, active: activeCount, grace: graceProtCount, removable: removableCount, account: data.cloudflare_account_label || '?' }))
                     + ' <span class="text-muted">' + escHtml(t('dns.orphOneZone')) + '</span></div>';
@@ -10167,7 +10167,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- La sezione "Mittenti bloccati" e' stata TOLTA.
+            <!-- La sezione "Mittenti lockedPackages" e' stata TOLTA.
                  Non esisteva nessun meccanismo di blocco: ne' una tabella nel database, ne'
                  una regola in Postfix. Era una tabella che scriveva "Nessun blocco attivo"
                  qualunque cosa succedesse, con un pulsante "Sblocca" che rispondeva "azione
@@ -12054,7 +12054,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div id="upd-ams"><span class="text-muted">{{t:up.phState}}</span></div>
                 </div>
             </div>
-""" + risorsa("pagine/cf-intervalli-card.html") + """
+""" + risorsa("pagine/cf-ranges-card.html") + """
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -12214,17 +12214,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     private static String getUpdatesScriptPacchetti() {
         return """
         // ================= il quadro dei pacchetti =================
-        // Una tabella sola: versione installata e del catalogo, vulnerabilita' con il verdetto
-        // sulla correzione, blocco, e su ogni riga i pulsanti per agire. Si carica da sola.
+        // Una tabella sola: versione installata e del catalogo, vulnerabilita' con il verdict
+        // sulla fix, blocco, e su ogni riga i pulsanti per agire. Si carica da sola.
 
-        /* Il verdetto sulla vulnerabilita', in una parola e un colore. */
+        /* Il verdict sulla vulnerabilita', in una parola e un colore. */
         function pkVulnBadge(v) {
             if (!v) return '<span class="text-muted small">' + escHtml(t('pkgs.noVuln')) + '</span>';
             const m = { 'si-risolve-aggiornando': ['bg-warning text-dark', 'pkgs.v.fixable'],
                         'aggiornamento-non-basta': ['bg-danger', 'pkgs.v.notEnough'],
-                        'correzione-fuori-dal-ramo': ['bg-danger', 'pkgs.v.outOfBranch'],
-                        'correzione-non-indicata': ['bg-danger', 'pkgs.v.noFix'],
-                        'nessuna-correzione': ['bg-danger', 'pkgs.v.noFix'] }[v.verdetto] || ['bg-secondary', 'pkgs.v.unknown'];
+                        'fix-fuori-dal-ramo': ['bg-danger', 'pkgs.v.outOfBranch'],
+                        'fix-non-indicata': ['bg-danger', 'pkgs.v.noFix'],
+                        'nessuna-fix': ['bg-danger', 'pkgs.v.noFix'] }[v.verdict] || ['bg-secondary', 'pkgs.v.unknown'];
             return '<span class="badge ' + m[0] + '"><i class="fas fa-bug me-1" aria-hidden="true"></i>' + escHtml(t(m[1])) + '</span>';
         }
 
@@ -12340,12 +12340,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- l'aggiornamento di un pacchetto, in una finestra ----------
-        let pkUpd = { name: '', firma: '', job: '' };
+        let pkUpd = { name: '', signature: '', job: '' };
 
         function pkUpdModal() { return bootstrap.Modal.getOrCreateInstance(document.getElementById('pkUpdModal')); }
 
         async function pkUpdOpen(name) {
-            pkUpd = { name: name, firma: '', job: '' };
+            pkUpd = { name: name, signature: '', job: '' };
             document.getElementById('pkUpdTitle').textContent = t('pkgs.m.title', { name: name });
             const body = document.getElementById('pkUpdBody');
             body.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.m.planning'));
@@ -12356,9 +12356,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pkUpdModal().show();
             const r = await updApi('package_preflight', { package: name });
             if (!r.success) { body.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
-            pkUpd.firma = r.firma || '';
+            pkUpd.signature = r.signature || '';
             const blocchi = (r.checks || []).filter(c => c.level === 'block');
-            const avvisi = (r.checks || []).filter(c => c.level === 'verifica' || c.level === 'warn' || c.level === 'attendi');
+            const warnings = (r.checks || []).filter(c => c.level === 'verifica' || c.level === 'warn' || c.level === 'attendi');
             const servizi = (r.services || []).map(x => typeof x === 'string' ? x : x.name);
             let h = '<p class="mb-2"><code>' + escHtml(r.name) + '</code> ' + escHtml(r.current) + ' &rarr; <strong>' + escHtml(r.available || '?') + '</strong></p>';
             if ((r.cve || []).length) h += '<div class="small mb-2"><strong>' + escHtml(t('up.closes')) + '</strong> ' + r.cve.map(c => '<span class="badge bg-dark me-1">' + escHtml(c) + '</span>').join('') + '</div>';
@@ -12366,16 +12366,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(t('pkgs.m.blocked')) + '</strong><ul class="mb-0">'
                    + blocchi.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul></div>';
             }
-            const sbl = (r.piano && r.piano.sbloccati) || [];
+            const sbl = (r.piano && r.piano.unlockedPackages) || [];
             h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.steps')) + '</h6><ol class="small">'
                + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepUnlock', { list: sbl.join(', ') }) : t('pkgs.m.stepNoUnlock')) + '</li>'
                + '<li>' + escHtml(t('pkgs.m.stepUpgrade')) + '</li>'
                + '<li>' + escHtml(servizi.length ? t('pkgs.m.stepRestart', { list: servizi.join(', ') }) : t('pkgs.m.stepNoRestart')) + '</li>'
                + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepRelock') : t('pkgs.m.stepCheck')) + '</li></ol>'
-               + updPianoHtml(r.piano, r.firma);
-            if (avvisi.length) {
+               + updPianoHtml(r.piano, r.signature);
+            if (warnings.length) {
                 h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.warnings')) + '</h6><ul class="small">'
-                   + avvisi.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul>';
+                   + warnings.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul>';
             }
             body.innerHTML = h;
             if (!blocchi.length && !r.blocked) {
@@ -12392,7 +12392,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const go = document.getElementById('pkUpdGo');
             go.disabled = true;
             const res = document.getElementById('pkUpdResult');
-            const r = await updApi('package_update', { package: pkUpd.name, confirm: document.getElementById('pkUpdName').value, firma: pkUpd.firma });
+            const r = await updApi('package_update', { package: pkUpd.name, confirm: document.getElementById('pkUpdName').value, signature: pkUpd.signature });
             if (!r.success) { res.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; go.disabled = false; return; }
             pkUpd.job = r.jobId;
             go.hidden = true;
@@ -12514,7 +12514,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.bWait')) + '</span>';
         }
 
-""" + risorsa("pagine/porta465.js") + risorsa("pagine/sorveglianza.js") + risorsa("pagine/diagnosi-web.js") + risorsa("pagine/web443.js") + risorsa("pagine/attiva-mtasts.js") + risorsa("pagine/cf-intervalli.js") + """
+""" + risorsa("pagine/porta465.js") + risorsa("pagine/sorveglianza.js") + risorsa("pagine/diagnosi-web.js") + risorsa("pagine/web443.js") + risorsa("pagine/attiva-mtasts.js") + risorsa("pagine/cf-ranges.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');
@@ -12578,10 +12578,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else {
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.pfLine', { pkg: pf.package, version: pf.version, repo: pf.repoVersion || '?', level: pf.livello || '?' }))
                    + ' ' + escHtml(pf.livelloEsplicito ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
-                   + '<div class="alert alert-' + (pf.verdetto === 'ALLINEATO' ? 'success' : 'warning')
-                   + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(pf.verdetto)) + '</strong> &mdash; '
+                   + '<div class="alert alert-' + (pf.verdict === 'ALLINEATO' ? 'success' : 'warning')
+                   + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(pf.verdict)) + '</strong> &mdash; '
                    + updEsc(pf.spiegazione) + '</div>';
-                const cb = pf.cambi || [];
+                const cb = pf.changes || [];
                 if (cb.length) {
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                        + '<th scope="col">' + escHtml(t('up.colLevel')) + '</th><th scope="col">' + escHtml(t('up.colWouldChange')) + '</th></tr></thead><tbody>';
@@ -12636,10 +12636,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!rs.present) {
                 h += '<div class="small text-muted">' + updEsc(rs.note || t('up.notInstalled')) + '</div>';
             } else {
-                const cls = rs.verdetto === 'NIENTE DA SEGNALARE' ? 'success'
-                          : (rs.verdetto === 'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE' ? 'info' : 'danger');
+                const cls = rs.verdict === 'NIENTE DA SEGNALARE' ? 'success'
+                          : (rs.verdict === 'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE' ? 'info' : 'danger');
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.fileLetti })) + '</div>'
-                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(rs.verdetto))
+                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(rs.verdict))
                    + '</strong> &mdash; ' + updEsc(rs.spiegazione) + '</div>';
                 const is = rs.issues || [];
                 if (is.length) {
@@ -12845,7 +12845,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('rc_remove_preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             pre.style.display = 'none';
-            if (r.nienteDaFare) {
+            if (r.nothingToDo) {
                 el.innerHTML = '<div class="alert alert-info py-2 mb-0">' + updEsc(r.nota) + '</div>'
                              + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">' + escHtml(t('up.back')) + '</button>';
                 return;
@@ -13233,12 +13233,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                          + escHtml(t('up.lookingProcs')) + '</div>';
             const r = await updApi('ssl_uso');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.verdetto === 'NESSUNO LO USA' ? 'success'
-                      : (r.verdetto === 'IN USO ADESSO' || r.verdetto === 'RICHIESTO') ? 'danger' : 'warning';
+            const cls = r.verdict === 'NESSUNO LO USA' ? 'success'
+                      : (r.verdict === 'IN USO ADESSO' || r.verdict === 'RICHIESTO') ? 'danger' : 'warning';
             // "IL COMANDO E' SUO" e "NON DETERMINABILE" restano gialli: non sono un divieto,
             // ma nemmeno un via libera.
             let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
-                  + '<strong>' + updEsc(updVerdetto(r.verdetto)) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
+                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
                   + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.nota) + '</div>'
                   + (r.percheEQui
                      ? '<div class="alert alert-secondary py-2 small mb-2"><strong>' + escHtml(t('up.whyHere')) + '</strong> '
@@ -13353,10 +13353,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingRspamdLog')) + '';
             const r = await updApi('rspamd_timeout');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.verdetto === 'NESSUNA ANALISI INTERROTTA' ? 'success'
-                      : (r.verdetto === 'CI SONO ANALISI INTERROTTE' ? 'danger'
-                      : (r.verdetto === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
-            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(r.verdetto))
+            const cls = r.verdict === 'NESSUNA ANALISI INTERROTTA' ? 'success'
+                      : (r.verdict === 'CI SONO ANALISI INTERROTTE' ? 'danger'
+                      : (r.verdict === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
             if (r.avvisa) {
                 h += '<div class="small text-muted mb-1">task_timeout <code>' + updEsc(r.taskTimeout)
@@ -13531,12 +13531,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // Il riquadro che spiega l'esito, riusato sia qui sia dentro la scheda di openssl.
         function rimRiquadro(r) {
-            const cls = r.verdetto === 'IL PANNELLO NON LO USA' ? 'success'
-                      : r.verdetto === "LO USA, E NON C'E' RICAMBIO" ? 'danger'
-                      : r.verdetto === 'LO USA' ? 'warning'
-                      : r.verdetto === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info'
-                      : r.verdetto === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
-            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdetto(r.verdetto))
+            const cls = r.verdict === 'IL PANNELLO NON LO USA' ? 'success'
+                      : r.verdict === "LO USA, E NON C'E' RICAMBIO" ? 'danger'
+                      : r.verdict === 'LO USA' ? 'warning'
+                      : r.verdict === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info'
+                      : r.verdict === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
+            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdetto(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
             const lb = r.fornisceLibrerie || [];
             if (lb.length) {
@@ -13565,8 +13565,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             // Il pulsante compare SOLO dove la misura dice che si puo': non si offre un'azione
             // che il controllo appena fatto rifiuterebbe.
-            if (r.pacchetto && (r.verdetto === 'IL PANNELLO NON LO USA'
-                             || r.verdetto === 'LI NOMINA, MA NON SONO I SUOI')) {
+            if (r.pacchetto && (r.verdict === 'IL PANNELLO NON LO USA'
+                             || r.verdict === 'LI NOMINA, MA NON SONO I SUOI')) {
                 // L'analisi approfondita viene PRIMA del pulsante che toglie, ed e' l'unica che
                 // guarda gli script su disco: quelli girano dopo, e il jar non li contiene.
                 h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pacchetto) + '" onclick="rimProfonda(this.dataset.pkg)">'
@@ -13596,7 +13596,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('deep_scan', { nome: nome });
             if (!r.success) { el.innerHTML = '<span class="text-danger small">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="alert alert-' + (r.bloccante ? 'danger' : 'success') + ' py-2 small mb-1">'
-                  + '<strong>' + updEsc(updVerdetto(r.verdetto)) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
+                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
                   + '<div class="small text-muted mb-1">' + escHtml(t('up.searchedRefs')) + ' '
                   + (r.cercati || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
 
@@ -13712,9 +13712,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += '<h6 class="small mt-2">' + escHtml(t('up.contestedLib')) + '</h6><div class="small">'
                + '<span class="text-muted">' + escHtml(t('up.belongsTo')) + '</span> ' + updEsc(r.fornisconoLib || t('fw.none')) + '<br>'
                + '<span class="text-muted">' + escHtml(t('up.fileColon')) + '</span> <code>' + updEsc(r.fileLib || t('up.absent')) + '</code></div>';
-            if (r.conflitti) {
+            if (r.hasConflicts) {
                 h += '<h6 class="small mt-2">' + escHtml(t('up.fileIntegrity')) + '</h6>'
-                   + '<pre class="upd-log mt-1">' + updEsc(r.conflitti) + '</pre>';
+                   + '<pre class="upd-log mt-1">' + updEsc(r.hasConflicts) + '</pre>';
             }
             // Se ci sono due client e uno non serve a nessuno, si puo' ripulire.
             const cl = (r.mysqlPackages || []).filter(p => /-client$/.test(p.name)).map(p => p.name);
@@ -13887,7 +13887,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
             h += '</tbody></table></div>';
             // Chi nomina il vecchio interprete fra cio' che RESTA: e' cio' che pkg non sa.
-            const rif = r.riferimenti || {};
+            const rif = r.references || {};
             const prob = rif.problemi || [];
             h += '<h6 class="mt-3 mb-1">' + escHtml(t('up.whoRefsOld')) + '</h6>'
                + '<p class="small text-muted mb-2">' + t('up.refsExamined.html', { n: updEsc(rif.esaminati || 0), gone: updEsc((rif.innocui || []).length) }) + '</p>';
@@ -14136,9 +14136,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         let updFirmaManutenzione = '';
 
         /* Il piano esatto di pkg: ogni pacchetto che cambia, da quale versione a quale. */
-        function updPianoHtml(pn, firma) {
+        function updPianoHtml(pn, signature) {
             if (!pn) return '';
-            if (!pn.misurato) {
+            if (!pn.measured) {
                 return '<div class="alert alert-danger py-2 small mb-2">' + escHtml(t('up.planUnavailable')) + ' '
                      + updEsc(pn.error || pn.errore || '?') + '</div>';
             }
@@ -14147,31 +14147,31 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const tipoCls = { aggiorna: 'bg-primary', installa: 'bg-info text-dark', reinstalla: 'bg-secondary',
                               rimuove: 'bg-danger', retrocede: 'bg-danger' };
             let h = '';
-            if ((pn.cambi || []).length) {
-                h += '<div class="small fw-bold mb-1">' + escHtml(tn('up.exactPlanN', pn.cambi.length)) + '</div>'
+            if ((pn.changes || []).length) {
+                h += '<div class="small fw-bold mb-1">' + escHtml(tn('up.exactPlanN', pn.changes.length)) + '</div>'
                    + '<div class="table-responsive" style="max-height:24rem;overflow:auto"><table class="table table-sm align-middle mb-1"><thead><tr>'
                    + '<th scope="col" style="width:8rem"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colNote')) + '</th></tr></thead><tbody>';
-                pn.cambi.forEach(c => {
+                pn.changes.forEach(c => {
                     h += '<tr class="upd-cell"><td><span class="badge ' + (tipoCls[c.tipo] || 'bg-secondary') + '">'
                        + updEsc(tipoNome[c.tipo] || c.tipo) + '</span></td>'
                        + '<td><code>' + updEsc(c.nome) + '</code></td>'
                        + '<td class="small">' + updEsc(c.da || '-') + '</td>'
                        + '<td class="small">' + updEsc(c.a || '-') + '</td>'
                        + '<td class="small">' + updEsc(c.motivo || '')
-                       + (c.ancoraVulnerabile ? ' <span class="badge bg-danger">' + escHtml(t('up.stillVulnerable')) + '</span>' : '')
+                       + (c.stillVulnerable ? ' <span class="badge bg-danger">' + escHtml(t('up.stillVulnerable')) + '</span>' : '')
                        + (c.repo ? ' <span class="text-muted">[' + updEsc(c.repo) + ']</span>' : '') + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
             } else {
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.planNoChange')) + '</div>';
             }
-            (pn.impedimenti || []).forEach(x => {
+            (pn.blockers || []).forEach(x => {
                 h += '<div class="small text-warning-emphasis"><i class="fas fa-lock me-1" aria-hidden="true"></i><code>' + updEsc(x.nome)
                    + '</code>: ' + updEsc(x.motivo) + '</div>';
             });
             h += '<div class="small text-muted mb-2">' + t('up.computedWith.html', { cmd: updEsc(pn.comando || '') })
-               + (pn.sullaCopia ? ' ' + escHtml(t('up.onCopy', { list: (pn.sbloccati || []).join(', ') })) : '.')
-               + (firma ? ' ' + t('up.fingerprint.html', { sig: updEsc(firma) }) : '') + '</div>';
+               + (pn.onBackup ? ' ' + escHtml(t('up.onCopy', { list: (pn.unlockedPackages || []).join(', ') })) : '.')
+               + (signature ? ' ' + t('up.fingerprint.html', { sig: updEsc(signature) }) : '') + '</div>';
             return h;
         }
 
@@ -14212,21 +14212,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (vuln.length) {
                 h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(tn('up.vulnPkgs', vuln.length)) + '</strong><ul class="mb-0 mt-1">';
                 vuln.forEach(v => {
-                    // L'intestazione dice lo stesso verdetto del dettaglio: quando c'e' il confronto
+                    // L'intestazione dice lo stesso verdict del dettaglio: quando c'e' il confronto
                     // con VuXML, sa se l'aggiornamento basta o no. Il blocco e' un'informazione a
-                    // parte, non un verdetto: il pulsante aggiorna anche un pacchetto bloccato.
-                    const vc0 = v.correzione;
-                    const aggiornabile = vc0 && (vc0.verdetto === 'si-risolve-aggiornando' || vc0.verdetto === 'aggiornamento-non-basta');
+                    // parte, non un verdict: il pulsante aggiorna anche un pacchetto bloccato.
+                    const vc0 = v.fix;
+                    const aggiornabile = vc0 && (vc0.verdict === 'si-risolve-aggiornando' || vc0.verdict === 'aggiornamento-non-basta');
                     h += '<li class="mb-2"><div class="d-flex flex-wrap align-items-center gap-1"><code>' + updEsc(v.name) + '</code>'
                        + (v.role ? ' <span class="text-muted">(' + updEsc(v.role) + ')</span>' : '')
-                       + (vc0 && vc0.verdetto
+                       + (vc0 && vc0.verdict
                             ? ' ' + pkVulnBadge(vc0)
                             : (v.locked
                                 ? (v.aggiornamentoDisponibile
                                     ? ' &mdash; ' + t('up.lockedHasUpdate.html')
                                     : ' &mdash; ' + t('up.lockedNoUpdate.html'))
                                 : ' &mdash; ' + escHtml(v.fixedByUpgrade ? t('up.fixedByUpgrade') : t('up.noUpdateInCatalog'))))
-                       + (v.locked && vc0 && vc0.verdetto ? ' <span class="badge bg-secondary"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.locked')) + '</span>' : '')
+                       + (v.locked && vc0 && vc0.verdict ? ' <span class="badge bg-secondary"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.locked')) + '</span>' : '')
                        + (aggiornabile ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
                             + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: vc0.catalogo || '' })) + '</button>' : '')
                        + '</div>';
@@ -14238,10 +14238,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     if (v.descrizione) {
                         h += '<br><span class="text-muted">' + updEsc(v.descrizione) + '</span>';
                     }
-                    // La domanda vera: la correzione c'e'? La dicono gli intervalli di VuXML
+                    // La domanda vera: la fix c'e'? La dicono gli ranges di VuXML
                     // messi accanto alla versione che il catalogo offre.
-                    if (v.correzione) h += '<br><span>' + updEsc(v.correzione.spiegazione || '') + '</span>';
-                    (v.riferimenti || []).forEach(u => {
+                    if (v.fix) h += '<br><span>' + updEsc(v.fix.spiegazione || '') + '</span>';
+                    (v.references || []).forEach(u => {
                         h += '<br><a href="' + updEsc(u) + '" target="_blank" rel="noopener noreferrer" class="small">'
                            + updEsc(u) + '</a>';
                     });
@@ -14333,9 +14333,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-warning py-2 small"><strong>' + escHtml(tn('up.staysLocked', r.waitCount)) + '</strong> '
                    + escHtml(t('up.staysLockedNote')) + '</div>';
             }
-            h += updPianoHtml(r.piano, r.firma);
-            updFirmaManutenzione = r.firma || '';
-            if (r.piano && r.piano.eseguibile) {
+            h += updPianoHtml(r.piano, r.signature);
+            updFirmaManutenzione = r.signature || '';
+            if (r.piano && r.piano.runnable) {
                 h += '<button class="btn btn-sm btn-danger" onclick="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
             } else {
                 h += '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.nothingToRun')) + '</div>';
@@ -14347,7 +14347,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConferma(t('up.confirmMaint'), t('up.wMaint'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('maintenance_run', { confirm: 'MANUTENZIONE', firma: updFirmaManutenzione });
+            const r = await updApi('maintenance_run', { confirm: 'MANUTENZIONE', signature: updFirmaManutenzione });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.maintRunning')) + '</span>';
             pre.style.display = 'block';

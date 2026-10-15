@@ -3,7 +3,7 @@
 // si legga da sola, che ogni riga dica versione, vulnerabilita' e blocco come testo, che il pulsante
 // Aggiorna apra la finestra con il piano esatto e chieda il nome del pacchetto prima di partire, che
 // segua il lavoro fino all'esito, che Blocca/Sblocca mandino il nome giusto, che il JDK del pannello
-// rimandi alla sua procedura e che l'intestazione di una vulnerabilita' dica lo stesso verdetto del
+// rimandi alla sua procedura e che l'intestazione di una vulnerabilita' dica lo stesso verdict del
 // dettaglio (era "l'aggiornamento la corregge" sopra un "l'aggiornamento non basta").
 //
 // Uso (dalla radice del progetto, dopo mvn package):
@@ -27,12 +27,12 @@ function vero(cosa, ok) {
 const richieste = [];
 let giri = 0, letture = 0;
 
-const VULN_NGINX = { verdetto: 'si-risolve-aggiornando', installata: '1.30.4,3', catalogo: '1.30.5_1,3', primaCorretta: '1.30.5,3',
+const VULN_NGINX = { verdict: 'si-risolve-aggiornando', installata: '1.30.4,3', catalogo: '1.30.5_1,3', firstFixed: '1.30.5,3',
     spiegazione: 'Si: aggiornare alla 1.30.5_1,3, che il tuo catalogo offre, corregge il problema.',
     problemi: [{ descrizione: 'nginx -- buffer overflow <img src=x onerror="window.iniettato=1">', cve: ['CVE-2026-90439'],
                  url: 'https://vuxml.FreeBSD.org/freebsd/7dc8fd4b.html' }] };
-const VULN_EXPAT = { verdetto: 'aggiornamento-non-basta', installata: '2.8.1', catalogo: '2.8.4', primaCorretta: '2.8.5',
-    spiegazione: 'Il catalogo offre 2.8.4, ma VuXML la considera ancora vulnerabile. La correzione e\' dalla 2.8.5.',
+const VULN_EXPAT = { verdict: 'aggiornamento-non-basta', installata: '2.8.1', catalogo: '2.8.4', firstFixed: '2.8.5',
+    spiegazione: 'Il catalogo offre 2.8.4, ma VuXML la considera ancora vulnerabile. La fix e\' dalla 2.8.5.',
     problemi: [{ descrizione: 'libexpat -- Improper Handling of Unicode Encoding', cve: ['CVE-2026-93990'], url: 'https://vuxml.FreeBSD.org/freebsd/7fed71c4.html' }] };
 
 function quadro() {
@@ -77,12 +77,12 @@ async function servi(route) {
         case 'packages_overview': letture++; return json(route, quadro());
         case 'packages_lock': return json(route, { success: true, changed: 1, output: '  ' + corpo.package + ': ' + (corpo.lock ? 'bloccato' : 'sbloccato') + '\n' });
         case 'package_preflight': return json(route, { success: true, name: corpo.package, current: '1.30.4,3', available: '1.30.5_1,3',
-            firma: '0123456789abcdef', blocked: false, canProceed: true, cve: ['CVE-2026-90439'],
+            signature: '0123456789abcdef', blocked: false, canProceed: true, cve: ['CVE-2026-90439'],
             services: [{ name: 'nginx', running: true }],
             checks: [{ level: 'ok', label: 'Pacchetto installato', detail: 'nginx 1.30.4,3' },
                      { level: 'verifica', label: 'Avvertenza', detail: 'Ricontrolla i virtual host dopo il riavvio.' }],
-            piano: { misurato: true, sbloccati: ['nginx'], comando: 'pkg upgrade -n -U nginx', sullaCopia: true,
-                     cambi: [{ tipo: 'aggiorna', nome: 'nginx', da: '1.30.4,3', a: '1.30.5_1,3', motivo: '', repo: 'FreeBSD-ports' }], impedimenti: [] } });
+            piano: { measured: true, unlockedPackages: ['nginx'], comando: 'pkg upgrade -n -U nginx', onBackup: true,
+                     changes: [{ tipo: 'aggiorna', nome: 'nginx', da: '1.30.4,3', a: '1.30.5_1,3', motivo: '', repo: 'FreeBSD-ports' }], blockers: [] } });
         case 'package_update':
             giri = 0;
             return json(route, { success: true, jobId: 'guid-1', async: true });
@@ -93,8 +93,8 @@ async function servi(route) {
                 consoleLog: '[3/6] Aggiornamento...\n[6/6] Riblocco...\n=== nginx 1.30.5_1,3 in servizio ===\n' } });
         case 'updates_status': return json(route, { success: true, dryRun: 'Your packages are up to date.', upToDate: false,
             vulnerable: [
-                { name: 'expat', role: '', locked: false, fixedByUpgrade: true, aggiornamentoDisponibile: true, cve: ['CVE-2026-93990'], correzione: VULN_EXPAT },
-                { name: 'nginx', role: 'Web server della webmail', locked: true, fixedByUpgrade: false, aggiornamentoDisponibile: true, cve: ['CVE-2026-90439'], correzione: VULN_NGINX },
+                { name: 'expat', role: '', locked: false, fixedByUpgrade: true, aggiornamentoDisponibile: true, cve: ['CVE-2026-93990'], fix: VULN_EXPAT },
+                { name: 'nginx', role: 'Web server della webmail', locked: true, fixedByUpgrade: false, aggiornamentoDisponibile: true, cve: ['CVE-2026-90439'], fix: VULN_NGINX },
             ], lockedUpdates: [], coinvolti: [] });
         default: return json(route, { success: true });
     }
@@ -114,8 +114,8 @@ async function servi(route) {
     await page.waitForSelector('#pk-body table');
     vero('una lettura all\'apertura della pagina', letture === 1);
     const testa = await page.textContent('#pk-body');
-    vero('riepilogo: aggiornamenti, vulnerabili, correggibili, bloccati', testa.includes('7 aggiornamenti disponibili') && testa.includes('2 pacchetti vulnerabili')
-        && testa.includes('1 si corregge subito') && testa.includes('3 bloccati'));
+    vero('riepilogo: aggiornamenti, vulnerabili, correggibili, lockedPackages', testa.includes('7 aggiornamenti disponibili') && testa.includes('2 pacchetti vulnerabili')
+        && testa.includes('1 si corregge subito') && testa.includes('3 lockedPackages'));
     vero('avviso sul pacchetto dello stack non bloccato, con il pulsante per bloccarli', testa.includes('1 pacchetto dello stack di posta non è bloccato')
         && await page.locator('#pk-body .alert button', { hasText: 'Blocca tutti i pacchetti dello stack di posta' }).count() === 1);
     const righe = await page.$$eval('#pk-body tbody tr:not([hidden])', tr => tr.map(r => r.cells[0].querySelector('code').textContent));
@@ -168,15 +168,15 @@ async function servi(route) {
     await page.click('#pkUpdGo');
     await page.waitForSelector('#pkUpdResult .alert-success', { timeout: 15000 });
     const upd = richieste.slice(prima).find(r => r.corpo && r.corpo.action === 'package_update');
-    vero('package_update con pacchetto, conferma, impronta e CSRF', upd && upd.corpo.package === 'nginx' && upd.corpo.confirm === 'nginx'
-        && upd.corpo.firma === '0123456789abcdef' && upd.corpo.csrf_token === 'csrf-prova');
+    vero('package_update con pacchetto, conferma, fingerprint e CSRF', upd && upd.corpo.package === 'nginx' && upd.corpo.confirm === 'nginx'
+        && upd.corpo.signature === '0123456789abcdef' && upd.corpo.csrf_token === 'csrf-prova');
     vero('il registro del lavoro e l\'esito', (await page.textContent('#pkUpdLog')).includes('in servizio')
         && (await page.textContent('#pkUpdResult')).includes('nginx è aggiornato'));
     if (foto) await page.locator('#pkUpdModal .modal-content').screenshot({ path: path.join(foto, 'pacchetti-finestra.png') });
     await page.click('#pkUpdModal .btn-close');
     await page.waitForSelector('#pkUpdModal', { state: 'hidden' });
 
-    console.log('\n== Vulnerabilita\': l\'intestazione dice il verdetto ==');
+    console.log('\n== Vulnerabilita\': l\'intestazione dice il verdict ==');
     await page.click('#aggiornamenti button:has-text("Verifica")');
     await page.waitForSelector('#upd-status li');
     const lis = await page.$$eval('#upd-status li', l => l.map(x => x.textContent));

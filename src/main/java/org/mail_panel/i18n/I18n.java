@@ -129,7 +129,7 @@ public final class I18n {
 
     /**
      * Le sostituzioni di ogni pagina: {{t:chiave}} con il testo gia' come HTML sicuro (vale anche
-     * dentro un attributo), {{lang}} con la lingua, {{i18nVersion}} con l'impronta del dizionario
+     * dentro un attributo), {{lang}} con la lingua, {{i18nVersion}} con l'fingerprint del dizionario
      * (per l'indirizzo di /i18n/(lingua).js: quando cambia un testo cambia l'indirizzo, e il
      * browser non usa quello vecchio in cache). Negli script non si usa {{t:...}}: li' t('chiave').
      *

@@ -22,7 +22,7 @@ import java.util.logging.Logger;
  * client MySQL, l'installazione dei componenti, la protezione e la rimozione dei pacchetti: tutti
  * cambiano i pacchetti o le loro protezioni, e due insieme si pestano i piedi. Il secondo
  * sovrascriveva l'elenco su disco del primo; il primo, finendo, lo cancellava mentre il secondo
- * aveva ancora pacchetti sbloccati; e un'interruzione in quel momento li lasciava sbloccati senza
+ * aveva ancora pacchetti unlockedPackages; e un'interruzione in quel momento li lasciava unlockedPackages senza
  * che l'avvio lo sapesse. Un "pkg upgrade" dei non protetti, partito mentre la manutenzione aveva
  * tolto la protezione a Dovecot, aggiornava anche Dovecot. E il piano calcolato da uno non vale
  * piu' se l'altro cambia i pacchetti nel frattempo.
@@ -56,7 +56,7 @@ public final class PackageQueue {
      * lavoro non puo' partire, da mostrare cosi' com'e'.
      *
      * Non lo prende nemmeno se su disco c'e' l'elenco di un lavoro che non si e' chiuso: quei
-     * pacchetti potrebbero essere ancora sbloccati, e un "pkg upgrade" o un "pkg install" li
+     * pacchetti potrebbero essere ancora unlockedPackages, e un "pkg upgrade" o un "pkg install" li
      * cambierebbe come se niente fosse.
      */
     public static String prendi(String id, String descrizione) {

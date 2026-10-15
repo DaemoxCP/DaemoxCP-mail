@@ -11,7 +11,7 @@
             const grave = r.contenutiInChiaro;
             let h = '<div class="alert alert-' + (grave ? 'danger' : 'info') + ' py-2 small mb-3">'
                   + '<i class="fas fa-' + (grave ? 'triangle-exclamation' : 'circle-info') + ' me-1" aria-hidden="true"></i>'
-                  + updEsc(r.verdetto) + '</div>';
+                  + updEsc(r.verdict) + '</div>';
 
             if (!r.nginxLeggibile) {
                 h += '<div class="alert alert-warning py-2 small mb-3">' + updEsc(r.nginxProblema) + '</div>';

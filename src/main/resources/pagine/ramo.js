@@ -62,7 +62,7 @@
             box.appendChild(riquadro);
 
             const file = ramoEl('p', 'small text-muted mb-2');
-            if (r.fileDelPannello) {
+            if (r.panelOwnedFile) {
                 file.append(...tNodes('up.branchByFile', { file: ramoEl('code', '', r.file) }));
             } else {
                 file.textContent = t('up.noPanelFile');
@@ -70,7 +70,7 @@
             box.appendChild(file);
             if (r.base) box.appendChild(ramoEl('p', 'small text-muted mb-2', r.base));
 
-            if (!r.cambiabile) {
+            if (!r.changeable) {
                 box.appendChild(ramoEl('div', 'alert alert-secondary py-2 small mb-0', r.motivo));
                 return;
             }
@@ -93,20 +93,20 @@
             if (!r.success) { box.appendChild(ramoEl('div', 'alert alert-danger py-2 small', r.error)); return; }
             if (!r.possibile) { box.appendChild(ramoEl('div', 'alert alert-secondary py-2 small', r.motivo)); return; }
             ramoVerso = verso;
-            ramoDati.impronta = r.impronta;
+            ramoDati.fingerprint = r.fingerprint;
             const card = ramoEl('div', 'border rounded p-3');
             card.appendChild(ramoEl('h6', 'mb-2', t('up.switchFromTo', { from: r.da, to: verso })));
-            const cambi = ramoEl('ul', 'small mb-2');
-            (r.cambi || []).forEach(c => {
+            const changes = ramoEl('ul', 'small mb-2');
+            (r.changes || []).forEach(c => {
                 const li = ramoEl('li', 'testo-lungo');
                 li.appendChild(ramoEl('strong', '', c.nome + ': '));
                 li.append(...tNodes('up.becomes', { from: ramoEl('code', '', c.da), to: ramoEl('code', '', c.a) }));
-                cambi.appendChild(li);
+                changes.appendChild(li);
             });
-            card.appendChild(cambi);
-            const avvisi = ramoEl('ul', 'small testo-avviso mb-2');
-            (r.avvisi || []).forEach(a => avvisi.appendChild(ramoEl('li', '', a)));
-            card.appendChild(avvisi);
+            card.appendChild(changes);
+            const warnings = ramoEl('ul', 'small testo-avviso mb-2');
+            (r.warnings || []).forEach(a => warnings.appendChild(ramoEl('li', '', a)));
+            card.appendChild(warnings);
             const dove = ramoEl('p', 'small mb-1');
             dove.append(...tNodes('up.fileWritten', { file: ramoEl('code', '', r.file) }));
             card.appendChild(dove);
@@ -141,7 +141,7 @@
             const esito = document.getElementById('ramo-esito');
             if (!inp || inp.value.trim() !== ramoVerso) return;
             document.getElementById('ramo-via').disabled = true;
-            const r = await updApi('ramo_cambia', { verso: ramoVerso, impronta: ramoDati.impronta, confirm: inp.value.trim() });
+            const r = await updApi('ramo_cambia', { verso: ramoVerso, fingerprint: ramoDati.fingerprint, confirm: inp.value.trim() });
             if (!r.success) {
                 esito.textContent = '';
                 esito.appendChild(ramoEl('div', 'alert alert-danger py-2 small mb-0', r.error || t('up.changeNotStarted')));

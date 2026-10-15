@@ -24,7 +24,7 @@ import java.util.stream.Stream;
  * Prima parte, senza database: quando si puo' e quando no (raccolte, nomi che uscirebbero da
  * /var/vmail, domini non del pannello, indirizzi che sono gia' caselle), le destinazioni (valide,
  * esistenti se sono sui domini del pannello, senza giri che tornano all'indirizzo), la posta sul
- * disco (contata, messa da parte, rimessa a posto), l'impronta dell'anteprima.
+ * disco (contata, messa da parte, rimessa a posto), l'fingerprint dell'anteprima.
  *
  * Seconda parte, su un MySQL vero (lo stesso del pannello: mysql80-server): le due transazioni,
  * guardate con le stesse query che usa Postfix. Che una trasformazione a meta' non resti mai:
@@ -123,12 +123,12 @@ public class AddressConversionTest {
         JSONObject ant = AddressTransform.anteprimaACasella(ok, ZoneId.of("Europe/Rome"));
         vero("l'anteprima elenca le destinazioni (anche quella disattiva) e chi arriva qui", ant.getBoolean("possibile")
                 && ant.getJSONArray("destinazioni").length() == 2 && ant.getJSONArray("versoQui").getJSONObject(0).getString("sorgente").equals("postmaster@domain-d.test"));
-        String prima = AddressTransform.impronta(ok);
+        String prima = AddressTransform.fingerprint(ok);
         AddressTransform.Stato cambiato = stato("dmarc@domain-d.test", true, null,
                 List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "vecchio@x.it", true)),
                 ok.versoQui());
-        vero("l'impronta cambia se un alias cambia (riattivato)", !prima.equals(AddressTransform.impronta(cambiato)));
-        vero("e non cambia se non cambia niente", prima.equals(AddressTransform.impronta(ok)));
+        vero("l'fingerprint cambia se un alias cambia (riattivato)", !prima.equals(AddressTransform.fingerprint(cambiato)));
+        vero("e non cambia se non cambia niente", prima.equals(AddressTransform.fingerprint(ok)));
 
         System.out.println("\n== Casella -> alias: cosa si perde ==");
         MailDatabase.Mailbox m = mailbox(7, "info@domain-d.test");

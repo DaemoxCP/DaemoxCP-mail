@@ -54,7 +54,7 @@ public class PfFirewallManager {
         DISABLED,         // anchor caricato vuoto
         CIDR_ONLY,        // solo whitelist/blacklist manuali
         GEO_WHITELIST,    // solo paesi in lista possono accedere alle porte AUTH
-        GEO_BLACKLIST     // paesi in lista bloccati (su tutte le porte mail)
+        GEO_BLACKLIST     // paesi in lista lockedPackages (su tutte le porte mail)
     }
 
     public static class FirewallState {
@@ -547,7 +547,7 @@ public class PfFirewallManager {
               .append(ports).append("\n");
         } else if (geoActive && state.mode == Mode.GEO_BLACKLIST) {
             String ports = "{ 25, 465, 587, 143, 993, 110, 995 }";
-            sb.append("# Geo blacklist: paesi selezionati bloccati su tutte le porte mail\n");
+            sb.append("# Geo blacklist: paesi selezionati lockedPackages su tutte le porte mail\n");
             sb.append("block in quick proto tcp from <panel_geo_bl> to any port ")
               .append(ports).append("\n");
         }

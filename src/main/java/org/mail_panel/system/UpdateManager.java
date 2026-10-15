@@ -42,7 +42,7 @@ public final class UpdateManager {
     private static final Logger LOGGER = Logger.getLogger(UpdateManager.class.getName());
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
 
-    /** Elenco dei pacchetti sbloccati durante una manutenzione, per rimetterli a posto dopo un crash. */
+    /** Elenco dei pacchetti unlockedPackages durante una manutenzione, per rimetterli a posto dopo un crash. */
     private static final String MAINTENANCE_STATE = PackageQueue.STATE_PATH;
 
     private UpdateManager() {}
@@ -266,7 +266,7 @@ public final class UpdateManager {
     // ===================== la regola dei blocchi =====================
 
     /**
-     * I pacchetti dello stack di posta restano bloccati: e' cosi' che un pkg upgrade, da qui o
+     * I pacchetti dello stack di posta restano lockedPackages: e' cosi' che un pkg upgrade, da qui o
      * da SSH, non li sostituisce senza i controlli dell'aggiornamento guidato. Fanno eccezione
      * solo quelli che un amministratore ha sbloccato con il pannello: quella scelta si ricorda
      * (impostazione pkg.unlocked_by_admin) e si rispetta.
@@ -292,23 +292,23 @@ public final class UpdateManager {
 
     /**
      * All'avvio: blocca ogni pacchetto dello stack installato e non bloccato, tranne quelli
-     * sbloccati apposta da un amministratore. Non fa niente se c'e' lo stato di un lavoro
+     * unlockedPackages apposta da un amministratore. Non fa niente se c'e' lo stato di un lavoro
      * interrotto (prima va ripristinato quello) o se il database del pannello non risponde:
      * senza l'elenco degli sblocchi voluti bloccherebbe anche quelli.
      */
     public static String applicaPoliticaBlocchi() {
         if (Files.exists(Paths.get(MAINTENANCE_STATE)) || org.mail_panel.Main.mailDatabase == null) return "";
         Set<String> aMano = sbloccatiAMano();
-        List<String> bloccati = new ArrayList<>(), falliti = new ArrayList<>();
+        List<String> lockedPackages = new ArrayList<>(), falliti = new ArrayList<>();
         JSONArray st = packagesStatus().getJSONArray("packages");
         for (int i = 0; i < st.length(); i++) {
             JSONObject p = st.getJSONObject(i);
             String n = p.getString("name");
             if (p.getBoolean("locked") || aMano.contains(n) || !isValidName(n)) continue;
-            if (ok("pkg lock -y " + n)) bloccati.add(n); else falliti.add(n);
+            if (ok("pkg lock -y " + n)) lockedPackages.add(n); else falliti.add(n);
         }
-        if (bloccati.isEmpty() && falliti.isEmpty()) return "";
-        String msg = "Mail stack packages locked at startup: " + (bloccati.isEmpty() ? "none" : String.join(", ", bloccati))
+        if (lockedPackages.isEmpty() && falliti.isEmpty()) return "";
+        String msg = "Mail stack packages locked at startup: " + (lockedPackages.isEmpty() ? "none" : String.join(", ", lockedPackages))
                 + (falliti.isEmpty() ? "" : "; could not lock: " + String.join(", ", falliti));
         LOGGER.info(msg);
         return msg;
@@ -318,7 +318,7 @@ public final class UpdateManager {
 
     /**
      * Il quadro unico dei pacchetti per la pagina Aggiornamenti: per ognuno versione
-     * installata e del catalogo, blocco, vulnerabilita' con il verdetto sulla correzione, e se
+     * installata e del catalogo, blocco, vulnerabilita' con il verdict sulla fix, e se
      * si puo' aggiornare da qui. Sola lettura e senza rete. Dentro: i pacchetti dello stack di
      * posta, piu' ogni altro pacchetto vulnerabile o bloccato; gli altri con un aggiornamento
      * (librerie, dipendenze) solo elencati a parte.
@@ -343,7 +343,7 @@ public final class UpdateManager {
             if (vul.has(e.getKey()) || "1".equals(e.getValue()[1])) nomi.add(e.getKey());
 
         JSONArray rows = new JSONArray();
-        int aggiornabili = 0, vulnerabili = 0, risolvibili = 0, bloccati = 0, stackSbloccati = 0;
+        int aggiornabili = 0, vulnerabili = 0, risolvibili = 0, lockedPackages = 0, stackSbloccati = 0;
         boolean riavvioPannello = false;
         for (String n : nomi) {
             String[] iv = inst.get(n);
@@ -353,7 +353,7 @@ public final class UpdateManager {
             JSONObject row = new JSONObject().put("name", n).put("installed", iv[0]).put("available", disp)
                     .put("update", !disp.isEmpty()).put("locked", locked).put("stack", ruolo != null)
                     .put("role", ruolo == null ? "" : ruolo);
-            if (locked) bloccati++;
+            if (locked) lockedPackages++;
             if (ruolo != null && !locked) stackSbloccati++;
             String perche = "";
             boolean eJvm = n.equals(jvm);
@@ -382,7 +382,7 @@ public final class UpdateManager {
             JSONObject v = vul.optJSONObject(n);
             if (v != null) {
                 vulnerabili++;
-                if ("si-risolve-aggiornando".equals(v.optString("verdetto"))) risolvibili++;
+                if ("si-risolve-aggiornando".equals(v.optString("verdict"))) risolvibili++;
                 row.put("vuln", v);
             }
             rows.put(row);
@@ -394,7 +394,7 @@ public final class UpdateManager {
         }
         return r.put("success", true).put("packages", rows).put("others", altri)
                 .put("summary", new JSONObject().put("updates", aggiornabili + altri.length()).put("stackUpdates", aggiornabili)
-                        .put("vulnerable", vulnerabili).put("fixable", risolvibili).put("locked", bloccati)
+                        .put("vulnerable", vulnerabili).put("fixable", risolvibili).put("locked", lockedPackages)
                         .put("stackUnlocked", stackSbloccati).put("panelRestart", riavvioPannello));
     }
 
@@ -518,7 +518,7 @@ public final class UpdateManager {
 
     /**
      * Versioni disponibili per i pacchetti BLOCCATI. Serve un comando diverso da
-     * `pkg upgrade -n`: quello i bloccati li salta e non dice a che versione andrebbero,
+     * `pkg upgrade -n`: quello i lockedPackages li salta e non dice a che versione andrebbero,
      * quindi da solo lascerebbe credere che non abbiano aggiornamenti.
      */
     public static JSONArray lockedUpdates() {
@@ -592,7 +592,7 @@ public final class UpdateManager {
         // Quali pacchetti hanno una versione piu' recente nel catalogo, PROTETTI COMPRESI.
         //
         // Serve perche' "pkg upgrade -n" i protetti li salta: dalla simulazione non si puo'
-        // sapere se per un pacchetto protetto esista una correzione. "pkg version" invece
+        // sapere se per un pacchetto protetto esista una fix. "pkg version" invece
         // confronta le versioni e del lock non si occupa, quindi risponde anche per quelli.
         Set<String> aggiornabili = new java.util.LinkedHashSet<>();
         for (String riga : sh("pkg version -U -vRL= 2>/dev/null", 60).split("\n")) {
@@ -603,7 +603,7 @@ public final class UpdateManager {
             // Solo "<" vuol dire che esiste una versione piu' recente. ">" (installato piu'
             // nuovo del catalogo), "?" (non nel catalogo) e "!" (confronto fallito) sono
             // differenze, non aggiornamenti: prenderle per tali direbbe a chi legge che per
-            // un pacchetto vulnerabile esiste una correzione che non esiste.
+            // un pacchetto vulnerabile esiste una fix che non esiste.
             String[] campi = t.split("\\s+");
             if (campi.length < 2 || !"<".equals(campi[1])) continue;
             String pv = campi[0];
@@ -625,7 +625,7 @@ public final class UpdateManager {
                     .put("aggiornamentoDisponibile", cEAggiornamento)
                     // Prima qui c'era "!lk && simulazione.contains(nome)", e per un pacchetto
                     // protetto veniva sempre falso — mentre la scheda scriveva "protetto,
-                    // quindi NON riceve la correzione", cioe' affermava che una correzione
+                    // quindi NON riceve la fix", cioe' affermava che una fix
                     // esistesse. Nessuno l'aveva verificato: la simulazione i protetti li
                     // salta, quindi da li' quell'informazione non si ricava proprio.
                     .put("fixedByUpgrade", !lk && (cEAggiornamento
@@ -635,19 +635,19 @@ public final class UpdateManager {
             JSONObject d = dettaglioVulnerabilita(audit, nome);
             v.put("cve", d.getJSONArray("cve"));
             v.put("descrizione", d.getString("descrizione"));
-            v.put("riferimenti", d.getJSONArray("riferimenti"));
+            v.put("references", d.getJSONArray("references"));
             vulnerabili.put(v);
         }
-        // "C'e' una versione piu' recente" non risponde a "la correzione c'e'?": la versione
-        // piu' recente puo' essere ancora vulnerabile, e la correzione puo' esistere in una
-        // versione che il tuo catalogo non ha. Lo dicono gli intervalli di VuXML.
+        // "C'e' una versione piu' recente" non risponde a "la fix c'e'?": la versione
+        // piu' recente puo' essere ancora vulnerabile, e la fix puo' esistere in una
+        // versione che il tuo catalogo non ha. Lo dicono gli ranges di VuXML.
         if (vulnerabili.length() > 0) {
             JSONObject corr = PackagePlan.correzioni();
             if (corr.optBoolean("success")) {
                 JSONObject per = corr.getJSONObject("pacchetti");
                 for (int i = 0; i < vulnerabili.length(); i++) {
                     JSONObject v = vulnerabili.getJSONObject(i);
-                    if (per.has(v.getString("name"))) v.put("correzione", per.getJSONObject(v.getString("name")));
+                    if (per.has(v.getString("name"))) v.put("fix", per.getJSONObject(v.getString("name")));
                 }
             } else {
                 r.put("correzioniErrore", corr.optString("error"));
@@ -655,7 +655,7 @@ public final class UpdateManager {
         }
         r.put("vulnerable", vulnerabili);
         // Lezione pagata sull'altro server il 30/08: mysql80-server era stato aggiornato a
-        // 8.0.46 ma il processo continuava a girare sui binari 8.0.45, quindi la correzione
+        // 8.0.46 ma il processo continuava a girare sui binari 8.0.45, quindi la fix
         // non era in servizio pur risultando installata. Vale per ogni libreria condivisa.
         r.put("notaRiavvio",
             I18n.tr("server.um.updatesStatus.2"));
@@ -671,12 +671,12 @@ public final class UpdateManager {
 
     /**
      * Estrae dal referto di `pkg audit` il blocco che riguarda un pacchetto: descrizione,
-     * identificativi CVE e riferimenti. Senza questo il pannello direbbe soltanto "e'
+     * identificativi CVE e references. Senza questo il pannello direbbe soltanto "e'
      * vulnerabile", che non basta per decidere se valga la pena sbloccare e aggiornare.
      */
     static JSONObject dettaglioVulnerabilita(String audit, String pacchetto) {
         JSONArray cve = new JSONArray();
-        JSONArray riferimenti = new JSONArray();
+        JSONArray references = new JSONArray();
         StringBuilder descrizione = new StringBuilder();
         boolean dentro = false;
         java.util.LinkedHashSet<String> cveVisti = new java.util.LinkedHashSet<>();
@@ -696,7 +696,7 @@ public final class UpdateManager {
                 }
             } else if (t.startsWith("WWW:")) {
                 String u = t.substring(4).trim();
-                if (u.startsWith("https://") || u.startsWith("http://")) riferimenti.put(u);
+                if (u.startsWith("https://") || u.startsWith("http://")) references.put(u);
             } else if (!t.isEmpty()) {
                 if (descrizione.length() > 0) descrizione.append(' ');
                 descrizione.append(t);
@@ -705,7 +705,7 @@ public final class UpdateManager {
         for (String c : cveVisti) cve.put(c);
         String desc = descrizione.toString();
         if (desc.length() > 600) desc = desc.substring(0, 600) + "...";
-        return new JSONObject().put("cve", cve).put("riferimenti", riferimenti).put("descrizione", desc);
+        return new JSONObject().put("cve", cve).put("references", references).put("descrizione", desc);
     }
 
     public static JSONObject maintenancePreview() {
@@ -722,7 +722,7 @@ public final class UpdateManager {
         // protetti; questo dice TUTTO cio' che cambiera', dipendenze comprese.
         JSONObject piano = pianoDellaManutenzione(arr).getJSONObject("piano");
         return new JSONObject().put("success", true).put("packages", arr)
-                .put("piano", pianoPerLaScheda(piano)).put("firma", piano.optString("firma", ""))
+                .put("piano", pianoPerLaScheda(piano)).put("signature", piano.optString("signature", ""))
                 .put("majorCount", maggiori).put("waitCount", attese)
                 .put("generalNote",
                     I18n.tr("server.um.maintenancePreview.1"));
@@ -811,9 +811,9 @@ public final class UpdateManager {
             // commentata che contiene args" in una sola espressione POSIX e' possibile ma
             // fragile, e una svista li' significa non seguire un riferimento — cioe' dichiarare
             // compatibile una configurazione che non lo e'.
-            String riferimenti = sh("grep -HE '^[[:space:]]*(!include(_try)?[[:space:]]|.*args[[:space:]]*=)' "
+            String references = sh("grep -HE '^[[:space:]]*(!include(_try)?[[:space:]]|.*args[[:space:]]*=)' "
                     + list + " 2>/dev/null", 20);
-            for (String riga : riferimenti.split("\n")) {
+            for (String riga : references.split("\n")) {
                 int c = riga.indexOf(':');
                 if (c <= 0) continue;
                 String sorgente = riga.substring(0, c);
@@ -1149,7 +1149,7 @@ public final class UpdateManager {
         r.put("consigliato", consigliato);
 
         // Cosa cambierebbe: solo i livelli STRETTAMENTE fra quello impostato e quello indicato.
-        JSONArray cambi = new JSONArray();
+        JSONArray changes = new JSONArray();
         double da = numeroLivello(impostato), a = numeroLivello(consigliato);
         if (a > da) {
             String scritti = sh("postconf -n 2>/dev/null | sed -E 's/[[:space:]]*=.*//'", 30);
@@ -1184,30 +1184,30 @@ public final class UpdateManager {
                         o.put("gate", gate).put("gateValore", valoreGate).put("gateAtteso", atteso);
                     par.put(o);
                 }
-                cambi.put(new JSONObject().put("livello", l[0]).put("cambia", l[1])
+                changes.put(new JSONObject().put("livello", l[0]).put("cambia", l[1])
                         .put("parametri", par).put("apertiQui", aperti));
             }
         }
-        r.put("cambi", cambi);
+        r.put("changes", changes);
 
-        String avvisi = sh("grep -hE 'using backwards-compatible default setting [a-z0-9_]+=' "
+        String warnings = sh("grep -hE 'using backwards-compatible default setting [a-z0-9_]+=' "
                 + "/var/log/maillog /var/log/maillog.[0-9] 2>/dev/null "
                 + "| sed -E 's/.*using backwards-compatible default setting //' "
                 + "| sed -E 's/[[:space:]]*(to|;).*//' | sort -u | head -40", 60);
         JSONArray righe = new JSONArray();
-        for (String l : avvisi.split("\n")) if (!l.isBlank()) righe.put(l.trim());
+        for (String l : warnings.split("\n")) if (!l.isBlank()) righe.put(l.trim());
         r.put("appoggi", righe);
 
         boolean indietro = a > da;
         r.put("indietro", indietro);
-        r.put("verdetto", indietro ? "IL LIVELLO E' INDIETRO" : "ALLINEATO");
+        r.put("verdict", indietro ? "IL LIVELLO E' INDIETRO" : "ALLINEATO");
         r.put("spiegazione", indietro
                 ? I18n.tr("server.um.postfixCompatibility.4", java.util.Map.of("impostato", String.valueOf(impostato), "consigliato", String.valueOf(consigliato)))
                 : (impostato.isBlank()
                    ? I18n.tr("server.um.postfixCompatibility.5")
                    : I18n.tr("server.um.postfixCompatibility.6", java.util.Map.of("impostato", String.valueOf(impostato)))));
         int apertiTot = 0;
-        for (int i = 0; i < cambi.length(); i++) apertiTot += cambi.getJSONObject(i).getInt("apertiQui");
+        for (int i = 0; i < changes.length(); i++) apertiTot += changes.getJSONObject(i).getInt("apertiQui");
         r.put("apertiQui", apertiTot);
         r.put("effettoQui", !indietro ? ""
                 : (apertiTot == 0
@@ -1325,12 +1325,12 @@ public final class UpdateManager {
                 : I18n.tr("server.um.rspamdTimeoutDiagnostics.2");
         r.put("campioneAmpio", campioneAmpio);
         int interruzioni = r.optInt("interruzioni", occ);
-        r.put("verdetto", !logC ? "LOG NON LEGGIBILE"
+        r.put("verdict", !logC ? "LOG NON LEGGIBILE"
                 : (interruzioni > 0 ? "CI SONO ANALISI INTERROTTE"
                                     : (campioneAmpio ? "NESSUNA ANALISI INTERROTTA"
                                                      : "NESSUNA TRACCIA, MA IL LOG E' CORTO")));
         String scomposizione = occ == 0 ? ""
-                : " " + I18n.tr("server.um.x.rsSplit", java.util.Map.of("occ", String.valueOf(occ), "avvisi", String.valueOf(r.optInt("ripetizioniAvviso", 0)), "interruzioni", String.valueOf(interruzioni)));
+                : " " + I18n.tr("server.um.x.rsSplit", java.util.Map.of("occ", String.valueOf(occ), "warnings", String.valueOf(r.optInt("ripetizioniAvviso", 0)), "interruzioni", String.valueOf(interruzioni)));
         r.put("spiegazione", !logC
                 ? I18n.tr("server.um.rspamdTimeoutDiagnostics.7", java.util.Map.of("log", String.valueOf(log)))
                 : (interruzioni == 0
@@ -1533,7 +1533,7 @@ public final class UpdateManager {
             if (nTuoi > 0 && "rotto".equals(q.getString("tipo"))) rotti++;
         }
         r.put("tuoi", tuoiTot).put("soloPacchetto", soloPacchetto);
-        r.put("verdetto", rotti > 0 ? "C'E' UN COSTRUTTO NON PIU' VALIDO"
+        r.put("verdict", rotti > 0 ? "C'E' UN COSTRUTTO NON PIU' VALIDO"
                 : (tuoiTot > 0 ? "DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE"
                                : "NIENTE DA SEGNALARE"));
         r.put("spiegazione", rotti > 0
@@ -1657,7 +1657,7 @@ public final class UpdateManager {
 
     /**
      * Il blocco finale di runMaintenanceJob non viene eseguito se il processo muore
-     * (riavvio del pannello, kill, crash della JVM): i pacchetti resterebbero sbloccati e
+     * (riavvio del pannello, kill, crash della JVM): i pacchetti resterebbero unlockedPackages e
      * nessuno se ne accorgerebbe finche' un aggiornamento successivo non porta via un
      * servizio. Questo file e' l'unica cosa che sopravvive.
      *
@@ -1709,7 +1709,7 @@ public final class UpdateManager {
 
     /**
      * Riscrive la SOLA configurazione di Dovecot dalla sorgente unica, senza toccare i
-     * pacchetti. Serviva: prima, per applicare una correzione alla configurazione bisognava
+     * pacchetti. Serviva: prima, per applicare una fix alla configurazione bisognava
      * passare dalla reinstallazione del pacchetto — `pkg delete` e reinstallazione — che e'
      * sproporzionato per riscrivere dei file di testo e introduce rischi che non c'entrano.
      *
@@ -3704,7 +3704,7 @@ public final class UpdateManager {
             boolean webOk = pw.optBoolean("ok");
             if (!webProvata) {
                 job.scrivi("    " + I18n.tr("server.um.x.webTestNotRun", java.util.Map.of("e", String.valueOf(pw.optString("errore")))));
-                webOk = true;   // non provata non vuol dire guasta: non boccio cio' che non ho misurato
+                webOk = true;   // non provata non vuol dire guasta: non boccio cio' che non ho measured
             } else if (webOk) {
                 job.scrivi("    " + I18n.tr("server.um.x.urlAnswersOrigin", java.util.Map.of("url", String.valueOf(pw.optString("url")), "codice", String.valueOf(pw.optString("codice")))));
             } else {
@@ -3717,7 +3717,7 @@ public final class UpdateManager {
                 job.status = "completed";
                 job.scrivi("");
                 // "In servizio" si puo' dire solo se qualcuno l'ha visto rispondere. Senza quella
-                // prova il lavoro puo' essere andato benissimo, ma il verdetto sarebbe piu' verde
+                // prova il lavoro puo' essere andato benissimo, ma il verdict sarebbe piu' verde
                 // delle prove che ho: allora lo dico, e la verifica la fai tu.
                 job.scrivi(webProvata
                         ? I18n.tr("server.um.runAggiornamentoRoundcube.18")
@@ -4035,7 +4035,7 @@ public final class UpdateManager {
                 return new JSONObject().put("success", false)
                         .put("error", I18n.tr("server.um.avviaAggiornamentoJavaOra.4", java.util.Map.of("trim", String.valueOf(sint.trim()))));
 
-            // Il pannello segna i pacchetti sbloccati: se lo script morisse a meta', al prossimo
+            // Il pannello segna i pacchetti unlockedPackages: se lo script morisse a meta', al prossimo
             // avvio restoreLocksAfterCrash() li riprotegge da solo. Se l'elenco non si scrive,
             // lo script non parte. Finche' l'elenco c'e', nessun altro lavoro sui pacchetti parte:
             // lo script lavora fuori dal pannello, e il turno del pannello non lo vede.
@@ -4496,11 +4496,11 @@ public final class UpdateManager {
 
             // Un file che NOMINA il percorso dell'interprete non lo esegue per forza: un testo
             // che lo cita combacia come uno script che lo lancia, e grep non sa distinguerli.
-            // La differenza la fanno due fatti verificabili: il file e' eseguibile, oppure sta
+            // La differenza la fanno due fatti verificabili: il file e' runnable, oppure sta
             // dove il sistema va a prendere cose da eseguire (cron, rc.d). Tutto il resto e'
             // molto probabilmente prosa, e non deve sbarrare una rimozione legittima — ma
             // finisce comunque in un elenco a parte, perche' "probabile" non e' "certo".
-            boolean eseguibile = ok("test -x " + file, 10);
+            boolean runnable = ok("test -x " + file, 10);
             boolean postoDiEsecuzione = file.startsWith("/var/cron/") || file.startsWith("/var/spool/cron/")
                     || file.startsWith("/usr/local/etc/rc.d/") || file.startsWith("/etc/rc.d/")
                     || file.startsWith("/etc/periodic/") || file.startsWith("/usr/local/etc/periodic/")
@@ -4512,9 +4512,9 @@ public final class UpdateManager {
             JSONObject v = new JSONObject().put("file", file).put("riga", riga)
                     .put("proprietario", nome.isEmpty()
                             ? (prop.isEmpty() ? I18n.tr("server.um.riferimentiInterprete.1") : prop) : nome);
-            v.put("eseguibile", eseguibile).put("postoDiEsecuzione", postoDiEsecuzione);
+            v.put("runnable", runnable).put("postoDiEsecuzione", postoDiEsecuzione);
             if (dellaFamiglia) innocui.put(v);
-            else if (eseguibile || postoDiEsecuzione) problemi.put(v);
+            else if (runnable || postoDiEsecuzione) problemi.put(v);
             else citazioni.put(v);
         }
         return r.put("esaminati", esaminati).put("problemi", problemi).put("innocui", innocui)
@@ -4574,7 +4574,7 @@ public final class UpdateManager {
 
             // Chi nomina il vecchio interprete fra cio' che resta: pkg non lo sa, va cercato.
             JSONObject rif = riferimentiInterprete(vecchie.iterator().next());
-            r.put("riferimenti", rif);
+            r.put("references", rif);
             if (!esegui || togliibili.isEmpty()) return r.put("success", true).put("eseguito", false);
             if (rif.getJSONArray("problemi").length() > 0)
                 return r.put("success", false).put("eseguito", false)
@@ -4626,7 +4626,7 @@ public final class UpdateManager {
     private static void runPassaggioPython(Job job) {
         job.status = "running";
         final int TOT = 7;
-        java.util.List<String> sbloccati = new ArrayList<>();
+        java.util.List<String> unlockedPackages = new ArrayList<>();
         java.util.List<String> daRibloccare = new ArrayList<>();
         // L'elenco scritto su disco da questa esecuzione: vuoto finche' non e' scritto.
         java.util.List<String> elencoSuDisco = new ArrayList<>();
@@ -4702,8 +4702,8 @@ public final class UpdateManager {
             if (errStato != null)
                 throw new IllegalStateException("I could not save the list for the restore, so I did not touch anything: " + errStato);
             elencoSuDisco.addAll(daElencare);
-            for (String v : daSbloccare) { ok("pkg unlock -y " + v, 30); sbloccati.add(v); }
-            if (!sbloccati.isEmpty()) job.scrivi("    " + I18n.tr("server.um.x.unlockedList", java.util.Map.of("elenco", String.valueOf(String.join(", ", sbloccati)))));
+            for (String v : daSbloccare) { ok("pkg unlock -y " + v, 30); unlockedPackages.add(v); }
+            if (!unlockedPackages.isEmpty()) job.scrivi("    " + I18n.tr("server.um.x.unlockedList", java.util.Map.of("elenco", String.valueOf(String.join(", ", unlockedPackages)))));
             // L'ordine conta: prima togliere, poi installare. Cosi' nessun file va forzato,
             // ed e' esattamente l'errore che ha rotto il client MySQL.
             StringBuilder catDel = new StringBuilder();
@@ -4801,7 +4801,7 @@ public final class UpdateManager {
         } finally {
             // Si protegge ogni pacchetto dell'elenco che e' installato adesso: i nuovi arrivati e,
             // se il passaggio si e' fermato prima di toglierli, i vecchi. Prima, con un pkg delete
-            // fallito, i vecchi restavano installati e sbloccati, con solo un avviso.
+            // fallito, i vecchi restavano installati e unlockedPackages, con solo un avviso.
             if (!elencoSuDisco.isEmpty()) {
                 java.util.List<String> falliti = new ArrayList<>();
                 int fatti = 0;
@@ -4815,8 +4815,8 @@ public final class UpdateManager {
                         : I18n.tr("server.um.x.reprotectSome", java.util.Map.of("elenco", String.valueOf(String.join(", ", falliti)))));
                 if (falliti.isEmpty()) pulisciStato();
                 else job.scrivi(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
-                if (daRibloccare.isEmpty() && !sbloccati.isEmpty()) {
-                    job.scrivi(I18n.tr("server.um.x.unlockedNotReplaced", java.util.Map.of("elenco", String.valueOf(String.join(", ", sbloccati)))));
+                if (daRibloccare.isEmpty() && !unlockedPackages.isEmpty()) {
+                    job.scrivi(I18n.tr("server.um.x.unlockedNotReplaced", java.util.Map.of("elenco", String.valueOf(String.join(", ", unlockedPackages)))));
                 }
             }
             job.fine = System.currentTimeMillis();
@@ -4880,7 +4880,7 @@ public final class UpdateManager {
                 I18n.tr("server.um.maintenancePlan.6"),
                 contornoAggiornato ? null : new JSONObject().put("tipo", "updates_apply")));
 
-        // --- Passi 3..N: un passo per ogni pacchetto protetto vulnerabile con correzione ---
+        // --- Passi 3..N: un passo per ogni pacchetto protetto vulnerabile con fix ---
         // L'ordine e' per numero di CVE chiuse: prima cio' che porta piu' beneficio.
         java.util.List<JSONObject> vulnerabili = new ArrayList<>();
         Matcher mv = Pattern.compile("(?m)^(\\S+?)-[0-9][^\\s]* is vulnerable:").matcher(audit);
@@ -4891,7 +4891,7 @@ public final class UpdateManager {
             if (coperto.test(nome)) continue;                 // ha gia' la sua fase dedicata
             String cur = sh("pkg query %v " + nome + " 2>/dev/null", 20);
             String av  = sh("pkg rquery -U %v " + nome + " 2>/dev/null", 20);
-            if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // nessuna correzione disponibile
+            if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // nessuna fix disponibile
             boolean maggiore = saltoSignificativo(nome, cur, av);
             JSONObject avv = avvertenzaPer(nome, maggiore);
             int nCve = dettaglioVulnerabilita(audit, nome).getJSONArray("cve").length();
@@ -5113,7 +5113,7 @@ public final class UpdateManager {
                     : I18n.tr("server.um.maintenancePlan.42"), null));
         }
 
-        // Vulnerabilita' senza correzione disponibile: non sono un passo, ma vanno sapute.
+        // Vulnerabilita' senza fix disponibile: non sono un passo, ma vanno sapute.
         JSONArray senzaRimedio = new JSONArray();
         for (String nome : visti) {
             String cur = sh("pkg query %v " + nome + " 2>/dev/null", 20);
@@ -5444,18 +5444,18 @@ public final class UpdateManager {
         String audit = sh("pkg audit " + nome + " 2>&1", 120);
         JSONObject det = dettaglioVulnerabilita(audit, nome);
         r.put("cve", det.getJSONArray("cve")).put("vulnDescrizione", det.getString("descrizione"))
-         .put("riferimenti", det.getJSONArray("riferimenti"));
+         .put("references", det.getJSONArray("references"));
         int nCve = det.getJSONArray("cve").length();
         aggiungiCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), nCve > 0 ? "verifica" : "ok",
                 nCve > 0 ? I18n.tr("server.um.x.openCves", java.util.Map.of("n", String.valueOf(nCve), "d", String.valueOf(det.getString("descrizione"))))
                          : I18n.tr("server.um.packagePreflight.9"));
 
-        // Servizi da riavviare. Il punto dolente: senza riavvio la correzione non entra in
+        // Servizi da riavviare. Il punto dolente: senza riavvio la fix non entra in
         // servizio. E vanno calcolati su TUTTA la famiglia, non sul solo pacchetto nominato:
         // aggiornando mysql80-server insieme a mysql80-client, sono i programmi collegati al
         // CLIENT (Postfix, Dovecot, php-fpm) a tenersi in memoria la libreria vecchia. Guardare
         // il solo nome scritto nel passo li lascerebbe fuori, ed e' esattamente il caso in cui
-        // la correzione risulta installata senza essere in servizio.
+        // la fix risulta installata senza essere in servizio.
         java.util.LinkedHashSet<String> logici = new java.util.LinkedHashSet<>();
         for (String membro : famiglia) logici.addAll(serviziDaRiavviare(membro));
         JSONArray servizi = new JSONArray();
@@ -5507,27 +5507,27 @@ public final class UpdateManager {
         // si chiede a pkg, su una copia del suo database in cui si tolgono le stesse protezioni
         // che togliera' l'aggiornamento vero. Il database vero non viene toccato.
         JSONObject piano = PackagePlan.pianoPer(famiglia, insiemeProtetti(lockList), UpdateManager::motivoPerNonSbloccare);
-        if (!piano.optBoolean("success") || !piano.optBoolean("misurato")) {
+        if (!piano.optBoolean("success") || !piano.optBoolean("measured")) {
             aggiungiCheck(checks, "piano", I18n.tr("server.um.packagePreflight.15"), "block",
                     I18n.tr("server.um.x.noPlan", java.util.Map.of("e", String.valueOf(piano.optString("error", piano.optString("errore", "?"))))));
             block = true;
         } else {
-            JSONArray cambi = piano.getJSONArray("cambi");
+            JSONArray changes = piano.getJSONArray("changes");
             java.util.List<String> rimossi = new ArrayList<>(), indietro = new ArrayList<>(),
                     ancoraVulnerabili = new ArrayList<>(), righe = new ArrayList<>();
-            for (int i = 0; i < cambi.length(); i++) {
-                JSONObject c = cambi.getJSONObject(i);
+            for (int i = 0; i < changes.length(); i++) {
+                JSONObject c = changes.getJSONObject(i);
                 String n = c.getString("nome");
                 switch (c.getString("tipo")) {
                     case "rimuove" -> rimossi.add(n + " " + c.getString("da"));
                     case "retrocede" -> indietro.add(n + " " + c.getString("da") + " -> " + c.getString("a"));
                     default -> { }
                 }
-                if (c.optBoolean("ancoraVulnerabile")) ancoraVulnerabili.add(n + " " + c.getString("a"));
+                if (c.optBoolean("stillVulnerable")) ancoraVulnerabili.add(n + " " + c.getString("a"));
                 righe.add(n + " " + (c.getString("da").isEmpty() ? I18n.tr("server.um.x.newPkg") : c.getString("da"))
                         + (c.getString("a").isEmpty() ? " " + I18n.tr("server.um.x.removedPkg") : " -> " + c.getString("a")));
             }
-            JSONArray imp = piano.getJSONArray("impedimenti");
+            JSONArray imp = piano.getJSONArray("blockers");
             for (int i = 0; i < imp.length(); i++) {
                 JSONObject x = imp.getJSONObject(i);
                 aggiungiCheck(checks, "piano-impedimento", I18n.tr("server.um.packagePreflight.16"), "block",
@@ -5535,9 +5535,9 @@ public final class UpdateManager {
                 block = true;
             }
             JSONArray err = piano.getJSONArray("erroriPkg");
-            if (err.length() > 0 || piano.optBoolean("conflitti")) {
+            if (err.length() > 0 || piano.optBoolean("hasConflicts")) {
                 aggiungiCheck(checks, "piano-errori", I18n.tr("server.um.packagePreflight.17"), "block",
-                        String.join(" | ", jsonArrayToList(err)) + (piano.optBoolean("conflitti") ? " " + I18n.tr("server.um.x.pkgConflicts") : ""));
+                        String.join(" | ", jsonArrayToList(err)) + (piano.optBoolean("hasConflicts") ? " " + I18n.tr("server.um.x.pkgConflicts") : ""));
                 block = true;
             }
             if (!rimossi.isEmpty()) {
@@ -5550,7 +5550,7 @@ public final class UpdateManager {
                         I18n.tr("server.um.x.planDowngrades", java.util.Map.of("elenco", String.valueOf(String.join(", ", indietro)))));
                 block = true;
             }
-            if (jsonArrayToList(piano.getJSONArray("nonCambiano")).contains(nome)) {
+            if (jsonArrayToList(piano.getJSONArray("unchangedPackages")).contains(nome)) {
                 aggiungiCheck(checks, "piano-fermo", I18n.tr("server.um.packagePreflight.20"), "block",
                         I18n.tr("server.um.packagePreflight.21", java.util.Map.of("nome", String.valueOf(nome))));
                 block = true;
@@ -5559,7 +5559,7 @@ public final class UpdateManager {
                 aggiungiCheck(checks, "piano-vulnerabili", I18n.tr("server.um.packagePreflight.22"), "verifica",
                         I18n.tr("server.um.x.stillVulnerable", java.util.Map.of("elenco", String.valueOf(String.join(", ", ancoraVulnerabili)))));
             }
-            java.util.List<String> extra = new ArrayList<>(jsonArrayToList(piano.getJSONArray("sbloccati")));
+            java.util.List<String> extra = new ArrayList<>(jsonArrayToList(piano.getJSONArray("unlockedPackages")));
             extra.removeAll(famiglia);
             if (!extra.isEmpty()) {
                 aggiungiCheck(checks, "piano-dipendenze", I18n.tr("server.um.packagePreflight.23"), "verifica",
@@ -5567,17 +5567,17 @@ public final class UpdateManager {
             }
             if (!block) {
                 aggiungiCheck(checks, "piano", I18n.tr("server.um.packagePreflight.15"), "ok",
-                        (cambi.length() == 1
+                        (changes.length() == 1
                          ? I18n.tr("server.um.x.pkgChanges.one", java.util.Map.of("righe", String.valueOf(String.join("; ", righe))))
-                         : I18n.tr("server.um.x.pkgChanges.other", java.util.Map.of("n", String.valueOf(cambi.length()), "righe", String.valueOf(String.join("; ", righe))))));
+                         : I18n.tr("server.um.x.pkgChanges.other", java.util.Map.of("n", String.valueOf(changes.length()), "righe", String.valueOf(String.join("; ", righe))))));
             }
             // I servizi da riavviare si calcolano su tutto cio' che il piano cambia, non solo
             // sulla famiglia: una dipendenza come openssl tiene in memoria i suoi utenti.
             java.util.LinkedHashSet<String> nomiServizi = new java.util.LinkedHashSet<>();
             for (int i = 0; i < servizi.length(); i++) nomiServizi.add(servizi.getJSONObject(i).getString("name"));
             java.util.List<String> perDipendenze = new ArrayList<>();
-            for (int i = 0; i < cambi.length(); i++) {
-                JSONObject c = cambi.getJSONObject(i);
+            for (int i = 0; i < changes.length(); i++) {
+                JSONObject c = changes.getJSONObject(i);
                 if ("rimuove".equals(c.getString("tipo")) || famiglia.contains(c.getString("nome"))) continue;
                 for (String logico : serviziDaRiavviare(c.getString("nome"))) {
                     String reale = nomeServizioReale(logico);
@@ -5593,10 +5593,10 @@ public final class UpdateManager {
                         I18n.tr("server.um.x.depsServices", java.util.Map.of("elenco", String.valueOf(String.join(", ", perDipendenze)))));
             }
         }
-        r.put("piano", pianoPerLaScheda(piano)).put("firma", piano.optString("firma", ""));
+        r.put("piano", pianoPerLaScheda(piano)).put("signature", piano.optString("signature", ""));
 
-        java.util.List<String> daSbloccare = jsonArrayToList(piano.optJSONArray("sbloccati") == null
-                ? new JSONArray() : piano.getJSONArray("sbloccati"));
+        java.util.List<String> daSbloccare = jsonArrayToList(piano.optJSONArray("unlockedPackages") == null
+                ? new JSONArray() : piano.getJSONArray("unlockedPackages"));
         aggiungiCheck(checks, "protezione", I18n.tr("server.um.packagePreflight.25"), "ok",
                 daSbloccare.isEmpty()
                     ? I18n.tr("server.um.packagePreflight.26")
@@ -5644,7 +5644,7 @@ public final class UpdateManager {
     }
 
     /**
-     * @param firmaApprovata l'impronta del piano che chi preme ha letto nella scheda. Il job
+     * @param firmaApprovata l'fingerprint del piano che chi preme ha letto nella scheda. Il job
      *                       ricalcola il piano e parte solo se e' lo stesso: fra la lettura e il
      *                       click il catalogo puo' essere cambiato, e allora si eseguirebbe un
      *                       piano che nessuno ha visto.
@@ -5710,10 +5710,10 @@ public final class UpdateManager {
                     ? new JSONArray().put(nome) : pf.getJSONArray("family"));
 
             // Si esegue il piano che e' stato letto, o niente. Il preflight qui sopra l'ha appena
-            // ricalcolato: se l'impronta non e' quella approvata, qualcosa e' cambiato nel
+            // ricalcolato: se l'fingerprint non e' quella approvata, qualcosa e' cambiato nel
             // frattempo (di solito il catalogo) e il piano che partirebbe non l'ha visto nessuno.
             piano = pf.getJSONObject("piano");
-            String firmaOra = pf.optString("firma", "");
+            String firmaOra = pf.optString("signature", "");
             if (!firmaOra.equals(firmaApprovata)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.2");
@@ -5722,7 +5722,7 @@ public final class UpdateManager {
                 return;
             }
             job.scrivi("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(firmaOra))));
-            JSONArray cambiPiano = piano.getJSONArray("cambi");
+            JSONArray cambiPiano = piano.getJSONArray("changes");
             for (int i = 0; i < cambiPiano.length(); i++) {
                 JSONObject c = cambiPiano.getJSONObject(i);
                 job.scrivi("    " + PackagePlan.typeName(c.getString("tipo")) + " " + c.getString("nome") + " "
@@ -5731,7 +5731,7 @@ public final class UpdateManager {
             }
             // Si sblocca esattamente cio' che il piano ha sbloccato nella copia: ne' uno in meno
             // (pkg si fermerebbe), ne' uno in piu' (resterebbe scoperto senza motivo).
-            java.util.List<String> protetti = jsonArrayToList(piano.getJSONArray("sbloccati"));
+            java.util.List<String> protetti = jsonArrayToList(piano.getJSONArray("unlockedPackages"));
             JSONArray sv = pf.optJSONArray("services");
             for (int i = 0; sv != null && i < sv.length(); i++) {
                 JSONObject o = sv.getJSONObject(i);
@@ -5754,7 +5754,7 @@ public final class UpdateManager {
             } else {
                 // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il
                 // ripristino all'avvio sa cosa riproteggere. Se non si scrive, non si sblocca
-                // niente: un'interruzione li lascerebbe sbloccati senza traccia.
+                // niente: un'interruzione li lascerebbe unlockedPackages senza traccia.
                 for (String m : protetti)
                     if (!isValidName(m)) throw new IllegalStateException("invalid package name in the plan: " + m);
                 String errStato = PackageQueue.scriviStato(protetti);
@@ -6203,7 +6203,7 @@ public final class UpdateManager {
      *   - un soname fornito dal pacchetto (libssl.so.12): sparisce la libreria, e chi ci si
      *     collega non parte piu'.
      *
-     * Quindi si separano nettamente due elenchi: i riferimenti che ROMPONO e quelli che
+     * Quindi si separano nettamente due elenchi: i references che ROMPONO e quelli che
      * REGGONO. E si cerca in tre posti diversi, perche' bastano due su tre per ingannarsi:
      * dentro il jar, fra i pacchetti installati (chi dichiara quei soname), e sui file di
      * testo del sistema, dove vivono gli script che girano piu' tardi.
@@ -6331,7 +6331,7 @@ public final class UpdateManager {
         // l'analisi che nomina cio' che deve ispezionare, non un uso che si romperebbe.
         boolean bloccante = totaleRompono > 0 || jarBloccanti > 0 || dichiaranoSoname.length() > 0;
         r.put("bloccante", bloccante);
-        r.put("verdetto", bloccante ? "CI SONO RIFERIMENTI CHE SI ROMPEREBBERO" : "NESSUN RIFERIMENTO CHE SI ROMPA");
+        r.put("verdict", bloccante ? "CI SONO RIFERIMENTI CHE SI ROMPEREBBERO" : "NESSUN RIFERIMENTO CHE SI ROMPA");
         int auto = nelJar.length() - jarBloccanti;
         r.put("spiegazione", bloccante
                 ? I18n.tr("server.um.deepAnalysis.5", java.util.Map.of("pacchetto", String.valueOf(pacchetto)))
@@ -6397,14 +6397,14 @@ public final class UpdateManager {
         // --- e il pannello? la stessa misura della scheda, rifatta adesso ---
         JSONObject uso = panelUsage(nome);
         r.put("uso", uso);
-        String v = uso.optString("verdetto", "");
+        String v = uso.optString("verdict", "");
         if (!v.equals("IL PANNELLO NON LO USA") && !v.equals("LI NOMINA, MA NON SONO I SUOI")
                 && !v.startsWith("NON NE USA I COMANDI"))
             return new JSONObject().put("success", false).put("uso", uso)
                     .put("error", I18n.tr("server.um.x.rmJarSays", java.util.Map.of("v", String.valueOf(v))) + " "
                             + uso.optString("spiegazione", ""));
 
-        // --- e i riferimenti sul disco? il jar e' solo uno dei tre posti ---
+        // --- e i references sul disco? il jar e' solo uno dei tre posti ---
         JSONObject prof = deepAnalysis(nome);
         r.put("profonda", prof);
         if (prof.optBoolean("bloccante"))
@@ -6901,7 +6901,7 @@ public final class UpdateManager {
             // Non basta sapere che una seconda copia esiste: bisogna sapere QUALE delle due
             // gira adesso. Se il PATH gia' sceglie l'altra, togliere il pacchetto non cambia
             // nulla — dire "diventerebbe un altro binario" sarebbe falso, e contraddirebbe il
-            // riquadro qui sopra che ha appena misurato chi vince nel PATH.
+            // riquadro qui sopra che ha appena measured chi vince nel PATH.
             String inUsoOra = sh("command -v " + e.getKey() + " 2>/dev/null", 15).trim();
             boolean eSuo = inUsoOra.equals(e.getValue());
             usati.put(new JSONObject().put("comando", e.getKey()).put("percorso", e.getValue())
@@ -6929,12 +6929,12 @@ public final class UpdateManager {
         r.put("fornisceLibrerie", librerie);
         r.put("comandiUsati", usati).put("nomiTroppoCorti", new JSONArray(troppoCorti));
 
-        String verdetto, spiegazione;
+        String verdict, spiegazione;
         if (!letturaRiuscita) {
-            verdetto = "NON DETERMINABILE";
+            verdict = "NON DETERMINABILE";
             spiegazione = I18n.tr("server.um.x.jarUnreadable", java.util.Map.of("jar", String.valueOf(jar == null || jar.isBlank() ? I18n.tr("server.um.x.jarUnknown") : jar)));
         } else if (usati.length() == 0) {
-            verdetto = librerie.length() > 0 ? "NON NE USA I COMANDI, MA E' UNA LIBRERIA"
+            verdict = librerie.length() > 0 ? "NON NE USA I COMANDI, MA E' UNA LIBRERIA"
                                              : "IL PANNELLO NON LO USA";
             spiegazione = I18n.tr("server.um.x.jarNoUse", java.util.Map.of("byte", String.valueOf(byteLetti), "n", String.valueOf(eseguibili.size()), "pacchetto", String.valueOf(pacchetto)))
                     + (librerie.length() > 0
@@ -6953,14 +6953,14 @@ public final class UpdateManager {
             }
             if (davveroSuoi == 0) {
                 // Li nomina, ma non e' questo pacchetto a fornire i binari che girano.
-                verdetto = "LI NOMINA, MA NON SONO I SUOI";
+                verdict = "LI NOMINA, MA NON SONO I SUOI";
                 spiegazione = usati.length() == 1
                         ? I18n.tr("server.um.x.namesOther.one", java.util.Map.of("pacchetto", String.valueOf(pacchetto)))
                         : I18n.tr("server.um.x.namesOther.other", java.util.Map.of("n", String.valueOf(usati.length()), "pacchetto", String.valueOf(pacchetto)));
-                return r.put("verdetto", verdetto).put("spiegazione", spiegazione)
+                return r.put("verdict", verdict).put("spiegazione", spiegazione)
                         .put("perche", I18n.tr("server.um.panelUsage.10"));
             }
-            verdetto = senzaRicambio > 0 ? "LO USA, E NON C'E' RICAMBIO" : "LO USA";
+            verdict = senzaRicambio > 0 ? "LO USA, E NON C'E' RICAMBIO" : "LO USA";
             spiegazione = (usati.length() == 1
                     ? I18n.tr("server.um.x.usesCmds.one")
                     : I18n.tr("server.um.x.usesCmds.other", java.util.Map.of("n", String.valueOf(usati.length()))))
@@ -6970,7 +6970,7 @@ public final class UpdateManager {
                           : I18n.tr("server.um.x.noSpare.other", java.util.Map.of("n", String.valueOf(senzaRicambio))))
                        : I18n.tr("server.um.x.allSpare"));
         }
-        return r.put("verdetto", verdetto).put("spiegazione", spiegazione)
+        return r.put("verdict", verdict).put("spiegazione", spiegazione)
                 .put("perche", I18n.tr("server.um.panelUsage.10"));
     }
 
@@ -7002,7 +7002,7 @@ public final class UpdateManager {
     public static JSONObject opensslUsage() {
         JSONObject r = new JSONObject().put("success", true);
         if (!ok("pkg info -e openssl", 20)) {
-            return r.put("installato", false).put("verdetto", "assente")
+            return r.put("installato", false).put("verdict", "assente")
                     .put("spiegazione", I18n.tr("server.um.opensslUsage.1"));
         }
         r.put("installato", true).put("versione", sh("pkg query %v openssl", 20));
@@ -7093,30 +7093,30 @@ public final class UpdateManager {
                  ? I18n.tr("server.um.opensslUsage.3", java.util.Map.of("conLibssl", String.valueOf(conLibssl)))
                  : I18n.tr("server.um.opensslUsage.4"));
 
-        // --- il verdetto, nell'ordine in cui le prove pesano ---
-        String verdetto, spiegazione;
+        // --- il verdict, nell'ordine in cui le prove pesano ---
+        String verdict, spiegazione;
         if (usanoIlPort.length() > 0) {
-            verdetto = "IN USO ADESSO";
+            verdict = "IN USO ADESSO";
             spiegazione = usanoIlPort.length() == 1
                     ? I18n.tr("server.um.x.portLibOpen.one")
                     : I18n.tr("server.um.x.portLibOpen.other", java.util.Map.of("n", String.valueOf(usanoIlPort.length())));
         } else if (dichiarano.length() > 0) {
-            verdetto = "RICHIESTO";
+            verdict = "RICHIESTO";
             spiegazione = I18n.tr("server.um.x.declaredBy", java.util.Map.of("elenco", String.valueOf(String.join(", ", jsonArrayToList(dichiarano)))));
         } else if (comandoDelPort) {
-            verdetto = "IL COMANDO E' SUO";
+            verdict = "IL COMANDO E' SUO";
             spiegazione = I18n.tr("server.um.x.cmdIsPort", java.util.Map.of("vincitore", String.valueOf(vincitore))) + " "
                     + (baseHaIlComando
                        ? I18n.tr("server.um.x.baseHasCmd")
                        : I18n.tr("server.um.x.baseNoCmd"));
         } else if (!misuraAttendibile) {
-            verdetto = "NON DETERMINABILE";
+            verdict = "NON DETERMINABILE";
             spiegazione = I18n.tr("server.um.opensslUsage.7");
         } else {
-            verdetto = "NESSUNO LO USA";
+            verdict = "NESSUNO LO USA";
             spiegazione = I18n.tr("server.um.opensslUsage.9", java.util.Map.of("conLibssl", String.valueOf(conLibssl)));
         }
-        r.put("verdetto", verdetto).put("spiegazione", spiegazione);
+        r.put("verdict", verdict).put("spiegazione", spiegazione);
 
         r.put("nota", I18n.tr("server.um.opensslUsage.10"));
         r.put("percheEQui", I18n.tr("server.um.opensslUsage.11"));
@@ -7163,7 +7163,7 @@ public final class UpdateManager {
         r.put("fornisconoLib", sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20));
         r.put("fileLib", sh("ls -l /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20));
         // File che i due pacchetti si contendono: quanti ne ha persi la 8.4.
-        r.put("conflitti", sh("pkg check -s mysql84-client 2>&1 | head -20", 180));
+        r.put("hasConflicts", sh("pkg check -s mysql84-client 2>&1 | head -20", 180));
         return r.put("success", true);
     }
 
@@ -7211,7 +7211,7 @@ public final class UpdateManager {
     /**
      * Da quale ramo dei pacchetti si serve questo sistema.
      *
-     * Cambia quanto ci mette una correzione ad arrivare, ed e' la risposta alla domanda "perche'
+     * Cambia quanto ci mette una fix ad arrivare, ed e' la risposta alla domanda "perche'
      * il repository non ha ancora la versione che chiude questa vulnerabilita'". Non si legge da
      * un file scelto a occhio: pkg fonde /etc/pkg/FreeBSD.conf con gli eventuali file in
      * /usr/local/etc/pkg/repos/, e solo lui sa quale ha vinto. "pkg -vv" stampa la
@@ -7232,7 +7232,7 @@ public final class UpdateManager {
      *  - le versioni installate e quelle del repository si leggono con DUE interrogazioni sole
      *    (pkg query e pkg rquery -U su tutto) e si uniscono qui: interrogare pkg 41 volte per 41
      *    pacchetti ci metterebbe minuti per la stessa informazione.
-     *  - non entra NIENTE di segreto: nomi, versioni, stati e avvisi. Nessun file di
+     *  - non entra NIENTE di segreto: nomi, versioni, stati e warnings. Nessun file di
      *    configurazione, nessuna password, nessuna chiave. Un rapporto fatto per essere
      *    incollato deve poter essere incollato senza rileggerlo riga per riga.
      */
@@ -7628,7 +7628,7 @@ public final class UpdateManager {
      * riparte, quelle cose non si rompono — si fermano dove sono, e nessuno lo segnala.
      */
     /**
-     * La lista degli intervalli Cloudflare compilata nel pannello e' ancora quella ufficiale?
+     * La lista degli ranges Cloudflare compilata nel pannello e' ancora quella ufficiale?
      *
      * Perche' serve. Il pannello si fida di CF-Connecting-IP soltanto se la richiesta arriva da
      * un indirizzo che riconosce come Cloudflare; l'elenco di quegli indirizzi e' scritto a mano
@@ -7662,11 +7662,11 @@ public final class UpdateManager {
             // Senza, una risposta parziale o una pagina di errore da cui si salvano due righe
             // darebbe una lista ufficiale corta. Nessun intervallo "mancante" — quindi niente
             // rosso — e invece una dozzina di "non piu' ufficiali": il pannello consiglierebbe
-            // di TOGLIERE dalla lista di fiducia intervalli che Cloudflare usa eccome. Un
+            // di TOGLIERE dalla lista di fiducia ranges che Cloudflare usa eccome. Un
             // consiglio sbagliato e' peggio di un verde sbagliato, perche' chi lo segue rompe
             // qualcosa di suo con le proprie mani.
             //
-            // Cloudflare pubblica da anni almeno 15 intervalli IPv4 e 7 IPv6. La soglia sta
+            // Cloudflare pubblica da anni almeno 15 ranges IPv4 e 7 IPv6. La soglia sta
             // sotto apposta: deve scattare su una risposta rotta, non su un aggiornamento
             // legittimo della lista.
             final int MIN_V4 = 10, MIN_V6 = 5;
@@ -7882,7 +7882,7 @@ public final class UpdateManager {
      *  - "sysrc -x" su una variabile che non esiste ha un esito non documentato: in quel caso
      *    non lo si chiama nemmeno. Non si danno comandi al buio a un file di configurazione
      *    del boot.
-     *  - Il verdetto NON si legge dai codici di uscita: si rilegge "sysrc -n" e si ricontrolla
+     *  - Il verdict NON si legge dai codici di uscita: si rilegge "sysrc -n" e si ricontrolla
      *    il file. Un comando che "riesce" senza aver fatto la cosa e' il modo piu' comune di
      *    raccontarsi che e' andata bene.
      *
@@ -7903,7 +7903,7 @@ public final class UpdateManager {
              .put("installato", installato).put("variabileEsiste", variabileEsiste);
 
             if (!installato && !variabileEsiste)
-                return r.put("success", true).put("eseguito", false).put("nienteDaFare", true)
+                return r.put("success", true).put("eseguito", false).put("nothingToDo", true)
                         .put("nota", I18n.tr("server.um.removePanelRcScript.1"));
 
             if (!esegui)
@@ -7929,7 +7929,7 @@ public final class UpdateManager {
             // 3. Lo script.
             if (installato) ok("rm -f " + percorso, 20);
 
-            // 4. Il verdetto: si RILEGGE, non si deduce dai codici di uscita.
+            // 4. Il verdict: si RILEGGE, non si deduce dai codici di uscita.
             JSONObject dopo = autoStart();
             r.put("dopo", dopo);
             boolean restaFile = dopo.optBoolean("installato", false);
@@ -9071,16 +9071,16 @@ public final class UpdateManager {
      * Il cambio di ramo, sul turno dei lavori sui pacchetti: riscrivere da dove pkg prende i
      * pacchetti mentre un altro lavoro li sta installando cambierebbe i pacchetti sotto i suoi piedi.
      */
-    public static JSONObject startBranchChange(String verso, String impronta) {
+    public static JSONObject startBranchChange(String verso, String fingerprint) {
         if (!PkgBranch.RAMI.contains(verso)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.branchPreview.1"));
-        if (impronta == null || !impronta.matches("[0-9a-f]{16}"))
+        if (fingerprint == null || !fingerprint.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.startBranchChange.1"));
         String id = "ramo-" + System.currentTimeMillis();
         Job j = new Job(id, "pkg_branch");
         return avviaSulTurno(id, j, I18n.tr("server.um.startBranchChange.2", java.util.Map.of("verso", String.valueOf(verso))), "pkg-branch", () -> {
             j.status = "running";
             try {
-                JSONObject r = PkgBranch.cambia(PkgBranch.reale(), j::scrivi, verso, impronta);
+                JSONObject r = PkgBranch.cambia(PkgBranch.reale(), j::scrivi, verso, fingerprint);
                 if (r.optBoolean("success")) {
                     j.esito = r.optString("messaggio");
                     j.status = "completed";
@@ -9281,7 +9281,7 @@ public final class UpdateManager {
      */
     private static void runRicollegamento(Job job) {
         job.status = "running";
-        java.util.List<String> sbloccati = new ArrayList<>();
+        java.util.List<String> unlockedPackages = new ArrayList<>();
         try {
             job.avanza(1, 5);
             job.scrivi(I18n.tr("server.um.runRicollegamento.1"));
@@ -9313,7 +9313,7 @@ public final class UpdateManager {
                 if (errStato != null)
                     throw new IllegalStateException("I could not save the list for the restore, so I did not unlock anything: " + errStato);
                 // Da riproteggere tutti, anche uno sblocco fallito: cosi' l'elenco su disco si chiude.
-                sbloccati.addAll(daSbloccare);
+                unlockedPackages.addAll(daSbloccare);
                 for (String n : daSbloccare)
                     job.scrivi("    " + n + ": " + (ok("pkg unlock -y " + n, 30) ? I18n.tr("server.um.x.unlocked") : I18n.tr("server.um.runRicollegamento.4")));
             } else job.scrivi(I18n.tr("server.um.runRicollegamento.5"));
@@ -9323,9 +9323,9 @@ public final class UpdateManager {
             job.scrivi(I18n.tr("server.um.runRicollegamento.6"));
             StringBuilder el = new StringBuilder();
             for (String n : nomi) el.append(' ').append(n);
-            // PRIMA una simulazione: se pkg segnala conflitti di file, ci si ferma.
+            // PRIMA una simulazione: se pkg segnala hasConflicts di file, ci si ferma.
             // "-f" serve a forzare la REINSTALLAZIONE, ma forza anche il passare sopra ai
-            // conflitti — e sono due cose diverse. Averle confuse ha fatto sovrascrivere i
+            // hasConflicts — e sono due cose diverse. Averle confuse ha fatto sovrascrivere i
             // file del client MySQL 8.4 con quelli di un altro pacchetto.
             String simulazione = sh("pkg install -f -n" + el + " 2>&1", 600);
             if (simulazione.toLowerCase().contains("conflicts with")) {
@@ -9378,19 +9378,19 @@ public final class UpdateManager {
             job.errorMessage = e.getMessage();
             job.scrivi(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            if (!sbloccati.isEmpty()) {
+            if (!unlockedPackages.isEmpty()) {
                 job.scrivi("");
                 job.scrivi("Riproteggo...");
                 int n = 0;
-                for (String p2 : sbloccati) if (ok("pkg info -e " + p2, 15) && ok("pkg lock -y " + p2, 30)) n++;
-                job.scrivi("  " + n + "/" + sbloccati.size() + " riprotetti");
-                if (n == sbloccati.size()) pulisciStato();
+                for (String p2 : unlockedPackages) if (ok("pkg info -e " + p2, 15) && ok("pkg lock -y " + p2, 30)) n++;
+                job.scrivi("  " + n + "/" + unlockedPackages.size() + " riprotetti");
+                if (n == unlockedPackages.size()) pulisciStato();
             }
             job.fine = System.currentTimeMillis();
         }
     }
 
-    /** @param firmaApprovata l'impronta del piano mostrato dall'anteprima: si esegue quello o niente. */
+    /** @param firmaApprovata l'fingerprint del piano mostrato dall'anteprima: si esegue quello o niente. */
     public static JSONObject startMaintenance(String firmaApprovata) {
         if (firmaApprovata == null || !firmaApprovata.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
@@ -9406,7 +9406,7 @@ public final class UpdateManager {
         return avviaSulTurno(id, j, I18n.tr("server.um.startUnlockedPackagesUpdate.1"), "update-plain", () -> runUpdateJob(j));
     }
 
-    /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti bloccati. */
+    /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti lockedPackages. */
     private static void runUpdateJob(Job job) {
         job.status = "running";
         job.avanza(1, 2);
@@ -9445,7 +9445,7 @@ public final class UpdateManager {
     /**
      * Sblocca -> aggiorna -> riprotegge ESATTAMENTE cio' che era protetto.
      * La riprotezione sta in un finally: deve avvenire anche se l'aggiornamento fallisce o
-     * solleva un'eccezione. Lasciare i pacchetti sbloccati dopo un errore e' lo scenario
+     * solleva un'eccezione. Lasciare i pacchetti unlockedPackages dopo un errore e' lo scenario
      * peggiore, perche' nessuno se ne accorge finche' un upgrade successivo non porta via
      * un servizio.
      */
@@ -9455,10 +9455,10 @@ public final class UpdateManager {
      * scritta due volte, prima o poi diventerebbe due decisioni diverse, e l'anteprima
      * mostrerebbe un piano che il lavoro non esegue.
      */
-    private static JSONObject pianoDellaManutenzione(JSONArray bloccati) {
+    private static JSONObject pianoDellaManutenzione(JSONArray lockedPackages) {
         Map<String, String> perche = new LinkedHashMap<>();
-        for (int i = 0; i < bloccati.length(); i++) {
-            JSONObject o = bloccati.getJSONObject(i);
+        for (int i = 0; i < lockedPackages.length(); i++) {
+            JSONObject o = lockedPackages.getJSONObject(i);
             if (o.has("advisory") && "attendi".equals(o.getJSONObject("advisory").getString("level")))
                 perche.put(o.getString("name"), I18n.tr("server.um.x.waitAdvisory"));
         }
@@ -9526,29 +9526,29 @@ public final class UpdateManager {
                 job.scrivi("    " + n + "  -> " + I18n.tr("server.um.x.heldBack", java.util.Map.of("motivo", String.valueOf(perche.getString(n)))));
 
             // Si esegue il piano che e' stato letto, o niente.
-            if (!piano.optBoolean("misurato")) {
+            if (!piano.optBoolean("measured")) {
                 throw new IllegalStateException("I could not work out the exact plan: "
                         + piano.optString("error", piano.optString("errore", "?")));
             }
-            if (!piano.optString("firma", "").equals(firmaApprovata)) {
+            if (!piano.optString("signature", "").equals(firmaApprovata)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runMaintenanceJob.6");
-                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.3", java.util.Map.of("firmaApprovata", String.valueOf(firmaApprovata), "firmaOra", String.valueOf(piano.optString("firma")))));
+                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.3", java.util.Map.of("firmaApprovata", String.valueOf(firmaApprovata), "firmaOra", String.valueOf(piano.optString("signature")))));
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.7"));
                 job.fine = System.currentTimeMillis();
                 return;
             }
-            if (!piano.optBoolean("eseguibile")) {
+            if (!piano.optBoolean("runnable")) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errori", String.valueOf(String.join(" | ", jsonArrayToList(piano.getJSONArray("erroriPkg"))))))
-                        + (piano.getJSONArray("cambi").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
+                        + (piano.getJSONArray("changes").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                 job.fine = System.currentTimeMillis();
                 return;
             }
-            daRibloccare.addAll(jsonArrayToList(piano.getJSONArray("sbloccati")));
-            job.scrivi("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(piano.getString("firma")))));
-            JSONArray cambiPiano = piano.getJSONArray("cambi");
+            daRibloccare.addAll(jsonArrayToList(piano.getJSONArray("unlockedPackages")));
+            job.scrivi("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(piano.getString("signature")))));
+            JSONArray cambiPiano = piano.getJSONArray("changes");
             for (int i = 0; i < cambiPiano.length(); i++) {
                 JSONObject c = cambiPiano.getJSONObject(i);
                 job.scrivi("    " + PackagePlan.typeName(c.getString("tipo")) + " " + c.getString("nome") + " " + c.getString("da")
@@ -9608,7 +9608,7 @@ public final class UpdateManager {
             }
 
             // Aggiornare un pacchetto non aggiorna il processo che lo usa: finche' non riparte gira
-            // sui file vecchi, e la correzione risulta installata senza essere in servizio. La
+            // sui file vecchi, e la fix risulta installata senza essere in servizio. La
             // manutenzione completa non riavvia niente da sola (lo fa l'aggiornamento guidato, un
             // pacchetto alla volta), ma dice esattamente chi va riavviato.
             java.util.LinkedHashSet<String> daRiavviare = new java.util.LinkedHashSet<>();

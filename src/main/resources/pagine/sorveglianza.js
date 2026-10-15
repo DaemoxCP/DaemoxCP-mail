@@ -82,7 +82,7 @@
                        + updEsc(o.nelPath) + '</code></div>';
             }
 
-            h += '<div id="sorv-cambi" class="mt-3"></div>';
+            h += '<div id="sorv-changes" class="mt-3"></div>';
             el.innerHTML = h;
         }
 
@@ -90,7 +90,7 @@
         // copiato alla lettera: un riassunto di un elenco di cambiamenti e' il modo migliore
         // per perdere proprio la riga che contava.
         async function sorvCambi(rfc, riferimento) {
-            const el = document.getElementById('sorv-cambi');
+            const el = document.getElementById('sorv-changes');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sv.downloadingRfc', { rfc: rfc }));
             const r = await updApi('sorveglianza_cambi', { rfc: rfc, riferimento: riferimento || rfc });
             if (!r.success) {

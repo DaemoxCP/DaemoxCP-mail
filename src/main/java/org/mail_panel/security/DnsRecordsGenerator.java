@@ -717,9 +717,9 @@ public class DnsRecordsGenerator {
                     spfCheck.message = I18n.tr("server.dnsg.spfNotAuth", java.util.Map.of("ip", String.valueOf(serverIp)));
                 }
             }
-            if (!e.avvisi.isEmpty())
+            if (!e.warnings.isEmpty())
                 spfCheck.message = (spfCheck.message == null ? "" : spfCheck.message + " ")
-                                 + String.join(" ", e.avvisi);
+                                 + String.join(" ", e.warnings);
         } else if (spfCheck.message != null && spfCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
             spfCheck.message = I18n.tr("server.dnsg.noSpf");
         }
@@ -787,7 +787,7 @@ public class DnsRecordsGenerator {
 
         // 5. Check DMARC - verify policy present
         // Il record si legge coi tag, non cercando "p=none" dentro la stringa: "p=none"
-        // compare per sottostringa anche in "sp=none", e il verdetto uscirebbe sbagliato.
+        // compare per sottostringa anche in "sp=none", e il verdict uscirebbe sbagliato.
         // E p=none NON e' una "policy debole": RFC 9989 §5.1.5 dice di partire da li'.
         DnsCheck dmarcCheck = verifyRecord("_dmarc." + domain, "TXT");
         dmarcCheck.recordType = "DMARC";
@@ -831,9 +831,9 @@ public class DnsRecordsGenerator {
                     }
                 }
             }
-            if (!e.avvisi.isEmpty())
+            if (!e.warnings.isEmpty())
                 dmarcCheck.message = (dmarcCheck.message == null ? "" : dmarcCheck.message + " ")
-                                   + String.join(" ", e.avvisi);
+                                   + String.join(" ", e.warnings);
         } else if (dmarcCheck.message != null && dmarcCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
             dmarcCheck.message = I18n.tr("server.dnsg.noDmarc");
         }
@@ -1245,7 +1245,7 @@ public class DnsRecordsGenerator {
          *
          * Prima la pagina appaiava schede e verifiche per NOME. All'apice del dominio ci sono
          * pero' due record diversi con lo stesso nome — MX e SPF — e il secondo sovrascriveva
-         * il primo nella mappa: la scheda MX finiva per mostrare il verdetto e il valore
+         * il primo nella mappa: la scheda MX finiva per mostrare il verdict e il valore
          * dell'SPF ("OK: autorizza esplicitamente 203.0.113.77" sotto "Mail Exchange").
          * Un accoppiamento indovinato dal nome e' un accoppiamento che prima o poi sbaglia:
          * qui viaggia esplicito.

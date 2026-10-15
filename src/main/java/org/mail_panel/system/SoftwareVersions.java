@@ -308,7 +308,7 @@ public final class SoftwareVersions {
             String inEsecuzione = valida(prima(s.esegui(FREEBSD_VERSION, "-r")));
             String installato = valida(prima(s.esegui(FREEBSD_VERSION, "-k")));
             r.put("installato", true).put("versione", userland).put("fonte", "freebsd-version -u");
-            // Kernel e userland possono avere patch diverse per buone ragioni (una correzione che
+            // Kernel e userland possono avere patch diverse per buone ragioni (una fix che
             // tocca solo l'una o l'altro): si dice, ma non e' un problema.
             if (inEsecuzione != null && !inEsecuzione.equals(userland)) r.put("dettaglio", I18n.tr("server.ver.kernelRunning", java.util.Map.of("v", String.valueOf(inEsecuzione))));
             // L'Handbook: kernel installato diverso da quello in esecuzione vuol dire riavvio mancante.

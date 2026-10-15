@@ -20,7 +20,7 @@ import java.util.logging.Logger;
  * I codici monouso: accesso via email, accesso dalla console del server, conferma di
  * un'operazione delicata, cambio dell'email di accesso.
  *
- *  - il codice esiste solo nel messaggio (o sulla console): nel database c'e' l'impronta HMAC;
+ *  - il codice esiste solo nel messaggio (o sulla console): nel database c'e' l'fingerprint HMAC;
  *  - vale 10 minuti (15 dalla console e per il cambio dell'email), cinque tentativi, una volta;
  *  - chiedere un codice per un indirizzo che non e' di nessuno da' la stessa risposta, nello
  *    stesso tempo: l'invio parte da una coda a parte e chi risponde non aspetta sendmail;

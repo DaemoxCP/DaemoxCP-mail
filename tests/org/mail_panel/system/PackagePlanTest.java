@@ -9,13 +9,13 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Il piano esatto di un aggiornamento e la risposta a "la correzione c'e'?".
+ * Il piano esatto di un aggiornamento e la risposta a "la fix c'e'?".
  *
  * Le uscite qui sotto hanno la forma che il sorgente di pkg stampa (src/utils.c per il piano,
  * src/audit.c per il JSON): sezioni con le voci rientrate da un tab, i totali in fondo, " (vulnerable!)"
- * accanto alle versioni di arrivo ancora vulnerabili, gli intervalli di VuXML come "&gt;= a : &lt; b".
+ * accanto alle versioni di arrivo ancora vulnerabili, gli ranges di VuXML come "&gt;= a : &lt; b".
  *
- * Il caso che ha motivato la classe e' in fondo al gruppo della correzione: nginx 1.30.4,3,
+ * Il caso che ha motivato la classe e' in fondo al gruppo della fix: nginx 1.30.4,3,
  * catalogo fermo alla stessa, VuXML che dice "&lt; 1.30.5,3". La scheda diceva insieme "protetto: la
  * patch non verra' applicata" e "nessun aggiornamento nel tuo ramo", e non si capiva se la
  * patch ci fosse.
@@ -58,12 +58,12 @@ public class PackagePlanTest {
             "Number of packages to be upgraded: 1",
             "",
             "81 MiB to be downloaded."));
-        vero("kafka da solo: misurato", p.getBoolean("misurato"));
-        JSONObject k = p.getJSONArray("cambi").getJSONObject(0);
+        vero("kafka da solo: measured", p.getBoolean("measured"));
+        JSONObject k = p.getJSONArray("changes").getJSONObject(0);
         vero("kafka da solo: 4.3.0 -> 4.3.1",
             "aggiorna".equals(k.getString("tipo")) && "kafka".equals(k.getString("nome"))
             && "4.3.0".equals(k.getString("da")) && "4.3.1".equals(k.getString("a")));
-        vero("kafka da solo: non ancora vulnerabile", !k.getBoolean("ancoraVulnerabile"));
+        vero("kafka da solo: non ancora vulnerabile", !k.getBoolean("stillVulnerable"));
 
         String grande = String.join("\n",
             "The following 5 package(s) will be affected (of 0 checked):",
@@ -89,7 +89,7 @@ public class PackagePlanTest {
             "The process will require 2 MiB more space.",
             "12 MiB to be downloaded.");
         p = PackagePlan.leggiPiano(grande);
-        vero("piano grande: misurato e con 5 cambi", p.getBoolean("misurato") && p.getJSONArray("cambi").length() == 5);
+        vero("piano grande: measured e con 5 changes", p.getBoolean("measured") && p.getJSONArray("changes").length() == 5);
         vero("piano grande: la rimozione ha nome, versione e motivo",
             trova(p, "php84-pecl-rdkafka").getString("tipo").equals("rimuove")
             && trova(p, "php84-pecl-rdkafka").getString("da").equals("6.0.3_1")
@@ -99,7 +99,7 @@ public class PackagePlanTest {
             "8.4.19".equals(trova(p, "php84").getString("da")) && trova(p, "php84").getString("motivo").contains("pcre2"));
         vero("piano grande: nginx con l'epoch", "1.30.5,3".equals(trova(p, "nginx").getString("a")));
         vero("piano grande: openssl ancora vulnerabile dopo l'aggiornamento",
-            trova(p, "openssl35").getBoolean("ancoraVulnerabile") && "3.5.3".equals(trova(p, "openssl35").getString("a")));
+            trova(p, "openssl35").getBoolean("stillVulnerable") && "3.5.3".equals(trova(p, "openssl35").getString("a")));
 
         p = PackagePlan.leggiPiano(String.join("\n",
             "Installed packages LOCKED:",
@@ -109,8 +109,8 @@ public class PackagePlanTest {
             "\tkafka: 4.3.0 -> 4.3.1",
             "",
             "Number of packages to be upgraded: 1"));
-        vero("protetto nel piano: misurato", p.getBoolean("misurato"));
-        JSONObject b = p.getJSONArray("bloccati").getJSONObject(0);
+        vero("protetto nel piano: measured", p.getBoolean("measured"));
+        JSONObject b = p.getJSONArray("lockedPackages").getJSONObject(0);
         vero("protetto nel piano: nome, versione e dove andrebbe",
             "openjdk21".equals(b.getString("nome")) && "21.0.8+9.1".equals(b.getString("versione"))
             && "21.0.9+10.1".equals(b.getString("verso")));
@@ -121,11 +121,11 @@ public class PackagePlanTest {
             "php84-pecl-rdkafka-6.0.3_1 is locked and may not be modified",
             "Your packages are up to date."));
         vero("protetto come evento (pkg piu' vecchio): il nome con i trattini",
-            p.getJSONArray("bloccati").length() == 1
-            && "php84-pecl-rdkafka".equals(p.getJSONArray("bloccati").getJSONObject(0).getString("nome")));
+            p.getJSONArray("lockedPackages").length() == 1
+            && "php84-pecl-rdkafka".equals(p.getJSONArray("lockedPackages").getJSONObject(0).getString("nome")));
 
         p = PackagePlan.leggiPiano("Checking for upgrades (1 candidates): 100%\nYour packages are up to date.");
-        vero("niente da fare", p.getBoolean("misurato") && p.getBoolean("nienteDaFare") && p.getJSONArray("cambi").isEmpty());
+        vero("niente da fare", p.getBoolean("measured") && p.getBoolean("nothingToDo") && p.getJSONArray("changes").isEmpty());
 
         p = PackagePlan.leggiPiano("pkg: No packages available to upgrade matching 'kafka' have been found in the repositories");
         vero("errore di pkg riportato, non taciuto", p.getJSONArray("erroriPkg").length() == 1);
@@ -143,31 +143,31 @@ public class PackagePlanTest {
             "\tkafka: 4.3.0 -> 4.3.1",
             "",
             "Number of packages to be upgraded: 2"));
-        vero("totale diverso: non misurato", !p.getBoolean("misurato"));
+        vero("totale diverso: non measured", !p.getBoolean("measured"));
         p = PackagePlan.leggiPiano(String.join("\n",
             "Installed packages to be UPGRADED:",
             "\tkafka 4.3.0 4.3.1",
             "",
             "Number of packages to be upgraded: 1"));
-        vero("riga illeggibile: non misurato", !p.getBoolean("misurato") && p.getJSONArray("illeggibili").length() == 1);
+        vero("riga illeggibile: non measured", !p.getBoolean("measured") && p.getJSONArray("illeggibili").length() == 1);
         p = PackagePlan.leggiPiano(String.join("\n",
             "Installed packages to be UPGRADED:",
             "\tkafka: 4.3.0 -> 4.3.1"));
-        vero("totale mancante: non misurato", !p.getBoolean("misurato"));
+        vero("totale mancante: non measured", !p.getBoolean("measured"));
 
-        // ---------------- l'impronta ----------------
+        // ---------------- l'fingerprint ----------------
 
-        JSONObject a1 = PackagePlan.leggiPiano(grande).put("sbloccati", new JSONArray().put("nginx"));
+        JSONObject a1 = PackagePlan.leggiPiano(grande).put("unlockedPackages", new JSONArray().put("nginx"));
         String g2 = grande.replace("\tnginx: 1.30.4,3 -> 1.30.5,3\n\topenssl35: 3.5.2 -> 3.5.3 (vulnerable!)",
                                    "\topenssl35: 3.5.2 -> 3.5.3 (vulnerable!)\n\tnginx: 1.30.4,3 -> 1.30.5,3");
-        JSONObject a2 = PackagePlan.leggiPiano(g2).put("sbloccati", new JSONArray().put("nginx"));
-        vero("impronta: stesso piano in altro ordine, stessa impronta", PackagePlan.firma(a1).equals(PackagePlan.firma(a2)));
-        JSONObject a3 = PackagePlan.leggiPiano(grande.replace("1.30.5,3", "1.30.6,3")).put("sbloccati", new JSONArray().put("nginx"));
-        vero("impronta: una versione diversa cambia l'impronta", !PackagePlan.firma(a1).equals(PackagePlan.firma(a3)));
-        JSONObject a4 = PackagePlan.leggiPiano(grande).put("sbloccati", new JSONArray().put("nginx").put("php84"));
-        vero("impronta: una protezione in piu' da togliere cambia l'impronta", !PackagePlan.firma(a1).equals(PackagePlan.firma(a4)));
+        JSONObject a2 = PackagePlan.leggiPiano(g2).put("unlockedPackages", new JSONArray().put("nginx"));
+        vero("fingerprint: stesso piano in altro ordine, stessa fingerprint", PackagePlan.signature(a1).equals(PackagePlan.signature(a2)));
+        JSONObject a3 = PackagePlan.leggiPiano(grande.replace("1.30.5,3", "1.30.6,3")).put("unlockedPackages", new JSONArray().put("nginx"));
+        vero("fingerprint: una versione diversa cambia l'fingerprint", !PackagePlan.signature(a1).equals(PackagePlan.signature(a3)));
+        JSONObject a4 = PackagePlan.leggiPiano(grande).put("unlockedPackages", new JSONArray().put("nginx").put("php84"));
+        vero("fingerprint: una protezione in piu' da togliere cambia l'fingerprint", !PackagePlan.signature(a1).equals(PackagePlan.signature(a4)));
 
-        // ---------------- la correzione c'e'? ----------------
+        // ---------------- la fix c'e'? ----------------
 
         String audit = """
             {
@@ -204,44 +204,44 @@ public class PackagePlanTest {
         JSONObject va = PackagePlan.leggiAudit(audit);
         vero("audit: due pacchetti letti", va.length() == 2);
         JSONArray nginxProblemi = va.getJSONObject("nginx").getJSONArray("problemi");
-        vero("audit: l'intervallo di nginx", ">= 1.25.0 : < 1.30.5,3".equals(nginxProblemi.getJSONObject(0).getJSONArray("intervalli").getString(0)));
+        vero("audit: l'intervallo di nginx", ">= 1.25.0 : < 1.30.5,3".equals(nginxProblemi.getJSONObject(0).getJSONArray("ranges").getString(0)));
         vero("audit: nessun pacchetto vulnerabile", PackagePlan.leggiAudit("{\n    \"pkg_count\": 0\n}").length() == 0);
 
         // IL CASO VERO: installata 1.30.4,3, catalogo fermo alla stessa, VuXML "< 1.30.5,3".
         JSONObject v = PackagePlan.valutaCorrezione("1.30.4,3", "1.30.4,3", nginxProblemi, CMP);
-        vero("nginx: la correzione esiste ma non nel ramo", "correzione-fuori-dal-ramo".equals(v.getString("verdetto")));
-        vero("nginx: dalla 1.30.5,3", "1.30.5,3".equals(v.getString("primaCorretta")));
+        vero("nginx: la fix esiste ma non nel ramo", "fix-fuori-dal-ramo".equals(v.getString("verdict")));
+        vero("nginx: dalla 1.30.5,3", "1.30.5,3".equals(v.getString("firstFixed")));
         vero("nginx: il testo dice che il lock non c'entra", v.getString("spiegazione").contains("la protezione non c'entra"));
 
         v = PackagePlan.valutaCorrezione("1.30.4,3", "1.30.5,3", nginxProblemi, CMP);
-        vero("nginx con la 1.30.5,3 nel catalogo: si risolve aggiornando", "si-risolve-aggiornando".equals(v.getString("verdetto")));
+        vero("nginx con la 1.30.5,3 nel catalogo: si risolve aggiornando", "si-risolve-aggiornando".equals(v.getString("verdict")));
 
         JSONArray curl = va.getJSONObject("curl").getJSONArray("problemi");
         v = PackagePlan.valutaCorrezione("8.15.0", "8.16.0", curl, CMP);
-        vero("curl: la 8.16.0 chiude uno solo dei due", "aggiornamento-non-basta".equals(v.getString("verdetto"))
-            && "8.17.0".equals(v.getString("primaCorretta")) && v.getString("spiegazione").contains("curl -- due"));
+        vero("curl: la 8.16.0 chiude uno solo dei due", "aggiornamento-non-basta".equals(v.getString("verdict"))
+            && "8.17.0".equals(v.getString("firstFixed")) && v.getString("spiegazione").contains("curl -- due"));
         v = PackagePlan.valutaCorrezione("8.15.0", "8.17.0", curl, CMP);
-        vero("curl: la 8.17.0 li chiude tutti e due", "si-risolve-aggiornando".equals(v.getString("verdetto")));
+        vero("curl: la 8.17.0 li chiude tutti e due", "si-risolve-aggiornando".equals(v.getString("verdict")));
         v = PackagePlan.valutaCorrezione("8.15.0", "", curl, CMP);
-        vero("curl: catalogo senza il pacchetto, correzione dalla 8.17.0",
-            "correzione-fuori-dal-ramo".equals(v.getString("verdetto")) && "8.17.0".equals(v.getString("primaCorretta")));
+        vero("curl: catalogo senza il pacchetto, fix dalla 8.17.0",
+            "fix-fuori-dal-ramo".equals(v.getString("verdict")) && "8.17.0".equals(v.getString("firstFixed")));
 
         v = PackagePlan.valutaCorrezione("2.1", "2.1", problemi(">= 0"), CMP);
-        vero("senza limite superiore: nessuna correzione", "nessuna-correzione".equals(v.getString("verdetto")));
+        vero("senza limite superiore: nessuna fix", "nessuna-fix".equals(v.getString("verdict")));
         v = PackagePlan.valutaCorrezione("2.1", "2.1", problemi("<= 2.1"), CMP);
-        vero("'<=': correzione non indicata", "correzione-non-indicata".equals(v.getString("verdetto")));
+        vero("'<=': fix non indicata", "fix-non-indicata".equals(v.getString("verdict")));
         v = PackagePlan.valutaCorrezione("2.1", "2.1", problemi("= 2.1"), CMP);
-        vero("'=': solo quella versione, ma il catalogo non ne ha un'altra", "correzione-fuori-dal-ramo".equals(v.getString("verdetto")));
-        // Piu' intervalli: conta quello in cui cade la versione installata, non il primo.
+        vero("'=': solo quella versione, ma il catalogo non ne ha un'altra", "fix-fuori-dal-ramo".equals(v.getString("verdict")));
+        // Piu' ranges: conta quello in cui cade la versione installata, non il primo.
         v = PackagePlan.valutaCorrezione("1.27.5", "1.27.5", problemi("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
-        vero("due rami di versioni: la correzione del ramo giusto", "1.28.1".equals(v.getString("primaCorretta")));
+        vero("due rami di versioni: la fix del ramo giusto", "1.28.1".equals(v.getString("firstFixed")));
         v = PackagePlan.valutaCorrezione("1.27.5", "1.28.0", problemi("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
-        vero("due rami di versioni: la 1.28.0 non basta", "aggiornamento-non-basta".equals(v.getString("verdetto")));
+        vero("due rami di versioni: la 1.28.0 non basta", "aggiornamento-non-basta".equals(v.getString("verdict")));
         v = PackagePlan.valutaCorrezione("3.0", "3.0", problemi("< 2.0"), CMP);
-        vero("versione fuori da ogni intervallo: non so, non invento", "non-so".equals(v.getString("verdetto")));
+        vero("versione fuori da ogni intervallo: non so, non invento", "non-so".equals(v.getString("verdict")));
         PackagePlan.Confronto rotto = (x, y) -> { throw new IllegalStateException("pkg non risponde"); };
         v = PackagePlan.valutaCorrezione("1.30.4,3", "1.30.4,3", nginxProblemi, rotto);
-        vero("confronto rotto: non so", "non-so".equals(v.getString("verdetto")) && v.getString("spiegazione").contains("pkg non risponde"));
+        vero("confronto rotto: non so", "non-so".equals(v.getString("verdict")) && v.getString("spiegazione").contains("pkg non risponde"));
 
         vero("estremi: uno", PackagePlan.estremi("< 1.30.5,3").size() == 1);
         vero("estremi: due", PackagePlan.estremi(">= 1.25.0 : < 1.30.5,3").size() == 2);
@@ -284,16 +284,16 @@ public class PackagePlanTest {
         int copiePrima = copieRimaste();
 
         JSONObject p = PackagePlan.pianoPer(List.of("kafka"), protetti, x -> null);
-        vero("simulazione: riuscita e misurata", p.optBoolean("success") && p.optBoolean("misurato"));
+        vero("simulazione: riuscita e misurata", p.optBoolean("success") && p.optBoolean("measured"));
         vero("simulazione: pkg ha nominato openjdk21 e l'ho aggiunto",
-            p.getJSONArray("sbloccati").toList().equals(List.of("kafka", "openjdk21")));
+            p.getJSONArray("unlockedPackages").toList().equals(List.of("kafka", "openjdk21")));
         vero("simulazione: il piano finale aggiorna kafka e openjdk21",
-            trova(p, "kafka") != null && trova(p, "openjdk21") != null && p.getJSONArray("bloccati").isEmpty());
+            trova(p, "kafka") != null && trova(p, "openjdk21") != null && p.getJSONArray("lockedPackages").isEmpty());
         // pkg si aggiorna da solo prima di tutto, ma con -n non lo dice: il piano lo deve dire lui.
-        JSONObject primo = p.getJSONArray("cambi").getJSONObject(0);
+        JSONObject primo = p.getJSONArray("changes").getJSONObject(0);
         vero("simulazione: pkg che aggiorna se stesso e' in testa al piano",
             "pkg".equals(primo.getString("nome")) && "2.1.0".equals(primo.getString("da")) && "2.2.0".equals(primo.getString("a")));
-        vero("simulazione: eseguibile e con impronta", p.getBoolean("eseguibile") && p.getString("firma").length() == 16);
+        vero("simulazione: runnable e con fingerprint", p.getBoolean("runnable") && p.getString("signature").length() == 16);
         vero("simulazione: il database VERO e' ancora protetto",
             Files.exists(locked.resolve("kafka")) && Files.exists(locked.resolve("openjdk21")));
         vero("simulazione: la copia e' stata cancellata", copieRimaste() == copiePrima);
@@ -302,14 +302,14 @@ public class PackagePlanTest {
                 x -> x.getString("nome").equals("openjdk21") && x.getString("verso").equals("21.0.9+10.1")
                      ? "e' il JDK su cui gira il pannello" : null);
         vero("simulazione: il JDK del pannello resta un impedimento con il suo motivo",
-            p.getJSONArray("impedimenti").length() == 1
-            && p.getJSONArray("impedimenti").getJSONObject(0).getString("motivo").contains("JDK"));
-        vero("simulazione: con un impedimento non e' eseguibile", !p.getBoolean("eseguibile"));
+            p.getJSONArray("blockers").length() == 1
+            && p.getJSONArray("blockers").getJSONObject(0).getString("motivo").contains("JDK"));
+        vero("simulazione: con un impedimento non e' runnable", !p.getBoolean("runnable"));
         vero("simulazione: anche qui la copia e' sparita", copieRimaste() == copiePrima);
 
         p = PackagePlan.pianoPer(List.of("nginx"), protetti, x -> null);
-        vero("simulazione: nginx non ha aggiornamenti, e lo dice", p.getJSONArray("nonCambiano").toList().equals(List.of("nginx"))
-            && !p.getBoolean("eseguibile"));
+        vero("simulazione: nginx non ha aggiornamenti, e lo dice", p.getJSONArray("unchangedPackages").toList().equals(List.of("nginx"))
+            && !p.getBoolean("runnable"));
 
         JSONObject s = PackagePlan.simula(List.of("ka fka"), List.of("kafka"));
         vero("simulazione: un nome con uno spazio non arriva alla shell", !s.optBoolean("success"));
@@ -321,13 +321,13 @@ public class PackagePlanTest {
         }
     }
 
-    private static JSONArray problemi(String... intervalli) {
-        return new JSONArray().put(new JSONObject().put("intervalli", new JSONArray(List.of(intervalli)))
+    private static JSONArray problemi(String... ranges) {
+        return new JSONArray().put(new JSONObject().put("ranges", new JSONArray(List.of(ranges)))
                 .put("descrizione", "prova").put("cve", new JSONArray()).put("url", ""));
     }
 
     private static JSONObject trova(JSONObject piano, String nome) {
-        JSONArray c = piano.getJSONArray("cambi");
+        JSONArray c = piano.getJSONArray("changes");
         for (int i = 0; i < c.length(); i++) if (nome.equals(c.getJSONObject(i).getString("nome"))) return c.getJSONObject(i);
         return null;
     }

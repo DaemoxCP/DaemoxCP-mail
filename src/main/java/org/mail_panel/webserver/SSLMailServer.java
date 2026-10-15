@@ -1062,7 +1062,7 @@ public class SSLMailServer {
     /**
      * GET /i18n/(lingua).js: il dizionario degli script, con t() e tn(). Pubblico (ci sono solo i
      * testi dell'interfaccia, e serve anche alla pagina di accesso) e da tenere in cache:
-     * l'indirizzo cambia con i testi (?v=impronta).
+     * l'indirizzo cambia con i testi (?v=fingerprint).
      */
     private void handleI18nScript(HttpExchange exchange) throws IOException {
         try (exchange) {
@@ -2348,7 +2348,7 @@ public class SSLMailServer {
         org.mail_panel.system.AddressTransform.Stato s = org.mail_panel.system.AddressTransform.stato(Main.mailDatabase, indirizzo);
         String no = org.mail_panel.system.AddressTransform.motivoNoCasella(s);
         if (no != null) return r.put("success", false).put("error", no);
-        if (!org.mail_panel.system.AddressTransform.impronta(s).equals(req.optString("impronta", "")))
+        if (!org.mail_panel.system.AddressTransform.fingerprint(s).equals(req.optString("fingerprint", "")))
             return r.put("success", false).put("cambiato", true).put("error",
                     I18n.tr("server.convert.changedToMailbox"));
         String password = req.optString("password", "");
@@ -2415,7 +2415,7 @@ public class SSLMailServer {
         if (!indirizzo.equals(req.optString("conferma", "").trim().toLowerCase(java.util.Locale.ROOT)))
             return r.put("success", false).put("error", I18n.tr("server.convert.typeAddress", Map.of("address", indirizzo)));
         org.mail_panel.system.AddressTransform.Stato s = org.mail_panel.system.AddressTransform.stato(Main.mailDatabase, indirizzo);
-        if (!org.mail_panel.system.AddressTransform.impronta(s).equals(req.optString("impronta", "")))
+        if (!org.mail_panel.system.AddressTransform.fingerprint(s).equals(req.optString("fingerprint", "")))
             return r.put("success", false).put("cambiato", true).put("error",
                     I18n.tr("server.convert.changedToAlias"));
         List<String> destinazioni;
@@ -3006,7 +3006,7 @@ public class SSLMailServer {
         // vedendo il token gia' li'. Da quel momento la regola vive dentro il binario dei
         // browser, e rimuoverla richiede mesi — mentre qui basta che il certificato del
         // pannello si rompa una volta per restare fuori proprio quando serve entrare a
-        // ripararlo (HSTS toglie il "prosegui comunque" sugli avvisi di certificato).
+        // ripararlo (HSTS toglie il "prosegui comunque" sugli warnings di certificato).
         //
         // Cosa resta, e perche': max-age si rinnova a ogni visita e includeSubDomains vale per
         // i sottodomini di QUESTO nome. Si tengono perche' il certificato si rinnova da solo e
@@ -6954,14 +6954,14 @@ public class SSLMailServer {
                 case "ramo_stato" -> response = UpdateManager.branchStatus();
                 case "ramo_anteprima" -> response = UpdateManager.branchPreview(req.optString("verso", ""));
                 case "ramo_cambia" -> {
-                    // La conferma e' il nome del ramo scritto a mano, e l'impronta e' quella
+                    // La conferma e' il nome del ramo scritto a mano, e l'fingerprint e' quella
                     // dell'anteprima: si cambia solo cio' che si e' visto.
                     String verso = req.optString("verso", "");
                     if (verso.isEmpty() || !verso.equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.updates.typeBranch"));
                         break;
                     }
-                    response = UpdateManager.startBranchChange(verso, req.optString("impronta", ""));
+                    response = UpdateManager.startBranchChange(verso, req.optString("fingerprint", ""));
                     logAudit("PKG_BRANCH_CHANGE", ip, "to " + verso + (response.optBoolean("success")
                             ? " (started, job " + response.optString("jobId") + ")" : " (not started: " + response.optString("error") + ")"));
                 }
@@ -7230,7 +7230,7 @@ public class SSLMailServer {
                                 .put("error", I18n.tr("server.updates.typePackage"));
                         break;
                     }
-                    response = UpdateManager.startGuidedUpdate(pk, req.optString("firma", ""));
+                    response = UpdateManager.startGuidedUpdate(pk, req.optString("signature", ""));
                     logAudit("GUIDED_UPDATE_STARTED", ip, pk + " -> " + response.optString("jobId", ""));
                 }
                 case "packages_lock" -> {
@@ -7255,7 +7255,7 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.startMaintenance(req.optString("firma", ""));
+                    response = UpdateManager.startMaintenance(req.optString("signature", ""));
                     logAudit("MAINTENANCE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
@@ -8444,7 +8444,7 @@ public class SSLMailServer {
                         JSONObject x = nonGiud.getJSONObject(i);
                         if (ng.length() > 0) ng.append(" | ");
                         ng.append(x.optString("jail")).append(": ").append(x.optString("perche"));
-                        // L'evidenza accanto al verdetto: cosa ha risposto fail2ban, e cosa ha
+                        // L'evidenza accanto al verdict: cosa ha risposto fail2ban, e cosa ha
                         // scritto nel proprio log. Senza, la riga dice solo che non si sa.
                         String u = x.optString("uscita", "");
                         if (!u.isEmpty()) ng.append(" [").append(I18n.tr("server.f2b.ban.answers", Map.of("answer", u))).append("]");
@@ -8460,11 +8460,11 @@ public class SSLMailServer {
             for (int i = 0; i < rotte.length(); i++) {
                 JSONObject x = rotte.getJSONObject(i);
                 if (b.length() > 0) b.append(" | ");
-                b.append(x.optString("jail")).append(": ").append(I18n.tr("server.f2b.ban.missingCommand", Map.of("command", x.optString("eseguibile"))));
+                b.append(x.optString("jail")).append(": ").append(I18n.tr("server.f2b.ban.missingCommand", Map.of("command", x.optString("runnable"))));
             }
             banDettaglio = b.toString();
         }
-        checks.put(makeCheck("ban-eseguibile",
+        checks.put(makeCheck("ban-runnable",
             I18n.tr("server.f2b.ban.check"),
             banEseguibile,
             banDettaglio,
@@ -8475,7 +8475,7 @@ public class SSLMailServer {
 
         // ========== I ban arrivano davvero a pf? ==========
         // E' il controllo piu' profondo che il pannello sappia fare, e finora viveva soltanto
-        // nella scheda del confronto: il verdetto in cima diceva "Tutto OK" mentre recidive
+        // nella scheda del confronto: il verdict in cima diceva "Tutto OK" mentre recidive
         // aveva una tabella che nessuna regola legge. Un riepilogo che non comprende il
         // controllo piu' severo non e' un riepilogo: e' la stessa mezza verita' che ha tenuto
         // nascoste per mesi una jail cieca e due che bannavano nel vuoto.
@@ -8683,7 +8683,7 @@ public class SSLMailServer {
             (pfAnchorPresent || !pfConfExists) ? null : "add_pf_anchor",
             I18n.tr("server.pf.fixAnchor")));
 
-        // Il verdetto complessivo si legge dai controlli, non da un elenco di booleani scritto
+        // Il verdict complessivo si legge dai controlli, non da un elenco di booleani scritto
         // a mano. Quell'elenco era una seconda versione della stessa verita', e le due
         // divergevano appena se ne aggiungeva uno: il controllo nuovo compariva rosso nella
         // lista mentre in cima restava "Tutto OK" e il pulsante per rimediare restava nascosto,
@@ -11754,7 +11754,7 @@ http {
      * "X-Forwarded-For: 1.2.3.4" se la vede accodare dal proxy, che aggiunge il proprio
      * mittente in coda. Il primo valore e' quindi il piu' facile da falsificare, non il piu'
      * attendibile — e usandolo per il limite dei tentativi bastava cambiarlo a ogni prova per
-     * non essere mai bloccati.
+     * non essere mai lockedPackages.
      *
      * Si scorre da destra saltando gli indirizzi che sono a loro volta proxy fidati (una
      * catena vera ne ha piu' d'uno) e ci si ferma al primo che non lo e': quello l'ha scritto

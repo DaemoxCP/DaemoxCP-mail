@@ -646,7 +646,7 @@ public final class DovecotConfig {
              + "uid e gid arrivano comunque anche da userdb static, quindi togliendole non cambia niente"},
             {"da confermare", "ssl = required, ssl_min_protocol, sendmail_path, !include",
              "non citate fra le modifiche, quindi presumibilmente invariate"},
-            {"criterio", "si tiene cio' che la 2.3 aveva, salvo cambi documentati",
+            {"criterio", "si tiene cio' che la 2.3 aveva, salvo changes documentati",
              "i due errori possibili non pesano uguale: un'impostazione che la 2.4 non conosce piu' fa "
              + "fallire doveconf, quindi si scopre subito e la configurazione precedente torna al suo "
              + "posto; un'impostazione giusta ma non scritta non fa fallire niente e cambia il "

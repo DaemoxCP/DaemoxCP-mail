@@ -98,8 +98,8 @@
                    + '<td>' + stato + '</td><td>' + proposta + '</td>'
                    + '<td class="text-end">' + azione + '</td></tr>';
 
-                if (x.avvisi && x.avvisi.length)
-                    h += '<tr><td colspan="4" class="pt-0">' + adAvvisi(x.avvisi) + '</td></tr>';
+                if (x.warnings && x.warnings.length)
+                    h += '<tr><td colspan="4" class="pt-0">' + adAvvisi(x.warnings) + '</td></tr>';
             });
             h += '</tbody></table></div><div id="autoDnsEsito"></div>';
 

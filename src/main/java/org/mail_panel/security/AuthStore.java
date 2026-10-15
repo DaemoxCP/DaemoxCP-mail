@@ -26,7 +26,7 @@ import java.util.logging.Logger;
  *
  *  - nessuna password e nessun hash di password: le colonne non esistono piu';
  *  - l'email dell'amministratore e' cifrata (DataCrypto) e si cerca solo col suo indice cieco;
- *  - ogni flusso di codici ha la sua tabella, e nel database c'e' solo l'impronta HMAC del codice;
+ *  - ogni flusso di codici ha la sua tabella, e nel database c'e' solo l'fingerprint HMAC del codice;
  *  - le date sono in UTC, colonne DATETIME, scritte da qui (mai NOW() col fuso del server);
  *  - solo PreparedStatement: le istruzioni sono costanti, i valori sono parametri;
  *  - l'unicita' (email, user handle, credenziale) la garantiscono i vincoli UNIQUE.

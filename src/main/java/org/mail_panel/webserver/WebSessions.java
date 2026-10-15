@@ -20,10 +20,10 @@ import java.util.logging.Logger;
 /**
  * Le sessioni del pannello, nel database (tabella panel_sessions), non in memoria.
  *
- *  - il token sta solo nel cookie __Host-MailPanel: nel database c'e' la sua impronta SHA-256,
+ *  - il token sta solo nel cookie __Host-MailPanel: nel database c'e' la sua fingerprint SHA-256,
  *    quindi chi legge il database non puo' usarlo;
  *  - una sessione scade dopo 30 minuti senza richieste e comunque dopo 12 ore;
- *  - vale solo con lo stesso browser (impronta dello User-Agent); l'IP non si confronta, perche'
+ *  - vale solo con lo stesso browser (fingerprint dello User-Agent); l'IP non si confronta, perche'
  *    dietro Cloudflare cambia, ma si conserva cifrato per l'elenco delle sessioni;
  *  - il token CSRF non si salva: e' l'HMAC del token di sessione con la chiave delle sessioni.
  *    Prima di entrare vale lo stesso schema con un cookie a parte (__Host-MailPanelPre), che lega

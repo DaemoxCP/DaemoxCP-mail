@@ -73,9 +73,9 @@ public class ResetDatabaseTest {
 
         System.out.println("\n== Il vecchio reset, rifatto: che cosa lasciava ==");
         popola(c);
-        List<String> avvisi = vecchioReset(c);
-        vero("MySQL rifiutava tre DROP, e restavano solo avvisi: " + avvisi,
-                avvisi.equals(List.of("mailboxes", "domains", "panel_admin")));
+        List<String> warnings = vecchioReset(c);
+        vero("MySQL rifiutava tre DROP, e restavano solo warnings: " + warnings,
+                warnings.equals(List.of("mailboxes", "domains", "panel_admin")));
         List<String> rimaste = tabelle(c);
         vero("restavano " + rimaste, new HashSet<>(rimaste).equals(new HashSet<>(List.of("admin_passkeys",
                 "cloudflare_accounts", "dkim_rotation_history", "domains", "mailboxes", "panel_admin", "panel_sessions",
@@ -211,17 +211,17 @@ public class ResetDatabaseTest {
             "domains", "virtual_aliases", "virtual_users", "virtual_domains", "rate_limits", "forwarding_rules",
             "sieve_filters", "auto_responders", "panel_settings", "panel_admin", "installed_components"
         };
-        List<String> avvisi = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         try (Statement st = c.createStatement()) {
             for (String t : tables) {
                 try {
                     st.executeUpdate("DROP TABLE IF EXISTS " + t);
                 } catch (SQLException e) {
-                    avvisi.add(t);
+                    warnings.add(t);
                 }
             }
         }
-        return avvisi;
+        return warnings;
     }
 
     /** Il database di prova vuoto, senza passare dal codice che si prova. */

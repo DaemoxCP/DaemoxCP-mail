@@ -4421,7 +4421,7 @@
   "server.um.x.rsOnlyPkg": "The {n} names found are only in files that belong to the rspamd package: they are its defaults, they are replaced at every update and they are not your choice. Listing them as problems would be a false alarm.",
   "server.um.x.rsRot": "The {n} older rotations were read too. The current file alone has {righe}.",
   "server.um.x.rsRotZ": "The {n} older rotations were read too ({z} compressed, decompressed on the fly). The current file alone has {righe}.",
-  "server.um.x.rsSplit": "Of the {occ} lines that contain the word \"timeout\", {avvisi} are the configuration warning itself, which rspamd writes again at every worker start, and {interruzioni} are interrupted scans.",
+  "server.um.x.rsSplit": "Of the {occ} lines that contain the word \"timeout\", {warnings} are the configuration warning itself, which rspamd writes again at every worker start, and {interruzioni} are interrupted scans.",
   "server.um.x.rsTheoretical": "In any case the configtest warning is about a THEORETICAL maximum — the sum of the limits of the single symbols — which to happen would need each of them to use up its own time in the same message.",
   "server.um.x.running": "running",
   "server.um.x.scriptDetach": "Script detachment",

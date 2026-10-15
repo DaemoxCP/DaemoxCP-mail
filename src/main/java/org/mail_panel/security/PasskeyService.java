@@ -33,8 +33,8 @@ import java.util.stream.Collectors;
  * Le passkey del pannello (WebAuthn), verificate dalla libreria Yubico webauthn-server-core.
  *
  *  - la registrazione salva la chiave pubblica COSE, controllando sfida, origine e rpId, e chiede
- *    una passkey "discoverable" con verifica dell'utente (impronta, volto o PIN);
- *  - il login verifica la firma, la sfida (usabile una volta, scade in tre minuti), l'origine,
+ *    una passkey "discoverable" con verifica dell'utente (fingerprint, volto o PIN);
+ *  - il login verifica la signature, la sfida (usabile una volta, scade in tre minuti), l'origine,
  *    l'rpId, la verifica dell'utente e il contatore;
  *  - il login non chiede il nome utente: niente da indovinare, niente che dica se un account
  *    esiste. Prima la pagina chiedeva il nome e /api/auth/check rispondeva se esisteva e se
@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
  *    che l'hanno chiesta.
  *
  * rpId e origine vengono dalla richiesta (Host e schema): una passkey registrata per un nome vale
- * solo per quel nome, perche' l'autenticatore firma l'hash dell'rpId e il browser scrive
+ * solo per quel nome, perche' l'autenticatore signature l'hash dell'rpId e il browser scrive
  * l'origine vera della pagina.
  */
 public final class PasskeyService {

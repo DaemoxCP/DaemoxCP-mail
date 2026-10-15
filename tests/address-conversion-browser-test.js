@@ -2,7 +2,7 @@
 // Chromium, sulle pagine generate dal pannello. Il server qui e' simulato: le sue regole e le sue
 // transazioni le prova AddressConversionTest, su MySQL. Qui si controlla che la pagina mostri l'anteprima,
 // chieda quello che serve (password, scelta sulla posta di prima, indirizzo scritto per conferma),
-// mandi al server l'impronta e il token CSRF, e che "Elimina casella" ora mandi il token.
+// mandi al server l'fingerprint e il token CSRF, e che "Elimina casella" ora mandi il token.
 //
 // Uso (dalla radice del progetto, dopo mvn package):
 //   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
@@ -61,7 +61,7 @@ async function servi(route) {
     if (p === '/api/domains') return json(route, { success: true, domains: [{ id: 1, domain: 'domain-d.test' }] });
     if (p === '/api/aliases' && req.method() === 'GET') {
         if (url.searchParams.get('trasforma') === 'dmarc@domain-d.test') return json(route, { success: true, possibile: true,
-            indirizzo: 'dmarc@domain-d.test', impronta: 'imp-alias',
+            indirizzo: 'dmarc@domain-d.test', fingerprint: 'imp-alias',
             destinazioni: [{ destinazione: 'owner@example.net', attivo: true }], copia: false,
             versoQui: [{ sorgente: 'postmaster@domain-d.test', attivo: true }],
             posta: { presente: true, messaggi: 1234, almeno: false, byte: 52428800, dimensione: '50,0 MB', filtri: true, ultimo: '2025-05-12T09:30:00+02:00' } });
@@ -72,7 +72,7 @@ async function servi(route) {
         return json(route, { success: true, id: 99, message: 'dmarc@domain-d.test ora e\' una casella. La posta di prima e\' in /var/vmail/.archivio-pannello/domain-d.test/dmarc-20261003T120000Z.' });
     if (p === '/api/mailboxes' && req.method() === 'GET') {
         if (url.searchParams.get('trasforma') === '7') return json(route, { success: true, possibile: true, id: 7,
-            indirizzo: 'info@domain-d.test', impronta: 'imp-casella',
+            indirizzo: 'info@domain-d.test', fingerprint: 'imp-casella',
             perdite: { ultimoAccesso: '2026-09-30T10:00:00+02:00', soloInvio: false, attiva: true, rispostaAutomatica: true,
                 inoltri: ['owner@example.net'], filtri: 2 },
             proposte: ['owner@example.net'], giaInoltrata: [{ destinazione: 'capo@esterno.it', attivo: true }], copia: true,
@@ -122,8 +122,8 @@ async function servi(route) {
     await page.click('#acVia');
     await page.waitForSelector('#aCasellaModal', { state: 'hidden' });
     const post = richieste.find(r => r.corpo && r.corpo.action === 'trasforma_in_casella');
-    vero('la richiesta: password, scelta "archivia", impronta, CSRF, inoltri non tenuti', post && post.corpo.password === 'Proposta-Dal-Generatore-42'
-        && post.corpo.posta_vecchia === 'archivia' && post.corpo.impronta === 'imp-alias' && post.corpo.csrf_token === 'csrf-prova'
+    vero('la richiesta: password, scelta "archivia", fingerprint, CSRF, inoltri non tenuti', post && post.corpo.password === 'Proposta-Dal-Generatore-42'
+        && post.corpo.posta_vecchia === 'archivia' && post.corpo.fingerprint === 'imp-alias' && post.corpo.csrf_token === 'csrf-prova'
         && post.corpo.tieni_inoltri === false && post.corpo.name === 'DMARC' && post.corpo.quota_mb === 1024);
     vero('e il messaggio del server', (await page.textContent('#aliasMsg')).includes('ora e\' una casella'));
 
@@ -150,9 +150,9 @@ async function servi(route) {
     await page.click('#aaVia');
     await page.waitForSelector('#aAliasModal', { state: 'hidden' });
     const pa = richieste.find(r => r.corpo && r.corpo.action === 'trasforma_in_alias');
-    vero('la richiesta: due destinazioni, la conferma, l\'impronta, il CSRF', pa && pa.corpo.destinazioni.length === 2
+    vero('la richiesta: due destinazioni, la conferma, l\'fingerprint, il CSRF', pa && pa.corpo.destinazioni.length === 2
         && pa.corpo.destinazioni[1] === 'postmaster@domain-c.test' && pa.corpo.conferma === 'INFO@domain-d.test'
-        && pa.corpo.impronta === 'imp-casella' && pa.corpo.csrf_token === 'csrf-prova' && pa.corpo.id === 7);
+        && pa.corpo.fingerprint === 'imp-casella' && pa.corpo.csrf_token === 'csrf-prova' && pa.corpo.id === 7);
     vero('e il messaggio del server sopra la tabella', (await page.textContent('#mbMsg')).includes('ora e\' un alias'));
 
     console.log('\n== Elimina casella: ora con il token CSRF ==');

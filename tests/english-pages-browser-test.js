@@ -124,7 +124,7 @@ const API = {
     })[body.action] || { success: true },
     // Updates: one endpoint, the reply depends on the action in the body.
     'POST /api/updates': (q, body) => ({
-        ramo_stato: { success: true, ramo: 'quarterly', spiegazione: 'Quarterly is the default.', cambiabile: true, verso: ['latest'], fileDelPannello: false,
+        ramo_stato: { success: true, ramo: 'quarterly', spiegazione: 'Quarterly is the default.', changeable: true, verso: ['latest'], panelOwnedFile: false,
                       repository: [{ nome: 'FreeBSD', ruolo: 'packages', ramo: 'quarterly', acceso: true, url: 'pkg+https://pkg.FreeBSD.org/...' }] },
         os_status: { success: true, kernelInstallato: '15.0-RELEASE-p3', uname: '15.0-RELEASE-p3', riavvioNecessario: false, userland: '15.0-RELEASE-p3',
                      arch: 'amd64', fineSupporto: '2026-12-31', noteSupporto: '', fonteSupporto: 'freebsd.org', aggiornabileConFreebsdUpdate: true, giaPronti: 'none' },
@@ -134,7 +134,7 @@ const API = {
             senzaRimedio: ['libfoo'] },
         packages_overview: { success: true, summary: { updates: 2, stackUpdates: 1, vulnerable: 1, fixable: 1, locked: 1, stackUnlocked: 1, panelRestart: true },
             packages: [{ name: 'postfix', installed: '3.9', available: '3.10', update: true, locked: true, stack: true, role: 'SMTP', canUpdate: true, whyNot: '',
-                         vuln: { verdetto: 'aggiornamento-non-basta', catalogo: '3.10', spiegazione: 'Not enough.', problemi: [] } },
+                         vuln: { verdict: 'aggiornamento-non-basta', catalogo: '3.10', spiegazione: 'Not enough.', problemi: [] } },
                        { name: 'openjdk25', installed: '25.0.1', available: '25.0.2', update: true, locked: true, stack: true, role: 'Java', javaFlow: true,
                          inUse: 'the panel runs on it', panelRestart: 'Restart the panel.', canUpdate: false, whyNot: 'Own procedure.' }],
             others: [{ name: 'curl', installed: '8.9', available: '8.10' }] },
@@ -142,7 +142,7 @@ const API = {
             { name: 'postfix', role: 'SMTP', version: '3.9', locked: true }, { name: 'dovecot', role: 'IMAP', version: '2.3', locked: false }] },
         updates_status: { success: true, rebootPending: true, kernel: '15.0-p3', running: '15.0-p2', dryRun: 'Nothing to do.',
             vulnerable: [{ name: 'curl', role: 'tools', locked: false, fixedByUpgrade: true, cve: ['CVE-2026-0001'],
-                           correzione: { verdetto: 'si-risolve-aggiornando', spiegazione: 'The repository has 8.10.' } }],
+                           fix: { verdict: 'si-risolve-aggiornando', spiegazione: 'The repository has 8.10.' } }],
             lockedUpdates: [{ name: 'postfix', role: 'SMTP', current: '3.9', available: '3.10', majorJump: false, advisory: { level: 'verifica', text: 'Read the notes.' } }] },
         defaults_check: { success: true, fonte: 'ports', avvertenza: 'Defaults move.', ramo: { ramo: 'quarterly', spiegazione: 'Default.', dove: '/etc/pkg' },
             righe: [{ componente: 'OpenSSL', perche: 'TLS', predefinito: 'base', installato: 'base', esito: 'coerente', dipendenti: [] }] },

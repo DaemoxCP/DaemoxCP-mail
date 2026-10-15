@@ -23,7 +23,7 @@ public class ReportScheduleTest {
     public static void main(String[] args) {
         // --- Il caso che si e' rotto in produzione ---
         // Settimanale, ultimo invio RIUSCITO otto giorni fa, ultimo tentativo fallito un minuto
-        // fa. Senza la correzione qui si riprovava, e si sarebbe riprovato al tick dopo, e al
+        // fa. Senza la fix qui si riprovava, e si sarebbe riprovato al tick dopo, e al
         // tick dopo ancora, indefinitamente.
         vero("dopo un fallimento non riprova subito",
             !PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), oreFa(0), "fallito: auth", ADESSO));

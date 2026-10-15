@@ -49,7 +49,7 @@ public class MtaStsSetup {
      *
      * Non e' un numero scelto a sentimento: un resolver che ha gia' in cache la risposta
      * precedente la tiene per il TTL di quella risposta, e su un jolly Cloudflare quel TTL
-     * misurato vale 300 secondi. Sotto i cinque minuti l'attesa non servirebbe a niente; sei
+     * measured vale 300 secondi. Sotto i cinque minuti l'attesa non servirebbe a niente; sei
      * lasciano il margine perche' la cache scada davvero.
      */
     private static final long MAX_WAIT_MS = 6 * 60 * 1000L;

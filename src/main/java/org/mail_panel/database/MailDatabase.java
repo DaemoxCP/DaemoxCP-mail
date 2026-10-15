@@ -576,8 +576,8 @@ public class MailDatabase {
     /**
      * Le tabelle dell'accesso senza password: le sessioni e i codici monouso, una tabella per
      * flusso (accesso via email, accesso dalla console, cambio dell'email, conferma di
-     * un'operazione delicata). Nei codici c'e' solo l'impronta HMAC, mai il codice; della sessione
-     * c'e' solo l'impronta SHA-256 del token. Date in UTC, colonne DATETIME.
+     * un'operazione delicata). Nei codici c'e' solo l'fingerprint HMAC, mai il codice; della sessione
+     * c'e' solo l'fingerprint SHA-256 del token. Date in UTC, colonne DATETIME.
      */
     private static final List<String> AUTH_TABLES = List.of(
         """

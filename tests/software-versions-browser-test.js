@@ -1,5 +1,5 @@
 // La Home in Chromium: la colonna Versione di "Servizi Mail" (con MySQL e Redis), la tabella
-// "Altro software", gli avvisi "da riavviare", le conferme prima di fermare un servizio e il
+// "Altro software", gli warnings "da riavviare", le conferme prima di fermare un servizio e il
 // token CSRF mandato a /api/service. Il server e' simulato: le letture vere le prova
 // SoftwareVersionsTest. Qui si controlla che la pagina mostri cio' che il server dice, solo come testo.
 //

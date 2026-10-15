@@ -1902,7 +1902,7 @@ public class Fail2banManager {
                 j.logFail2ban = BanActionRepair.erroriLogPer(jail);
                 j.sezioni = BanActionRepair.sezioniCheDefiniscono(jail);
                 j.dump = BanActionRepair.configurazioneLetta(jail);
-                // Non si conclude "non banna via pf": non e' stato misurato. Si dice cosa
+                // Non si conclude "non banna via pf": non e' stato measured. Si dice cosa
                 // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
                 // quel comando su questo sistema non fa niente.
                 j.nota = j.nonRaggiungibile
@@ -2144,7 +2144,7 @@ public class Fail2banManager {
          *
          * Ci finiscono anche quelli presenti nella tabella quando nessuna regola la legge:
          * essere nella tabella e' una condizione necessaria, non sufficiente, e contarli come
-         * bloccati sarebbe lo stesso errore di leggere "Currently banned" come una prova.
+         * lockedPackages sarebbe lo stesso errore di leggere "Currently banned" come una prova.
          */
         public int totaleNonApplicati() {
             int n = 0;
@@ -2661,7 +2661,7 @@ public class Fail2banManager {
         StringBuilder content = new StringBuilder();
         content.append("# Permaban list — gestito dal mail panel\n");
         content.append("# IP qui dentro vengono caricati nella tabella pf <permaban>\n");
-        content.append("# e bloccati con regola: block in quick from <permaban>\n\n");
+        content.append("# e lockedPackages con regola: block in quick from <permaban>\n\n");
         for (String ip : ips) content.append(ip).append("\n");
         Files.writeString(Paths.get(PERMABAN_FILE), content.toString(), java.nio.charset.StandardCharsets.UTF_8);
         try {

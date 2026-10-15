@@ -1,6 +1,6 @@
 package org.mail_panel.system;
 
-/** Il verdetto della scheda Autoconfig: la riga che dichiarava non servito un file servito. */
+/** Il verdict della scheda Autoconfig: la riga che dichiarava non servito un file servito. */
 public class AutoconfigTest {
 
     static int falliti = 0;

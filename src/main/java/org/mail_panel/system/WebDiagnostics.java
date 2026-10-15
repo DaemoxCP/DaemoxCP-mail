@@ -256,7 +256,7 @@ public class WebDiagnostics {
             r.put("fail2banLetto", false);
         }
 
-        r.put("verdetto", verdetto(r));
+        r.put("verdict", verdict(r));
         return r;
     }
 
@@ -267,7 +267,7 @@ public class WebDiagnostics {
     }
 
     /** Il riassunto, costruito solo su cio' che si e' potuto misurare. */
-    private static String verdetto(JSONObject r) {
+    private static String verdict(JSONObject r) {
         List<String> p = new ArrayList<>();
         if (!r.optBoolean("nginxLeggibile", false))
             p.add(I18n.tr("server.webdiag.nginxUnreadable"));
