@@ -25,7 +25,7 @@ public class PackageQueueTest {
         // L'elenco in una cartella di prova, non in /var/db.
         Path d = Files.createTempDirectory("prova-turno");
         Path f = d.resolve("mail-panel-maintenance-locks");
-        PackageQueue.elenco = f;
+        PackageQueue.list = f;
 
         // --- Il turno ---
         vero("libero all'inizio", PackageQueue.chi() == null);

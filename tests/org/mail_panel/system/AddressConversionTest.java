@@ -49,7 +49,7 @@ public class AddressConversionTest {
         return a;
     }
 
-    static MailDatabase.Mailbox casella(int id, String email) {
+    static MailDatabase.Mailbox mailbox(int id, String email) {
         MailDatabase.Mailbox m = new MailDatabase.Mailbox();
         m.id = id;
         m.email = email;
@@ -113,7 +113,7 @@ public class AddressConversionTest {
         vero("un dominio che non e' del pannello no",
                 AddressTransform.motivoNoCasella(stato("dmarc@altro.it", false, null, una, List.of())).contains("non è fra i domini"));
         vero("un indirizzo che e' gia' una casella no",
-                AddressTransform.motivoNoCasella(stato("dmarc@domain-d.test", true, casella(5, "dmarc@domain-d.test"), una, List.of())).contains("già una casella"));
+                AddressTransform.motivoNoCasella(stato("dmarc@domain-d.test", true, mailbox(5, "dmarc@domain-d.test"), una, List.of())).contains("già una casella"));
         vero("un indirizzo senza alias no",
                 AddressTransform.motivoNoCasella(stato("dmarc@domain-d.test", true, null, List.of(), List.of())).contains("non ha alias"));
         AddressTransform.Stato ok = stato("dmarc@domain-d.test", true, null,
@@ -131,7 +131,7 @@ public class AddressConversionTest {
         vero("e non cambia se non cambia niente", prima.equals(AddressTransform.impronta(ok)));
 
         System.out.println("\n== Casella -> alias: cosa si perde ==");
-        MailDatabase.Mailbox m = casella(7, "info@domain-d.test");
+        MailDatabase.Mailbox m = mailbox(7, "info@domain-d.test");
         m.receiveEnabled = false;
         AddressTransform.Stato c = new AddressTransform.Stato("info@domain-d.test", true, m,
                 List.of(alias(4, "info@domain-d.test", "info@domain-d.test", true), alias(5, "info@domain-d.test", "capo@x.it", true)),
@@ -150,7 +150,7 @@ public class AddressConversionTest {
 
     static void destinazioni() {
         System.out.println("\n== Casella -> alias: le destinazioni ==");
-        AddressTransform.Stato s = stato("info@domain-d.test", true, casella(7, "info@domain-d.test"), List.of(), List.of());
+        AddressTransform.Stato s = stato("info@domain-d.test", true, mailbox(7, "info@domain-d.test"), List.of(), List.of());
         FakeNetwork r = new FakeNetwork(Set.of("domain-d.test", "domain-c.test"), Set.of("owner@domain-d.test", "info@domain-d.test"));
         r.con("vendite@domain-d.test", "owner@domain-d.test");
         vero("nessuna destinazione: no", errore(s, new JSONArray(), r).contains("almeno una"));
@@ -171,7 +171,7 @@ public class AddressConversionTest {
         vero("un alias che riporta all'indirizzo: no, con la strada: " + g, g != null && g.contains("giro@domain-d.test -> info@domain-d.test"));
         r.con("a@domain-d.test", "b@domain-d.test").con("b@domain-d.test", "info@domain-d.test");
         vero("anche a due passi", errore(s, new JSONArray().put("a@domain-d.test"), r).contains("a@domain-d.test -> b@domain-d.test -> info@domain-d.test"));
-        AddressTransform.Stato conAlias = stato("info@domain-d.test", true, casella(7, "info@domain-d.test"),
+        AddressTransform.Stato conAlias = stato("info@domain-d.test", true, mailbox(7, "info@domain-d.test"),
                 List.of(alias(9, "info@domain-d.test", "giro@domain-d.test", true)), List.of());
         vero("e anche se il giro passa da un alias che l'indirizzo ha gia'",
                 errore(conAlias, new JSONArray().put("owner@example.net"), r).contains("giro@domain-d.test"));

@@ -136,7 +136,7 @@ public class AppleProfile {
     }
 
     /** La casella esiste davvero? Whitelist: si serve solo cio' che il pannello ospita. */
-    public static Casella casella(String email) {
+    public static Casella mailbox(String email) {
         if (email == null || email.isBlank()) return null;
         String cercato = email.trim().toLowerCase(Locale.ROOT);
         try {
@@ -181,7 +181,7 @@ public class AppleProfile {
 
     /** L'anteprima del profilo, per guardarlo prima di scaricarlo. */
     public static JSONObject anteprima(String email) {
-        Casella c = casella(email);
+        Casella c = mailbox(email);
         if (c == null)
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.noMailbox", java.util.Map.of("e", String.valueOf(email))));

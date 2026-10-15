@@ -585,12 +585,12 @@ public class AutoDns {
      */
     public JSONObject caselleDisponibili() {
         JSONObject r = new JSONObject().put("success", true);
-        JSONArray elenco = new JSONArray();
+        JSONArray list = new JSONArray();
         try {
             for (MailDatabase.Domain dom : database.getDomains())
                 for (MailDatabase.Mailbox m : database.getMailboxes(dom.id))
-                    if (m.email != null && !m.email.isBlank()) elenco.put(m.email);
-            return r.put("caselle", elenco);
+                    if (m.email != null && !m.email.isBlank()) list.put(m.email);
+            return r.put("caselle", list);
         } catch (Exception e) {
             return errore(I18n.tr("server.adns.readMailboxes", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }

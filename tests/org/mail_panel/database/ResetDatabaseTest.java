@@ -170,7 +170,7 @@ public class ResetDatabaseTest {
     /** Una riga in ogni tabella del pannello, legate come nell'uso vero. Restituisce l'id del dominio. */
     static int popola(Connection c) throws SQLException {
         int dominio = inserisci(c, "INSERT INTO domains (domain) VALUES (?)", "esempio.test");
-        int casella = inserisci(c, "INSERT INTO mailboxes (domain_id, email, password) VALUES (?, ?, ?)",
+        int mailbox = inserisci(c, "INSERT INTO mailboxes (domain_id, email, password) VALUES (?, ?, ?)",
                 dominio, "posta@esempio.test", "x");
         int admin = inserisci(c, "INSERT INTO panel_admin (username) VALUES (?)", "amministratore");
         inserisci(c, "INSERT INTO panel_sessions (token_hash, admin_id, ua_hash, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -185,13 +185,13 @@ public class ResetDatabaseTest {
         inserisci(c, "INSERT INTO rspamd_training (message_id, trained_as, trained_by) VALUES (?, ?, ?)",
                 "<1@esempio.test>", "spam", admin);
         inserisci(c, "INSERT INTO roundcube_tokens (token, mailbox_id, expires_at) VALUES (?, ?, ?)",
-                "t".repeat(64), casella, "2030-01-01 00:00:00");
-        inserisci(c, "INSERT INTO auto_responders (mailbox_id, body) VALUES (?, ?)", casella, "Sono in ferie.");
+                "t".repeat(64), mailbox, "2030-01-01 00:00:00");
+        inserisci(c, "INSERT INTO auto_responders (mailbox_id, body) VALUES (?, ?)", mailbox, "Sono in ferie.");
         inserisci(c, "INSERT INTO sieve_filters (mailbox_id, name, conditions, actions) VALUES (?, ?, ?, ?)",
-                casella, "filtro", "[]", "[]");
-        inserisci(c, "INSERT INTO forwarding_rules (mailbox_id, destination) VALUES (?, ?)", casella, "altro@esempio.test");
+                mailbox, "filtro", "[]", "[]");
+        inserisci(c, "INSERT INTO forwarding_rules (mailbox_id, destination) VALUES (?, ?)", mailbox, "altro@esempio.test");
         inserisci(c, "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id) VALUES (?, ?, ?)",
-                "2026-10-03", casella, dominio);
+                "2026-10-03", mailbox, dominio);
         inserisci(c, "INSERT INTO aliases (domain_id, source, destination) VALUES (?, ?, ?)",
                 dominio, "info@esempio.test", "posta@esempio.test");
         inserisci(c, "INSERT INTO dkim_rotation_history (domain_id, domain, event_type) VALUES (?, ?, ?)",

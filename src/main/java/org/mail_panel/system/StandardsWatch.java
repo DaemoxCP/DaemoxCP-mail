@@ -287,16 +287,16 @@ public class StandardsWatch {
      * Decidere se tocca il nostro codice resta un lavoro di lettura — ma partire dall'elenco
      * scritto dagli autori e' un'altra cosa rispetto a partire da centottanta pagine.
      */
-    public static JSONObject cosaECambiato(String numero) { return cosaECambiato(numero, numero); }
+    public static JSONObject cosaECambiato(String number) { return cosaECambiato(number, number); }
 
     /**
      * @param numero     il documento nuovo, da scaricare
      * @param rifermento la specifica del pannello a cui si riferisce, per sapere quali
      *                   identificatori incrociare (per un aggiornamento sono diversi)
      */
-    public static JSONObject cosaECambiato(String numero, String rifermento) {
-        JSONObject r = new JSONObject().put("rfc", normalizza(numero));
-        String n = normalizza(numero);
+    public static JSONObject cosaECambiato(String number, String rifermento) {
+        JSONObject r = new JSONObject().put("rfc", normalizza(number));
+        String n = normalizza(number);
         if (!n.matches("[0-9]{1,5}"))
             return r.put("success", false).put("error", I18n.tr("server.watch.badNumber"));
         try {
@@ -385,14 +385,14 @@ public class StandardsWatch {
      * qualunque cosa, e la segnalazione diventerebbe rumore. E' lo stesso errore che sull'SPF
      * faceva passare per buono un record che non autorizzava il server.
      */
-    public static List<String> righeCheToccano(String elenco, String identificatori) {
+    public static List<String> righeCheToccano(String list, String identificatori) {
         List<String> fuori = new ArrayList<>();
-        if (elenco == null || identificatori == null) return fuori;
+        if (list == null || identificatori == null) return fuori;
         List<String> chiavi = new ArrayList<>();
         for (String k : identificatori.split(",")) if (!k.trim().isEmpty()) chiavi.add(k.trim());
         if (chiavi.isEmpty()) return fuori;
 
-        for (String riga : elenco.split("\n")) {
+        for (String riga : list.split("\n")) {
             String r = riga.trim();
             if (r.length() < 3) continue;
             LinkedHashSet<String> trovati = new LinkedHashSet<>();

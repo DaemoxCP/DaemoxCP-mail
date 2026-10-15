@@ -33,16 +33,16 @@ public class AliasMessagesTest {
         return new ArrayList<>(List.of(righe));
     }
 
-    static String nota(String indirizzo, boolean casella, List<MailDatabase.Alias> righe) {
-        return SSLMailServer.dopoGliAlias(indirizzo, casella, righe);
+    static String nota(String indirizzo, boolean mailbox, List<MailDatabase.Alias> righe) {
+        return SSLMailServer.dopoGliAlias(indirizzo, mailbox, righe);
     }
 
     /** La logica di prima (creazione soltanto): una riga casella -> casella bastava, attiva o no. */
-    static boolean vecchiaAvvisava(String sorgente, boolean casella, List<MailDatabase.Alias> righe) {
+    static boolean vecchiaAvvisava(String sorgente, boolean mailbox, List<MailDatabase.Alias> righe) {
         boolean copiaInCasella = false;
         for (MailDatabase.Alias a : righe)
             if (a.source.equals(sorgente) && a.destination.equals(sorgente)) copiaInCasella = true;
-        return casella && !copiaInCasella;
+        return mailbox && !copiaInCasella;
     }
 
     public static void main(String[] x) {

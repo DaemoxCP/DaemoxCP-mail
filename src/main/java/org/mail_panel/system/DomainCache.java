@@ -26,7 +26,7 @@ public class DomainCache {
 
     private static final long VALIDITA_MS = 30_000;
 
-    private static volatile Set<String> elenco = null;
+    private static volatile Set<String> list = null;
     private static volatile long scadenza = 0;
 
     private DomainCache() {}
@@ -34,7 +34,7 @@ public class DomainCache {
     /** I domini gestiti, in minuscolo. Rilegge dal database solo quando la copia e' scaduta. */
     public static Set<String> domini() {
         long ora = System.currentTimeMillis();
-        Set<String> copia = elenco;
+        Set<String> copia = list;
         if (copia != null && ora < scadenza) return copia;
 
         Set<String> nuovo = new LinkedHashSet<>();
@@ -52,7 +52,7 @@ public class DomainCache {
             }
             return Set.of();
         }
-        elenco = nuovo;
+        list = nuovo;
         scadenza = ora + VALIDITA_MS;
         return nuovo;
     }

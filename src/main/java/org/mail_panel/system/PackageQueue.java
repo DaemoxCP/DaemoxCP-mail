@@ -45,7 +45,7 @@ public final class PackageQueue {
     public static final String STATO = "/var/db/mail-panel-maintenance-locks";
 
     /** Dove sta l'elenco. E' una variabile solo perche' le prove non scrivano in /var/db. */
-    static Path elenco = Path.of(STATO);
+    static Path list = Path.of(STATO);
 
     private record Turno(String id, String descrizione, long inizio) {}
 
@@ -80,7 +80,7 @@ public final class PackageQueue {
         }
         if (nonConElencoAperto && statoPresente()) {
             rilascia(id);
-            return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(elenco)));
+            return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(list)));
         }
         return null;
     }
@@ -147,7 +147,7 @@ public final class PackageQueue {
      * perderebbe proprio i pacchetti da riproteggere.
      */
     public static String scriviStato(List<String> pacchetti) {
-        return scriviStato(elenco, pacchetti);
+        return scriviStato(list, pacchetti);
     }
 
     static String scriviStato(Path f, List<String> pacchetti) {
@@ -173,12 +173,12 @@ public final class PackageQueue {
 
     /** Cancella l'elenco. Lo fa solo il lavoro che l'ha scritto, dopo aver riprotetto tutto. */
     public static void cancellaStato() {
-        try { Files.deleteIfExists(elenco); }
-        catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + elenco, e); }
+        try { Files.deleteIfExists(list); }
+        catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + list, e); }
     }
 
     /** Se c'e' un elenco di un lavoro non concluso. */
     public static boolean statoPresente() {
-        return Files.exists(elenco);
+        return Files.exists(list);
     }
 }

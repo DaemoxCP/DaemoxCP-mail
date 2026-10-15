@@ -279,14 +279,14 @@ public final class PackagePlan {
     public static JSONObject simula(List<String> daSbloccare, List<String> pacchetti) {
         for (String n : daSbloccare) if (!isValidName(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
         for (String n : pacchetti) if (!isValidName(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
-        String elenco = pacchetti.isEmpty() ? "" : " " + String.join(" ", pacchetti);
+        String list = pacchetti.isEmpty() ? "" : " " + String.join(" ", pacchetti);
         String prefisso = "pkg";
         String copia = null;
         try {
             if (!daSbloccare.isEmpty()) {
                 String db = cartellaDb();
-                long kb = numero(sh("du -sk " + db + " 2>/dev/null | cut -f1", 120));
-                long liberi = numero(sh("df -k /var/tmp 2>/dev/null | tail -1 | awk '{print $4}'", 30));
+                long kb = number(sh("du -sk " + db + " 2>/dev/null | cut -f1", 120));
+                long liberi = number(sh("df -k /var/tmp 2>/dev/null | tail -1 | awk '{print $4}'", 30));
                 if (kb <= 0) return fallito(I18n.tr("server.plan.cannotMeasure", java.util.Map.of("db", String.valueOf(db))));
                 if (liberi < kb * 2)
                     return fallito(I18n.tr("server.plan.noSpace", java.util.Map.of("mb", String.valueOf(kb / 1024), "free", String.valueOf(liberi / 1024))));
@@ -304,11 +304,11 @@ public final class PackagePlan {
                     if (!u.success()) return fallito(I18n.tr("server.plan.unlockFailed", java.util.Map.of("n", String.valueOf(n), "out", String.valueOf(u.outputTrim()))));
                 }
             }
-            Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefisso + " upgrade -n -U" + elenco + " 2>&1");
+            Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefisso + " upgrade -n -U" + list + " 2>&1");
             JSONObject piano = leggiPiano(r.output());
             return piano.put("success", true).put("codice", r.exitCode()).put("uscita", r.outputTrim())
                     .put("sullaCopia", copia != null)
-                    .put("comando", "pkg upgrade -n -U" + elenco);
+                    .put("comando", "pkg upgrade -n -U" + list);
         } finally {
             // La copia se ne va sempre. Il percorso e' quello creato da mktemp e verificato sopra.
             if (copia != null) Shell.runShell(Duration.ofSeconds(300), "rm -rf " + copia);
@@ -735,7 +735,7 @@ public final class PackagePlan {
                 .put("cambi", new JSONArray()).put("bloccati", new JSONArray()).put("erroriPkg", new JSONArray());
     }
 
-    private static long numero(String s) {
+    private static long number(String s) {
         try { return Long.parseLong(s.trim().split("\\s+")[0]); } catch (Exception e) { return -1; }
     }
 }

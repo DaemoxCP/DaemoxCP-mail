@@ -799,7 +799,7 @@ public final class UpdateManager {
         // da un !include attivo oppure da un args = di passdb/userdb.
         for (int giro = 0; giro < 3; giro++) {   // tre livelli bastano e impediscono un ciclo infinito
             int prima = vivi.size();
-            String elenco = String.join(" ", vivi);
+            String list = String.join(" ", vivi);
             // -H e non -h: serve sapere DA QUALE file arriva ogni riferimento, perche' un
             // include relativo si risolve rispetto alla cartella del file che lo contiene.
             // "!include auth-sql.conf.ext" dentro conf.d/10-auth.conf indica
@@ -812,7 +812,7 @@ public final class UpdateManager {
             // fragile, e una svista li' significa non seguire un riferimento — cioe' dichiarare
             // compatibile una configurazione che non lo e'.
             String riferimenti = sh("grep -HE '^[[:space:]]*(!include(_try)?[[:space:]]|.*args[[:space:]]*=)' "
-                    + elenco + " 2>/dev/null", 20);
+                    + list + " 2>/dev/null", 20);
             for (String riga : riferimenti.split("\n")) {
                 int c = riga.indexOf(':');
                 if (c <= 0) continue;
@@ -906,9 +906,9 @@ public final class UpdateManager {
             r.put("note", I18n.tr("server.um.dovecotCompatibility.1", java.util.Map.of("dOVECOT_DIR", String.valueOf(DOVECOT_DIR))));
         } else {
             r.put("scanned", true);
-            String elenco = String.join(" ", file);
+            String list = String.join(" ", file);
             for (String[] rot : DOVECOT_24_ROTTURE) {
-                String trovati = sh("grep -lE \"" + rot[0] + "\" " + elenco + " 2>/dev/null", 20);
+                String trovati = sh("grep -lE \"" + rot[0] + "\" " + list + " 2>/dev/null", 20);
                 if (trovati.isEmpty()) continue;
                 List<String> dove = new ArrayList<>();
                 for (String f : trovati.split("\n")) if (!f.trim().isEmpty()) dove.add(f.trim());
@@ -917,7 +917,7 @@ public final class UpdateManager {
             }
             // Variabili a lettera singola: %u %d %n %h e le forme con modificatori (%2.256Nu).
             // La sintassi nuova e' %{...}, che non combacia con questa espressione.
-            String var = sh("grep -lE '%[0-9.]*[A-Za-z]([^{A-Za-z]|$)' " + elenco + " 2>/dev/null", 20);
+            String var = sh("grep -lE '%[0-9.]*[A-Za-z]([^{A-Za-z]|$)' " + list + " 2>/dev/null", 20);
             if (!var.isEmpty()) {
                 List<String> dove = new ArrayList<>();
                 for (String f : var.split("\n")) if (!f.trim().isEmpty()) dove.add(f.trim());
@@ -928,13 +928,13 @@ public final class UpdateManager {
             }
             // Nella 2.4 questa direttiva e' obbligatoria e deve essere la prima: la sua assenza
             // e' di per se' la prova che la configurazione e' ancora in formato 2.3.
-            if (sh("grep -lE '^[[:space:]]*dovecot_config_version' " + elenco + " 2>/dev/null", 20).isEmpty()) {
+            if (sh("grep -lE '^[[:space:]]*dovecot_config_version' " + list + " 2>/dev/null", 20).isEmpty()) {
                 problemi.put(new JSONObject()
                         .put("costrutto", I18n.tr("server.um.x.noConfigVersion"))
                         .put("sostituto", I18n.tr("server.um.dovecotCompatibility.6"))
                         .put("files", new JSONArray()));
             }
-            if (sh("grep -lE '^[[:space:]]*dovecot_storage_version' " + elenco + " 2>/dev/null", 20).isEmpty()) {
+            if (sh("grep -lE '^[[:space:]]*dovecot_storage_version' " + list + " 2>/dev/null", 20).isEmpty()) {
                 problemi.put(new JSONObject()
                         .put("costrutto", I18n.tr("server.um.x.noStorageVersion"))
                         .put("sostituto", I18n.tr("server.um.dovecotCompatibility.8"))
@@ -1872,30 +1872,30 @@ public final class UpdateManager {
             // con le STESSE credenziali, su una casella vera.
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.x.authTest"));
-            String casella = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
-            if (casella.isEmpty()) {
+            String mailbox = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
+            if (mailbox.isEmpty()) {
                 job.scrivi(I18n.tr("server.um.runRigenerazioneDovecot.7"));
                 job.status = "completed";
                 job.scrivi("");
                 job.scrivi(I18n.tr("server.um.runRigenerazioneDovecot.8"));
                 return;
             }
-            if (!casella.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
+            if (!mailbox.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
                 job.scrivi(I18n.tr("server.um.runRigenerazioneDovecot.9"));
                 job.status = "completed";
                 return;
             }
             // La stessa condizione della password_query scritta nel file, senza estrarre la
             // password: interessa che la riga ci sia e sia raggiungibile, non il suo contenuto.
-            String trovate = mysqlOut("SELECT COUNT(*) FROM mailboxes WHERE email='" + casella + "' AND active=1;").trim();
+            String trovate = mysqlOut("SELECT COUNT(*) FROM mailboxes WHERE email='" + mailbox + "' AND active=1;").trim();
             if ("1".equals(trovate)) {
-                job.scrivi(I18n.tr("server.um.runRigenerazioneDovecot.10", java.util.Map.of("casella", String.valueOf(casella))));
+                job.scrivi(I18n.tr("server.um.runRigenerazioneDovecot.10", java.util.Map.of("casella", String.valueOf(mailbox))));
                 job.status = "completed";
                 job.scrivi("");
                 job.scrivi(I18n.tr("server.um.runRigenerazioneDovecot.11"));
             } else {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runRigenerazioneDovecot.12", java.util.Map.of("casella", String.valueOf(casella), "trovate", String.valueOf(trovate)));
+                job.errorMessage = I18n.tr("server.um.runRigenerazioneDovecot.12", java.util.Map.of("casella", String.valueOf(mailbox), "trovate", String.valueOf(trovate)));
                 job.scrivi("    " + I18n.tr("server.um.x.alarm", java.util.Map.of("m", String.valueOf(job.errorMessage))));
             }
         } catch (Exception e) {
@@ -1995,7 +1995,7 @@ public final class UpdateManager {
             int sp = t.lastIndexOf(' ');
             if (sp <= 0) continue;
             arr.put(new JSONObject().put("plugin", t.substring(0, sp).trim())
-                    .put("accounts", (int) numero(t.substring(sp + 1))));
+                    .put("accounts", (int) number(t.substring(sp + 1))));
         }
         return arr;
     }
@@ -2015,7 +2015,7 @@ public final class UpdateManager {
     }
 
     /** Numero da output di comando; 0 se non contiene cifre. */
-    private static long numero(String v) {
+    private static long number(String v) {
         try { return Long.parseLong(v == null ? "" : v.trim().replaceAll("[^0-9]", "")); }
         catch (Exception e) { return 0L; }
     }
@@ -2200,8 +2200,8 @@ public final class UpdateManager {
         // --- 7. Spazio per la copia fredda ---
         String dataDir = sh("grep -E '^[[:space:]]*datadir[[:space:]]*=' /usr/local/etc/mysql/my.cnf 2>/dev/null | tail -1 | cut -d= -f2 | tr -d ' '", 15);
         if (dataDir.isEmpty()) dataDir = "/var/db/mysql";
-        long dirKb = numero(sh("du -sk " + dataDir + " 2>/dev/null | awk '{print $1}'", 120));
-        long freeKb = numero(sh("df -k /var/db 2>/dev/null | tail -1 | awk '{print $4}'", 20));
+        long dirKb = number(sh("du -sk " + dataDir + " 2>/dev/null | awk '{print $1}'", 120));
+        long freeKb = number(sh("df -k /var/db 2>/dev/null | tail -1 | awk '{print $4}'", 20));
         long servono = (long) (dirKb * 1.15) + 512L * 1024L;
         r.put("dataDir", dataDir).put("dataDirMb", dirKb / 1024).put("freeMb", freeKb / 1024);
         if (dirKb <= 0 || freeKb < servono) {
@@ -2216,9 +2216,9 @@ public final class UpdateManager {
         // --- 8. Inventario, per riconfrontare a fine migrazione ---
         long schemi = 0, tabelle = 0, caselle = 0;
         if (su && !runVer.isEmpty()) {
-            schemi = numero(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
-            tabelle = numero(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
-            caselle = numero(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
+            schemi = number(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
+            tabelle = number(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
+            caselle = number(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
         }
         r.put("schemaCount", schemi).put("tableCount", tabelle).put("mailboxCount", caselle);
         aggiungiCheck(checks, "inventario", I18n.tr("server.um.mysql84Preflight.24"), schemi > 0 ? "ok" : "verifica",
@@ -2266,8 +2266,8 @@ public final class UpdateManager {
 
     /** File e byte logici di un albero: si misura con stat, MAI con du. */
     private static long[] misura(String dir) {
-        long file = numero(sh("find " + dir + " -type f 2>/dev/null | wc -l", 120));
-        long byteLogici = numero(sh("find " + dir + " -type f -exec stat -f %z {} + 2>/dev/null "
+        long file = number(sh("find " + dir + " -type f 2>/dev/null | wc -l", 120));
+        long byteLogici = number(sh("find " + dir + " -type f -exec stat -f %z {} + 2>/dev/null "
                 + "| awk '{s+=$1} END {print s+0}'", 120));
         return new long[]{file, byteLogici};
     }
@@ -2384,14 +2384,14 @@ public final class UpdateManager {
             ok("printf '%s\\n%s\\n' " + srvPkg + " " + cliPkg + " > " + backupDir + "/pacchetti.txt", 20);
             job.scrivi(I18n.tr("server.um.runMigrazione84.11"));
             ok("pkg fetch -y -o " + backupDir + "/pkg " + srvPkg + " " + cliPkg + " >/dev/null 2>&1", 600);
-            job.scrivi("    " + I18n.tr("server.um.x.pkgsKept", java.util.Map.of("n", String.valueOf(numero(sh("find " + backupDir + "/pkg -name '*.pkg' | wc -l", 30))))));
+            job.scrivi("    " + I18n.tr("server.um.x.pkgsKept", java.util.Map.of("n", String.valueOf(number(sh("find " + backupDir + "/pkg -name '*.pkg' | wc -l", 30))))));
 
             long[] prima = misura(dataDir);
             job.scrivi("    " + I18n.tr("server.um.x.copying", java.util.Map.of("dir", String.valueOf(dataDir), "n", String.valueOf(prima[0]), "mb", String.valueOf((prima[1] / 1024 / 1024)))));
             String cpOut = sh("cp -Rp " + dataDir + " " + backupDir + "/datadir 2>&1; echo EXIT=$?", 1800);
             int cpCode = -1;
             for (String l : cpOut.split("\n")) {
-                if (l.startsWith("EXIT=")) { cpCode = (int) numero(l); continue; }
+                if (l.startsWith("EXIT=")) { cpCode = (int) number(l); continue; }
                 if (!l.trim().isEmpty()) job.scrivi("      cp: " + l);
             }
             if (cpCode != 0) throw new IllegalStateException("cp exited with code " + cpCode);
@@ -2486,9 +2486,9 @@ public final class UpdateManager {
             job.avanza(10, TOT);
             job.scrivi("");
             job.scrivi("[10/" + TOT + "] " + I18n.tr("server.um.x.inventory"));
-            long sd = numero(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
-            long td = numero(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
-            long cd = numero(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
+            long sd = number(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
+            long td = number(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
+            long cd = number(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
             job.scrivi(I18n.tr("server.um.runMigrazione84.23", java.util.Map.of("schemiPrima", String.valueOf(schemiPrima), "sd", String.valueOf(sd), "tabellePrima", String.valueOf(tabellePrima), "td", String.valueOf(td), "casellePrima", String.valueOf(casellePrima), "cd", String.valueOf(cd))));
             boolean inventarioOk = sd >= schemiPrima && td >= tabellePrima && cd >= casellePrima;
             if (!inventarioOk) job.scrivi(I18n.tr("server.um.runMigrazione84.24", java.util.Map.of("backupDir", String.valueOf(backupDir))));
@@ -2762,7 +2762,7 @@ public final class UpdateManager {
                     I18n.tr("server.um.x.rcNoCreds", java.util.Map.of("errore", String.valueOf(dsn.optString("errore", "")))));
             block = true;
         } else {
-            tabelle = numero(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
+            tabelle = number(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
                     + dsn.getString("db") + "';"));
             r.put("db", dsn.getString("db")).put("dbUser", dsn.getString("user")).put("tables", tabelle);
             if (tabelle == 0) {
@@ -3448,11 +3448,11 @@ public final class UpdateManager {
                     .put("testo", sh("ls -la " + root + " 2>&1 | head -25", 30)));
 
             // 5. Con quale utente gira nginx: e' lui che deve poter leggere
-            String utente = sh("grep -hE '^[[:space:]]*user[[:space:]]' /usr/local/etc/nginx/nginx.conf "
+            String user = sh("grep -hE '^[[:space:]]*user[[:space:]]' /usr/local/etc/nginx/nginx.conf "
                     + "2>/dev/null | head -1 | awk '{print $2}' | tr -d ';'", 20).trim();
             String proc = sh("ps -axo user,command 2>/dev/null | grep '[n]ginx: worker' | head -2", 30);
             voci.put(new JSONObject().put("titolo", I18n.tr("server.um.roundcubeDiagnostics.7"))
-                    .put("testo", I18n.tr("server.um.x.nginxUserDeclared", java.util.Map.of("u", String.valueOf(utente.isEmpty() ? I18n.tr("server.um.x.nginxUserNobody") : utente)))
+                    .put("testo", I18n.tr("server.um.x.nginxUserDeclared", java.util.Map.of("u", String.valueOf(user.isEmpty() ? I18n.tr("server.um.x.nginxUserNobody") : user)))
                             + "\n" + (proc.isEmpty() ? I18n.tr("server.um.x.noWorker") : proc)));
 
             // 6. La risposta del SERVER, scavalcando qualunque cosa stia davanti
@@ -3615,7 +3615,7 @@ public final class UpdateManager {
                 job.scrivi("    " + I18n.tr("server.um.x.didNotPass", java.util.Map.of("r", String.valueOf(cp.getString("ridotto")))));
                 job.scrivi(I18n.tr("server.um.runAggiornamentoRoundcube.3"));
             }
-            job.scrivi("    " + I18n.tr("server.um.x.copyVerified", java.util.Map.of("file", String.valueOf(backupDir + "/roundcube.sql"), "kb", String.valueOf(numero(sh("wc -c < " + backupDir + "/roundcube.sql", 30)) / 1024))));
+            job.scrivi("    " + I18n.tr("server.um.x.copyVerified", java.util.Map.of("file", String.valueOf(backupDir + "/roundcube.sql"), "kb", String.valueOf(number(sh("wc -c < " + backupDir + "/roundcube.sql", 30)) / 1024))));
             job.scrivi(I18n.tr("server.um.runAggiornamentoRoundcube.4"));
 
             job.avanza(3, TOT);
@@ -3687,7 +3687,7 @@ public final class UpdateManager {
             job.avanza(8, TOT);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runAggiornamentoRoundcube.14", java.util.Map.of("tOT", String.valueOf(TOT))));
-            long tabelleDopo = numero(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
+            long tabelleDopo = number(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
                     + pf.optString("db") + "';"));
             job.scrivi(I18n.tr("server.um.runAggiornamentoRoundcube.15", java.util.Map.of("tabellePrima", String.valueOf(tabellePrima), "tabelleDopo", String.valueOf(tabelleDopo))));
             boolean tabOk = tabelleDopo >= tabellePrima;
@@ -3964,8 +3964,8 @@ public final class UpdateManager {
 
             // Via di ritorno: un pacchetto ricostruito dai file INSTALLATI, non scaricato dal
             // repository. Se il repository non ha piu' la versione vecchia, e' l'unico modo.
-            long liberi = numero(sh("df -k /var/db | tail -1 | awk '{print $4}'", 30)) / 1024;
-            long grande = numero(sh("pkg query %sb " + pkg + " 2>/dev/null", 30)) / 1024 / 1024;
+            long liberi = number(sh("df -k /var/db | tail -1 | awk '{print $4}'", 30)) / 1024;
+            long grande = number(sh("pkg query %sb " + pkg + " 2>/dev/null", 30)) / 1024 / 1024;
             r.put("spazioMb", liberi).put("jdkMb", grande);
             if (grande > 0 && liberi < grande * 2) {
                 aggiungiCheck(checks, "spazio", I18n.tr("server.um.javaPreflight.10"), "block",
@@ -4555,7 +4555,7 @@ public final class UpdateManager {
             for (String n : famiglia) {
                 if (!isValidName(n)) continue;
                 String ver = sh("pkg query %v " + n + " 2>/dev/null", 20).trim();
-                long kb = numero(sh("pkg query %sb " + n + " 2>/dev/null", 20)) / 1024;
+                long kb = number(sh("pkg query %sb " + n + " 2>/dev/null", 20)) / 1024;
                 java.util.List<String> chi = new ArrayList<>();
                 for (String d : sh("pkg query %rn " + n + " 2>/dev/null").split("\n")) {
                     String t = d.trim();
@@ -4670,7 +4670,7 @@ public final class UpdateManager {
                 String nome = d.substring(d.lastIndexOf('/') + 1);
                 if (!ok("tar -cf " + bk + "/" + nome + ".tar -C " + d + " . 2>/dev/null", 300))
                     throw new IllegalStateException("copy of " + d + " failed");
-                long n = numero(sh("tar -tf " + bk + "/" + nome + ".tar 2>/dev/null | wc -l", 60));
+                long n = number(sh("tar -tf " + bk + "/" + nome + ".tar 2>/dev/null | wc -l", 60));
                 if (n < 1) throw new IllegalStateException("the copy of " + d + " is empty");
                 job.scrivi("    " + d + " -> " + nome + ".tar " + I18n.tr("server.um.x.entries", java.util.Map.of("n", String.valueOf(n))));
             }
@@ -4689,9 +4689,9 @@ public final class UpdateManager {
             job.avanza(4, TOT);
             job.scrivi("");
             job.scrivi("[4/" + TOT + "] " + I18n.tr("server.um.x.pySwap", java.util.Map.of("vecchio", String.valueOf(vecchio), "nuovo", String.valueOf(nuovo))));
-            String elenco = sh("pkg lock -l 2>/dev/null");
+            String list = sh("pkg lock -l 2>/dev/null");
             java.util.List<String> daSbloccare = new ArrayList<>();
-            for (String v : leaf) if (bloccato(elenco, v)) daSbloccare.add(v);
+            for (String v : leaf) if (bloccato(list, v)) daSbloccare.add(v);
             // L'elenco su disco PRIMA di sbloccare (prima lo si scriveva dopo): i vecchi, che vanno
             // riprotetti se restano, e i nuovi, che alla fine vanno protetti. Se il pannello muore
             // in mezzo, l'avvio protegge quelli che trova installati. Se l'elenco non si scrive,
@@ -5002,9 +5002,9 @@ public final class UpdateManager {
         boolean rspamdPresente = ok("pkg info -e rspamd", 20);
         boolean cartellaRspamd = ok("test -d /var/db/rspamd", 15);
         long fileRspamd = cartellaRspamd
-                ? numero(sh("find /var/db/rspamd -type f 2>/dev/null | wc -l", 60)) : 0;
+                ? number(sh("find /var/db/rspamd -type f 2>/dev/null | wc -l", 60)) : 0;
         long unser = cartellaRspamd
-                ? numero(sh("find /var/db/rspamd -type f -name '*.unser' 2>/dev/null | wc -l", 60)) : 0;
+                ? number(sh("find /var/db/rspamd -type f -name '*.unser' 2>/dev/null | wc -l", 60)) : 0;
         if (rspamdPresente && !cartellaRspamd) {
             passi.put(passo("fase-rspamd-cache", "fase", I18n.tr("server.um.maintenancePlan.20"), "manuale",
                     I18n.tr("server.um.maintenancePlan.21"),
@@ -5079,11 +5079,11 @@ public final class UpdateManager {
             if (m.find() && !m.group(1).equals(pyNuovo)) pyVecchie.add(m.group(1));
         }
         if (!pyVecchie.isEmpty()) {
-            String elenco = String.join(", ", pythonDaSpostare(pyVecchie.iterator().next()));
+            String list = String.join(", ", pythonDaSpostare(pyVecchie.iterator().next()));
             passi.put(passo("fase-python", "fase", I18n.tr("server.um.maintenancePlan.37"),
                     "manuale",
                     I18n.tr("server.um.x.pyInstalled", java.util.Map.of("vecchie", String.valueOf(String.join("/py", pyVecchie)), "nuovo", String.valueOf(pyNuovo)))
-                    + (elenco.isEmpty() ? "." : ": " + elenco),
+                    + (list.isEmpty() ? "." : ": " + list),
                     I18n.tr("server.um.maintenancePlan.38", java.util.Map.of("p", String.valueOf(pyVecchie.iterator().next()), "pyNuovo", String.valueOf(pyNuovo))), null));
         } else {
             passi.put(passo("fase-python", "fase", I18n.tr("server.um.maintenancePlan.37"),
@@ -5334,8 +5334,8 @@ public final class UpdateManager {
         {"mysql-server", "su -m mysql -c '$(which mysqld 2>/dev/null || echo /usr/local/libexec/mysqld) --validate-config'"},
     };
 
-    private static String provaConfigDi(String servizio) {
-        for (String[] r : PROVA_CONFIG) if (r[0].equals(servizio)) return r[1];
+    private static String provaConfigDi(String service) {
+        for (String[] r : PROVA_CONFIG) if (r[0].equals(service)) return r[1];
         return null;
     }
 
@@ -5352,15 +5352,15 @@ public final class UpdateManager {
         {"redis", "redis-cli DBSIZE 2>/dev/null", "server.um.provaConfigDi.1"},
     };
 
-    private static String[] provaDopoDi(String servizio) {
-        for (String[] r : PROVA_DOPO) if (r[0].equals(servizio)) return r;
+    private static String[] provaDopoDi(String service) {
+        for (String[] r : PROVA_DOPO) if (r[0].equals(service)) return r;
         return null;
     }
 
     /** Il pid di un servizio, o stringa vuota. Confrontarlo prima e dopo prova che e' ripartito davvero. */
-    private static String pidServizio(String servizio) {
-        if (!isValidName(servizio)) return "";
-        String o = sh("service " + servizio + " status 2>/dev/null", 15);
+    private static String pidServizio(String service) {
+        if (!isValidName(service)) return "";
+        String o = sh("service " + service + " status 2>/dev/null", 15);
         Matcher m = Pattern.compile("pid[s]?[: ]+([0-9]+)").matcher(o.toLowerCase());
         return m.find() ? m.group(1) : "";
     }
@@ -5775,19 +5775,19 @@ public final class UpdateManager {
             job.avanza(3, TOT);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.9", java.util.Map.of("tOT", String.valueOf(TOT))));
-            StringBuilder elenco = new StringBuilder();
-            for (String m : famiglia) if (isValidName(m)) elenco.append(' ').append(m);
+            StringBuilder list = new StringBuilder();
+            for (String m : famiglia) if (isValidName(m)) list.append(' ').append(m);
             // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
             // ripescare i messaggi che chiedono un'azione.
             StringBuilder catturato = new StringBuilder();
             // -U: stesso catalogo su cui e' stato calcolato il piano. Riscaricarlo adesso potrebbe
             // portare versioni diverse da quelle approvate.
-            int code = eseguiConLog(job, "pkg upgrade -y -U" + elenco + " 2>&1", 1800, catturato);
+            int code = eseguiConLog(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, catturato);
             // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
             // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
             if (code == 4) {
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.10"));
-                code = eseguiConLog(job, "pkg upgrade -y -U" + elenco + " 2>&1", 1800, catturato);
+                code = eseguiConLog(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, catturato);
             }
             messaggiAzione = messaggiCheChiedonoAzione(catturato.toString());
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
@@ -5866,7 +5866,7 @@ public final class UpdateManager {
                 String[] dopo = provaDopoDi(s);
                 if (dopo != null && attivo) {
                     String out = sh(dopo[1], 30).trim();
-                    long n = numero(out);
+                    long n = number(out);
                     job.scrivi("      " + I18n.tr(dopo[2]) + ": " + (out.isEmpty() ? I18n.tr("server.um.runAggiornamentoGuidato.27") : String.valueOf(n)));
                     if (n == 0) {
                         job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.28"));
@@ -5977,8 +5977,8 @@ public final class UpdateManager {
                 j.scrivi(I18n.tr("server.um.startRspamdCacheCleanup.1"));
                 j.scrivi("");
                 j.scrivi(I18n.tr("server.um.startRspamdCacheCleanup.2"));
-                long unserPrima = numero(sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null | wc -l", 60));
-                long altriPrima = numero(sh("find " + DIR + " -type f ! -name '*.unser' 2>/dev/null | wc -l", 60));
+                long unserPrima = number(sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null | wc -l", 60));
+                long altriPrima = number(sh("find " + DIR + " -type f ! -name '*.unser' 2>/dev/null | wc -l", 60));
                 j.scrivi(I18n.tr("server.um.startRspamdCacheCleanup.3", java.util.Map.of("unserPrima", String.valueOf(unserPrima))));
                 j.scrivi(I18n.tr("server.um.startRspamdCacheCleanup.4", java.util.Map.of("altriPrima", String.valueOf(altriPrima))));
                 if (unserPrima == 0) {
@@ -5998,8 +5998,8 @@ public final class UpdateManager {
                 j.avanza(3, 4);
                 j.scrivi("");
                 j.scrivi(I18n.tr("server.um.startRspamdCacheCleanup.7"));
-                long unserDopo = numero(sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null | wc -l", 60));
-                long altriDopo = numero(sh("find " + DIR + " -type f ! -name '*.unser' 2>/dev/null | wc -l", 60));
+                long unserDopo = number(sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null | wc -l", 60));
+                long altriDopo = number(sh("find " + DIR + " -type f ! -name '*.unser' 2>/dev/null | wc -l", 60));
                 j.scrivi(I18n.tr("server.um.startRspamdCacheCleanup.8", java.util.Map.of("unserDopo", String.valueOf(unserDopo))));
                 j.scrivi(I18n.tr("server.um.startRspamdCacheCleanup.9", java.util.Map.of("altriPrima", String.valueOf(altriPrima), "altriDopo", String.valueOf(altriDopo))));
                 if (altriDopo != altriPrima) {
@@ -6221,11 +6221,11 @@ public final class UpdateManager {
         JSONObject r = new JSONObject().put("success", true).put("pacchetto", pacchetto);
 
         // --- cosa il pacchetto mette sul disco: percorsi assoluti e soname ---
-        String elenco = sh("pkg query '%Fp' " + pacchetto + " 2>/dev/null", 60);
-        if (elenco.isBlank()) elenco = sh("pkg info -l " + pacchetto + " 2>/dev/null", 60);
+        String list = sh("pkg query '%Fp' " + pacchetto + " 2>/dev/null", 60);
+        if (list.isBlank()) list = sh("pkg info -l " + pacchetto + " 2>/dev/null", 60);
         java.util.LinkedHashSet<String> percorsi = new java.util.LinkedHashSet<>();
         java.util.LinkedHashSet<String> basi = new java.util.LinkedHashSet<>();
-        for (String riga : elenco.split("\n")) {
+        for (String riga : list.split("\n")) {
             String f = riga.trim();
             if (!f.matches("(/usr)?(/local)?/(s?bin|libexec)(/[A-Za-z0-9._+-]{1,64}){1,2}")) continue;
             percorsi.add(f);
@@ -6621,12 +6621,12 @@ public final class UpdateManager {
         JSONObject pk = packagesStatus();
         r.put("pacchetti", pk);
         int conAggiornamento = 0, protetti = 0, totali = 0;
-        JSONArray elenco = pk.optJSONArray("packages");
+        JSONArray list = pk.optJSONArray("packages");
         JSONArray daAggiornare = new JSONArray();
-        if (elenco != null) {
-            totali = elenco.length();
-            for (int i = 0; i < elenco.length(); i++) {
-                JSONObject x = elenco.getJSONObject(i);
+        if (list != null) {
+            totali = list.length();
+            for (int i = 0; i < list.length(); i++) {
+                JSONObject x = list.getJSONObject(i);
                 if (x.optBoolean("locked")) protetti++;
                 String ins = x.optString("current", ""), rep = x.optString("available", "");
                 if (!rep.isEmpty() && !rep.equals(ins) && !"-".equals(rep)) {
@@ -6828,14 +6828,14 @@ public final class UpdateManager {
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.panelUsage.1", java.util.Map.of("pacchetto", String.valueOf(pacchetto))));
 
         // --- 1. quali eseguibili installa il pacchetto ---
-        String elenco = sh("pkg query '%Fp' " + pacchetto + " 2>/dev/null", 60);
+        String list = sh("pkg query '%Fp' " + pacchetto + " 2>/dev/null", 60);
         String comeElencato = "pkg query %Fp";
-        if (elenco.isBlank()) {   // formato non disponibile: si ripiega su pkg info -l
-            elenco = sh("pkg info -l " + pacchetto + " 2>/dev/null", 60);
+        if (list.isBlank()) {   // formato non disponibile: si ripiega su pkg info -l
+            list = sh("pkg info -l " + pacchetto + " 2>/dev/null", 60);
             comeElencato = "pkg info -l";
         }
         java.util.LinkedHashMap<String, String> eseguibili = new java.util.LinkedHashMap<>();
-        for (String riga : elenco.split("\n")) {
+        for (String riga : list.split("\n")) {
             String f = riga.trim();
             if (!f.startsWith("/")) continue;
             if (!f.matches("(/usr)?(/local)?/(s?bin|libexec)(/[A-Za-z0-9._+-]{1,64}){1,2}")) continue;
@@ -7786,9 +7786,9 @@ public final class UpdateManager {
             // numero che non corrispondeva a niente: qui diceva 5 mentre "pkg upgrade -n"
             // rispondeva "Your packages are up to date", cioe' zero. Un numero che nessuna
             // altra schermata conferma fa dubitare di tutte le altre.
-            String elenco = sh("pkg version -U -vRL= 2>/dev/null", 60);
+            String list = sh("pkg version -U -vRL= 2>/dev/null", 60);
             int daAggiornare = 0, piuRecenti = 0, fuoriCatalogo = 0, nonConfrontabili = 0;
-            for (String riga : elenco.split("\n")) {
+            for (String riga : list.split("\n")) {
                 String t = riga.trim();
                 if (t.isEmpty()) continue;
                 String[] campi = t.split("\\s+");
@@ -8206,10 +8206,10 @@ public final class UpdateManager {
             boolean be = ok("bectl check", 30);
             r.put("bootEnvironment", be);
             if (be) {
-                String elenco = sh("bectl list -H 2>/dev/null | awk '{print $1\" (\"$2\") \"$4}'", 30);
-                r.put("beEsistenti", elenco);
+                String list = sh("bectl list -H 2>/dev/null | awk '{print $1\" (\"$2\") \"$4}'", 30);
+                r.put("beEsistenti", list);
                 aggiungiCheck(checks, "be", I18n.tr("server.um.systemUpgradePreflight.15"), "ok",
-                        I18n.tr("server.um.x.beSupported", java.util.Map.of("elenco", String.valueOf(elenco.replace("\n", " | ")))));
+                        I18n.tr("server.um.x.beSupported", java.util.Map.of("elenco", String.valueOf(list.replace("\n", " | ")))));
             } else {
                 aggiungiCheck(checks, "be", I18n.tr("server.um.systemUpgradePreflight.15"), "attendi",
                         I18n.tr("server.um.systemUpgradePreflight.16"));
@@ -8217,7 +8217,7 @@ public final class UpdateManager {
 
             // Spazio: l'ambiente di avvio e' un clone, ma i file scaricati e le vecchie librerie
             // occupano comunque.
-            long liberiMb = numero(sh("df -m / | tail -1 | awk '{print $4}'", 30));
+            long liberiMb = number(sh("df -m / | tail -1 | awk '{print $4}'", 30));
             r.put("liberiMb", liberiMb);
             aggiungiCheck(checks, "spazio", I18n.tr("server.um.x.spaceRoot"), liberiMb > 5000 ? "ok" : "block",
                     I18n.tr("server.um.x.mbFreeRoot", java.util.Map.of("n", String.valueOf(liberiMb))) + " " + (liberiMb > 5000
@@ -8329,7 +8329,7 @@ public final class UpdateManager {
             job.scrivi(I18n.tr("server.um.runPreparazioneSistema.2", java.util.Map.of("tOT", String.valueOf(TOT))));
             if (!ok("tar -cf " + bk + "/etc.tar -C /etc . 2>/dev/null", 600))
                 throw new IllegalStateException("copy of /etc failed");
-            long voci = numero(sh("tar -tf " + bk + "/etc.tar 2>/dev/null | wc -l", 120));
+            long voci = number(sh("tar -tf " + bk + "/etc.tar 2>/dev/null | wc -l", 120));
             if (voci < 50) throw new IllegalStateException("the copy of /etc has only " + voci
                     + " entries: not credible, I stop");
             job.scrivi("    /etc -> " + bk + "/etc.tar " + I18n.tr("server.um.x.entries", java.util.Map.of("n", String.valueOf(voci))));
@@ -9234,16 +9234,16 @@ public final class UpdateManager {
                 j.scrivi("    " + I18n.tr("server.um.x.libOwner", java.util.Map.of("p", String.valueOf(libDopo.isEmpty() ? I18n.tr("server.um.x.nobodyMissing") : libDopo))));
                 JSONArray rotti = packagesWithMissingLibraries().getJSONArray("packages");
                 j.scrivi(I18n.tr("server.um.startForeignClientCleanup.10", java.util.Map.of("length", String.valueOf(rotti.length()))));
-                String casella = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
+                String mailbox = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
                 boolean postfixOk = true;
-                if (casella.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
-                    String q = sh("postmap -q '" + casella + "' mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf 2>&1", 60);
+                if (mailbox.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
+                    String q = sh("postmap -q '" + mailbox + "' mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf 2>&1", 60);
                     String ql = q.toLowerCase();
                     postfixOk = !q.trim().isEmpty() && !ql.contains("error") && !ql.contains("fatal")
                             && !ql.contains("not found") && !ql.contains("dlopen") && !ql.startsWith("postmap:");
                     j.scrivi("    " + (postfixOk
-                            ? I18n.tr("server.um.x.pfResolveYes", java.util.Map.of("casella", String.valueOf(casella), "r", String.valueOf(q.trim())))
-                            : I18n.tr("server.um.x.pfResolveNo", java.util.Map.of("casella", String.valueOf(casella), "r", String.valueOf(q.trim())))));
+                            ? I18n.tr("server.um.x.pfResolveYes", java.util.Map.of("casella", String.valueOf(mailbox), "r", String.valueOf(q.trim())))
+                            : I18n.tr("server.um.x.pfResolveNo", java.util.Map.of("casella", String.valueOf(mailbox), "r", String.valueOf(q.trim())))));
                 }
                 if (difformi == 0 && rotti.length() == 0 && !libDopo.isEmpty() && postfixOk) {
                     j.status = "completed";

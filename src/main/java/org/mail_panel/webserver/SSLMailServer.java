@@ -1841,7 +1841,7 @@ public class SSLMailServer {
     }
 
     /** La decisione di {@link #dopoGliAlias(String, int)} senza database: la esercita tests/.../AliasMessagesTest. */
-    static String dopoGliAlias(String indirizzo, boolean casella, List<MailDatabase.Alias> delDominio) {
+    static String dopoGliAlias(String indirizzo, boolean mailbox, List<MailDatabase.Alias> delDominio) {
         int at = indirizzo.indexOf('@');
         String catchAll = at >= 0 ? indirizzo.substring(at) : null;
         List<String> altrove = new ArrayList<>();
@@ -1855,7 +1855,7 @@ public class SSLMailServer {
                 altrove.add(a.destination);
             }
         }
-        if (casella) {
+        if (mailbox) {
             if (copia || altrove.isEmpty()) return null;
             return I18n.tr(copiaSpenta ? "server.alias.mailboxCopyOff" : "server.alias.mailboxNoCopy",
                     Map.of("address", indirizzo, "targets", String.join(", ", altrove)));
@@ -2865,27 +2865,27 @@ public class SSLMailServer {
                 return;
             }
             String email = parametro(exchange.getRequestURI().getRawQuery(), "email");
-            var casella = org.mail_panel.system.AppleProfile.casella(email);
+            var mailbox = org.mail_panel.system.AppleProfile.mailbox(email);
             String host = org.mail_panel.system.AppleProfile.hostDiPosta();
-            if (casella == null || host == null || host.isBlank()) {
+            if (mailbox == null || host == null || host.isBlank()) {
                 exchange.sendResponseHeaders(404, -1);
                 return;
             }
 
             String profilo = org.mail_panel.system.AppleProfile
-                    .mobileconfig(casella.email(), casella.nome(), host, host);
+                    .mobileconfig(mailbox.email(), mailbox.nome(), host, host);
             if (!org.mail_panel.system.AppleProfile.benFormato(profilo)) {
                 // Non si consegna un file rotto: Mail lo rifiuterebbe senza spiegare perche'.
                 exchange.sendResponseHeaders(500, -1);
                 return;
             }
             byte[] dati = profilo.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            String nome = org.mail_panel.system.AppleProfile.nomeFile(casella.email());
+            String nome = org.mail_panel.system.AppleProfile.nomeFile(mailbox.email());
             exchange.getResponseHeaders().set("Content-Type", "application/x-apple-aspen-config");
             exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + nome + "\"");
             exchange.sendResponseHeaders(200, dati.length);
             try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
-            logAudit("PROFILO_APPLE", getClientIp(exchange), "downloaded for " + casella.email());
+            logAudit("PROFILO_APPLE", getClientIp(exchange), "downloaded for " + mailbox.email());
         } catch (Exception e) {
             try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
         } finally {

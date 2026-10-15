@@ -112,12 +112,12 @@ public final class PkgCatalog {
             Collections.sort(nomi);
         }
 
-        JSONArray elenco = new JSONArray();
+        JSONArray list = new JSONArray();
         JSONArray mancanti = new JSONArray();
         JSONObject piuVecchio = null;
         for (String nome : nomi) {
             JSONObject o = new JSONObject().put("nome", nome);
-            elenco.put(o);
+            list.put(o);
             if (!NOME_REPO.matcher(nome).matches()) {
                 o.put("trovato", false).put("errore", I18n.tr("server.catalog.badRepoName"));
                 mancanti.put(nome);
@@ -144,7 +144,7 @@ public final class PkgCatalog {
             if (piuVecchio == null || secondi / 3600 > piuVecchio.getLong("ore")) piuVecchio = o;
         }
 
-        return new JSONObject().put("repository", elenco).put("mancanti", mancanti).put("daPkg", daPkg)
+        return new JSONObject().put("repository", list).put("mancanti", mancanti).put("daPkg", daPkg)
                 .put("datato", piuVecchio != null)
                 .put("ore", piuVecchio == null ? -1 : piuVecchio.getLong("ore"))
                 .put("giorni", piuVecchio == null ? -1 : piuVecchio.getLong("giorni"))

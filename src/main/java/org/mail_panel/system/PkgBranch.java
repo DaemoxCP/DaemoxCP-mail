@@ -91,8 +91,8 @@ public final class PkgBranch {
 
     /** I repository dall'uscita di pkg -vv (print_repository in src/utils.c). */
     static List<Repo> repository(String pkgVv) {
-        List<Repo> elenco = new ArrayList<>();
-        if (pkgVv == null) return elenco;
+        List<Repo> list = new ArrayList<>();
+        if (pkgVv == null) return list;
         String nome = null, url = null, ip = null;
         boolean acceso = false, dentro = false;
         int priorita = 0;
@@ -111,11 +111,11 @@ public final class PkgBranch {
             Matcher mi = Pattern.compile("^\\s*ip_version\\s*:\\s*([46])").matcher(riga);
             if (mi.find()) ip = mi.group(1);
             if (riga.trim().startsWith("}")) {
-                if (url != null && NOME.matcher(nome).matches()) elenco.add(classifica(nome, url, acceso, priorita, ip));
+                if (url != null && NOME.matcher(nome).matches()) list.add(classifica(nome, url, acceso, priorita, ip));
                 nome = null;
             }
         }
-        return elenco;
+        return list;
     }
 
     static Repo classifica(String nome, String url, boolean acceso, int priorita, String ip) {

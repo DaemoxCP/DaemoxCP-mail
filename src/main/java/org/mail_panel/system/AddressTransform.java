@@ -85,7 +85,7 @@ public final class AddressTransform {
     public record Perdite(boolean rispostaAutomatica, List<String> inoltri, int filtri) {}
 
     /** Quello che conta per decidere, letto dal database e dal disco. */
-    public record Stato(String indirizzo, boolean dominioDelPannello, MailDatabase.Mailbox casella,
+    public record Stato(String indirizzo, boolean dominioDelPannello, MailDatabase.Mailbox mailbox,
                         List<MailDatabase.Alias> conQuestaSorgente, List<MailDatabase.Alias> versoQui,
                         Posta posta, Perdite perdite) {}
 
@@ -255,7 +255,7 @@ public final class AddressTransform {
     /** Lo stato che l'anteprima ha mostrato. Il numero dei messaggi non conta: in una casella cambia di continuo. */
     public static String impronta(Stato s) {
         StringBuilder t = new StringBuilder(s.indirizzo()).append('|').append(s.dominioDelPannello()).append('|');
-        MailDatabase.Mailbox m = s.casella();
+        MailDatabase.Mailbox m = s.mailbox();
         t.append(m == null ? "-" : m.id + "," + m.email + "," + m.active + "," + m.receiveEnabled).append('|');
         for (MailDatabase.Alias a : ordinati(s.conQuestaSorgente())) t.append(a.id).append(':').append(a.destination).append(':').append(a.active).append(';');
         t.append('|');
@@ -285,7 +285,7 @@ public final class AddressTransform {
             return I18n.tr("server.convert.catchAll", java.util.Map.of("a", String.valueOf(a)));
         if (!indirizzoValido(a) || cartella(vmail, a) == null) return I18n.tr("server.convert.notMailboxAddress");
         if (!s.dominioDelPannello()) return I18n.tr("server.convert.notPanelDomain", java.util.Map.of("a", String.valueOf(a)));
-        if (s.casella() != null) return I18n.tr("server.convert.alreadyMailbox", java.util.Map.of("a", String.valueOf(a)));
+        if (s.mailbox() != null) return I18n.tr("server.convert.alreadyMailbox", java.util.Map.of("a", String.valueOf(a)));
         if (s.conQuestaSorgente().isEmpty()) return I18n.tr("server.convert.noAlias", java.util.Map.of("a", String.valueOf(a)));
         return null;
     }
@@ -308,7 +308,7 @@ public final class AddressTransform {
 
     public static JSONObject anteprimaAAlias(Stato s, ZoneId zona) {
         JSONObject o = new JSONObject().put("indirizzo", s.indirizzo());
-        MailDatabase.Mailbox m = s.casella();
+        MailDatabase.Mailbox m = s.mailbox();
         if (m == null) return o.put("possibile", false).put("motivo", I18n.tr("server.convert.notMailbox", java.util.Map.of("a", String.valueOf(s.indirizzo()))));
         Perdite p = s.perdite() == null ? new Perdite(false, List.of(), 0) : s.perdite();
         JSONArray gia = new JSONArray();
