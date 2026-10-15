@@ -158,7 +158,7 @@ echo ""
 echo "${YELLOW}[PHASE 2/10] Installing packages...${NC}"
 
 # MySQL
-pkg install -y mysql80-server mysql80-client
+pkg install -y mysql84-server mysql84-client
 
 # Postfix with MySQL support (postfix-mysql replaces postfix)
 pkg install -y postfix-mysql
@@ -201,7 +201,26 @@ echo "${YELLOW}[PHASE 3/10] Configuring MySQL...${NC}"
 
 sysrc mysql_enable="YES"
 service mysql-server start 2>/dev/null || service mysql-server restart 2>/dev/null || true
-sleep 5
+
+# Il server deve rispondere davvero, non basta avere lanciato il comando di avvio.
+# Senza questo controllo le fasi 3, 9 e 10 fallivano una per una e l'installazione
+# si dichiarava comunque riuscita, lasciando un sistema senza database.
+mysql_ready=no
+attempt=0
+while [ $attempt -lt 30 ]; do
+    if mysqladmin ping >/dev/null 2>&1; then
+        mysql_ready=yes
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+done
+if [ "$mysql_ready" != yes ]; then
+    echo "${RED}  ERROR: the MySQL server is not answering.${NC}"
+    echo "  Postfix, Dovecot and Roundcube all need the database: stopping here."
+    echo "  Check that the server package is installed: pkg info | grep mysql"
+    exit 1
+fi
 
 # Create database and tables
 cat > /tmp/mysql_setup.sql << EOSQL
@@ -399,7 +418,19 @@ CREATE TABLE audit_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 EOSQL
 
-mysql -u root < /tmp/mysql_setup.sql 2>/dev/null || mysql -u root -p'' < /tmp/mysql_setup.sql 2>/dev/null || true
+# Il file contiene la password dell'utente del pannello: leggibile solo da root.
+chmod 600 /tmp/mysql_setup.sql
+
+# "-p''" collassava a "-p" nudo e faceva chiedere la password all'operatore, con il
+# messaggio di errore nascosto da 2>/dev/null. La forma giusta e' --password=.
+# E niente "|| true": se il database non si crea non c'e' nulla su cui appoggiarsi.
+if ! mysql -u root < /tmp/mysql_setup.sql 2>/dev/null; then
+    if ! mysql -u root --password= < /tmp/mysql_setup.sql; then
+        echo "${RED}  ERROR: cannot create the database and its tables.${NC}"
+        rm -f /tmp/mysql_setup.sql
+        exit 1
+    fi
+fi
 rm -f /tmp/mysql_setup.sql
 
 echo "${GREEN}  MySQL configured${NC}"

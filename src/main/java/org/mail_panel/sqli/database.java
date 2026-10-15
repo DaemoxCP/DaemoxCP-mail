@@ -73,7 +73,7 @@ public class database {
                     rspamd_installed INTEGER DEFAULT 0,
                     clamav_installed INTEGER DEFAULT 0,
                     roundcube_installed INTEGER DEFAULT 0,
-                    roundcube_domain TEXT DEFAULT '',
+                    roundcube_domain TEXT DEFAULT 'webmail.example.com',
                     roundcube_port TEXT DEFAULT '8443',
                     roundcube_ssl_cert TEXT DEFAULT '',
                     roundcube_ssl_key TEXT DEFAULT ''
@@ -125,7 +125,7 @@ public class database {
 
     public void ensureRoundcubeColumns() {
         String[] columns = {
-            "roundcube_domain TEXT DEFAULT ''",
+            "roundcube_domain TEXT DEFAULT 'webmail.example.com'",
             "roundcube_port TEXT DEFAULT '8443'",
             "roundcube_ssl_cert TEXT DEFAULT ''",
             "roundcube_ssl_key TEXT DEFAULT ''",

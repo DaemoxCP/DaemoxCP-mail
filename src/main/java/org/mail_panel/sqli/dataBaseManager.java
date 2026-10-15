@@ -260,7 +260,7 @@ public class dataBaseManager {
             prepare.setInt(14, 0);
             prepare.setInt(15, 0);
             prepare.setInt(16, 0);
-            prepare.setString(17, "");      // roundcube_domain
+            prepare.setString(17, "webmail.example.com");      // roundcube_domain
             prepare.setString(18, "8443");  // roundcube_port
             prepare.setString(19, "");      // roundcube_ssl_cert
             prepare.setString(20, "");      // roundcube_ssl_key
