@@ -128,7 +128,7 @@ public class SubmissionPort {
             // La verifica che non si da' per scontata: se le restrizioni venissero valutate
             // PRIMA dell'autenticazione, la riga rifiuterebbe anche gli utenti legittimi.
             Ris d = esegui("postconf", "-h", "smtpd_delay_reject");
-            String valore = d.uscita.trim();
+            String valore = d.output.trim();
             r.put("delayReject", valore).put("delayRejectLetto", d.codice == 0);
             r.put("sicuro", d.codice == 0 && valore.equalsIgnoreCase("yes"));
 
@@ -186,7 +186,7 @@ public class SubmissionPort {
             if (check.codice != 0) {
                 Files.writeString(p, prima);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.subm.checkFailed", java.util.Map.of("out", String.valueOf(check.uscita.trim()))));
+                        .put("error", I18n.tr("server.subm.checkFailed", java.util.Map.of("out", String.valueOf(check.output.trim()))));
             }
 
             Ris reload = esegui("postfix", "reload");
@@ -194,7 +194,7 @@ public class SubmissionPort {
                 Files.writeString(p, prima);
                 esegui("postfix", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.subm.reloadFailed", java.util.Map.of("out", String.valueOf(reload.uscita.trim()))));
+                        .put("error", I18n.tr("server.subm.reloadFailed", java.util.Map.of("out", String.valueOf(reload.output.trim()))));
             }
 
             // Non basta che i comandi non abbiano protestato: si rilegge e si guarda.
@@ -204,7 +204,7 @@ public class SubmissionPort {
                         .put("error", I18n.tr("server.subm.notPresent", java.util.Map.of("file", String.valueOf(MASTER))));
 
             Ris m465 = esegui("postconf", "-M", m.voce + "/inet");
-            r.put("vocePostfix", m465.uscita.trim());
+            r.put("vocePostfix", m465.output.trim());
 
             return r.put("success", true)
                     .put("nota", I18n.tr("server.subm.done", java.util.Map.of("svc", String.valueOf(m.voce), "copy", String.valueOf(copia))));
@@ -213,7 +213,7 @@ public class SubmissionPort {
         }
     }
 
-    private record Ris(int codice, String uscita) {}
+    private record Ris(int codice, String output) {}
 
     private static Ris esegui(String... cmd) {
         try {

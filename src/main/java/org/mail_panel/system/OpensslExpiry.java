@@ -102,9 +102,9 @@ public class OpensslExpiry {
     }
 
     /** La versione dentro l'uscita di "openssl version": "OpenSSL 3.5.6 30 Sep 2025" -> 3.5.6 */
-    public static String estraiVersione(String uscita) {
-        if (uscita == null) return null;
-        for (String riga : uscita.split("\n")) {
+    public static String estraiVersione(String output) {
+        if (output == null) return null;
+        for (String riga : output.split("\n")) {
             String t = riga.trim();
             if (!t.startsWith("OpenSSL") && !t.startsWith("LibreSSL")) continue;
             String[] p = t.split("\\s+");
@@ -131,10 +131,10 @@ public class OpensslExpiry {
 
         // Chi vince nel PATH del pannello: e' quello che finirebbe negli script.
         Ris quale = esegui("sh", "-c", "command -v openssl");
-        r.put("nelPath", quale.codice == 0 ? quale.uscita.trim() : "");
+        r.put("nelPath", quale.codice == 0 ? quale.output.trim() : "");
 
         Ris fv = esegui("freebsd-version", "-k");
-        if (fv.codice == 0) r.put("freebsd", fv.uscita.trim());
+        if (fv.codice == 0) r.put("freebsd", fv.output.trim());
 
         // Il verdict guarda solo cio' che c'e' davvero.
         int peggiore = 0;
@@ -161,11 +161,11 @@ public class OpensslExpiry {
         Ris v = esegui(percorso, "version");
         if (v.codice != 0) return o.put("presente", false);
 
-        String versione = estraiVersione(v.uscita);
-        o.put("presente", true).put("uscita", v.uscita.trim()).put("versione", versione == null ? "" : versione);
+        String versione = estraiVersione(v.output);
+        o.put("presente", true).put("output", v.output.trim()).put("versione", versione == null ? "" : versione);
         if (versione == null)
             return o.put("urgenza", 3)
-                    .put("commento", I18n.tr("server.sslexp.unreadable", java.util.Map.of("out", String.valueOf(v.uscita.trim()))));
+                    .put("commento", I18n.tr("server.sslexp.unreadable", java.util.Map.of("out", String.valueOf(v.output.trim()))));
 
         String fine = fineSupporto(versione);
         Long giorni = giorniRimasti(versione, oggi);
@@ -182,7 +182,7 @@ public class OpensslExpiry {
         return o;
     }
 
-    private record Ris(int codice, String uscita) {}
+    private record Ris(int codice, String output) {}
 
     private static Ris esegui(String... cmd) {
         try {

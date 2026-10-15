@@ -338,7 +338,7 @@ public class AutoDns {
             JSONObject pubb = org.mail_panel.system.MtaSts.pubblicabile(d.domain);
             r.put("prova", pubb.optJSONObject("prova"));
             if (!pubb.optBoolean("pubblicabile", false))
-                return r.put("success", false).put("error", pubb.optString("motivo"));
+                return r.put("success", false).put("error", pubb.optString("reason"));
 
             String valore = pubb.getString("valore");
             r.put("valore", valore);

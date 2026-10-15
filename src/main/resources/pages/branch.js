@@ -31,7 +31,7 @@
                 testa.appendChild(branchEl('span', 'badge bg-secondary fs-6', t('up.noOfficialBranch')));
             }
             box.appendChild(testa);
-            box.appendChild(branchEl('p', 'small mb-2', r.spiegazione));
+            box.appendChild(branchEl('p', 'small mb-2', r.explanation));
 
             const tab = branchEl('table', 'table table-sm align-middle mb-2 tabella-schede');
             tab.setAttribute('aria-label', t('up.pkgRepos'));
@@ -71,7 +71,7 @@
             if (r.base) box.appendChild(branchEl('p', 'small text-muted mb-2', r.base));
 
             if (!r.changeable) {
-                box.appendChild(branchEl('div', 'alert alert-secondary py-2 small mb-0', r.motivo));
+                box.appendChild(branchEl('div', 'alert alert-secondary py-2 small mb-0', r.reason));
                 return;
             }
             const azioni = branchEl('div', 'd-flex flex-wrap gap-2');
@@ -91,7 +91,7 @@
             const r = await updApi('ramo_anteprima', { verso: verso });
             box.textContent = '';
             if (!r.success) { box.appendChild(branchEl('div', 'alert alert-danger py-2 small', r.error)); return; }
-            if (!r.possibile) { box.appendChild(branchEl('div', 'alert alert-secondary py-2 small', r.motivo)); return; }
+            if (!r.possibile) { box.appendChild(branchEl('div', 'alert alert-secondary py-2 small', r.reason)); return; }
             ramoVerso = verso;
             branchData.fingerprint = r.fingerprint;
             const card = branchEl('div', 'border rounded p-3');

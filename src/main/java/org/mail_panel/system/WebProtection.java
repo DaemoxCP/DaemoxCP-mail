@@ -200,17 +200,17 @@ public class WebProtection {
         Ris dump = esegui("nginx", "-T");
         if (dump.codice != 0)
             return r.put("ok", false)
-                    .put("motivo", I18n.tr("server.pubweb.dumpFailed", java.util.Map.of("out", String.valueOf(dump.uscita.trim()))));
+                    .put("reason", I18n.tr("server.pubweb.dumpFailed", java.util.Map.of("out", String.valueOf(dump.output.trim()))));
 
-        java.util.List<String> incluse = cartelleIncluse(dump.uscita);
+        java.util.List<String> incluse = cartelleIncluse(dump.output);
         r.put("cartelle", new org.json.JSONArray(incluse));
         String scelta = cartellaScelta(incluse);
         if (scelta == null)
             return r.put("ok", false)
-                    .put("motivo", I18n.tr("server.pubweb.noInclude"));
+                    .put("reason", I18n.tr("server.pubweb.noInclude"));
         r.put("cartella", scelta);
         return r.put("ok", true)
-                .put("motivo", I18n.tr("server.pubweb.includes", java.util.Map.of("dir", String.valueOf(scelta))));
+                .put("reason", I18n.tr("server.pubweb.includes", java.util.Map.of("dir", String.valueOf(scelta))));
     }
 
     /* ===================================================================
@@ -222,7 +222,7 @@ public class WebProtection {
         try {
             JSONObject inc = includeAttivo();
             if (!inc.optBoolean("ok", false))
-                return r.put("success", false).put("error", inc.optString("motivo"));
+                return r.put("success", false).put("error", inc.optString("reason"));
             String cartella = inc.getString("cartella");
             final String FILE = cartella + "/" + FILE_NAME;
             r.put("file", FILE).put("cartella", cartella);
@@ -258,7 +258,7 @@ public class WebProtection {
             if (prova.codice != 0) {
                 if (prima != null) Files.writeString(f, prima); else Files.deleteIfExists(f);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.pubweb.nginxRejectedRemoved", java.util.Map.of("out", String.valueOf(prova.uscita.trim()))));
+                        .put("error", I18n.tr("server.pubweb.nginxRejectedRemoved", java.util.Map.of("out", String.valueOf(prova.output.trim()))));
             }
 
             Ris ric = esegui("service", "nginx", "reload");
@@ -266,7 +266,7 @@ public class WebProtection {
                 if (prima != null) Files.writeString(f, prima); else Files.deleteIfExists(f);
                 esegui("service", "nginx", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.pubweb.reloadFailedRemoved", java.util.Map.of("out", String.valueOf(ric.uscita.trim()))));
+                        .put("error", I18n.tr("server.pubweb.reloadFailedRemoved", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
             }
 
             // 4. Non basta che i comandi non abbiano protestato: si prova la porta.
@@ -368,9 +368,9 @@ public class WebProtection {
             Ris dump = esegui("nginx", "-T");
             if (dump.codice != 0)
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.pubweb.confUnreadable", java.util.Map.of("out", String.valueOf(dump.uscita.trim()))));
+                        .put("error", I18n.tr("server.pubweb.confUnreadable", java.util.Map.of("out", String.valueOf(dump.output.trim()))));
 
-            String principale = filePrincipale(dump.uscita);
+            String principale = filePrincipale(dump.output);
             if (principale == null || !Files.isReadable(Path.of(principale)))
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.noMainFile"));
@@ -393,7 +393,7 @@ public class WebProtection {
             if (prova.codice != 0) {
                 Files.writeString(Path.of(principale), prima);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.pubweb.nginxRejectedRestored", java.util.Map.of("out", String.valueOf(prova.uscita.trim()))));
+                        .put("error", I18n.tr("server.pubweb.nginxRejectedRestored", java.util.Map.of("out", String.valueOf(prova.output.trim()))));
             }
 
             Ris ric = esegui("service", "nginx", "reload");
@@ -401,13 +401,13 @@ public class WebProtection {
                 Files.writeString(Path.of(principale), prima);
                 esegui("service", "nginx", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.pubweb.reloadFailedRestored", java.util.Map.of("out", String.valueOf(ric.uscita.trim()))));
+                        .put("error", I18n.tr("server.pubweb.reloadFailedRestored", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
             }
 
             // Si rilegge da nginx, non dal file: conta cosa nginx include davvero.
             Ris dopoDump = esegui("nginx", "-T");
             boolean visto = dopoDump.codice == 0
-                    && cartelleIncluse(dopoDump.uscita).contains(PROPOSED_FOLDER);
+                    && cartelleIncluse(dopoDump.output).contains(PROPOSED_FOLDER);
             if (!visto)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.includeNotSeen", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(principale))));
@@ -504,16 +504,16 @@ public class WebProtection {
                 Files.deleteIfExists(Path.of(JAIL));
                 esegui("fail2ban-client", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.pubweb.f2bRejected", java.util.Map.of("out", String.valueOf(rel.uscita.trim()))));
+                        .put("error", I18n.tr("server.pubweb.f2bRejected", java.util.Map.of("out", String.valueOf(rel.output.trim()))));
             }
 
             // Non basta che il reload sia andato: si chiede a fail2ban se la vede.
             Ris st = esegui("fail2ban-client", "status", "mailpanel-pubblico");
             if (st.codice != 0)
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.pubweb.jailNotActive", java.util.Map.of("out", String.valueOf(st.uscita.trim()))));
+                        .put("error", I18n.tr("server.pubweb.jailNotActive", java.util.Map.of("out", String.valueOf(st.output.trim()))));
 
-            return r.put("success", true).put("stato", st.uscita.trim())
+            return r.put("success", true).put("stato", st.output.trim())
                     .put("nota", I18n.tr("server.pubweb.jailActive"));
         } catch (Exception e) {
             return r.put("success", false).put("error", I18n.tr("server.pubweb.jailError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
@@ -527,15 +527,15 @@ public class WebProtection {
                 "fetch -q -o - --no-verify-peer --no-verify-hostname -T 5 "
               + "https://127.0.0.1/.well-known/mta-sts.txt 2>/dev/null "
               + "|| curl -sk --max-time 5 https://127.0.0.1/.well-known/mta-sts.txt");
-        boolean politica = a.uscita != null && a.uscita.contains("version: STSv1");
+        boolean politica = a.output != null && a.output.contains("version: STSv1");
         r.put("politica", politica);
         if (!politica)
             return r.put("ok", false)
-                    .put("errore", I18n.tr("server.pubweb.policyNotBack", java.util.Map.of("out", String.valueOf(a.uscita == null ? "" : a.uscita.trim()))));
+                    .put("errore", I18n.tr("server.pubweb.policyNotBack", java.util.Map.of("out", String.valueOf(a.output == null ? "" : a.output.trim()))));
         return r.put("ok", true);
     }
 
-    private record Ris(int codice, String uscita) {}
+    private record Ris(int codice, String output) {}
 
     private static Ris esegui(String... cmd) {
         try {

@@ -102,7 +102,7 @@ public class BanActionRepairTest {
         BanActionRepair.Esito m = BanActionRepair.conAzionePf(multi, "mail-panel-auth");
         vero("azione su piu' righe: si ferma", m.tipo == BanActionRepair.Esito.Tipo.DA_GUARDARE);
         vero("azione su piu' righe: niente contenuto scritto", m.contenuto == null);
-        vero("azione su piu' righe: dice dove guardare", m.motivo != null && m.motivo.contains("riga"));
+        vero("azione su piu' righe: dice dove guardare", m.reason != null && m.reason.contains("riga"));
 
         // --- Sezione assente: non si inventa niente ---
         vero("sezione assente",

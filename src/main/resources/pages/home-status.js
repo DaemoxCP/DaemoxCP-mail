@@ -35,7 +35,7 @@
             if (!r || r.success === false) {
                 el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                              + '<i class="fas fa-question-circle me-1" aria-hidden="true"></i>'
-                             + homeEsc((r && (r.motivo || r.error)) || t('hs.notChecked'))
+                             + homeEsc((r && (r.reason || r.error)) || t('hs.notChecked'))
                              + '</div>';
                 return;
             }
@@ -48,7 +48,7 @@
             // la stessa frase sono due punti che un giorno la scriveranno diversa.
             el.innerHTML = '<div class="alert alert-' + (ok ? 'success' : 'warning') + ' py-2 small mb-0">'
                 + '<i class="fas fa-' + (ok ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
-                + '<strong>' + homeEsc(r.motivo || (ok ? t('hs.restarts') : t('hs.noRestart'))) + '</strong>'
+                + '<strong>' + homeEsc(r.reason || (ok ? t('hs.restarts') : t('hs.noRestart'))) + '</strong>'
                 + (ok ? '' : ' <a href="/updates" class="alert-link">' + homeEsc(t('hs.goOs')) + '</a>')
                 + '</div>';
         }

@@ -349,9 +349,9 @@ public final class SoftwareVersions {
     }
 
     /** Il primo gruppo del modello nell'uscita, se e' una versione; altrimenti null. */
-    static String estrai(Pattern modello, String uscita) {
-        if (uscita == null) return null;
-        Matcher m = modello.matcher(uscita);
+    static String estrai(Pattern modello, String output) {
+        if (output == null) return null;
+        Matcher m = modello.matcher(output);
         return m.find() ? valida(m.group(1)) : null;
     }
 
@@ -361,9 +361,9 @@ public final class SoftwareVersions {
         return VALID_VERSION.matcher(t).matches() ? t : null;
     }
 
-    private static String prima(String uscita) {
-        if (uscita == null) return null;
-        String t = uscita.strip();
+    private static String prima(String output) {
+        if (output == null) return null;
+        String t = output.strip();
         int a = t.indexOf('\n');
         return a < 0 ? t : t.substring(0, a).strip();
     }
@@ -372,10 +372,10 @@ public final class SoftwareVersions {
      * "pkg which": "/usr/local/sbin/postconf was installed by package postfix-mysql-3.10.4,1".
      * I file che nessun pacchetto possiede ("was not found in the database") non compaiono.
      */
-    static Map<String, String> proprietari(String uscita) {
+    static Map<String, String> proprietari(String output) {
         Map<String, String> m = new HashMap<>();
-        if (uscita == null) return m;
-        Matcher r = Pattern.compile("^(/\\S+) was installed by package (\\S+)$", Pattern.MULTILINE).matcher(uscita);
+        if (output == null) return m;
+        Matcher r = Pattern.compile("^(/\\S+) was installed by package (\\S+)$", Pattern.MULTILINE).matcher(output);
         while (r.find()) {
             String nv = r.group(2);
             int trattino = nv.lastIndexOf('-');
@@ -386,10 +386,10 @@ public final class SoftwareVersions {
     }
 
     /** "pkg query '%n %t'": nome del pacchetto e ora di installazione (secondi dal 1970). */
-    static Map<String, Long> installazioni(String uscita) {
+    static Map<String, Long> installazioni(String output) {
         Map<String, Long> m = new HashMap<>();
-        if (uscita == null) return m;
-        Matcher r = Pattern.compile("^([0-9A-Za-z.+_-]{1,100}) (\\d{1,12})$", Pattern.MULTILINE).matcher(uscita);
+        if (output == null) return m;
+        Matcher r = Pattern.compile("^([0-9A-Za-z.+_-]{1,100}) (\\d{1,12})$", Pattern.MULTILINE).matcher(output);
         while (r.find()) m.put(r.group(1), Long.parseLong(r.group(2)));
         return m;
     }

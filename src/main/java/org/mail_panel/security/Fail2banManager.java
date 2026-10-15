@@ -1596,22 +1596,22 @@ public class Fail2banManager {
             // Il secondo argomento di fail2ban-regex puo' essere il NOME di un filtro. Si prova
             // con quello della jail, che e' la convenzione; se non esiste si ripiega sulla
             // failregex vera, chiesta a fail2ban.
-            String uscita = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, jailName));
-            if (uscita == null || !uscita.contains("Lines:")) {
+            String output = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, jailName));
+            if (output == null || !output.contains("Lines:")) {
                 String fr = primaFailregex(jailName);
                 if (fr == null) {
                     c.messaggio = I18n.tr("server.f2bm.noFilter");
                     return c;
                 }
-                uscita = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, fr));
+                output = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, fr));
             }
-            if (uscita == null || !uscita.contains("Lines:")) {
+            if (output == null || !output.contains("Lines:")) {
                 c.messaggio = I18n.tr("server.f2bm.regexUnreadable");
                 return c;
             }
-            c.uscita = uscita.length() > 3000 ? uscita.substring(uscita.length() - 3000) : uscita;
+            c.output = output.length() > 3000 ? output.substring(output.length() - 3000) : output;
 
-            java.util.regex.Matcher m = Pattern.compile("(\\d+)\\s+matched").matcher(uscita);
+            java.util.regex.Matcher m = Pattern.compile("(\\d+)\\s+matched").matcher(output);
             c.agganci = m.find() ? Integer.parseInt(m.group(1)) : 0;
             c.verificato = true;
             c.messaggio = c.agganci > 0
@@ -1723,10 +1723,10 @@ public class Fail2banManager {
      * ("`-", "|-"), "status <jail>" li mette dopo "File list:" — e una lettura che funziona
      * su una sola delle due e' esattamente il difetto che si sta correggendo.
      */
-    static java.util.List<String> percorsiIn(String uscita) {
+    static java.util.List<String> percorsiIn(String output) {
         java.util.List<String> out = new ArrayList<>();
-        if (uscita == null) return out;
-        java.util.regex.Matcher m = Pattern.compile("(/[^\\s,]+)").matcher(uscita);
+        if (output == null) return out;
+        java.util.regex.Matcher m = Pattern.compile("(/[^\\s,]+)").matcher(output);
         while (m.find()) {
             String v = m.group(1).trim();
             // L'uscita nomina anche il comando invocato: non e' un log sorvegliato.
@@ -1812,14 +1812,14 @@ public class Fail2banManager {
             for (String log : logs) {
                 java.io.File f = new java.io.File(log);
                 if (!f.exists()) {
-                    e.problemi.add(new LogSbagliato(jail, log, null,
+                    e.issues.add(new LogSbagliato(jail, log, null,
                         I18n.tr("server.f2bm.watchesMissing", java.util.Map.of("l", String.valueOf(log)))));
                     continue;
                 }
                 if (f.length() > 0) continue;
                 String vicino = vicinoScritto(f);
                 if (vicino != null)
-                    e.problemi.add(new LogSbagliato(jail, log, vicino,
+                    e.issues.add(new LogSbagliato(jail, log, vicino,
                         I18n.tr("server.f2bm.watchesWrong", java.util.Map.of("l", String.valueOf(log), "v", String.valueOf(vicino)))));
             }
         }
@@ -1847,14 +1847,14 @@ public class Fail2banManager {
         public final java.util.List<String> senzaLog = new ArrayList<>();
         /** Nomi che non passano la validazione: non ci si costruisce un comando sopra. */
         public final java.util.List<String> saltate = new ArrayList<>();
-        public final java.util.List<LogSbagliato> problemi = new ArrayList<>();
+        public final java.util.List<LogSbagliato> issues = new ArrayList<>();
     }
 
     /** Una jail e il log che non puo' dirle niente. */
     public static class LogSbagliato {
-        public final String jail, log, vicino, motivo;
-        LogSbagliato(String jail, String log, String vicino, String motivo) {
-            this.jail = jail; this.log = log; this.vicino = vicino; this.motivo = motivo;
+        public final String jail, log, vicino, reason;
+        LogSbagliato(String jail, String log, String vicino, String reason) {
+            this.jail = jail; this.log = log; this.vicino = vicino; this.reason = reason;
         }
     }
 
@@ -2209,7 +2209,7 @@ public class Fail2banManager {
     }
 
     public static class FiltroCheck {
-        public String jail = "", log = "", messaggio = "", uscita = "";
+        public String jail = "", log = "", messaggio = "", output = "";
         public boolean verificato;
         public int agganci;
         public long righeLog;

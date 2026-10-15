@@ -138,10 +138,10 @@ public class WebDiagnostics {
         Ris dump = esegui("nginx", "-T");
         if (dump.codice != 0) {
             r.put("nginxLeggibile", false)
-             .put("nginxProblema", I18n.tr("server.webdiag.dumpFailed", java.util.Map.of("out", String.valueOf(primeRighe(dump.uscita, 3)))));
+             .put("nginxProblema", I18n.tr("server.webdiag.dumpFailed", java.util.Map.of("out", String.valueOf(primeRighe(dump.output, 3)))));
         } else {
             r.put("nginxLeggibile", true);
-            List<Blocco> bl = blocchi(dump.uscita);
+            List<Blocco> bl = blocchi(dump.output);
             JSONArray siti = new JSONArray();
             boolean inChiaro = false, ottanta = false;
             for (Blocco b : bl) {
@@ -166,23 +166,23 @@ public class WebDiagnostics {
             r.put("siti", siti).put("porta80Presente", ottanta).put("contenutiInChiaro", inChiaro)
              .put("porta443Presente", quattro43);
 
-            boolean limReq = dump.uscita.contains("limit_req"), limConn = dump.uscita.contains("limit_conn");
+            boolean limReq = dump.output.contains("limit_req"), limConn = dump.output.contains("limit_conn");
             r.put("limitReq", limReq).put("limitConn", limConn);
-            r.put("sslProtocols", primaRigaCon(dump.uscita, "ssl_protocols"));
-            r.put("workerConnections", primaRigaCon(dump.uscita, "worker_connections"));
+            r.put("sslProtocols", primaRigaCon(dump.output, "ssl_protocols"));
+            r.put("workerConnections", primaRigaCon(dump.output, "worker_connections"));
         }
 
         // Chi e' davvero in ascolto sulla macchina, indipendentemente da nginx.
         Ris sock = esegui("sh", "-c", "sockstat -4 -6 -l 2>/dev/null | awk 'NR==1 || $6 ~ /:(80|443)$/'");
-        r.put("inAscolto", sock.codice == 0 ? sock.uscita.trim() : "")
+        r.put("inAscolto", sock.codice == 0 ? sock.output.trim() : "")
          .put("inAscoltoLetto", sock.codice == 0);
 
         // Il firewall: le porte web sono filtrate?
         Ris pf = esegui("sh", "-c", "pfctl -sr 2>/dev/null");
-        if (pf.codice == 0 && !pf.uscita.isBlank()) {
-            r.put("pfLetto", true).put("pfRegole", pf.uscita.trim().split("\n").length);
-            r.put("pfCita80", pf.uscita.contains(" 80") || pf.uscita.contains("{ 80"));
-            r.put("pfCita443", pf.uscita.contains("443"));
+        if (pf.codice == 0 && !pf.output.isBlank()) {
+            r.put("pfLetto", true).put("pfRegole", pf.output.trim().split("\n").length);
+            r.put("pfCita80", pf.output.contains(" 80") || pf.output.contains("{ 80"));
+            r.put("pfCita443", pf.output.contains("443"));
         } else {
             r.put("pfLetto", false);
         }
@@ -199,10 +199,10 @@ public class WebDiagnostics {
         // ogni jail sorveglia.
         Ris f2b = esegui("sh", "-c", "fail2ban-client status 2>/dev/null");
         if (f2b.codice == 0) {
-            r.put("fail2banLetto", true).put("jail", f2b.uscita.trim());
+            r.put("fail2banLetto", true).put("jail", f2b.output.trim());
 
             List<String> nomi = new ArrayList<>();
-            for (String riga : f2b.uscita.split("\n")) {
+            for (String riga : f2b.output.split("\n")) {
                 int i = riga.toLowerCase(Locale.ROOT).indexOf("jail list:");
                 if (i < 0) continue;
                 for (String x : riga.substring(i + "jail list:".length()).split(","))
@@ -216,7 +216,7 @@ public class WebDiagnostics {
                 Ris lp = esegui("sh", "-c", "fail2ban-client get "
                         + nome.replace("\"", "") + " logpath 2>/dev/null");
                 if (lp.codice != 0) { tutteLette = false; continue; }
-                boolean suNginx = lp.uscita.contains("/nginx/") || lp.uscita.contains("nginx-");
+                boolean suNginx = lp.output.contains("/nginx/") || lp.output.contains("nginx-");
                 if (suNginx) guardaNginx = true;
 
                 // Quale porta protegge. Non e' una proprieta' della jail ma dell'AZIONE
@@ -225,7 +225,7 @@ public class WebDiagnostics {
                 // ognuna la sua porta.
                 String azioni = "";
                 Ris ac = esegui("sh", "-c", "fail2ban-client get " + sicuro(nome) + " actions 2>/dev/null");
-                if (ac.codice == 0) azioni = ac.uscita.trim();
+                if (ac.codice == 0) azioni = ac.output.trim();
                 java.util.LinkedHashSet<String> porte = new java.util.LinkedHashSet<>();
                 boolean porteLette = false;
                 for (String az : azioni.replaceAll("(?s).*?:", "").split(",")) {
@@ -234,13 +234,13 @@ public class WebDiagnostics {
                     Ris pr = esegui("sh", "-c", "fail2ban-client get " + sicuro(nome)
                             + " action " + sicuro(a) + " port 2>/dev/null");
                     if (pr.codice != 0) continue;
-                    String v = pr.uscita.trim();
+                    String v = pr.output.trim();
                     if (!v.isEmpty() && !v.toLowerCase(Locale.ROOT).contains("not ")) {
                         porte.add(v); porteLette = true;
                     }
                 }
                 sorveglianza.put(new JSONObject().put("jail", nome)
-                        .put("log", lp.uscita.trim()).put("suNginx", suNginx)
+                        .put("log", lp.output.trim()).put("suNginx", suNginx)
                         .put("azioni", azioni)
                         .put("porte", String.join(", ", porte))
                         // "Non dichiarata" non e' "nessuna": con l'azione predefinita di pf il
@@ -326,7 +326,7 @@ public class WebDiagnostics {
         return sb.toString().trim();
     }
 
-    private record Ris(int codice, String uscita) {}
+    private record Ris(int codice, String output) {}
 
     private static Ris esegui(String... cmd) {
         try {

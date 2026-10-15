@@ -140,7 +140,7 @@
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-1">'
                   + repEsc(r.nota || r.error) + '</div>';
             if (r.oggetto) h += '<div class="small text-muted">' + escHtml(t('rep.subject')) + ' <code>' + repEsc(r.oggetto) + '</code></div>';
-            if (r.uscita) h += '<pre class="upd-log mt-1">' + repEsc(r.uscita) + '</pre>';
+            if (r.output) h += '<pre class="upd-log mt-1">' + repEsc(r.output) + '</pre>';
             el.innerHTML = h;
         }
 

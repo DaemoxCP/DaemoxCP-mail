@@ -293,7 +293,7 @@ public final class AddressTransform {
     public static JSONObject anteprimaACasella(Stato s, ZoneId zona) {
         JSONObject o = new JSONObject().put("indirizzo", s.indirizzo());
         String no = motivoNoCasella(s);
-        if (no != null) return o.put("possibile", false).put("motivo", no);
+        if (no != null) return o.put("possibile", false).put("reason", no);
         JSONArray dest = new JSONArray();
         boolean copia = false;
         for (MailDatabase.Alias a : s.conQuestaSorgente()) {
@@ -309,7 +309,7 @@ public final class AddressTransform {
     public static JSONObject anteprimaAAlias(Stato s, ZoneId zona) {
         JSONObject o = new JSONObject().put("indirizzo", s.indirizzo());
         MailDatabase.Mailbox m = s.mailbox();
-        if (m == null) return o.put("possibile", false).put("motivo", I18n.tr("server.convert.notMailbox", java.util.Map.of("a", String.valueOf(s.indirizzo()))));
+        if (m == null) return o.put("possibile", false).put("reason", I18n.tr("server.convert.notMailbox", java.util.Map.of("a", String.valueOf(s.indirizzo()))));
         Perdite p = s.perdite() == null ? new Perdite(false, List.of(), 0) : s.perdite();
         JSONArray gia = new JSONArray();
         boolean copia = false;

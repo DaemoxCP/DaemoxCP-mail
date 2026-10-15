@@ -21,11 +21,11 @@ public class MtaStsOldLogicTest {
                      inPropagazione = new ArrayList<>();
         for (MtaStsSetup.EsameNome e : casi) {
             switch (e.stato) {
-                case ASSENTE -> assenti.add(e.dominio + " (" + e.motivo + ")");
-                case CIECO -> ciechi.add(e.dominio + " (" + e.motivo + ")");
+                case ASSENTE -> assenti.add(e.dominio + " (" + e.reason + ")");
+                case CIECO -> ciechi.add(e.dominio + " (" + e.reason + ")");
                 case DA_CORREGGERE -> {
-                    if (e.motivo.contains("Cloudflare")) proxati.add(e.dominio);
-                    else storti.add(e.dominio + " (" + e.motivo + ")");
+                    if (e.reason.contains("Cloudflare")) proxati.add(e.dominio);
+                    else storti.add(e.dominio + " (" + e.reason + ")");
                 }
                 case GIUSTO -> { if (!e.risolve) inPropagazione.add(e.dominio); }
             }

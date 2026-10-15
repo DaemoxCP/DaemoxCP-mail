@@ -491,7 +491,7 @@ public final class PeriodicReport {
 
         JSONObject esito = consegna(mittente, destinatario, oggetto, corpo);
         r.put("oggetto", oggetto).put("corpo", corpo).put("mittente", mittente)
-         .put("coseDaFare", quante).put("uscita", esito.optString("uscita", ""));
+         .put("coseDaFare", quante).put("output", esito.optString("output", ""));
         if (esito.optBoolean("success")) {
             String ora = LocalDateTime.now().format(ISO);
             impSet("report_last", ora);
@@ -543,7 +543,7 @@ public final class PeriodicReport {
                  .append("X-Mailer: FreeBSD Mail Panel\r\n")
                  .append("\r\n")
                  .append(corpo.replace("\n", "\r\n"));
-        StringBuilder uscita = new StringBuilder()
+        StringBuilder output = new StringBuilder()
                 .append("* ").append(I18n.tr("server.rp.postfixSendmail", java.util.Map.of("p", String.valueOf(sendmail)))).append('\n')
                 .append("* Message-ID: <").append(messageId).append(">\n");
 
@@ -558,8 +558,8 @@ public final class PeriodicReport {
                 os.write(messaggio.toString().getBytes(StandardCharsets.UTF_8));
             }
             String detto = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-            if (!detto.isEmpty()) uscita.append(detto).append('\n');
-            r.put("uscita", uscita.toString());
+            if (!detto.isEmpty()) output.append(detto).append('\n');
+            r.put("output", output.toString());
             boolean finito = p.waitFor(60, TimeUnit.SECONDS);
             if (!finito) { p.destroyForcibly(); return r.put("success", false).put("error", I18n.tr("server.rp.sendmailTimeout")); }
             int codice = p.exitValue();
@@ -568,7 +568,7 @@ public final class PeriodicReport {
                 return r.put("success", false).put("error", I18n.tr("server.rp.sendmailExit", java.util.Map.of("c", String.valueOf(codice)))
                         + (detto.isEmpty() ? "" : ": " + detto));
         } catch (Exception e) {
-            return r.put("uscita", uscita.toString()).put("success", false)
+            return r.put("output", output.toString()).put("success", false)
                     .put("error", I18n.tr("server.rp.cannotRun", java.util.Map.of("p", String.valueOf(sendmail), "m", String.valueOf(e.getMessage()))));
         }
 
@@ -577,12 +577,12 @@ public final class PeriodicReport {
         JSONObject log = seguiNelLog(inizioLog, messageId, a);
         JSONArray righe = log.optJSONArray("righe");
         if (righe != null && righe.length() > 0) {
-            uscita.append("* ").append(I18n.tr("server.rp.fromMaillog", java.util.Map.of("f", String.valueOf(org.mail_panel.monitoring.LogManager.MAILLOG)))).append('\n');
-            for (int i = 0; i < righe.length(); i++) uscita.append(righe.getString(i)).append('\n');
+            output.append("* ").append(I18n.tr("server.rp.fromMaillog", java.util.Map.of("f", String.valueOf(org.mail_panel.monitoring.LogManager.MAILLOG)))).append('\n');
+            for (int i = 0; i < righe.length(); i++) output.append(righe.getString(i)).append('\n');
         } else {
-            uscita.append("* ").append(I18n.tr("server.rp.noLogLine")).append('\n');
+            output.append("* ").append(I18n.tr("server.rp.noLogLine")).append('\n');
         }
-        return verdict(log).put("uscita", uscita.toString());
+        return verdict(log).put("output", output.toString());
     }
 
     // ===================== quale sendmail =====================

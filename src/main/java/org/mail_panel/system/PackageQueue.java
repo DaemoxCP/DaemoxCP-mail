@@ -47,7 +47,7 @@ public final class PackageQueue {
     /** Dove sta l'elenco. E' una variabile solo perche' le prove non scrivano in /var/db. */
     static Path list = Path.of(STATE_PATH);
 
-    private record Turno(String id, String descrizione, long inizio) {}
+    private record Turno(String id, String description, long inizio) {}
 
     private static final AtomicReference<Turno> IN_CORSO = new AtomicReference<>();
 
@@ -59,20 +59,20 @@ public final class PackageQueue {
      * pacchetti potrebbero essere ancora unlockedPackages, e un "pkg upgrade" o un "pkg install" li
      * cambierebbe come se niente fosse.
      */
-    public static String prendi(String id, String descrizione) {
-        return prendi(id, descrizione, true);
+    public static String prendi(String id, String description) {
+        return prendi(id, description, true);
     }
 
     /**
      * Come prendi, ma anche con l'elenco di un lavoro interrotto su disco. Solo per rimettere o
      * togliere protezioni: rimetterle e' proprio il rimedio a quell'elenco.
      */
-    public static String prendiPerLeProtezioni(String id, String descrizione) {
-        return prendi(id, descrizione, false);
+    public static String prendiPerLeProtezioni(String id, String description) {
+        return prendi(id, description, false);
     }
 
-    private static String prendi(String id, String descrizione, boolean nonConElencoAperto) {
-        Turno nuovo = new Turno(id, descrizione, System.currentTimeMillis());
+    private static String prendi(String id, String description, boolean nonConElencoAperto) {
+        Turno nuovo = new Turno(id, description, System.currentTimeMillis());
         while (!IN_CORSO.compareAndSet(null, nuovo)) {
             String chi = chi();
             if (chi != null) return occupato(chi);
@@ -96,7 +96,7 @@ public final class PackageQueue {
         Turno t = IN_CORSO.get();
         if (t == null) return null;
         long min = (System.currentTimeMillis() - t.inizio()) / 60000;
-        return t.descrizione() + ", " + (min < 1 ? I18n.tr("server.turn.justStarted")
+        return t.description() + ", " + (min < 1 ? I18n.tr("server.turn.justStarted")
                 : min == 1 ? I18n.tr("server.turn.running.one")
                 : I18n.tr("server.turn.running.other", java.util.Map.of("n", String.valueOf(min))));
     }

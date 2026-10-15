@@ -2248,9 +2248,9 @@ public class SSLMailServer {
     private static final java.util.regex.Pattern TIME_ZONE_VALUE =
             java.util.regex.Pattern.compile("[+-](0\\d|1[0-4]):[0-5]\\d|SYSTEM|[A-Za-z][A-Za-z0-9_+-]{0,30}(/[A-Za-z0-9_+-]{1,30}){0,2}");
 
-    private static JSONObject sulTurnoPacchetti(String descrizione, java.util.function.Supplier<JSONObject> lavoro) {
+    private static JSONObject sulTurnoPacchetti(String description, java.util.function.Supplier<JSONObject> lavoro) {
         String id = "installa-" + System.nanoTime();
-        String rifiuto = org.mail_panel.system.PackageQueue.prendi(id, descrizione);
+        String rifiuto = org.mail_panel.system.PackageQueue.prendi(id, description);
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto).put("message", rifiuto);
         try { return lavoro.get(); }
         finally { org.mail_panel.system.PackageQueue.rilascia(id); }
@@ -5223,7 +5223,7 @@ public class SSLMailServer {
                                 .put("jail", c.jail).put("log", c.log)
                                 .put("verificato", c.verificato).put("agganci", c.agganci)
                                 .put("righe_log", c.righeLog).put("messaggio", c.messaggio)
-                                .put("uscita", c.uscita);
+                                .put("output", c.output);
                     }
                     // Legge e basta: mette a confronto gli indirizzi che Fail2ban crede
                     // bannati con quelli che pf blocca davvero. "Currently banned" dice che il
@@ -8392,18 +8392,18 @@ public class SSLMailServer {
         } else if (esame.esaminate.isEmpty()) {
             logOk = false;
             logDettaglio.append(I18n.tr("server.f2b.log.noFiles"));
-        } else if (esame.problemi.isEmpty()) {
+        } else if (esame.issues.isEmpty()) {
             logOk = true;
             logDettaglio.append(I18n.tr("server.f2b.log.allOk", Map.of("n", esame.esaminate.size(), "jails", String.join(", ", esame.esaminate))));
             if (!esame.senzaLog.isEmpty())
                 logDettaglio.append(". ").append(I18n.tr("server.f2b.log.withoutLog", Map.of("jails", String.join(", ", esame.senzaLog))));
         } else {
             logOk = false;
-            logDettaglio.append(I18n.tr("server.f2b.log.someBlind", Map.of("total", esame.esaminate.size(), "n", esame.problemi.size()))).append(" ");
+            logDettaglio.append(I18n.tr("server.f2b.log.someBlind", Map.of("total", esame.esaminate.size(), "n", esame.issues.size()))).append(" ");
             boolean primo = true;
-            for (Fail2banManager.LogSbagliato sb : esame.problemi) {
+            for (Fail2banManager.LogSbagliato sb : esame.issues) {
                 if (!primo) logDettaglio.append(" | ");
-                logDettaglio.append(sb.jail).append(": ").append(sb.motivo);
+                logDettaglio.append(sb.jail).append(": ").append(sb.reason);
                 primo = false;
             }
         }
@@ -8446,7 +8446,7 @@ public class SSLMailServer {
                         ng.append(x.optString("jail")).append(": ").append(x.optString("perche"));
                         // L'evidenza accanto al verdict: cosa ha risposto fail2ban, e cosa ha
                         // scritto nel proprio log. Senza, la riga dice solo che non si sa.
-                        String u = x.optString("uscita", "");
+                        String u = x.optString("output", "");
                         if (!u.isEmpty()) ng.append(" [").append(I18n.tr("server.f2b.ban.answers", Map.of("answer", u))).append("]");
                         String lg = x.optString("log", "");
                         if (!lg.isEmpty()) ng.append(" [fail2ban.log: ").append(lg.replace("\n", " ⏎ ")).append("]");
@@ -9150,7 +9150,7 @@ public class SSLMailServer {
             // "gia' configurate e attive", e il percorso sbagliato sarebbe rimasto per sempre.
             boolean logSbagliati = false;
             try {
-                logSbagliati = !fail2banManager.esaminaLogSorvegliati(activeJailsNow).problemi.isEmpty();
+                logSbagliati = !fail2banManager.esaminaLogSorvegliati(activeJailsNow).issues.isEmpty();
             } catch (Exception ignored) { }
 
             // E nemmeno "le jail ci sono e guardano il file giusto" basta: recidive aveva la

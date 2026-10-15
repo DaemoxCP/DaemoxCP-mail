@@ -62,17 +62,17 @@ public class MtaStsSetup {
     private static final long WAIT_INTERVAL_MS = 30 * 1000L;
 
     public static class Passo {
-        public String chiave, titolo, dettaglio, stato, motivo;
+        public String chiave, titolo, dettaglio, stato, reason;
         public JSONObject json() {
             return new JSONObject().put("chiave", chiave).put("titolo", titolo)
                     .put("dettaglio", dettaglio == null ? "" : dettaglio)
-                    .put("stato", stato).put("motivo", motivo == null ? "" : motivo);
+                    .put("stato", stato).put("reason", reason == null ? "" : reason);
         }
     }
 
     private static Passo passo(String c, String t, String d, String s, String m) {
         Passo p = new Passo();
-        p.chiave = c; p.titolo = t; p.dettaglio = d; p.stato = s; p.motivo = m;
+        p.chiave = c; p.titolo = t; p.dettaglio = d; p.stato = s; p.reason = m;
         return p;
     }
 
@@ -89,7 +89,7 @@ public class MtaStsSetup {
         JSONObject inc = web.optJSONObject("include");
         boolean includeOk = inc != null && inc.optBoolean("ok", false);
         passi.add(passo("include", I18n.tr("server.sts.stepInclude"),
-                inc == null ? "" : inc.optString("motivo", ""),
+                inc == null ? "" : inc.optString("reason", ""),
                 includeOk ? "fatto" : "da fare", null));
         passi.add(passo("config443", I18n.tr("server.sts.step443"),
                 web.optString("file", ""),
@@ -218,7 +218,7 @@ public class MtaStsSetup {
                 continue;
             }
             switch (txt.esito) {
-                case NON_CHIESTO -> txtIgnoti.add(d + " (" + txt.motivo + ")");
+                case NON_CHIESTO -> txtIgnoti.add(d + " (" + txt.reason + ")");
                 case ASSENTE -> senzaTxt.add(d);
                 case TROPPI -> troppi.add(d + " (" + txt.valori.size() + " record: "
                         + String.join("  ||  ", txt.valori) + ")");
@@ -292,10 +292,10 @@ public class MtaStsSetup {
                         ? " " + I18n.tr("server.sts.wildcardAnswers", java.util.Map.of("d", String.valueOf(e.dominio))) : ""));
             }
             switch (e.stato) {
-                case ASSENTE -> r.assenti.add(e.dominio + " (" + e.motivo + ")");
-                case CIECO -> r.ciechi.add(e.dominio + " (" + e.motivo + ")");
+                case ASSENTE -> r.assenti.add(e.dominio + " (" + e.reason + ")");
+                case CIECO -> r.ciechi.add(e.dominio + " (" + e.reason + ")");
                 case DA_CORREGGERE -> {
-                    if (e.contenutoSbagliato) r.storti.add(e.dominio + " (" + e.motivo + ")");
+                    if (e.contenutoSbagliato) r.storti.add(e.dominio + " (" + e.reason + ")");
                 }
                 case GIUSTO -> { if (!e.risolve) r.inPropagazione.add(e.dominio); }
             }
@@ -573,7 +573,7 @@ public class MtaStsSetup {
             // L'uscita si mostra SEMPRE, non solo quando fallisce. Buttarla via quando il
             // comando "riesce" toglie la prova proprio nel caso peggiore: quello in cui
             // riesce ma non ha fatto quello che credevamo.
-            riga.put("uscita", dettaglio);
+            riga.put("output", dettaglio);
             fatti.put(riga);
             if (job != null) {
                 job.scrivi("--- " + I18n.tr("server.sts.acmeOutput") + " ---");
@@ -777,7 +777,7 @@ public class MtaStsSetup {
 
     public static final class EsameNome {
         public final String dominio; public final StatoNome stato;
-        public final String motivo; public final boolean risolve;
+        public final String reason; public final boolean risolve;
         /**
          * Il nome risponde ATTRAVERSO Cloudflare: o il record esplicito e' proxato, o il
          * record manca e a rispondere e' un jolly proxato. Nei due casi l'effetto e' lo
@@ -795,7 +795,7 @@ public class MtaStsSetup {
         public final boolean contenutoSbagliato;
         EsameNome(String d, StatoNome s, String m, boolean r) { this(d, s, m, r, false, false); }
         EsameNome(String d, StatoNome s, String m, boolean r, boolean proxy, boolean storto) {
-            dominio = d; stato = s; motivo = m; risolve = r;
+            dominio = d; stato = s; reason = m; risolve = r;
             passaDalProxy = proxy; contenutoSbagliato = storto;
         }
     }
@@ -936,13 +936,13 @@ public class MtaStsSetup {
          * Con NON_CHIESTO, il perche': "il DNS risponde SERVFAIL" e "nessun DNS risponde"
          * portano a cercare il guasto in posti diversi.
          */
-        public final String motivo;
+        public final String reason;
 
-        private LetturaTxt(EsitoTxt esito, List<String> valori, String motivo) {
+        private LetturaTxt(EsitoTxt esito, List<String> valori, String reason) {
             this.esito = esito;
             this.valori = List.copyOf(valori);
             this.contenuto = esito == EsitoTxt.PRESENTE ? valori.get(0) : "";
-            this.motivo = motivo;
+            this.reason = reason;
         }
     }
 
@@ -953,8 +953,8 @@ public class MtaStsSetup {
         return new LetturaTxt(e, sts, "");
     }
 
-    private static LetturaTxt ignoto(String motivo) {
-        return new LetturaTxt(EsitoTxt.NON_CHIESTO, List.of(), motivo);
+    private static LetturaTxt ignoto(String reason) {
+        return new LetturaTxt(EsitoTxt.NON_CHIESTO, List.of(), reason);
     }
 
     public static LetturaTxt leggiTxt(String dominio) {

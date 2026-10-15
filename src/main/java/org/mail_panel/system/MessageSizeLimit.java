@@ -42,7 +42,7 @@ public class MessageSizeLimit {
         Ris r = esegui("postconf", "-h", "message_size_limit");
         if (r.codice != 0) return -1;
         try {
-            return aMega(Long.parseLong(r.uscita.trim()));
+            return aMega(Long.parseLong(r.output.trim()));
         } catch (Exception e) {
             return -1;
         }
@@ -69,13 +69,13 @@ public class MessageSizeLimit {
         Ris set = esegui("postconf", "-e", "message_size_limit=" + aByte(mb));
         if (set.codice != 0)
             return r.put("success", false)
-                    .put("error", I18n.tr("server.size.postconfRefused", Map.of("output", set.uscita.trim())));
+                    .put("error", I18n.tr("server.size.postconfRefused", Map.of("output", set.output.trim())));
 
         Ris check = esegui("postfix", "check");
         if (check.codice != 0) {
             esegui("postconf", "-e", "message_size_limit=" + aByte(prima));
             return r.put("success", false).put("ripristinato", true)
-                    .put("error", I18n.tr("server.size.checkFailed", Map.of("before", prima, "output", check.uscita.trim())));
+                    .put("error", I18n.tr("server.size.checkFailed", Map.of("before", prima, "output", check.output.trim())));
         }
 
         Ris reload = esegui("postfix", "reload");
@@ -83,7 +83,7 @@ public class MessageSizeLimit {
             esegui("postconf", "-e", "message_size_limit=" + aByte(prima));
             esegui("postfix", "reload");
             return r.put("success", false).put("ripristinato", true)
-                    .put("error", I18n.tr("server.size.reloadFailed", Map.of("before", prima, "output", reload.uscita.trim())));
+                    .put("error", I18n.tr("server.size.reloadFailed", Map.of("before", prima, "output", reload.output.trim())));
         }
 
         // Non basta che i comandi non abbiano protestato: si rilegge.
@@ -97,7 +97,7 @@ public class MessageSizeLimit {
                 .put("nota", I18n.tr("server.size.changed", Map.of("before", prima, "mb", mb)));
     }
 
-    private record Ris(int codice, String uscita) {}
+    private record Ris(int codice, String output) {}
 
     private static Ris esegui(String... cmd) {
         try {

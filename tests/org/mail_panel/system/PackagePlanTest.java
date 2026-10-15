@@ -93,10 +93,10 @@ public class PackagePlanTest {
         vero("piano grande: la rimozione ha nome, versione e motivo",
             trova(p, "php84-pecl-rdkafka").getString("tipo").equals("rimuove")
             && trova(p, "php84-pecl-rdkafka").getString("da").equals("6.0.3_1")
-            && trova(p, "php84-pecl-rdkafka").getString("motivo").startsWith("conflicts with"));
+            && trova(p, "php84-pecl-rdkafka").getString("reason").startsWith("conflicts with"));
         vero("piano grande: l'installazione nuova", "10.45".equals(trova(p, "pcre2").getString("a")));
         vero("piano grande: la reinstallazione separa nome e versione",
-            "8.4.19".equals(trova(p, "php84").getString("da")) && trova(p, "php84").getString("motivo").contains("pcre2"));
+            "8.4.19".equals(trova(p, "php84").getString("da")) && trova(p, "php84").getString("reason").contains("pcre2"));
         vero("piano grande: nginx con l'epoch", "1.30.5,3".equals(trova(p, "nginx").getString("a")));
         vero("piano grande: openssl ancora vulnerabile dopo l'aggiornamento",
             trova(p, "openssl35").getBoolean("stillVulnerable") && "3.5.3".equals(trova(p, "openssl35").getString("a")));
@@ -203,7 +203,7 @@ public class PackagePlanTest {
             }""";
         JSONObject va = PackagePlan.leggiAudit(audit);
         vero("audit: due pacchetti letti", va.length() == 2);
-        JSONArray nginxProblemi = va.getJSONObject("nginx").getJSONArray("problemi");
+        JSONArray nginxProblemi = va.getJSONObject("nginx").getJSONArray("issues");
         vero("audit: l'intervallo di nginx", ">= 1.25.0 : < 1.30.5,3".equals(nginxProblemi.getJSONObject(0).getJSONArray("ranges").getString(0)));
         vero("audit: nessun pacchetto vulnerabile", PackagePlan.leggiAudit("{\n    \"pkg_count\": 0\n}").length() == 0);
 
@@ -211,37 +211,37 @@ public class PackagePlanTest {
         JSONObject v = PackagePlan.valutaCorrezione("1.30.4,3", "1.30.4,3", nginxProblemi, CMP);
         vero("nginx: la fix esiste ma non nel ramo", "fix-fuori-dal-ramo".equals(v.getString("verdict")));
         vero("nginx: dalla 1.30.5,3", "1.30.5,3".equals(v.getString("firstFixed")));
-        vero("nginx: il testo dice che il lock non c'entra", v.getString("spiegazione").contains("la protezione non c'entra"));
+        vero("nginx: il testo dice che il lock non c'entra", v.getString("explanation").contains("la protezione non c'entra"));
 
         v = PackagePlan.valutaCorrezione("1.30.4,3", "1.30.5,3", nginxProblemi, CMP);
         vero("nginx con la 1.30.5,3 nel catalogo: si risolve aggiornando", "si-risolve-aggiornando".equals(v.getString("verdict")));
 
-        JSONArray curl = va.getJSONObject("curl").getJSONArray("problemi");
+        JSONArray curl = va.getJSONObject("curl").getJSONArray("issues");
         v = PackagePlan.valutaCorrezione("8.15.0", "8.16.0", curl, CMP);
         vero("curl: la 8.16.0 chiude uno solo dei due", "aggiornamento-non-basta".equals(v.getString("verdict"))
-            && "8.17.0".equals(v.getString("firstFixed")) && v.getString("spiegazione").contains("curl -- due"));
+            && "8.17.0".equals(v.getString("firstFixed")) && v.getString("explanation").contains("curl -- due"));
         v = PackagePlan.valutaCorrezione("8.15.0", "8.17.0", curl, CMP);
         vero("curl: la 8.17.0 li chiude tutti e due", "si-risolve-aggiornando".equals(v.getString("verdict")));
         v = PackagePlan.valutaCorrezione("8.15.0", "", curl, CMP);
         vero("curl: catalogo senza il pacchetto, fix dalla 8.17.0",
             "fix-fuori-dal-ramo".equals(v.getString("verdict")) && "8.17.0".equals(v.getString("firstFixed")));
 
-        v = PackagePlan.valutaCorrezione("2.1", "2.1", problemi(">= 0"), CMP);
+        v = PackagePlan.valutaCorrezione("2.1", "2.1", issues(">= 0"), CMP);
         vero("senza limite superiore: nessuna fix", "nessuna-fix".equals(v.getString("verdict")));
-        v = PackagePlan.valutaCorrezione("2.1", "2.1", problemi("<= 2.1"), CMP);
+        v = PackagePlan.valutaCorrezione("2.1", "2.1", issues("<= 2.1"), CMP);
         vero("'<=': fix non indicata", "fix-non-indicata".equals(v.getString("verdict")));
-        v = PackagePlan.valutaCorrezione("2.1", "2.1", problemi("= 2.1"), CMP);
+        v = PackagePlan.valutaCorrezione("2.1", "2.1", issues("= 2.1"), CMP);
         vero("'=': solo quella versione, ma il catalogo non ne ha un'altra", "fix-fuori-dal-ramo".equals(v.getString("verdict")));
         // Piu' ranges: conta quello in cui cade la versione installata, non il primo.
-        v = PackagePlan.valutaCorrezione("1.27.5", "1.27.5", problemi("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
+        v = PackagePlan.valutaCorrezione("1.27.5", "1.27.5", issues("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
         vero("due rami di versioni: la fix del ramo giusto", "1.28.1".equals(v.getString("firstFixed")));
-        v = PackagePlan.valutaCorrezione("1.27.5", "1.28.0", problemi("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
+        v = PackagePlan.valutaCorrezione("1.27.5", "1.28.0", issues("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
         vero("due rami di versioni: la 1.28.0 non basta", "aggiornamento-non-basta".equals(v.getString("verdict")));
-        v = PackagePlan.valutaCorrezione("3.0", "3.0", problemi("< 2.0"), CMP);
+        v = PackagePlan.valutaCorrezione("3.0", "3.0", issues("< 2.0"), CMP);
         vero("versione fuori da ogni intervallo: non so, non invento", "non-so".equals(v.getString("verdict")));
         PackagePlan.Confronto rotto = (x, y) -> { throw new IllegalStateException("pkg non risponde"); };
         v = PackagePlan.valutaCorrezione("1.30.4,3", "1.30.4,3", nginxProblemi, rotto);
-        vero("confronto rotto: non so", "non-so".equals(v.getString("verdict")) && v.getString("spiegazione").contains("pkg non risponde"));
+        vero("confronto rotto: non so", "non-so".equals(v.getString("verdict")) && v.getString("explanation").contains("pkg non risponde"));
 
         vero("estremi: uno", PackagePlan.estremi("< 1.30.5,3").size() == 1);
         vero("estremi: due", PackagePlan.estremi(">= 1.25.0 : < 1.30.5,3").size() == 2);
@@ -303,7 +303,7 @@ public class PackagePlanTest {
                      ? "e' il JDK su cui gira il pannello" : null);
         vero("simulazione: il JDK del pannello resta un impedimento con il suo motivo",
             p.getJSONArray("blockers").length() == 1
-            && p.getJSONArray("blockers").getJSONObject(0).getString("motivo").contains("JDK"));
+            && p.getJSONArray("blockers").getJSONObject(0).getString("reason").contains("JDK"));
         vero("simulazione: con un impedimento non e' runnable", !p.getBoolean("runnable"));
         vero("simulazione: anche qui la copia e' sparita", copieRimaste() == copiePrima);
 
@@ -321,9 +321,9 @@ public class PackagePlanTest {
         }
     }
 
-    private static JSONArray problemi(String... ranges) {
+    private static JSONArray issues(String... ranges) {
         return new JSONArray().put(new JSONObject().put("ranges", new JSONArray(List.of(ranges)))
-                .put("descrizione", "prova").put("cve", new JSONArray()).put("url", ""));
+                .put("description", "prova").put("cve", new JSONArray()).put("url", ""));
     }
 
     private static JSONObject trova(JSONObject piano, String nome) {

@@ -1096,7 +1096,7 @@ public class DnsRecordsGenerator {
             // NON si scrive "non attivo" su una domanda rimasta senza risposta: sono due guasti
             // diversi e mandano a cercare in posti opposti (come per autoconfig, in verifyAllRecords).
             mtaStsCheck.passed = false;
-            mtaStsCheck.message = "Non so se il record c'e': " + txtSts.motivo + ".";
+            mtaStsCheck.message = "Non so se il record c'e': " + txtSts.reason + ".";
         } else {
             mtaStsCheck.passed = false;
             mtaStsCheck.informativo = true;

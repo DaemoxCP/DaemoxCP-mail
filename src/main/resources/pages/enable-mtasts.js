@@ -27,7 +27,7 @@
                               : '<i class="fas fa-circle text-warning" style="font-size:.6rem" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('up.pTodo')) + '</span>')
                    + '</td><td class="small"><strong>' + (i + 1) + '. ' + updEsc(p.titolo) + '</strong>'
                    + (p.dettaglio ? '<div class="text-muted">' + updEsc(p.dettaglio) + '</div>' : '')
-                   + (p.motivo ? '<div class="text-warning">' + updEsc(p.motivo) + '</div>' : '')
+                   + (p.reason ? '<div class="text-warning">' + updEsc(p.reason) + '</div>' : '')
                    + '</td></tr>';
             });
             h += '</tbody></table></div>';

@@ -64,13 +64,13 @@ public final class PkgCatalog {
      * nel sorgente di pkg (src/utils.c): "  <nome>: { ", poi "enabled : yes," o "no,", e "}".
      * Restituisce null se non riconosce nessun repository: "non so" non e' "nessuno".
      */
-    static List<String> accesi(String uscita) {
+    static List<String> accesi(String output) {
         List<String> tutti = new ArrayList<>(), accesi = new ArrayList<>();
         String nome = null;
         boolean dentro = false;
         Pattern apre = Pattern.compile("^\\s+(\\S+):\\s*\\{");
         Pattern acceso = Pattern.compile("^\\s*enabled\\s*:\\s*(\\w+)");
-        for (String riga : (uscita == null ? "" : uscita).split("\n")) {
+        for (String riga : (output == null ? "" : output).split("\n")) {
             if (riga.startsWith("Repositories:")) { dentro = true; continue; }
             if (!dentro) continue;
             Matcher m = apre.matcher(riga);

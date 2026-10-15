@@ -59,7 +59,7 @@ public final class BanActionRepair {
                 // puo' fare chiunque guardi la pagina.
                 nonGiudicate.put(new JSONObject().put("jail", jail)
                     .put("perche", I18n.tr("server.banfix.noCommand"))
-                    .put("uscita", uscitaAzioni(jail))
+                    .put("output", uscitaAzioni(jail))
                     .put("log", erroriLogPer(jail))
                     .put("sezioni", sezioniCheDefiniscono(jail))
                     .put("dump", configurazioneLetta(jail)));
@@ -132,7 +132,7 @@ public final class BanActionRepair {
                     case GIA_A_POSTO -> passi.put(passo("mail-panel-auth", true,
                         I18n.tr("server.banfix.alreadyOk")));
                     case DA_GUARDARE -> {
-                        passi.put(passo("mail-panel-auth", false, e.motivo));
+                        passi.put(passo("mail-panel-auth", false, e.reason));
                         daGuardareAMano = true;
                     }
                     case MODIFICATO -> {
@@ -323,8 +323,8 @@ public final class BanActionRepair {
         enum Tipo { ASSENTE, GIA_A_POSTO, MODIFICATO, DA_GUARDARE }
         final Tipo tipo;
         final String contenuto;
-        final String motivo;
-        private Esito(Tipo t, String c, String m) { tipo = t; contenuto = c; motivo = m; }
+        final String reason;
+        private Esito(Tipo t, String c, String m) { tipo = t; contenuto = c; reason = m; }
         static Esito assente()            { return new Esito(Tipo.ASSENTE, null, null); }
         static Esito giaAPosto()          { return new Esito(Tipo.GIA_A_POSTO, null, null); }
         static Esito modificato(String c) { return new Esito(Tipo.MODIFICATO, c, null); }

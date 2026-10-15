@@ -130,9 +130,9 @@ public class MtaStsTest {
         caso("DNS che non risponde (dig esce con 9)", 9, irraggiungibile, MtaStsSetup.EsitoTxt.NON_CHIESTO, "");
         // Il piano scrive il perche' accanto al dominio: un SERVFAIL si cerca nella zona, un
         // DNS che non risponde nella rete di questo server.
-        String perche = MtaStsSetup.interpretaTxt(0, servfail).motivo;
+        String perche = MtaStsSetup.interpretaTxt(0, servfail).reason;
         esigi("il piano dice che il DNS ha risposto SERVFAIL: \"" + perche + "\"", perche.contains("SERVFAIL"));
-        perche = MtaStsSetup.interpretaTxt(9, irraggiungibile).motivo;
+        perche = MtaStsSetup.interpretaTxt(9, irraggiungibile).reason;
         esigi("e che nessun DNS ha risposto: \"" + perche + "\"", perche.equals("nessun DNS risponde"));
         // Varianti costruite sulla risposta vera di domain-d.test.
         String riga = "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=0fec393151a7c577266a\"";
@@ -191,7 +191,7 @@ public class MtaStsTest {
                 "da fare".equals(p.stato));
         esigi("il dettaglio nomina tutti e due i record",
                 p.dettaglio.contains("id=0fec393151a7c577266a") && p.dettaglio.contains("id=1700000000000"));
-        esigi("e il motivo dice perche' conta", p.motivo != null && p.motivo.contains("RFC 8461"));
+        esigi("e il motivo dice perche' conta", p.reason != null && p.reason.contains("RFC 8461"));
         p = passoTxt(List.of(new MtaStsSetup.EsameTxt("domain-d.test", true, l2),
                              new MtaStsSetup.EsameTxt("domain-a.test", true, uno)), atteso);
         esigi("un dominio a posto non copre quello con due record: " + p.stato, "da fare".equals(p.stato));
@@ -222,7 +222,7 @@ public class MtaStsTest {
             // SERVFAIL. Se questo lo fa, la lettura deve dire NON_CHIESTO, non ASSENTE.
             if (statoDig("_mta-sts.dnssec-failed.org").equals("SERVFAIL")) {
                 MtaStsSetup.LetturaTxt l = MtaStsSetup.leggiTxt("dnssec-failed.org");
-                System.out.println("  dnssec-failed.org -> " + l.esito + " (" + l.motivo + ")");
+                System.out.println("  dnssec-failed.org -> " + l.esito + " (" + l.reason + ")");
                 esigi("un SERVFAIL e' NON_CHIESTO, non ASSENTE", l.esito == MtaStsSetup.EsitoTxt.NON_CHIESTO);
             } else {
                 System.out.println("  (il resolver di questa macchina non convalida DNSSEC: SERVFAIL provato solo qui sopra)");

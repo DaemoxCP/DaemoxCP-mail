@@ -17,7 +17,7 @@
                   + escHtml(s.pronto ? t('w4.ready') : t('w4.notReady')) + '</div>';
 
             h += '<table class="table table-sm mb-2"><tbody>'
-               + w443Riga(escHtml(t('w4.nginxReads')), inc.ok, updEsc(inc.motivo || ''))
+               + w443Riga(escHtml(t('w4.nginxReads')), inc.ok, updEsc(inc.reason || ''))
                + w443Riga(escHtml(t('w4.installed')), s.installato,
                           '<code>' + updEsc(s.file) + '</code>')
                + w443Riga(escHtml(t('w4.policyWritten')), s.politicaScritta,

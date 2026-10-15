@@ -91,7 +91,7 @@ public final class PackagePlan {
      * stampa da solo, il piano esce con "measured" falso: un piano letto a meta' e presentato
      * come completo e' peggio di nessun piano.
      */
-    static JSONObject leggiPiano(String uscita) {
+    static JSONObject leggiPiano(String output) {
         JSONArray changes = new JSONArray(), lockedPackages = new JSONArray();
         JSONArray errori = new JSONArray(), warnings = new JSONArray(), illeggibili = new JSONArray();
         Map<String, Integer> contati = new HashMap<>(), dichiarati = new HashMap<>();
@@ -99,7 +99,7 @@ public final class PackagePlan {
         boolean aggiornato = false, hasConflicts = false;
         String sezione = null;
 
-        for (String grezza : (uscita == null ? "" : uscita).split("\n")) {
+        for (String grezza : (output == null ? "" : output).split("\n")) {
             String riga = grezza.replace("\r", "");
             String t = riga.trim();
 
@@ -201,10 +201,10 @@ public final class PackagePlan {
         return true;
     }
 
-    private static JSONObject voce(String tipo, String nome, String da, String a, String motivo,
+    private static JSONObject voce(String tipo, String nome, String da, String a, String reason,
                                    String repo, boolean vulnerabile) {
         return new JSONObject().put("tipo", tipo).put("nome", nome).put("da", da).put("a", a)
-                .put("motivo", motivo == null ? "" : motivo).put("repo", repo == null ? "" : repo)
+                .put("reason", reason == null ? "" : reason).put("repo", repo == null ? "" : repo)
                 .put("stillVulnerable", vulnerabile);
     }
 
@@ -306,7 +306,7 @@ public final class PackagePlan {
             }
             Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefisso + " upgrade -n -U" + list + " 2>&1");
             JSONObject piano = leggiPiano(r.output());
-            return piano.put("success", true).put("codice", r.exitCode()).put("uscita", r.outputTrim())
+            return piano.put("success", true).put("codice", r.exitCode()).put("output", r.outputTrim())
                     .put("onBackup", copia != null)
                     .put("comando", "pkg upgrade -n -U" + list);
         } finally {
@@ -364,7 +364,7 @@ public final class PackagePlan {
                 String no = !protetti.contains(n)
                         ? I18n.tr("server.plan.lockedUnknown")
                         : motivoPerNonSbloccare.apply(blocco);
-                if (no != null) { blockers.put(new JSONObject().put("nome", n).put("motivo", no)); continue; }
+                if (no != null) { blockers.put(new JSONObject().put("nome", n).put("reason", no)); continue; }
                 sblocca.add(n);
                 aggiunti = true;
             }
@@ -532,18 +532,18 @@ public final class PackagePlan {
         if (pk == null) return fuori;
         for (String nome : pk.keySet()) {
             JSONObject p = pk.getJSONObject(nome);
-            JSONArray problemi = new JSONArray();
+            JSONArray issues = new JSONArray();
             JSONArray is = p.optJSONArray("issues");
             for (int i = 0; is != null && i < is.length(); i++) {
                 JSONObject x = is.getJSONObject(i);
-                problemi.put(new JSONObject()
+                issues.put(new JSONObject()
                         .put("ranges", x.optJSONArray("Affected versions") == null ? new JSONArray()
                                 : x.getJSONArray("Affected versions"))
-                        .put("descrizione", x.optString("description", ""))
+                        .put("description", x.optString("description", ""))
                         .put("cve", x.optJSONArray("cve") == null ? new JSONArray() : x.getJSONArray("cve"))
                         .put("url", x.optString("url", "")));
             }
-            fuori.put(nome, new JSONObject().put("versione", p.optString("version", "")).put("problemi", problemi));
+            fuori.put(nome, new JSONObject().put("versione", p.optString("version", "")).put("issues", issues));
         }
         return fuori;
     }
@@ -565,7 +565,7 @@ public final class PackagePlan {
      *    pubblicata e' corretta;
      *  - "non-so": un intervallo non si lascia leggere o il confronto non ha risposto.
      */
-    static JSONObject valutaCorrezione(String installata, String catalogo, JSONArray problemi, Confronto c) {
+    static JSONObject valutaCorrezione(String installata, String catalogo, JSONArray issues, Confronto c) {
         JSONObject r = new JSONObject().put("installata", installata).put("catalogo", catalogo == null ? "" : catalogo);
         try {
             boolean catalogoPiuNuovo = catalogo != null && !catalogo.isEmpty() && c.confronta(catalogo, installata) > 0;
@@ -574,15 +574,15 @@ public final class PackagePlan {
             String finoA = null;                  // un "<=": vulnerabile fino a questa compresa
             boolean senzaLimite = false, illeggibile = false, soloQuesta = false;
             List<String> ancoraApertiNelCatalogo = new ArrayList<>();
-            for (int i = 0; problemi != null && i < problemi.length(); i++) {
-                JSONObject p = problemi.getJSONObject(i);
+            for (int i = 0; issues != null && i < issues.length(); i++) {
+                JSONObject p = issues.getJSONObject(i);
                 JSONArray ranges = p.optJSONArray("ranges");
                 List<Estremo> suo = null;
                 for (int k = 0; ranges != null && k < ranges.length(); k++) {
                     List<Estremo> es = estremi(ranges.getString(k));
                     if (dentro(installata, es, c)) { suo = es; break; }
                 }
-                JSONObject d = new JSONObject().put("descrizione", p.optString("descrizione"))
+                JSONObject d = new JSONObject().put("description", p.optString("description"))
                         .put("cve", p.optJSONArray("cve")).put("url", p.optString("url"))
                         .put("ranges", ranges);
                 if (suo == null) {
@@ -610,12 +610,12 @@ public final class PackagePlan {
                     }
                 }
                 if (catalogoPiuNuovo && dentroUnoQualsiasi(catalogo, ranges, c)) {
-                    ancoraApertiNelCatalogo.add(p.optString("descrizione"));
+                    ancoraApertiNelCatalogo.add(p.optString("description"));
                     d.put("openInCatalog", true);
                 }
                 dettagli.put(d);
             }
-            r.put("problemi", dettagli);
+            r.put("issues", dettagli);
             if (firstFixed != null) r.put("firstFixed", firstFixed);
 
             String verdict, spiega;
@@ -645,9 +645,9 @@ public final class PackagePlan {
                 verdict = "non-so";
                 spiega = I18n.tr("server.plan.v.noComparable");
             }
-            return r.put("verdict", verdict).put("spiegazione", spiega);
+            return r.put("verdict", verdict).put("explanation", spiega);
         } catch (RuntimeException e) {
-            return r.put("verdict", "non-so").put("spiegazione", I18n.tr("server.plan.v.compareFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return r.put("verdict", "non-so").put("explanation", I18n.tr("server.plan.v.compareFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -684,7 +684,7 @@ public final class PackagePlan {
                 try { if (catalogo.isEmpty() || c.confronta(x, catalogo) > 0) catalogo = x; }
                 catch (RuntimeException ignora) { /* resta quella che c'era */ }
             }
-            per.put(nome, valutaCorrezione(v.getString("versione"), catalogo, v.getJSONArray("problemi"), c));
+            per.put(nome, valutaCorrezione(v.getString("versione"), catalogo, v.getJSONArray("issues"), c));
         }
         return new JSONObject().put("success", true).put("pacchetti", per);
     }
@@ -700,9 +700,9 @@ public final class PackagePlan {
      * ("?" fuori catalogo, ">" piu' nuovo del catalogo, "!" non confrontabile) non sono
      * aggiornamenti disponibili e restano fuori.
      */
-    public static Map<String, String> daAggiornare(String uscita) {
+    public static Map<String, String> daAggiornare(String output) {
         Map<String, String> r = new java.util.TreeMap<>();
-        for (String riga : (uscita == null ? "" : uscita).split("\n")) {
+        for (String riga : (output == null ? "" : output).split("\n")) {
             Matcher m = DA_AGGIORNARE.matcher(riga.trim());
             if (m.find() && isValidName(m.group(1)) && versioneValida(m.group(3))) r.put(m.group(1), m.group(3));
         }
@@ -710,9 +710,9 @@ public final class PackagePlan {
     }
 
     /** Da {@code pkg query '%n\t%v\t%k'}: nome -> {versione, "1" se bloccato}. */
-    public static Map<String, String[]> installati(String uscita) {
+    public static Map<String, String[]> installati(String output) {
         Map<String, String[]> r = new java.util.TreeMap<>();
-        for (String riga : (uscita == null ? "" : uscita).split("\n")) {
+        for (String riga : (output == null ? "" : output).split("\n")) {
             String[] c = riga.split("\t");
             if (c.length == 3 && isValidName(c[0].trim()) && versioneValida(c[1].trim()))
                 r.put(c[0].trim(), new String[]{c[1].trim(), c[2].trim()});

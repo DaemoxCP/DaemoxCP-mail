@@ -283,7 +283,7 @@ public class MtaSts {
             return r.put("pubblicabile", true)
                     .put("valore", recordTxt(politica(host, modo, maxAgeConsigliato(modo))));
         return r.put("pubblicabile", false)
-                .put("motivo", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + dominio + PATH), "err", String.valueOf(prova.optString("errore", I18n.tr("server.mtasts.unknownReason"))))));
+                .put("reason", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + dominio + PATH), "err", String.valueOf(prova.optString("errore", I18n.tr("server.mtasts.unknownReason"))))));
     }
 
     /** I domini gestiti, per l'interfaccia. */

@@ -435,7 +435,7 @@ public class Autoconfig {
             if (prova.codice != 0) {
                 Files.writeString(p, testo);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.autoconf.nginxRejected", java.util.Map.of("out", String.valueOf(prova.uscita.trim()))));
+                        .put("error", I18n.tr("server.autoconf.nginxRejected", java.util.Map.of("out", String.valueOf(prova.output.trim()))));
             }
 
             Esito ric = esegui("service", "nginx", "reload");
@@ -443,7 +443,7 @@ public class Autoconfig {
                 Files.writeString(p, testo);
                 esegui("service", "nginx", "reload");
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.autoconf.reloadFailed", java.util.Map.of("out", String.valueOf(ric.uscita.trim()))));
+                        .put("error", I18n.tr("server.autoconf.reloadFailed", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
             }
 
             // Una verifica non puo' guardare solo cio' che volevo ottenere: va guardato anche
@@ -495,7 +495,7 @@ public class Autoconfig {
         return vive;
     }
 
-    private record Esito(int codice, String uscita) {}
+    private record Esito(int codice, String output) {}
 
     private static Esito esegui(String... cmd) {
         try {

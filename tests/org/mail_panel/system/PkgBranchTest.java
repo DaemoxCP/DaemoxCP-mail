@@ -181,7 +181,7 @@ public class PkgBranchTest {
         proprio.cartella.put("poudriere.conf", "poudriere: { url: \"file:///usr/local/poudriere/data/packages/15amd64-default\" }\n");
         st = PkgBranch.stato(proprio);
         vero("pacchetti da un repository proprio: non si cambia, e si dice perche'", st.getString("ramo").equals("nessuno")
-                && !st.getBoolean("changeable") && st.getString("motivo").contains("repository che usi"));
+                && !st.getBoolean("changeable") && st.getString("reason").contains("repository che usi"));
 
         FakeSystem misti = new FakeSystem();
         misti.cartella.put("FreeBSD.conf", "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/latest\" }\n");

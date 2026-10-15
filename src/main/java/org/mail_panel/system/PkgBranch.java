@@ -74,7 +74,7 @@ public final class PkgBranch {
         Instant adesso();
     }
 
-    public record Esito(int codice, String uscita) {}
+    public record Esito(int codice, String output) {}
 
     /** Dove va il racconto di un cambio di ramo (il registro del lavoro). */
     public interface Registro { void riga(String testo); }
@@ -153,7 +153,7 @@ public final class PkgBranch {
         return p.ramo();
     }
 
-    static String spiegazione(String ramo) {
+    static String explanation(String ramo) {
         return switch (ramo) {
             case "quarterly" -> I18n.tr("server.branch.quarterly");
             case "latest" -> I18n.tr("server.branch.latest");
@@ -173,7 +173,7 @@ public final class PkgBranch {
                     .put("error", I18n.tr("server.branch.noRepoRecognized"));
         String ramo = ramo(repos);
         String nostro = s.leggi(FILE);
-        JSONObject r = new JSONObject().put("success", true).put("ramo", ramo).put("spiegazione", spiegazione(ramo))
+        JSONObject r = new JSONObject().put("success", true).put("ramo", ramo).put("explanation", explanation(ramo))
                 .put("repository", json(repos)).put("file", FILE.toString()).put("panelOwnedFile", nostro != null)
                 .put("fingerprint", fingerprint(repos, nostro));
         if (nostro != null) r.put("fileContent", nostro.length() > 4000 ? nostro.substring(0, 4000) : nostro);
@@ -181,9 +181,9 @@ public final class PkgBranch {
         if (!dopo.isEmpty()) r.put("fileDopo", new JSONArray(dopo));
         Repo base = acceso(repos, "base");
         if (base != null) r.put("base", I18n.tr("server.branch.baseFromPkg", java.util.Map.of("r", String.valueOf(base.ramo()))));
-        String motivo = motivoNo(repos);
-        r.put("changeable", motivo == null);
-        if (motivo != null) r.put("motivo", motivo);
+        String reason = motivoNo(repos);
+        r.put("changeable", reason == null);
+        if (reason != null) r.put("reason", reason);
         else {
             JSONArray verso = new JSONArray();
             for (String x : RAMI) if (!x.equals(ramo)) verso.put(x);
@@ -272,8 +272,8 @@ public final class PkgBranch {
         if (!RAMI.contains(verso)) return new JSONObject().put("success", false).put("error", I18n.tr("server.branch.badBranch"));
         JSONObject r = new JSONObject().put("success", true).put("da", st.getString("ramo")).put("verso", verso)
                 .put("fingerprint", st.getString("fingerprint"));
-        if (!st.optBoolean("changeable")) return r.put("possibile", false).put("motivo", st.getString("motivo"));
-        if (verso.equals(st.getString("ramo"))) return r.put("possibile", false).put("motivo", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
+        if (!st.optBoolean("changeable")) return r.put("possibile", false).put("reason", st.getString("reason"));
+        if (verso.equals(st.getString("ramo"))) return r.put("possibile", false).put("reason", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
         List<Repo> repos = repository(s.pkgVv());
         JSONArray changes = new JSONArray();
         for (String tipo : List.of("pacchetti", "moduli")) {
@@ -316,7 +316,7 @@ public final class PkgBranch {
         JSONObject st = stato(s);
         if (!st.optBoolean("success")) return st;
         if (!RAMI.contains(verso)) return errore(log, I18n.tr("server.branch.badBranch"));
-        if (!st.optBoolean("changeable")) return errore(log, st.getString("motivo"));
+        if (!st.optBoolean("changeable")) return errore(log, st.getString("reason"));
         if (!st.getString("fingerprint").equals(fingerprint))
             return errore(log, I18n.tr("server.branch.changedSincePreview"));
         String da = st.getString("ramo");
@@ -409,7 +409,7 @@ public final class PkgBranch {
         return new Sistema() {
             public String pkgVv() {
                 Esito e = esegui(null, 60, PKG, "-vv");
-                return e.codice() == 0 ? e.uscita() : null;
+                return e.codice() == 0 ? e.output() : null;
             }
             public String leggi(Path p) {
                 try {
@@ -444,7 +444,7 @@ public final class PkgBranch {
             public Esito pkgUpdate(Registro registro) { return esegui(registro, 900, PKG, "update", "-f"); }
             public String pkgVersioni() {
                 Esito e = esegui(null, 120, PKG, "version", "-U", "-vRL=");
-                return e.codice() == 0 ? e.uscita() : null;
+                return e.codice() == 0 ? e.output() : null;
             }
             public Instant adesso() { return Instant.now(); }
         };
