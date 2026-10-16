@@ -54,15 +54,15 @@
                     const inPf = (j.nel_firewall || []).length;
                     const mancanti = j.solo_in_fail2ban || [];
                     const residui = j.solo_in_pf || [];
-                    let esito;
+                    let outcome;
                     if (!j.letta) {
                         // Non verificata con ban attivi: rosso. Non verificata e ferma: grigio.
                         const grave = f2b > 0;
-                        esito = '<span class="' + (grave ? 'text-danger' : 'text-muted') + ' small">'
+                        outcome = '<span class="' + (grave ? 'text-danger' : 'text-muted') + ' small">'
                               + (grave ? '<i class="fas fa-circle-question me-1" aria-hidden="true"></i><strong>' + escHtml(tn('cpf.notVerified', f2b)) + '.</strong> ' : '')
                               + escapeHtml(j.nota || t('cpf.notMeasuredOne')) + '</span>';
                         if ((j.comandi_ban || []).length > 0)
-                            esito += '<div class="small text-muted mt-1"><code>' + j.comandi_ban.map(escapeHtml).join('</code><br><code>') + '</code></div>';
+                            outcome += '<div class="small text-muted mt-1"><code>' + j.comandi_ban.map(escapeHtml).join('</code><br><code>') + '</code></div>';
                         // L'evidenza grezza, aperta a richiesta: cosa risponde fail2ban, cosa ha
                         // scritto nel log, e quali file definiscono questa jail. Serve a poterla
                         // leggere e a poterla incollare a qualcun altro senza passare da ssh.
@@ -75,27 +75,27 @@
                             // Aperto, non richiuso dietro un click: questa riga esiste perche' la
                             // misura NON e' riuscita, e l'evidenza che serve a capire perche' e'
                             // esattamente cio' che chi guarda deve avere sotto gli occhi.
-                            esito += '<details class="small mt-2" open><summary>' + escHtml(t('cpf.whatSees')) + '</summary>' +
+                            outcome += '<details class="small mt-2" open><summary>' + escHtml(t('cpf.whatSees')) + '</summary>' +
                                      '<pre class="mt-1 mb-0" style="white-space:pre-wrap;max-height:400px;overflow:auto">' +
                                      escapeHtml(pezzi.join('\n\n')) + '</pre></details>';
                     } else if (j.tabella_mancante) {
-                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(f2b > 0 ? tn('cpf.noTableBans', f2b) : t('cpf.noTable')) + '</span>';
+                        outcome = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(f2b > 0 ? tn('cpf.noTableBans', f2b) : t('cpf.noTable')) + '</span>';
                     } else if (!j.regola_presente) {
-                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(f2b > 0 ? t('cpf.noRuleNow', { n: f2b }) : t('cpf.noRuleText')) + '</span>';
+                        outcome = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(f2b > 0 ? t('cpf.noRuleNow', { n: f2b }) : t('cpf.noRuleText')) + '</span>';
                     } else if (mancanti.length > 0) {
-                        esito = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('cpf.notBlocked')) + ' ' + mancanti.map(escapeHtml).join(', ') + '</span>';
+                        outcome = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('cpf.notBlocked')) + ' ' + mancanti.map(escapeHtml).join(', ') + '</span>';
                     } else if (residui.length > 0) {
-                        esito = '<span class="text-warning"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(t('cpf.leftover')) + ' ' + residui.map(escapeHtml).join(', ') + '</span>';
+                        outcome = '<span class="text-warning"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(t('cpf.leftover')) + ' ' + residui.map(escapeHtml).join(', ') + '</span>';
                     } else if (f2b === 0 && inPf === 0) {
-                        esito = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('cpf.noneActive')) + '</span>';
+                        outcome = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('cpf.noneActive')) + '</span>';
                     } else {
-                        esito = '<span class="text-success"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('cpf.allApplied')) + '</span>';
+                        outcome = '<span class="text-success"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('cpf.allApplied')) + '</span>';
                     }
                     h += '<tr><td><code>' + escapeHtml(j.jail) + '</code></td>' +
                          '<td class="small text-muted">' + (j.tabella ? escapeHtml(j.tabella) : '—') + '</td>' +
                          '<td class="text-end">' + f2b + '</td>' +
                          '<td class="text-end">' + (j.letta ? inPf : '?') + '</td>' +
-                         '<td>' + esito + '</td></tr>';
+                         '<td>' + outcome + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
                 corpo.innerHTML = h;

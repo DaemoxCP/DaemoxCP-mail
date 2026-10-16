@@ -99,16 +99,16 @@
                      + t('hs.unknownSeries.html', { series: homeEsc(so.serie) }) + letta + '</div>';
             }
             // Se la data e' passata o vicina, dirlo: una data sola non si legge da sola.
-            let stato = '';
+            let state = '';
             const p = String(so.fineSupporto).split('/');
             if (p.length === 3) {
                 const q = new Date(+p[2], +p[1] - 1, +p[0]);
                 const giorni = Math.round((q - Date.now()) / 86400000);
-                if (giorni < 0) stato = ' <span class="badge bg-danger">' + homeEsc(t('hs.supportEnded')) + '</span>';
-                else if (giorni < 90) stato = ' <span class="badge bg-warning text-dark">' + homeEsc(tn('hs.inDays', giorni)) + '</span>';
+                if (giorni < 0) state = ' <span class="badge bg-danger">' + homeEsc(t('hs.supportEnded')) + '</span>';
+                else if (giorni < 90) state = ' <span class="badge bg-warning text-dark">' + homeEsc(tn('hs.inDays', giorni)) + '</span>';
             }
             return '<div class="small text-muted">' + homeEsc(t('hs.endOfSupport', { series: so.serie }))
-                 + ' <strong>' + homeEsc(so.fineSupporto) + '</strong>' + stato + letta + '</div>';
+                 + ' <strong>' + homeEsc(so.fineSupporto) + '</strong>' + state + letta + '</div>';
         }
 
         // ---------- versioni, riavvio, aggiornamenti ----------

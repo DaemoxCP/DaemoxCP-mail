@@ -115,7 +115,7 @@
             const lab = branchEl('label', 'form-label small mb-1', t('up.typeBranch', { branch: verso }));
             lab.htmlFor = 'ramo-conferma';
             card.appendChild(lab);
-            const riga = branchEl('div', 'd-flex flex-wrap gap-2 align-items-center');
+            const line = branchEl('div', 'd-flex flex-wrap gap-2 align-items-center');
             const inp = branchEl('input', 'form-control form-control-sm');
             inp.id = 'ramo-conferma';
             inp.style.maxWidth = '14rem';
@@ -127,29 +127,29 @@
             via.disabled = true;
             inp.addEventListener('input', () => { via.disabled = inp.value.trim() !== verso; });
             via.addEventListener('click', branchChange);
-            const annulla = branchEl('button', 'btn btn-sm btn-secondary', t('common.cancel'));
-            annulla.type = 'button';
-            annulla.addEventListener('click', () => { box.textContent = ''; });
-            riga.append(inp, via, annulla);
-            card.appendChild(riga);
+            const cancel = branchEl('button', 'btn btn-sm btn-secondary', t('common.cancel'));
+            cancel.type = 'button';
+            cancel.addEventListener('click', () => { box.textContent = ''; });
+            line.append(inp, via, cancel);
+            card.appendChild(line);
             box.appendChild(card);
             inp.focus();
         }
 
         async function branchChange() {
             const inp = document.getElementById('ramo-conferma');
-            const esito = document.getElementById('ramo-esito');
+            const outcome = document.getElementById('ramo-esito');
             if (!inp || inp.value.trim() !== ramoVerso) return;
             document.getElementById('ramo-via').disabled = true;
             const r = await updApi('ramo_cambia', { verso: ramoVerso, fingerprint: branchData.fingerprint, confirm: inp.value.trim() });
             if (!r.success) {
-                esito.textContent = '';
-                esito.appendChild(branchEl('div', 'alert alert-danger py-2 small mb-0', r.error || t('up.changeNotStarted')));
+                outcome.textContent = '';
+                outcome.appendChild(branchEl('div', 'alert alert-danger py-2 small mb-0', r.error || t('up.changeNotStarted')));
                 document.getElementById('ramo-via').disabled = false;
                 return;
             }
             document.getElementById('ramo-anteprima').textContent = '';
-            esito.textContent = t('up.changingBranch');
+            outcome.textContent = t('up.changingBranch');
             const pre = document.getElementById('ramo-log');
             pre.style.display = 'block';
             pre.textContent = '';
@@ -158,15 +158,15 @@
 
         async function branchFollow(id) {
             const s = await updApi('job_status', { jobId: id });
-            const esito = document.getElementById('ramo-esito');
+            const outcome = document.getElementById('ramo-esito');
             const pre = document.getElementById('ramo-log');
             if (s.success && s.job) {
                 pre.textContent = s.job.consoleLog || '';
                 pre.scrollTop = pre.scrollHeight;
                 if (s.job.status === 'completed' || s.job.status === 'error') {
-                    esito.textContent = '';
+                    outcome.textContent = '';
                     const ok = s.job.status === 'completed';
-                    esito.appendChild(branchEl('div', 'alert ' + (ok ? 'alert-success' : 'alert-danger') + ' py-2 small mb-0',
+                    outcome.appendChild(branchEl('div', 'alert ' + (ok ? 'alert-success' : 'alert-danger') + ' py-2 small mb-0',
                         ok ? (s.job.result || t('up.branchChanged')) : (s.job.errorMessage || t('up.branchChangeFailed'))));
                     branchStatus();
                     return;

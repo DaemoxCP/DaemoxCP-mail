@@ -48,10 +48,10 @@
             el.innerHTML = h;
         }
 
-        function w443Riga(cosa, stato, nota) {
-            const i = stato === null || stato === undefined
+        function w443Riga(cosa, state, nota) {
+            const i = state === null || state === undefined
                 ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('wd.unknown')) + '</span>'
-                : (stato ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
+                : (state ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
                          : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>');
             return '<tr><td style="width:2rem">' + i + '</td><td class="small">' + cosa
                  + '<div class="text-muted">' + nota + '</div></td></tr>';
@@ -92,5 +92,5 @@
             const r = await updApi('web443_jail', { confirm: 'ATTIVA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + updEsc(r.nota || r.error) + '</div>'
-                         + (r.stato ? '<pre class="small p-2 border rounded mt-1 mb-0">' + updEsc(r.stato) + '</pre>' : '');
+                         + (r.state ? '<pre class="small p-2 border rounded mt-1 mb-0">' + updEsc(r.state) + '</pre>' : '');
         }

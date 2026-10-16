@@ -53,14 +53,14 @@
                 const nome = x.quale === 'spf' ? 'SPF' : 'DMARC';
                 const troppi = (x.quanti || 0) > 1;
 
-                let stato;
-                if (troppi) stato = '<span class="badge bg-danger">' + escHtml(t('ad.cancelOut', { n: x.quanti })) + '</span>';
-                else if (x.esiste) stato = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
-                else stato = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
+                let state;
+                if (troppi) state = '<span class="badge bg-danger">' + escHtml(t('ad.cancelOut', { n: x.quanti })) + '</span>';
+                else if (x.esiste) state = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
+                else state = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
                 if (x.altriTxt > 0)
-                    stato += '<div class="small text-muted mt-1">' + escHtml(tn('ad.otherTxt', x.altriTxt)) + '</div>';
+                    state += '<div class="small text-muted mt-1">' + escHtml(tn('ad.otherTxt', x.altriTxt)) + '</div>';
                 if (x.contenuto)
-                    stato += '<div class="small mt-1" style="word-break:break-all"><code>' + adEsc(x.contenuto) + '</code></div>';
+                    state += '<div class="small mt-1" style="word-break:break-all"><code>' + adEsc(x.contenuto) + '</code></div>';
 
                 let proposta;
                 if (x.bloccato) {
@@ -95,7 +95,7 @@
 
                 h += '<tr class="upd-cell"><td><strong>' + escHtml(nome) + '</strong><br>'
                    + '<code class="small">' + adEsc(x.nome) + '</code></td>'
-                   + '<td>' + stato + '</td><td>' + proposta + '</td>'
+                   + '<td>' + state + '</td><td>' + proposta + '</td>'
                    + '<td class="text-end">' + azione + '</td></tr>';
 
                 if (x.warnings && x.warnings.length)
@@ -158,13 +158,13 @@
 
         function adVersoCambia() {
             const sel = document.getElementById('adVerso');
-            const campo = document.getElementById('adVersoAltro');
+            const field = document.getElementById('adVersoAltro');
             const nota = document.getElementById('adVersoAltroNota');
-            if (!sel || !campo) return;
+            if (!sel || !field) return;
             const altro = sel.value === '__altro__';
-            campo.classList.toggle('d-none', !altro);
+            field.classList.toggle('d-none', !altro);
             if (nota) nota.classList.toggle('d-none', !altro);
-            if (altro) campo.focus();
+            if (altro) field.focus();
         }
 
         // Gli indirizzi si scelgono da un elenco. Chi ne vuole uno diverso lo scrive, ma
@@ -184,8 +184,8 @@
             const sel = document.getElementById('adVerso');
             if (!sel) return '';
             if (sel.value === '__altro__') {
-                const campo = document.getElementById('adVersoAltro');
-                return campo ? campo.value.trim() : '';
+                const field = document.getElementById('adVersoAltro');
+                return field ? field.value.trim() : '';
             }
             return sel.value;
         }
@@ -251,12 +251,12 @@
                   + '</tr></thead><tbody>';
 
             lista.forEach(x => {
-                let stato;
-                if (x.conflitto) stato = '<span class="badge bg-danger">' + escHtml(t('ad.conflict')) + '</span>';
-                else if (x.esiste) stato = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
-                else stato = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
+                let state;
+                if (x.conflitto) state = '<span class="badge bg-danger">' + escHtml(t('ad.conflict')) + '</span>';
+                else if (x.esiste) state = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
+                else state = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
                 if (x.contenuto)
-                    stato += '<div class="small mt-1" style="word-break:break-all"><code>'
+                    state += '<div class="small mt-1" style="word-break:break-all"><code>'
                            + adEsc(x.contenuto) + '</code></div>';
 
                 const azione = (x.esiste || x.conflitto)
@@ -271,13 +271,13 @@
                       ? '<div class="small mt-1"><i class="fas fa-circle-info me-1 text-secondary" aria-hidden="true"></i>'
                         + '<span class="text-secondary">' + adEsc(x.premessa) + '</span></div>'
                       : '') + '</td>'
-                   + '<td>' + stato + '</td>'
+                   + '<td>' + state + '</td>'
                    + '<td><code class="small" style="word-break:break-all">' + adEsc(x.proposto) + '</code></td>'
                    + '<td class="text-end">' + azione + '</td></tr>';
 
-                if (x.avviso || x.conflitto)
+                if (x.warning || x.conflitto)
                     h += '<tr><td colspan="4" class="pt-0">'
-                       + adAvvisi([x.avviso || x.conflitto]) + '</td></tr>';
+                       + adAvvisi([x.warning || x.conflitto]) + '</td></tr>';
             });
 
             h += '</tbody></table></div><div id="adOpzEsito"></div>';
@@ -350,13 +350,13 @@
                          + '<div><span class="text-muted">' + escHtml(t('ad.after')) + '</span> <code style="word-break:break-all">'
                          + adEsc(a.dopo) + '</code></div></div>';
 
-            const avviso = nuova === 'reject' ? '\n\n' + t('ad.warnReject')
+            const warning = nuova === 'reject' ? '\n\n' + t('ad.warnReject')
                 : nuova === 'quarantine' ? '\n\n' + t('ad.warnQuarantine') : '';
             if (!adConferma(t('ad.confirmPolicy', { policy: nuova }) + '\n\n'
                      + t('ad.before') + '  ' + a.prima + '\n'
                      + t('ad.after') + '  ' + a.dopo + '\n\n'
                      + t('ad.onlyP')
-                     + avviso, t('ad.wordChange'))) return;
+                     + warning, t('ad.wordChange'))) return;
 
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.editingCf'));
             const r = await autoDnsApi('change_policy', { politica: nuova, confirm: 'CAMBIA' });
@@ -431,7 +431,7 @@
                     //
                     // Il registro sta dentro il contenitore che si ridisegna, quindi lo si tiene
                     // da parte e lo si rimette nella scheda nuova.
-                    const riga = (s.job.status === 'completed'
+                    const line = (s.job.status === 'completed'
                             ? '<i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('ad.done', { s: s.job.elapsedSeconds }))
                             : '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + escHtml(t('ad.stopped', { message: s.job.errorMessage })));
                     const registro = pre ? pre.textContent : '';
@@ -445,7 +445,7 @@
                         p.textContent = registro;
                         fresco.innerHTML = '<div class="alert alert-'
                             + (s.job.status === 'completed' ? 'success' : 'warning')
-                            + ' py-2 small mb-2">' + riga + '</div>';
+                            + ' py-2 small mb-2">' + line + '</div>';
                         fresco.appendChild(p);
                     }
                     return;

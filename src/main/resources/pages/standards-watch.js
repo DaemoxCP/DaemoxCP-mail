@@ -114,9 +114,9 @@
                 tocca.forEach(voce => {
                     const i = voce.indexOf('  ->  ');
                     const chiavi = i < 0 ? '' : voce.substring(0, i);
-                    const riga = i < 0 ? voce : voce.substring(i + 6);
+                    const line = i < 0 ? voce : voce.substring(i + 6);
                     h += '<tr class="upd-cell"><td style="width:12rem" class="small"><code>'
-                       + updEsc(chiavi) + '</code></td><td class="small">' + updEsc(riga) + '</td></tr>';
+                       + updEsc(chiavi) + '</code></td><td class="small">' + updEsc(line) + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
             }

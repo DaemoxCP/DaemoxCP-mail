@@ -136,7 +136,7 @@
             const r = await repApi('send', { confirm: 'INVIA', destinatario: a });
             // Giallo quando Postfix l'ha preso ma non e' ancora arrivato, o non si sa: non e'
             // un errore, ma nemmeno la conferma che il verde prometterebbe.
-            const cls = !r.success ? 'danger' : (r.avviso ? 'warning' : 'success');
+            const cls = !r.success ? 'danger' : (r.warning ? 'warning' : 'success');
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-1">'
                   + repEsc(r.nota || r.error) + '</div>';
             if (r.oggetto) h += '<div class="small text-muted">' + escHtml(t('rep.subject')) + ' <code>' + repEsc(r.oggetto) + '</code></div>';

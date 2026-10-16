@@ -828,14 +828,14 @@
                 return;
             }
 
-            const righe = r.domini || [];
+            const lines = r.domini || [];
             // Il titolo dice la cosa peggiore per prima: un dominio senza chiave non deve
             // finire in fondo a un elenco che comincia con "tutto bene".
             let cls = 'success', testo = t('dns.sumAllMatch');
             if (r.senzaChiave > 0) {
                 cls = 'danger';
                 testo = tn('dns.sumNoKey', r.senzaChiave);
-            } else if (righe.some(d => d.stato === 'non_corrisponde')) {
+            } else if (lines.some(d => d.state === 'non_corrisponde')) {
                 cls = 'danger';
                 testo = t('dns.sumMismatch');
             } else if (r.nonVerificabili > 0) {
@@ -847,30 +847,30 @@
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                + '<th scope="col">' + escHtml(t('st.colDomain')) + '</th><th scope="col">' + escHtml(t('dns.colSelector')) + '</th><th scope="col">' + escHtml(t('dns.colVerifies')) + '</th>'
                + '<th scope="col">' + escHtml(t('dns.colKeyAge')) + '</th><th scope="col">' + escHtml(t('dns.colRotation')) + '</th></tr></thead><tbody>';
-            righe.forEach(d => {
-                let stato;
-                if (d.stato === 'assente')
-                    stato = '<span class="badge bg-danger">' + escHtml(t('dns.noKey')) + '</span>';
-                else if (d.stato === 'ok')
-                    stato = '<span class="badge bg-success">' + escHtml(t('dns.yes')) + '</span>';
-                else if (d.stato === 'non_corrisponde')
-                    stato = '<span class="badge bg-danger">' + escHtml(t('dns.otherKey')) + '</span>';
+            lines.forEach(d => {
+                let state;
+                if (d.state === 'assente')
+                    state = '<span class="badge bg-danger">' + escHtml(t('dns.noKey')) + '</span>';
+                else if (d.state === 'ok')
+                    state = '<span class="badge bg-success">' + escHtml(t('dns.yes')) + '</span>';
+                else if (d.state === 'non_corrisponde')
+                    state = '<span class="badge bg-danger">' + escHtml(t('dns.otherKey')) + '</span>';
                 else
                     // "Non ho potuto controllare" non e' "va bene", e non e' nemmeno "e' rotto".
-                    stato = '<span class="badge bg-secondary">' + escHtml(t('dns.unverifiable')) + '</span>';
+                    state = '<span class="badge bg-secondary">' + escHtml(t('dns.unverifiable')) + '</span>';
 
                 let eta = '<span class="text-muted">&mdash;</span>';
                 if (d.giorniDallUltima !== undefined && d.giorniDallUltima !== null) {
                     const g = d.giorniDallUltima;
                     // Oltre l'intervallo scelto la chiave e' in ritardo; senza intervallo il
                     // riferimento e' 90 giorni, la cadenza che il pannello consiglia.
-                    const limite = (d.intervalloGiorni && d.intervalloGiorni > 0) ? d.intervalloGiorni : 90;
+                    const limit = (d.intervalloGiorni && d.intervalloGiorni > 0) ? d.intervalloGiorni : 90;
                     eta = escHtml(tn('dns.days', g))
-                        + (g > limite ? ' <span class="badge bg-warning text-dark">' + escHtml(t('dns.overLimit', { limit: limite })) + '</span>' : '');
+                        + (g > limit ? ' <span class="badge bg-warning text-dark">' + escHtml(t('dns.overLimit', { limit: limit })) + '</span>' : '');
                 }
 
                 let rot;
-                if (d.stato === 'assente') rot = '<span class="text-muted">&mdash;</span>';
+                if (d.state === 'assente') rot = '<span class="text-muted">&mdash;</span>';
                 else if (d.intervalloGiorni && d.intervalloGiorni > 0)
                     rot = escHtml(tn('dns.every', d.intervalloGiorni))
                         + (d.prossimaRotazione ? '<div class="small text-muted">' + escHtml(t('dns.nextShort', { date: String(d.prossimaRotazione).substring(0, 10) })) + '</div>' : '');
@@ -881,8 +881,8 @@
                    + '<td><code class="small">' + escapeHtmlBl(d.selettore || '') + '</code>'
                    + (d.rotazioneInCorso ? '<div class="small text-muted">' + escHtml(t('dns.rotatingNow', { state: d.rotazioneInCorso })) + '</div>' : '')
                    + '</td>'
-                   + '<td>' + stato
-                   + (d.stato === 'ok' ? '' : '<div class="small text-muted">'
+                   + '<td>' + state
+                   + (d.state === 'ok' ? '' : '<div class="small text-muted">'
                         + escapeHtmlBl(d.nota || d.messaggio || '') + '</div>')
                    + '</td>'
                    + '<td>' + eta + '</td><td>' + rot + '</td></tr>';

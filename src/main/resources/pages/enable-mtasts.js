@@ -16,8 +16,8 @@
 
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>';
             (r.passi || []).forEach((p, i) => {
-                const fatto = p.stato === 'fatto';
-                const incerto = p.stato === 'incerto';
+                const fatto = p.state === 'fatto';
+                const incerto = p.state === 'incerto';
                 // "incerto" non e' verde: il pannello non ha potuto verificare, e mostrarlo
                 // come fatto sarebbe la bugia che stiamo cercando di togliere dal pannello.
                 h += '<tr class="upd-cell"><td style="width:2rem">'

@@ -7,16 +7,16 @@
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
                 return;
             }
-            const stato = r.stato;
-            let colore = stato === 'GIA_PRESENTE' ? 'success'
-                       : stato === 'VOCE_ASSENTE' ? 'secondary' : 'warning';
+            const state = r.state;
+            let colore = state === 'GIA_PRESENTE' ? 'success'
+                       : state === 'VOCE_ASSENTE' ? 'secondary' : 'warning';
             let h = '<div class="alert alert-' + colore + ' py-2 small mb-2">'
-                  + '<i class="fas fa-' + (stato === 'GIA_PRESENTE' ? 'check-circle' : 'triangle-exclamation')
+                  + '<i class="fas fa-' + (state === 'GIA_PRESENTE' ? 'check-circle' : 'triangle-exclamation')
                   + ' me-1" aria-hidden="true"></i>' + updEsc(r.nota) + '</div>';
 
             h += '<table class="table table-sm mb-2"><tbody>'
                + '<tr><td style="width:14rem" class="small">' + escHtml(t('p465.entry')) + '</td><td class="small"><code>'
-               + updEsc(r.voce || t('p465.none')) + '</code>' + (r.riga ? ' (' + escHtml(t('p465.line', { n: r.riga })) + ')' : '') + '</td></tr>'
+               + updEsc(r.voce || t('p465.none')) + '</code>' + (r.line ? ' (' + escHtml(t('p465.line', { n: r.line })) + ')' : '') + '</td></tr>'
                + '<tr><td class="small">' + escHtml(t('p465.lineToAdd')) + '</td><td class="small"><code style="word-break:break-all">-o '
                + updEsc(r.restrizione) + '</code></td></tr>'
                + '<tr><td class="small">smtpd_delay_reject</td><td class="small">'
@@ -27,7 +27,7 @@
                     + '</code> &mdash; ' + escHtml(t('p465.unsafe')))
                + '</td></tr></tbody></table>';
 
-            if (stato === 'AGGIUNTA')
+            if (state === 'AGGIUNTA')
                 h += '<button class="btn btn-sm btn-outline-warning" onclick="upd465Applica()"'
                    + (r.sicuro ? '' : ' disabled')
                    + '><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('p465.apply')) + '</button>';

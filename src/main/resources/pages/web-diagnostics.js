@@ -61,10 +61,10 @@
             el.innerHTML = h;
         }
 
-        function webRiga(cosa, stato, nota) {
-            const icona = stato === null || stato === undefined
+        function webRiga(cosa, state, nota) {
+            const icona = state === null || state === undefined
                 ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('wd.unknown')) + '</span>'
-                : (stato ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
+                : (state ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
                          : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>');
             return '<tr><td style="width:2rem">' + icona + '</td><td class="small">' + cosa
                  + '<div class="text-muted">' + nota + '</div></td></tr>';
