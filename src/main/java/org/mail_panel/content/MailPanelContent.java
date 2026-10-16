@@ -12609,7 +12609,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     h += '<button class="btn btn-sm btn-outline-warning mb-1" data-level="' + escHtml(pf.consigliato) + '" data-open="' + Number(pf.apertiQui || 0) + '"'
                        + ' onclick="pfAlza(this.dataset.level, Number(this.dataset.open))">'
                        + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('up.raiseLevel', { level: pf.consigliato }))
-                       + '</button><div id="pf-esito" class="mt-1"></div>'
+                       + '</button><div id="pf-outcome" class="mt-1"></div>'
                        + '<div class="small text-muted mb-2">' + t('up.raiseNote.html') + '</div>';
                 }
                 const ap = pf.appoggi || [];
@@ -13397,7 +13397,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function pfAlza(livello, aperti) {
             const avviso = aperti > 0 ? tn('up.paramsChange', aperti) : t('up.paramsSame');
             if (!updConferma(t('up.confirmLevel', { level: livello, note: avviso }), t('up.wRaise'))) return;
-            const el = document.getElementById('pf-esito');
+            const el = document.getElementById('pf-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.raising')) + '';
             const r = await updApi('postfix_level', { confirm: 'ALZA', livello: livello });
             let h = '<div class="alert alert-' + (r.success ? (r.avvisoVia === false ? 'warning' : 'success') : 'danger')
@@ -13417,7 +13417,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (r.success) {
                 const esito = h;
                 await updCompat();
-                const nuovo = document.getElementById('pf-esito');
+                const nuovo = document.getElementById('pf-outcome');
                 if (nuovo) nuovo.innerHTML = esito;
             }
         }
@@ -13523,7 +13523,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       : '<span class="badge upd-badge-warn">' + escHtml(t('acf.no')) + '</span>') + '</td>'
                    + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.nome) + '" data-i="' + i + '" onclick="rimUsa(this.dataset.name, Number(this.dataset.i))">'
                    + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.check')) + '</button>'
-                   + '<div id="rim-esito-' + i + '" class="mt-1"></div></td></tr>';
+                   + '<div id="rim-outcome-' + i + '" class="mt-1"></div></td></tr>';
             });
             h += '</tbody></table></div>';
             el.innerHTML = h;
@@ -13581,7 +13581,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rimUsa(nome, i) {
-            const el = document.getElementById('rim-esito-' + i);
+            const el = document.getElementById('rim-outcome-' + i);
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
             const r = await updApi('panel_uses', { nome: nome });
             el.innerHTML = r.success ? rimRiquadro(r)

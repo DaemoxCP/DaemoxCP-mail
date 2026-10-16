@@ -35,13 +35,13 @@
             if (!r.completo)
                 h += '<button class="btn btn-sm btn-success" onclick="amsAttiva()">'
                    + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('ams.run')) + '</button>';
-            h += '<div id="amsEsito" class="mt-2"></div>';
+            h += '<div id="amsOutcome" class="mt-2"></div>';
             el.innerHTML = h;
         }
 
         async function amsAttiva() {
             if (!updConferma(t('ams.confirm'), t('w4.wEnable'))) return;
-            const el = document.getElementById('amsEsito');
+            const el = document.getElementById('amsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.running')) + '';
             const r = await updApi('mtasts_attiva', { confirm: 'ATTIVA' });
             if (!r.success || !r.jobId) {
@@ -62,7 +62,7 @@
         }
 
         async function amsSegui(id) {
-            const el = document.getElementById('amsEsito');
+            const el = document.getElementById('amsOutcome');
             const pre = document.getElementById('amsLog');
             const s = await updApi('job_status', { jobId: id });
             if (s.success && s.job) {

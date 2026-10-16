@@ -124,8 +124,8 @@ const API = {
     })[body.action] || { success: true },
     // Updates: one endpoint, the reply depends on the action in the body.
     'POST /api/updates': (q, body) => ({
-        branch_status: { success: true, ramo: 'quarterly', spiegazione: 'Quarterly is the default.', changeable: true, verso: ['latest'], panelOwnedFile: false,
-                      repository: [{ nome: 'FreeBSD', ruolo: 'packages', ramo: 'quarterly', acceso: true, url: 'pkg+https://pkg.FreeBSD.org/...' }] },
+        branch_status: { success: true, branch: 'quarterly', spiegazione: 'Quarterly is the default.', changeable: true, verso: ['latest'], panelOwnedFile: false,
+                      repository: [{ nome: 'FreeBSD', ruolo: 'packages', branch: 'quarterly', acceso: true, url: 'pkg+https://pkg.FreeBSD.org/...' }] },
         os_status: { success: true, kernelInstallato: '15.0-RELEASE-p3', uname: '15.0-RELEASE-p3', riavvioNecessario: false, userland: '15.0-RELEASE-p3',
                      arch: 'amd64', fineSupporto: '2026-12-31', noteSupporto: '', fonteSupporto: 'freebsd.org', aggiornabileConFreebsdUpdate: true, giaPronti: 'none' },
         plan: { success: true, daFare: 1, passi: [
@@ -144,7 +144,7 @@ const API = {
             vulnerable: [{ name: 'curl', role: 'tools', locked: false, fixedByUpgrade: true, cve: ['CVE-2026-0001'],
                            fix: { verdict: 'si-risolve-aggiornando', spiegazione: 'The repository has 8.10.' } }],
             lockedUpdates: [{ name: 'postfix', role: 'SMTP', current: '3.9', available: '3.10', majorJump: false, advisory: { level: 'verifica', text: 'Read the notes.' } }] },
-        defaults_check: { success: true, fonte: 'ports', avvertenza: 'Defaults move.', ramo: { ramo: 'quarterly', spiegazione: 'Default.', dove: '/etc/pkg' },
+        defaults_check: { success: true, fonte: 'ports', avvertenza: 'Defaults move.', branch: { branch: 'quarterly', spiegazione: 'Default.', dove: '/etc/pkg' },
             righe: [{ componente: 'OpenSSL', perche: 'TLS', predefinito: 'base', installato: 'base', esito: 'coerente', dipendenti: [] }] },
         panel_env: { success: true, spiegazione: 'Every tool is reachable.', pathEreditato: '/usr/bin', pathUsato: '/usr/bin:/usr/local/bin',
             strumenti: [{ comando: 'doveadm', aCosaServe: 'mailboxes', risolto: '/usr/local/bin/doveadm', stato: 'raggiungibile' }] },
@@ -253,7 +253,7 @@ const VISITS = [
     { path: '/install' },
     { path: '/setup' },
     { path: '/updates', prepare: async page => {
-        await page.waitForSelector('#ramo-body table');
+        await page.waitForSelector('#branch-body table');
         for (const [fn, sel] of [['osStato', '#os-body table'], ['planLoad', '#plan-body .border'], ['pkOverview', '#pk-body table'],
                                  ['updStatus', '#upd-status .alert-danger'], ['defCheck', '#def-body table'], ['envCheck', '#env-body table']]) {
             await page.evaluate(f => window[f](), fn);

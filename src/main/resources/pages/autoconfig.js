@@ -78,7 +78,7 @@
                   ? '<div class="alert alert-warning py-2 small mt-2 mb-0">'
                     + '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>' + escHtml(t('acf.handledBy443')) + '</div>'
                   : '')
-               + '<div id="acEsito" class="mt-2"></div>';
+               + '<div id="acOutcome" class="mt-2"></div>';
 
             el.innerHTML = h;
         }
@@ -90,7 +90,7 @@
 
 
         async function acAnteprima() {
-            const el = document.getElementById('acEsito');
+            const el = document.getElementById('acOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.generating'));
             const r = await acApi('preview');
             if (!r.success) {
@@ -104,7 +104,7 @@
 
         async function acInstalla() {
             if (!adConferma(t('acf.confirmInstall'), t('acf.wordInstall'))) return;
-            const el = document.getElementById('acEsito');
+            const el = document.getElementById('acOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.installing'));
             const r = await acApi('install', { confirm: 'INSTALLA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'

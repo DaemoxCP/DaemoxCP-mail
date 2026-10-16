@@ -45,7 +45,7 @@
                 + '<div class="small text-muted mb-2">' + t('pa.sets.html', { imap: paEsc(r.hostDiPosta + ':' + r.portaImap), smtp: paEsc(r.hostDiPosta + ':' + r.portaSmtp) }) + '</div>'
                 + '<div class="alert alert-secondary py-2 small mb-0">'
                 + '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>' + t('pa.after.html') + '</div>'
-                + '<div id="paEsito" class="mt-2"></div>';
+                + '<div id="paOutcome" class="mt-2"></div>';
         }
 
         function paScarica() {
@@ -56,7 +56,7 @@
 
         async function paAnteprima() {
             const sel = document.getElementById('paCasella');
-            const el = document.getElementById('paEsito');
+            const el = document.getElementById('paOutcome');
             if (!sel || !sel.value) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + paEsc(t('pa.generating'));
             const r = await paApi('preview', { email: sel.value });

@@ -43,7 +43,7 @@
                + '</button>'
                + '<button class="btn btn-sm btn-outline-secondary" onclick="w443Jail()">'
                + '<i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('w4.enableJail')) + '</button>'
-               + '</div><div id="w443Esito" class="mt-2"></div>';
+               + '</div><div id="w443Outcome" class="mt-2"></div>';
 
             el.innerHTML = h;
         }
@@ -61,7 +61,7 @@
         // senza questa riga, qualunque file aggiuntivo verrebbe ignorato.
         async function w443Include() {
             if (!updConferma(t('w4.confirmInclude'), t('w4.wAdd'))) return;
-            const el = document.getElementById('w443Esito');
+            const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.changing')) + '';
             const r = await updApi('web443_include', { confirm: 'AGGIUNGI' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
@@ -74,7 +74,7 @@
 
         async function w443Installa() {
             if (!updConferma(t('w4.confirmInstall'), t('w4.wOpen'))) return;
-            const el = document.getElementById('w443Esito');
+            const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.writing')) + '';
             const r = await updApi('web443_install', { confirm: 'APRI' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
@@ -87,7 +87,7 @@
 
         async function w443Jail() {
             if (!updConferma(t('w4.confirmJail'), t('w4.wEnable'))) return;
-            const el = document.getElementById('w443Esito');
+            const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.jailWriting')) + '';
             const r = await updApi('web443_jail', { confirm: 'ATTIVA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'

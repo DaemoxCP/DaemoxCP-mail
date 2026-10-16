@@ -73,7 +73,7 @@
             // pulsante che lo esegue.
             h += '<div class="alert alert-secondary py-2 small mb-0"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>'
                + '<strong>' + escHtml(t('sts.noManualOrder')) + '</strong> ' + escHtml(t('sts.noManualOrderHint')) + '</div>'
-               + '<div id="stsEsito" class="mt-2"></div>';
+               + '<div id="stsOutcome" class="mt-2"></div>';
 
             el.innerHTML = h;
         }
@@ -82,7 +82,7 @@
             const sel = document.getElementById('stsModo');
             if (!sel) return;
             const modo = sel.value;
-            const el = document.getElementById('stsEsito');
+            const el = document.getElementById('stsOutcome');
             if (modo === 'enforce' && !adConferma(t('sts.confirmEnforce'), 'ENFORCE')) return;
             const r = await stsApi('mtasts_mode', { modo: modo });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
@@ -91,7 +91,7 @@
         }
 
         async function stsPubblica() {
-            const el = document.getElementById('stsEsito');
+            const el = document.getElementById('stsOutcome');
             if (!adConferma(t('sts.confirmPublish'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sts.publishing'));
             const r = await stsApi('mtasts_txt', { confirm: 'CREA' });

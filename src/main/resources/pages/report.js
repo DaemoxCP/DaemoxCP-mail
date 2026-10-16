@@ -72,7 +72,7 @@
             // --- impostazioni ---
             // I valori restano quelli del server; il nome si mostra nella lingua della pagina.
             const freq = [['giornaliero', t('rep.daily')], ['settimanale', t('rep.weekly')], ['mensile', t('rep.monthly')]];
-            h += '<div id="rep-esito-identita"></div>'
+            h += '<div id="rep-outcome-identity"></div>'
                + '<hr><h6 class="mb-2">' + escHtml(t('rep.whenWho')) + '</h6>'
                + '<div class="row g-2 align-items-end">'
                + '<div class="col-md-4"><label class="form-label small mb-1" for="repFrom">' + escHtml(t('rep.from')) + '</label>'
@@ -96,7 +96,7 @@
                + '<button class="btn btn-sm btn-success me-1" onclick="repSalva()"><i class="fas fa-floppy-disk me-1" aria-hidden="true"></i>' + escHtml(t('common.save')) + '</button>'
                + '<button class="btn btn-sm btn-outline-primary" onclick="repProva()"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i>' + escHtml(t('rep.sendTest')) + '</button>'
                + '</div>'
-               + '<div id="rep-esito" class="mt-2"></div>'
+               + '<div id="rep-outcome" class="mt-2"></div>'
                + '<div class="small text-muted mt-2">' + repEsc(s.prossimo) + '</div>';
             if (s.ultimoEsito) h += '<div class="small text-muted">' + escHtml(t('rep.lastResult', { result: s.ultimoEsito })) + '</div>';
             el.innerHTML = h;
@@ -104,7 +104,7 @@
 
         async function repCreaIdentita(indirizzo) {
             if (!repConferma(t('rep.confirmCreate', { address: indirizzo }), t('ad.wordCreate'))) return;
-            const el = document.getElementById('rep-esito-identita');
+            const el = document.getElementById('rep-outcome-identity');
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
             const r = await repApi('identity_create', { confirm: 'CREA', indirizzo: indirizzo });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small">'
@@ -113,7 +113,7 @@
         }
 
         async function repSalva() {
-            const el = document.getElementById('rep-esito');
+            const el = document.getElementById('rep-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
             const r = await repApi('save', {
                 mittente: (document.getElementById('repFrom') || { value: '' }).value.trim(),
@@ -131,7 +131,7 @@
             const a = document.getElementById('repTo').value.trim();
             if (!a) { alert(t('rep.needTo')); return; }
             if (!repConferma(t('rep.confirmSend', { address: a }), t('rep.wordSend'))) return;
-            const el = document.getElementById('rep-esito');
+            const el = document.getElementById('rep-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.sending')) + '';
             const r = await repApi('send', { confirm: 'INVIA', destinatario: a });
             // Giallo quando Postfix l'ha preso ma non e' ancora arrivato, o non si sa: non e'
