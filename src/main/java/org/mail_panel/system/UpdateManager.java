@@ -3762,7 +3762,7 @@ public final class UpdateManager {
      * classe e' stata caricata. Se il pannello e' stato avviato con "java -jar x.jar" e basta,
      * la riga ricostruita e' altrettanto spoglia — ed e' giusto cosi': si riparte come si era.
      */
-    public static String startCommand(boolean soloWeb) {
+    public static String startCommand(boolean webOnly) {
         StringBuilder c = new StringBuilder(System.getProperty("java.home", "") + "/bin/java");
         for (String a : java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
             // Le opzioni di misurazione non si riportano: appartengono a chi stava osservando.
@@ -3771,7 +3771,7 @@ public final class UpdateManager {
         }
         String jar = jarPath();
         if (!jar.isEmpty()) c.append(" -jar ").append(jar);
-        return soloWeb ? c.append(" --web").toString() : c.toString();
+        return webOnly ? c.append(" --web").toString() : c.toString();
     }
 
     /** Il file jar da cui gira questo pannello, o stringa vuota se non e' un jar. */

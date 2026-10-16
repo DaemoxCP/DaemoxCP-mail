@@ -272,7 +272,16 @@ public class Main {
         }
     }
 
+    /**
+     * Si ferma finche' qualcuno non preme ENTER. Senza terminale non si ferma e non stampa
+     * niente: il messaggio da' per inteso un lettore che non c'e', e l'attesa non finisce.
+     * Con stdin chiuso System.in.read() legge EOF e il processo prosegue di corsa; con stdin
+     * su una pipe aperta -- ssh senza -t, cron, un runner -- non legge niente e resta fermo
+     * per sempre. E' la seconda forma che ha tenuto un'installazione riuscita ferma per sette
+     * ore e cinquanta: processo vivo, exit code 0, nessun errore da nessuna parte.
+     */
     private static void waitForEnter() {
+        if (nonInteractive) return;
         System.out.println(ANSI_YELLOW + "Press ENTER to continue..." + ANSI_RESET);
         try {
             System.in.read();
@@ -358,12 +367,16 @@ public class Main {
         // e uno script staccato non ne ha uno: senza questa modalita' il processo ripartirebbe
         // e morirebbe subito, lasciando il pannello web irraggiungibile.
         // Il server web di suo non ha mai avuto bisogno del terminale: usa solo System.out.
-        boolean soloWeb = false;
-        for (String a1 : args) if ("--web".equals(a1)) soloWeb = true;
-        if (soloWeb) {
+        boolean webOnly = false;
+        for (String a1 : args) if ("--web".equals(a1)) webOnly = true;
+        if (webOnly) {
+            // --web e' il servizio: nessun tasto da premere, qualunque cosa dica il terminale.
+            nonInteractive = true;
             System.out.println("Starting in web-only mode: no on-screen menu.");
             System.out.println("To see the menu again: stop this process and start it again without --web.");
-            startWebServer(true);
+            // Se il server non parte il processo deve uscire diverso da zero: con exit 0 chi
+            // ha riavviato il pannello crede che sia tornato su, e invece e' spento.
+            System.exit(startWebServer() ? 0 : 1);
             return;
         }
 
@@ -460,7 +473,7 @@ public class Main {
                         // Start Mail Panel WebServer
                         try {
                             screen.stopScreen();
-                            startWebServer(false);
+                            startWebServer();
                         } catch (Exception ex) {
                             ex.printStackTrace();
                         }
@@ -689,7 +702,7 @@ public class Main {
             System.out.flush();
         }
 
-        // Note: waitForEnter() is already called inside executeScript(), no need to call again
+        // L'attesa di un tasto la fa gia' executeScript(), e solo se c'e' un terminale.
 
         try {
             screen.startScreen();
@@ -698,7 +711,36 @@ public class Main {
         }
     }
 
-    private static void startWebServer(boolean senzaTastiera) {
+    /**
+     * Vero quando non c'e' nessuno che possa premere un tasto: avvio da rc.d, da cron, da un
+     * runner, o un `ssh host 'java ...'` senza -t.
+     *
+     * E' stato di classe e non un parametro perche' parametro era: arrivava a questa funzione
+     * sola e le altre sei attese restavano scoperte, executeScript() compresa, che e' quella
+     * che ha tenuto fermo un processo per sette ore e cinquanta a installazione finita bene.
+     * Qui lo leggono waitForEnter() e startWebServer(), che sono tutti i punti in cui il
+     * processo si ferma ad aspettare una persona.
+     *
+     * Lo decide il terminale, non la riga di comando: Console.isTerminal() e' vero solo se
+     * stdin E stdout sono un tty, quindi anche un `| tail` lo spegne. --web lo forza comunque,
+     * perche' significa "fai il servizio" anche se chi lo lancia ha un terminale davanti.
+     */
+    private static boolean nonInteractive = !hasTerminal();
+
+    private static boolean hasTerminal() {
+        java.io.Console console = System.console();
+        return console != null && console.isTerminal();
+    }
+
+    /**
+     * Accende il server del pannello e resta in ascolto.
+     *
+     * @return vero se il server e' partito, falso su ogni errore di configurazione e se la
+     *         porta era occupata. Il chiamante non interattivo ne fa il proprio codice
+     *         d'uscita: senza terminale il messaggio rosso a schermo non lo legge nessuno.
+     *         Sul percorso di successo non torna: o resta in ascolto, o aspetta ENTER.
+     */
+    private static boolean startWebServer() {
         try (ResultSet result = dbManager.get_data_config()) {
             if (result.next()) {
                 String certContent = result.getString("mail_panel_ssl_cert");
@@ -711,20 +753,20 @@ public class Main {
                     System.out.println(ANSI_RED + "ERROR: SSL Certificate is empty!" + ANSI_RESET);
                     System.out.println(ANSI_YELLOW + "Configure SSL in 'Edit Panel Configuration'" + ANSI_RESET);
                     waitForEnter();
-                    return;
+                    return false;
                 }
 
                 if (keyContent == null || keyContent.trim().isEmpty()) {
                     System.out.println(ANSI_RED + "ERROR: SSL Private Key is empty!" + ANSI_RESET);
                     System.out.println(ANSI_YELLOW + "Configure SSL in 'Edit Panel Configuration'" + ANSI_RESET);
                     waitForEnter();
-                    return;
+                    return false;
                 }
 
                 if (!certContent.contains("-----BEGIN CERTIFICATE-----")) {
                     System.out.println(ANSI_RED + "ERROR: Invalid SSL Certificate format!" + ANSI_RESET);
                     waitForEnter();
-                    return;
+                    return false;
                 }
 
                 if (!keyContent.contains("-----BEGIN PRIVATE KEY-----") &&
@@ -732,7 +774,7 @@ public class Main {
                     !keyContent.contains("-----BEGIN EC PRIVATE KEY-----")) {
                     System.out.println(ANSI_RED + "ERROR: Invalid SSL Private Key format!" + ANSI_RESET);
                     waitForEnter();
-                    return;
+                    return false;
                 }
 
                 // Connect to MySQL for mail data
@@ -796,7 +838,7 @@ public class Main {
                     System.out.println(ANSI_YELLOW + "Nothing was started: the running panel "
                             + "was not touched." + ANSI_RESET);
                     waitForEnter();
-                    return;
+                    return false;
                 }
                 server.start();
 
@@ -823,15 +865,16 @@ public class Main {
                     finalServer.stop();
                 }));
 
-                if (senzaTastiera) {
-                    // Senza terminale, System.in e' /dev/null: readLine() tornerebbe subito null
-                    // e il server si spegnerebbe un istante dopo essersi acceso. Qui si resta
-                    // fermi finche' non arriva un segnale, e a quello pensa lo shutdown hook.
+                if (nonInteractive) {
+                    // Senza terminale non si legge da stdin, in nessuna delle due forme che
+                    // prende: chiuso, readLine() torna subito null e il server si spegnerebbe
+                    // un istante dopo essersi acceso; pipe aperta, non torna affatto. Qui si
+                    // resta fermi finche' non arriva un segnale, e a quello pensa lo shutdown hook.
                     System.out.println("Listening. To stop it: kill " + ProcessHandle.current().pid());
                     System.out.flush();
                     try { new java.util.concurrent.CountDownLatch(1).await(); }
                     catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
-                    return;
+                    return true;
                 }
 
                 // Wait for ENTER to stop (blocks until input)
@@ -842,12 +885,15 @@ public class Main {
                 server.stop();
                 System.out.println(ANSI_GREEN + "Server stopped. Goodbye!" + ANSI_RESET);
                 System.exit(0);
+                return true;
             }
         } catch (Exception e) {
             System.out.println(ANSI_RED + "ERROR: " + e.getMessage() + ANSI_RESET);
             e.printStackTrace();
             waitForEnter();
         }
+        // Nessuna riga di configurazione in tabella, o un'eccezione: il server non e' partito.
+        return false;
     }
 
     private static void setupMySQLDatabase() {
