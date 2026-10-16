@@ -81,7 +81,7 @@ public final class PkgBranch {
 
     /** Un repository come lo mostra pkg -vv, con quello che se ne capisce. */
     record Repo(String nome, String url, boolean acceso, int priorita, String ipVersion,
-                String tipo, String ramo, boolean conMinore) {}
+                String tipo, String branch, boolean conMinore) {}
 
     private static final Pattern UFFICIALE =
             Pattern.compile("^pkg\\+https?://pkg\\.freebsd\\.org/[^/]+/([A-Za-z0-9_]+)/?$", Pattern.CASE_INSENSITIVE);
@@ -146,15 +146,15 @@ public final class PkgBranch {
     }
 
     /** Il ramo che vale: quello dei pacchetti, "misti" se i moduli del kernel vanno per conto loro. */
-    static String ramo(List<Repo> repos) {
+    static String branch(List<Repo> repos) {
         Repo p = acceso(repos, "pacchetti"), k = acceso(repos, "moduli");
         if (p == null) return "nessuno";
-        if (k != null && !k.ramo().equals(p.ramo())) return "misti";
-        return p.ramo();
+        if (k != null && !k.branch().equals(p.branch())) return "misti";
+        return p.branch();
     }
 
-    static String explanation(String ramo) {
-        return switch (ramo) {
+    static String explanation(String branch) {
+        return switch (branch) {
             case "quarterly" -> I18n.tr("server.branch.quarterly");
             case "latest" -> I18n.tr("server.branch.latest");
             case "misti" -> I18n.tr("server.branch.mixed");
@@ -171,22 +171,22 @@ public final class PkgBranch {
         if (repos.isEmpty())
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.branch.noRepoRecognized"));
-        String ramo = ramo(repos);
+        String branch = branch(repos);
         String nostro = s.leggi(FILE);
-        JSONObject r = new JSONObject().put("success", true).put("ramo", ramo).put("explanation", explanation(ramo))
+        JSONObject r = new JSONObject().put("success", true).put("branch", branch).put("explanation", explanation(branch))
                 .put("repository", json(repos)).put("file", FILE.toString()).put("panelOwnedFile", nostro != null)
                 .put("fingerprint", fingerprint(repos, nostro));
         if (nostro != null) r.put("fileContent", nostro.length() > 4000 ? nostro.substring(0, 4000) : nostro);
         List<String> dopo = fileDopo(s);
         if (!dopo.isEmpty()) r.put("fileDopo", new JSONArray(dopo));
         Repo base = acceso(repos, "base");
-        if (base != null) r.put("base", I18n.tr("server.branch.baseFromPkg", java.util.Map.of("r", String.valueOf(base.ramo()))));
+        if (base != null) r.put("base", I18n.tr("server.branch.baseFromPkg", java.util.Map.of("r", String.valueOf(base.branch()))));
         String reason = motivoNo(repos);
         r.put("changeable", reason == null);
         if (reason != null) r.put("reason", reason);
         else {
             JSONArray verso = new JSONArray();
-            for (String x : RAMI) if (!x.equals(ramo)) verso.put(x);
+            for (String x : RAMI) if (!x.equals(branch)) verso.put(x);
             r.put("verso", verso);
         }
         return r;
@@ -204,7 +204,7 @@ public final class PkgBranch {
         JSONArray a = new JSONArray();
         for (Repo r : repos) {
             a.put(new JSONObject().put("nome", r.nome()).put("url", r.url()).put("acceso", r.acceso())
-                    .put("tipo", r.tipo()).put("ramo", r.ramo()).put("ufficiale", !r.tipo().equals("esterno"))
+                    .put("tipo", r.tipo()).put("branch", r.branch()).put("ufficiale", !r.tipo().equals("esterno"))
                     .put("ruolo", switch (r.tipo()) {
                         case "pacchetti" -> I18n.tr("server.branch.kindPackages");
                         case "moduli" -> I18n.tr("server.branch.kindKmods");
@@ -270,10 +270,10 @@ public final class PkgBranch {
         JSONObject st = stato(s);
         if (!st.optBoolean("success")) return st;
         if (!RAMI.contains(verso)) return new JSONObject().put("success", false).put("error", I18n.tr("server.branch.badBranch"));
-        JSONObject r = new JSONObject().put("success", true).put("da", st.getString("ramo")).put("verso", verso)
+        JSONObject r = new JSONObject().put("success", true).put("da", st.getString("branch")).put("verso", verso)
                 .put("fingerprint", st.getString("fingerprint"));
         if (!st.optBoolean("changeable")) return r.put("possibile", false).put("reason", st.getString("reason"));
-        if (verso.equals(st.getString("ramo"))) return r.put("possibile", false).put("reason", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
+        if (verso.equals(st.getString("branch"))) return r.put("possibile", false).put("reason", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
         List<Repo> repos = repository(s.pkgVv());
         JSONArray changes = new JSONArray();
         for (String tipo : List.of("pacchetti", "moduli")) {
@@ -305,7 +305,7 @@ public final class PkgBranch {
     /** Il ramo che pkg vede adesso, rileggendo pkg -vv. */
     private static String effettivo(Sistema s) {
         List<Repo> repos = repository(s.pkgVv());
-        return repos.isEmpty() ? "illeggibile" : ramo(repos);
+        return repos.isEmpty() ? "illeggibile" : branch(repos);
     }
 
     /**
@@ -319,7 +319,7 @@ public final class PkgBranch {
         if (!st.optBoolean("changeable")) return errore(log, st.getString("reason"));
         if (!st.getString("fingerprint").equals(fingerprint))
             return errore(log, I18n.tr("server.branch.changedSincePreview"));
-        String da = st.getString("ramo");
+        String da = st.getString("branch");
         if (verso.equals(da)) return errore(log, I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
         List<Repo> repos = repository(s.pkgVv());
         String prima = s.leggi(FILE);
@@ -385,7 +385,7 @@ public final class PkgBranch {
         }
         log.riga("");
         log.riga(msg.toString());
-        JSONObject r = new JSONObject().put("success", true).put("ramo", verso).put("messaggio", msg.toString());
+        JSONObject r = new JSONObject().put("success", true).put("branch", verso).put("messaggio", msg.toString());
         if (v != null) {
             r.put("aggiornabili", aggiornabili).put("piuRecenti", new JSONArray(piuRecenti.size() > 30 ? piuRecenti.subList(0, 30) : piuRecenti));
             if (!piuRecenti.isEmpty()) log.riga(I18n.tr("server.branch.newerList", java.util.Map.of("elenco", String.valueOf(String.join(", ", piuRecenti.size() > 30 ? piuRecenti.subList(0, 30) : piuRecenti)))));

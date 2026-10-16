@@ -65,13 +65,13 @@ async function servi(route) {
     richieste.push({ metodo: req.method(), percorso: p, corpo });
     if (p !== '/api/updates' || !corpo) return json(route, { success: true });
     switch (corpo.action) {
-        case 'ramo_stato': letture++; return json(route, stato());
-        case 'ramo_anteprima': return json(route, { success: true, possibile: true, da: ramoAdesso, verso: corpo.verso,
+        case 'branch_status': letture++; return json(route, stato());
+        case 'branch_preview': return json(route, { success: true, possibile: true, da: ramoAdesso, verso: corpo.verso,
             fingerprint: stato().fingerprint, file: '/usr/local/etc/pkg/repos/zz-pannello-ramo.conf',
             changes: [{ nome: 'FreeBSD-ports', da: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', a: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
             warnings: ['Non si aggiorna nessun pacchetto: cambia da dove pkg li prende.', 'Su latest il prossimo aggiornamento puo\' portare versioni maggiori nuove.'],
             contenuto: '# Scritto dal pannello\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', comeTorna: '' });
-        case 'ramo_cambia':
+        case 'branch_change':
             if (!cambioRiesce) return json(route, { success: false, error: 'C\'e\' gia\' un lavoro sui pacchetti in corso (aggiornamento di nginx).' });
             giri = 0;
             return json(route, { success: true, jobId: 'ramo-1', async: true });
@@ -124,7 +124,7 @@ async function servi(route) {
 
     console.log('\n== Il cambio, seguito fino all\'esito ==');
     await page.click('#ramo-via');
-    const post = richieste.find(r => r.corpo && r.corpo.action === 'ramo_cambia');
+    const post = richieste.find(r => r.corpo && r.corpo.action === 'branch_change');
     vero('la richiesta: ramo, conferma, fingerprint dell\'anteprima, token CSRF', post && post.corpo.verso === 'latest'
         && post.corpo.confirm === 'latest' && post.corpo.fingerprint === 'aaaaaaaaaaaaaaaa' && post.corpo.csrf_token === 'csrf-prova');
     await page.waitForFunction(() => document.getElementById('ramo-esito').textContent.includes('Adesso i pacchetti arrivano'), null, { timeout: 15000 });

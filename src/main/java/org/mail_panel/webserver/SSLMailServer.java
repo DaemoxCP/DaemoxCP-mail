@@ -128,7 +128,7 @@ public class SSLMailServer {
     /** /api/updates: le azioni che leggono (anteprime, stati, diagnosi). Tutte le altre cambiano il sistema. */
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
         "packages_status", "packages_overview", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
-        "mysql84_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "ramo_stato", "ramo_anteprima",
+        "mysql84_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "branch_status", "branch_preview",
         "system_report", "os_status", "reboot_preview", "rc_stato", "riepilogo_sistema", "cf_intervalli",
         "rc_remove_preview", "rc_preview", "os_upgrade_targets", "os_upgrade_preflight", "os_upgrade_instructions",
         "os_upgrade_verify", "salto_stato", "be_list", "ssl_uso", "removal_candidates", "panel_uses", "deep_scan",
@@ -2225,7 +2225,7 @@ public class SSLMailServer {
                             () -> Main.mysqlAvailable && Main.mailDatabase != null ? Main.mailDatabase.versioneServer() : null));
                     // Il ramo accanto alle versioni: quali versioni arrivano dipende da li'.
                     JSONObject ramo = org.mail_panel.system.PkgBranch.stato(org.mail_panel.system.PkgBranch.reale());
-                    if (ramo.optBoolean("success")) versioniLette.put("ramo", ramo.getString("ramo"));
+                    if (ramo.optBoolean("success")) versioniLette.put("branch", ramo.getString("branch"));
                     versioniLetteMs = System.currentTimeMillis();
                     versioniLetteAzioni = azioni;
                 }
@@ -6951,9 +6951,9 @@ public class SSLMailServer {
                 case "broken_libs" -> response = UpdateManager.packagesWithMissingLibraries();
                 case "mysql_client_diag" -> response = UpdateManager.mysqlClientDiagnostics();
                 case "defaults_check" -> response = UpdateManager.defaultsConsistency();
-                case "ramo_stato" -> response = UpdateManager.branchStatus();
-                case "ramo_anteprima" -> response = UpdateManager.branchPreview(req.optString("verso", ""));
-                case "ramo_cambia" -> {
+                case "branch_status" -> response = UpdateManager.branchStatus();
+                case "branch_preview" -> response = UpdateManager.branchPreview(req.optString("verso", ""));
+                case "branch_change" -> {
                     // La conferma e' il nome del ramo scritto a mano, e l'fingerprint e' quella
                     // dell'anteprima: si cambia solo cio' che si e' visto.
                     String verso = req.optString("verso", "");

@@ -170,7 +170,7 @@ public class OpensslExpiry {
         String fine = fineSupporto(versione);
         Long giorni = giorniRimasti(versione, oggi);
         int u = urgenza(versione, oggi);
-        o.put("ramo", ramo(versione)).put("lts", eLts(versione)).put("urgenza", u);
+        o.put("branch", ramo(versione)).put("lts", eLts(versione)).put("urgenza", u);
         if (fine == null)
             return o.put("commento", I18n.tr("server.sslexp.notInTable", java.util.Map.of("b", String.valueOf(ramo(versione)))));
 

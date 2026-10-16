@@ -124,7 +124,7 @@ const API = {
     })[body.action] || { success: true },
     // Updates: one endpoint, the reply depends on the action in the body.
     'POST /api/updates': (q, body) => ({
-        ramo_stato: { success: true, ramo: 'quarterly', spiegazione: 'Quarterly is the default.', changeable: true, verso: ['latest'], panelOwnedFile: false,
+        branch_status: { success: true, ramo: 'quarterly', spiegazione: 'Quarterly is the default.', changeable: true, verso: ['latest'], panelOwnedFile: false,
                       repository: [{ nome: 'FreeBSD', ruolo: 'packages', ramo: 'quarterly', acceso: true, url: 'pkg+https://pkg.FreeBSD.org/...' }] },
         os_status: { success: true, kernelInstallato: '15.0-RELEASE-p3', uname: '15.0-RELEASE-p3', riavvioNecessario: false, userland: '15.0-RELEASE-p3',
                      arch: 'amd64', fineSupporto: '2026-12-31', noteSupporto: '', fonteSupporto: 'freebsd.org', aggiornabileConFreebsdUpdate: true, giaPronti: 'none' },

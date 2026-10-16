@@ -2,7 +2,7 @@
         // ---------- ramo dei pacchetti: quarterly o latest (RamoPkg sul server) ----------
         // La scheda si legge da sola all'apertura: pkg -vv non va in rete e risponde subito.
         // Cambiare ramo invece scarica il catalogo nuovo, quindi e' un lavoro con il suo registro.
-        let branchData = null, ramoVerso = '';
+        let branchData = null, branchTarget = '';
 
         function branchEl(tag, classe, testo) {
             const e = document.createElement(tag);
@@ -12,10 +12,10 @@
         }
 
         async function branchStatus() {
-            const box = document.getElementById('ramo-body');
+            const box = document.getElementById('branch-body');
             box.textContent = t('up.readingPkg');
-            document.getElementById('ramo-anteprima').textContent = '';
-            const r = await updApi('ramo_stato');
+            document.getElementById('branch-preview').textContent = '';
+            const r = await updApi('branch_status');
             box.textContent = '';
             if (!r.success) {
                 box.appendChild(branchEl('div', 'alert alert-secondary py-2 small mb-0', r.error || t('up.branchUnreadable')));
@@ -23,9 +23,9 @@
             }
             branchData = r;
             const testa = branchEl('p', 'mb-1');
-            if (r.ramo === 'quarterly' || r.ramo === 'latest') {
-                testa.append(...tNodes('up.branchFrom', { branch: branchEl('span', 'badge ' + (r.ramo === 'latest' ? 'bg-info text-dark' : 'bg-secondary') + ' fs-6', r.ramo) }));
-            } else if (r.ramo === 'misti') {
+            if (r.branch === 'quarterly' || r.branch === 'latest') {
+                testa.append(...tNodes('up.branchFrom', { branch: branchEl('span', 'badge ' + (r.branch === 'latest' ? 'bg-info text-dark' : 'bg-secondary') + ' fs-6', r.branch) }));
+            } else if (r.branch === 'misti') {
                 testa.appendChild(branchEl('span', 'badge bg-warning text-dark fs-6', t('up.mixedBranches')));
             } else {
                 testa.appendChild(branchEl('span', 'badge bg-secondary fs-6', t('up.noOfficialBranch')));
@@ -45,7 +45,7 @@
             const corpo = tab.createTBody();
             (r.repository || []).forEach(x => {
                 const tr = corpo.insertRow();
-                const celle = [[x.nome, COL[0]], [x.ruolo, COL[1]], [x.ramo || '-', COL[2]],
+                const celle = [[x.nome, COL[0]], [x.ruolo, COL[1]], [x.branch || '-', COL[2]],
                                [x.acceso ? t('dns.yes') : t('acf.no'), COL[3]]];
                 celle.forEach(([testo, etichetta]) => {
                     const td = branchEl('td', '', testo);
@@ -85,14 +85,14 @@
         }
 
         async function branchPreview(verso) {
-            const box = document.getElementById('ramo-anteprima');
+            const box = document.getElementById('branch-preview');
             box.textContent = t('up.buildingPreview');
-            document.getElementById('ramo-esito').textContent = '';
-            const r = await updApi('ramo_anteprima', { verso: verso });
+            document.getElementById('branch-outcome').textContent = '';
+            const r = await updApi('branch_preview', { verso: verso });
             box.textContent = '';
             if (!r.success) { box.appendChild(branchEl('div', 'alert alert-danger py-2 small', r.error)); return; }
             if (!r.possibile) { box.appendChild(branchEl('div', 'alert alert-secondary py-2 small', r.reason)); return; }
-            ramoVerso = verso;
+            branchTarget = verso;
             branchData.fingerprint = r.fingerprint;
             const card = branchEl('div', 'border rounded p-3');
             card.appendChild(branchEl('h6', 'mb-2', t('up.switchFromTo', { from: r.da, to: verso })));
@@ -113,17 +113,17 @@
             card.appendChild(branchEl('pre', 'small border rounded p-2 mb-1', r.contenuto));
             if (r.comeTorna) card.appendChild(branchEl('p', 'small text-muted mb-2', r.comeTorna));
             const lab = branchEl('label', 'form-label small mb-1', t('up.typeBranch', { branch: verso }));
-            lab.htmlFor = 'ramo-conferma';
+            lab.htmlFor = 'branch-confirm';
             card.appendChild(lab);
             const line = branchEl('div', 'd-flex flex-wrap gap-2 align-items-center');
             const inp = branchEl('input', 'form-control form-control-sm');
-            inp.id = 'ramo-conferma';
+            inp.id = 'branch-confirm';
             inp.style.maxWidth = '14rem';
             inp.autocomplete = 'off';
             inp.spellcheck = false;
             const via = branchEl('button', 'btn btn-sm btn-danger', t('up.changeBranch'));
             via.type = 'button';
-            via.id = 'ramo-via';
+            via.id = 'branch-go';
             via.disabled = true;
             inp.addEventListener('input', () => { via.disabled = inp.value.trim() !== verso; });
             via.addEventListener('click', branchChange);
@@ -137,20 +137,20 @@
         }
 
         async function branchChange() {
-            const inp = document.getElementById('ramo-conferma');
-            const outcome = document.getElementById('ramo-esito');
-            if (!inp || inp.value.trim() !== ramoVerso) return;
-            document.getElementById('ramo-via').disabled = true;
-            const r = await updApi('ramo_cambia', { verso: ramoVerso, fingerprint: branchData.fingerprint, confirm: inp.value.trim() });
+            const inp = document.getElementById('branch-confirm');
+            const outcome = document.getElementById('branch-outcome');
+            if (!inp || inp.value.trim() !== branchTarget) return;
+            document.getElementById('branch-go').disabled = true;
+            const r = await updApi('branch_change', { verso: branchTarget, fingerprint: branchData.fingerprint, confirm: inp.value.trim() });
             if (!r.success) {
                 outcome.textContent = '';
                 outcome.appendChild(branchEl('div', 'alert alert-danger py-2 small mb-0', r.error || t('up.changeNotStarted')));
-                document.getElementById('ramo-via').disabled = false;
+                document.getElementById('branch-go').disabled = false;
                 return;
             }
-            document.getElementById('ramo-anteprima').textContent = '';
+            document.getElementById('branch-preview').textContent = '';
             outcome.textContent = t('up.changingBranch');
-            const pre = document.getElementById('ramo-log');
+            const pre = document.getElementById('branch-log');
             pre.style.display = 'block';
             pre.textContent = '';
             branchFollow(r.jobId);
@@ -158,8 +158,8 @@
 
         async function branchFollow(id) {
             const s = await updApi('job_status', { jobId: id });
-            const outcome = document.getElementById('ramo-esito');
-            const pre = document.getElementById('ramo-log');
+            const outcome = document.getElementById('branch-outcome');
+            const pre = document.getElementById('branch-log');
             if (s.success && s.job) {
                 pre.textContent = s.job.consoleLog || '';
                 pre.scrollTop = pre.scrollHeight;

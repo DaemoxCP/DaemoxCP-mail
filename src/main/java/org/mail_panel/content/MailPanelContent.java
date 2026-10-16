@@ -1407,12 +1407,12 @@ public class MailPanelContent {
                 const daRiavviare = Object.values(d.servizi).concat(d.altro).filter(v => v.riavvio).length;
                 stato.textContent = t('ver.readAt', { time: d.letteAlle.substring(11, 19) })
                     + (daRiavviare > 0 ? ' ' + tn('ver.toRestart', daRiavviare) : '');
-                if (d.ramo) {
+                if (d.branch) {
                     // Da quale ramo arrivano i pacchetti: lo si cambia in Aggiornamenti.
                     stato.appendChild(document.createTextNode(' ' + t('ver.branch') + ' '));
                     const a = document.createElement('a');
                     a.href = '/updates#ramo';
-                    a.textContent = d.ramo === 'misti' ? t('ver.branchMixed') : d.ramo === 'nessuno' ? t('ver.branchNone') : d.ramo;
+                    a.textContent = d.branch === 'misti' ? t('ver.branchMixed') : d.branch === 'nessuno' ? t('ver.branchNone') : d.branch;
                     stato.appendChild(a);
                     stato.appendChild(document.createTextNode('.'));
                 }
@@ -13179,11 +13179,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.comparing')) + '';
             const r = await updApi('defaults_check');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const rm = r.ramo || {};
+            const rm = r.branch || {};
             let h = '';
-            if (rm.ramo) {
-                h += '<div class="alert alert-' + (rm.ramo === 'quarterly' ? 'warning' : rm.ramo === 'latest' ? 'info' : 'secondary')
-                   + ' py-2"><strong>' + escHtml(t('up.branchIs', { branch: rm.ramo })) + '</strong>'
+            if (rm.branch) {
+                h += '<div class="alert alert-' + (rm.branch === 'quarterly' ? 'warning' : rm.branch === 'latest' ? 'info' : 'secondary')
+                   + ' py-2"><strong>' + escHtml(t('up.branchIs', { branch: rm.branch })) + '</strong>'
                    + (rm.url ? ' &mdash; <code>' + updEsc(rm.url) + '</code>' : '')
                    + '<br><span class="small">' + updEsc(rm.spiegazione) + '</span>'
                    + '<br><span class="small text-muted">' + updEsc(rm.dove) + '</span></div>';

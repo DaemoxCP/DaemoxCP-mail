@@ -6769,7 +6769,7 @@ public final class UpdateManager {
         JSONObject be = bootEnvironments();
         r.put("ambienti", be);
 
-        r.put("ramo", branchRepositories());
+        r.put("branch", branchRepositories());
         r.put("daFare", ordinaPerUrgenza(daFare));
         return r;
     }
@@ -8937,7 +8937,7 @@ public final class UpdateManager {
                 t.append(so.optString("notaAggiornamenti")).append('\n');
 
             t.append("\n--- ").append(I18n.tr("server.um.x.repBranch")).append(" ---\n");
-            t.append(ramo.optString("ramo")).append("   ").append(ramo.optString("url")).append('\n');
+            t.append(ramo.optString("branch")).append("   ").append(ramo.optString("url")).append('\n');
             t.append(ramo.optString("explanation")).append('\n');
 
             t.append("\n--- ").append(I18n.tr("server.um.x.repDefaults")).append(" ---\n");
@@ -9047,7 +9047,7 @@ public final class UpdateManager {
     public static JSONObject branchRepositories() {
         JSONObject st = PkgBranch.stato(PkgBranch.reale());
         if (!st.optBoolean("success"))
-            return new JSONObject().put("success", true).put("ramo", I18n.tr("server.um.branchRepositories.1")).put("url", "")
+            return new JSONObject().put("success", true).put("branch", I18n.tr("server.um.branchRepositories.1")).put("url", "")
                     .put("explanation", st.optString("error")).put("dove", "");
         String url = "";
         JSONArray repo = st.getJSONArray("repository");
@@ -9055,7 +9055,7 @@ public final class UpdateManager {
             JSONObject x = repo.getJSONObject(i);
             if (x.optBoolean("acceso") && "pacchetti".equals(x.optString("tipo"))) { url = x.optString("url"); break; }
         }
-        return new JSONObject().put("success", true).put("ramo", st.getString("ramo")).put("url", url)
+        return new JSONObject().put("success", true).put("branch", st.getString("branch")).put("url", url)
                 .put("explanation", st.getString("explanation"))
                 .put("dove", I18n.tr("server.um.branchRepositories.2"));
     }
@@ -9150,7 +9150,7 @@ public final class UpdateManager {
             righe.put(riga);
         }
         return new JSONObject().put("success", true).put("righe", righe)
-                .put("ramo", branchRepositories())
+                .put("branch", branchRepositories())
                 .put("fonte", I18n.tr("server.um.defaultsConsistency.2"))
                 .put("avvertenza", I18n.tr("server.um.defaultsConsistency.3"));
     }

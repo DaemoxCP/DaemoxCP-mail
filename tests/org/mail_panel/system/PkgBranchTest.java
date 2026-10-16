@@ -148,7 +148,7 @@ public class PkgBranchTest {
         }
         public Instant adesso() { return Instant.parse("2026-10-03T12:00:00Z"); }
 
-        String ramoVisto() { return PkgBranch.stato(this).optString("ramo"); }
+        String ramoVisto() { return PkgBranch.stato(this).optString("branch"); }
     }
 
     static PkgBranch.Registro nel(FakeSystem f) { return f.registro::add; }
@@ -157,7 +157,7 @@ public class PkgBranchTest {
         System.out.println("\n== Leggere i repository da pkg -vv ==");
         FakeSystem f = new FakeSystem();
         JSONObject st = PkgBranch.stato(f);
-        vero("FreeBSD 15 di serie: ramo quarterly", st.getBoolean("success") && st.getString("ramo").equals("quarterly"));
+        vero("FreeBSD 15 di serie: ramo quarterly", st.getBoolean("success") && st.getString("branch").equals("quarterly"));
         JSONArray rep = st.getJSONArray("repository");
         vero("tre repository: pacchetti, moduli del kernel, sistema base (spento)", rep.length() == 3
                 && rep.getJSONObject(0).getString("tipo").equals("pacchetti") && rep.getJSONObject(1).getString("tipo").equals("moduli")
@@ -171,7 +171,7 @@ public class PkgBranchTest {
         vero("su -STABLE i moduli senza versione minore: kmods_latest",
                 PkgBranch.indirizzo(ks, "latest").equals("pkg+https://pkg.FreeBSD.org/${ABI}/kmods_latest"));
         PkgBranch.Repo vecchio = PkgBranch.classifica("FreeBSD", "pkg+http://pkg.FreeBSD.org/FreeBSD:14:amd64/latest", true, 0, null);
-        vero("FreeBSD 14 (repository \"FreeBSD\", http): pacchetti, ramo latest", vecchio.tipo().equals("pacchetti") && vecchio.ramo().equals("latest"));
+        vero("FreeBSD 14 (repository \"FreeBSD\", http): pacchetti, ramo latest", vecchio.tipo().equals("pacchetti") && vecchio.branch().equals("latest"));
         vero("un mirror o un repository proprio non e' ufficiale",
                 PkgBranch.classifica("poudriere", "file:///usr/local/poudriere/data/packages/15amd64-default", true, 0, null).tipo().equals("esterno")
                 && PkgBranch.classifica("FreeBSD-ports", "pkg+https://mirror.example.org/FreeBSD:15:amd64/quarterly", true, 0, null).tipo().equals("esterno"));
@@ -180,14 +180,14 @@ public class PkgBranchTest {
         proprio.cartella.put("FreeBSD.conf", "FreeBSD-ports: { enabled: no }\nFreeBSD-ports-kmods: { enabled: no }\n");
         proprio.cartella.put("poudriere.conf", "poudriere: { url: \"file:///usr/local/poudriere/data/packages/15amd64-default\" }\n");
         st = PkgBranch.stato(proprio);
-        vero("pacchetti da un repository proprio: non si cambia, e si dice perche'", st.getString("ramo").equals("nessuno")
+        vero("pacchetti da un repository proprio: non si cambia, e si dice perche'", st.getString("branch").equals("nessuno")
                 && !st.getBoolean("changeable") && st.getString("reason").contains("repository che usi"));
 
         FakeSystem misti = new FakeSystem();
         misti.cartella.put("FreeBSD.conf", "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/latest\" }\n");
         st = PkgBranch.stato(misti);
         vero("pacchetti latest e moduli quarterly: \"misti\", e si puo' allineare a tutti e due",
-                st.getString("ramo").equals("misti") && st.getJSONArray("verso").length() == 2);
+                st.getString("branch").equals("misti") && st.getJSONArray("verso").length() == 2);
 
         FakeSystem base = new FakeSystem();
         base.cartella.put("FreeBSD.conf", "FreeBSD-base: { enabled: yes }\n");
@@ -220,7 +220,7 @@ public class PkgBranchTest {
         f = new FakeSystem();
         String imp = PkgBranch.stato(f).getString("fingerprint");
         JSONObject r = PkgBranch.cambia(f, nel(f), "latest", imp);
-        vero("riuscito: " + r.optString("messaggio", r.optString("error")), r.getBoolean("success") && r.getString("ramo").equals("latest"));
+        vero("riuscito: " + r.optString("messaggio", r.optString("error")), r.getBoolean("success") && r.getString("branch").equals("latest"));
         vero("pkg ora vede latest, anche per i moduli", f.ramoVisto().equals("latest"));
         vero("il file del pannello c'e', con la marca", f.cartella.get("zz-panel-branch.conf").startsWith(PkgBranch.MARCA));
         vero("catalogo scaricato una volta", f.aggiornamenti == 1);

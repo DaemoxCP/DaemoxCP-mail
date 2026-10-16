@@ -1007,8 +1007,8 @@ public final class PeriodicReport {
             if (g >= 0) t.append("  ").append(I18n.tr("server.rp.c.inDays", java.util.Map.of("n", String.valueOf(g))));
             t.append("\n");
         }
-        JSONObject ramo = d.optJSONObject("ramo");
-        if (ramo != null) t.append(I18n.tr("server.rp.c.branch", java.util.Map.of("v", String.valueOf(ramo.optString("ramo", "?"))))).append("\n");
+        JSONObject ramo = d.optJSONObject("branch");
+        if (ramo != null) t.append(I18n.tr("server.rp.c.branch", java.util.Map.of("v", String.valueOf(ramo.optString("branch", "?"))))).append("\n");
         t.append("\n");
 
         // --- pacchetti ---
