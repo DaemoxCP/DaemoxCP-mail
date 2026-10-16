@@ -235,6 +235,21 @@ public class Main {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             org.mail_panel.util.Shell.applicaPath(processBuilder);
             processBuilder.redirectErrorStream(true);
+            // Lo stdin del figlio e' /dev/null, sempre. L'impostazione predefinita di
+            // ProcessBuilder e' una pipe di cui la JVM tiene aperto il capo in scrittura e
+            // su cui non scrive mai: uno script che legge non riceve ne' dati ne' EOF, e
+            // resta fermo per sempre. Misurato sulla VM: uno script con "read x" appende
+            // executeScript in tutte e tre le condizioni -- stdin del pannello su pipe
+            // aperta, su /dev/null, e su una pty vera con l'ENTER pronto. Non e' quindi un
+            // guasto della sola non interattivita': quella pipe non serve a nessuno, perche'
+            // nemmeno un operatore al terminale puo' rispondere (quello che digita va allo
+            // stdin del pannello, che lo legge waitForEnter(), non allo script). Per questo
+            // non e' condizionato a nonInteractive.
+            // Con /dev/null la lettura torna EOF: lo script non si ferma piu' e il suo codice
+            // d'uscita arriva al chiamante. Attenzione a chi aggiunge uno script che legge:
+            // EOF non e' un errore, quindi "read x" prosegue con un valore VUOTO. Chi legge
+            // deve controllare l'esito della lettura, altrimenti va avanti su niente.
+            processBuilder.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
             processBuilder.directory(new File(System.getProperty("user.dir")));
 
             Process process = processBuilder.start();
