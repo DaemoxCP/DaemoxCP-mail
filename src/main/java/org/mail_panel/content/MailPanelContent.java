@@ -9229,7 +9229,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     ${escHtml(t('sec.jailCounts', { failed: jail.currently_failed, total: jail.total_banned }))}
                                 </small>
                                 <div class="mt-1">
-                                    <button class="btn btn-sm btn-outline-secondary py-0" data-jail="${escHtml(jail.name)}" onclick="verificaFiltroJail(this.dataset.jail)" title="${escHtml(t('sec.seesHint'))}">
+                                    <button class="btn btn-sm btn-outline-secondary py-0" data-jail="${escHtml(jail.name)}" onclick="checkJailFilter(this.dataset.jail)" title="${escHtml(t('sec.seesHint'))}">
                                         <i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>${escHtml(t('sec.sees'))}</button>
                                     <div id="filtro-${escapeHtml(jail.name)}" class="small mt-1"></div>
                                 </div>
