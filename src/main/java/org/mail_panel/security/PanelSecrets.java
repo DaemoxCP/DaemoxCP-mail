@@ -39,6 +39,8 @@ public final class PanelSecrets {
     static final String WEBMAIL_KEY = "webmail_key";
     /** La password dell'utente MySQL del pannello (prima stava nel database SQLite di configurazione). */
     public static final String MYSQL_PASSWORD = "mysql_password";
+    /** La password di root di MySQL: prima non esisteva, e root entrava senza nulla. */
+    public static final String MYSQL_ROOT_PASSWORD = "mysql_root_password";
     /** La chiave privata TLS (PEM) del pannello (prima stava nel database SQLite di configurazione). */
     public static final String PANEL_TLS_KEY = "panel_tls_key";
 
@@ -174,6 +176,77 @@ public final class PanelSecrets {
             else p.setProperty(name, v);
             return p;
         });
+    }
+
+    /**
+     * Le lettere con cui si genera una password.
+     *
+     * <p>Mancano apposta l'apice, le virgolette, la barra rovescia e l'accento grave: la
+     * password finisce dentro {@code IDENTIFIED BY '...'} in un here-document dello script
+     * d'installazione, e uno di quei caratteri la spezzerebbe o verrebbe preso per un'escape
+     * di MySQL. Il dollaro resta: l'espansione del here-document avviene una volta sola,
+     * quindi un dollaro <em>dentro</em> la password non viene riespanso.
+     */
+    private static final char[] ALPHABET =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=".toCharArray();
+
+    /**
+     * Solo lettere e cifre: l'alfabeto per la password dell'utente del pannello.
+     *
+     * <p>Non e' una scelta pigra. Quella password, a differenza di quella di root, finisce
+     * in posti che <em>non</em> sono SQL: l'URL di collegamento di Roundcube
+     * ({@code mysql://utente:password@127.0.0.1/roundcubemail}), i file di Postfix e la
+     * configurazione di Dovecot. In un URL una chiocciola spezza l'indirizzo, un
+     * {@code %} apre una sequenza di decodifica e una barra cambia il percorso; nei file di
+     * configurazione un {@code #} puo' aprire un commento. Qui un carattere in piu' non
+     * aggiunge difesa che valga quelle rotture: ventiquattro caratteri alfanumerici sono
+     * circa 143 bit.
+     */
+    private static final char[] ALPHANUMERIC =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".toCharArray();
+
+    /** Una password nuova per SQL, presa da un generatore crittografico. */
+    public static String newPassword(int length) {
+        return newPassword(length, ALPHABET);
+    }
+
+    /** Una password nuova di sole lettere e cifre, per i posti che non sono SQL. */
+    public static String newAlphanumericPassword(int length) {
+        return newPassword(length, ALPHANUMERIC);
+    }
+
+    private static String newPassword(int length, char[] alphabet) {
+        StringBuilder b = new StringBuilder(length);
+        for (int i = 0; i < length; i++) b.append(alphabet[RANDOM.nextInt(alphabet.length)]);
+        return b.toString();
+    }
+
+    /**
+     * La password di root di MySQL, generandola se non c'e' ancora.
+     *
+     * <p>Prima non ce n'era nessuna: lo script d'installazione faceva {@code mysql -u root} e
+     * poi {@code mysql -u root --password=}, cioe' dava per scontato che root entrasse senza
+     * segreto. Su FreeBSD e' proprio come resta un MySQL appena installato, e root senza
+     * password vuol dire che <em>qualunque</em> utente locale — compreso {@code www}, che fa
+     * girare Roundcube — ha i pieni poteri sul database.
+     *
+     * <p>La <strong>prima</strong> password non si configura: si genera, una volta sola, con
+     * un generatore crittografico; da quel momento <em>quella</em> e' la password, e si
+     * rilegge da qui. Altrimenti quella nel file e quella impostata in MySQL non sarebbero
+     * piu' lo stesso segreto. Una password messa a mano non viene mai sostituita.
+     *
+     * <p>Si puo' chiamare da piu' processi insieme: la generazione avviene sotto il lock del
+     * file e chi arriva secondo trova quella del primo, invece di sovrascriverla con una sua
+     * che in MySQL non e' mai stata impostata.
+     */
+    public static synchronized String ensureMysqlRootPassword() {
+        String v = get(MYSQL_ROOT_PASSWORD);
+        if (!v.isEmpty()) return v;
+        return update(p -> {
+            if (!p.getProperty(MYSQL_ROOT_PASSWORD, "").isEmpty()) return null;   // l'ha appena scritta un altro
+            p.setProperty(MYSQL_ROOT_PASSWORD, newPassword(28));
+            return p;
+        }).getProperty(MYSQL_ROOT_PASSWORD, "");
     }
 
     /**
