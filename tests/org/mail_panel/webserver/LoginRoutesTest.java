@@ -141,6 +141,22 @@ public class LoginRoutesTest {
                 .redirectErrorStream(true).start();
         cert.getInputStream().readAllBytes();
         check("test certificate", cert.waitFor() == 0);
+
+        // Il pannello adesso guarda l'intestazione Host (HostCheck), e queste richieste
+        // arrivano col NOME -- panel.example.test, che e' anche l'rpId delle passkey, e per
+        // questo non puo' essere un indirizzo. Quel nome va dichiarato, perche' e' quello che
+        // un pannello raggiunto per nome ha scritto nella propria configurazione: prima
+        // nessuno lo chiedeva e la prova girava senza. Il file dei segreti va in una cartella
+        // di prova, perche' update_panel_config ci mette la chiave TLS.
+        Field secretsDir = org.mail_panel.security.PanelSecrets.class.getDeclaredField("dir");
+        secretsDir.setAccessible(true);
+        secretsDir.set(null, dir.resolve("secrets"));
+        Main.dbManager = new org.mail_panel.sqli.dataBaseManager();
+        Main.dbManager.create_tables();
+        Main.dbManager.insert_data_default();
+        Main.dbManager.update_panel_config(HOST, "0", Files.readString(dir.resolve("c.pem")),
+                Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
+
         SSLMailServer srv = new SSLMailServer(0, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);
