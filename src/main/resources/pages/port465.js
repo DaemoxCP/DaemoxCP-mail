@@ -32,13 +32,13 @@
                    + (r.sicuro ? '' : ' disabled')
                    + '><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('p465.apply')) + '</button>';
 
-            h += '<div id="upd-465-esito" class="mt-2"></div>';
+            h += '<div id="upd-465-outcome" class="mt-2"></div>';
             el.innerHTML = h;
         }
 
         async function upd465Applica() {
             if (!updConferma(t('p465.confirm'), t('p465.wApply'))) return;
-            const el = document.getElementById('upd-465-esito');
+            const el = document.getElementById('upd-465-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('p465.applying')) + '';
             const r = await updApi('porta465_apply', { confirm: 'APPLICA' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'

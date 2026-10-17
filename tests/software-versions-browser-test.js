@@ -23,7 +23,7 @@ function vero(cosa, ok) {
 
 const richieste = [];
 const VERSIONI = {
-    success: true, letteAlle: '2026-10-03T14:00:05+02:00', ramo: 'quarterly',
+    success: true, letteAlle: '2026-10-03T14:00:05+02:00', branch: 'quarterly',
     servizi: {
         postfix: { chiave: 'postfix', nome: 'Postfix', ruolo: 'Server SMTP', installato: true, versione: '3.10.4', fonte: '/usr/local/sbin/postconf -h mail_version',
             pacchetto: 'postfix-mysql-3.10.4,1', riavvio: true,
@@ -110,7 +110,7 @@ async function servi(route) {
     const stato = await page.textContent('#versioniStato');
     vero('riepilogo: ora della lettura e quanti da riavviare — ' + stato, stato.startsWith('Lette dal server alle 14:00:05.') && stato.includes('3 programmi vanno riavviati'));
     vero('e il ramo dei pacchetti, con il collegamento alla scheda per cambiarlo', stato.includes('Pacchetti dal ramo quarterly.')
-        && await page.getAttribute('#versioniStato a', 'href') === '/updates#ramo');
+        && await page.getAttribute('#versioniStato a', 'href') === '/updates#branch');
 
     console.log('\n== Altro software ==');
     const altro = await page.$$eval('#altroSoftware tr', tr => tr.map(r => [...r.cells].map(c => c.textContent.trim())));

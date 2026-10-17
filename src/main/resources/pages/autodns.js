@@ -101,7 +101,7 @@
                 if (x.warnings && x.warnings.length)
                     h += '<tr><td colspan="4" class="pt-0">' + adAvvisi(x.warnings) + '</td></tr>';
             });
-            h += '</tbody></table></div><div id="autoDnsEsito"></div>';
+            h += '</tbody></table></div><div id="autoDnsOutcome"></div>';
 
             h += adRapporti(r.rapporti);
             h += adOpzionali(r.opzionali);
@@ -153,7 +153,7 @@
                  + '<i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.createBox')) + '</button>'
                  + '</div></div>'
 
-                 + '</div><div id="adAliasEsito" class="mt-3"></div></div></div>';
+                 + '</div><div id="adAliasOutcome" class="mt-3"></div></div></div>';
         }
 
         function adVersoCambia() {
@@ -192,7 +192,7 @@
 
         async function autoDnsCreaAlias() {
             const verso = adVersoScelto();
-            const el = document.getElementById('adAliasEsito');
+            const el = document.getElementById('adAliasOutcome');
             if (!verso) {
                 el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + escHtml(t('ad.chooseFirst')) + '</div>';
                 return;
@@ -209,7 +209,7 @@
         }
 
         async function autoDnsCreaCasella() {
-            const el = document.getElementById('adAliasEsito');
+            const el = document.getElementById('adAliasOutcome');
             if (!adConferma(t('ad.confirmBox'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingBox'));
             const r = await autoDnsApi('mailbox_create', { confirm: 'CREA' });
@@ -223,7 +223,7 @@
             el.innerHTML = h;
             // Non si ricarica da soli: la ricarica cancellerebbe la password dallo schermo.
             if (r.success) {
-                const b = document.getElementById('autoDnsEsito');
+                const b = document.getElementById('autoDnsOutcome');
                 if (b) b.innerHTML = '<div class="alert alert-info py-2 small mb-1">' + escHtml(t('ad.boxCreated')) + '</div>';
             }
         }
@@ -280,7 +280,7 @@
                        + adAvvisi([x.warning || x.conflitto]) + '</td></tr>';
             });
 
-            h += '</tbody></table></div><div id="adOpzEsito"></div>';
+            h += '</tbody></table></div><div id="adOpzOutcome"></div>';
 
             // Qui c'era un riquadro fisso: "MTA-STS il pannello non lo crea, perche' quel sito
             // non lo serve". Era vero quando fu scritto e ha smesso di esserlo il giorno in cui
@@ -292,7 +292,7 @@
         }
 
         async function autoDnsCreaOpzionale(quale) {
-            const el = document.getElementById('adOpzEsito');
+            const el = document.getElementById('adOpzOutcome');
             if (!adConferma(t('ad.confirmOpt'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
             const r = await autoDnsApi('create_optional', { confirm: 'CREA', quale: quale });
@@ -304,7 +304,7 @@
         // Crea in fila quelli che mancano. Uno per volta e non tutti insieme: se il terzo
         // fallisce si deve poter dire QUALE ha fallito e perché, non "qualcosa è andato storto".
         async function autoDnsCreaTuttiOpzionali() {
-            const el = document.getElementById('adOpzEsito');
+            const el = document.getElementById('adOpzOutcome');
             const r0 = await autoDnsApi('status');
             const mancanti = (r0.opzionali || []).filter(x => !x.esiste && !x.conflitto);
             if (!mancanti.length) { el.innerHTML = '<div class="alert alert-info py-2 small mb-0">' + escHtml(t('ad.nothingMissing')) + '</div>'; return; }
@@ -330,7 +330,7 @@
             const sel = document.getElementById('adPoliticaNuova');
             if (!sel) return;
             const nuova = sel.value;
-            const el = document.getElementById('autoDnsEsito');
+            const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.readingCurrent'));
 
             const a = await autoDnsApi('change_policy', { politica: nuova });
@@ -370,7 +370,7 @@
             const politica = (sel && sel.value) ? sel.value : 'none';
             const che = quale === 'spf' ? 'SPF' : 'DMARC (p=' + politica + ')';
             if (!adConferma(t('ad.confirmCreate', { record: che }), t('ad.wordCreate'))) return;
-            const el = document.getElementById('autoDnsEsito');
+            const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
             const r = await autoDnsApi('create', { confirm: 'CREA', quale: quale, politica: politica });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
@@ -393,7 +393,7 @@
             if (!currentDomainId) return;
             if (!adConferma(t('ad.confirmAll'), t('ad.wordConfigure'))) return;
 
-            const el = document.getElementById('autoDnsEsito');
+            const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.starting'));
             const r = await autoDnsApi('configura_tutto', { confirm: 'CONFIGURA' });
             if (!r.success || !r.jobId) {
@@ -413,7 +413,7 @@
         }
 
         async function adSegui(id) {
-            const el = document.getElementById('autoDnsEsito');
+            const el = document.getElementById('autoDnsOutcome');
             const pre = document.getElementById('adLog');
             const s = await autoDnsApi('job_status', { jobId: id });
             if (s.success && s.job) {
@@ -436,7 +436,7 @@
                             : '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + escHtml(t('ad.stopped', { message: s.job.errorMessage })));
                     const registro = pre ? pre.textContent : '';
                     await autoDnsCarica();
-                    const fresco = document.getElementById('autoDnsEsito');
+                    const fresco = document.getElementById('autoDnsOutcome');
                     if (fresco) {
                         const p = document.createElement('pre');
                         p.className = 'small p-2 border rounded mb-0';
