@@ -811,6 +811,111 @@ fi
 chmod 640 /var/db/mailpanel/roundcube_sso.key
 chown root:www /var/db/mailpanel/roundcube_sso.key
 
+# php.ini
+#
+# Il pacchetto php84 NON lo installa: in /usr/local/etc ci sono solo i campioni
+# php.ini-production e php.ini-development, e senza php.ini PHP parte sui valori
+# predefiniti compilati dentro. Verificato dopo un'installazione completa: il file non
+# c'era e php-fpm girava lo stesso. Quei predefiniti sono il motivo per cui un allegato
+# di 3 MB non si poteva spedire (upload_max_filesize = 2M) e PHP non sapeva in che fuso
+# fosse.
+#
+# I limiti di caricamento sono tarati su message_size_limit di Postfix (50 MB, definito
+# sopra in questo stesso script): il tetto vero resta quello, PHP non deve essere il
+# collo di bottiglia che lo nasconde. post_max_size sta sopra upload_max_filesize perche'
+# nella stessa richiesta viaggia anche il resto del modulo.
+cat > /usr/local/etc/php.ini << 'PHPINIEOF'
+[PHP]
+engine = On
+short_open_tag = Off
+output_buffering = 4096
+zend.enable_gc = On
+zend.exception_ignore_args = On
+; r19: ne' la versione di PHP negli header, ne' un errore sotto gli occhi di chi passa.
+expose_php = Off
+display_errors = Off
+display_startup_errors = Off
+log_errors = On
+error_log = /var/log/php_errors.log
+error_reporting = E_ALL & ~E_DEPRECATED
+ignore_repeated_errors = Off
+max_execution_time = 300
+max_input_time = 300
+memory_limit = 256M
+variables_order = "GPCS"
+request_order = "GP"
+register_argc_argv = Off
+auto_globals_jit = On
+default_mimetype = "text/html"
+default_charset = "UTF-8"
+enable_dl = Off
+file_uploads = On
+upload_max_filesize = 50M
+post_max_size = 56M
+max_file_uploads = 20
+allow_url_fopen = On
+allow_url_include = Off
+default_socket_timeout = 60
+
+[Date]
+; UTC, non il fuso di chi amministra: quello che si memorizza e' sempre UTC, e la
+; conversione la fa chi mostra (r13). Roundcube converte da se' nel fuso dell'utente.
+; Senza questa riga PHP non ha nessun fuso e lo dice a ogni funzione sulle date.
+date.timezone = UTC
+
+[Session]
+session.save_handler = files
+; NON /tmp, che e' il predefinito: li' i file di sessione di Roundcube sarebbero
+; leggibili da qualunque utente locale. Questa cartella la crea lo script, 700 e di www.
+session.save_path = "/var/db/mailpanel/php_sessions"
+session.use_strict_mode = 1
+session.use_cookies = 1
+session.use_only_cookies = 1
+session.cookie_lifetime = 0
+session.cookie_path = /
+session.cookie_httponly = 1
+session.cookie_secure = 1
+session.cookie_samesite = "Lax"
+session.gc_probability = 1
+session.gc_divisor = 1000
+session.gc_maxlifetime = 3600
+session.cache_limiter = nocache
+session.sid_length = 32
+
+[opcache]
+opcache.enable = 1
+opcache.enable_cli = 0
+opcache.memory_consumption = 128
+opcache.interned_strings_buffer = 8
+opcache.max_accelerated_files = 10000
+opcache.revalidate_freq = 2
+opcache.validate_timestamps = 1
+PHPINIEOF
+
+if [ ! -f /usr/local/etc/php.ini ]; then
+    echo "${RED}  ERROR: cannot write /usr/local/etc/php.ini${NC}"
+    exit 1
+fi
+chmod 644 /usr/local/etc/php.ini
+
+# La cartella delle sessioni di Roundcube e il registro degli errori di PHP.
+mkdir -p /var/db/mailpanel/php_sessions
+chown www:www /var/db/mailpanel/php_sessions
+chmod 700 /var/db/mailpanel/php_sessions
+touch /var/log/php_errors.log
+chown www:www /var/log/php_errors.log
+chmod 640 /var/log/php_errors.log
+
+# La rotazione, altrimenti quel registro cresce senza fine. La cartella si crea: su una
+# FreeBSD appena installata non c'e', ma /etc/newsyslog.conf la include gia'.
+mkdir -p /usr/local/etc/newsyslog.conf.d
+cat > /usr/local/etc/newsyslog.conf.d/php-errors.conf << 'PHPLOGEOF'
+# Registro degli errori di PHP (scritto dall'installazione del pannello mail)
+/var/log/php_errors.log    www:www    640    7    1024    *    JC
+PHPLOGEOF
+
+echo "${GREEN}  php.ini written${NC}"
+
 # PHP-FPM
 cat > /usr/local/etc/php-fpm.d/www.conf << 'PHPFPM_CONF'
 [www]
