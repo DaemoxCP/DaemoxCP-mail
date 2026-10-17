@@ -261,6 +261,20 @@ public class SSLMailServer {
         java.util.Objects.requireNonNull(access, "every route declares its access");
         if (routes.put(path, access) != null) throw new IllegalStateException("Route declared twice: " + path);
         HttpContext context = server.createContext(path, handler);
+        if (!HOST_CHECK_EXEMPT.contains(path)) {
+            context.getFilters().add(new Filter() {
+                @Override
+                public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+                    if (hostAllowed(exchange)) chain.doFilter(exchange);
+                    else sendMisdirected(exchange);
+                }
+
+                @Override
+                public String description() {
+                    return "the Host this panel answers to";
+                }
+            });
+        }
         context.getFilters().add(new Filter() {
             @Override
             public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
@@ -376,6 +390,71 @@ public class SSLMailServer {
         "/api/login", "/api/language",
         // Le chiama la webmail, non un browser: niente cookie, si autentica con la sua chiave
         org.mail_panel.integration.WebmailPasswordConfig.PATH, "/api/internal/mailbox-vault");
+
+    /**
+     * Le rotte che un Host diverso da quello del pannello lo ricevono per mestiere.
+     *
+     * <p>Le prime due sono pubbliche per forza e il loro Host e' <em>un dominio di posta</em>,
+     * non il nome del pannello: Thunderbird chiede l'autoconfigurazione a
+     * {@code autoconfig.esempio.it} e un server mittente chiede la politica MTA-STS a
+     * {@code mta-sts.esempio.it}. Non restano senza controllo: i due gestori confrontano da se'
+     * quel nome con l'elenco dei domini che questo pannello ospita davvero, e rispondono 404
+     * se non e' uno di quelli.
+     *
+     * <p>Le altre due le chiama la webmail sulla stessa macchina, a
+     * {@code https://127.0.0.1:&lt;porta&gt;}: con un nome configurato in "Modify Data", un Host
+     * {@code 127.0.0.1} verrebbe rifiutato e il cambio password della webmail smetterebbe di
+     * funzionare. Non restano scoperte: WebmailPasswordHandler pretende che la connessione
+     * arrivi davvero dal loopback, senza intestazioni di proxy davanti, e con la chiave della
+     * webmail.
+     */
+    private static final java.util.Set<String> HOST_CHECK_EXEMPT = java.util.Set.of(
+        "/autoconfig", "/mta-sts",
+        org.mail_panel.integration.WebmailPasswordConfig.PATH, "/api/internal/mailbox-vault");
+
+    /**
+     * L'Host della richiesta raggiunge questo pannello? Vedi {@link HostCheck} per il perche'
+     * del confronto esatto, della porta fuori dal confronto e del DNS mai interrogato.
+     *
+     * <p>Eccezione: si accetta qualunque Host se la richiesta arriva <em>davvero</em> da
+     * Cloudflare. La presenza delle intestazioni non basta a dimostrarlo — sono testo, e
+     * chiunque parli direttamente con l'origine puo' scriverle — quindi conta l'indirizzo TCP,
+     * che non si puo' inventare.
+     */
+    private boolean hostAllowed(HttpExchange exchange) {
+        String host = exchange.getRequestHeaders().getFirst("Host");
+        String configured = "";
+        try (java.sql.ResultSet r = Main.dbManager.get_data_config()) {
+            if (r.next()) configured = r.getString("mail_panel_host");
+        } catch (Exception e) {
+            // Non si sa a che nome risponde il pannello: si lascia passare solo il loopback,
+            // cosi' la macchina resta amministrabile e nessun nome di fuori entra.
+            LOGGER.warning("Cannot read the configured panel host: " + e.getMessage());
+            String name = HostCheck.hostName(host);
+            return name.equals("localhost") || "127.0.0.1".equals(HostCheck.literalIp(name))
+                    || "0:0:0:0:0:0:0:1".equals(HostCheck.literalIp(name));
+        }
+        if (HostCheck.allowed(host, configured)) return true;
+
+        String tcp = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
+                ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
+        if (org.mail_panel.security.TrustedProxy.isTrustedProxy(tcp)
+                && (exchange.getRequestHeaders().containsKey("CF-Connecting-IP")
+                    || exchange.getRequestHeaders().containsKey("CF-RAY"))) {
+            return true;
+        }
+        LOGGER.warning(HostCheck.why(host, configured));
+        return false;
+    }
+
+    /** 421: questo server non e' quello per il nome chiesto. Nessun dettaglio a chi chiede. */
+    private void sendMisdirected(HttpExchange exchange) throws IOException {
+        byte[] body = "Misdirected request\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
+        exchange.sendResponseHeaders(421, body.length);
+        try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(body); }
+        exchange.close();
+    }
 
     /**
      * Il token CSRF per ogni richiesta che cambia qualcosa, in un punto solo invece che gestore per
