@@ -162,6 +162,52 @@ public final class UpdateManager {
         //    "service roundcube" altrove nel pannello e' verosimilmente uno sbaglio.
     };
 
+    /**
+     * Che fine hanno fatto i servizi, confrontati con com'erano PRIMA del lavoro.
+     *
+     * "Non attivo adesso" non vuol dire "caduto". Su questa macchina local_unbound non e'
+     * nemmeno abilitato e ntpd non parte: un controllo che guarda solo l'adesso dichiara
+     * guasto OGNI aggiornamento. Misurato sulla VM FreeBSD 15.1 il 23/10/2026: un
+     * aggiornamento guidato di nginx riuscito in ogni singolo passo — piano rispettato,
+     * servizio riavviato, pid cambiato, pacchetto riprotetto — e' finito in "error" con
+     * "un servizio non e' ripartito come doveva", per due servizi che non erano attivi
+     * nemmeno prima.
+     *
+     * Un allarme che suona sempre insegna a ignorarlo, e quando suona per davvero non lo
+     * distingue nessuno. Che non fosse attivo nemmeno prima si dice comunque: e' una cosa
+     * da sapere, non un guasto di questo lavoro.
+     *
+     * Sta in un punto solo perche' lo chiedono quattro lavori (manutenzione, aggiornamento
+     * guidato, aggiornamento dei non protetti, migrazione di MySQL) e la stessa decisione
+     * scritta quattro volte e' diventata quattro decisioni diverse: una giusta e tre no.
+     *
+     * @param prima lo stato dei servizi all'inizio del lavoro, da {@link #statoServizi()}
+     * @return true se almeno un servizio che era attivo adesso non lo e' piu'
+     */
+    private static boolean serviziCaduti(Job job, Map<String, Boolean> prima) {
+        return serviziCaduti(job, prima, statoServizi());
+    }
+
+    /** Il confronto in se', senza chiedere niente al sistema: cosi' si prova. */
+    static boolean serviziCaduti(Job job, Map<String, Boolean> prima, Map<String, Boolean> adesso) {
+        java.util.LinkedHashSet<String> nomi = new java.util.LinkedHashSet<>(prima.keySet());
+        nomi.addAll(adesso.keySet());   // un servizio comparso con l'aggiornamento si vede
+        boolean caduto = false;
+        for (String s : nomi) {
+            boolean eraAttivo = Boolean.TRUE.equals(prima.get(s));
+            boolean attivo = Boolean.TRUE.equals(adesso.get(s));
+            if (eraAttivo && !attivo) {
+                caduto = true;
+                job.scrivi(I18n.tr("server.um.runMaintenanceJob.21", java.util.Map.of("key", String.valueOf(s))));
+                continue;
+            }
+            job.scrivi("    " + s + ": "
+                    + (attivo ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMaintenanceJob.22"))
+                    + (!attivo && !eraAttivo ? I18n.tr("server.um.runMaintenanceJob.23") : ""));
+        }
+        return caduto;
+    }
+
     /** Quali servizi risultano attivi adesso. Solo quelli davvero presenti sul sistema. */
     private static Map<String, Boolean> statoServizi() {
         Map<String, Boolean> m = new LinkedHashMap<>();
@@ -2364,6 +2410,9 @@ public final class UpdateManager {
         String backupDir = "", dataDir = "/var/db/mysql", srvPkg = "", cliPkg = "";
         boolean mysqlFermo = false, pacchettiSostituiti = false, arrivatoInFondo = false;
         boolean postfixEra = false, dovecotEra = false;
+        // Lo stato dei servizi PRIMA: senza questo, "non attivo adesso" verrebbe preso per
+        // "caduto adesso" anche per chi non era mai partito.
+        Map<String, Boolean> serviziPrima = statoServizi();
         long schemiPrima = 0, tabellePrima = 0, casellePrima = 0;
         String casellaProva = "";
         try {
@@ -2616,11 +2665,7 @@ public final class UpdateManager {
 
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runMigrazione84.31"));
-            boolean caduto = false;
-            for (Map.Entry<String, Boolean> e : statoServizi().entrySet()) {
-                job.scrivi("    " + e.getKey() + ": " + (e.getValue() ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26")));
-                if (!e.getValue()) caduto = true;
-            }
+            boolean caduto = serviziCaduti(job, serviziPrima);
 
             arrivatoInFondo = true;
             if (!inventarioOk || !provaOk || caduto || persi || !l1 || !l2) {
@@ -5734,6 +5779,9 @@ public final class UpdateManager {
         java.util.List<String> servizi = new ArrayList<>();
         Map<String, String> pidPrima = new LinkedHashMap<>();
         Map<String, Boolean> attivoPrima = new LinkedHashMap<>();
+        // attivoPrima riguarda i soli servizi che si riavvieranno; per il quadro finale
+        // serve lo stato di TUTTI, preso prima di toccare qualunque cosa.
+        Map<String, Boolean> serviziPrima = statoServizi();
         try {
             job.avanza(1, TOT);
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.1", java.util.Map.of("nome", String.valueOf(nome))));
@@ -5968,11 +6016,7 @@ public final class UpdateManager {
             job.avanza(6, TOT);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.35", java.util.Map.of("tOT", String.valueOf(TOT))));
-            boolean caduto = false;
-            for (Map.Entry<String, Boolean> e : statoServizi().entrySet()) {
-                job.scrivi("    " + e.getKey() + ": " + (e.getValue() ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26")));
-                if (!e.getValue()) caduto = true;
-            }
+            boolean caduto = serviziCaduti(job, serviziPrima);
 
             if (pianoNonRispettato || !fuoriDalPiano.isEmpty()) {
                 // Due guasti diversi, e il messaggio li distingue: "piano non rispettato" e'
@@ -9530,6 +9574,9 @@ public final class UpdateManager {
     /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti lockedPackages. */
     private static void runUpdateJob(Job job) {
         job.status = "running";
+        // Lo stato dei servizi PRIMA dell'aggiornamento: e' l'unico modo di distinguere un
+        // servizio caduto da uno che non era attivo nemmeno prima.
+        Map<String, Boolean> serviziPrima = statoServizi();
         job.avanza(1, 2);
         job.scrivi(I18n.tr("server.um.runUpdateJob.1"));
         job.scrivi(I18n.tr("server.um.runUpdateJob.2"));
@@ -9547,11 +9594,7 @@ public final class UpdateManager {
             job.scrivi(I18n.tr("server.um.runUpdateJob.4", java.util.Map.of("code", String.valueOf(code))));
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runMigrazione84.31"));
-            boolean caduto = false;
-            for (Map.Entry<String, Boolean> e : statoServizi().entrySet()) {
-                job.scrivi("  " + e.getKey() + ": " + (e.getValue() ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26")));
-                if (!e.getValue()) caduto = true;
-            }
+            boolean caduto = serviziCaduti(job, serviziPrima);
             job.status = (code == 0 && !caduto) ? "completed" : "error";
             if (code != 0) job.errorMessage = I18n.tr("server.um.runUpdateJob.5", java.util.Map.of("code", String.valueOf(code)));
             else if (caduto) job.errorMessage = I18n.tr("server.um.runUpdateJob.6");
@@ -9796,17 +9839,9 @@ public final class UpdateManager {
                 job.scrivi("  " + I18n.tr("server.um.x.protLost", java.util.Map.of("elenco", String.valueOf(String.join(", ", mancanti)))));
             }
 
-            Map<String, Boolean> serviziDopo = statoServizi();
-            for (Map.Entry<String, Boolean> e : serviziPrima.entrySet()) {
-                boolean prima = e.getValue(), dopo = serviziDopo.getOrDefault(e.getKey(), false);
-                if (prima && !dopo) {
-                    allarme = true;
-                    job.scrivi(I18n.tr("server.um.runMaintenanceJob.21", java.util.Map.of("key", String.valueOf(e.getKey()))));
-                } else {
-                    job.scrivi("  " + e.getKey() + ": " + (dopo ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMaintenanceJob.22"))
-                            + (prima ? "" : I18n.tr("server.um.runMaintenanceJob.23")));
-                }
-            }
+            // Questo confronto era giusto solo qui, e scritto a mano: adesso e' lo stesso
+            // che usano gli altri tre lavori.
+            if (serviziCaduti(job, serviziPrima)) allarme = true;
 
             if (allarme) {
                 job.status = "error";
