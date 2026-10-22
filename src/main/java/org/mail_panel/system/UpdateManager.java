@@ -2030,6 +2030,50 @@ public final class UpdateManager {
         return l;
     }
 
+    /** I nomi delle divergenze, per il messaggio d'errore di un lavoro. */
+    private static String elencoDivergenze(JSONArray divergenze) {
+        java.util.List<String> nomi = new ArrayList<>();
+        for (int i = 0; i < divergenze.length(); i++) nomi.add(divergenze.getJSONObject(i).optString("name"));
+        return String.join(", ", nomi);
+    }
+
+    /** Il messaggio d'errore di un lavoro che ha trovato cambiamenti fuori dal piano. */
+    private static String messaggioDivergenze(JSONArray d) {
+        return d.length() == 1
+            ? I18n.tr("server.um.x.divergenceFound.one", java.util.Map.of("elenco", String.valueOf(elencoDivergenze(d))))
+            : I18n.tr("server.um.x.divergenceFound.other", java.util.Map.of(
+                    "n", String.valueOf(d.length()), "elenco", String.valueOf(elencoDivergenze(d))));
+    }
+
+    /**
+     * Confronta l'inventario dei pacchetti con quello di prima dell'aggiornamento e scrive
+     * nel log del lavoro che cosa e' cambiato DAVVERO.
+     *
+     * Sta in un punto solo perche' la fanno due lavori (l'aggiornamento guidato e la
+     * manutenzione completa) e una decisione scritta due volte diventa due decisioni.
+     *
+     * @param chi per il registro del pannello: quale lavoro ha trovato la divergenza
+     * @return le divergenze, vuote se tutto cio' che e' cambiato era nel piano
+     */
+    private static JSONArray confrontaConLInventario(Job job, Map<String, String> prima,
+                                                     JSONObject piano, String chi) {
+        JSONArray fuori = PackagePlan.divergenze(prima,
+                PackagePlan.soloVersioni(PackagePlan.installati()), piano);
+        job.scrivi("  " + I18n.tr("server.um.x.divergenceHeader"));
+        if (fuori.isEmpty()) {
+            job.scrivi("    ok  " + I18n.tr("server.plan.d.none"));
+            return fuori;
+        }
+        for (int i = 0; i < fuori.length(); i++)
+            job.scrivi("    NO  " + PackagePlan.divergenzaInRiga(fuori.getJSONObject(i)));
+        job.scrivi("  " + I18n.tr("server.um.x.divergenceNote"));
+        // Fuori dal log del lavoro, che vive in memoria e se ne va col pannello: un
+        // cambiamento che nessuno ha approvato su un server di posta deve restare scritto.
+        // Solo nomi di pacchetto e versioni, nessun segreto (r19).
+        LOGGER.warning(chi + ": " + fuori.length() + " change(s) outside the signed plan: " + fuori);
+        return fuori;
+    }
+
     /**
      * La famiglia MySQL che la versione NEL REPOSITORY di un pacchetto pretende, quando e'
      * diversa da quella installata; null se non c'e' conflitto.
@@ -5676,6 +5720,7 @@ public final class UpdateManager {
         job.status = "running";
         final int TOT = 6;
         boolean pianoNonRispettato = false;
+        JSONArray fuoriDalPiano = new JSONArray();
         JSONObject piano;
         java.util.List<String> daRiproteggere = new ArrayList<>();
         java.util.List<String> famiglia = new ArrayList<>();
@@ -5780,6 +5825,9 @@ public final class UpdateManager {
             // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
             // ripescare i messaggi che chiedono un'azione.
             StringBuilder catturato = new StringBuilder();
+            // L'inventario PRIMA: e' l'unico modo di accorgersi di un pacchetto che cambia
+            // senza essere nel piano. Il confronto riga per riga del piano non puo' vederlo.
+            Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
             // -U: stesso catalogo su cui e' stato calcolato il piano. Riscaricarlo adesso potrebbe
             // portare versioni diverse da quelle approvate.
             int code = eseguiConLog(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, catturato);
@@ -5807,6 +5855,13 @@ public final class UpdateManager {
                 if (!v.getBoolean("ok")) pianoNonRispettato = true;
             }
             if (pianoNonRispettato) job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.13"));
+
+            // E dall'altra direzione: che cosa e' cambiato davvero. Il confronto qui sopra
+            // scorre il PIANO, quindi un pacchetto cambiato che nel piano non c'era non lo
+            // vede. Sulla VM, il 18/10/2026, pkg ha rimosso lmdb per un conflitto trovato
+            // durante l'esecuzione e la verifica ha concluso "superata".
+            fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano,
+                    "Guided update of " + nome);
 
             job.avanza(4, TOT);
             job.scrivi("");
@@ -5909,9 +5964,16 @@ public final class UpdateManager {
                 if (!e.getValue()) caduto = true;
             }
 
-            if (pianoNonRispettato) {
+            if (pianoNonRispettato || !fuoriDalPiano.isEmpty()) {
+                // Due guasti diversi, e il messaggio li distingue: "piano non rispettato" e'
+                // un pacchetto del piano che non e' arrivato dove doveva, la divergenza e'
+                // qualcosa che e' cambiato senza essere nel piano. Possono presentarsi
+                // insieme, quindi si dicono entrambi.
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.36");
+                java.util.List<String> problemi = new ArrayList<>();
+                if (pianoNonRispettato) problemi.add(I18n.tr("server.um.runAggiornamentoGuidato.36"));
+                if (!fuoriDalPiano.isEmpty()) problemi.add(messaggioDivergenze(fuoriDalPiano));
+                job.errorMessage = String.join(" ", problemi);
             } else if (problemaServizi || caduto) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.37");
@@ -9582,6 +9644,8 @@ public final class UpdateManager {
             job.avanza(3, 4);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runMaintenanceJob.12"));
+            // L'inventario PRIMA, per accorgersi di cio' che cambia senza essere nel piano.
+            Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
             // -U: lo stesso catalogo su cui e' stato calcolato il piano.
             int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
             // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
@@ -9602,9 +9666,21 @@ public final class UpdateManager {
                 job.scrivi("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("nome", String.valueOf(v.getString("nome")), "atteso", String.valueOf(v.getString("atteso")), "trovato", String.valueOf(v.getString("trovato")))));
                 if (!v.getBoolean("ok")) pianoNonRispettato = true;
             }
-            if (pianoNonRispettato) {
+
+            // E dall'altra direzione: ogni differenza fra l'inventario di prima e quello di
+            // adesso che il piano non spiega. Il confronto qui sopra scorre il PIANO e non
+            // puo' vedere un pacchetto cambiato che nel piano non c'era.
+            JSONArray fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano, "Maintenance");
+
+            // I problemi si sommano al messaggio che c'e' gia' (per esempio l'uscita di pkg
+            // diversa da zero): nessuno dei tre deve coprire gli altri.
+            java.util.List<String> problemi = new ArrayList<>();
+            if (pianoNonRispettato) problemi.add(I18n.tr("server.um.runMaintenanceJob.14"));
+            if (!fuoriDalPiano.isEmpty()) problemi.add(messaggioDivergenze(fuoriDalPiano));
+            if (!problemi.isEmpty()) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMaintenanceJob.14");
+                job.errorMessage = (job.errorMessage == null || job.errorMessage.isEmpty()
+                        ? "" : job.errorMessage + " ") + String.join(" ", problemi);
             }
 
             // Aggiornare un pacchetto non aggiorna il processo che lo usa: finche' non riparte gira
