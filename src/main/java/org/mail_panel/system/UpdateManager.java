@@ -162,6 +162,52 @@ public final class UpdateManager {
         //    "service roundcube" altrove nel pannello e' verosimilmente uno sbaglio.
     };
 
+    /**
+     * Che fine hanno fatto i servizi, confrontati con com'erano PRIMA del lavoro.
+     *
+     * "Non attivo adesso" non vuol dire "caduto". Su questa macchina local_unbound non e'
+     * nemmeno abilitato e ntpd non parte: un controllo che guarda solo l'adesso dichiara
+     * guasto OGNI aggiornamento. Misurato sulla VM FreeBSD 15.1 il 23/10/2026: un
+     * aggiornamento guidato di nginx riuscito in ogni singolo passo — piano rispettato,
+     * servizio riavviato, pid cambiato, pacchetto riprotetto — e' finito in "error" con
+     * "un servizio non e' ripartito come doveva", per due servizi che non erano attivi
+     * nemmeno prima.
+     *
+     * Un allarme che suona sempre insegna a ignorarlo, e quando suona per davvero non lo
+     * distingue nessuno. Che non fosse attivo nemmeno prima si dice comunque: e' una cosa
+     * da sapere, non un guasto di questo lavoro.
+     *
+     * Sta in un punto solo perche' lo chiedono quattro lavori (manutenzione, aggiornamento
+     * guidato, aggiornamento dei non protetti, migrazione di MySQL) e la stessa decisione
+     * scritta quattro volte e' diventata quattro decisioni diverse: una giusta e tre no.
+     *
+     * @param prima lo stato dei servizi all'inizio del lavoro, da {@link #statoServizi()}
+     * @return true se almeno un servizio che era attivo adesso non lo e' piu'
+     */
+    private static boolean serviziCaduti(Job job, Map<String, Boolean> prima) {
+        return serviziCaduti(job, prima, statoServizi());
+    }
+
+    /** Il confronto in se', senza chiedere niente al sistema: cosi' si prova. */
+    static boolean serviziCaduti(Job job, Map<String, Boolean> prima, Map<String, Boolean> adesso) {
+        java.util.LinkedHashSet<String> nomi = new java.util.LinkedHashSet<>(prima.keySet());
+        nomi.addAll(adesso.keySet());   // un servizio comparso con l'aggiornamento si vede
+        boolean caduto = false;
+        for (String s : nomi) {
+            boolean eraAttivo = Boolean.TRUE.equals(prima.get(s));
+            boolean attivo = Boolean.TRUE.equals(adesso.get(s));
+            if (eraAttivo && !attivo) {
+                caduto = true;
+                job.scrivi(I18n.tr("server.um.runMaintenanceJob.21", java.util.Map.of("key", String.valueOf(s))));
+                continue;
+            }
+            job.scrivi("    " + s + ": "
+                    + (attivo ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMaintenanceJob.22"))
+                    + (!attivo && !eraAttivo ? I18n.tr("server.um.runMaintenanceJob.23") : ""));
+        }
+        return caduto;
+    }
+
     /** Quali servizi risultano attivi adesso. Solo quelli davvero presenti sul sistema. */
     private static Map<String, Boolean> statoServizi() {
         Map<String, Boolean> m = new LinkedHashMap<>();
@@ -674,6 +720,71 @@ public final class UpdateManager {
      * identificativi CVE e references. Senza questo il pannello direbbe soltanto "e'
      * vulnerabile", che non basta per decidere se valga la pena sbloccare e aggiornare.
      */
+    /** La riga con cui pkg audit chiude il referto. E' la prova che il controllo e' avvenuto. */
+    private static final Pattern AUDIT_TOTALE = Pattern.compile(
+            "(\\d+)\\s+problem\\(s\\)\\s+in\\s+(\\d+)\\s+[^\\n]*package\\(s\\)\\s+found");
+
+    /**
+     * Il referto di pkg audit per UNA versione precisa di un pacchetto.
+     *
+     * Due trappole, misurate sulla VM FreeBSD 15.1 il 23/10/2026, che insieme rendevano
+     * questo controllo incapace di dire qualunque cosa.
+     *
+     * 1. `pkg audit nome`, col solo nome, non risponde "la versione installata e'
+     *    vulnerabile?" ma "VuXML ha voci per questo nome?". Su nginx 1.30.6,3, appena
+     *    aggiornato e non vulnerabile, rispondeva "nginx is vulnerable" con 25 problemi,
+     *    elencando intervalli come "< 1.8.1_3,2" che non c'entrano niente; `pkg audit` senza
+     *    argomenti, che guarda le versioni installate, nello stesso momento non lo nominava
+     *    affatto. E l'intestazione di quel referto e' "nginx is vulnerable:", SENZA la
+     *    versione, quindi dettaglioVulnerabilita — che cerca "nome-versione is vulnerable:"
+     *    — non entrava mai nel blocco: zero CVE sempre, in entrambe le direzioni.
+     *    Su php84 8.4.26, vulnerabile per davvero, il referto del pannello era "[ok] Nessuna
+     *    vulnerabilita' nota registrata per questo pacchetto", mentre pkg diceva
+     *    "php84 is vulnerable" e PackagePlan.correzioni, che la domanda la pone giusta,
+     *    trovava la fix nella 8.4.27.
+     *    La forma che risponde alla domanda giusta e' `pkg audit nome-versione`: con
+     *    "nginx-1.30.6,3" dice "0 problem(s)", con "php84-8.4.26" trova l'unico problema vero.
+     *
+     * 2. Se il database delle vulnerabilita' non c'e', pkg risponde "vulnxml file vuln.xml
+     *    does not exist" e chi cerca solo le righe "is vulnerable" conclude "nessuna
+     *    vulnerabilita'". E' il caso peggiore: una rassicurazione al posto di un "non ho
+     *    potuto controllare". Il codice di uscita non aiuta a distinguere — misurato: 1
+     *    senza il database, 0 sia con problemi trovati sia senza. Quello che distingue un
+     *    referto fatto da uno non fatto e' la riga finale "N problem(s) in M package(s)
+     *    found.", e quella si pretende.
+     *
+     * Il conto che si mostra e' quello della riga finale, non il numero di CVE: una voce di
+     * VuXML puo' non avere nessun identificativo CVE, e contare i CVE la perderebbe.
+     */
+    static JSONObject refertoAudit(String nome, String versione) {
+        JSONObject r = refertoVuoto(nome, versione);
+        if (!isValidName(nome) || !PackagePlan.versioneValida(versione))
+            return r.put("done", false).put("problems", 0)
+                    .put("error", I18n.tr("server.um.x.auditNoVersion"));
+        return leggiReferto(sh("pkg audit '" + nome + "-" + versione + "' 2>&1", 120), nome, r);
+    }
+
+    /** La lettura del referto, separata dal comando: funzione pura, si prova con uscite vere. */
+    static JSONObject leggiReferto(String out, String nome, JSONObject r) {
+        Matcher m = AUDIT_TOTALE.matcher(out == null ? "" : out);
+        if (!m.find())
+            return r.put("done", false).put("problems", 0)
+                    .put("error", I18n.tr("server.um.x.auditNotDone", java.util.Map.of("out", String.valueOf(riassumiUscita(out)))));
+        JSONObject det = dettaglioVulnerabilita(out, nome);
+        int problemi;
+        try { problemi = Integer.parseInt(m.group(1)); } catch (NumberFormatException e) { problemi = 0; }
+        return r.put("done", true).put("problems", problemi)
+                .put("cve", det.getJSONArray("cve")).put("description", det.getString("description"))
+                .put("references", det.getJSONArray("references"));
+    }
+
+    /** Un referto vuoto da riempire, per chi legge un'uscita gia' in mano. */
+    static JSONObject refertoVuoto(String nome, String versione) {
+        return new JSONObject().put("name", nome == null ? "" : nome)
+                .put("version", versione == null ? "" : versione)
+                .put("cve", new JSONArray()).put("references", new JSONArray()).put("description", "");
+    }
+
     static JSONObject dettaglioVulnerabilita(String audit, String pacchetto) {
         JSONArray cve = new JSONArray();
         JSONArray references = new JSONArray();
@@ -1609,19 +1720,24 @@ public final class UpdateManager {
      * Shell.run raccoglie tutto e restituisce alla fine: per un pkg upgrade da minuti
      * significherebbe una pagina ferma senza sapere se sta funzionando.
      */
-    private static int eseguiConLog(Job job, String comando, int timeoutSecondi) throws Exception {
+    static int eseguiConLog(Job job, String comando, int timeoutSecondi) throws Exception {
         return eseguiConLog(job, comando, timeoutSecondi, null);
     }
 
-    private static int eseguiConLog(Job job, String comando, int timeoutSecondi, StringBuilder cattura) throws Exception {
+    static int eseguiConLog(Job job, String comando, int timeoutSecondi, StringBuilder cattura) throws Exception {
         return eseguiConLog(job, comando, timeoutSecondi, cattura, null);
     }
 
-    private static int eseguiConLog(Job job, String comando, int timeoutSecondi,
-                                    StringBuilder cattura, Map<String, String> ambiente) throws Exception {
+    static int eseguiConLog(Job job, String comando, int timeoutSecondi,
+                            StringBuilder cattura, Map<String, String> ambiente) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", comando);
         org.mail_panel.util.Shell.applicaPath(pb);
         if (ambiente != null) pb.environment().putAll(ambiente);
+        // Lo standard input e' /dev/null, come in Shell: la pipe predefinita di
+        // ProcessBuilder non arriva mai a EOF, quindi un comando che legge resterebbe
+        // fermo per tutto il timeout — qui 1800 o 3600 secondi. Il motivo per esteso sta
+        // sul campo NIENTE_STDIN di Shell.
+        pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
         pb.redirectErrorStream(true);
         Process p = pb.start();
 
@@ -2088,6 +2204,50 @@ public final class UpdateManager {
         return l;
     }
 
+    /** I nomi delle divergenze, per il messaggio d'errore di un lavoro. */
+    private static String elencoDivergenze(JSONArray divergenze) {
+        java.util.List<String> nomi = new ArrayList<>();
+        for (int i = 0; i < divergenze.length(); i++) nomi.add(divergenze.getJSONObject(i).optString("name"));
+        return String.join(", ", nomi);
+    }
+
+    /** Il messaggio d'errore di un lavoro che ha trovato cambiamenti fuori dal piano. */
+    private static String messaggioDivergenze(JSONArray d) {
+        return d.length() == 1
+            ? I18n.tr("server.um.x.divergenceFound.one", java.util.Map.of("elenco", String.valueOf(elencoDivergenze(d))))
+            : I18n.tr("server.um.x.divergenceFound.other", java.util.Map.of(
+                    "n", String.valueOf(d.length()), "elenco", String.valueOf(elencoDivergenze(d))));
+    }
+
+    /**
+     * Confronta l'inventario dei pacchetti con quello di prima dell'aggiornamento e scrive
+     * nel log del lavoro che cosa e' cambiato DAVVERO.
+     *
+     * Sta in un punto solo perche' la fanno due lavori (l'aggiornamento guidato e la
+     * manutenzione completa) e una decisione scritta due volte diventa due decisioni.
+     *
+     * @param chi per il registro del pannello: quale lavoro ha trovato la divergenza
+     * @return le divergenze, vuote se tutto cio' che e' cambiato era nel piano
+     */
+    private static JSONArray confrontaConLInventario(Job job, Map<String, String> prima,
+                                                     JSONObject piano, String chi) {
+        JSONArray fuori = PackagePlan.divergenze(prima,
+                PackagePlan.soloVersioni(PackagePlan.installati()), piano);
+        job.scrivi("  " + I18n.tr("server.um.x.divergenceHeader"));
+        if (fuori.isEmpty()) {
+            job.scrivi("    ok  " + I18n.tr("server.plan.d.none"));
+            return fuori;
+        }
+        for (int i = 0; i < fuori.length(); i++)
+            job.scrivi("    NO  " + PackagePlan.divergenzaInRiga(fuori.getJSONObject(i)));
+        job.scrivi("  " + I18n.tr("server.um.x.divergenceNote"));
+        // Fuori dal log del lavoro, che vive in memoria e se ne va col pannello: un
+        // cambiamento che nessuno ha approvato su un server di posta deve restare scritto.
+        // Solo nomi di pacchetto e versioni, nessun segreto (r19).
+        LOGGER.warning(chi + ": " + fuori.length() + " change(s) outside the signed plan: " + fuori);
+        return fuori;
+    }
+
     /**
      * La famiglia MySQL che la versione NEL REPOSITORY di un pacchetto pretende, quando e'
      * diversa da quella installata; null se non c'e' conflitto.
@@ -2373,6 +2533,9 @@ public final class UpdateManager {
         String backupDir = "", dataDir = "/var/db/mysql", srvPkg = "", cliPkg = "";
         boolean mysqlFermo = false, pacchettiSostituiti = false, arrivatoInFondo = false;
         boolean postfixEra = false, dovecotEra = false;
+        // Lo stato dei servizi PRIMA: senza questo, "non attivo adesso" verrebbe preso per
+        // "caduto adesso" anche per chi non era mai partito.
+        Map<String, Boolean> serviziPrima = statoServizi();
         long schemiPrima = 0, tabellePrima = 0, casellePrima = 0;
         String casellaProva = "";
         try {
@@ -2625,11 +2788,7 @@ public final class UpdateManager {
 
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runMigrazione84.31"));
-            boolean caduto = false;
-            for (Map.Entry<String, Boolean> e : statoServizi().entrySet()) {
-                job.scrivi("    " + e.getKey() + ": " + (e.getValue() ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26")));
-                if (!e.getValue()) caduto = true;
-            }
+            boolean caduto = serviziCaduti(job, serviziPrima);
 
             arrivatoInFondo = true;
             if (!inventarioOk || !provaOk || caduto || persi || !l1 || !l2) {
@@ -5498,15 +5657,20 @@ public final class UpdateManager {
             }
         }
 
-        // Vulnerabilita' che questo aggiornamento chiuderebbe: e' il motivo per farlo.
-        String audit = sh("pkg audit " + nome + " 2>&1", 120);
-        JSONObject det = dettaglioVulnerabilita(audit, nome);
-        r.put("cve", det.getJSONArray("cve")).put("vulnDescrizione", det.getString("description"))
-         .put("references", det.getJSONArray("references"));
-        int nCve = det.getJSONArray("cve").length();
-        aggiungiCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), nCve > 0 ? "verifica" : "ok",
-                nCve > 0 ? I18n.tr("server.um.x.openCves", java.util.Map.of("n", String.valueOf(nCve), "d", String.valueOf(det.getString("description"))))
-                         : I18n.tr("server.um.packagePreflight.9"));
+        // Vulnerabilita' che questo aggiornamento chiuderebbe: e' il motivo per farlo. Si
+        // chiede per la versione INSTALLATA, e si pretende un referto: il perche' delle due
+        // cose sta su refertoAudit.
+        JSONObject refr = refertoAudit(nome, versione);
+        r.put("cve", refr.getJSONArray("cve")).put("vulnDescrizione", refr.getString("description"))
+         .put("references", refr.getJSONArray("references")).put("vulnChecked", refr.optBoolean("done"));
+        int problemi = refr.optInt("problems");
+        if (!refr.optBoolean("done"))
+            aggiungiCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), "verifica",
+                    refr.optString("error"));
+        else
+            aggiungiCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), problemi > 0 ? "verifica" : "ok",
+                    problemi > 0 ? I18n.tr("server.um.x.openCves", java.util.Map.of("n", String.valueOf(problemi), "d", String.valueOf(refr.getString("description"))))
+                                 : I18n.tr("server.um.packagePreflight.9"));
 
         // Servizi da riavviare. Il punto dolente: senza riavvio la fix non entra in
         // servizio. E vanno calcolati su TUTTA la famiglia, non sul solo pacchetto nominato:
@@ -5734,6 +5898,7 @@ public final class UpdateManager {
         job.status = "running";
         final int TOT = 6;
         boolean pianoNonRispettato = false;
+        JSONArray fuoriDalPiano = new JSONArray();
         JSONObject piano;
         java.util.List<String> daRiproteggere = new ArrayList<>();
         java.util.List<String> famiglia = new ArrayList<>();
@@ -5742,6 +5907,9 @@ public final class UpdateManager {
         java.util.List<String> servizi = new ArrayList<>();
         Map<String, String> pidPrima = new LinkedHashMap<>();
         Map<String, Boolean> attivoPrima = new LinkedHashMap<>();
+        // attivoPrima riguarda i soli servizi che si riavvieranno; per il quadro finale
+        // serve lo stato di TUTTI, preso prima di toccare qualunque cosa.
+        Map<String, Boolean> serviziPrima = statoServizi();
         try {
             job.avanza(1, TOT);
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.1", java.util.Map.of("nome", String.valueOf(nome))));
@@ -5846,6 +6014,9 @@ public final class UpdateManager {
             // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
             // ripescare i messaggi che chiedono un'azione.
             StringBuilder catturato = new StringBuilder();
+            // L'inventario PRIMA: e' l'unico modo di accorgersi di un pacchetto che cambia
+            // senza essere nel piano. Il confronto riga per riga del piano non puo' vederlo.
+            Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
             // -U: stesso catalogo su cui e' stato calcolato il piano. Riscaricarlo adesso potrebbe
             // portare versioni diverse da quelle approvate.
             int code = eseguiConLog(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, catturato);
@@ -5856,6 +6027,17 @@ public final class UpdateManager {
                 code = eseguiConLog(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, catturato);
             }
             messaggiAzione = messaggiCheChiedonoAzione(catturato.toString());
+
+            // Il confronto con l'inventario si fa SUBITO, prima di decidere se fermarsi: un
+            // pkg che esce diverso da zero e' proprio il caso in cui la macchina puo' essere
+            // rimasta a meta', e allora sapere che cosa e' cambiato conta di piu', non di
+            // meno. Misurato sulla VM il 23/10/2026: un aggiornamento guidato di
+            // postfix-mysql si e' fermato a meta' con uscita 3 (mysql97-client in conflitto
+            // con mysql84-client sugli stessi file) dopo che il solver aveva aggiunto al
+            // piano una rimozione che il piano firmato non aveva.
+            fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano,
+                    "Guided update of " + nome);
+
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
 
             String versioneDopo = sh("pkg query %v " + nome + " 2>/dev/null", 20);
@@ -5873,6 +6055,7 @@ public final class UpdateManager {
                 if (!v.getBoolean("ok")) pianoNonRispettato = true;
             }
             if (pianoNonRispettato) job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.13"));
+
 
             job.avanza(4, TOT);
             job.scrivi("");
@@ -5946,13 +6129,17 @@ public final class UpdateManager {
             job.avanza(5, TOT);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.30", java.util.Map.of("tOT", String.valueOf(TOT))));
-            String audit = sh("pkg audit " + nome + " 2>&1", 120);
-            JSONObject det = dettaglioVulnerabilita(audit, nome);
-            int rimaste = det.getJSONArray("cve").length();
-            if (rimaste == 0) {
+            // Sulla versione NUOVA, quella appena installata: chiedere col solo nome
+            // risponderebbe a un'altra domanda (vedi refertoAudit).
+            JSONObject refrDopo = refertoAudit(nome, versioneDopo);
+            if (!refrDopo.optBoolean("done")) {
+                // "Non ho potuto controllare" non e' "non ci sono vulnerabilita'".
+                job.scrivi("  " + refrDopo.optString("error"));
+                job.scrivi("  " + I18n.tr("server.um.x.auditUncertain"));
+            } else if (refrDopo.optInt("problems") == 0) {
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.31", java.util.Map.of("nome", String.valueOf(nome))));
             } else {
-                job.scrivi("  " + I18n.tr("server.um.x.cvesLeft", java.util.Map.of("n", String.valueOf(rimaste), "nome", String.valueOf(nome), "d", String.valueOf(det.getString("description")))));
+                job.scrivi("  " + I18n.tr("server.um.x.cvesLeft", java.util.Map.of("n", String.valueOf(refrDopo.optInt("problems")), "nome", String.valueOf(nome), "d", String.valueOf(refrDopo.getString("description")))));
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.32"));
             }
 
@@ -5969,15 +6156,18 @@ public final class UpdateManager {
             job.avanza(6, TOT);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.35", java.util.Map.of("tOT", String.valueOf(TOT))));
-            boolean caduto = false;
-            for (Map.Entry<String, Boolean> e : statoServizi().entrySet()) {
-                job.scrivi("    " + e.getKey() + ": " + (e.getValue() ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26")));
-                if (!e.getValue()) caduto = true;
-            }
+            boolean caduto = serviziCaduti(job, serviziPrima);
 
-            if (pianoNonRispettato) {
+            if (pianoNonRispettato || !fuoriDalPiano.isEmpty()) {
+                // Due guasti diversi, e il messaggio li distingue: "piano non rispettato" e'
+                // un pacchetto del piano che non e' arrivato dove doveva, la divergenza e'
+                // qualcosa che e' cambiato senza essere nel piano. Possono presentarsi
+                // insieme, quindi si dicono entrambi.
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.36");
+                java.util.List<String> problemi = new ArrayList<>();
+                if (pianoNonRispettato) problemi.add(I18n.tr("server.um.runAggiornamentoGuidato.36"));
+                if (!fuoriDalPiano.isEmpty()) problemi.add(messaggioDivergenze(fuoriDalPiano));
+                job.errorMessage = String.join(" ", problemi);
             } else if (problemaServizi || caduto) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.37");
@@ -6647,6 +6837,40 @@ public final class UpdateManager {
      */
     public static JSONObject reportData() { return reportData(true); }
 
+    /**
+     * Quanti pacchetti dello stack hanno una versione piu' recente nel catalogo, quanti di
+     * quelli sono protetti — cioe' trattenuti dal blocco — e l'elenco da mostrare.
+     *
+     * Funzione pura: riceve le righe di {@link #packagesStatus()} e la mappa nome ->
+     * versione del catalogo, cosi' si prova senza pkg. Le chiavi che legge sono quelle che
+     * packagesStatus mette DAVVERO ("name", "version", "locked"), e la prova le verifica una
+     * per una contro una riga vera: era proprio una chiave sbagliata a rendere muto questo
+     * conto, e una chiave sbagliata non la vede ne' il compilatore ne' una prova scritta su
+     * righe inventate.
+     */
+    static JSONObject contaAggiornamenti(JSONArray righe, Map<String, String> disponibili) {
+        int totali = 0, protetti = 0, conAggiornamento = 0, trattenuti = 0;
+        JSONArray daAggiornare = new JSONArray();
+        for (int i = 0; righe != null && i < righe.length(); i++) {
+            JSONObject x = righe.getJSONObject(i);
+            totali++;
+            boolean protetto = x.optBoolean("locked");
+            if (protetto) protetti++;
+            String nome = x.optString("name", "");
+            String installata = x.optString("version", "");
+            String catalogo = disponibili == null ? "" : disponibili.getOrDefault(nome, "");
+            if (catalogo.isEmpty() || catalogo.equals(installata)) continue;
+            conAggiornamento++;
+            if (protetto) trattenuti++;
+            if (daAggiornare.length() < 25)
+                daAggiornare.put(nome + " " + installata + " -> " + catalogo
+                        + (protetto ? " " + I18n.tr("server.um.x.heldSuffix") : ""));
+        }
+        return new JSONObject().put("totali", totali).put("protetti", protetti)
+                .put("conAggiornamento", conAggiornamento).put("trattenuti", trattenuti)
+                .put("daAggiornare", daAggiornare);
+    }
+
     public static JSONObject reportData(boolean aggiornaDatabase) {
         JSONObject r = new JSONObject();
         JSONArray daFare = new JSONArray();
@@ -6684,32 +6908,40 @@ public final class UpdateManager {
                     .put("dove", I18n.tr("server.um.reportData.4")));
 
         // --- pacchetti ---
+        //
+        // Le versioni del catalogo si chiedono a pkg: nelle righe di packagesStatus non ci
+        // sono, e la riga del rapporto le leggeva da due chiavi che quelle righe non hanno
+        // mai avuto ("current" e "available"), quindi era SEMPRE zero. Misurato sulla VM il
+        // 23/10/2026: "con aggiornamento: 0" mentre nello stesso istante packagesOverview,
+        // che le versioni le chiede, ne contava 2 dello stack e 5 in tutto. Una riga che non
+        // puo' dire nient'altro che zero e' peggio di una riga che manca: rassicura.
         JSONObject pk = packagesStatus();
         r.put("pacchetti", pk);
-        int conAggiornamento = 0, protetti = 0, totali = 0;
-        JSONArray list = pk.optJSONArray("packages");
-        JSONArray daAggiornare = new JSONArray();
-        if (list != null) {
-            totali = list.length();
-            for (int i = 0; i < list.length(); i++) {
-                JSONObject x = list.getJSONObject(i);
-                if (x.optBoolean("locked")) protetti++;
-                String ins = x.optString("current", ""), rep = x.optString("available", "");
-                if (!rep.isEmpty() && !rep.equals(ins) && !"-".equals(rep)) {
-                    conAggiornamento++;
-                    if (daAggiornare.length() < 25)
-                        daAggiornare.put(x.optString("name") + " " + ins + " -> " + rep);
-                }
-            }
-        }
-        r.put("pacchettiTotali", totali).put("pacchettiProtetti", protetti)
-         .put("pacchettiConAggiornamento", conAggiornamento).put("daAggiornare", daAggiornare);
+        JSONObject conteggio = contaAggiornamenti(pk.optJSONArray("packages"),
+                PackagePlan.daAggiornare(PackagePlan.leggiDaAggiornare().output()));
+        int conAggiornamento = conteggio.getInt("conAggiornamento");
+        int trattenuti = conteggio.getInt("trattenuti");
+        JSONArray daAggiornare = conteggio.getJSONArray("daAggiornare");
+        r.put("pacchettiTotali", conteggio.getInt("totali")).put("pacchettiProtetti", conteggio.getInt("protetti"))
+         .put("pacchettiConAggiornamento", conAggiornamento).put("daAggiornare", daAggiornare)
+         .put("pacchettiTrattenuti", trattenuti);
         if (conAggiornamento > 0)
             daFare.put(new JSONObject().put("urgenza", 2)
                     .put("cosa", conAggiornamento == 1
                             ? I18n.tr("server.um.x.newerInRepo.one")
                             : I18n.tr("server.um.x.newerInRepo.other", java.util.Map.of("n", String.valueOf(conAggiornamento))))
                     .put("dove", I18n.tr("server.um.reportData.5")));
+        // Un aggiornamento che esiste e che il blocco trattiene e' una notizia diversa da un
+        // aggiornamento disponibile: `pkg upgrade`, da qui o da SSH, lo salta ed esce 0.
+        // Misurato sulla VM il 23/10/2026: con nginx e postfix-mysql bloccati, `pkg upgrade -n`
+        // li nomina in una riga di passaggio, non li mette nel riepilogo e termina con uscita
+        // ZERO. Chi legge solo il codice di uscita conclude che non c'era niente da fare.
+        if (trattenuti > 0)
+            daFare.put(new JSONObject().put("urgenza", 2)
+                    .put("cosa", trattenuti == 1
+                            ? I18n.tr("server.um.x.heldByLock.one")
+                            : I18n.tr("server.um.x.heldByLock.other", java.util.Map.of("n", String.valueOf(trattenuti))))
+                    .put("dove", I18n.tr("server.um.reportData.8")));
 
         // --- vulnerabilita', separando quelle a cui si puo' rimediare ---
         //
@@ -6754,6 +6986,12 @@ public final class UpdateManager {
         JSONArray conRimedio = new JSONArray(), senzaRimedio = new JSONArray();
         JSONArray nonCapiti = new JSONArray();
         int trovati = 0;
+        // "C'e' il rimedio" senza dire che il pacchetto e' protetto e' una falsa
+        // rassicurazione: il rimedio esiste nel catalogo e nessun `pkg upgrade` lo applichera'
+        // mai, perche' il blocco lo salta. Sulla VM, il 23/10/2026, era proprio il caso di
+        // nginx: catalogo 1.30.6,3, cioe' la versione da cui VuXML considera corretto il
+        // problema, e il pacchetto bloccato dal pannello.
+        Set<String> bloccatiOra = insiemeProtetti();
         for (String riga : audit.split("\n")) {
             Matcher m = Pattern.compile("^([A-Za-z0-9._+-]+)-([0-9][^\\s]*) is vulnerable").matcher(riga.trim());
             if (!m.find()) continue;
@@ -6769,7 +7007,8 @@ public final class UpdateManager {
             }
             String nelRepo = sh("pkg rquery -U %v " + nome + " 2>/dev/null", 30).trim();
             if (!nelRepo.isEmpty() && !nelRepo.equals(installata))
-                conRimedio.put(nome + ": " + installata + " -> " + nelRepo);
+                conRimedio.put(nome + ": " + installata + " -> " + nelRepo
+                        + (bloccatiOra.contains(nome) ? " " + I18n.tr("server.um.x.heldSuffixFix") : ""));
             else
                 senzaRimedio.put(nome + " " + installata);
         }
@@ -9475,6 +9714,9 @@ public final class UpdateManager {
     /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti lockedPackages. */
     private static void runUpdateJob(Job job) {
         job.status = "running";
+        // Lo stato dei servizi PRIMA dell'aggiornamento: e' l'unico modo di distinguere un
+        // servizio caduto da uno che non era attivo nemmeno prima.
+        Map<String, Boolean> serviziPrima = statoServizi();
         job.avanza(1, 2);
         job.scrivi(I18n.tr("server.um.runUpdateJob.1"));
         job.scrivi(I18n.tr("server.um.runUpdateJob.2"));
@@ -9492,11 +9734,7 @@ public final class UpdateManager {
             job.scrivi(I18n.tr("server.um.runUpdateJob.4", java.util.Map.of("code", String.valueOf(code))));
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runMigrazione84.31"));
-            boolean caduto = false;
-            for (Map.Entry<String, Boolean> e : statoServizi().entrySet()) {
-                job.scrivi("  " + e.getKey() + ": " + (e.getValue() ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26")));
-                if (!e.getValue()) caduto = true;
-            }
+            boolean caduto = serviziCaduti(job, serviziPrima);
             job.status = (code == 0 && !caduto) ? "completed" : "error";
             if (code != 0) job.errorMessage = I18n.tr("server.um.runUpdateJob.5", java.util.Map.of("code", String.valueOf(code)));
             else if (caduto) job.errorMessage = I18n.tr("server.um.runUpdateJob.6");
@@ -9654,6 +9892,10 @@ public final class UpdateManager {
                     () -> pianoDellaManutenzione(lockedUpdates()).getJSONObject("piano"));
             if (cresciuto != null) throw new IllegalStateException(cresciuto);
 
+            // L'inventario PRIMA, per accorgersi di cio' che cambia senza essere nel piano.
+            // Si prende dopo lo scaricamento, a ridosso dell'aggiornamento: lo scaricamento
+            // non installa niente, ma l'inventario deve fotografare il momento esatto.
+            Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
             // -U: lo stesso catalogo su cui e' stato calcolato il piano.
             int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
             // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
@@ -9674,9 +9916,21 @@ public final class UpdateManager {
                 job.scrivi("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("nome", String.valueOf(v.getString("nome")), "atteso", String.valueOf(v.getString("atteso")), "trovato", String.valueOf(v.getString("trovato")))));
                 if (!v.getBoolean("ok")) pianoNonRispettato = true;
             }
-            if (pianoNonRispettato) {
+
+            // E dall'altra direzione: ogni differenza fra l'inventario di prima e quello di
+            // adesso che il piano non spiega. Il confronto qui sopra scorre il PIANO e non
+            // puo' vedere un pacchetto cambiato che nel piano non c'era.
+            JSONArray fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano, "Maintenance");
+
+            // I problemi si sommano al messaggio che c'e' gia' (per esempio l'uscita di pkg
+            // diversa da zero): nessuno dei tre deve coprire gli altri.
+            java.util.List<String> problemi = new ArrayList<>();
+            if (pianoNonRispettato) problemi.add(I18n.tr("server.um.runMaintenanceJob.14"));
+            if (!fuoriDalPiano.isEmpty()) problemi.add(messaggioDivergenze(fuoriDalPiano));
+            if (!problemi.isEmpty()) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMaintenanceJob.14");
+                job.errorMessage = (job.errorMessage == null || job.errorMessage.isEmpty()
+                        ? "" : job.errorMessage + " ") + String.join(" ", problemi);
             }
 
             // Aggiornare un pacchetto non aggiorna il processo che lo usa: finche' non riparte gira
@@ -9733,17 +9987,9 @@ public final class UpdateManager {
                 job.scrivi("  " + I18n.tr("server.um.x.protLost", java.util.Map.of("elenco", String.valueOf(String.join(", ", mancanti)))));
             }
 
-            Map<String, Boolean> serviziDopo = statoServizi();
-            for (Map.Entry<String, Boolean> e : serviziPrima.entrySet()) {
-                boolean prima = e.getValue(), dopo = serviziDopo.getOrDefault(e.getKey(), false);
-                if (prima && !dopo) {
-                    allarme = true;
-                    job.scrivi(I18n.tr("server.um.runMaintenanceJob.21", java.util.Map.of("key", String.valueOf(e.getKey()))));
-                } else {
-                    job.scrivi("  " + e.getKey() + ": " + (dopo ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMaintenanceJob.22"))
-                            + (prima ? "" : I18n.tr("server.um.runMaintenanceJob.23")));
-                }
-            }
+            // Questo confronto era giusto solo qui, e scritto a mano: adesso e' lo stesso
+            // che usano gli altri tre lavori.
+            if (serviziCaduti(job, serviziPrima)) allarme = true;
 
             if (allarme) {
                 job.status = "error";
