@@ -179,6 +179,15 @@ pkg install -y dovecot-mysql dovecot-pigeonhole
 # Anti-spam and antivirus
 pkg install -y rspamd redis clamav
 
+# Fail2ban. Quindici file del pannello lo usano -- Fail2banManager, Fail2banAutoSetup,
+# BanActionRepair, WebProtection, la pagina Firewall -- e nessuno lo installava: dopo
+# un'installazione completa "pkg info | grep fail2ban" non trovava niente, e le jail che il
+# pannello scrive al proprio avvio finivano in una cartella che non esiste.
+# Si nomina per ORIGINE: il nome del pacchetto porta davanti la versione di Python
+# ("py312-fail2ban" oggi) e cambia da sola.
+pkg install -y security/py-fail2ban
+sysrc fail2ban_enable="YES"
+
 # SSL: NON si installa il port security/openssl.
 # Il predefinito dei port FreeBSD e' ssl=base, cioe' i pacchetti binari sono costruiti contro
 # l'OpenSSL del sistema, che sta in /usr/lib e non e' un pacchetto. Installare anche il port
@@ -977,6 +986,10 @@ sleep 1
 service postfix start 2>/dev/null || true
 service php_fpm start 2>/dev/null || true
 service nginx start 2>/dev/null || true
+# Fail2ban parte ora, anche se la jail del pannello non c'e' ancora: la scrive il pannello
+# al proprio avvio e poi fa "fail2ban-client reload". Le jail della posta invece stanno
+# gia' in jail.d.
+service fail2ban start 2>/dev/null || true
 
 sleep 3
 

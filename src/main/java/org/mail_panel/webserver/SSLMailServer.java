@@ -8245,7 +8245,7 @@ public class SSLMailServer {
                          : I18n.tr("server.f2b.pkgMissing"),
             f2bInstalled ? null : I18n.tr("server.f2b.impactInstalled"),
             f2bInstalled ? null : "install_fail2ban",
-            f2bInstalled ? null : I18n.tr("server.runs", Map.of("command", "pkg install -y py311-fail2ban"))));
+            f2bInstalled ? null : I18n.tr("server.runs", Map.of("command", "pkg install -y " + FAIL2BAN_ORIGIN))));
         boolean enabledAtBoot = isFail2banEnabledAtBoot();
         checks.put(makeCheck("fail2ban-enabled-boot",
             I18n.tr("server.f2b.checkBoot"),
@@ -8543,7 +8543,7 @@ public class SSLMailServer {
         try {
             if (pfConfExists) {
                 String pfConf = java.nio.file.Files.readString(java.nio.file.Paths.get("/etc/pf.conf"));
-                pfAnchorPresent = pfConf.contains("anchor \"f2b/*\"") || pfConf.contains("anchor f2b/*");
+                pfAnchorPresent = org.mail_panel.security.Fail2banAutoSetup.hasF2bAnchor(pfConf);
             }
         } catch (Exception ignored) {}
 
@@ -8726,7 +8726,7 @@ public class SSLMailServer {
         } catch (Exception ignored) { }
         try {
             var p2 = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
-                "/usr/sbin/pkg", "query", "%n-%v", "py311-fail2ban");
+                "/usr/sbin/pkg", "query", "-g", "%n-%v", FAIL2BAN_PACKAGE_GLOB);
             if (p2.success() && p2.output() != null && !p2.output().isBlank()) {
                 if (b.length() > 0) b.append(" — ");
                 b.append(I18n.tr("server.f2b.packageIs", java.util.Map.of("p", String.valueOf(p2.output().trim().split("\n")[0]))));
@@ -8749,6 +8749,21 @@ public class SSLMailServer {
         }
         return c;
     }
+
+    /**
+     * Il pacchetto di fail2ban si nomina per ORIGINE, non per nome.
+     *
+     * <p>Il nome porta davanti la versione di Python di quel momento, e cambia da sola sotto
+     * i piedi: qui c'era scritto {@code py311-fail2ban} in tre punti, e su FreeBSD 15.1 oggi
+     * quel pacchetto non esiste piu' — {@code pkg install -y py311-fail2ban} risponde "No
+     * packages available to install matching", mentre quello buono si chiama
+     * {@code py312-fail2ban}. Cioe' il pulsante "installa fail2ban" della pagina Firewall non
+     * poteva funzionare. L'origine invece non cambia mai.
+     */
+    private static final String FAIL2BAN_ORIGIN = "security/py-fail2ban";
+
+    /** Per CHIEDERE la versione installata: pkg query vuole un nome, e qui va a modello. */
+    private static final String FAIL2BAN_PACKAGE_GLOB = "py*-fail2ban";
 
     private boolean isFail2banEnabledAtBoot() {
         try {
@@ -8788,7 +8803,7 @@ public class SSLMailServer {
         JSONObject r = new JSONObject();
         try {
             // TODO: migrate to Shell.run when touched
-            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "py311-fail2ban");
+            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", FAIL2BAN_ORIGIN);
             org.mail_panel.util.Shell.applicaPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
@@ -9248,7 +9263,7 @@ public class SSLMailServer {
             boolean anchorPresent = false;
             try {
                 String c = java.nio.file.Files.readString(java.nio.file.Paths.get("/etc/pf.conf"));
-                anchorPresent = c.contains("anchor \"f2b/*\"") || c.contains("anchor f2b/*");
+                anchorPresent = org.mail_panel.security.Fail2banAutoSetup.hasF2bAnchor(c);
             } catch (Exception ignored) {}
             if (!anchorPresent) {
                 JSONObject res = addPfAnchorF2b();
@@ -9335,7 +9350,7 @@ public class SSLMailServer {
                 return r;
             }
             String content = java.nio.file.Files.readString(pfConfPath);
-            if (content.contains("anchor \"f2b/*\"") || content.contains("anchor f2b/*")) {
+            if (org.mail_panel.security.Fail2banAutoSetup.hasF2bAnchor(content)) {
                 r.put("success", true);
                 r.put("message", I18n.tr("server.f2bfix.anchorAlready"));
                 return r;
@@ -11646,8 +11661,8 @@ http {
      * Configurabile via setting "audit_log_file_path" nel DB.
      * Se il file non è scrivibile, l'errore non blocca l'app.
      *
-     * Formato di linea (parsabile da Fail2ban con regex semplice):
-     *   2026-05-08T12:34:56 [ACTION] ip=1.2.3.4 user=admin details="..."
+     * Formato di linea (parsabile da Fail2ban con regex semplice), in UTC:
+     *   2026-10-17T21:20:28Z [ACTION] ip=1.2.3.4 user=admin details="..."
      */
     void logAudit(String action, String ipAddress, String details) {
         String username = getSessionUsername();
@@ -11682,15 +11697,35 @@ http {
         return path;
     }
 
-    private static void writeAuditToFile(String action, String ip, String username, String details) {
-        String path = getAuditLogPath();
+    /**
+     * Una riga del registro di autenticazione, quella che legge fail2ban.
+     *
+     * <p>Il momento e' in UTC con la Z, al secondo. Prima era
+     * {@code LocalDateTime.now()} con {@code ISO_LOCAL_DATE_TIME}: l'ora <em>locale</em> del
+     * server, senza niente che dicesse quale fuso fosse, contro r13 — e con i decimali dei
+     * nanosecondi attaccati, perche' quel formato li stampa quando ci sono. Quei decimali
+     * tenevano in piedi per caso il filtro di fail2ban: facevano da primo campo dopo che
+     * fail2ban aveva tolto la data, e le poche righe cadute sul secondo intero non venivano
+     * riconosciute.
+     *
+     * <p>Questa forma e' meta' di un contratto: l'altra meta' e'
+     * {@code Fail2banAutoSetup.filterContent()}. Cambiarne una sola non rompe niente a
+     * vista — semplicemente non viene piu' bloccato nessuno.
+     */
+    public static String auditLine(String action, String ip, String username, String details) {
         // Sanitizza newline / quote per evitare CRLF injection nei log
         String safeAction = action == null ? "-" : action.replaceAll("[\\r\\n\\t]", " ");
         String safeIp = ip == null ? "-" : ip.replaceAll("[\\r\\n\\t\\s]", "");
         String safeUser = username == null || username.isEmpty() ? "-" : username.replaceAll("[\\r\\n\\t\"]", "_");
         String safeDetails = details == null ? "" : details.replaceAll("[\\r\\n\\t\"]", " ");
-        String ts = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-        String line = ts + " [" + safeAction + "] ip=" + safeIp + " user=" + safeUser + " details=\"" + safeDetails + "\"\n";
+        String ts = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
+        return ts + " [" + safeAction + "] ip=" + safeIp + " user=" + safeUser
+                + " details=\"" + safeDetails + "\"\n";
+    }
+
+    private static void writeAuditToFile(String action, String ip, String username, String details) {
+        String path = getAuditLogPath();
+        String line = auditLine(action, ip, username, details);
 
         java.nio.file.Path p = java.nio.file.Paths.get(path);
         try {

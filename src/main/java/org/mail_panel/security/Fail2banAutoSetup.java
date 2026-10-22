@@ -90,7 +90,8 @@ public final class Fail2banAutoSetup {
                 String content = Files.readString(pfConf, java.nio.charset.StandardCharsets.UTF_8);
                 boolean hasTable = content.contains("table <permaban>");
                 boolean hasBlock = content.matches("(?s).*block\\s+in\\s+quick\\s+from\\s+<permaban>.*");
-                if (!hasTable || !hasBlock) {
+                boolean hasF2bAnchor = hasF2bAnchor(content);
+                if (!hasTable || !hasBlock || !hasF2bAnchor) {
                     // Backup
                     Path bak = Paths.get("/etc/pf.conf.bak." + System.currentTimeMillis());
                     Files.copy(pfConf, bak);
@@ -102,6 +103,17 @@ public final class Fail2banAutoSetup {
                     }
                     if (!hasBlock) {
                         additions.append("block in quick from <permaban>\n");
+                    }
+                    if (!hasF2bAnchor) {
+                        // L'anchor di fail2ban. La jail [mail-panel-auth] ha
+                        // "action = pf[...]", e l'azione pf di fail2ban mette le sue regole
+                        // dentro l'anchor "f2b/<nome>". Un anchor che pf.conf non nomina non
+                        // viene MAI guardato: fail2ban annota il blocco, lo scrive nel suo
+                        // registro, dice di averlo fatto, e il pacchetto passa lo stesso.
+                        // Il pannello sapeva aggiungerlo, ma solo dalla pagina Firewall, a
+                        // pulsante premuto: all'avvio no. Le regole dell'anchor hanno
+                        // "quick", quindi valgono anche messe in fondo.
+                        additions.append("anchor \"f2b/*\"\n");
                     }
                     // Append (regole con 'quick' funzionano anche se piazzate in fondo)
                     String newContent = content + (content.endsWith("\n") ? "" : "\n") + additions.toString();
@@ -151,6 +163,35 @@ public final class Fail2banAutoSetup {
         }
     }
 
+    /**
+     * Un filtro gia' sul disco: lo riscriviamo?
+     *
+     * <p>Si', solo se e' ancora quello del pannello ed e' diverso da quello che il pannello
+     * scriverebbe oggi. Un file modificato a mano non si tocca, e si riconosce dal fatto che
+     * non comincia piu' con la firma.
+     */
+    static boolean shouldRewriteFilter(String existing) {
+        if (existing == null) return true;
+        if (existing.equals(filterContent())) return false;
+        return existing.startsWith(MARKER);
+    }
+
+    /**
+     * In questo pf.conf c'e' gia' la riga che fa guardare a pf le regole di fail2ban?
+     *
+     * <p>Si accettano le forme che pf accetta: col nome fra virgolette o senza. Non si guarda
+     * dentro i commenti, perche' una riga commentata non e' una regola — e quel file i
+     * commenti li contiene davvero, scritti dal pannello stesso.
+     */
+    public static boolean hasF2bAnchor(String pfConf) {
+        for (String line : pfConf.split("\n")) {
+            String t = line.trim();
+            if (t.startsWith("#")) continue;
+            if (t.startsWith("anchor \"f2b/*\"") || t.startsWith("anchor f2b/*")) return true;
+        }
+        return false;
+    }
+
     /** Crea il file di log con perms 640 root:wheel se non esiste. */
     private static void ensureLogFile() {
         try {
@@ -178,7 +219,15 @@ public final class Fail2banAutoSetup {
         }
     }
 
-    /** Scrive il filter solo se manca. Ritorna true se ha scritto. */
+    /**
+     * Scrive il filter se manca, e lo riscrive se e' ancora quello del pannello ed e'
+     * vecchio. Ritorna true se ha scritto.
+     *
+     * <p>"Scrivi solo se manca" lasciava per sempre il filtro rotto a chi aveva gia' avviato
+     * il pannello una volta: il file c'era, quindi la correzione non sarebbe mai arrivata.
+     * Un filtro modificato da chi amministra la macchina invece non si tocca, e si riconosce
+     * dal fatto che la prima riga non e' piu' la firma del pannello.
+     */
     private static boolean writeFilterIfMissing() {
         try {
             Path filterDir = Paths.get(FILTER_DIR);
@@ -187,10 +236,17 @@ public final class Fail2banAutoSetup {
                 return false;
             }
             Path filterPath = Paths.get(FILTER_FILE);
+            String wanted = filterContent();
             if (Files.exists(filterPath)) {
-                return false; // già presente, non sovrascrivere
+                String existing = Files.readString(filterPath, StandardCharsets.UTF_8);
+                if (!shouldRewriteFilter(existing)) {
+                    if (!existing.equals(wanted))
+                        LOGGER.info("[Fail2banAutoSetup] " + FILTER_FILE + " was edited by hand — left alone");
+                    return false;
+                }
+                LOGGER.info("[Fail2banAutoSetup] Rewriting our own older " + FILTER_FILE);
             }
-            Files.writeString(filterPath, FILTER_CONTENT, StandardCharsets.UTF_8);
+            Files.writeString(filterPath, wanted, StandardCharsets.UTF_8);
             try { Files.setPosixFilePermissions(filterPath, PosixFilePermissions.fromString("rw-r--r--")); } catch (Exception ignored) {}
             LOGGER.info("[Fail2banAutoSetup] Wrote " + FILTER_FILE);
             return true;
@@ -237,11 +293,19 @@ public final class Fail2banAutoSetup {
         }
     }
 
-    /** Scrive la conf di log rotation se manca. */
+    /**
+     * Scrive la conf di log rotation se manca.
+     *
+     * <p>La cartella si <strong>crea</strong>, non si salta: su una FreeBSD appena installata
+     * {@code /usr/local/etc/newsyslog.conf.d} non esiste ancora, ma {@code /etc/newsyslog.conf}
+     * la include gia' (riga {@code <include> /usr/local/etc/newsyslog.conf.d/[!.]*.conf}).
+     * Saltare voleva dire proprio il caso normale: nessuna rotazione, e un registro di
+     * autenticazione che cresce senza fine.
+     */
     private static void writeNewsyslogIfMissing() {
         try {
             Path dir = Paths.get(NEWSYSLOG_DIR);
-            if (!Files.isDirectory(dir)) return; // sistema senza newsyslog.conf.d, salto
+            if (!Files.isDirectory(dir)) Files.createDirectories(dir);
             Path conf = Paths.get(NEWSYSLOG_CONF);
             if (Files.exists(conf)) return; // già presente
             String content = "# Log rotation per mail-panel auth log (auto-generato dal pannello)\n"
@@ -284,19 +348,54 @@ public final class Fail2banAutoSetup {
 
     // ================== EMBEDDED CONFIG CONTENT ==================
 
-    private static final String FILTER_CONTENT = ""
-        + "# Fail2ban filter per FreeBSD-Mail-Panel (auto-generato dal pannello)\n"
+    /** La riga con cui il pannello firma i file che scrive lui: solo quelli li riscrive. */
+    static final String MARKER = "# Fail2ban filter per FreeBSD-Mail-Panel (auto-generato dal pannello)";
+
+    private static final String FAILURES = "LOGIN_FAILURE|LOGIN_2FA_FAILURE|LOGIN_INVALID_INPUT"
+        + "|LOGIN_BLOCKED|CSRF_FAILURE|SSL_CERT_[A-Z_]+_FAILED|FAIL2BAN_[A-Z_]+_FAILED"
+        + "|PASSKEY_REGISTER_FAILED|2FA_[A-Z_]+_FAILED|ADMIN_PASSWORD_CHANGE_FAILED";
+
+    private static final String SUCCESSES = "LOGIN_SUCCESS|PASSKEY_LOGIN_SUCCESS|DOMAIN_CREATED"
+        + "|DOMAIN_UPDATED|DOMAIN_DELETED|ALIAS_CREATED|ALIAS_DELETED|SSL_CERT_RENEWED"
+        + "|SSL_CERT_ISSUED_HTTP01|SSL_CERT_ISSUED_DNS01|SSL_CERT_DEPLOYED"
+        + "|SSL_CERT_INSTALLED_MANUAL|SSL_AUTO_RENEWAL_SETTINGS_CHANGED|SSL_MANUAL_CHECK_TRIGGERED"
+        + "|FAIL2BAN_IP_BANNED|FAIL2BAN_IP_UNBANNED|2FA_ENABLED|2FA_DISABLED"
+        + "|2FA_BACKUP_CODES_REGENERATED|PASSKEY_REGISTERED|PASSKEY_DELETED|ADMIN_PASSWORD_CHANGED"
+        + "|HOSTNAME_CHANGED|ROUNDCUBE_DOMAIN_CHANGED|ROUNDCUBE_SSL_UPDATED";
+
+    /**
+     * Il filtro.
+     *
+     * <p>Il {@code failregex} deve reggere <strong>due</strong> forme della stessa riga, perche'
+     * fail2ban, quando il {@code datepattern} prende, toglie la data dalla riga prima di
+     * cercarci dentro, e quando non prende la lascia. Prima era {@code ^\S+ \[}, cioe' scritto
+     * per la sola forma con la data: tolta la data resta uno spazio davanti alla parentesi, e
+     * {@code \S+} non puo' mangiarlo. Misurato con {@code fail2ban-regex}: funzionava per
+     * caso, perche' l'ora aveva i decimali e quei decimali facevano da {@code \S+}; delle 42
+     * righe di prova le due col secondo intero erano le sole che fail2ban si perdeva. Un
+     * filtro che non trova niente ha lo stesso aspetto di un sistema senza attacchi, quindi
+     * nessuno se ne sarebbe accorto.
+     *
+     * <p>Il {@code %%z} in fondo al {@code datepattern} prende la Z dell'ora UTC. I due pezzi
+     * vanno insieme con il formato della riga ({@code SSLMailServer.auditLine}): cambiarne uno
+     * solo non rompe niente a vista, semplicemente smette di bloccare qualcuno.
+     */
+    public static String filterContent() {
+        return MARKER + "\n"
         + "#\n"
-        + "# Il pannello scrive su /var/log/mail-panel-auth.log linee del tipo:\n"
-        + "#   2026-05-08T12:34:56 [LOGIN_FAILURE] ip=1.2.3.4 user=admin details=\"...\"\n"
+        + "# Il pannello scrive su " + LOG_FILE + " righe cosi':\n"
+        + "#   2026-10-17T21:20:28Z [LOGIN_FAILURE] ip=1.2.3.4 user=admin details=\"...\"\n"
+        + "#\n"
+        + "# Prova:  fail2ban-regex " + LOG_FILE + " " + FILTER_FILE + "\n"
         + "\n"
         + "[Definition]\n"
         + "\n"
-        + "failregex = ^\\S+ \\[(?:LOGIN_FAILURE|LOGIN_2FA_FAILURE|LOGIN_INVALID_INPUT|LOGIN_BLOCKED|CSRF_FAILURE|SSL_CERT_[A-Z_]+_FAILED|FAIL2BAN_[A-Z_]+_FAILED|PASSKEY_REGISTER_FAILED|2FA_[A-Z_]+_FAILED|ADMIN_PASSWORD_CHANGE_FAILED)\\] ip=<HOST>\n"
+        + "failregex = ^\\s*(?:\\S+\\s+)?\\[(?:" + FAILURES + ")\\] ip=<HOST>\n"
         + "\n"
-        + "ignoreregex = ^\\S+ \\[(?:LOGIN_SUCCESS|PASSKEY_LOGIN_SUCCESS|DOMAIN_CREATED|DOMAIN_UPDATED|DOMAIN_DELETED|ALIAS_CREATED|ALIAS_DELETED|SSL_CERT_RENEWED|SSL_CERT_ISSUED_HTTP01|SSL_CERT_ISSUED_DNS01|SSL_CERT_DEPLOYED|SSL_CERT_INSTALLED_MANUAL|SSL_AUTO_RENEWAL_SETTINGS_CHANGED|SSL_MANUAL_CHECK_TRIGGERED|FAIL2BAN_IP_BANNED|FAIL2BAN_IP_UNBANNED|2FA_ENABLED|2FA_DISABLED|2FA_BACKUP_CODES_REGENERATED|PASSKEY_REGISTERED|PASSKEY_DELETED|ADMIN_PASSWORD_CHANGED|HOSTNAME_CHANGED|ROUNDCUBE_DOMAIN_CHANGED|ROUNDCUBE_SSL_UPDATED)\\]\n"
+        + "ignoreregex = ^\\s*(?:\\S+\\s+)?\\[(?:" + SUCCESSES + ")\\]\n"
         + "\n"
-        + "datepattern = ^%%Y-%%m-%%dT%%H:%%M:%%S\n";
+        + "datepattern = ^%%Y-%%m-%%dT%%H:%%M:%%S%%z\n";
+    }
 
     private static final String JAIL_BLOCK = ""
         + "# Auto-generato da FreeBSD-Mail-Panel — modifica i parametri liberamente,\n"
