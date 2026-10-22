@@ -18,6 +18,7 @@ Similar to Mailcow but **100% native** - NO Docker required.
 - [Configuration Files](#configuration-files)
 - [Database Schema](#database-schema)
 - [Ports Reference](#ports-reference)
+- [Package Locks](#package-locks)
 - [Service Commands](#service-commands)
 - [Installation](#installation)
 - [Web Panel](#web-panel)
@@ -498,6 +499,59 @@ CREATE TABLE audit_log (
 | Redis | 6379 | TCP | Cache |
 | Roundcube | 8443 | TCP | Webmail (HTTPS) |
 | **Web Panel** | **2096** | TCP | HTTPS admin panel |
+
+---
+
+## Package Locks
+
+At startup the panel runs `pkg lock` on every installed package of the mail stack (Postfix,
+Dovecot, Rspamd, ClamAV, Redis, MySQL, nginx, PHP and its extensions, Roundcube, fail2ban,
+the panel's own JDK). On a full installation that is around 40 packages.
+
+**Why.** The panel generates the configuration of these services. A new major version may
+refuse that configuration instead of degrading — Dovecot 2.4 does not start on a 2.3
+configuration — so a plain `pkg upgrade` could stop the mail server, and no version number
+would say so. The lock makes that impossible until the panel's guided update has checked the
+live configuration, the vulnerability ranges and the services that must restart.
+
+**How to update a locked package.** From the panel: *Updates*. It shows, per package, the
+catalog version, whether it closes a vulnerability and which services will restart; then it
+unlocks, updates, re-locks and restarts, verifying each step. An administrator can also
+unlock a single package from that page, and the panel remembers that choice and does not
+lock it again.
+
+**What `pkg upgrade` does meanwhile.** It skips the locked packages, names them in a line
+that scrolls past, leaves them out of the summary and **exits 0**:
+
+```
+nginx-1.30.5_2,3 is locked and may not be modified
+postfix-mysql-3.11.7_1,1 is locked and may not be modified
+The following 3 package(s) will be affected (of 0 checked):
+...
+Number of packages to be upgraded: 3
+```
+
+So from the outside it looks like there was nothing to do. The panel's periodic report says
+how many updates the lock is holding back, and marks the vulnerable ones.
+
+**If the panel is removed, or stops starting.** The locks stay: nothing removes them at
+shutdown, by design. Those packages then stop receiving updates, **including security
+fixes**, silently. The panel leaves the explanation on the machine:
+
+- `/var/db/mailpanel/locked-packages.txt` — why they are locked, the list, and the commands
+  to release them. Rewritten at every startup and at every lock change.
+- each locked package carries a `mail_panel_lock` annotation in pkg's own database, visible
+  with `pkg info -A <name>`, pointing at that file.
+- removing the panel's rc script from the panel says how many packages stay locked and how
+  to release them.
+
+To release everything by hand:
+
+```bash
+pkg unlock -a -y
+```
+
+One package only: `pkg unlock -y <name>`. The real state is always `pkg lock -l`.
 
 ---
 
