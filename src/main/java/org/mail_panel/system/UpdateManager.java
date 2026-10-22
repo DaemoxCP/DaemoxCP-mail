@@ -2136,6 +2136,64 @@ public final class UpdateManager {
         catch (Exception e) { return 0L; }
     }
 
+    /**
+     * Scarica i pacchetti che l'aggiornamento installera' e ricalcola il piano: il piano
+     * dipende da cio' che e' nella CACHE di pkg.
+     *
+     * Misurato sulla VM FreeBSD 15.1 il 23/10/2026, due volte sullo stesso pacchetto e sullo
+     * stesso catalogo, a due minuti di distanza:
+     *
+     *   senza i file in /var/cache/pkg -> 3 cambi: installa lmdb0, installa mysql97-client,
+     *                                     aggiorna postfix-mysql
+     *   con i file in /var/cache/pkg   -> 4 cambi: gli stessi PIU' "rimuove lmdb 1.0.2,1"
+     *
+     * Il controllo di integrita' di pkg trova i conflitti sui file solo quando i pacchetti
+     * sono scaricati: senza, `pkg upgrade -n` non puo' vedere che lmdb0 e lmdb si contendono
+     * /usr/local/bin/mdb_copy, e la rimozione che ne segue non compare nel piano. Compare
+     * durante l'esecuzione, quando il solver rifa' il conto.
+     *
+     * Non e' un dettaglio: il pannello RIFIUTA i piani che rimuovono pacchetti ("Il piano
+     * rimuove pacchetti: pkg rimuoverebbe lmdb 1.0.2,1. Il pannello non esegue aggiornamenti
+     * che tolgono pacchetti dal server"), e quel rifiuto veniva scavalcato ogni volta che i
+     * pacchetti non erano ancora stati scaricati — cioe' al primo tentativo, sempre. E' la
+     * spiegazione del reperto 14: il piano firmato 465385a9d669def8 non conteneva rimozioni e
+     * l'esecuzione ha rimosso lmdb.
+     *
+     * Lo scaricamento non aggiunge lavoro: sono gli stessi byte che servirebbero un istante
+     * dopo. Quello che aggiunge e' la possibilita' di fermarsi prima.
+     *
+     * @return null se pkg farebbe le stesse cose, altrimenti il motivo per fermarsi
+     */
+    private static String scaricaERicontrolla(Job job, String comandoFetch, JSONObject approvato,
+                                              java.util.function.Supplier<JSONObject> ricalcola) throws Exception {
+        job.scrivi("  " + I18n.tr("server.um.x.fetchFirst"));
+        int codeF = eseguiConLog(job, comandoFetch, 1800);
+        if (codeF != 0) {
+            // Senza i file, il piano resta quello incompleto: lo si dice, non si prosegue
+            // facendo finta che il controllo sia stato fatto.
+            job.scrivi("  " + I18n.tr("server.um.x.fetchFailed", java.util.Map.of("code", String.valueOf(codeF))));
+            return I18n.tr("server.um.x.fetchFailed", java.util.Map.of("code", String.valueOf(codeF)));
+        }
+        JSONObject adesso = ricalcola.get();
+        if (!adesso.optBoolean("measured")) {
+            job.scrivi("  " + I18n.tr("server.um.x.replanFailed"));
+            return I18n.tr("server.um.x.replanFailed");
+        }
+        String prima = PackagePlan.firmaDeiCambi(approvato), dopo = PackagePlan.firmaDeiCambi(adesso);
+        if (prima.equals(dopo)) {
+            job.scrivi("  " + I18n.tr("server.um.x.planUnchanged", java.util.Map.of("f", String.valueOf(dopo))));
+            return null;
+        }
+        job.scrivi("  " + I18n.tr("server.um.x.planGrew", java.util.Map.of("prima", String.valueOf(prima), "dopo", String.valueOf(dopo))));
+        job.scrivi("  " + I18n.tr("server.um.x.planApproved"));
+        for (String r : PackagePlan.cambiInRighe(approvato)) job.scrivi("      " + r);
+        job.scrivi("  " + I18n.tr("server.um.x.planNow"));
+        for (String r : PackagePlan.cambiInRighe(adesso)) job.scrivi("      " + r);
+        LOGGER.warning("Plan changed after fetching the packages: " + prima + " -> " + dopo
+                + "; approved=" + PackagePlan.cambiInRighe(approvato) + "; now=" + PackagePlan.cambiInRighe(adesso));
+        return I18n.tr("server.um.x.planGrewStop");
+    }
+
     /** JSONArray di stringhe -> lista Java, per poterle unire e ciclare. */
     private static java.util.List<String> jsonArrayToList(JSONArray a) {
         java.util.List<String> l = new ArrayList<>();
@@ -5945,6 +6003,14 @@ public final class UpdateManager {
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.9", java.util.Map.of("tOT", String.valueOf(TOT))));
             StringBuilder list = new StringBuilder();
             for (String m : famiglia) if (isValidName(m)) list.append(' ').append(m);
+
+            // Prima si scaricano i pacchetti e si ricalcola: finche' non sono scaricati, pkg
+            // non vede i conflitti sui file e il piano puo' crescere durante l'esecuzione.
+            // Il perche' per esteso, con la misura, sta su scaricaERicontrolla.
+            final java.util.List<String> fam = famiglia;
+            String cresciuto = scaricaERicontrolla(job, "pkg upgrade -F -y -U" + list + " 2>&1", piano,
+                    () -> PackagePlan.pianoPer(fam, insiemeProtetti(), UpdateManager::motivoPerNonSbloccare));
+            if (cresciuto != null) throw new IllegalStateException(cresciuto);
             // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
             // ripescare i messaggi che chiedono un'azione.
             StringBuilder catturato = new StringBuilder();
@@ -9820,7 +9886,15 @@ public final class UpdateManager {
             job.avanza(3, 4);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runMaintenanceJob.12"));
+            // Come nell'aggiornamento guidato: prima si scarica e si ricalcola, perche' il
+            // piano dipende da cio' che e' nella cache di pkg (vedi scaricaERicontrolla).
+            String cresciuto = scaricaERicontrolla(job, "pkg upgrade -F -y -U 2>&1", piano,
+                    () -> pianoDellaManutenzione(lockedUpdates()).getJSONObject("piano"));
+            if (cresciuto != null) throw new IllegalStateException(cresciuto);
+
             // L'inventario PRIMA, per accorgersi di cio' che cambia senza essere nel piano.
+            // Si prende dopo lo scaricamento, a ridosso dell'aggiornamento: lo scaricamento
+            // non installa niente, ma l'inventario deve fotografare il momento esatto.
             Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
             // -U: lo stesso catalogo su cui e' stato calcolato il piano.
             int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);

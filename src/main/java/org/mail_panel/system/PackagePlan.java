@@ -235,6 +235,47 @@ public final class PackagePlan {
         }
     }
 
+    /**
+     * L'fingerprint dei soli CAMBIAMENTI del piano, senza le protezioni da togliere.
+     *
+     * Serve per confrontare due piani calcolati in condizioni diverse: quello approvato,
+     * dove il pacchetto era ancora protetto e andava sbloccato, e quello ricalcolato dopo lo
+     * sblocco vero, dove non c'e' piu' niente da sbloccare. La firma intera differirebbe per
+     * quella sola ragione; questa risponde alla domanda che conta, cioe' "pkg farebbe le
+     * stesse cose?".
+     */
+    public static String firmaDeiCambi(JSONObject piano) {
+        List<String> righe = new ArrayList<>();
+        JSONArray c = piano == null ? null : piano.optJSONArray("changes");
+        for (int i = 0; c != null && i < c.length(); i++) {
+            JSONObject x = c.getJSONObject(i);
+            righe.add(x.optString("tipo") + " " + x.optString("nome") + " " + x.optString("da") + " " + x.optString("a"));
+        }
+        java.util.Collections.sort(righe);
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(String.join("\n", righe).getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(h).substring(0, 16);
+        } catch (Exception e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
+    }
+
+    /** I cambiamenti del piano in righe leggibili, per mostrare due piani a confronto. */
+    public static List<String> cambiInRighe(JSONObject piano) {
+        List<String> righe = new ArrayList<>();
+        JSONArray c = piano == null ? null : piano.optJSONArray("changes");
+        for (int i = 0; c != null && i < c.length(); i++) {
+            JSONObject x = c.getJSONObject(i);
+            String a = x.optString("a");
+            righe.add(typeName(x.optString("tipo")) + " " + x.optString("nome")
+                    + (x.optString("da").isEmpty() ? "" : " " + x.optString("da"))
+                    + (a.isEmpty() || a.equals(x.optString("da")) ? "" : " -> " + a));
+        }
+        java.util.Collections.sort(righe);
+        return righe;
+    }
+
     // ===================== chiedere il piano a pkg =====================
 
     /** Solo nomi di pacchetto plausibili: finiscono in una riga di comando. */
