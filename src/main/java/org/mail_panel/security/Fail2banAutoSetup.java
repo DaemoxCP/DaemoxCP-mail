@@ -30,6 +30,7 @@ public final class Fail2banAutoSetup {
 
     private static final String LOG_FILE          = "/var/log/mail-panel-auth.log";
     private static final String FILTER_DIR        = "/usr/local/etc/fail2ban/filter.d";
+    private static final String JAIL_D            = "/usr/local/etc/fail2ban/jail.d";
     private static final String FILTER_FILE       = FILTER_DIR + "/mail-panel-auth.conf";
     private static final String JAIL_LOCAL        = "/usr/local/etc/fail2ban/jail.local";
     private static final String NEWSYSLOG_DIR     = "/usr/local/etc/newsyslog.conf.d";
@@ -55,7 +56,9 @@ public final class Fail2banAutoSetup {
             if (filterChanged || jailChanged) {
                 reloadFail2ban();
             }
-            // 7. Se un blocco non fermerebbe niente, dirlo: un pannello non protetto non deve
+            // 7. Le jail dei servizi di posta, se mancano
+            ensureMailJailsIfMissing();
+            // 8. Se un blocco non fermerebbe niente, dirlo: un pannello non protetto non deve
             //    sembrare a posto.
             warnIfBansWouldNotBite();
         } catch (Throwable t) {
@@ -165,6 +168,59 @@ public final class Fail2banAutoSetup {
 
         } catch (Exception e) {
             LOGGER.warning("[Fail2banAutoSetup] ensurePermabanSetup failed: " + e.getMessage());
+        }
+    }
+
+    // ================== le jail dei servizi di posta ==================
+
+    private static final String MAIL_JAILS = JAIL_D + "/mail.local";
+
+    /**
+     * C'e' davvero un server di posta su questa macchina?
+     *
+     * <p>Si guardano i file di configurazione, non il conto che il pannello tiene in SQLite:
+     * quelle righe dicono che cosa il pannello <em>crede</em> di aver installato, e una jail
+     * per un servizio che non c'e' fail2ban non la carica — fa solo rumore nel registro e un
+     * rosso nella pagina Firewall.
+     */
+    static boolean mailStackPresent() {
+        return Files.exists(Paths.get("/usr/local/etc/postfix/main.cf"))
+                && Files.isDirectory(Paths.get("/usr/local/etc/dovecot"));
+    }
+
+    /**
+     * Le jail di Postfix, Dovecot, Rspamd e Roundcube: si scrivono se mancano.
+     *
+     * <p>Prima esistevano solo a <strong>pulsante premuto</strong>, dalla pagina Firewall: su
+     * una macchina appena installata i servizi di posta stavano su porte pubbliche senza
+     * niente che fermasse chi provava le credenziali a raffica, e nulla diceva che mancasse
+     * qualcosa. La jail del pannello invece l'avvio la scriveva gia': non c'era un motivo per
+     * cui quelle della posta dovessero essere diverse.
+     *
+     * <p>Solo se mancano. Il lavoro vero lo fa {@code Fail2banManager.installMailJails()} --
+     * che scrive il file, crea i filtri propri, accende il registro degli accessi di Roundcube
+     * (altrimenti fail2ban rifiuta la jail roundcube-auth) e ricarica -- ma quel metodo
+     * sovrascrive {@code mail.local} senza guardare, e all'avvio vorrebbe dire cancellare a
+     * ogni riavvio i parametri che un amministratore ha cambiato. Il file c'e' gia': non si
+     * tocca, come per il filtro del pannello.
+     */
+    private static void ensureMailJailsIfMissing() {
+        try {
+            if (!Files.isDirectory(Paths.get(JAIL_D))
+                    && !Files.isDirectory(Paths.get(FILTER_DIR))) {
+                return;                                   // fail2ban non installato
+            }
+            if (Files.exists(Paths.get(MAIL_JAILS))) return;      // gia' li', anche se ritoccate
+            if (!mailStackPresent()) {
+                LOGGER.info("[Fail2banAutoSetup] no mail server here yet: mail jails skipped");
+                return;
+            }
+            Fail2banManager.InstallResult r = new Fail2banManager().installMailJails();
+            if (r != null && r.success) LOGGER.info("[Fail2banAutoSetup] mail jails written to " + MAIL_JAILS);
+            else LOGGER.warning("[Fail2banAutoSetup] mail jails not written: "
+                    + (r == null ? "no result" : String.valueOf(r.error)));
+        } catch (Throwable t) {
+            LOGGER.warning("[Fail2banAutoSetup] mail jails failed: " + t.getMessage());
         }
     }
 
