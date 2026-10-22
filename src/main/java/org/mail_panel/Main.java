@@ -821,6 +821,20 @@ public class Main {
                     return false;
                 }
 
+                // Da adesso il pannello guarda l'Host della richiesta, e con un indirizzo
+                // wildcard quel nome non c'e': si accettano localhost e gli indirizzi di
+                // questa macchina. E' lo stato normale dopo l'installazione, che scrive
+                // 0.0.0.0, quindi lo si dice all'avvio invece di lasciarlo scoprire a chi
+                // apre il pannello con un nome e si vede rifiutare.
+                if (org.mail_panel.webserver.HostCheck.isWildcardHost(host)) {
+                    System.out.println(ANSI_YELLOW + "The panel address is " + host
+                            + " (listen everywhere), so it answers to localhost and to this"
+                            + " machine's own addresses "
+                            + org.mail_panel.webserver.HostCheck.localAddresses() + "." + ANSI_RESET);
+                    System.out.println(ANSI_YELLOW + "To reach it by name — and the passkeys need"
+                            + " a name — write it in 'Edit Panel Configuration'." + ANSI_RESET);
+                }
+
                 // Connect to MySQL for mail data
                 String mysqlHost = result.getString("mysql_host");
                 String mysqlPort = result.getString("mysql_port");

@@ -42,9 +42,14 @@ import java.util.stream.Collectors;
  *  - la conferma di un'operazione delicata (STEP_UP) vale solo per la sessione e l'amministratore
  *    che l'hanno chiesta.
  *
- * rpId e origine vengono dalla richiesta (Host e schema): una passkey registrata per un nome vale
- * solo per quel nome, perche' l'autenticatore signature l'hash dell'rpId e il browser scrive
- * l'origine vera della pagina.
+ * rpId e origine vengono dalla richiesta (Host e schema), che
+ * {@link org.mail_panel.webserver.HostCheck} ha gia' controllato: una passkey registrata per un
+ * nome vale solo per quel nome, perche' l'autenticatore signature l'hash dell'rpId e il browser
+ * scrive l'origine vera della pagina.
+ *
+ * Il controllo qui sotto guarda che l'Host SOMIGLI a un nome DNS, non che sia il nome di questo
+ * pannello: {@code evil.example} lo passa senza difficolta'. Finche' nessuno controllava l'Host,
+ * bastava quello per far cominciare una cerimonia con un rpId scelto da chi chiedeva.
  */
 public final class PasskeyService {
 
