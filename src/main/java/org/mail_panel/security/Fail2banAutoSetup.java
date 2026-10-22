@@ -55,6 +55,9 @@ public final class Fail2banAutoSetup {
             if (filterChanged || jailChanged) {
                 reloadFail2ban();
             }
+            // 7. Se un blocco non fermerebbe niente, dirlo: un pannello non protetto non deve
+            //    sembrare a posto.
+            warnIfBansWouldNotBite();
         } catch (Throwable t) {
             // Non propagare mai — il setup non deve far crashare il pannello
             LOGGER.warning("[Fail2banAutoSetup] Setup failed: " + t.getMessage());
@@ -92,9 +95,6 @@ public final class Fail2banAutoSetup {
                 boolean hasBlock = content.matches("(?s).*block\\s+in\\s+quick\\s+from\\s+<permaban>.*");
                 boolean hasF2bAnchor = hasF2bAnchor(content);
                 if (!hasTable || !hasBlock || !hasF2bAnchor) {
-                    // Backup
-                    Path bak = Paths.get("/etc/pf.conf.bak." + System.currentTimeMillis());
-                    Files.copy(pfConf, bak);
                     StringBuilder additions = new StringBuilder();
                     additions.append("\n# === Permaban (auto-gestito dal mail panel) ===\n");
                     if (!hasTable) {
@@ -132,6 +132,11 @@ public final class Fail2banAutoSetup {
                         LOGGER.warning("[Fail2banAutoSetup] pf.conf permaban check failed, NOT applied: " + testOut);
                         Files.deleteIfExists(tmp);
                     } else {
+                        // La copia di sicurezza si fa ADESSO, non prima: fatta prima, un
+                        // controllo di sintassi fallito lasciava un .bak.<timestamp> di
+                        // troppo a ogni avvio, cioe' un file in piu' ogni volta che la
+                        // riparazione NON e' avvenuta.
+                        Files.copy(pfConf, Paths.get("/etc/pf.conf.bak." + System.currentTimeMillis()));
                         Files.move(tmp, pfConf, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                         // Ricarica live
                         try {
@@ -160,6 +165,113 @@ public final class Fail2banAutoSetup {
 
         } catch (Exception e) {
             LOGGER.warning("[Fail2banAutoSetup] ensurePermabanSetup failed: " + e.getMessage());
+        }
+    }
+
+    // ================== pf: i blocchi fermano davvero un pacchetto? ==================
+
+    /**
+     * Perche' un blocco di fail2ban non fermerebbe niente, o stringa vuota se lo ferma.
+     *
+     * <p>Quattro pezzi devono esserci <strong>insieme</strong>, e l'ordine conta perche' il
+     * primo che manca rende inutile guardare i successivi: il modulo pf nel kernel (senza,
+     * {@code pfctl} non parla nemmeno con il kernel e risponde
+     * {@code /dev/pf: No such file or directory}), il file {@code /etc/pf.conf}, la riga
+     * {@code anchor "f2b/*"} dentro quel file, e pf acceso.
+     *
+     * <p>Misurato su una FreeBSD 15.1 appena installata, col pannello mail installato e
+     * acceso: {@code fail2ban-client} dichiara bloccato l'indirizzo, e in pf non c'e' niente
+     * perche' pf.conf non esiste e il modulo non e' caricato. "Blocca e dice di aver
+     * bloccato" e' il caso peggiore: non lascia tracce da cui accorgersi.
+     *
+     * <p>Funzione pura, perche' questa e' la cosa da provare: le quattro letture dal sistema
+     * stanno nei metodi qui sotto.
+     */
+    public static String whyBansWouldNotBite(boolean moduleLoaded, boolean confExists,
+                                             boolean anchorPresent, boolean pfEnabled) {
+        if (!moduleLoaded)
+            return "the pf kernel module is not loaded, so pfctl cannot talk to the kernel at all";
+        if (!confExists)
+            return "/etc/pf.conf does not exist, so pf has no ruleset to put the bans in";
+        if (!anchorPresent)
+            return "/etc/pf.conf does not name anchor \"f2b/*\", and an anchor pf never looks at"
+                    + " is where fail2ban writes its block rules";
+        if (!pfEnabled)
+            return "pf is not running (pfctl says Status: Disabled)";
+        return "";
+    }
+
+    /** Il modulo pf nel kernel. */
+    public static boolean pfModuleLoaded() {
+        return runSaying("/sbin/kldstat").contains("pf.ko");
+    }
+
+    /**
+     * pf acceso.
+     *
+     * <p>Si legge "Status: Enabled", non il codice d'uscita: {@code pfctl -s info} esce
+     * <strong>0 anche a pf spento</strong>, stampando "Status: Disabled". Chiedere solo se il
+     * comando riesce vuol dire scrivere "pf acceso" accanto a un firewall spento.
+     */
+    public static boolean pfEnabled() {
+        return runSaying("/sbin/pfctl", "-s", "info").contains("Status: Enabled");
+    }
+
+    /** Dentro una jail di FreeBSD non si caricano moduli: non e' un guasto, e' un ambiente. */
+    public static boolean insideFreebsdJail() {
+        return runSaying("/sbin/sysctl", "-n", "security.jail.jailed").trim().equals("1");
+    }
+
+    /** Quello che un comando dice, stderr compreso; stringa vuota se non si e' potuto lanciare. */
+    private static String runSaying(String... command) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            org.mail_panel.util.Shell.applicaPath(pb);
+            pb.redirectErrorStream(true);
+            pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
+            Process p = pb.start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            return out;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * All'avvio: se un blocco non fermerebbe niente, lo dice.
+     *
+     * <p>Non accende pf e non scrive {@code /etc/pf.conf}: l'avvio ricorre a ogni riavvio, su
+     * una macchina che nel frattempo puo' aver cambiato configurazione per mano di qualcun
+     * altro, e accendere un firewall li' sarebbe cambiare una macchina viva alle spalle di chi
+     * la amministra. Lo fa l'<em>installazione</em>, che e' un'azione esplicita, e la pagina
+     * Firewall, che e' un pulsante premuto da una persona.
+     *
+     * <p>Quello che l'avvio deve fare e' non far sembrare a posto un pannello che non e'
+     * protetto: prima non diceva niente, e la pagina di accesso stava su una porta pubblica
+     * con fail2ban che annotava blocchi senza effetto.
+     */
+    private static void warnIfBansWouldNotBite() {
+        try {
+            if (insideFreebsdJail()) return;          // in una jail pf non e' una scelta di qui
+            boolean anchor = false;
+            boolean conf = Files.exists(Paths.get("/etc/pf.conf"));
+            if (conf) {
+                try {
+                    anchor = hasF2bAnchor(Files.readString(Paths.get("/etc/pf.conf"), StandardCharsets.UTF_8));
+                } catch (IOException ignored) { }
+            }
+            String why = whyBansWouldNotBite(pfModuleLoaded(), conf, anchor, pfEnabled());
+            if (why.isEmpty()) return;
+            // Giallo e due righe: una dice che cosa non funziona, l'altra come si ripara. Il
+            // colore non e' l'unico veicolo (r9): il testo dice tutto da se'.
+            System.out.println("\u001B[33mFail2ban can record bans but NOTHING WILL BE BLOCKED: "
+                    + why + ".\u001B[0m");
+            System.out.println("\u001B[33mFix it from the Firewall page ('fix all'), or run the"
+                    + " mail server installation, which sets pf up.\u001B[0m");
+            LOGGER.warning("[Fail2banAutoSetup] bans would not bite: " + why);
+        } catch (Throwable t) {
+            LOGGER.warning("[Fail2banAutoSetup] pf check failed: " + t.getMessage());
         }
     }
 

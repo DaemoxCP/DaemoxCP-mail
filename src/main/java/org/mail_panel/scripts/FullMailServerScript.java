@@ -213,6 +213,93 @@ chmod 770 /var/vmail
 echo "${GREEN}  Packages installed${NC}"
 
 # =============================================================================
+# pf, il firewall: senza, i blocchi di fail2ban non fermano niente
+# =============================================================================
+# Misurato su una FreeBSD 15.1 appena installata: /etc/pf.conf NON esiste, il modulo pf non
+# e' caricato e pf_enable non e' impostato. La jail del pannello ha "action = pf[...]", quindi
+# fail2ban scrive le sue regole nell'anchor "f2b/*" e, senza niente di tutto questo,
+# fail2ban-client dichiara bloccato un indirizzo mentre in pf non c'e' nulla. "Blocca e dice
+# di aver bloccato" e' il caso peggiore: non lascia tracce da cui accorgersi.
+#
+# Qui si puo' fare perche' installare un server di posta e' un'azione esplicita. Il pannello
+# all'AVVIO non lo fa: quello ricorre a ogni riavvio, su una macchina che intanto puo' aver
+# cambiato configurazione per mano d'altri, e li' si limita a dirlo.
+echo ""
+echo "${YELLOW}Setting up pf, so that a ban actually blocks...${NC}"
+
+if [ "$(sysctl -n security.jail.jailed 2>/dev/null)" = 1 ]; then
+    # Dentro una jail i moduli non si caricano e il firewall e' dell'host: non e' un guasto.
+    echo "${YELLOW}  Inside a FreeBSD jail: pf belongs to the host, leaving it alone.${NC}"
+elif kldstat 2>/dev/null | grep -q ipfw.ko; then
+    # Questa macchina ha gia' un firewall. Accenderne un secondo non si fa a sorpresa.
+    echo "${YELLOW}  ipfw is loaded: this machine already has a firewall, leaving pf alone.${NC}"
+    echo "  To use fail2ban's bans, add an ipfw rule for its table, or switch to pf."
+else
+    if ! kldstat 2>/dev/null | grep -q pf.ko; then
+        # Senza il modulo, pfctl non parla col kernel: nemmeno la prova di sintassi parte
+        # ("pfctl: /dev/pf: No such file or directory").
+        kldload pf 2>/dev/null || true
+    fi
+    if ! kldstat 2>/dev/null | grep -q pf.ko; then
+        echo "${RED}  WARNING: cannot load the pf kernel module. Fail2ban will record bans"
+        echo "  that block nothing. Check 'kldload pf' by hand.${NC}"
+    elif [ -f /etc/pf.conf ]; then
+        # C'e' gia': quelle regole le ha scritte qualcun altro e non si riscrivono, e pf NON
+        # si accende, perche' non si sa che cosa bloccherebbero. Il pannello al proprio avvio
+        # aggiunge l'anchor con una prova di sintassi e una copia di sicurezza.
+        echo "${YELLOW}  /etc/pf.conf already exists: left untouched, and pf NOT enabled.${NC}"
+        echo "  The panel adds 'anchor \\"f2b/*\\"' to it at startup; enable pf yourself when"
+        echo "  you have checked those rules: sysrc pf_enable=YES && service pf start"
+    else
+        # Il file minimo: non blocca NESSUN servizio, quindi accendere pf non chiude fuori
+        # nessuno. L'unico blocco arriva dall'anchor, cioe' dagli indirizzi che fail2ban
+        # mette in tabella, e dalla tabella <permaban> del pannello.
+        cat > /etc/pf.conf << 'PFCONF'
+# /etc/pf.conf, scritto dall'installazione del pannello mail.
+#
+# Configurazione MINIMA e SICURA per fail2ban + pf:
+#  - nessun servizio viene bloccato, quindi accendere pf non chiude fuori nessuno;
+#  - l'unico blocco arriva dagli indirizzi che fail2ban mette nel suo anchor e dalla
+#    tabella <permaban> del pannello.
+#
+# Per personalizzarla: si modifica questo file e poi 'pfctl -f /etc/pf.conf'.
+
+# Il loopback non si filtra.
+set skip on lo
+
+# La lista dei blocchi permanenti del pannello.
+table <permaban> persist file "/var/db/mail-panel/permaban.list"
+block in quick from <permaban>
+
+# L'anchor di fail2ban: ci mette le sue "block in quick" l'azione pf della jail.
+# Deve venire PRIMA del pass, e le sue regole hanno "quick".
+anchor "f2b/*"
+
+# Predefinito: passa tutto. Niente e' bloccato a parte quanto sopra.
+pass
+PFCONF
+        chmod 644 /etc/pf.conf
+        mkdir -p /var/db/mail-panel
+        [ -f /var/db/mail-panel/permaban.list ] || : > /var/db/mail-panel/permaban.list
+        chmod 640 /var/db/mail-panel/permaban.list
+        # Prova di sintassi prima di accendere: un pf.conf rifiutato lascia pf spento, non
+        # a meta'.
+        if pfctl -nf /etc/pf.conf 2>&1; then
+            sysrc pf_enable="YES" >/dev/null
+            service pf start 2>/dev/null || pfctl -e -f /etc/pf.conf 2>/dev/null || true
+            if pfctl -s info 2>/dev/null | grep -q "Status: Enabled"; then
+                echo "${GREEN}  pf is on, with a ruleset that blocks nothing by itself.${NC}"
+            else
+                echo "${RED}  WARNING: pf did not come up. Fail2ban will record bans that block"
+                echo "  nothing. Check 'service pf start' by hand.${NC}"
+            fi
+        else
+            echo "${RED}  WARNING: the generated /etc/pf.conf was refused by pfctl: pf left off.${NC}"
+        fi
+    fi
+fi
+
+# =============================================================================
 # PHASE 3: CONFIGURE MySQL
 # =============================================================================
 echo ""
@@ -1094,7 +1181,19 @@ service nginx start 2>/dev/null || true
 # Fail2ban parte ora, anche se la jail del pannello non c'e' ancora: la scrive il pannello
 # al proprio avvio e poi fa "fail2ban-client reload". Le jail della posta invece stanno
 # gia' in jail.d.
-service fail2ban start 2>/dev/null || true
+#
+# RESTART, non start, e il motivo e' misurato: l'azione pf di una jail crea la propria
+# regola in "actionstart", una volta sola, quando la jail parte. Se quella volta pf non
+# c'era, fail2ban scrive nel suo registro
+#   ERROR stderr: 'pfctl: /dev/pf: No such file or directory'
+#   ERROR Error starting action Jail('mail-panel-auth')/pf
+# e NON la riprova mai: ne' un reload, ne' un "service start" su un servizio gia' in
+# esecuzione. Da li' in avanti "actionban" sembra riuscire -- crea la tabella da se' -- e
+# in pf resta una tabella SENZA la regola che la legge, cioe' niente. Misurato: con
+# l'azione fallita, "pfctl -a f2b/mail-panel-auth -s rules" e' vuoto mentre
+# fail2ban-client dice "Banned IP list: 203.0.113.77"; dopo un restart la regola c'e'.
+# Succede a ogni REINSTALLAZIONE, perche' li' fail2ban e' gia' in esecuzione da prima.
+service fail2ban restart 2>/dev/null || service fail2ban start 2>/dev/null || true
 
 sleep 3
 

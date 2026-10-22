@@ -8923,31 +8923,15 @@ public class SSLMailServer {
     }
 
     /** Verifica se il modulo kernel pf è caricato (kldstat). */
+    /** Il modulo pf nel kernel. Stessa implementazione di Fail2banAutoSetup. */
     private boolean isPfModuleLoaded() {
-        try {
-            // TODO: migrate to Shell.run when touched
-            ProcessBuilder pb = new ProcessBuilder("/sbin/kldstat");
-            org.mail_panel.util.Shell.applicaPath(pb);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-            return out.contains("pf.ko");
-        } catch (Exception e) { return false; }
+        return org.mail_panel.security.Fail2banAutoSetup.pfModuleLoaded();
     }
 
     /** Verifica se il pannello sta girando dentro una jail FreeBSD (security.jail.jailed). */
+    /** Dentro una jail di FreeBSD non si caricano moduli. Stessa implementazione. */
     private boolean isRunningInsideFreebsdJail() {
-        try {
-            // TODO: migrate to Shell.run when touched
-            ProcessBuilder pb = new ProcessBuilder("/sbin/sysctl", "-n", "security.jail.jailed");
-            org.mail_panel.util.Shell.applicaPath(pb);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-            return out.equals("1");
-        } catch (Exception e) { return false; }
+        return org.mail_panel.security.Fail2banAutoSetup.insideFreebsdJail();
     }
 
     /** Carica il modulo kernel pf con kldload. */
@@ -9011,18 +8995,9 @@ public class SSLMailServer {
         } catch (Exception e) { return false; }
     }
 
+    /** pf acceso. L'implementazione sta in Fail2banAutoSetup, una sola per tutto il pannello. */
     private boolean isPfRunning() {
-        try {
-            // pfctl -si ritorna info status. Se pf non gira, exit code != 0 o output dice "Disabled".
-            // TODO: migrate to Shell.run when touched
-            ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-si");
-            org.mail_panel.util.Shell.applicaPath(pb);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-            return out.contains("Status: Enabled");
-        } catch (Exception e) { return false; }
+        return org.mail_panel.security.Fail2banAutoSetup.pfEnabled();
     }
 
     private JSONObject startPfService() {
