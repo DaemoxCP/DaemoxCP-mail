@@ -6581,6 +6581,40 @@ public final class UpdateManager {
      */
     public static JSONObject reportData() { return reportData(true); }
 
+    /**
+     * Quanti pacchetti dello stack hanno una versione piu' recente nel catalogo, quanti di
+     * quelli sono protetti — cioe' trattenuti dal blocco — e l'elenco da mostrare.
+     *
+     * Funzione pura: riceve le righe di {@link #packagesStatus()} e la mappa nome ->
+     * versione del catalogo, cosi' si prova senza pkg. Le chiavi che legge sono quelle che
+     * packagesStatus mette DAVVERO ("name", "version", "locked"), e la prova le verifica una
+     * per una contro una riga vera: era proprio una chiave sbagliata a rendere muto questo
+     * conto, e una chiave sbagliata non la vede ne' il compilatore ne' una prova scritta su
+     * righe inventate.
+     */
+    static JSONObject contaAggiornamenti(JSONArray righe, Map<String, String> disponibili) {
+        int totali = 0, protetti = 0, conAggiornamento = 0, trattenuti = 0;
+        JSONArray daAggiornare = new JSONArray();
+        for (int i = 0; righe != null && i < righe.length(); i++) {
+            JSONObject x = righe.getJSONObject(i);
+            totali++;
+            boolean protetto = x.optBoolean("locked");
+            if (protetto) protetti++;
+            String nome = x.optString("name", "");
+            String installata = x.optString("version", "");
+            String catalogo = disponibili == null ? "" : disponibili.getOrDefault(nome, "");
+            if (catalogo.isEmpty() || catalogo.equals(installata)) continue;
+            conAggiornamento++;
+            if (protetto) trattenuti++;
+            if (daAggiornare.length() < 25)
+                daAggiornare.put(nome + " " + installata + " -> " + catalogo
+                        + (protetto ? " " + I18n.tr("server.um.x.heldSuffix") : ""));
+        }
+        return new JSONObject().put("totali", totali).put("protetti", protetti)
+                .put("conAggiornamento", conAggiornamento).put("trattenuti", trattenuti)
+                .put("daAggiornare", daAggiornare);
+    }
+
     public static JSONObject reportData(boolean aggiornaDatabase) {
         JSONObject r = new JSONObject();
         JSONArray daFare = new JSONArray();
@@ -6618,32 +6652,40 @@ public final class UpdateManager {
                     .put("dove", I18n.tr("server.um.reportData.4")));
 
         // --- pacchetti ---
+        //
+        // Le versioni del catalogo si chiedono a pkg: nelle righe di packagesStatus non ci
+        // sono, e la riga del rapporto le leggeva da due chiavi che quelle righe non hanno
+        // mai avuto ("current" e "available"), quindi era SEMPRE zero. Misurato sulla VM il
+        // 23/10/2026: "con aggiornamento: 0" mentre nello stesso istante packagesOverview,
+        // che le versioni le chiede, ne contava 2 dello stack e 5 in tutto. Una riga che non
+        // puo' dire nient'altro che zero e' peggio di una riga che manca: rassicura.
         JSONObject pk = packagesStatus();
         r.put("pacchetti", pk);
-        int conAggiornamento = 0, protetti = 0, totali = 0;
-        JSONArray list = pk.optJSONArray("packages");
-        JSONArray daAggiornare = new JSONArray();
-        if (list != null) {
-            totali = list.length();
-            for (int i = 0; i < list.length(); i++) {
-                JSONObject x = list.getJSONObject(i);
-                if (x.optBoolean("locked")) protetti++;
-                String ins = x.optString("current", ""), rep = x.optString("available", "");
-                if (!rep.isEmpty() && !rep.equals(ins) && !"-".equals(rep)) {
-                    conAggiornamento++;
-                    if (daAggiornare.length() < 25)
-                        daAggiornare.put(x.optString("name") + " " + ins + " -> " + rep);
-                }
-            }
-        }
-        r.put("pacchettiTotali", totali).put("pacchettiProtetti", protetti)
-         .put("pacchettiConAggiornamento", conAggiornamento).put("daAggiornare", daAggiornare);
+        JSONObject conteggio = contaAggiornamenti(pk.optJSONArray("packages"),
+                PackagePlan.daAggiornare(PackagePlan.leggiDaAggiornare().output()));
+        int conAggiornamento = conteggio.getInt("conAggiornamento");
+        int trattenuti = conteggio.getInt("trattenuti");
+        JSONArray daAggiornare = conteggio.getJSONArray("daAggiornare");
+        r.put("pacchettiTotali", conteggio.getInt("totali")).put("pacchettiProtetti", conteggio.getInt("protetti"))
+         .put("pacchettiConAggiornamento", conAggiornamento).put("daAggiornare", daAggiornare)
+         .put("pacchettiTrattenuti", trattenuti);
         if (conAggiornamento > 0)
             daFare.put(new JSONObject().put("urgenza", 2)
                     .put("cosa", conAggiornamento == 1
                             ? I18n.tr("server.um.x.newerInRepo.one")
                             : I18n.tr("server.um.x.newerInRepo.other", java.util.Map.of("n", String.valueOf(conAggiornamento))))
                     .put("dove", I18n.tr("server.um.reportData.5")));
+        // Un aggiornamento che esiste e che il blocco trattiene e' una notizia diversa da un
+        // aggiornamento disponibile: `pkg upgrade`, da qui o da SSH, lo salta ed esce 0.
+        // Misurato sulla VM il 23/10/2026: con nginx e postfix-mysql bloccati, `pkg upgrade -n`
+        // li nomina in una riga di passaggio, non li mette nel riepilogo e termina con uscita
+        // ZERO. Chi legge solo il codice di uscita conclude che non c'era niente da fare.
+        if (trattenuti > 0)
+            daFare.put(new JSONObject().put("urgenza", 2)
+                    .put("cosa", trattenuti == 1
+                            ? I18n.tr("server.um.x.heldByLock.one")
+                            : I18n.tr("server.um.x.heldByLock.other", java.util.Map.of("n", String.valueOf(trattenuti))))
+                    .put("dove", I18n.tr("server.um.reportData.8")));
 
         // --- vulnerabilita', separando quelle a cui si puo' rimediare ---
         //
@@ -6688,6 +6730,12 @@ public final class UpdateManager {
         JSONArray conRimedio = new JSONArray(), senzaRimedio = new JSONArray();
         JSONArray nonCapiti = new JSONArray();
         int trovati = 0;
+        // "C'e' il rimedio" senza dire che il pacchetto e' protetto e' una falsa
+        // rassicurazione: il rimedio esiste nel catalogo e nessun `pkg upgrade` lo applichera'
+        // mai, perche' il blocco lo salta. Sulla VM, il 23/10/2026, era proprio il caso di
+        // nginx: catalogo 1.30.6,3, cioe' la versione da cui VuXML considera corretto il
+        // problema, e il pacchetto bloccato dal pannello.
+        Set<String> bloccatiOra = insiemeProtetti();
         for (String riga : audit.split("\n")) {
             Matcher m = Pattern.compile("^([A-Za-z0-9._+-]+)-([0-9][^\\s]*) is vulnerable").matcher(riga.trim());
             if (!m.find()) continue;
@@ -6703,7 +6751,8 @@ public final class UpdateManager {
             }
             String nelRepo = sh("pkg rquery -U %v " + nome + " 2>/dev/null", 30).trim();
             if (!nelRepo.isEmpty() && !nelRepo.equals(installata))
-                conRimedio.put(nome + ": " + installata + " -> " + nelRepo);
+                conRimedio.put(nome + ": " + installata + " -> " + nelRepo
+                        + (bloccatiOra.contains(nome) ? " " + I18n.tr("server.um.x.heldSuffixFix") : ""));
             else
                 senzaRimedio.put(nome + " " + installata);
         }
