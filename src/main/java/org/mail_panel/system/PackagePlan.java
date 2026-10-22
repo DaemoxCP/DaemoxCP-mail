@@ -424,6 +424,103 @@ public final class PackagePlan {
         }
     }
 
+    /** Le versioni installate senza lo stato di blocco: {@code nome -> versione}. */
+    public static Map<String, String> soloVersioni(Map<String, String[]> installati) {
+        Map<String, String> r = new java.util.TreeMap<>();
+        if (installati != null)
+            for (Map.Entry<String, String[]> e : installati.entrySet())
+                if (e.getValue() != null && e.getValue().length > 0) r.put(e.getKey(), e.getValue()[0]);
+        return r;
+    }
+
+    /**
+     * Che cosa e' cambiato DAVVERO, messo a confronto con il piano firmato.
+     *
+     * {@link #verificaEsito} scorre le righe del PIANO: vede un pacchetto del piano che non
+     * e' arrivato dove doveva, e non puo' vedere un pacchetto cambiato che nel piano non
+     * c'era. Il 18/10/2026, sulla VM, e' successo: il piano firmato (465385a9d669def8) aveva
+     * dieci cambi e nessuna rimozione; durante l'esecuzione pkg ha trovato un conflitto
+     * (lmdb0 contro lmdb su /usr/local/bin/mdb_copy), ha rifatto il calcolo e ha RIMOSSO
+     * lmdb. Il confronto ha controllato i suoi dieci, li ha trovati tutti "ok" e ha concluso
+     * "verifica superata". La rimozione stava nel log di pkg e in nessun verdetto.
+     *
+     * Qui si guarda dall'altra direzione: l'inventario dei pacchetti installati prima e
+     * dopo. Ogni differenza che il piano non spiega e' una divergenza. La firma del piano
+     * esiste per garantire che venga eseguito quello che e' stato mostrato, e su un server
+     * di posta una rimozione non prevista e' precisamente il caso che deve intercettare.
+     *
+     * Una reinstallazione non lascia traccia nell'inventario (stessa versione) e quindi non
+     * puo' comparire qui: quel caso lo copre {@link #verificaEsito}. I due controlli sono
+     * complementari e servono entrambi.
+     *
+     * Funzione pura: riceve i due inventari e il piano, cosi' si prova con uscite vere.
+     *
+     * @return una voce per divergenza: {@code name}, {@code happened}
+     *         ("removed", "installed", "changed"), {@code from}, {@code to}, {@code why}
+     */
+    public static JSONArray divergenze(Map<String, String> prima, Map<String, String> dopo,
+                                       JSONObject piano) {
+        Map<String, String> a = prima == null ? Map.of() : prima;
+        Map<String, String> b = dopo == null ? Map.of() : dopo;
+
+        // Le righe del piano per nome. Un nome puo' comparire una volta sola: se comparisse
+        // due volte il piano sarebbe ambiguo, e si tiene la prima perche' e' quella mostrata.
+        Map<String, JSONObject> pianificato = new HashMap<>();
+        JSONArray c = piano == null ? null : piano.optJSONArray("changes");
+        for (int i = 0; c != null && i < c.length(); i++) {
+            JSONObject x = c.getJSONObject(i);
+            pianificato.putIfAbsent(x.optString("nome"), x);
+        }
+
+        Set<String> nomi = new java.util.TreeSet<>(a.keySet());
+        nomi.addAll(b.keySet());
+        JSONArray fuori = new JSONArray();
+        for (String nome : nomi) {
+            String va = a.get(nome), vb = b.get(nome);
+            String avvenuto = va == null ? "installed" : vb == null ? "removed"
+                            : va.equals(vb) ? null : "changed";
+            if (avvenuto == null) continue;   // niente e' cambiato per questo pacchetto
+
+            JSONObject p = pianificato.get(nome);
+            if (p == null) {
+                fuori.put(voceDivergenza(nome, avvenuto, va, vb,
+                        I18n.tr("server.plan.d.notInPlan")));
+                continue;
+            }
+            // Nel piano c'era: il tipo e la versione di arrivo devono combaciare.
+            String tipo = p.optString("tipo"), atteso = p.optString("a");
+            boolean coincide = switch (avvenuto) {
+                case "removed" -> "rimuove".equals(tipo);
+                case "installed" -> "installa".equals(tipo) && atteso.equals(vb);
+                default -> ("aggiorna".equals(tipo) || "retrocede".equals(tipo)) && atteso.equals(vb);
+            };
+            if (coincide) continue;
+            fuori.put(voceDivergenza(nome, avvenuto, va, vb,
+                    I18n.tr("server.plan.d.planSaid", java.util.Map.of(
+                            "kind", String.valueOf(typeName(tipo)),
+                            "expected", String.valueOf(atteso.isEmpty() ? I18n.tr("server.plan.removed") : atteso)))));
+        }
+        return fuori;
+    }
+
+    private static JSONObject voceDivergenza(String nome, String avvenuto, String da, String a, String why) {
+        return new JSONObject().put("name", nome).put("happened", avvenuto)
+                .put("from", da == null ? "" : da).put("to", a == null ? "" : a)
+                .put("why", why);
+    }
+
+    /** Una divergenza detta in una riga, nella lingua di chi legge. */
+    public static String divergenzaInRiga(JSONObject d) {
+        String nome = d.optString("name");
+        String testo = switch (d.optString("happened")) {
+            case "removed" -> I18n.tr("server.plan.d.removed", java.util.Map.of("name", nome, "version", String.valueOf(d.optString("from"))));
+            case "installed" -> I18n.tr("server.plan.d.installed", java.util.Map.of("name", nome, "version", String.valueOf(d.optString("to"))));
+            default -> I18n.tr("server.plan.d.changed", java.util.Map.of("name", nome,
+                    "from", String.valueOf(d.optString("from")), "to", String.valueOf(d.optString("to"))));
+        };
+        return testo + " — " + d.optString("why");
+    }
+
     /**
      * Dopo l'aggiornamento vero: ogni pacchetto del piano e' dove il piano diceva?
      * Una riga per cambiamento, con cio' che era atteso e cio' che c'e'.
