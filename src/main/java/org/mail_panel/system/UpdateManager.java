@@ -1609,19 +1609,24 @@ public final class UpdateManager {
      * Shell.run raccoglie tutto e restituisce alla fine: per un pkg upgrade da minuti
      * significherebbe una pagina ferma senza sapere se sta funzionando.
      */
-    private static int eseguiConLog(Job job, String comando, int timeoutSecondi) throws Exception {
+    static int eseguiConLog(Job job, String comando, int timeoutSecondi) throws Exception {
         return eseguiConLog(job, comando, timeoutSecondi, null);
     }
 
-    private static int eseguiConLog(Job job, String comando, int timeoutSecondi, StringBuilder cattura) throws Exception {
+    static int eseguiConLog(Job job, String comando, int timeoutSecondi, StringBuilder cattura) throws Exception {
         return eseguiConLog(job, comando, timeoutSecondi, cattura, null);
     }
 
-    private static int eseguiConLog(Job job, String comando, int timeoutSecondi,
-                                    StringBuilder cattura, Map<String, String> ambiente) throws Exception {
+    static int eseguiConLog(Job job, String comando, int timeoutSecondi,
+                            StringBuilder cattura, Map<String, String> ambiente) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", comando);
         org.mail_panel.util.Shell.applicaPath(pb);
         if (ambiente != null) pb.environment().putAll(ambiente);
+        // Lo standard input e' /dev/null, come in Shell: la pipe predefinita di
+        // ProcessBuilder non arriva mai a EOF, quindi un comando che legge resterebbe
+        // fermo per tutto il timeout — qui 1800 o 3600 secondi. Il motivo per esteso sta
+        // sul campo NIENTE_STDIN di Shell.
+        pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
         pb.redirectErrorStream(true);
         Process p = pb.start();
 
