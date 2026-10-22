@@ -30,10 +30,12 @@ import java.util.concurrent.Executors;
  * registro di audit; con il token giusto la richiesta passa (e un servizio sconosciuto e' 400);
  * un'azione su un servizio finisce nel registro e fa rileggere le versioni.
  *
- * Il servizio usato per l'azione e' redis, che qui non c'e': "service redis restart" fallisce
- * senza toccare niente, ed e' quello che serve.
+ * Il servizio usato per l'azione e' redis, e l'esito del restart NON si pretende: redis lo
+ * installa l'installatore di questo stesso pannello, quindi su una macchina col server di posta
+ * installato quel restart riesce, mentre su una macchina nuda fallisce. Si pretende invece la
+ * cosa che deve valere sempre: che la risposta e il registro di audit dicano lo stesso esito.
  *
- * Uso (con il MySQL di prova del README.md, gia' con le tabelle create da AddressConversionTest):
+ * Uso (con il MySQL di prova del README.md; lo schema se lo prepara da sola):
  *   java -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.VersionsApiTest
  */
@@ -74,6 +76,19 @@ public class VersionsApiTest {
         }
     }
 
+    /**
+     * L'esito che il registro attribuisce a quell'azione: il pannello scrive
+     * {@code service=<nome>} e ci aggiunge {@code (failed)} solo se non e' riuscita
+     * (SSLMailServer, "service=" + service + (success ? "" : " (failed)")). Quindi l'assenza
+     * di quella parola E' il "riuscito", e va letta sulla riga, non su tutto il file: un
+     * {@code contains("service=redis")} sarebbe vero anche per "service=redis (failed)".
+     */
+    static boolean esitoNelRegistro(Path registro, String azione) throws Exception {
+        for (String riga : Files.readString(registro).split("\n"))
+            if (riga.contains(azione)) return !riga.contains("(failed)");
+        throw new IllegalStateException("nel registro non c'e' nessuna riga " + azione);
+    }
+
     static boolean aspettaRiga(Path registro, String testo) throws Exception {
         for (int i = 0; i < 40; i++) {
             if (Files.exists(registro) && Files.readString(registro).contains(testo)) return true;
@@ -97,7 +112,10 @@ public class VersionsApiTest {
         db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(porta), System.getProperty("mysql.database", "mailpanel_prova"));
         vero("connessione a MySQL", db.connect());
-        db.setSetting("audit_log_file_path", registro.toString());
+        // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.
+        // Scritta prima che le tabelle esistessero, non si salvava e il pannello
+        // scriveva nel registro vero.
+        TestSessions.auditLogTo(db, registro);
         Main.mailDatabase = db;
         Main.mysqlAvailable = true;
         Main.setupRequired = false;
@@ -165,10 +183,21 @@ public class VersionsApiTest {
             Thread.sleep(1100);   // letteAlle ha i secondi: una nuova lettura deve potersi distinguere
             HttpResponse<String> azione = chiedi("POST", "/api/service",
                     "{\"service\":\"redis\",\"action\":\"restart\",\"csrf_token\":\"" + csrf + "\"}", true);
-            vero("redis restart: risposta 200 (qui fallisce, non c'e' redis)", azione.statusCode() == 200
-                    && !new JSONObject(azione.body()).getBoolean("success"));
-            vero("nel registro: SERVICE_RESTART di redis, non riuscito", aspettaRiga(registro, "SERVICE_RESTART")
-                    && aspettaRiga(registro, "service=redis (failed)"));
+            // Non si pretende che redis FALLISCA. Lo pretendeva, con il commento "qui non
+            // c'e' redis": ma redis lo installa l'installatore di questo stesso pannello, e
+            // su una macchina con il server di posta installato "service redis restart"
+            // riesce. Due controlli su due cadevano, su un difetto che non c'era.
+            //
+            // L'invariante vero e' un altro, e vale su qualunque macchina: la risposta e il
+            // registro devono dire LA STESSA COSA. Se divergessero, chi legge l'audit log
+            // crederebbe riuscito quello che e' fallito, o il contrario.
+            boolean riuscita = new JSONObject(azione.body()).getBoolean("success");
+            vero("redis restart: risposta 200, esito " + (riuscita ? "riuscito" : "non riuscito")
+                    + " (dipende da questa macchina, e va bene)", azione.statusCode() == 200);
+            vero("nel registro c'e' SERVICE_RESTART di redis", aspettaRiga(registro, "SERVICE_RESTART")
+                    && aspettaRiga(registro, "service=redis"));
+            vero("e il registro dice lo STESSO esito della risposta",
+                    esitoNelRegistro(registro, "SERVICE_RESTART") == riuscita);
             String dopo = new JSONObject(chiedi("GET", "/api/versioni", null, true).body()).getString("letteAlle");
             vero("dopo l'azione le versioni si rileggono, anche senza fresco: " + dopo, !dopo.equals(lette));
         } finally {

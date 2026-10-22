@@ -111,12 +111,23 @@ public class LoginRoutesTest {
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         System.setProperty("jdk.httpclient.allowRestrictedHeaders", "host");
         Path dir = Files.createTempDirectory("login-routes");
+        // Il file dei segreti va scelto ADESSO, prima che qualunque cosa tocchi PanelSecrets:
+        // quella classe legge questa proprieta' una volta sola, quando viene caricata, e
+        // TestSessions.prepare la rispetta se c'e' gia'. Spostare la cartella DOPO -- com'era
+        // in un primo giro -- vuol dire creare gli amministratori con una chiave e cercarli
+        // con un'altra: il blind index dell'email non combacia piu', adminByEmail non trova
+        // nessuno, e la prova cade su "only the real one gets an email" senza che niente dica
+        // perche'.
+        System.setProperty("mailpanel.secrets.dir", dir.resolve("secrets").toString());
 
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_prova"));
         check("connected to MySQL", db.connect());
-        db.setSetting("audit_log_file_path", dir.resolve("audit.log").toString());
+        // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.
+        // Scritta prima che le tabelle esistessero, non si salvava e il pannello
+        // scriveva nel registro vero.
+        TestSessions.auditLogTo(db, dir.resolve("audit.log"));
         TestSessions.prepare(db);
         Main.mysqlAvailable = true;
         Main.setupRequired = false;
@@ -146,11 +157,8 @@ public class LoginRoutesTest {
         // arrivano col NOME -- panel.example.test, che e' anche l'rpId delle passkey, e per
         // questo non puo' essere un indirizzo. Quel nome va dichiarato, perche' e' quello che
         // un pannello raggiunto per nome ha scritto nella propria configurazione: prima
-        // nessuno lo chiedeva e la prova girava senza. Il file dei segreti va in una cartella
-        // di prova, perche' update_panel_config ci mette la chiave TLS.
-        Field secretsDir = org.mail_panel.security.PanelSecrets.class.getDeclaredField("dir");
-        secretsDir.setAccessible(true);
-        secretsDir.set(null, dir.resolve("secrets"));
+        // nessuno lo chiedeva e la prova girava senza. update_panel_config mette la chiave TLS
+        // nel file dei segreti, che e' gia' nella cartella di prova scelta in cima.
         Main.dbManager = new org.mail_panel.sqli.dataBaseManager();
         Main.dbManager.create_tables();
         Main.dbManager.insert_data_default();
@@ -283,9 +291,33 @@ public class LoginRoutesTest {
             HttpResponse<String> pkAgain = ask("POST", "/api/login", new JSONObject().put("action", "passkey_verify").put("request", opt.getString("request"))
                     .put("credential", new JSONObject(assertion)).put("csrf_token", token).toString(), "Cookie", preCookie);
             check("the same assertion again: 401, no cookie", pkAgain.statusCode() == 401 && cookieValue(pkAgain, WebSessions.COOKIE) == null);
-            JSONObject ipOpt = new JSONObject(ask("POST", "/api/login", "{\"action\":\"passkey_options\",\"csrf_token\":\"" + token + "\"}",
-                    "Cookie", preCookie, "Host", "127.0.0.1:" + port).body());
-            check("opened by IP address: the passkey needs a name (the server says so)", !ipOpt.optBoolean("success"));
+            // Aperto per INDIRIZZO invece che col nome. Da quando il pannello guarda l'Host
+            // (HostCheck) sono due cose distinte, e qui si provano entrambe.
+            //
+            // 1) Col nome configurato, un Host che e' un indirizzo non arriva nemmeno al
+            //    gestore: 421, e il corpo non e' JSON. Prima questa riga ci costruiva sopra un
+            //    JSONObject e la prova si spaccava con "A JSONObject text must begin with '{'".
+            String body = "{\"action\":\"passkey_options\",\"csrf_token\":\"" + token + "\"}";
+            HttpResponse<String> perIndirizzo = ask("POST", "/api/login", body,
+                    "Cookie", preCookie, "Host", "127.0.0.1:" + port);
+            check("opened by IP address while the panel answers to a name: 421, before the handler",
+                    perIndirizzo.statusCode() == 421);
+
+            // 2) E con l'indirizzo configurato a wildcard -- quello che scrive l'installatore --
+            //    un Host che e' un indirizzo viene servito, e allora e' il gestore delle
+            //    passkey a dire che gli serve un nome. E' la proprieta' che questa riga
+            //    provava da sempre, e va provata nella condizione in cui esiste ancora.
+            Main.dbManager.update_panel_config("0.0.0.0", "0", Files.readString(dir.resolve("c.pem")),
+                    Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
+            try {
+                JSONObject ipOpt = new JSONObject(ask("POST", "/api/login", body,
+                        "Cookie", preCookie, "Host", "127.0.0.1:" + port).body());
+                check("opened by IP address, panel listening everywhere: the passkey needs a name"
+                        + " (the server says so)", !ipOpt.optBoolean("success"));
+            } finally {
+                Main.dbManager.update_panel_config(HOST, "0", Files.readString(dir.resolve("c.pem")),
+                        Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
+            }
 
             System.out.println("\n== /api/login with the console code ==");
             String console = LoginCodes.issueConsoleCode(AuthStore.adminById(plain.id()).orElseThrow());
