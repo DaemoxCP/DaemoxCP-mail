@@ -180,9 +180,32 @@ public final class Shell {
         return e == null ? "" : e;
     }
 
+    /**
+     * Lo standard input di ogni figlio: /dev/null, cioe' EOF immediato.
+     *
+     * Senza questa riga ProcessBuilder gli da' la sua pipe predefinita, che la JVM tiene
+     * aperta in scrittura e non scrive mai: chi legge non prende ne' dati ne' EOF e resta
+     * fermo fino al timeout. Misurato sulla VM FreeBSD 15.1 il 23/10/2026: un `read x`
+     * passato a runShell con timeout 8s torna dopo 8102 ms, exit -1, timedOut true; lo
+     * stesso comando con </dev/null torna in 3 ms. Nei lavori dell'updater i timeout
+     * valgono 1800 o 3600 secondi, quindi quell'attesa e' mezz'ora o un'ora in cui il
+     * turno dei pacchetti resta preso e ogni altra operazione viene rifiutata.
+     *
+     * Nessuno puo' rispondere a quel prompt: il figlio non eredita il terminale, prende
+     * una pipe sua, e quello che l'operatore digita arriva allo stdin del PANNELLO. Quindi
+     * l'attesa non e' un'attesa, e' un blocco.
+     *
+     * EOF non e' un errore: un comando che legge senza controllare l'esito della lettura
+     * prosegue con un valore vuoto invece di fermarsi. Questo toglie l'attesa, non
+     * trasforma un prompt in un errore — chi aggiunge un comando che chiede qualcosa deve
+     * controllare l'esito della lettura.
+     */
+    private static final java.io.File NIENTE_STDIN = new java.io.File("/dev/null");
+
     private static Result runInternal(Duration timeout, List<String> cmd) {
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.environment().put("PATH", PATH_COMPLETO);
+        pb.redirectInput(ProcessBuilder.Redirect.from(NIENTE_STDIN));
         pb.redirectErrorStream(true);
         Process p = null;
         try {
