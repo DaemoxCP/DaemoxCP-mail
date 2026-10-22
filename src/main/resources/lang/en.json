@@ -4259,6 +4259,7 @@
   "server.um.x.lineNoLonger": "{file}:{riga} no longer contains {root}",
   "server.um.x.lockAlready": "already fine",
   "server.um.x.lockDone": "protected",
+  "server.um.x.locksStayWarning": "Careful: {n} mail stack packages stay locked (pkg lock) even without the panel, so they will not receive security fixes any more — and \"pkg upgrade\" skips them exiting with code 0, as if there were nothing to do. To release them all: {cmd}. The reason and the list are in {file}.",
   "server.um.x.lockFailed": "FAILED",
   "server.um.x.lockOfInst": "{lock} of {inst} protected",
   "server.um.x.markedVital": " because it is marked as vital",

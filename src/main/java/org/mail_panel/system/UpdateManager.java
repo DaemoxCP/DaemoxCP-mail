@@ -267,7 +267,13 @@ public final class UpdateManager {
         String id = "lock-" + System.nanoTime();
         String rifiuto = PackageQueue.prendiPerLeProtezioni(id, I18n.tr("server.um.packagesLock.1"));
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
-        try { return cambiaProtezioni(blocca, soloQuesto); }
+        try {
+            JSONObject esito = cambiaProtezioni(blocca, soloQuesto);
+            // La nota sulla macchina dice lo stato di adesso: se un amministratore sblocca
+            // dal pannello, la nota non deve continuare a elencare quel pacchetto.
+            scriviNotaDeiBlocchi();
+            return esito;
+        }
         finally { PackageQueue.rilascia(id); }
     }
 
@@ -351,13 +357,152 @@ public final class UpdateManager {
             JSONObject p = st.getJSONObject(i);
             String n = p.getString("name");
             if (p.getBoolean("locked") || aMano.contains(n) || !isValidName(n)) continue;
-            if (ok("pkg lock -y " + n)) lockedPackages.add(n); else falliti.add(n);
+            if (ok("pkg lock -y " + n)) { lockedPackages.add(n); annotaBlocco(n); } else falliti.add(n);
         }
+        // La nota si riscrive a ogni avvio, anche quando non c'era niente da bloccare: dice lo
+        // stato di ADESSO, e una nota che resta indietro e' peggio di nessuna nota.
+        scriviNotaDeiBlocchi();
         if (lockedPackages.isEmpty() && falliti.isEmpty()) return "";
         String msg = "Mail stack packages locked at startup: " + (lockedPackages.isEmpty() ? "none" : String.join(", ", lockedPackages))
                 + (falliti.isEmpty() ? "" : "; could not lock: " + String.join(", ", falliti));
         LOGGER.info(msg);
         return msg;
+    }
+
+    // ===================== la traccia dei blocchi sulla macchina =====================
+
+    /**
+     * Dove il pannello spiega, sulla macchina, perche' quei pacchetti sono bloccati.
+     *
+     * Il blocco non scade e nessuno lo toglie allo spegnimento: e' la regola, ed e' giusta
+     * finche' il pannello c'e'. Ma se il pannello viene disinstallato, o semplicemente non
+     * riparte piu', quei pacchetti restano bloccati per sempre — e un pacchetto bloccato non
+     * riceve nemmeno le correzioni di sicurezza.
+     *
+     * Chi se ne accorgerebbe? Misurato sulla VM FreeBSD 15.1 il 23/10/2026, con 40 pacchetti
+     * bloccati: `pkg upgrade` nomina i bloccati in una riga di passaggio, non li mette nel
+     * riepilogo e termina con uscita ZERO. Dal sistema non si capisce ne' chi li ha bloccati,
+     * ne' perche', ne' come liberarli: `pkg lock -l` elenca i nomi e basta.
+     *
+     * Questo file e' la risposta a quelle tre domande, e sopravvive al pannello.
+     */
+    static final String LOCK_NOTE = "/var/db/mailpanel/locked-packages.txt";
+
+    /** Dove sta la nota. E' una variabile solo perche' le prove non scrivano in /var/db. */
+    static Path notaBlocchi = Paths.get(LOCK_NOTE);
+
+    /** Il comando che libera tutto, scritto in un punto solo perche' compare in piu' testi. */
+    static final String COMANDO_SBLOCCO = "pkg unlock -a -y";
+
+    /**
+     * Il testo della nota. Funzione pura: riceve l'elenco e il momento, cosi' si prova.
+     *
+     * In italiano come gli altri file che il pannello genera sulla macchina (l'override del
+     * ramo di pkg, il filtro di fail2ban, la lista permaban): li legge chi amministra il
+     * server, non il programma.
+     */
+    static String notaDeiBlocchi(java.util.Collection<String> bloccati, String quando) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Pacchetti bloccati dal pannello mail FreeBSD\n")
+          .append("# Scritto dal pannello il ").append(quando).append(" (UTC). NON modificare a mano:\n")
+          .append("# viene riscritto a ogni avvio del pannello e a ogni cambio di protezione.\n")
+          .append("#\n")
+          .append("# PERCHE': i pacchetti dello stack di posta restano bloccati (pkg lock) perche' un\n")
+          .append("# \"pkg upgrade\", da qui o da SSH, non li sostituisca senza i controlli\n")
+          .append("# dell'aggiornamento guidato: la configurazione generata dal pannello puo' non\n")
+          .append("# essere accettata dalla versione nuova, e il servizio si rifiuterebbe di partire.\n")
+          .append("#\n")
+          .append("# COME SI AGGIORNANO: dal pannello, pagina Aggiornamenti. Li' si vede, per ogni\n")
+          .append("# pacchetto, se c'e' una versione nuova e se chiude una vulnerabilita'; il pannello\n")
+          .append("# sblocca, aggiorna, riprotegge e riavvia i servizi.\n")
+          .append("#\n")
+          .append("# ATTENZIONE, se il pannello non c'e' piu' o non riparte: questi pacchetti restano\n")
+          .append("# bloccati, cioe' NON riceveranno piu' nemmeno le correzioni di sicurezza, e\n")
+          .append("# \"pkg upgrade\" li salta uscendo con codice 0, come se non ci fosse niente da fare.\n")
+          .append("# Per liberarli tutti:\n")
+          .append("#\n")
+          .append("#     ").append(COMANDO_SBLOCCO).append("\n")
+          .append("#\n")
+          .append("# Uno solo:  pkg unlock -y <nome>\n")
+          .append("# Lo stato vero lo dice sempre: pkg lock -l\n")
+          .append("\n");
+        if (bloccati.isEmpty()) sb.append("# (nessun pacchetto bloccato)\n");
+        for (String n : bloccati) sb.append(n).append('\n');
+        return sb.toString();
+    }
+
+    /**
+     * Scrive la nota con i pacchetti bloccati ADESSO. Se non ce n'e' nessuno, la cancella:
+     * una nota che elenca blocchi che non esistono piu' manderebbe a cercare un problema
+     * che non c'e'.
+     */
+    static synchronized void scriviNotaDeiBlocchi() {
+        try {
+            Set<String> bloccati = new TreeSet<>();
+            for (String n : insiemeProtetti()) if (ruoloDi(n) != null) bloccati.add(n);
+            Path f = notaBlocchi;
+            if (bloccati.isEmpty()) { Files.deleteIfExists(f); return; }
+            if (f.getParent() != null) Files.createDirectories(f.getParent());
+            String quando = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
+            // Scrittura atomica: un file letto a meta' da chi indaga su un server fermo
+            // sarebbe un modo di sbagliare proprio nel momento peggiore.
+            Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
+            Files.writeString(tmp, notaDeiBlocchi(bloccati, quando), StandardCharsets.UTF_8);
+            Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception e) {
+            // La nota e' una spiegazione, non un meccanismo: se non si scrive, il pannello
+            // funziona comunque. Ma lo si dice, perche' senza di lei la macchina non spiega
+            // piu' i propri blocchi.
+            LOGGER.log(Level.WARNING, "Cannot write " + notaBlocchi, e);
+        }
+    }
+
+    /**
+     * L'avviso sui pacchetti che resterebbero bloccati senza il pannello, o "" se non ce
+     * n'e' nessuno.
+     *
+     * Serve dove qualcuno sta togliendo il pannello di mezzo: e' l'unico momento in cui la
+     * domanda "e i blocchi?" si pone da se', ed e' il momento in cui nessuno la faceva.
+     */
+    static String avvisoBlocchiRimasti() {
+        Set<String> bloccati = new TreeSet<>();
+        for (String n : insiemeProtetti()) if (ruoloDi(n) != null) bloccati.add(n);
+        if (bloccati.isEmpty()) return "";
+        return I18n.tr("server.um.x.locksStayWarning", java.util.Map.of(
+                "n", String.valueOf(bloccati.size()), "cmd", COMANDO_SBLOCCO, "file", LOCK_NOTE));
+    }
+
+    /**
+     * Annota sul pacchetto, nel database di pkg, chi l'ha bloccato e dove sta scritto il
+     * perche'. E' il cartello nel punto in cui qualcuno si fa la domanda: chi vede
+     * "nginx-1.30.6,3 is locked and may not be modified" e indaga con `pkg info -A nginx`
+     * trova la riga, e la riga rimanda alla nota.
+     *
+     * Misurato sulla VM il 23/10/2026: `pkg annotate -y -A` scrive e `pkg info -A` mostra.
+     * Si annota solo cio' che si e' appena bloccato, quindi a regime non costa niente.
+     */
+    private static void annotaBlocco(String nome) {
+        String cmd = comandoAnnotazione(nome);
+        if (cmd != null) ok(cmd, 20);
+    }
+
+    /** La chiave dell'annotazione nel database di pkg. */
+    static final String CHIAVE_ANNOTAZIONE = "mail_panel_lock";
+
+    /**
+     * Il comando che scrive l'annotazione, o null se il nome non passa il filtro.
+     *
+     * Sta in una funzione sua perche' il valore contiene spazi, un percorso e un trattino
+     * lungo: e' una riga di comando, e una riga di comando si prova eseguendola, non
+     * leggendola. In questo progetto un apice dentro un testo e' gia' passato intatto
+     * attraverso un here-document per rompere piu' in la'.
+     */
+    static String comandoAnnotazione(String nome) {
+        if (!isValidName(nome)) return null;
+        return "pkg annotate -y -A " + nome + " " + CHIAVE_ANNOTAZIONE
+             + " 'bloccato dal pannello mail: vedi " + LOCK_NOTE
+             + " - si libera con " + COMANDO_SBLOCCO + "'";
     }
 
     // ===================== il quadro dei pacchetti =====================
@@ -2134,6 +2279,11 @@ public final class UpdateManager {
     private static long number(String v) {
         try { return Long.parseLong(v == null ? "" : v.trim().replaceAll("[^0-9]", "")); }
         catch (Exception e) { return 0L; }
+    }
+
+    /** Due frasi in una nota, senza righe vuote se la seconda non c'e'. */
+    private static String unisci(String a, String b) {
+        return b == null || b.isEmpty() ? a : a + "\n\n" + b;
     }
 
     /**
@@ -8207,15 +8357,20 @@ public final class UpdateManager {
             r.put("percorso", percorso).put("copia", copia)
              .put("installato", installato).put("variabileEsiste", variabileEsiste);
 
+            // Chi sta togliendo l'avvio automatico del pannello deve sapere che i blocchi
+            // restano: e' l'unico punto in cui la domanda si pone da se'.
+            String avvisoBlocchi = avvisoBlocchiRimasti();
+            if (!avvisoBlocchi.isEmpty()) r.put("locksStay", avvisoBlocchi);
+
             if (!installato && !variabileEsiste)
                 return r.put("success", true).put("eseguito", false).put("nothingToDo", true)
-                        .put("nota", I18n.tr("server.um.removePanelRcScript.1"));
+                        .put("nota", unisci(I18n.tr("server.um.removePanelRcScript.1"), avvisoBlocchi));
 
             if (!esegui)
                 return r.put("success", true).put("eseguito", false)
-                        .put("nota", I18n.tr("server.um.x.rcRmPreview", java.util.Map.of("azioni", String.valueOf((variabileEsiste ? I18n.tr("server.um.x.rcRmVar") : "")
+                        .put("nota", unisci(I18n.tr("server.um.x.rcRmPreview", java.util.Map.of("azioni", String.valueOf((variabileEsiste ? I18n.tr("server.um.x.rcRmVar") : "")
                                 + (variabileEsiste && installato ? " " + I18n.tr("server.um.x.and") + " " : "")
-                                + (installato ? I18n.tr("server.um.x.rcRmFile", java.util.Map.of("file", String.valueOf(percorso), "copia", String.valueOf(copia))) : "")))));
+                                + (installato ? I18n.tr("server.um.x.rcRmFile", java.util.Map.of("file", String.valueOf(percorso), "copia", String.valueOf(copia))) : "")))), avvisoBlocchi));
 
             ok("mkdir -p /var/db/mailpanel", 20);
 
@@ -8248,7 +8403,7 @@ public final class UpdateManager {
             }
 
             return r.put("success", true).put("eseguito", true)
-                    .put("nota", I18n.tr("server.um.removePanelRcScript.4", java.util.Map.of("copia", String.valueOf(copia))));
+                    .put("nota", unisci(I18n.tr("server.um.removePanelRcScript.4", java.util.Map.of("copia", String.valueOf(copia))), avvisoBlocchi));
         } catch (Exception e) {
             return r.put("success", false).put("error", I18n.tr("server.um.removePanelRcScript.5", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         }
