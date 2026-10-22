@@ -674,6 +674,71 @@ public final class UpdateManager {
      * identificativi CVE e references. Senza questo il pannello direbbe soltanto "e'
      * vulnerabile", che non basta per decidere se valga la pena sbloccare e aggiornare.
      */
+    /** La riga con cui pkg audit chiude il referto. E' la prova che il controllo e' avvenuto. */
+    private static final Pattern AUDIT_TOTALE = Pattern.compile(
+            "(\\d+)\\s+problem\\(s\\)\\s+in\\s+(\\d+)\\s+[^\\n]*package\\(s\\)\\s+found");
+
+    /**
+     * Il referto di pkg audit per UNA versione precisa di un pacchetto.
+     *
+     * Due trappole, misurate sulla VM FreeBSD 15.1 il 23/10/2026, che insieme rendevano
+     * questo controllo incapace di dire qualunque cosa.
+     *
+     * 1. `pkg audit nome`, col solo nome, non risponde "la versione installata e'
+     *    vulnerabile?" ma "VuXML ha voci per questo nome?". Su nginx 1.30.6,3, appena
+     *    aggiornato e non vulnerabile, rispondeva "nginx is vulnerable" con 25 problemi,
+     *    elencando intervalli come "< 1.8.1_3,2" che non c'entrano niente; `pkg audit` senza
+     *    argomenti, che guarda le versioni installate, nello stesso momento non lo nominava
+     *    affatto. E l'intestazione di quel referto e' "nginx is vulnerable:", SENZA la
+     *    versione, quindi dettaglioVulnerabilita — che cerca "nome-versione is vulnerable:"
+     *    — non entrava mai nel blocco: zero CVE sempre, in entrambe le direzioni.
+     *    Su php84 8.4.26, vulnerabile per davvero, il referto del pannello era "[ok] Nessuna
+     *    vulnerabilita' nota registrata per questo pacchetto", mentre pkg diceva
+     *    "php84 is vulnerable" e PackagePlan.correzioni, che la domanda la pone giusta,
+     *    trovava la fix nella 8.4.27.
+     *    La forma che risponde alla domanda giusta e' `pkg audit nome-versione`: con
+     *    "nginx-1.30.6,3" dice "0 problem(s)", con "php84-8.4.26" trova l'unico problema vero.
+     *
+     * 2. Se il database delle vulnerabilita' non c'e', pkg risponde "vulnxml file vuln.xml
+     *    does not exist" e chi cerca solo le righe "is vulnerable" conclude "nessuna
+     *    vulnerabilita'". E' il caso peggiore: una rassicurazione al posto di un "non ho
+     *    potuto controllare". Il codice di uscita non aiuta a distinguere — misurato: 1
+     *    senza il database, 0 sia con problemi trovati sia senza. Quello che distingue un
+     *    referto fatto da uno non fatto e' la riga finale "N problem(s) in M package(s)
+     *    found.", e quella si pretende.
+     *
+     * Il conto che si mostra e' quello della riga finale, non il numero di CVE: una voce di
+     * VuXML puo' non avere nessun identificativo CVE, e contare i CVE la perderebbe.
+     */
+    static JSONObject refertoAudit(String nome, String versione) {
+        JSONObject r = refertoVuoto(nome, versione);
+        if (!isValidName(nome) || !PackagePlan.versioneValida(versione))
+            return r.put("done", false).put("problems", 0)
+                    .put("error", I18n.tr("server.um.x.auditNoVersion"));
+        return leggiReferto(sh("pkg audit '" + nome + "-" + versione + "' 2>&1", 120), nome, r);
+    }
+
+    /** La lettura del referto, separata dal comando: funzione pura, si prova con uscite vere. */
+    static JSONObject leggiReferto(String out, String nome, JSONObject r) {
+        Matcher m = AUDIT_TOTALE.matcher(out == null ? "" : out);
+        if (!m.find())
+            return r.put("done", false).put("problems", 0)
+                    .put("error", I18n.tr("server.um.x.auditNotDone", java.util.Map.of("out", String.valueOf(riassumiUscita(out)))));
+        JSONObject det = dettaglioVulnerabilita(out, nome);
+        int problemi;
+        try { problemi = Integer.parseInt(m.group(1)); } catch (NumberFormatException e) { problemi = 0; }
+        return r.put("done", true).put("problems", problemi)
+                .put("cve", det.getJSONArray("cve")).put("description", det.getString("description"))
+                .put("references", det.getJSONArray("references"));
+    }
+
+    /** Un referto vuoto da riempire, per chi legge un'uscita gia' in mano. */
+    static JSONObject refertoVuoto(String nome, String versione) {
+        return new JSONObject().put("name", nome == null ? "" : nome)
+                .put("version", versione == null ? "" : versione)
+                .put("cve", new JSONArray()).put("references", new JSONArray()).put("description", "");
+    }
+
     static JSONObject dettaglioVulnerabilita(String audit, String pacchetto) {
         JSONArray cve = new JSONArray();
         JSONArray references = new JSONArray();
@@ -5440,15 +5505,20 @@ public final class UpdateManager {
             }
         }
 
-        // Vulnerabilita' che questo aggiornamento chiuderebbe: e' il motivo per farlo.
-        String audit = sh("pkg audit " + nome + " 2>&1", 120);
-        JSONObject det = dettaglioVulnerabilita(audit, nome);
-        r.put("cve", det.getJSONArray("cve")).put("vulnDescrizione", det.getString("description"))
-         .put("references", det.getJSONArray("references"));
-        int nCve = det.getJSONArray("cve").length();
-        aggiungiCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), nCve > 0 ? "verifica" : "ok",
-                nCve > 0 ? I18n.tr("server.um.x.openCves", java.util.Map.of("n", String.valueOf(nCve), "d", String.valueOf(det.getString("description"))))
-                         : I18n.tr("server.um.packagePreflight.9"));
+        // Vulnerabilita' che questo aggiornamento chiuderebbe: e' il motivo per farlo. Si
+        // chiede per la versione INSTALLATA, e si pretende un referto: il perche' delle due
+        // cose sta su refertoAudit.
+        JSONObject refr = refertoAudit(nome, versione);
+        r.put("cve", refr.getJSONArray("cve")).put("vulnDescrizione", refr.getString("description"))
+         .put("references", refr.getJSONArray("references")).put("vulnChecked", refr.optBoolean("done"));
+        int problemi = refr.optInt("problems");
+        if (!refr.optBoolean("done"))
+            aggiungiCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), "verifica",
+                    refr.optString("error"));
+        else
+            aggiungiCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), problemi > 0 ? "verifica" : "ok",
+                    problemi > 0 ? I18n.tr("server.um.x.openCves", java.util.Map.of("n", String.valueOf(problemi), "d", String.valueOf(refr.getString("description"))))
+                                 : I18n.tr("server.um.packagePreflight.9"));
 
         // Servizi da riavviare. Il punto dolente: senza riavvio la fix non entra in
         // servizio. E vanno calcolati su TUTTA la famiglia, non sul solo pacchetto nominato:
@@ -5880,13 +5950,17 @@ public final class UpdateManager {
             job.avanza(5, TOT);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.30", java.util.Map.of("tOT", String.valueOf(TOT))));
-            String audit = sh("pkg audit " + nome + " 2>&1", 120);
-            JSONObject det = dettaglioVulnerabilita(audit, nome);
-            int rimaste = det.getJSONArray("cve").length();
-            if (rimaste == 0) {
+            // Sulla versione NUOVA, quella appena installata: chiedere col solo nome
+            // risponderebbe a un'altra domanda (vedi refertoAudit).
+            JSONObject refrDopo = refertoAudit(nome, versioneDopo);
+            if (!refrDopo.optBoolean("done")) {
+                // "Non ho potuto controllare" non e' "non ci sono vulnerabilita'".
+                job.scrivi("  " + refrDopo.optString("error"));
+                job.scrivi("  " + I18n.tr("server.um.x.auditUncertain"));
+            } else if (refrDopo.optInt("problems") == 0) {
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.31", java.util.Map.of("nome", String.valueOf(nome))));
             } else {
-                job.scrivi("  " + I18n.tr("server.um.x.cvesLeft", java.util.Map.of("n", String.valueOf(rimaste), "nome", String.valueOf(nome), "d", String.valueOf(det.getString("description")))));
+                job.scrivi("  " + I18n.tr("server.um.x.cvesLeft", java.util.Map.of("n", String.valueOf(refrDopo.optInt("problems")), "nome", String.valueOf(nome), "d", String.valueOf(refrDopo.getString("description")))));
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.32"));
             }
 
