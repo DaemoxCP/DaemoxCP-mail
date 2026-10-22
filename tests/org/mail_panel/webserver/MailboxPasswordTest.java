@@ -119,7 +119,10 @@ public class MailboxPasswordTest {
         db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_prova"));
         check("connected to MySQL", db.connect());
-        db.setSetting("audit_log_file_path", audit.toString());
+        // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.
+        // Scritta prima che le tabelle esistessero, non si salvava e il pannello
+        // scriveva nel registro vero.
+        TestSessions.auditLogTo(db, audit);
         Main.mysqlAvailable = true;
         Main.setupRequired = false;
         String[] login = TestSessions.open(db, "vault-test", UA);
