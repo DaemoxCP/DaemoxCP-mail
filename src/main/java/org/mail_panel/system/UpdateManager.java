@@ -5838,6 +5838,17 @@ public final class UpdateManager {
                 code = eseguiConLog(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, catturato);
             }
             messaggiAzione = messaggiCheChiedonoAzione(catturato.toString());
+
+            // Il confronto con l'inventario si fa SUBITO, prima di decidere se fermarsi: un
+            // pkg che esce diverso da zero e' proprio il caso in cui la macchina puo' essere
+            // rimasta a meta', e allora sapere che cosa e' cambiato conta di piu', non di
+            // meno. Misurato sulla VM il 23/10/2026: un aggiornamento guidato di
+            // postfix-mysql si e' fermato a meta' con uscita 3 (mysql97-client in conflitto
+            // con mysql84-client sugli stessi file) dopo che il solver aveva aggiunto al
+            // piano una rimozione che il piano firmato non aveva.
+            fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano,
+                    "Guided update of " + nome);
+
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
 
             String versioneDopo = sh("pkg query %v " + nome + " 2>/dev/null", 20);
@@ -5856,12 +5867,6 @@ public final class UpdateManager {
             }
             if (pianoNonRispettato) job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.13"));
 
-            // E dall'altra direzione: che cosa e' cambiato davvero. Il confronto qui sopra
-            // scorre il PIANO, quindi un pacchetto cambiato che nel piano non c'era non lo
-            // vede. Sulla VM, il 18/10/2026, pkg ha rimosso lmdb per un conflitto trovato
-            // durante l'esecuzione e la verifica ha concluso "superata".
-            fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano,
-                    "Guided update of " + nome);
 
             job.avanza(4, TOT);
             job.scrivi("");
