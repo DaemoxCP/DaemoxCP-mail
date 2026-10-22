@@ -3,6 +3,16 @@
 Non fanno parte della build: Maven non guarda questa cartella, il jar non le contiene.
 Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguono a mano.
 
+Il jar e' compilato per Java 25 (`<release>25</release>` nel pom). Con un JDK piu' recente
+sul Mac, le prove vanno compilate con `--release 25`, altrimenti sulla VM non partono:
+«has been compiled by a more recent version of the Java Runtime (class file version 70.0),
+this version ... recognizes class file versions up to 69.0». Il jar invece va bene, perche'
+Maven la release la dichiara.
+
+E l'esito di una prova e' il suo **codice di uscita**: `java ... | tail -4` restituisce
+quello di `tail`, cioe' zero sempre. Una prova che non parte affatto, letta cosi', sembra
+passata.
+
     mvn -o -q package -DskipTests
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/system/*.java
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/webserver/*.java
@@ -25,12 +35,37 @@ Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguo
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AddressConversionTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PkgBranchTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ChildStdinTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.HeldUpdatesReportTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PlanDivergenceTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PlanAfterFetchTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceFallTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AuditReportTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockTraceTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/monitoring/*.java
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.monitoring.MailQueueTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/sqli/*.java
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.sqli.ConfigSecretsTest
     sh tests/pkg-simulation-test.sh
+
+## Le prove dell'area aggiornamenti
+
+`ChildStdinTest`, `HeldUpdatesReportTest`, `PlanDivergenceTest`, `PlanAfterFetchTest`,
+`ServiceFallTest`, `AuditReportTest` e `LockTraceTest` vanno eseguite **sulla VM FreeBSD**,
+non sul Mac: una parte di loro chiede a `pkg` com'e' fatta davvero la macchina (le chiavi che
+`packagesStatus` mette, i pacchetti che `pkg audit` dice vulnerabili, i pacchetti bloccati) e
+quella parte sul Mac **si salta dicendolo**, perche' una prova che si salta in silenzio conta
+come verde senza aver provato niente.
+
+Due di loro toccano il sistema e rimettono tutto com'era: `LockTraceTest` scrive
+l'annotazione `mail_panel_lock` su un pacchetto e la rimuove, e scrive la nota dei blocchi in
+una cartella temporanea (non in `/var/db`, come `PackageQueueTest` con il suo elenco).
+`AuditReportTest` chiede a `pkg audit` dei pacchetti installati e non cambia niente. Vanno
+bene su una macchina di prova, non su un server di posta vero.
+
+`HeldUpdatesReportTest` e `AuditReportTest` hanno bisogno del database delle vulnerabilita'
+(`pkg audit -F`): senza, dicono quali prove hanno saltato e perche'.
 
 ## Con un MySQL di prova
 
