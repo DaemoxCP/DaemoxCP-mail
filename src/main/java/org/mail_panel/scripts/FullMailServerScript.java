@@ -54,14 +54,19 @@ public class FullMailServerScript {
 MYSQL_HOST="$1"
 MYSQL_PORT="$2"
 MYSQL_USER="$3"
-MYSQL_PASSWORD="$4"
-MYSQL_DATABASE="$5"
-MAIL_HOSTNAME="$6"
-ROUNDCUBE_DOMAIN="$7"
-ROUNDCUBE_PORT="$8"
-ROUNDCUBE_SSL_CERT="$9"
-ROUNDCUBE_SSL_KEY="${10}"
-ROUNDCUBE_SSL_CHAIN="${11}"
+MYSQL_DATABASE="$4"
+MAIL_HOSTNAME="$5"
+ROUNDCUBE_DOMAIN="$6"
+ROUNDCUBE_PORT="$7"
+ROUNDCUBE_SSL_CERT="$8"
+ROUNDCUBE_SSL_KEY="$9"
+ROUNDCUBE_SSL_CHAIN="${10}"
+
+# Le due password NON sono argomenti: arrivano dall'ambiente, perche' la riga di comando
+# di un processo la legge chiunque con "ps" per tutto il tempo che l'installazione dura.
+#   MYSQL_PASSWORD        quella dell'utente del pannello
+#   MYSQL_ROOT_PASSWORD   quella di root, generata dal pannello e tenuta nel file dei segreti
+# Chi lancia questo script a mano deve esportarle.
 
 # Colors
 RED='\\033[0;31m'
@@ -84,7 +89,12 @@ fi
 
 # Validate parameters
 if [ -z "$MYSQL_PASSWORD" ]; then
-    echo "${RED}Error: MySQL password not provided${NC}"
+    echo "${RED}Error: MYSQL_PASSWORD not in the environment${NC}"
+    exit 1
+fi
+
+if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
+    echo "${RED}Error: MYSQL_ROOT_PASSWORD not in the environment${NC}"
     exit 1
 fi
 
@@ -222,8 +232,58 @@ if [ "$mysql_ready" != yes ]; then
     exit 1
 fi
 
+# Una cartella privata per i due file che contengono un segreto: il file di credenziali di
+# root e lo script SQL. mktemp -d la crea 700 qualunque sia la maschera, quindi nessun altro
+# utente ci entra, e il contenuto e' al riparo dal momento in cui nasce. Prima lo script SQL
+# stava in /tmp e veniva portato a 600 DOPO essere stato scritto: in mezzo c'era una finestra
+# in cui chiunque poteva leggerlo. Non si tocca la maschera globale: piu' avanti lo script
+# scrive file che devono restare leggibili da www e da postfix.
+MYSQL_WORK=$(mktemp -d /var/tmp/mailpanel-mysql.XXXXXXXX) || {
+    echo "${RED}Error: cannot create the temporary folder${NC}"; exit 1; }
+trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
+MYSQL_ROOT_CNF="$MYSQL_WORK/root.cnf"
+MYSQL_SETUP_SQL="$MYSQL_WORK/setup.sql"
+
+# La password di root. Un MySQL appena installato su FreeBSD lascia root SENZA password, e
+# finche' resta cosi' qualunque utente locale -- www compreso, che fa girare Roundcube -- ha
+# i pieni poteri sul database. Prima nessuno la impostava: lo script faceva "mysql -u root"
+# e, se falliva, "mysql -u root --password=".
+#
+# Se si entra senza password, questo MySQL e' nuovo e la password si imposta adesso. Se non
+# si entra, una password c'e' gia' e deve essere quella del pannello: non si va a indovinare.
+if mysql -u root --password= -e "SELECT 1" >/dev/null 2>&1; then
+    echo "  Fresh MySQL: setting the root password"
+    # Here-document NON quotato: $MYSQL_ROOT_PASSWORD si espande una volta sola, quindi un
+    # dollaro DENTRO la password non viene riespanso. L'alfabeto del generatore non ha
+    # apice, virgolette, barra rovescia ne' accento grave, che qui spezzerebbero la riga.
+    if ! mysql -u root --password= << EOROOT
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD';
+FLUSH PRIVILEGES;
+EOROOT
+    then
+        echo "${RED}  ERROR: cannot set the MySQL root password.${NC}"
+        exit 1
+    fi
+fi
+
+# Da qui in poi root si usa SEMPRE cosi': la password in un file 600 letto da mysql, mai
+# in "-p..." sulla riga di comando, che "ps" mostra a tutti. Le virgolette intorno al
+# valore servono perche' nei file di opzioni di MySQL un '#' non quotato apre un commento.
+cat > "$MYSQL_ROOT_CNF" << EOCNF
+[client]
+user=root
+password="$MYSQL_ROOT_PASSWORD"
+EOCNF
+
+if ! mysql --defaults-extra-file="$MYSQL_ROOT_CNF" -e "SELECT 1" >/dev/null 2>&1; then
+    echo "${RED}  ERROR: the MySQL root password does not work.${NC}"
+    echo "  MySQL was already here with a root password that the panel does not know."
+    echo "  Set it to the one in the panel secrets file, or let the panel install MySQL."
+    exit 1
+fi
+
 # Create database and tables
-cat > /tmp/mysql_setup.sql << EOSQL
+cat > "$MYSQL_SETUP_SQL" << EOSQL
 CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';
 CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
@@ -418,20 +478,15 @@ CREATE TABLE audit_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 EOSQL
 
-# Il file contiene la password dell'utente del pannello: leggibile solo da root.
-chmod 600 /tmp/mysql_setup.sql
-
 # "-p''" collassava a "-p" nudo e faceva chiedere la password all'operatore, con il
-# messaggio di errore nascosto da 2>/dev/null. La forma giusta e' --password=.
+# messaggio di errore nascosto da 2>/dev/null. Adesso root ha una password e la si passa
+# dal file di credenziali, quindi non c'e' piu' niente da indovinare e niente da nascondere.
 # E niente "|| true": se il database non si crea non c'e' nulla su cui appoggiarsi.
-if ! mysql -u root < /tmp/mysql_setup.sql 2>/dev/null; then
-    if ! mysql -u root --password= < /tmp/mysql_setup.sql; then
-        echo "${RED}  ERROR: cannot create the database and its tables.${NC}"
-        rm -f /tmp/mysql_setup.sql
-        exit 1
-    fi
+if ! mysql --defaults-extra-file="$MYSQL_ROOT_CNF" < "$MYSQL_SETUP_SQL"; then
+    echo "${RED}  ERROR: cannot create the database and its tables.${NC}"
+    exit 1
 fi
-rm -f /tmp/mysql_setup.sql
+rm -f "$MYSQL_SETUP_SQL"
 
 echo "${GREEN}  MySQL configured${NC}"
 
@@ -762,7 +817,7 @@ echo ""
 echo "${YELLOW}[PHASE 9/10] Configuring Roundcube...${NC}"
 
 # Create Roundcube database
-mysql -u root << ROUNDCUBE_DB
+mysql --defaults-extra-file="$MYSQL_ROOT_CNF" << ROUNDCUBE_DB
 CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 GRANT ALL PRIVILEGES ON roundcubemail.* TO '$MYSQL_USER'@'localhost';
 GRANT ALL PRIVILEGES ON roundcubemail.* TO '$MYSQL_USER'@'127.0.0.1';
@@ -770,7 +825,10 @@ FLUSH PRIVILEGES;
 ROUNDCUBE_DB
 
 if [ -f /usr/local/www/roundcube/SQL/mysql.initial.sql ]; then
-    mysql -u $MYSQL_USER -p$MYSQL_PASSWORD roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
+    # Le tabelle di Roundcube le fa root, dal file di credenziali: "-p$MYSQL_PASSWORD"
+    # metteva anche questa password nella riga di comando, dove la legge chiunque con "ps".
+    mysql --defaults-extra-file="$MYSQL_ROOT_CNF" roundcubemail \
+        < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
 fi
 
 ROUNDCUBE_DES_KEY=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)

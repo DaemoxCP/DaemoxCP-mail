@@ -204,12 +204,42 @@ public class Main {
      * Execute a shell script with detailed output
      */
     public static boolean executeScript(String scriptPath, String scriptName, String... args) {
+        return executeScript(scriptPath, scriptName, java.util.Map.of(), args);
+    }
+
+    /**
+     * Come {@link #executeScript}, ma i segreti arrivano allo script dall'<em>ambiente</em>, e
+     * gli argomenti non si stampano.
+     *
+     * <p>Due strade portavano fuori la password del database, e sono tutte e due chiuse qui.
+     *
+     * <p>La prima: {@code "Arguments: " + String.join(" ", args)} le scriveva sullo standard
+     * output. Avviato dal servizio, quello standard output e' un <em>file</em>: la password
+     * finiva su disco in chiaro, e ci restava. Adesso si dice quanti argomenti ci sono, non
+     * quali.
+     *
+     * <p>La seconda, peggiore: un argomento della riga di comando lo legge <em>chiunque</em>
+     * con {@code ps}, per tutta la durata dell'installazione, che sono minuti. L'ambiente di
+     * un processo invece su FreeBSD lo vede solo chi ne e' proprietario o root
+     * ({@code procstat -e}). Non e' una cassaforte, ma e' la differenza fra "ogni utente
+     * della macchina" e "root".
+     */
+    public static boolean executeScriptWithSecrets(String scriptPath, String scriptName,
+                                                   java.util.Map<String, String> secrets, String... args) {
+        return executeScript(scriptPath, scriptName, secrets, args);
+    }
+
+    private static boolean executeScript(String scriptPath, String scriptName,
+                                         java.util.Map<String, String> secrets, String... args) {
         System.out.println();
         System.out.println(ANSI_CYAN + "═══════════════════════════════════════════════════════════════" + ANSI_RESET);
         System.out.println(ANSI_CYAN + "  Executing: " + scriptName + ANSI_RESET);
         System.out.println(ANSI_CYAN + "  Script: " + scriptPath + ANSI_RESET);
         if (args.length > 0) {
-            System.out.println(ANSI_CYAN + "  Arguments: " + String.join(" ", args) + ANSI_RESET);
+            System.out.println(ANSI_CYAN + "  Arguments: "
+                    + (secrets.isEmpty() ? String.join(" ", args)
+                                         : args.length + " (hidden: this call carries a secret)")
+                    + ANSI_RESET);
         }
         System.out.println(ANSI_CYAN + "═══════════════════════════════════════════════════════════════" + ANSI_RESET);
         System.out.println();
@@ -234,6 +264,7 @@ public class Main {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             org.mail_panel.util.Shell.applicaPath(processBuilder);
+            processBuilder.environment().putAll(secrets);
             processBuilder.redirectErrorStream(true);
             // Lo stdin del figlio e' /dev/null, sempre. L'impostazione predefinita di
             // ProcessBuilder e' una pipe di cui la JVM tiene aperto il capo in scrittura e
@@ -526,19 +557,6 @@ public class Main {
     }
 
     /**
-     * Generate a random password
-     */
-    private static String generateRandomPassword(int length) {
-        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        StringBuilder password = new StringBuilder();
-        java.security.SecureRandom random = new java.security.SecureRandom();
-        for (int i = 0; i < length; i++) {
-            password.append(chars.charAt(random.nextInt(chars.length())));
-        }
-        return password.toString();
-    }
-
-    /**
      * Install/Reinstall the complete mail server
      */
     private static void installMailServer(Screen screen, MultiWindowTextGUI gui) {
@@ -590,12 +608,20 @@ public class Main {
 
         // ALWAYS generate a new password (both install and reinstall)
         // This ensures a fresh secure password every time
-        mysqlPassword = generateRandomPassword(24);
+        mysqlPassword = org.mail_panel.security.PanelSecrets.newAlphanumericPassword(24);
         System.out.println(ANSI_GREEN + "[AUTO] Generated MySQL password" + ANSI_RESET);
 
         // Save it (replaces old password if reinstalling): the password goes to the panel secrets file, the rest to SQLite
         dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
         System.out.println(ANSI_GREEN + "[AUTO] MySQL password saved to the panel secrets file" + ANSI_RESET);
+
+        // La password di root di MySQL. Quella NON si rigenera a ogni installazione: la si
+        // genera la prima volta e poi e' quella, perche' se MySQL c'e' gia' root la usa gia'
+        // (una reinstallazione del pannello non e' una reinstallazione del database). Prima
+        // non esisteva affatto e root entrava senza niente: lo script faceva "mysql -u root"
+        // e, se falliva, "mysql -u root --password=".
+        String mysqlRootPassword = org.mail_panel.security.PanelSecrets.ensureMysqlRootPassword();
+        System.out.println(ANSI_GREEN + "[AUTO] MySQL root password ready in the panel secrets file" + ANSI_RESET);
 
         // Read Roundcube configuration
         String roundcubeDomain = dbManager.getRoundcubeDomain();
@@ -654,10 +680,13 @@ public class Main {
             }
         }
 
-        // Execute the unified mail server installation script
-        boolean success = executeScript("./install_scripts/install_mail_server.sh",
+        // Execute the unified mail server installation script. Le due password viaggiano
+        // nell'ambiente e non fra gli argomenti: un argomento lo legge chiunque con "ps".
+        boolean success = executeScriptWithSecrets("./install_scripts/install_mail_server.sh",
                 "Complete Mail Server Installation",
-                mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase, mailHostname.trim(),
+                java.util.Map.of("MYSQL_PASSWORD", mysqlPassword,
+                                 "MYSQL_ROOT_PASSWORD", mysqlRootPassword),
+                mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname.trim(),
                 roundcubeDomain, roundcubePort, roundcubeSslCert, roundcubeSslKey, roundcubeSslChain);
 
         if (success) {
