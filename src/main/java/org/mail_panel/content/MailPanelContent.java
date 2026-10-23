@@ -13816,8 +13816,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 return;
             }
             if (azione.tipo === 'updates_apply') {
-                if (!updConferma('', t('up.wUpgrade'))) return;
-                r = await updApi('updates_apply', { confirm: 'AGGIORNA' });
+                /* Non si parte da qui: questo aggiornamento ha un piano e una firma, e si
+                   approva nella scheda che li mostra. Come per il JDK del pannello, si va
+                   dove la decisione si puo' prendere guardandola. */
+                const c = document.getElementById('upd-status');
+                if (c) {
+                    updStatus();
+                    c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+                alert(t('up.applyFromCard'));
+                return;
             } else if (azione.tipo === 'package_update') {
                 // L'aggiornamento di un pacchetto passa sempre dalla sua finestra: piano esatto,
                 // conferma con il nome, avanzamento.
@@ -14196,11 +14204,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- aggiornamenti e vulnerabilita' ----------
+        /* La firma del piano letto nella scheda: si manda al via, e il server esegue quello
+           o niente. Senza, l'aggiornamento dei non protetti era l'unico che partiva alla
+           cieca. Vuota finche' la scheda non e' stata letta: il pulsante lo dice. */
+        let updFirmaNonProtetti = '';
         async function updStatus() {
             const el = document.getElementById('upd-status');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.simulating')) + '';
             const r = await updApi('updates_status');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            updFirmaNonProtetti = r.signature || '';
             let h = '';
 
             if (r.rebootPending) {
@@ -14286,6 +14299,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + aff.map(p => updEsc(p.name) + (p.locked ? ' (' + escHtml(t('up.locked')) + ')' : '')).join(', ') + '</div>';
             }
 
+            /* Il piano esatto con la sua firma, come nelle altre due schede. L'uscita grezza
+               di pkg resta sotto, ripiegata: e' il dettaglio, non la decisione. */
+            if (r.piano) h += updPianoHtml(r.piano, r.signature);
             h += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('up.fullSim')) + '</summary>'
                + '<pre class="upd-log mt-2">' + updEsc(r.dryRun) + '</pre></details>';
             if (r.audit) {
@@ -14296,11 +14312,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updApply() {
+            /* Senza la firma non si parte: vuol dire che la scheda non e' stata letta, cioe'
+               che nessuno ha visto il piano che si sta per eseguire. */
+            if (!updFirmaNonProtetti) { alert(t('up.readFirst')); return; }
             if (!confirm(t('up.confirmApply'))) return;
             if (!updConferma('', t('up.wUpgrade'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('updates_apply', { confirm: 'AGGIORNA' });
+            const r = await updApi('updates_apply', { confirm: 'AGGIORNA', signature: updFirmaNonProtetti });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
             pre.style.display = 'block';

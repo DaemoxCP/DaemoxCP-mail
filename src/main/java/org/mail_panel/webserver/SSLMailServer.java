@@ -7326,7 +7326,7 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.startUnlockedPackagesUpdate();
+                    response = UpdateManager.startUnlockedPackagesUpdate(req.optString("signature", ""));
                     logAudit("UPDATES_APPLY_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "maintenance_run" -> {

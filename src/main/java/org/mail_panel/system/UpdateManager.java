@@ -746,7 +746,20 @@ public final class UpdateManager {
         // occupano decine, e un taglio anticipato cadrebbe in mezzo all'elenco facendo
         // risultare "senza aggiornamenti" pacchetti che invece ne hanno. Si taglia solo
         // cio' che si mostra a video, mai cio' che si analizza.
-        String simulazioneCompleta = sh("pkg upgrade -n 2>&1", 180);
+        // Il piano dell'aggiornamento dei NON protetti, con la sua firma. Prima qui c'era un
+        // "pkg upgrade -n" grezzo e il testo finiva in pagina cosi' com'era: chi premeva
+        // "Aggiorna non protetti" approvava un testo, non un piano, e niente legava quel
+        // testo a cio' che sarebbe stato eseguito. Era l'unico dei tre lavori sui pacchetti
+        // senza piano ne' firma — e l'unico che non confrontava niente alla fine.
+        //
+        // Nessuno sblocco: e' il senso di questo aggiornamento, quindi la regola rifiuta
+        // sempre, e i protetti restano nel piano con il loro motivo (pkg li salta). E nessun
+        // gemello di famiglia da sbloccare, per la stessa ragione: qui non si sblocca niente.
+        JSONObject pianoNonProtetti = PackagePlan.pianoTotale(java.util.Set.of(), insiemeProtetti(),
+                b -> I18n.tr("server.um.x.staysLockedHere"));
+        r.put("piano", pianoPerLaScheda(pianoNonProtetti))
+         .put("signature", pianoNonProtetti.optString("signature"));
+        String simulazioneCompleta = pianoNonProtetti.optString("output");
         StringBuilder mostrata = new StringBuilder();
         int omesse = 0;
         for (String l : simulazioneCompleta.split("\n")) {
@@ -9907,39 +9920,111 @@ public final class UpdateManager {
         return avviaSulTurno(id, j, "manutenzione", "update-maintenance", () -> runMaintenanceJob(j, firmaApprovata));
     }
 
-    public static JSONObject startUnlockedPackagesUpdate() {
+    /** @param firmaApprovata la firma del piano letto nella scheda: si esegue quello o niente. */
+    public static JSONObject startUnlockedPackagesUpdate(String firmaApprovata) {
+        if (firmaApprovata == null || !firmaApprovata.matches("[0-9a-f]{16}"))
+            return new JSONObject().put("success", false)
+                    .put("error", I18n.tr("server.um.startUnlockedPackagesUpdate.2"));
         String id = "upd-" + System.currentTimeMillis();
         Job j = new Job(id, "update");
-        return avviaSulTurno(id, j, I18n.tr("server.um.startUnlockedPackagesUpdate.1"), "update-plain", () -> runUpdateJob(j));
+        return avviaSulTurno(id, j, I18n.tr("server.um.startUnlockedPackagesUpdate.1"), "update-plain",
+                () -> runUpdateJob(j, firmaApprovata));
     }
 
     /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti lockedPackages. */
-    private static void runUpdateJob(Job job) {
+    private static void runUpdateJob(Job job, String firmaApprovata) {
         job.status = "running";
         // Lo stato dei servizi PRIMA dell'aggiornamento: e' l'unico modo di distinguere un
         // servizio caduto da uno che non era attivo nemmeno prima.
         Map<String, Boolean> serviziPrima = statoServizi();
-        job.avanza(1, 2);
+        final int TOT = 4;
+        job.avanza(1, TOT);
         job.scrivi(I18n.tr("server.um.runUpdateJob.1"));
         job.scrivi(I18n.tr("server.um.runUpdateJob.2"));
         job.scrivi("");
         try {
-            int code = eseguiConLog(job, "pkg upgrade -y 2>&1", 3600);
+            // Si esegue il piano che e' stato letto, o niente: come gli altri due lavori.
+            JSONObject piano = PackagePlan.pianoTotale(java.util.Set.of(), insiemeProtetti(),
+                    b -> I18n.tr("server.um.x.staysLockedHere"));
+            if (!piano.optBoolean("measured"))
+                throw new IllegalStateException("I could not work out the exact plan: "
+                        + piano.optString("error", piano.optString("errore", "?")));
+            String firmaOra = piano.optString("signature");
+            if (!firmaOra.equals(firmaApprovata)) {
+                job.status = "error";
+                job.errorMessage = I18n.tr("server.um.runUpdateJob.7");
+                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.3", java.util.Map.of("firmaApprovata", String.valueOf(firmaApprovata), "firmaOra", String.valueOf(firmaOra))));
+                job.scrivi(I18n.tr("server.um.runUpdateJob.8"));
+                job.fine = System.currentTimeMillis();
+                return;
+            }
+            // Come la manutenzione: un piano che non si puo' eseguire non si esegue, e si
+            // dice perche'. Senza questo, premere il pulsante su una macchina aggiornata
+            // lanciava un pkg upgrade che non faceva niente e si dichiarava riuscito.
+            if (!piano.optBoolean("runnable")) {
+                job.status = "error";
+                job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errori", String.valueOf(String.join(" | ", jsonArrayToList(piano.getJSONArray("erroriPkg"))))))
+                        + (piano.getJSONArray("changes").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
+                job.scrivi(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
+                job.fine = System.currentTimeMillis();
+                return;
+            }
+            job.scrivi("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(firmaOra))));
+            JSONArray cambiPiano = piano.getJSONArray("changes");
+            for (int i = 0; i < cambiPiano.length(); i++) {
+                JSONObject c = cambiPiano.getJSONObject(i);
+                job.scrivi("    " + PackagePlan.typeName(c.getString("tipo")) + " " + c.getString("nome") + " " + c.getString("da")
+                        + (c.getString("a").isEmpty() || c.getString("a").equals(c.getString("da")) ? "" : " -> " + c.getString("a")));
+            }
+
+            job.avanza(2, TOT);
+            job.scrivi("");
+            // Come negli altri due: prima si scarica e si ricalcola, perche' il piano dipende
+            // da cio' che e' nella cache di pkg (vedi scaricaERicontrolla).
+            String cresciuto = scaricaERicontrolla(job, "pkg upgrade -F -y -U 2>&1", piano,
+                    () -> PackagePlan.pianoTotale(java.util.Set.of(), insiemeProtetti(),
+                            b -> I18n.tr("server.um.x.staysLockedHere")));
+            if (cresciuto != null) throw new IllegalStateException(cresciuto);
+
+            Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
+
+            job.avanza(3, TOT);
+            job.scrivi("");
+            // -U: lo stesso catalogo su cui e' stato calcolato il piano. Prima era senza, cioe'
+            // riscaricava il catalogo e poteva installare versioni diverse da quelle mostrate.
+            int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
             // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
             // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
             if (code == 4) {
                 job.scrivi(I18n.tr("server.um.runUpdateJob.3"));
-                code = eseguiConLog(job, "pkg upgrade -y 2>&1", 3600);
+                code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
             }
-            job.avanza(2, 2);
+
+            job.scrivi("");
+            job.scrivi(I18n.tr("server.um.runMaintenanceJob.13"));
+            boolean pianoNonRispettato = false;
+            JSONArray verifica = PackagePlan.verificaEsito(piano);
+            for (int i = 0; i < verifica.length(); i++) {
+                JSONObject v2 = verifica.getJSONObject(i);
+                job.scrivi("    " + (v2.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("nome", String.valueOf(v2.getString("nome")), "atteso", String.valueOf(v2.getString("atteso")), "trovato", String.valueOf(v2.getString("trovato")))));
+                if (!v2.getBoolean("ok")) pianoNonRispettato = true;
+            }
+            JSONArray fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano,
+                    "Update of the unprotected packages");
+
+            job.avanza(4, TOT);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runUpdateJob.4", java.util.Map.of("code", String.valueOf(code))));
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runMigrazione84.31"));
             boolean caduto = serviziCaduti(job, serviziPrima);
-            job.status = (code == 0 && !caduto) ? "completed" : "error";
-            if (code != 0) job.errorMessage = I18n.tr("server.um.runUpdateJob.5", java.util.Map.of("code", String.valueOf(code)));
-            else if (caduto) job.errorMessage = I18n.tr("server.um.runUpdateJob.6");
+            java.util.List<String> problemi = new ArrayList<>();
+            if (code != 0) problemi.add(I18n.tr("server.um.runUpdateJob.5", java.util.Map.of("code", String.valueOf(code))));
+            if (pianoNonRispettato) problemi.add(I18n.tr("server.um.runMaintenanceJob.14"));
+            if (!fuoriDalPiano.isEmpty()) problemi.add(messaggioDivergenze(fuoriDalPiano));
+            if (caduto) problemi.add(I18n.tr("server.um.runUpdateJob.6"));
+            job.status = problemi.isEmpty() ? "completed" : "error";
+            job.errorMessage = String.join(" ", problemi);
         } catch (Exception e) {
             job.status = "error"; job.errorMessage = e.getMessage();
             job.scrivi(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
