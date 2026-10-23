@@ -269,9 +269,9 @@ public final class UpdateManager {
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         try {
             JSONObject esito = cambiaProtezioni(blocca, soloQuesto);
-            // La nota sulla macchina dice lo stato di adesso: se un amministratore sblocca
-            // dal pannello, la nota non deve continuare a elencare quel pacchetto.
-            scriviNotaDeiBlocchi();
+            // La traccia sulla macchina dice lo stato di adesso: se un amministratore sblocca
+            // dal pannello, ne' la nota ne' l'annotazione devono continuare a dirlo bloccato.
+            refreshLockTrace();
             return esito;
         }
         finally { PackageQueue.rilascia(id); }
@@ -357,11 +357,13 @@ public final class UpdateManager {
             JSONObject p = st.getJSONObject(i);
             String n = p.getString("name");
             if (p.getBoolean("locked") || aMano.contains(n) || !isValidName(n)) continue;
-            if (ok("pkg lock -y " + n)) { lockedPackages.add(n); annotaBlocco(n); } else falliti.add(n);
+            if (ok("pkg lock -y " + n)) lockedPackages.add(n); else falliti.add(n);
         }
-        // La nota si riscrive a ogni avvio, anche quando non c'era niente da bloccare: dice lo
-        // stato di ADESSO, e una nota che resta indietro e' peggio di nessuna nota.
-        scriviNotaDeiBlocchi();
+        // La traccia si rimette in pari a ogni avvio, anche quando non c'era niente da bloccare:
+        // dice lo stato di ADESSO, e una traccia che resta indietro e' peggio di nessuna traccia.
+        // E' anche il punto che ripara cio' che e' rimasto indietro fuori dal pannello: lo
+        // script che aggiorna Java riprotegge con pkg lock e poi riavvia il pannello.
+        refreshLockTrace();
         if (lockedPackages.isEmpty() && falliti.isEmpty()) return "";
         String msg = "Mail stack packages locked at startup: " + (lockedPackages.isEmpty() ? "none" : String.join(", ", lockedPackages))
                 + (falliti.isEmpty() ? "" : "; could not lock: " + String.join(", ", falliti));
@@ -474,17 +476,111 @@ public final class UpdateManager {
     }
 
     /**
-     * Annota sul pacchetto, nel database di pkg, chi l'ha bloccato e dove sta scritto il
-     * perche'. E' il cartello nel punto in cui qualcuno si fa la domanda: chi vede
+     * La traccia dei blocchi rimessa in pari con la macchina: la nota e le annotazioni.
+     *
+     * Si chiama dove le protezioni possono essere cambiate: all'avvio, dal pulsante delle
+     * protezioni e alla fine di ogni lavoro sul turno dei pacchetti (withLockTrace). Non
+     * lancia mai: la traccia e' una spiegazione, non un meccanismo, e un suo guasto non deve
+     * far fallire il lavoro che l'ha chiamata.
+     */
+    static void refreshLockTrace() {
+        scriviNotaDeiBlocchi();
+        try {
+            int[] fatti = syncLockMarks();
+            if (fatti[0] + fatti[1] > 0)
+                LOGGER.info("Lock marks: " + fatti[0] + " added, " + fatti[1] + " removed");
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Cannot update the lock marks", e);
+        }
+    }
+
+    /**
+     * Il lavoro sul turno dei pacchetti, con la traccia dei blocchi rimessa in pari quando
+     * finisce, anche con un errore. Avvolge TUTTI i lavori del turno, quindi un lavoro nuovo
+     * che riprotegge non deve ricordarsene.
+     */
+    static Runnable withLockTrace(Runnable lavoro) {
+        return () -> {
+            try { lavoro.run(); }
+            finally { refreshLockTrace(); }
+        };
+    }
+
+    /**
+     * Mette l'annotazione su ogni pacchetto bloccato dal pannello che non ce l'ha, e la toglie
+     * da quelli che non lo sono piu'. Restituisce {aggiunte, tolte}.
+     *
+     * L'annotazione e' il cartello nel punto in cui qualcuno si fa la domanda: chi vede
      * "nginx-1.30.6,3 is locked and may not be modified" e indaga con `pkg info -A nginx`
      * trova la riga, e la riga rimanda alla nota.
      *
-     * Misurato sulla VM il 23/10/2026: `pkg annotate -y -A` scrive e `pkg info -A` mostra.
-     * Si annota solo cio' che si e' appena bloccato, quindi a regime non costa niente.
+     * Prima si annotava solo il pacchetto appena bloccato all'avvio. Misurato sulla VM
+     * FreeBSD 15.1 il 24/10/2026: reinstallare un pacchetto — quindi anche aggiornarlo —
+     * cancella le sue annotazioni, e nessuna riprotezione le riscriveva. Su 39 pacchetti
+     * protetti dal pannello l'annotazione stava su uno, redis: il cartello spariva proprio dai
+     * pacchetti che il pannello aveva aggiornato.
+     *
+     * Costa due letture (pkg lock -l, pkg query) e un comando per ogni cartello da cambiare,
+     * quindi a regime nessuno. Se una delle due letture fallisce non si tocca niente: con
+     * l'elenco dei blocchi vuoto per un errore, i cartelli si toglierebbero da tutti.
      */
-    private static void annotaBlocco(String nome) {
-        String cmd = comandoAnnotazione(nome);
-        if (cmd != null) ok(cmd, 20);
+    static int[] syncLockMarks() {
+        Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg lock -l");
+        Shell.Result annotazioni = Shell.runShell(Duration.ofSeconds(60), "pkg query -a '%n %At'");
+        if (!lock.success() || !annotazioni.success()) {
+            LOGGER.warning("Lock marks not updated: cannot read the locks or the annotations");
+            return new int[]{0, 0};
+        }
+        Set<String> bloccati = new TreeSet<>();
+        for (String n : insiemeProtetti(lock.outputTrim())) if (ruoloDi(n) != null) bloccati.add(n);
+        Set<String> annotati = markedIn(annotazioni.outputTrim());
+        int aggiunte = 0, tolte = 0;
+        for (String cmd : lockMarkCommands(bloccati, annotati)) {
+            if (!ok(cmd, 20)) continue;
+            if (cmd.contains(" -A ")) aggiunte++; else tolte++;
+        }
+        return new int[]{aggiunte, tolte};
+    }
+
+    /**
+     * I pacchetti che portano l'annotazione del pannello, da un'uscita di
+     * `pkg query -a '%n %At'`: una riga per annotazione, "nome chiave". Funzione pura.
+     */
+    static Set<String> markedIn(String uscita) {
+        Set<String> r = new TreeSet<>();
+        for (String riga : uscita.split("\n")) {
+            String[] c = riga.trim().split(" ", 2);
+            if (c.length == 2 && CHIAVE_ANNOTAZIONE.equals(c[1].trim()) && isValidName(c[0])) r.add(c[0]);
+        }
+        return r;
+    }
+
+    /**
+     * I comandi che portano i cartelli dallo stato annotati a quello bloccati: aggiungere
+     * dove manca, togliere dove il blocco non c'e' piu'. Funzione pura, quindi si prova.
+     *
+     * La regola e' la stessa della nota (lo stack di posta, bloccato adesso): le due tracce
+     * devono dire la stessa cosa.
+     */
+    static java.util.List<String> lockMarkCommands(Set<String> bloccati, Set<String> annotati) {
+        java.util.List<String> r = new ArrayList<>();
+        for (String n : new TreeSet<>(bloccati)) {
+            if (annotati.contains(n)) continue;
+            String cmd = comandoAnnotazione(n);
+            if (cmd != null) r.add(cmd);
+        }
+        for (String n : new TreeSet<>(annotati)) {
+            if (bloccati.contains(n)) continue;
+            String cmd = removeMarkCommand(n);
+            if (cmd != null) r.add(cmd);
+        }
+        return r;
+    }
+
+    /** Il comando che toglie l'annotazione, o null se il nome non passa il filtro. */
+    static String removeMarkCommand(String nome) {
+        if (!isValidName(nome)) return null;
+        return "pkg annotate -y -D " + nome + " " + CHIAVE_ANNOTAZIONE;
     }
 
     /** La chiave dell'annotazione nel database di pkg. */
@@ -2715,7 +2811,10 @@ public final class UpdateManager {
         return new Thread(I18n.withCurrent(lavoro), nome);
     }
 
-    private static JSONObject avviaSulTurno(String id, Job j, String description, String nomeThread, Runnable lavoro) {
+    private static JSONObject avviaSulTurno(String id, Job j, String description, String nomeThread, Runnable work) {
+        // Ogni lavoro del turno puo' aver tolto e rimesso protezioni, o aggiornato pacchetti
+        // protetti (che cosi' perdono l'annotazione): la traccia si rimette in pari alla fine.
+        Runnable lavoro = withLockTrace(work);
         String rifiuto = PackageQueue.prendi(id, description);
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         JOBS.put(id, j);
@@ -4957,7 +5056,7 @@ public final class UpdateManager {
         String rifiuto = PackageQueue.prendi(id, I18n.tr("server.um.pythonLeftovers.1"));
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         try { return restiPythonOra(true); }
-        finally { PackageQueue.rilascia(id); }
+        finally { refreshLockTrace(); PackageQueue.rilascia(id); }
     }
 
     private static JSONObject restiPythonOra(boolean esegui) {
@@ -6875,7 +6974,7 @@ public final class UpdateManager {
         String rifiuto = PackageQueue.prendi(id, I18n.tr("server.um.removePackage.1", java.util.Map.of("nome", String.valueOf(nome))));
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         try { return rimuoviPacchettoOra(nome); }
-        finally { PackageQueue.rilascia(id); }
+        finally { refreshLockTrace(); PackageQueue.rilascia(id); }
     }
 
     private static JSONObject rimuoviPacchettoOra(String nome) {
