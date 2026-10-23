@@ -63,13 +63,18 @@ public class PostfixScript {
             echo "[1/6] Installing Postfix..."
             pkg install -y postfix-mysql
 
-            # Disable sendmail completely
-            echo "[2/6] Disabling sendmail..."
+            # Disable sendmail completely, and make Postfix the local MTA instead of dma
+            echo "[2/6] Disabling sendmail, Postfix becomes the local MTA..."
             sysrc sendmail_enable="NO"
             sysrc sendmail_submit_enable="NO"
             sysrc sendmail_outbound_enable="NO"
             sysrc sendmail_msp_queue_enable="NO"
             service sendmail stop 2>/dev/null || true
+
+            """
+            // Postfix come MTA locale: senza, la posta di sistema esce da dma. Lo stesso pezzo
+            // e' in FullMailServerScript e FullMailStackScript.
+            + LocalMtaScript.SHELL + """
 
             # Create mail directories
             echo "[3/6] Creating mail directories..."
@@ -99,7 +104,13 @@ public class PostfixScript {
 # Basic settings
 myhostname = localhost
 mydomain = localhost
-myorigin = $mydomain
+# Indirizzi senza dominio (root, postmaster: cron, periodic) consegnati qui, e solo localhost
+# e' locale. Esplicito perche' il pannello riscrive myhostname e mydomain con il nome vero
+# del server: con $mydomain la posta di sistema finirebbe a quel nome e rimbalzerebbe, con
+# il mydestination predefinito quel nome diventerebbe locale e raggiungibile da Internet.
+# Il perche' misurato e' in FullMailServerScript, accanto allo stesso myorigin.
+myorigin = localhost
+mydestination = localhost
 inet_interfaces = all
 inet_protocols = all
 

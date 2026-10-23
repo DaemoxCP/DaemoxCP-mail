@@ -47,6 +47,8 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.monitoring.MailQueueTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/sqli/*.java
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.sqli.ConfigSecretsTest
+    javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/scripts/*.java
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.LocalMtaTest
     sh tests/pkg-simulation-test.sh
 
 ## Le prove dell'area aggiornamenti
@@ -208,6 +210,16 @@ dalla riga del processo smtp che ha consegnato (stesso pid) e della connessione 
 un altro processo che apre una connessione cifrata verso lo stesso server, una connessione
 precedente dello stesso processo, una riusata (conn_use) o il ripiego in chiaro dopo un TLS
 caduto non devono far scrivere "con TLS" a un rapporto partito in chiaro.
+
+**LocalMtaTest** — Postfix come MTA locale (LocalMtaScript), sulla VM perche' servono `postconf`
+e `sysrc`. Fino al 24/10/2026 nessuno dei tre script che installano Postfix scriveva
+`/usr/local/etc/mail/mailer.conf`, e la posta di cron, di periodic e del mail() di PHP usciva da
+dma. La prova verifica che tutti e tre contengano il pezzo dopo `pkg install`, fa leggere a
+`postconf` il loro `main.cf` (myorigin = localhost, mydestination senza il nome del server, la
+consegna locale accesa) ed esegue il pezzo in una cartella finta, con i percorsi del sistema
+sostituiti e controllati: senza Postfix non scrive niente, ripetuto non riscrive niente, un
+mailer.conf diverso lo mette da parte, un messaggio rimasto nella coda di dma lo dice. Non tocca
+il sistema.
 
 **PackagePlanTest** — il piano esatto di un aggiornamento e la risposta a "la patch c'e'?".
 Legge uscite di `pkg upgrade -n` e di `pkg audit -Rjson` con la forma che il sorgente di pkg

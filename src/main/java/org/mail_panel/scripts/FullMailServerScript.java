@@ -633,6 +633,20 @@ sysrc sendmail_submit_enable="NO"
 sysrc sendmail_outbound_enable="NO"
 sysrc sendmail_msp_queue_enable="NO"
 
+# myorigin = localhost: gli indirizzi senza dominio -- root, postmaster, cioe' la posta di
+# cron e di periodic -- restano su questa macchina. Diventano @localhost, che e' in
+# mydestination, e Postfix li consegna in /var/mail come faceva dma. Con myorigin = $mydomain
+# diventavano @$MAIL_HOSTNAME, che non e' locale: misurato sulla VM il 23/10/2026, Postfix li
+# spediva via SMTP a se stesso e li rimbalzava ("loops back to myself").
+# L'altra strada, $myhostname in mydestination, e' quella dei manuali, ed e' stata scartata
+# per due motivi. Apre a Internet gli account di sistema: misurato dal Mac, fuori da
+# mynetworks, "RCPT TO:<root@$MAIL_HOSTNAME>" passava da 454 Relay access denied a 250, e un
+# utente inesistente dava 550 "User unknown in local recipient table", cioe' l'elenco degli
+# account si ricava dall'SMTP. E se il nome del server coincidesse con un dominio gestito dal
+# pannello, tutta la posta di quel dominio verrebbe consegnata agli utenti di sistema invece
+# che alle caselle. Con localhost, da fuori, non cambia niente: root@localhost resta 504 per
+# reject_non_fqdn_recipient.
+
 # main.cf
 cat > /usr/local/etc/postfix/main.cf << POSTFIX_MAIN
 # Postfix - FreeBSD Mail Panel
@@ -641,7 +655,8 @@ cat > /usr/local/etc/postfix/main.cf << POSTFIX_MAIN
 # Basic settings
 myhostname = $MAIL_HOSTNAME
 mydomain = $MAIL_HOSTNAME
-myorigin = \\$mydomain
+# Indirizzi senza dominio (root, postmaster) consegnati qui: vedi lo script di installazione
+myorigin = localhost
 mydestination = localhost
 mynetworks = 127.0.0.0/8 [::1]/128
 
@@ -806,6 +821,11 @@ chown postfix:postfix /var/spool/postfix/private
 chmod 710 /var/spool/postfix/private
 
 sysrc postfix_enable="YES"
+
+"""
+            // Postfix come MTA locale: senza, la posta di sistema esce da dma. Lo stesso pezzo
+            // e' in PostfixScript e FullMailStackScript.
+            + LocalMtaScript.SHELL + """
 
 echo "${GREEN}  Postfix configured${NC}"
 
@@ -1227,6 +1247,14 @@ if service nginx status >/dev/null 2>&1; then
     echo "  ${GREEN}[OK]${NC} Nginx is running"
 else
     echo "  ${RED}[FAIL]${NC} Nginx is NOT running"
+    SERVICES_OK=false
+fi
+
+# Non e' un servizio, ma senza questo la posta di sistema esce da dma (LocalMtaScript.java).
+if grep -Eq '^sendmail[[:space:]]+/usr/local/sbin/sendmail([[:space:]]|$)' /usr/local/etc/mail/mailer.conf 2>/dev/null; then
+    echo "  ${GREEN}[OK]${NC} sendmail(8) hands over to Postfix"
+else
+    echo "  ${RED}[FAIL]${NC} sendmail(8) does NOT hand over to Postfix (dma)"
     SERVICES_OK=false
 fi
 
