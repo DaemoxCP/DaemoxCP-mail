@@ -2811,12 +2811,12 @@ public final class UpdateManager {
         return new Thread(I18n.withCurrent(lavoro), nome);
     }
 
-    private static JSONObject avviaSulTurno(String id, Job j, String description, String nomeThread, Runnable work) {
-        // Ogni lavoro del turno puo' aver tolto e rimesso protezioni, o aggiornato pacchetti
-        // protetti (che cosi' perdono l'annotazione): la traccia si rimette in pari alla fine.
-        Runnable lavoro = withLockTrace(work);
+    private static JSONObject avviaSulTurno(String id, Job j, String description, String nomeThread, Runnable lavoro) {
         String rifiuto = PackageQueue.prendi(id, description);
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
+        // Ogni lavoro del turno puo' aver tolto e rimesso protezioni, o aggiornato pacchetti
+        // protetti (che cosi' perdono l'annotazione): la traccia si rimette in pari alla fine.
+        lavoro = withLockTrace(lavoro);
         JOBS.put(id, j);
         PackageQueue.avvia(id, nomeThread, lavoro);
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
