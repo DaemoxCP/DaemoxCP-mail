@@ -2098,7 +2098,7 @@ public class MailPanelContent {
             fetch('/api/aliases?trasforma=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
                 acMostra('acCaricamento', false);
                 if (!d.success || !d.possibile) {
-                    document.getElementById('acNo').textContent = d.motivo || d.error || t('conv.notPossible');
+                    document.getElementById('acNo').textContent = d.reason || d.error || t('conv.notPossible');
                     acMostra('acNo', true);
                     return;
                 }
@@ -2267,7 +2267,7 @@ public class MailPanelContent {
             fetch('/api/mailboxes?trasforma=' + id).then(r => r.json()).then(d => {
                 aaMostra('aaCaricamento', false);
                 if (!d.success || !d.possibile) {
-                    document.getElementById('aaNo').textContent = d.motivo || d.error || t('conv.notPossible');
+                    document.getElementById('aaNo').textContent = d.reason || d.error || t('conv.notPossible');
                     aaMostra('aaNo', true);
                     return;
                 }
@@ -12232,13 +12232,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function pkDettaglio(p) {
             let h = '';
             if (p.vuln) {
-                h += '<div class="small mb-1">' + escHtml(p.vuln.spiegazione || '') + '</div>';
-                (p.vuln.problemi || []).forEach(x => {
+                h += '<div class="small mb-1">' + escHtml(p.vuln.explanation || '') + '</div>';
+                (p.vuln.issues || []).forEach(x => {
                     const url = String(x.url || '');
                     const cves = (x.cve || []).join(', ') || 'VuXML';
                     h += '<div class="small">' + (url.indexOf('https://') === 0
                             ? '<a href="' + escHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escHtml(cves) + '</a>'
-                            : '<code>' + escHtml(cves) + '</code>') + ' &mdash; ' + escHtml(x.descrizione || '') + '</div>';
+                            : '<code>' + escHtml(cves) + '</code>') + ' &mdash; ' + escHtml(x.description || '') + '</div>';
                 });
             }
             if (p.advisory && p.advisory.text) h += '<div class="small mt-1"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>' + escHtml(p.advisory.text) + '</div>';
@@ -12580,7 +12580,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + ' ' + escHtml(pf.livelloEsplicito ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
                    + '<div class="alert alert-' + (pf.verdict === 'ALLINEATO' ? 'success' : 'warning')
                    + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(pf.verdict)) + '</strong> &mdash; '
-                   + updEsc(pf.spiegazione) + '</div>';
+                   + updEsc(pf.explanation) + '</div>';
                 const cb = pf.changes || [];
                 if (cb.length) {
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
@@ -12640,7 +12640,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                           : (rs.verdict === 'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE' ? 'info' : 'danger');
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.fileLetti })) + '</div>'
                    + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(rs.verdict))
-                   + '</strong> &mdash; ' + updEsc(rs.spiegazione) + '</div>';
+                   + '</strong> &mdash; ' + updEsc(rs.explanation) + '</div>';
                 const is = rs.issues || [];
                 if (is.length) {
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
@@ -12789,7 +12789,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('reboot_now', { confirm: 'RIAVVIA IL SERVER', minuti: 1 });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.rebootNotScheduled')) + '</strong><br>'
-                    + updEsc(r.error) + (r.uscita ? '<br><code>' + updEsc(r.uscita) + '</code>' : '') + '</div>';
+                    + updEsc(r.error) + (r.output ? '<br><code>' + updEsc(r.output) + '</code>' : '') + '</div>';
                 return;
             }
             el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.nota) + '</strong>'
@@ -13116,7 +13116,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                            : '<span class="badge upd-badge-info">' + escHtml(t('up.spare')) + '</span>');
                     h += '<tr class="upd-cell"><td><code>' + updEsc(x.nome) + '</code><br>'
                        + '<span class="small text-muted">' + updEsc(x.origine) + '</span></td>'
-                       + '<td class="small">' + updEsc(x.spiegazione) + '</td>'
+                       + '<td class="small">' + updEsc(x.explanation) + '</td>'
                        + '<td>' + badge + '<br><span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
                        + '<td class="text-end">' + updEsc(x.spazio) + '</td>'
                        + '<td class="small">' + updEsc(x.creato)
@@ -13185,7 +13185,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-' + (rm.branch === 'quarterly' ? 'warning' : rm.branch === 'latest' ? 'info' : 'secondary')
                    + ' py-2"><strong>' + escHtml(t('up.branchIs', { branch: rm.branch })) + '</strong>'
                    + (rm.url ? ' &mdash; <code>' + updEsc(rm.url) + '</code>' : '')
-                   + '<br><span class="small">' + updEsc(rm.spiegazione) + '</span>'
+                   + '<br><span class="small">' + updEsc(rm.explanation) + '</span>'
                    + '<br><span class="small text-muted">' + updEsc(rm.dove) + '</span></div>';
             }
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
@@ -13238,7 +13238,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // "IL COMANDO E' SUO" e "NON DETERMINABILE" restano gialli: non sono un divieto,
             // ma nemmeno un via libera.
             let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
-                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
+                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
                   + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.nota) + '</div>'
                   + (r.percheEQui
                      ? '<div class="alert alert-secondary py-2 small mb-2"><strong>' + escHtml(t('up.whyHere')) + '</strong> '
@@ -13357,7 +13357,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       : (r.verdict === 'CI SONO ANALISI INTERROTTE' ? 'danger'
                       : (r.verdict === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(r.verdict))
-                  + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
+                  + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
             if (r.avvisa) {
                 h += '<div class="small text-muted mb-1">task_timeout <code>' + updEsc(r.taskTimeout)
                    + '</code> &middot; ' + escHtml(t('up.cacheMax')) + ' <code>' + updEsc(r.massimoTeorico) + '</code></div>';
@@ -13463,7 +13463,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('panel_env');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             const cls = r.irraggiungibili ? 'danger' : (r.assenti ? 'warning' : 'success');
-            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + updEsc(r.spiegazione) + '</div>'
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + updEsc(r.explanation) + '</div>'
                   + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr><td class="small">' + escHtml(t('up.pathInherited')) + '</td>'
                   + '<td><code class="small">' + updEsc(r.pathEreditato || t('up.empty')) + '</code></td></tr>'
@@ -13498,7 +13498,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('removal_candidates');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             const c = r.candidati || [];
-            let h = '<p class="small text-muted">' + updEsc(r.spiegazione) + '</p>';
+            let h = '<p class="small text-muted">' + updEsc(r.explanation) + '</p>';
             if (!c.length) {
                 h += '<div class="alert alert-info py-2 mb-0">' + escHtml(t('up.noCandidates')) + '</div>';
                 el.innerHTML = h; return;
@@ -13537,7 +13537,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       : r.verdict === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info'
                       : r.verdict === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
             let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdetto(r.verdict))
-                  + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>';
+                  + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
             const lb = r.fornisceLibrerie || [];
             if (lb.length) {
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.sharedLibs')) + ' '
@@ -13596,7 +13596,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('deep_scan', { nome: nome });
             if (!r.success) { el.innerHTML = '<span class="text-danger small">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="alert alert-' + (r.bloccante ? 'danger' : 'success') + ' py-2 small mb-1">'
-                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.spiegazione) + '</div>'
+                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
                   + '<div class="small text-muted mb-1">' + escHtml(t('up.searchedRefs')) + ' '
                   + (r.cercati || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
 
@@ -13888,7 +13888,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += '</tbody></table></div>';
             // Chi nomina il vecchio interprete fra cio' che RESTA: e' cio' che pkg non sa.
             const rif = r.references || {};
-            const prob = rif.problemi || [];
+            const prob = rif.issues || [];
             h += '<h6 class="mt-3 mb-1">' + escHtml(t('up.whoRefsOld')) + '</h6>'
                + '<p class="small text-muted mb-2">' + t('up.refsExamined.html', { n: updEsc(rif.esaminati || 0), gone: updEsc((rif.innocui || []).length) }) + '</p>';
             const cit = rif.citazioni || [];
@@ -14157,7 +14157,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                        + '<td><code>' + updEsc(c.nome) + '</code></td>'
                        + '<td class="small">' + updEsc(c.da || '-') + '</td>'
                        + '<td class="small">' + updEsc(c.a || '-') + '</td>'
-                       + '<td class="small">' + updEsc(c.motivo || '')
+                       + '<td class="small">' + updEsc(c.reason || '')
                        + (c.stillVulnerable ? ' <span class="badge bg-danger">' + escHtml(t('up.stillVulnerable')) + '</span>' : '')
                        + (c.repo ? ' <span class="text-muted">[' + updEsc(c.repo) + ']</span>' : '') + '</td></tr>';
                 });
@@ -14167,7 +14167,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             (pn.blockers || []).forEach(x => {
                 h += '<div class="small text-warning-emphasis"><i class="fas fa-lock me-1" aria-hidden="true"></i><code>' + updEsc(x.nome)
-                   + '</code>: ' + updEsc(x.motivo) + '</div>';
+                   + '</code>: ' + updEsc(x.reason) + '</div>';
             });
             h += '<div class="small text-muted mb-2">' + t('up.computedWith.html', { cmd: updEsc(pn.comando || '') })
                + (pn.onBackup ? ' ' + escHtml(t('up.onCopy', { list: (pn.unlockedPackages || []).join(', ') })) : '.')
@@ -14235,12 +14235,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                            + v.cve.map(c => updEsc(c)).join('</span><span class="badge bg-dark me-1">')
                            + '</span>';
                     }
-                    if (v.descrizione) {
-                        h += '<br><span class="text-muted">' + updEsc(v.descrizione) + '</span>';
+                    if (v.description) {
+                        h += '<br><span class="text-muted">' + updEsc(v.description) + '</span>';
                     }
                     // La domanda vera: la fix c'e'? La dicono gli ranges di VuXML
                     // messi accanto alla versione che il catalogo offre.
-                    if (v.fix) h += '<br><span>' + updEsc(v.fix.spiegazione || '') + '</span>';
+                    if (v.fix) h += '<br><span>' + updEsc(v.fix.explanation || '') + '</span>';
                     (v.references || []).forEach(u => {
                         h += '<br><a href="' + updEsc(u) + '" target="_blank" rel="noopener noreferrer" class="small">'
                            + updEsc(u) + '</a>';

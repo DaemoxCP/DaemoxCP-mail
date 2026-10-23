@@ -17,7 +17,12 @@ Tre cose che vanno sapute, o la rete urla a vuoto:
 """
 import re, sys, glob, os
 
-root = sys.argv[1] if len(sys.argv) > 1 else "."
+# La radice e' il primo argomento che NON e' un'opzione. Prima era argv[1] qualunque fosse,
+# quindi "check_dom.py --quiet" prendeva "--quiet" per una cartella: i glob non trovavano
+# niente, la rete stampava zero problemi e usciva ZERO. Un controllo che non puo' fallire e'
+# peggio di nessun controllo, e questo non poteva nemmeno accorgersene.
+cartelle = [a for a in sys.argv[1:] if not a.startswith("-")]
+root = cartelle[0] if cartelle else "."
 quiet = "--quiet" in sys.argv
 
 def leggi(pats, rec=False):
@@ -99,6 +104,13 @@ for f, s in prove:
             if neg: negativi.add(i)
             else: da_prove.setdefault(i, set()).add(os.path.basename(f))
 morti = {i: v for i, v in da_prove.items() if not risolto(i)}
+
+# Zero file non e' "zero problemi": e' "non ho guardato niente". Si dice e si esce male,
+# altrimenti una radice sbagliata passa per una rete verde.
+if not app or not prove:
+    print(f"  NIENTE DA CONTROLLARE in {root!r}: file applicazione {len(app)}, file di prova {len(prove)}.")
+    print("  La radice e' sbagliata, o i file non ci sono: in nessuno dei due casi questa e' una rete verde.")
+    sys.exit(2)
 
 print(f"  file applicazione: {len(app)}   file di prova: {len(prove)}")
 print(f"  funzioni chiamate da on*: {len(chiamate)}   senza dichiarazione: {len(orfane)}")

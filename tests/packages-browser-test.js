@@ -28,12 +28,12 @@ const richieste = [];
 let giri = 0, letture = 0;
 
 const VULN_NGINX = { verdict: 'si-risolve-aggiornando', installata: '1.30.4,3', catalogo: '1.30.5_1,3', firstFixed: '1.30.5,3',
-    spiegazione: 'Si: aggiornare alla 1.30.5_1,3, che il tuo catalogo offre, corregge il problema.',
-    problemi: [{ descrizione: 'nginx -- buffer overflow <img src=x onerror="window.iniettato=1">', cve: ['CVE-2026-90439'],
+    explanation: 'Si: aggiornare alla 1.30.5_1,3, che il tuo catalogo offre, corregge il problema.',
+    issues: [{ description: 'nginx -- buffer overflow <img src=x onerror="window.iniettato=1">', cve: ['CVE-2026-90439'],
                  url: 'https://vuxml.FreeBSD.org/freebsd/7dc8fd4b.html' }] };
 const VULN_EXPAT = { verdict: 'aggiornamento-non-basta', installata: '2.8.1', catalogo: '2.8.4', firstFixed: '2.8.5',
-    spiegazione: 'Il catalogo offre 2.8.4, ma VuXML la considera ancora vulnerabile. La fix e\' dalla 2.8.5.',
-    problemi: [{ descrizione: 'libexpat -- Improper Handling of Unicode Encoding', cve: ['CVE-2026-93990'], url: 'https://vuxml.FreeBSD.org/freebsd/7fed71c4.html' }] };
+    explanation: 'Il catalogo offre 2.8.4, ma VuXML la considera ancora vulnerabile. La fix e\' dalla 2.8.5.',
+    issues: [{ description: 'libexpat -- Improper Handling of Unicode Encoding', cve: ['CVE-2026-93990'], url: 'https://vuxml.FreeBSD.org/freebsd/7fed71c4.html' }] };
 
 function quadro() {
     return { success: true,
@@ -82,7 +82,7 @@ async function servi(route) {
             checks: [{ level: 'ok', label: 'Pacchetto installato', detail: 'nginx 1.30.4,3' },
                      { level: 'verifica', label: 'Avvertenza', detail: 'Ricontrolla i virtual host dopo il riavvio.' }],
             piano: { measured: true, unlockedPackages: ['nginx'], comando: 'pkg upgrade -n -U nginx', onBackup: true,
-                     changes: [{ tipo: 'aggiorna', nome: 'nginx', da: '1.30.4,3', a: '1.30.5_1,3', motivo: '', repo: 'FreeBSD-ports' }], blockers: [] } });
+                     changes: [{ tipo: 'aggiorna', nome: 'nginx', da: '1.30.4,3', a: '1.30.5_1,3', reason: '', repo: 'FreeBSD-ports' }], blockers: [] } });
         case 'package_update':
             giri = 0;
             return json(route, { success: true, jobId: 'guid-1', async: true });
@@ -95,7 +95,7 @@ async function servi(route) {
             vulnerable: [
                 { name: 'expat', role: '', locked: false, fixedByUpgrade: true, aggiornamentoDisponibile: true, cve: ['CVE-2026-93990'], fix: VULN_EXPAT },
                 { name: 'nginx', role: 'Web server della webmail', locked: true, fixedByUpgrade: false, aggiornamentoDisponibile: true, cve: ['CVE-2026-90439'], fix: VULN_NGINX },
-            ], lockedUpdates: [], coinvolti: [] });
+            ], lockedUpdates: [], affectedMailPackages: [] });
         default: return json(route, { success: true });
     }
 }

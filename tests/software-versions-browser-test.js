@@ -76,7 +76,7 @@ async function servi(route) {
         domains: 2, mailboxes: 5, aliases: 3, mail_hostname: '', server_ip: '' });
     if (p === '/api/versioni') return json(route, VERSIONI);
     if (p === '/api/service') return json(route, { success: true });
-    if (p === '/api/updates') return json(route, { success: true, attivo: true, motivo: 'Il pannello riparte da solo.' });
+    if (p === '/api/updates') return json(route, { success: true, attivo: true, reason: 'Il pannello riparte da solo.' });
     return json(route, { success: true });
 }
 
