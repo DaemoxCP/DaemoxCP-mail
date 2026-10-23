@@ -14332,6 +14332,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('maintenance_preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="alert alert-secondary py-2 small">' + updEsc(r.generalNote) + '</div>';
+            /* Se il piano rimuove o retrocede pacchetti il pannello non lo esegue: si dice
+               QUI, prima del pulsante, non dopo aver scritto MANUTENZIONE. */
+            if (r.blockedReason) {
+                h += '<div class="alert alert-danger py-2 small"><strong>'
+                   + escHtml(t('up.notRunnable')) + '</strong> ' + updEsc(r.blockedReason) + '</div>';
+            }
             const pk = r.packages || [];
             if (!pk.length) {
                 h += '<div class="small text-muted">' + escHtml(t('up.noLockedUpd')) + '</div>';

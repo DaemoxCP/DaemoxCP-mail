@@ -991,6 +991,7 @@ public final class UpdateManager {
         // protetti; questo dice TUTTO cio' che cambiera', dipendenze comprese.
         JSONObject piano = pianoDellaManutenzione(arr).getJSONObject("piano");
         return new JSONObject().put("success", true).put("packages", arr)
+                .put("blockedReason", motivoPianoDistruttivo(piano) == null ? "" : motivoPianoDistruttivo(piano))
                 .put("piano", pianoPerLaScheda(piano)).put("signature", piano.optString("signature", ""))
                 .put("majorCount", maggiori).put("waitCount", attese)
                 .put("generalNote",
@@ -2365,6 +2366,54 @@ public final class UpdateManager {
             if (!v.isEmpty()) l.add(v);
         }
         return l;
+    }
+
+    /**
+     * I cambiamenti che il pannello NON esegue: rimozioni e retrocessioni.
+     *
+     * E' una regola del pannello, non un fatto di pkg: un aggiornamento che toglie un
+     * pacchetto da un server di posta, o che ne riporta indietro la versione, va deciso da
+     * una persona che sa chi lo usa. Stava scritta in un punto solo — la scheda di un
+     * pacchetto protetto — e mancava negli altri due lavori che eseguono un piano.
+     *
+     * Misurato sulla VM FreeBSD 15.1 il 23/10/2026, sulla stessa macchina e sullo stesso
+     * pacchetto: l'aggiornamento guidato di postfix-mysql si ferma («Il piano rimuove
+     * pacchetti: pkg rimuoverebbe lmdb 1.0.2,1»), mentre la manutenzione completa dava
+     * runnable=true su un piano che conteneva «rimuove lmdb 1.0.2,1» e nessun impedimento.
+     * Due risposte opposte alla stessa domanda, e quella permissiva stava sul pulsante
+     * «Manutenzione completa», cioe' su quello che si preme per aggiornare tutto.
+     *
+     * @return {@code removes} e {@code downgrades}: i cambiamenti, gia' in forma leggibile
+     */
+    static JSONObject cambiamentiDistruttivi(JSONObject piano) {
+        JSONArray rimossi = new JSONArray(), indietro = new JSONArray();
+        JSONArray c = piano == null ? null : piano.optJSONArray("changes");
+        for (int i = 0; c != null && i < c.length(); i++) {
+            JSONObject x = c.getJSONObject(i);
+            String n = x.optString("nome");
+            switch (x.optString("tipo")) {
+                case "rimuove" -> rimossi.put(n + " " + x.optString("da"));
+                case "retrocede" -> indietro.put(n + " " + x.optString("da") + " -> " + x.optString("a"));
+                default -> { }
+            }
+        }
+        return new JSONObject().put("removes", rimossi).put("downgrades", indietro);
+    }
+
+    /**
+     * Il motivo per cui un piano non si esegue, o null se non tocca niente in quel modo.
+     * Lo chiedono i tre lavori che eseguono un piano, cosi' la regola e' una sola.
+     */
+    static String motivoPianoDistruttivo(JSONObject piano) {
+        JSONObject d = cambiamentiDistruttivi(piano);
+        java.util.List<String> motivi = new ArrayList<>();
+        if (!d.getJSONArray("removes").isEmpty())
+            motivi.add(I18n.tr("server.um.x.planRemoves", java.util.Map.of("elenco",
+                    String.valueOf(String.join(", ", jsonArrayToList(d.getJSONArray("removes")))))));
+        if (!d.getJSONArray("downgrades").isEmpty())
+            motivi.add(I18n.tr("server.um.x.planDowngrades", java.util.Map.of("elenco",
+                    String.valueOf(String.join(", ", jsonArrayToList(d.getJSONArray("downgrades")))))));
+        return motivi.isEmpty() ? null : String.join(" ", motivi);
     }
 
     /** I nomi delle divergenze, per il messaggio d'errore di un lavoro. */
@@ -5931,16 +5980,15 @@ public final class UpdateManager {
             block = true;
         } else {
             JSONArray changes = piano.getJSONArray("changes");
-            java.util.List<String> rimossi = new ArrayList<>(), indietro = new ArrayList<>(),
-                    ancoraVulnerabili = new ArrayList<>(), righe = new ArrayList<>();
+            // Rimozioni e retrocessioni dalla funzione condivisa: la regola e' la stessa dei
+            // due lavori, e scritta due volte diventerebbe due regole (e lo era).
+            JSONObject distruttivi = cambiamentiDistruttivi(piano);
+            java.util.List<String> rimossi = jsonArrayToList(distruttivi.getJSONArray("removes"));
+            java.util.List<String> indietro = jsonArrayToList(distruttivi.getJSONArray("downgrades"));
+            java.util.List<String> ancoraVulnerabili = new ArrayList<>(), righe = new ArrayList<>();
             for (int i = 0; i < changes.length(); i++) {
                 JSONObject c = changes.getJSONObject(i);
                 String n = c.getString("nome");
-                switch (c.getString("tipo")) {
-                    case "rimuove" -> rimossi.add(n + " " + c.getString("da"));
-                    case "retrocede" -> indietro.add(n + " " + c.getString("da") + " -> " + c.getString("a"));
-                    default -> { }
-                }
                 if (c.optBoolean("stillVulnerable")) ancoraVulnerabili.add(n + " " + c.getString("a"));
                 righe.add(n + " " + (c.getString("da").isEmpty() ? I18n.tr("server.um.x.newPkg") : c.getString("da"))
                         + (c.getString("a").isEmpty() ? " " + I18n.tr("server.um.x.removedPkg") : " -> " + c.getString("a")));
@@ -9969,6 +10017,16 @@ public final class UpdateManager {
                 job.fine = System.currentTimeMillis();
                 return;
             }
+            // La stessa regola degli altri due: niente rimozioni, niente retrocessioni.
+            String distruttivo = motivoPianoDistruttivo(piano);
+            if (distruttivo != null) {
+                job.status = "error";
+                job.errorMessage = distruttivo;
+                job.scrivi(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(distruttivo))));
+                job.scrivi(I18n.tr("server.um.x.destructiveByHand"));
+                job.fine = System.currentTimeMillis();
+                return;
+            }
             job.scrivi("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(firmaOra))));
             JSONArray cambiPiano = piano.getJSONArray("changes");
             for (int i = 0; i < cambiPiano.length(); i++) {
@@ -10135,6 +10193,18 @@ public final class UpdateManager {
                 job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errori", String.valueOf(String.join(" | ", jsonArrayToList(piano.getJSONArray("erroriPkg"))))))
                         + (piano.getJSONArray("changes").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
+                job.fine = System.currentTimeMillis();
+                return;
+            }
+            // La stessa regola della scheda di un pacchetto: il pannello non esegue piani
+            // che rimuovono o retrocedono pacchetti. Qui mancava, e questo e' il lavoro che
+            // si preme per aggiornare tutto.
+            String distruttivo = motivoPianoDistruttivo(piano);
+            if (distruttivo != null) {
+                job.status = "error";
+                job.errorMessage = distruttivo;
+                job.scrivi(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(distruttivo))));
+                job.scrivi(I18n.tr("server.um.x.destructiveByHand"));
                 job.fine = System.currentTimeMillis();
                 return;
             }

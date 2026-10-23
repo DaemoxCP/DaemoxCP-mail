@@ -147,6 +147,42 @@ for parola, files in sorted(prove.items()):
     guasti.append(f'una prova si aspetta "{parola}" nel testo (si dice '
                   f'"{INGLESI_VIETATI_IN_ITALIANO[parola]}"): {", ".join(files)}')
 
+# --- 6. i segnaposto che il TESTO chiede devono essere quelli che il CODICE passa ---
+#
+# Terzo lato ancora: `I18n.tr("chiave", Map.of("reason", ...))` contro un testo che dice
+# {motivo}. L'interpolazione non sostituisce niente e l'utente legge la graffa. Misurato il
+# 23/10/2026 eseguendo la manutenzione completa sulla VM: nel log compariva
+# «dovecot -> TRATTENUTO: {motivo}». Sette chiavi, tutte dalla stessa rinomina a meta'
+# (motivo -> reason, uscita -> output) con i file di lingua rimasti indietro. Il controllo 2
+# non le vedeva: it.json e en.json dicevano {motivo} TUTTI E DUE, quindi fra loro combaciavano.
+#
+# Il parser dei siti di chiamata prende le stringhe vicine alla chiave, quindi l'insieme dei
+# nomi passati e' piu' largo del vero: l'approssimazione sta dalla parte che NON inventa
+# guasti, e ogni segnaposto segnalato qui non e' passato da nessuna parte.
+import glob
+
+siti = {}
+for f in glob.glob(os.path.join(radice, "src/main/java/**/*.java"), recursive=True):
+    t = open(f, encoding="utf-8", errors="replace").read()
+    for m in re.finditer(r'I18n\.tr\(\s*"([A-Za-z0-9_.]+)"\s*,', t):
+        coda = t[m.end():m.end() + 1500]
+        fine = coda.find(");")
+        if fine > 0:
+            coda = coda[:fine]
+        siti.setdefault(m.group(1), set()).update(re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"\s*,', coda))
+
+senza = 0
+for chiave, passati in sorted(siti.items()):
+    if chiave not in it:
+        continue
+    attesi = set(SEGNAPOSTO.findall(it[chiave])) | set(SEGNAPOSTO.findall(en.get(chiave, "")))
+    mancanti = sorted(attesi - passati)
+    if mancanti:
+        senza += 1
+        guasti.append(f'il testo di {chiave} chiede {mancanti} e il codice non li passa '
+                      f"(passa {sorted(passati)[:6]}): l'utente leggerebbe la graffa")
+print(f"  testi che chiedono un segnaposto che il codice non passa: {senza}")
+
 if guasti:
     print()
     for g in guasti:
