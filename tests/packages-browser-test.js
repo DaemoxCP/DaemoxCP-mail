@@ -114,8 +114,8 @@ async function servi(route) {
     await page.waitForSelector('#pk-body table');
     vero('una lettura all\'apertura della pagina', letture === 1);
     const testa = await page.textContent('#pk-body');
-    vero('riepilogo: aggiornamenti, vulnerabili, correggibili, lockedPackages', testa.includes('7 aggiornamenti disponibili') && testa.includes('2 pacchetti vulnerabili')
-        && testa.includes('1 si corregge subito') && testa.includes('3 lockedPackages'));
+    vero('riepilogo: aggiornamenti, vulnerabili, correggibili, bloccati', testa.includes('7 aggiornamenti disponibili') && testa.includes('2 pacchetti vulnerabili')
+        && testa.includes('1 si corregge subito') && testa.includes('3 bloccati'));
     vero('avviso sul pacchetto dello stack non bloccato, con il pulsante per bloccarli', testa.includes('1 pacchetto dello stack di posta non è bloccato')
         && await page.locator('#pk-body .alert button', { hasText: 'Blocca tutti i pacchetti dello stack di posta' }).count() === 1);
     const righe = await page.$$eval('#pk-body tbody tr:not([hidden])', tr => tr.map(r => r.cells[0].querySelector('code').textContent));
