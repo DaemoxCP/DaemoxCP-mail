@@ -65,7 +65,7 @@ async function servi(route) {
             destinazioni: [{ destinazione: 'owner@example.net', attivo: true }], copia: false,
             versoQui: [{ sorgente: 'postmaster@domain-d.test', attivo: true }],
             posta: { presente: true, messaggi: 1234, almeno: false, byte: 52428800, dimensione: '50,0 MB', filtri: true, ultimo: '2025-05-12T09:30:00+02:00' } });
-        if (url.searchParams.get('trasforma')) return json(route, { success: true, possibile: false, motivo: 'Non si puo\' in questa prova.' });
+        if (url.searchParams.get('trasforma')) return json(route, { success: true, possibile: false, reason: 'Non si puo\' in questa prova.' });
         return json(route, { success: true, aliases: ALIAS });
     }
     if (p === '/api/aliases' && req.method() === 'POST' && corpo.action === 'trasforma_in_casella')

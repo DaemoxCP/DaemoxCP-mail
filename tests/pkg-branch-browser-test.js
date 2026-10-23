@@ -27,7 +27,7 @@ let ramoAdesso = 'quarterly', cambioRiesce = true, letture = 0, giri = 0;
 function stato() {
     const latest = ramoAdesso === 'latest';
     return { success: true, branch: ramoAdesso, changeable: true, verso: [latest ? 'quarterly' : 'latest'],
-        spiegazione: latest ? 'Ramo continuo: le versioni arrivano appena il port e\' aggiornato e compilato.'
+        explanation: latest ? 'Ramo continuo: le versioni arrivano appena il port e\' aggiornato e compilato.'
                             : 'Ramo trimestrale: si stacca dallo sviluppo dei port a gennaio, aprile, luglio e ottobre.',
         fingerprint: latest ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa',
         file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf', panelOwnedFile: latest,
