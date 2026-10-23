@@ -5577,6 +5577,38 @@ public final class UpdateManager {
         return "";
     }
 
+    /**
+     * Un pacchetto GIA' installato che e' "la stessa cosa a un'altra versione" di 'nome', o
+     * null. Serve a PackagePlan per riconoscere quando pkg gira attorno a un blocco
+     * installando un altro membro della famiglia: il perche' sta su PackagePlan.aggiuntaFamiglia.
+     *
+     * Due condizioni, entrambe necessarie, perche' una sola sbaglia:
+     *
+     *  - **la stessa famiglia dichiarata** (FAMIGLIE). Senza questa, python311 e python312
+     *    sembrerebbero gemelli, e invece convivono benissimo.
+     *  - **lo stesso scheletro**, cioe' lo stesso nome a cifre sostituite: mysql97-client e
+     *    mysql84-client diventano entrambi "mysql#-client", mentre mysql84-server diventa
+     *    "mysql#-server". Senza questa, il gemello di mysql97-client potrebbe risultare
+     *    mysql84-server, che e' della stessa famiglia ma non occupa lo stesso posto.
+     */
+    static String gemelloInstallatoDellaFamiglia(String nome) {
+        if (!isValidName(nome)) return null;
+        String fam = famigliaDi(nome);
+        if (fam == null) return null;
+        String scheletro = scheletroDelNome(nome);
+        for (String riga : sh("pkg query %n 2>/dev/null", 30).split("\n")) {
+            String t = riga.trim();
+            if (!isValidName(t) || t.equals(nome) || !t.matches(fam)) continue;
+            if (scheletro.equals(scheletroDelNome(t))) return t;
+        }
+        return null;
+    }
+
+    /** Il nome con le cifre sostituite: "mysql84-client" -> "mysql#-client". */
+    static String scheletroDelNome(String nome) {
+        return nome == null ? "" : nome.replaceAll("[0-9]+", "#");
+    }
+
     /** Tutti i pacchetti INSTALLATI che appartengono alla stessa famiglia. Almeno il pacchetto stesso. */
     static java.util.List<String> membriFamiglia(String nome) {
         java.util.List<String> membri = new ArrayList<>();
@@ -5878,7 +5910,8 @@ public final class UpdateManager {
         // pkg per aggiornare puo' cambiare anche dipendenze, installarne di nuove, rimuoverne:
         // si chiede a pkg, su una copia del suo database in cui si tolgono le stesse protezioni
         // che togliera' l'aggiornamento vero. Il database vero non viene toccato.
-        JSONObject piano = PackagePlan.pianoPer(famiglia, insiemeProtetti(lockList), UpdateManager::motivoPerNonSbloccare);
+        JSONObject piano = PackagePlan.pianoPer(famiglia, insiemeProtetti(lockList),
+                UpdateManager::motivoPerNonSbloccare, UpdateManager::gemelloInstallatoDellaFamiglia);
         if (!piano.optBoolean("success") || !piano.optBoolean("measured")) {
             aggiungiCheck(checks, "piano", I18n.tr("server.um.packagePreflight.15"), "block",
                     I18n.tr("server.um.x.noPlan", java.util.Map.of("e", String.valueOf(piano.optString("error", piano.optString("errore", "?"))))));
@@ -5973,6 +6006,19 @@ public final class UpdateManager {
                 daSbloccare.isEmpty()
                     ? I18n.tr("server.um.packagePreflight.26")
                     : I18n.tr("server.um.x.willUnlock", java.util.Map.of("elenco", String.valueOf(String.join(", ", daSbloccare)))));
+
+        // Se fra quelli da sbloccare c'e' un pacchetto che nessuno ha chiesto, il perche' va
+        // detto: sta li' perche' altrimenti pkg installerebbe un altro membro della sua
+        // famiglia al suo posto (PackagePlan.aggiuntaFamiglia).
+        JSONArray fam2 = piano.optJSONArray("familyUnlocked");
+        for (int i = 0; fam2 != null && i < fam2.length(); i++) {
+            JSONObject f = fam2.getJSONObject(i);
+            aggiungiCheck(checks, "famigliasbloccata", I18n.tr("server.um.x.familyUnlockedLabel"), "verifica",
+                    I18n.tr("server.um.x.familyUnlockedWhy", java.util.Map.of(
+                            "gemello", String.valueOf(f.optString("installed")),
+                            "versione", String.valueOf(f.optString("version")),
+                            "nuovo", String.valueOf(f.optString("wouldInstall")))));
+        }
 
         r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
         return r;
@@ -6159,7 +6205,8 @@ public final class UpdateManager {
             // Il perche' per esteso, con la misura, sta su scaricaERicontrolla.
             final java.util.List<String> fam = famiglia;
             String cresciuto = scaricaERicontrolla(job, "pkg upgrade -F -y -U" + list + " 2>&1", piano,
-                    () -> PackagePlan.pianoPer(fam, insiemeProtetti(), UpdateManager::motivoPerNonSbloccare));
+                    () -> PackagePlan.pianoPer(fam, insiemeProtetti(), UpdateManager::motivoPerNonSbloccare,
+                            UpdateManager::gemelloInstallatoDellaFamiglia));
             if (cresciuto != null) throw new IllegalStateException(cresciuto);
             // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
             // ripescare i messaggi che chiedono un'azione.
@@ -9938,7 +9985,8 @@ public final class UpdateManager {
         JSONObject piano = PackagePlan.pianoTotale(daSbloccare, protetti,
                 b -> perche.containsKey(b.optString("nome"))
                         ? I18n.tr("server.um.x.staysProtected", java.util.Map.of("reason", String.valueOf(perche.get(b.optString("nome")))))
-                        : motivoPerNonSbloccare(b));
+                        : motivoPerNonSbloccare(b),
+                UpdateManager::gemelloInstallatoDellaFamiglia);
         return new JSONObject().put("piano", piano).put("trattenuti", new JSONObject(perche))
                 .put("protetti", new JSONArray(new ArrayList<>(protetti)));
     }
