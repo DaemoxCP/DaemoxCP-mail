@@ -372,9 +372,21 @@ public final class PackagePlan {
      */
     public static JSONObject pianoPer(List<String> pacchetti, Set<String> protetti,
                                       Function<JSONObject, String> motivoPerNonSbloccare) {
+        return pianoPer(pacchetti, protetti, motivoPerNonSbloccare, n -> null);
+    }
+
+    /**
+     * @param gemelloInstallato riceve il nome di un pacchetto che il piano INSTALLEREBBE e
+     *                          restituisce il nome di un pacchetto GIA' installato della
+     *                          stessa famiglia, o null. Serve a riconoscere quando pkg sta
+     *                          girando attorno a un blocco: vedi il ciclo di pianoCon.
+     */
+    public static JSONObject pianoPer(List<String> pacchetti, Set<String> protetti,
+                                      Function<JSONObject, String> motivoPerNonSbloccare,
+                                      Function<String, String> gemelloInstallato) {
         LinkedHashSet<String> sblocca = new LinkedHashSet<>();
         for (String p : pacchetti) if (protetti.contains(p)) sblocca.add(p);
-        return pianoCon(pacchetti, sblocca, protetti, motivoPerNonSbloccare, true);
+        return pianoCon(pacchetti, sblocca, protetti, motivoPerNonSbloccare, gemelloInstallato, true);
     }
 
     /**
@@ -385,13 +397,22 @@ public final class PackagePlan {
      */
     public static JSONObject pianoTotale(Set<String> daSbloccare, Set<String> protetti,
                                          Function<JSONObject, String> motivoPerNonSbloccare) {
-        return pianoCon(List.of(), new LinkedHashSet<>(daSbloccare), protetti, motivoPerNonSbloccare, false);
+        return pianoTotale(daSbloccare, protetti, motivoPerNonSbloccare, n -> null);
+    }
+
+    public static JSONObject pianoTotale(Set<String> daSbloccare, Set<String> protetti,
+                                         Function<JSONObject, String> motivoPerNonSbloccare,
+                                         Function<String, String> gemelloInstallato) {
+        return pianoCon(List.of(), new LinkedHashSet<>(daSbloccare), protetti, motivoPerNonSbloccare,
+                gemelloInstallato, false);
     }
 
     private static JSONObject pianoCon(List<String> pacchetti, LinkedHashSet<String> sblocca, Set<String> protetti,
-                                       Function<JSONObject, String> motivoPerNonSbloccare, boolean impedimentiBloccano) {
+                                       Function<JSONObject, String> motivoPerNonSbloccare,
+                                       Function<String, String> gemelloInstallato, boolean impedimentiBloccano) {
         JSONObject piano = null;
         JSONArray blockers = new JSONArray();
+        JSONArray famigliaSbloccata = new JSONArray();
         for (int giro = 0; giro < 6; giro++) {
             piano = simula(new ArrayList<>(sblocca), pacchetti);
             if (!piano.optBoolean("success") || !piano.optBoolean("measured")) break;
@@ -409,9 +430,12 @@ public final class PackagePlan {
                 sblocca.add(n);
                 aggiunti = true;
             }
+            if (aggiuntaFamiglia(piano, sblocca, protetti, gemelloInstallato, blockers, famigliaSbloccata))
+                aggiunti = true;
             if (!aggiunti) break;
         }
-        piano.put("unlockedPackages", new JSONArray(new ArrayList<>(sblocca))).put("blockers", blockers);
+        piano.put("unlockedPackages", new JSONArray(new ArrayList<>(sblocca))).put("blockers", blockers)
+             .put("familyUnlocked", famigliaSbloccata);
 
         // I pacchetti chiesti che il piano NON cambia: pkg li lascerebbe dove sono.
         JSONArray fermi = new JSONArray();
@@ -450,6 +474,79 @@ public final class PackagePlan {
                 // se nel piano c'e' pkg che aggiornerebbe se stesso.
                 && (pacchetti.isEmpty() || fermi.length() < pacchetti.size());
         return piano.put("runnable", runnable).put("signature", piano.optBoolean("measured") ? signature(piano) : "");
+    }
+
+    /**
+     * Un "installa" che e' della stessa famiglia di un pacchetto GIA' installato non e'
+     * un'aggiunta: e' pkg che gira attorno a un blocco.
+     *
+     * Per pkg un pacchetto protetto non e' "da non cambiare": e' **non disponibile**. Se
+     * serve una libreria che quel pacchetto fornisce, il solver cerca un altro fornitore — e
+     * lo installa, anche se si contende i file con quello che c'e' gia'.
+     *
+     * Misurato sulla VM FreeBSD 15.1 il 23/10/2026. Con mysql84-client protetto, aggiornare
+     * postfix-mysql produceva un piano con "installa mysql97-client 9.7.2"; i due forniscono
+     * la stessa libmysqlclient.so.24 e si contendono /usr/local/bin/comp_err, quindi
+     * l'esecuzione moriva a meta' con «mysql97-client conflicts with mysql84-client
+     * (installs files into the same place)», uscita 3. Sbloccando ANCHE mysql84-client, nella
+     * stessa simulazione mysql97-client **spariisce dal piano**: pkg torna a usare quello che
+     * c'e'. Il piano diceva il vero su cio' che pkg avrebbe fatto; era pkg a essere stato
+     * reso cieco dal blocco.
+     *
+     * Si sblocca solo quando il catalogo ha la STESSA versione installata, cioe' quando
+     * sbloccare non puo' cambiare niente: lo scopo e' far vedere a pkg cio' che c'e' gia',
+     * non aggiornarlo. Se il catalogo ne ha una piu' recente, sbloccare sarebbe un
+     * aggiornamento che nessuno ha chiesto (e per i client MySQL l'avvertenza dice di
+     * aspettare): allora e' un impedimento, col suo motivo. E se il gemello non e' nemmeno
+     * protetto, il blocco non c'entra: e' un conflitto vero fra due membri della famiglia.
+     *
+     * @return true se ha allargato l'elenco da sbloccare, cioe' se il piano va rifatto
+     */
+    private static boolean aggiuntaFamiglia(JSONObject piano, LinkedHashSet<String> sblocca,
+                                            Set<String> protetti, Function<String, String> gemelloInstallato,
+                                            JSONArray blockers, JSONArray famigliaSbloccata) {
+        boolean aggiunti = false;
+        JSONArray changes = piano.optJSONArray("changes");
+        for (int i = 0; changes != null && i < changes.length(); i++) {
+            JSONObject c = changes.getJSONObject(i);
+            if (!"installa".equals(c.optString("tipo"))) continue;
+            String nuovo = c.optString("nome");
+            String gemello = gemelloInstallato == null ? null : gemelloInstallato.apply(nuovo);
+            if (gemello == null || gemello.equals(nuovo) || sblocca.contains(gemello)
+                    || !isValidName(gemello)) continue;
+            if (gia(blockers, gemello)) continue;
+            if (!protetti.contains(gemello)) {
+                blockers.put(new JSONObject().put("nome", nuovo)
+                        .put("reason", I18n.tr("server.plan.familyConflict",
+                                java.util.Map.of("nuovo", String.valueOf(nuovo), "gemello", String.valueOf(gemello)))));
+                continue;
+            }
+            String installata = sh("pkg query %v " + gemello + " 2>/dev/null", 20).trim();
+            String catalogo = "";
+            for (String riga : sh("pkg rquery -U %v " + gemello + " 2>/dev/null", 30).split("\n")) {
+                String x = riga.trim();
+                if (versioneValida(x)) { catalogo = x; break; }
+            }
+            if (!versioneValida(installata) || !installata.equals(catalogo)) {
+                blockers.put(new JSONObject().put("nome", gemello)
+                        .put("reason", I18n.tr("server.plan.familyLockedNewer",
+                                java.util.Map.of("nuovo", String.valueOf(nuovo), "gemello", String.valueOf(gemello),
+                                        "installata", String.valueOf(installata.isEmpty() ? "?" : installata),
+                                        "catalogo", String.valueOf(catalogo.isEmpty() ? "?" : catalogo)))));
+                continue;
+            }
+            sblocca.add(gemello);
+            famigliaSbloccata.put(new JSONObject().put("installed", gemello).put("wouldInstall", nuovo)
+                    .put("version", installata));
+            aggiunti = true;
+        }
+        return aggiunti;
+    }
+
+    private static boolean gia(JSONArray blockers, String nome) {
+        for (int i = 0; i < blockers.length(); i++)
+            if (nome.equals(blockers.getJSONObject(i).optString("nome"))) return true;
+        return false;
     }
 
     /** Il pkg installato e quello del catalogo, se il catalogo ne ha uno piu' recente; altrimenti null. */
