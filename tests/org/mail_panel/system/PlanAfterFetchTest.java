@@ -104,6 +104,25 @@ public class PlanAfterFetchTest {
         vero("  e l'ordine non dipende da quello della simulazione",
              righe.equals(PackagePlan.cambiInRighe(riordina(cresciuto))));
 
+        // ===== I tre lavori sui pacchetti chiedono TUTTI la firma =====
+        //
+        // Era l'invariante che mancava: l'aggiornamento dei non protetti partiva senza, cioe'
+        // eseguiva un "pkg upgrade -y" che nessuno aveva approvato riga per riga. Il controllo
+        // avviene prima di prendere il turno e prima di toccare pkg, quindi si prova qui.
+        for (String firma : new String[]{"", "   ", "abc", "ZZZZZZZZZZZZZZZZ", "0123456789abcde",
+                                         "0123456789abcdef0", "0123456789ABCDEF"}) {
+            vero("l'aggiornamento dei non protetti rifiuta la firma \"" + firma + "\"",
+                 !UpdateManager.startUnlockedPackagesUpdate(firma).optBoolean("success"));
+            vero("  la manutenzione rifiuta la stessa",
+                 !UpdateManager.startMaintenance(firma).optBoolean("success"));
+            vero("  e l'aggiornamento guidato pure",
+                 !UpdateManager.startGuidedUpdate("nginx", firma).optBoolean("success"));
+        }
+        vero("e senza firma del tutto (null) non parte niente",
+             !UpdateManager.startUnlockedPackagesUpdate(null).optBoolean("success")
+             && !UpdateManager.startMaintenance(null).optBoolean("success")
+             && !UpdateManager.startGuidedUpdate("nginx", null).optBoolean("success"));
+
         System.out.println(falliti == 0 ? "\nTUTTO OK" : "\n" + falliti + " PROVE FALLITE");
         if (falliti > 0) System.exit(1);
     }
