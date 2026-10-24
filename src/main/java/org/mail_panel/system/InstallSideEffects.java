@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 /**
  * Cio' che un aggiornamento di pacchetti cambia FUORI dai file che pkg installa: la
@@ -464,21 +465,35 @@ final class InstallSideEffects {
      * assente, file illeggibile): allora l'allarme resta.
      */
     static String saslUsers(byte[] content) {
-        Path tmp = null;
+        Path dir = null;
         try {
-            tmp = Files.createTempFile("sasldb", ".db",
-                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-            Files.write(tmp, content);
-            Shell.Result r = Shell.runShell(Duration.ofSeconds(20), "sasldblistusers2 -f '" + tmp + "' 2>/dev/null");
+            // Lo strumento aggiunge da solo ".db" al nome che gli si da': con -f .../sasldb2.db
+            // cerca sasldb2.db.db, non lo trova, scrive «listusers failed» ed esce con 0.
+            // Misurato sulla VM: preso cosi', due file qualunque risultavano «stessi utenti».
+            dir = Files.createTempDirectory("sasldb",
+                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+            Files.write(dir.resolve(SASLDB_NAME), content);
+            Shell.Result r = Shell.runShell(Duration.ofSeconds(20),
+                    "sasldblistusers2 -f '" + dir.resolve("sasldb2") + "' 2>&1");
             if (r.exitCode() != 0) return null;
             List<String> lines = new ArrayList<>();
-            for (String l : r.output().split("\n")) if (!l.isBlank()) lines.add(l.trim());
+            for (String l : r.output().split("\n")) {
+                if (l.isBlank()) continue;
+                // Solo righe «utente@dominio: attributo»: qualunque altra cosa (compreso
+                // «listusers failed», che esce con 0) vuol dire che non ha letto il database.
+                if (!l.trim().matches("[^\\s:]+@[^\\s:]*: \\S+")) return null;
+                lines.add(l.trim());
+            }
             java.util.Collections.sort(lines);
             return String.join("\n", lines);
         } catch (IOException | RuntimeException e) {
             return null;
         } finally {
-            if (tmp != null) try { Files.deleteIfExists(tmp); } catch (IOException ignored) {}
+            if (dir != null) {
+                try (Stream<Path> w = Files.walk(dir)) {
+                    for (Path x : w.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(x);
+                } catch (IOException ignored) {}
+            }
         }
     }
 

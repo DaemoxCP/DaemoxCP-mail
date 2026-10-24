@@ -210,9 +210,10 @@ public class InstallSideEffectsTest {
         }
         Path d = Files.createTempDirectory("sasl");
         try {
-            byte[] empty1 = emptySasldb(d.resolve("uno.db")), empty2 = emptySasldb(d.resolve("due.db"));
+            // saslpasswd2 aggiunge ".db" al nome che gli si da'.
+            byte[] empty1 = emptySasldb(d.resolve("uno")), empty2 = emptySasldb(d.resolve("due"));
             org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(10),
-                    "echo x | saslpasswd2 -p -f " + d.resolve("utente.db") + " -c probeuser");
+                    "echo x | saslpasswd2 -p -f " + d.resolve("utente") + " -c probeuser");
             byte[] withUser = Files.readAllBytes(d.resolve("utente.db"));
             check("due database vuoti ricreati hanno byte diversi (se no la prova non prova niente)",
                     !java.util.Arrays.equals(empty1, empty2));
@@ -229,16 +230,20 @@ public class InstallSideEffectsTest {
                     new InstallSideEffects.ConfigSnapshot(u, Map.of()), Set.of());
             check("sasldb2.db con un utente in piu': allarme", "script".equals(kindOf(added, path)));
             check("gli utenti si leggono, mai le password: «utente@dominio: attributo»",
-                    InstallSideEffects.saslUsers(withUser).matches("(?s)probeuser@\\S+: \\w+.*"));
+                    String.valueOf(InstallSideEffects.saslUsers(withUser)).matches("(?s)probeuser@\\S+: \\w+.*"));
+            check("un database vuoto da' zero utenti, non «non letto»", "".equals(InstallSideEffects.saslUsers(empty1)));
+            check("un file che non e' un database SASL: non letto, quindi niente «stessi utenti»",
+                    InstallSideEffects.saslUsers("non sono un database".getBytes()) == null);
         } finally {
             try (var st = Files.walk(d)) { st.sorted(java.util.Comparator.reverseOrder()).forEach(x -> x.toFile().delete()); }
         }
     }
 
-    private static byte[] emptySasldb(Path f) throws Exception {
+    /** Come lo script di cyrus-sasl: crea l'utente cyrus e lo toglie. {@code base} senza ".db". */
+    private static byte[] emptySasldb(Path base) throws Exception {
         org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(10),
-                "echo test | saslpasswd2 -p -f " + f + " -c cyrus && saslpasswd2 -f " + f + " -d cyrus");
-        return Files.readAllBytes(f);
+                "echo test | saslpasswd2 -p -f " + base + " -c cyrus && saslpasswd2 -f " + base + " -d cyrus");
+        return Files.readAllBytes(Path.of(base + ".db"));
     }
 
     // ===== la versione di prima, messa da parte =====
