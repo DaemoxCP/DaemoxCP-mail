@@ -205,6 +205,7 @@ public class InstallScriptDriftTest {
         sh("rm -f " + REPO_CONF + "; rm -rf " + REPO_DB);
         String packagesBefore = sh("pkg query %n-%v | sort | sha256");
         String savedBefore = sh("ls " + SAVED_DIR + " 2>/dev/null");
+        boolean savedDirExisted = Files.isDirectory(Path.of(SAVED_DIR));
         Set<String> lockedBefore = locked();
         work = Files.createTempDirectory(Path.of("/var/tmp"), "drift-probe");
         try {
@@ -237,6 +238,7 @@ public class InstallScriptDriftTest {
             // Le copie «di prima» che i casi sporchi hanno messo da parte: sono della prova.
             for (String d : sh("ls " + SAVED_DIR + " 2>/dev/null").split("\n"))
                 if (!d.isBlank() && !savedBefore.contains(d.trim())) sh("rm -rf " + SAVED_DIR + "/" + d.trim());
+            if (!savedDirExisted) sh("rmdir " + SAVED_DIR + " 2>/dev/null");
             // E la nota e i cartelli dei pacchetti bloccati, che dopo il pacchetto tolto vanno riallineati.
             UpdateManager.refreshLockTrace();
             String after = sh("pkg query %n-%v | sort | sha256");
@@ -249,7 +251,8 @@ public class InstallScriptDriftTest {
             check("alla fine: niente file di prova in /etc, nessun utente di prova",
                     !Files.exists(Path.of(ETC_FILE)) && !sh("pw usershow " + USER + " 2>&1").startsWith(USER + ":"));
             check("alla fine: le copie «di prima» sono quelle che c'erano",
-                    sh("ls " + SAVED_DIR + " 2>/dev/null").equals(savedBefore));
+                    sh("ls " + SAVED_DIR + " 2>/dev/null").equals(savedBefore)
+                    && Files.isDirectory(Path.of(SAVED_DIR)) == savedDirExisted);
         }
     }
 
