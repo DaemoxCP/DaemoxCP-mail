@@ -467,7 +467,10 @@ MASTERCONF
             # ============ 4. Dovecot ============
             echo ""
             echo "[4/8] Installing Dovecot..."
-            pkg install -y dovecot-mysql dovecot-pigeonhole
+            # dovecot-pigeonhole-mysql, non dovecot-pigeonhole: quest'ultimo dipende da
+            # "dovecot" senza MySQL, e pkg risolve il conflitto togliendo dovecot-mysql in
+            # silenzio (misurato il 24/10/2026, vedi PackageInstall e FullMailServerScript).
+            pkg install -y dovecot-mysql dovecot-pigeonhole-mysql
 
             """
             // Sorgente UNICA della configurazione Dovecot. Prima scriveva dbname=mailpanel, cablato e diverso da quello configurato.

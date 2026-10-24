@@ -76,8 +76,11 @@ public class PfSetupTest {
         check("nessuna delle 15 combinazioni incomplete passa in silenzio", silenzi == 0);
 
         OUT.println("\n== L'installazione mette in piedi pf ==");
+        // La riga si cerca nella forma in cui lo script la scrive: se non la trova, indexOf da'
+        // -1, che e' minore di tutto, e il controllo passerebbe senza aver guardato niente.
+        int fail2banInstall = script.indexOf("install_packages security/py-fail2ban");
         check("lo fa dopo aver installato fail2ban",
-                script.indexOf("pkg install -y security/py-fail2ban") < script.indexOf("Setting up pf"));
+                fail2banInstall >= 0 && fail2banInstall < script.indexOf("Setting up pf"));
         check("e prima di configurare MySQL, cioe' dentro l'installazione e non dopo",
                 script.indexOf("Setting up pf") < script.indexOf("[PHASE 3/10]"));
         check("dentro una jail di FreeBSD non ci prova",
