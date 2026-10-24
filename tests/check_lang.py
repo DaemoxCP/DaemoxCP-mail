@@ -215,6 +215,85 @@ for f in sorgenti_js:
             guasti.append(f"{os.path.basename(f)}: {funzione}('{chiave}') passa {{{nome}}}, il testo chiede {sorted(chiesti)}")
 print(f"  chiamate del JavaScript con segnaposto: {chiamate_js}, con nomi che il testo non chiede: {js_diversi}")
 
+# --- 8. le tabelle codice -> testo leggono codici che qualcuno produce ---
+#
+# La pagina traduce un codice del server con una tabella: ({ consistent: t('up.eConsistent'),
+# absent: t('up.eMissing') })[v] || v. Se il codice cambia nel server e non nella tabella, la
+# pagina mostra il codice grezzo al posto del testo, senza errori. Misurato il 24/10/2026: la
+# rinomina dei codici aveva cambiato "coerente" -> "consistent" nel server e lasciato la tabella
+# con coerente, quindi un italiano leggeva «consistent». Una tabella e' un oggetto letterale con
+# almeno due voci, tutte del tipo  chiave: t('...'). Ogni chiave deve comparire come stringa
+# letterale altrove nel codice (Java o JavaScript, fuori dalle tabelle stesse), oppure come
+# costante di enum (name() la manda fuori col suo nome).
+def code_tables(text):
+    """Le tabelle (inizio, fine, chiavi) in un testo, cercate a mano: niente parser qui."""
+    out = []
+    entry = re.compile(r"""\s*(?:'([^'\n]+)'|"([^"\n]+)"|([A-Za-z_$][\w$]*))\s*:\s*t\(\s*\\?'[\w.\-]+\\?'\s*\)\s*(,|\})""")
+    for m in re.finditer(r"\{", text):
+        keys, i = [], m.end()
+        while True:
+            e = entry.match(text, i)
+            if not e: break
+            keys.append(next(g for g in e.groups()[:3] if g is not None))
+            i = e.end()
+            if e.group(4) == "}":
+                if len(keys) >= 2 and is_lookup(text, m.start(), i): out.append((m.start(), i, keys))
+                break
+    return out
+def is_lookup(text, start, end):
+    """Usata con [codice]: ({...})[v], oppure const NOME = {...} e poi NOME[...]. Un oggetto
+    { title: t(...), desc: t(...) } e' una scheda di testi, non una tabella, e non conta."""
+    if re.match(r"\s*\)?\s*\[", text[end:end + 20]): return True
+    name = re.search(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*$", text[max(0, start - 80):start])
+    return bool(name and re.search(r"(?<![\w$.])" + re.escape(name.group(1)) + r"\s*\[", text[end:]))
+def java_without_comments(src):
+    """Il Java senza commenti, letto carattere per carattere: una regex /\\*.*?\\*/ prende per
+    commento anche "/usr/local/*" dentro una stringa, e si mangia il codice fino al primo */."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        if src.startswith('"""', i):
+            j = src.find('"""', i + 3)
+            while j > 0 and src[j - 1] == "\\": j = src.find('"""', j + 1)
+            j = n if j < 0 else j + 3
+            out.append(src[i:j]); i = j
+        elif src[i] in "\"'":
+            q, j = src[i], i + 1
+            while j < n and src[j] != q and src[j] != "\n":
+                j += 2 if src[j] == "\\" else 1
+            out.append(src[i:j + 1]); i = j + 1
+        elif src.startswith("//", i):
+            j = src.find("\n", i); i = n if j < 0 else j
+        elif src.startswith("/*", i):
+            j = src.find("*/", i + 2); i = n if j < 0 else j + 2
+            out.append(" ")
+        else:
+            out.append(src[i]); i += 1
+    return "".join(out)
+code_files = glob.glob(os.path.join(radice, "src/main/java/**/*.java"), recursive=True) + \
+             glob.glob(os.path.join(radice, "src/main/resources/pages/*"))
+tables, produced, enum_names = [], set(), set()
+for f in code_files:
+    text = open(f, encoding="utf-8", errors="replace").read()
+    found = code_tables(text)
+    for a, b, keys in found:
+        tables.append((os.path.basename(f), text.count("\n", 0, a) + 1, keys))
+    for a, b, keys in reversed(found):
+        text = text[:a] + " " * (b - a) + text[b:]
+    if f.endswith(".java"):
+        text = java_without_comments(text)
+        for body in re.findall(r"\benum\s+\w+[^{]*\{([^;}]*)", text):
+            enum_names |= set(re.findall(r"\b([A-Z][A-Z0-9_]*)\b", body))
+    produced |= set(re.findall(r'"((?:\\.|[^"\\\n])*)"', text))
+    produced |= set(re.findall(r"'((?:\\.|[^'\\\n])*)'", text))
+def is_produced(k):
+    # una chiave composta come "postfix:stop" (servizio + azione) si guarda per parti
+    return all(p in produced or p in enum_names for p in k.split(":"))
+orphans = [(f, line, k) for f, line, keys in tables for k in keys if not is_produced(k)]
+print(f"  tabelle codice -> testo: {len(tables)}, con {sum(len(k) for _, _, k in tables)} codici;"
+      f" codici che nessuno produce: {len(orphans)}")
+for f, line, k in orphans[:20]:
+    guasti.append(f"la tabella in {f}:{line} traduce il codice \"{k}\", che il codice non produce da nessuna parte")
+
 if guasti:
     print()
     for g in guasti:
