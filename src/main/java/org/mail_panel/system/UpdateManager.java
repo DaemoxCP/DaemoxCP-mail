@@ -5907,25 +5907,130 @@ public final class UpdateManager {
      */
     static java.util.List<String> messaggiCheChiedonoAzione(String outputPkg) {
         java.util.List<String> fuori = new ArrayList<>();
-        StringBuilder blocco = new StringBuilder();
-        boolean dentro = false;
-        for (String r : outputPkg.split("\n")) {
-            if (r.startsWith("Message from ")) {
-                if (dentro && chiedeAzione(blocco.toString())) fuori.add(blocco.toString().trim());
-                blocco.setLength(0);
-                dentro = true;
-            }
-            if (dentro) blocco.append(r).append('\n');
-        }
-        if (dentro && chiedeAzione(blocco.toString())) fuori.add(blocco.toString().trim());
+        // Il rientro comune si toglie, non solo quello della prima riga: uno script che
+        // scrive tutto rientrato di quattro spazi, ristampato con trim(), avrebbe la prima
+        // riga a sinistra e le altre spostate.
+        for (String blocco : outputBlocks(outputPkg))
+            if (chiedeAzione(blocco)) fuori.add(blocco.stripTrailing().stripIndent().strip());
         return fuori;
     }
+
+    /** "[4/4] Installing postfix-mysql-3.11.7_3,1...": pkg che dice a che punto e'. */
+    private static final Pattern PKG_PROGRESS = Pattern.compile("^\\[\\d+/\\d+\\] .*");
+
+    /** Le righe con cui pkg ricomincia a parlare, per esempio quando un aggiornamento si rilancia. */
+    private static final Pattern PKG_RESTARTS = Pattern.compile(
+            "^(Checking integrity|Checking for upgrades|Updating .* repository catalogue).*");
+
+    /** Il bordo di un riquadro: «=====...» da solo sulla riga. */
+    private static final Pattern BOX_EDGE = Pattern.compile("^={10,}\\s*$");
+
+    /**
+     * Due frasi che pkg e i port stampano a OGNI aggiornamento e che durante un aggiornamento
+     * non chiedono niente. La prima e' di pkg per ogni file di configurazione diverso dal suo
+     * esempio; la seconda dei port per ogni utente o gruppo del pacchetto che si disinstalla,
+     * e qui il pacchetto si reinstalla subito dopo. Misurate nell'uscita vera
+     * dell'aggiornamento di postfix-mysql del 24/10/2026: tenerle vorrebbe dire ristampare
+     * come «da fare» due cose sbagliate da fare.
+     */
+    private static final Pattern[] NOTICES_NOT_ACTIONS = {
+        Pattern.compile("^You may need to manually remove \\S+ if it is no longer needed\\.?\\s*$"),
+        Pattern.compile("^==> You should manually remove the \"[^\"]+\" (user|group)\\s*$"),
+    };
+
+    /**
+     * L'uscita di pkg divisa nei pezzi che chi la legge prenderebbe per un messaggio.
+     *
+     * Prima si leggevano solo i blocchi «Message from». Ma uno script di installazione scrive
+     * mentre gira, e pkg stampa quelle righe dove capitano, FUORI da ogni blocco. Misurato
+     * sull'aggiornamento di postfix-mysql del 24/10/2026 (reperto 42): 61 righe, e le due cose
+     * che contavano erano entrambe fuori — «COMPATIBILITY: editing main.cf, setting
+     * inet_protocols=ipv4», cioe' IPv6 tolto al prossimo riavvio, e il riquadro «Postfix was
+     * *not* activated in mailer.conf». L'unico blocco «Message from» era quello della versione
+     * VECCHIA, che si stava disinstallando. Risultato: zero messaggi.
+     *
+     * I pezzi:
+     *  - un blocco «Message from», fino al successivo o a quando pkg ricomincia a parlare;
+     *  - un riquadro fra due righe di «=====», con le sue righe vuote dentro;
+     *  - fuori da questi, un paragrafo: righe consecutive fra due righe vuote o due righe di
+     *    avanzamento di pkg. Le righe di uno script stanno fra l'avanzamento del suo
+     *    pacchetto e quello del successivo.
+     */
+    static java.util.List<String> outputBlocks(String outputPkg) {
+        java.util.List<String> blocks = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        String mode = "paragraph";   // "paragraph", "message", "box"
+        for (String line : (outputPkg == null ? "" : outputPkg).split("\n")) {
+            if (line.startsWith("Message from ")) {
+                closeBlock(blocks, current);
+                mode = "message";
+                current.append(line).append('\n');
+                continue;
+            }
+            boolean pkgSpeaks = PKG_PROGRESS.matcher(line).matches() || PKG_RESTARTS.matcher(line).matches();
+            if ("message".equals(mode)) {
+                if (!pkgSpeaks) { current.append(line).append('\n'); continue; }
+                closeBlock(blocks, current);
+                mode = "paragraph";
+            }
+            if (BOX_EDGE.matcher(line).matches()) {
+                closeBlock(blocks, current);
+                mode = "box".equals(mode) ? "paragraph" : "box";
+                continue;
+            }
+            if (pkgSpeaks) {
+                closeBlock(blocks, current);
+                mode = "paragraph";
+                continue;
+            }
+            boolean notice = false;
+            for (Pattern p : NOTICES_NOT_ACTIONS) if (p.matcher(line).matches()) notice = true;
+            if (notice) continue;
+            if (line.trim().isEmpty() && "paragraph".equals(mode)) { closeBlock(blocks, current); continue; }
+            current.append(line).append('\n');
+        }
+        closeBlock(blocks, current);
+        return blocks;
+    }
+
+    private static void closeBlock(java.util.List<String> blocks, StringBuilder current) {
+        if (!current.toString().trim().isEmpty()) blocks.add(current.toString());
+        current.setLength(0);
+    }
+
+    /** «Editing /usr/local/etc/postfix/master.cf, adding...», «COMPATIBILITY: editing .../main.cf». */
+    private static final Pattern SCRIPT_EDITS_A_FILE = Pattern.compile("(?s).*\\bediting /.*");
 
     private static boolean chiedeAzione(String testo) {
         String t = testo.toLowerCase();
         return t.contains("it is recommended") || t.contains("you should") || t.contains("you may need")
             || t.contains("you need to") || t.contains("remember to")
-            || t.contains("following command") || t.contains("action is needed");
+            || t.contains("following command") || t.contains("action is needed")
+            // Uno script che dice di aver modificato un file, o di aver cambiato un valore
+            // predefinito per compatibilita', non chiede niente a parole: ha gia' fatto. E'
+            // la prima cosa da leggere, perche' quello che ha fatto entra in vigore al
+            // riavvio (reperto 42: «Specify inet_protocols explicitly if you want to enable
+            // IPv6»).
+            || t.contains("compatibility:") || t.contains("explicitly")
+            || SCRIPT_EDITS_A_FILE.matcher(t).matches();
+    }
+
+    /**
+     * Ristampa alla fine del log i messaggi che chiedono un'azione o dicono di aver cambiato
+     * qualcosa. La chiedono i tre lavori che aggiornano pacchetti: prima lo faceva solo
+     * l'aggiornamento guidato, e la manutenzione completa — quella che aggiorna tutto —
+     * lasciava scorrere i messaggi di tutti i pacchetti in mezzo all'uscita di pkg.
+     */
+    private static void writeActionMessages(Job job, String pkgOutput) {
+        java.util.List<String> messages = messaggiCheChiedonoAzione(pkgOutput);
+        if (messages.isEmpty()) return;
+        job.scrivi("");
+        job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.33"));
+        job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.34"));
+        for (String m : messages) {
+            for (String l : m.split("\n")) if (!l.trim().isEmpty()) job.scrivi("  " + l);
+            job.scrivi("");
+        }
     }
 
     /**
@@ -6308,7 +6413,6 @@ public final class UpdateManager {
         JSONObject piano;
         java.util.List<String> daRiproteggere = new ArrayList<>();
         java.util.List<String> famiglia = new ArrayList<>();
-        java.util.List<String> messaggiAzione = new ArrayList<>();
         boolean ricontrolloManuale = false;
         java.util.List<String> servizi = new ArrayList<>();
         Map<String, String> pidPrima = new LinkedHashMap<>();
@@ -6316,6 +6420,9 @@ public final class UpdateManager {
         // attivoPrima riguarda i soli servizi che si riavvieranno; per il quadro finale
         // serve lo stato di TUTTI, preso prima di toccare qualunque cosa.
         Map<String, Boolean> serviziPrima = statoServizi();
+        // Cio' che il piano non puo' dire: che cosa fanno gli script di installazione alla
+        // configurazione viva e agli indirizzi in ascolto (vedi InstallSideEffects).
+        InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
         try {
             job.avanza(1, TOT);
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.1", java.util.Map.of("nome", String.valueOf(nome))));
@@ -6424,6 +6531,9 @@ public final class UpdateManager {
             // L'inventario PRIMA: e' l'unico modo di accorgersi di un pacchetto che cambia
             // senza essere nel piano. Il confronto riga per riga del piano non puo' vederlo.
             Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
+            // E la configurazione con gli indirizzi in ascolto, nello stesso istante: il piano
+            // dice quali pacchetti cambiano, non che cosa i loro script riscrivono.
+            sideEffects.takeBefore();
             // -U: stesso catalogo su cui e' stato calcolato il piano. Riscaricarlo adesso potrebbe
             // portare versioni diverse da quelle approvate.
             int code = eseguiConLog(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, catturato);
@@ -6433,7 +6543,6 @@ public final class UpdateManager {
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.10"));
                 code = eseguiConLog(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, catturato);
             }
-            messaggiAzione = messaggiCheChiedonoAzione(catturato.toString());
 
             // Il confronto con l'inventario si fa SUBITO, prima di decidere se fermarsi: un
             // pkg che esce diverso da zero e' proprio il caso in cui la macchina puo' essere
@@ -6444,6 +6553,9 @@ public final class UpdateManager {
             // piano una rimozione che il piano firmato non aveva.
             fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano,
                     "Guided update of " + nome);
+            // Anche questo prima di decidere se fermarsi, per la stessa ragione. Il riavvio dei
+            // servizi qui sotto mette in vigore quello che uno script ha scritto.
+            sideEffects.checkConfig(job, piano, fuoriDalPiano, !servizi.isEmpty());
 
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
 
@@ -6550,20 +6662,14 @@ public final class UpdateManager {
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.32"));
             }
 
-            if (!messaggiAzione.isEmpty()) {
-                job.scrivi("");
-                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.33"));
-                job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.34"));
-                for (String m : messaggiAzione) {
-                    for (String l : m.split("\n")) if (!l.trim().isEmpty()) job.scrivi("  " + l);
-                    job.scrivi("");
-                }
-            }
+            writeActionMessages(job, catturato.toString());
 
             job.avanza(6, TOT);
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.35", java.util.Map.of("tOT", String.valueOf(TOT))));
             boolean caduto = serviziCaduti(job, serviziPrima);
+            sideEffects.checkListening(job);
+            java.util.List<String> effetti = sideEffects.problems();
 
             if (pianoNonRispettato || !fuoriDalPiano.isEmpty()) {
                 // Due guasti diversi, e il messaggio li distingue: "piano non rispettato" e'
@@ -6574,10 +6680,20 @@ public final class UpdateManager {
                 java.util.List<String> problemi = new ArrayList<>();
                 if (pianoNonRispettato) problemi.add(I18n.tr("server.um.runAggiornamentoGuidato.36"));
                 if (!fuoriDalPiano.isEmpty()) problemi.add(messaggioDivergenze(fuoriDalPiano));
+                problemi.addAll(effetti);
                 job.errorMessage = String.join(" ", problemi);
             } else if (problemaServizi || caduto) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.37");
+                java.util.List<String> problemi = new ArrayList<>();
+                problemi.add(I18n.tr("server.um.runAggiornamentoGuidato.37"));
+                problemi.addAll(effetti);
+                job.errorMessage = String.join(" ", problemi);
+            } else if (!effetti.isEmpty()) {
+                // Ogni passo e' riuscito — piano, riavvio, pid, servizi — ed e' proprio il caso
+                // del reperto 42: il pacchetto e' in servizio, ma con una configurazione che
+                // nessuno ha approvato, o senza un indirizzo che prima rispondeva.
+                job.status = "error";
+                job.errorMessage = String.join(" ", effetti);
             } else if (ricontrolloManuale) {
                 // Non e' un errore, ma nemmeno un "fatto e verificato": dirlo completato
                 // sarebbe affermare una cosa che il pannello non ha potuto controllare.
@@ -6594,6 +6710,8 @@ public final class UpdateManager {
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = e.getMessage();
+            // pkg fermo a meta' dopo che uno script ha gia' scritto: si dicono tutte e due.
+            for (String p : sideEffects.problems()) job.errorMessage += " " + p;
             job.scrivi(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             // La riprotezione avviene SEMPRE, qualunque cosa sia andata storta sopra.
@@ -10134,6 +10252,8 @@ public final class UpdateManager {
         // Lo stato dei servizi PRIMA dell'aggiornamento: e' l'unico modo di distinguere un
         // servizio caduto da uno che non era attivo nemmeno prima.
         Map<String, Boolean> serviziPrima = statoServizi();
+        // Come negli altri due: cio' che gli script fanno a configurazione e indirizzi.
+        InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
         final int TOT = 4;
         job.avanza(1, TOT);
         job.scrivi(I18n.tr("server.um.runUpdateJob.1"));
@@ -10194,17 +10314,20 @@ public final class UpdateManager {
             if (cresciuto != null) throw new IllegalStateException(cresciuto);
 
             Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
+            sideEffects.takeBefore();
 
             job.avanza(3, TOT);
             job.scrivi("");
+            // L'uscita si tiene anche qui, per ripescare alla fine i messaggi degli script.
+            StringBuilder catturato = new StringBuilder();
             // -U: lo stesso catalogo su cui e' stato calcolato il piano. Prima era senza, cioe'
             // riscaricava il catalogo e poteva installare versioni diverse da quelle mostrate.
-            int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
+            int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600, catturato);
             // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
             // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
             if (code == 4) {
                 job.scrivi(I18n.tr("server.um.runUpdateJob.3"));
-                code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
+                code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600, catturato);
             }
 
             job.scrivi("");
@@ -10218,6 +10341,10 @@ public final class UpdateManager {
             }
             JSONArray fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano,
                     "Update of the unprotected packages");
+            // Questo lavoro non riavvia niente: quello che uno script ha scritto entra in
+            // vigore al prossimo riavvio del servizio, e va detto prima.
+            sideEffects.checkConfig(job, piano, fuoriDalPiano, false);
+            writeActionMessages(job, catturato.toString());
 
             job.avanza(4, TOT);
             job.scrivi("");
@@ -10225,11 +10352,13 @@ public final class UpdateManager {
             job.scrivi("");
             job.scrivi(I18n.tr("server.um.runMigrazione84.31"));
             boolean caduto = serviziCaduti(job, serviziPrima);
+            sideEffects.checkListening(job);
             java.util.List<String> problemi = new ArrayList<>();
             if (code != 0) problemi.add(I18n.tr("server.um.runUpdateJob.5", java.util.Map.of("code", String.valueOf(code))));
             if (pianoNonRispettato) problemi.add(I18n.tr("server.um.runMaintenanceJob.14"));
             if (!fuoriDalPiano.isEmpty()) problemi.add(messaggioDivergenze(fuoriDalPiano));
             if (caduto) problemi.add(I18n.tr("server.um.runUpdateJob.6"));
+            problemi.addAll(sideEffects.problems());
             job.status = problemi.isEmpty() ? "completed" : "error";
             job.errorMessage = String.join(" ", problemi);
         } catch (Exception e) {
@@ -10295,6 +10424,9 @@ public final class UpdateManager {
         boolean statoScritto = false;
         Set<String> protettiPrima = new TreeSet<>();
         Map<String, Boolean> serviziPrima = new LinkedHashMap<>();
+        // Come negli altri due: cio' che gli script fanno a configurazione e indirizzi. Se il
+        // lavoro si ferma prima di pkg upgrade non fotografa niente, e alla fine non dice niente.
+        InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
         // La fine la scrive SOLO il finally, come sua ultima riga. Anche i rifiuti a partire qui
         // sotto escono passando dal finally, che scrive ancora la riprotezione e la verifica:
         // con la fine scritta prima del return, il loro esito diventava visibile (vedi
@@ -10403,13 +10535,16 @@ public final class UpdateManager {
             // Si prende dopo lo scaricamento, a ridosso dell'aggiornamento: lo scaricamento
             // non installa niente, ma l'inventario deve fotografare il momento esatto.
             Map<String, String> inventarioPrima = PackagePlan.soloVersioni(PackagePlan.installati());
+            sideEffects.takeBefore();
+            // L'uscita si tiene anche qui, per ripescare alla fine i messaggi degli script.
+            StringBuilder catturato = new StringBuilder();
             // -U: lo stesso catalogo su cui e' stato calcolato il piano.
-            int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
+            int code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600, catturato);
             // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
             // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
             if (code == 4) {
                 job.scrivi(I18n.tr("server.um.runUpdateJob.3"));
-                code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600);
+                code = eseguiConLog(job, "pkg upgrade -y -U 2>&1", 3600, catturato);
             }
             job.scrivi(I18n.tr("server.um.runUpdateJob.4", java.util.Map.of("code", String.valueOf(code))));
             if (code != 0) { job.status = "error"; job.errorMessage = I18n.tr("server.um.runUpdateJob.5", java.util.Map.of("code", String.valueOf(code))); }
@@ -10428,6 +10563,9 @@ public final class UpdateManager {
             // adesso che il piano non spiega. Il confronto qui sopra scorre il PIANO e non
             // puo' vedere un pacchetto cambiato che nel piano non c'era.
             JSONArray fuoriDalPiano = confrontaConLInventario(job, inventarioPrima, piano, "Maintenance");
+            // La manutenzione non riavvia niente: cio' che uno script ha scritto entra in vigore
+            // al prossimo riavvio, ed e' quello che chi legge la lista qui sotto sta per fare.
+            sideEffects.checkConfig(job, piano, fuoriDalPiano, false);
 
             // I problemi si sommano al messaggio che c'e' gia' (per esempio l'uscita di pkg
             // diversa da zero): nessuno dei tre deve coprire gli altri.
@@ -10458,6 +10596,7 @@ public final class UpdateManager {
                 job.scrivi(I18n.tr("server.um.x.toRestart", java.util.Map.of("elenco", String.valueOf(String.join(", ", daRiavviare)))));
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.15"));
             }
+            writeActionMessages(job, catturato.toString());
 
         } catch (Exception e) {
             job.status = "error"; job.errorMessage = e.getMessage();
@@ -10497,6 +10636,15 @@ public final class UpdateManager {
             // Questo confronto era giusto solo qui, e scritto a mano: adesso e' lo stesso
             // che usano gli altri tre lavori.
             if (serviziCaduti(job, serviziPrima)) allarme = true;
+
+            // E la configurazione e gli indirizzi: nessuno dei due conti sopra li vede.
+            sideEffects.checkListening(job);
+            java.util.List<String> effetti = sideEffects.problems();
+            if (!effetti.isEmpty()) {
+                allarme = true;
+                job.errorMessage = (job.errorMessage == null || job.errorMessage.isEmpty()
+                        ? "" : job.errorMessage + " ") + String.join(" ", effetti);
+            }
 
             if (allarme) {
                 job.status = "error";
