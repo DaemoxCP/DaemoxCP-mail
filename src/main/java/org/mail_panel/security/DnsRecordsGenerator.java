@@ -1076,7 +1076,7 @@ public class DnsRecordsGenerator {
         mtaStsCheck.recordName = "_mta-sts." + domain;
         mtaStsCheck.recordType = "MTA-STS";
         if (!txtSts.values.isEmpty()) mtaStsCheck.currentValue = String.join("  ||  ", txtSts.values);
-        if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.PRESENTE) {
+        if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.PRESENT) {
             // Il record c'e': ora si va a CHIEDERE la politica. Guardare solo il TXT diceva
             // "fatto" su domini che dichiarano pubblicamente una protezione e poi non la
             // servono. E' una promessa non mantenuta, e il pannello la mostrava come esito
@@ -1087,12 +1087,12 @@ public class DnsRecordsGenerator {
                 mtaStsCheck.message = I18n.tr("server.dnsg.stsActive");
             } else {
                 mtaStsCheck.passed = false;
-                mtaStsCheck.message = I18n.tr("server.dnsg.stsNotServed", java.util.Map.of("d", String.valueOf(domain), "e", String.valueOf(test.optString("errore", I18n.tr("server.dnsg.unreachable")))));
+                mtaStsCheck.message = I18n.tr("server.dnsg.stsNotServed", java.util.Map.of("d", String.valueOf(domain), "e", String.valueOf(test.optString("error", I18n.tr("server.dnsg.unreachable")))));
             }
-        } else if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.TROPPI) {
+        } else if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.TOO_MANY) {
             mtaStsCheck.passed = false;
             mtaStsCheck.message = I18n.tr("server.dnsg.stsMany", java.util.Map.of("n", String.valueOf(txtSts.values.size()), "d", String.valueOf(domain)));
-        } else if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.NON_CHIESTO) {
+        } else if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.NOT_ASKED) {
             // NON si scrive "non attivo" su una domanda rimasta senza risposta: sono due guasti
             // diversi e mandano a cercare in posti opposti (come per autoconfig, in verifyAllRecords).
             mtaStsCheck.passed = false;

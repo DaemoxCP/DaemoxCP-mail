@@ -183,6 +183,38 @@ for chiave, passati in sorted(siti.items()):
                       f"(passa {sorted(passati)[:6]}): l'utente leggerebbe la graffa")
 print(f"  testi che chiedono un segnaposto che il codice non passa: {senza}")
 
+# --- 7. e lo stesso nel JavaScript: t('chiave', { nome: ... }) ---
+#
+# Il controllo 6 guarda i Map.of del Java. La pagina passa i segnaposto con un oggetto, e una
+# rinomina delle chiavi JSON fatta a testo li cambierebbe come se fossero chiavi della risposta:
+# t('ad.reportsToFwd', { address: ... }) con il testo che chiede {indirizzo}. Si guardano le
+# chiavi di primo livello dell'oggetto, e devono stare fra i segnaposto del testo (tn ha anche n).
+CHIAMATA_JS = re.compile(r"""\b(t|tn|tNodes)\(\s*\\?['"]([A-Za-z0-9_.\-]+)\\?['"]\s*,\s*(?:[^,{}()'"]+,\s*)?\{""")
+sorgenti_js = glob.glob(os.path.join(radice, "src/main/resources/pages/*.js")) + \
+              glob.glob(os.path.join(radice, "src/main/java/**/*.java"), recursive=True)
+chiamate_js, js_diversi = 0, 0
+for f in sorgenti_js:
+    testo = open(f, encoding="utf-8", errors="replace").read()
+    for m in CHIAMATA_JS.finditer(testo):
+        funzione, chiave = m.group(1), m.group(2)
+        i, prof = m.end() - 1, 0
+        while i < len(testo):
+            if testo[i] == "{": prof += 1
+            elif testo[i] == "}":
+                prof -= 1
+                if prof == 0: break
+            i += 1
+        piatto = re.sub(r"\([^()]*\)|\[[^\[\]]*\]|\{[^{}]*\}", "", testo[m.end():i])
+        passati = set(re.findall(r"(?:^|,)\s*([A-Za-z_$][\w$]*)\s*(?::|(?=,|$))", piatto))
+        chiamate_js += 1
+        if chiave not in it or not isinstance(it[chiave], str):
+            continue
+        chiesti = set(SEGNAPOSTO.findall(it[chiave])) | ({"n"} if funzione == "tn" else set())
+        for nome in sorted(passati - chiesti):
+            js_diversi += 1
+            guasti.append(f"{os.path.basename(f)}: {funzione}('{chiave}') passa {{{nome}}}, il testo chiede {sorted(chiesti)}")
+print(f"  chiamate del JavaScript con segnaposto: {chiamate_js}, con nomi che il testo non chiede: {js_diversi}")
+
 if guasti:
     print()
     for g in guasti:

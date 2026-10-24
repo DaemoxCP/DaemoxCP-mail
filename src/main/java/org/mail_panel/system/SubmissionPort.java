@@ -43,11 +43,11 @@ public class SubmissionPort {
      * La parte che si puo' provare senza server
      * =================================================================== */
 
-    public enum Outcome { AGGIUNTA, GIA_PRESENTE, VOCE_ASSENTE }
+    public enum Outcome { ADDED, ALREADY_PRESENT, ENTRY_MISSING }
 
     public static class Change {
         public Outcome outcome;
-        public String content;   // il file nuovo, solo quando esito == AGGIUNTA
+        public String content;   // il file nuovo, solo quando esito == ADDED
         public String entry;        // il nome trovato: smtps oppure submissions
         public int line;           // dove comincia la voce, per poterlo dire
         public String already;         // la restrizione gia' presente, quando c'e'
@@ -63,7 +63,7 @@ public class SubmissionPort {
      */
     public static Change addRestriction(String masterCf) {
         Change m = new Change();
-        if (masterCf == null) { m.outcome = Outcome.VOCE_ASSENTE; return m; }
+        if (masterCf == null) { m.outcome = Outcome.ENTRY_MISSING; return m; }
 
         String[] lines = masterCf.split("\n", -1);
         int start = -1;
@@ -74,7 +74,7 @@ public class SubmissionPort {
             String first = r.trim().split("\\s+")[0];
             if (NAMES.contains(first)) { start = i; m.entry = first; break; }
         }
-        if (start < 0) { m.outcome = Outcome.VOCE_ASSENTE; return m; }
+        if (start < 0) { m.outcome = Outcome.ENTRY_MISSING; return m; }
         m.line = start + 1;
 
         // Le opzioni della voce: le righe indentate che seguono, fino alla prossima voce.
@@ -91,7 +91,7 @@ public class SubmissionPort {
             String compact = lines[i].replace(" ", "");
             if (compact.contains("smtpd_client_restrictions=")
                     || compact.contains("smtpd_recipient_restrictions=")) {
-                m.outcome = Outcome.GIA_PRESENTE;
+                m.outcome = Outcome.ALREADY_PRESENT;
                 m.already = lines[i].trim();
                 return m;
             }
@@ -102,7 +102,7 @@ public class SubmissionPort {
         outside.add("  -o " + RESTRICTION);
         for (int i = end; i < lines.length; i++) outside.add(lines[i]);
 
-        m.outcome = Outcome.AGGIUNTA;
+        m.outcome = Outcome.ADDED;
         m.content = String.join("\n", outside);
         return m;
     }
@@ -120,23 +120,23 @@ public class SubmissionPort {
                 return new JSONObject().put("success", false)
                         .put("error", I18n.tr("server.subm.cannotRead", java.util.Map.of("file", String.valueOf(MASTER))));
             Change m = addRestriction(Files.readString(p));
-            r.put("voce", m.entry == null ? JSONObject.NULL : m.entry)
-             .put("riga", m.line)
-             .put("stato", m.outcome.name())
-             .put("restrizione", RESTRICTION);
+            r.put("entry", m.entry == null ? JSONObject.NULL : m.entry)
+             .put("line", m.line)
+             .put("state", m.outcome.name())
+             .put("restriction", RESTRICTION);
 
             // La verifica che non si da' per scontata: se le restrizioni venissero valutate
             // PRIMA dell'autenticazione, la riga rifiuterebbe anche gli utenti legittimi.
             RunResult d = run("postconf", "-h", "smtpd_delay_reject");
             String value = d.output.trim();
-            r.put("delayReject", value).put("delayRejectLetto", d.code == 0);
-            r.put("sicuro", d.code == 0 && value.equalsIgnoreCase("yes"));
+            r.put("delayReject", value).put("delayRejectRead", d.code == 0);
+            r.put("safe", d.code == 0 && value.equalsIgnoreCase("yes"));
 
             switch (m.outcome) {
-                case GIA_PRESENTE -> r.put("nota", I18n.tr("server.subm.already", java.util.Map.of("svc", String.valueOf(m.entry), "line", String.valueOf(m.already))))
-                        .put("gia", m.already);
-                case VOCE_ASSENTE -> r.put("nota", I18n.tr("server.subm.noEntry"));
-                case AGGIUNTA -> r.put("nota", I18n.tr("server.subm.acceptsUnauth", java.util.Map.of("svc", String.valueOf(m.entry), "line", String.valueOf(m.line))));
+                case ALREADY_PRESENT -> r.put("note", I18n.tr("server.subm.already", java.util.Map.of("svc", String.valueOf(m.entry), "line", String.valueOf(m.already))))
+                        .put("already", m.already);
+                case ENTRY_MISSING -> r.put("note", I18n.tr("server.subm.noEntry"));
+                case ADDED -> r.put("note", I18n.tr("server.subm.acceptsUnauth", java.util.Map.of("svc", String.valueOf(m.entry), "line", String.valueOf(m.line))));
             }
             return r;
         } catch (Exception e) {
@@ -155,37 +155,37 @@ public class SubmissionPort {
             if (!st.optBoolean("success", false))
                 return r.put("success", false).put("error", st.optString("error", I18n.tr("server.subm.stateUnreadable")));
 
-            String state = st.optString("stato", "");
-            if ("GIA_PRESENTE".equals(state))
-                return r.put("success", true).put("giaFatto", true).put("nota", st.optString("nota"));
-            if ("VOCE_ASSENTE".equals(state))
-                return r.put("success", false).put("error", st.optString("nota"));
+            String state = st.optString("state", "");
+            if ("ALREADY_PRESENT".equals(state))
+                return r.put("success", true).put("alreadyDone", true).put("note", st.optString("note"));
+            if ("ENTRY_MISSING".equals(state))
+                return r.put("success", false).put("error", st.optString("note"));
 
             // Il controllo che vale piu' di tutti: senza delay_reject a "yes" la riga
             // rifiuterebbe anche chi si autentica, perche' verrebbe valutata prima dell'AUTH.
-            if (!st.optBoolean("sicuro", false))
+            if (!st.optBoolean("safe", false))
                 return r.put("success", false)
-                        .put("error", st.optBoolean("delayRejectLetto", false)
+                        .put("error", st.optBoolean("delayRejectRead", false)
                                 ? I18n.tr("server.subm.delayReject", java.util.Map.of("v", String.valueOf(st.optString("delayReject", "?"))))
                                 : I18n.tr("server.subm.delayRejectUnread", java.util.Map.of("v", String.valueOf(st.optString("delayReject", "?")))));
 
             Path p = Path.of(MASTER);
             String before = Files.readString(p);
             Change m = addRestriction(before);
-            if (m.outcome != Outcome.AGGIUNTA)
+            if (m.outcome != Outcome.ADDED)
                 return r.put("success", false).put("error", I18n.tr("server.subm.changed", java.util.Map.of("state", String.valueOf(m.outcome.name()))));
 
             Path copy = Path.of(COPY);
             Files.createDirectories(copy.getParent());
             Files.writeString(copy, before);
-            r.put("copia", copy.toString()).put("voce", m.entry).put("riga", m.line);
+            r.put("copy", copy.toString()).put("entry", m.entry).put("line", m.line);
 
             Files.writeString(p, m.content);
 
             RunResult check = run("postfix", "check");
             if (check.code != 0) {
                 Files.writeString(p, before);
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.subm.checkFailed", java.util.Map.of("out", String.valueOf(check.output.trim()))));
             }
 
@@ -193,21 +193,21 @@ public class SubmissionPort {
             if (reload.code != 0) {
                 Files.writeString(p, before);
                 run("postfix", "reload");
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.subm.reloadFailed", java.util.Map.of("out", String.valueOf(reload.output.trim()))));
             }
 
             // Non basta che i comandi non abbiano protestato: si rilegge e si guarda.
             Change after = addRestriction(Files.readString(p));
-            if (after.outcome != Outcome.GIA_PRESENTE)
+            if (after.outcome != Outcome.ALREADY_PRESENT)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.subm.notPresent", java.util.Map.of("file", String.valueOf(MASTER))));
 
             RunResult m465 = run("postconf", "-M", m.entry + "/inet");
-            r.put("vocePostfix", m465.output.trim());
+            r.put("postfixEntry", m465.output.trim());
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.subm.done", java.util.Map.of("svc", String.valueOf(m.entry), "copy", String.valueOf(copy))));
+                    .put("note", I18n.tr("server.subm.done", java.util.Map.of("svc", String.valueOf(m.entry), "copy", String.valueOf(copy))));
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", I18n.tr("server.subm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }

@@ -45,8 +45,8 @@
             const corpo = tab.createTBody();
             (r.repository || []).forEach(x => {
                 const tr = corpo.insertRow();
-                const celle = [[x.nome, COL[0]], [x.ruolo, COL[1]], [x.branch || '-', COL[2]],
-                               [x.acceso ? t('dns.yes') : t('acf.no'), COL[3]]];
+                const celle = [[x.name, COL[0]], [x.role, COL[1]], [x.branch || '-', COL[2]],
+                               [x.enabled ? t('dns.yes') : t('acf.no'), COL[3]]];
                 celle.forEach(([testo, etichetta]) => {
                     const td = branchEl('td', '', testo);
                     td.setAttribute('data-label', etichetta);
@@ -75,7 +75,7 @@
                 return;
             }
             const azioni = branchEl('div', 'd-flex flex-wrap gap-2');
-            (r.verso || []).forEach(v => {
+            (r.destination || []).forEach(v => {
                 const b = branchEl('button', 'btn btn-sm btn-outline-warning', t('up.switchTo', { branch: v }));
                 b.type = 'button';
                 b.addEventListener('click', () => branchPreview(v));
@@ -88,19 +88,19 @@
             const box = document.getElementById('branch-preview');
             box.textContent = t('up.buildingPreview');
             document.getElementById('branch-outcome').textContent = '';
-            const r = await updApi('branch_preview', { verso: verso });
+            const r = await updApi('branch_preview', { destination: verso });
             box.textContent = '';
             if (!r.success) { box.appendChild(branchEl('div', 'alert alert-danger py-2 small', r.error)); return; }
-            if (!r.possibile) { box.appendChild(branchEl('div', 'alert alert-secondary py-2 small', r.reason)); return; }
+            if (!r.possible) { box.appendChild(branchEl('div', 'alert alert-secondary py-2 small', r.reason)); return; }
             branchTarget = verso;
             branchData.fingerprint = r.fingerprint;
             const card = branchEl('div', 'border rounded p-3');
-            card.appendChild(branchEl('h6', 'mb-2', t('up.switchFromTo', { from: r.da, to: verso })));
+            card.appendChild(branchEl('h6', 'mb-2', t('up.switchFromTo', { from: r.from, to: verso })));
             const changes = branchEl('ul', 'small mb-2');
             (r.changes || []).forEach(c => {
                 const li = branchEl('li', 'testo-lungo');
-                li.appendChild(branchEl('strong', '', c.nome + ': '));
-                li.append(...tNodes('up.becomes', { from: branchEl('code', '', c.da), to: branchEl('code', '', c.a) }));
+                li.appendChild(branchEl('strong', '', c.name + ': '));
+                li.append(...tNodes('up.becomes', { from: branchEl('code', '', c.from), to: branchEl('code', '', c.to) }));
                 changes.appendChild(li);
             });
             card.appendChild(changes);
@@ -110,8 +110,8 @@
             const dove = branchEl('p', 'small mb-1');
             dove.append(...tNodes('up.fileWritten', { file: branchEl('code', '', r.file) }));
             card.appendChild(dove);
-            card.appendChild(branchEl('pre', 'small border rounded p-2 mb-1', r.contenuto));
-            if (r.comeTorna) card.appendChild(branchEl('p', 'small text-muted mb-2', r.comeTorna));
+            card.appendChild(branchEl('pre', 'small border rounded p-2 mb-1', r.content));
+            if (r.howToReturn) card.appendChild(branchEl('p', 'small text-muted mb-2', r.howToReturn));
             const lab = branchEl('label', 'form-label small mb-1', t('up.typeBranch', { branch: verso }));
             lab.htmlFor = 'branch-confirm';
             card.appendChild(lab);
@@ -141,7 +141,7 @@
             const outcome = document.getElementById('branch-outcome');
             if (!inp || inp.value.trim() !== branchTarget) return;
             document.getElementById('branch-go').disabled = true;
-            const r = await updApi('branch_change', { verso: branchTarget, fingerprint: branchData.fingerprint, confirm: inp.value.trim() });
+            const r = await updApi('branch_change', { destination: branchTarget, fingerprint: branchData.fingerprint, confirm: inp.value.trim() });
             if (!r.success) {
                 outcome.textContent = '';
                 outcome.appendChild(branchEl('div', 'alert alert-danger py-2 small mb-0', r.error || t('up.changeNotStarted')));

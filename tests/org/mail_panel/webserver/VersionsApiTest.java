@@ -150,16 +150,16 @@ public class VersionsApiTest {
             HttpResponse<String> r = ask("GET", "/api/versioni", null, true);
             JSONObject j = new JSONObject(r.body());
             String mysql = db.serverVersion();
-            JSONObject line = j.getJSONObject("servizi").getJSONObject("mysql");
+            JSONObject line = j.getJSONObject("services").getJSONObject("mysql");
             real("con la sessione: 200 e le sette righe dei servizi", r.statusCode() == 200 && j.getBoolean("success")
-                    && j.getJSONObject("servizi").length() == 7);
-            real("MySQL letto dal server vero, in esecuzione: " + line.optString("versione"),
-                    mysql != null && mysql.equals(line.optString("versione")) && line.optBoolean("inEsecuzione"));
-            String read = j.getString("letteAlle");
+                    && j.getJSONObject("services").length() == 7);
+            real("MySQL letto dal server vero, in esecuzione: " + line.optString("version"),
+                    mysql != null && mysql.equals(line.optString("version")) && line.optBoolean("running"));
+            String read = j.getString("readAt");
             real("seconda richiesta: la stessa lettura (" + read + ")",
-                    new JSONObject(ask("GET", "/api/versioni", null, true).body()).getString("letteAlle").equals(read));
+                    new JSONObject(ask("GET", "/api/versioni", null, true).body()).getString("readAt").equals(read));
             real("\"fresco\" entro tre secondi: la stessa lettura",
-                    new JSONObject(ask("GET", "/api/versioni?fresco=1", null, true).body()).getString("letteAlle").equals(read));
+                    new JSONObject(ask("GET", "/api/versioni?fresco=1", null, true).body()).getString("readAt").equals(read));
             real("fresco=2: 400", ask("GET", "/api/versioni?fresco=2", null, true).statusCode() == 400);
             // Il token CSRF si guarda prima di tutto (il filtro di ogni rotta): senza, 403; con, il 405 del gestore
             real("POST without the CSRF token: 403", askSeparately("POST", "/api/versioni", "{}", true).statusCode() == 403);
@@ -198,7 +198,7 @@ public class VersionsApiTest {
                     && waitForLine(log, "service=redis"));
             real("e il registro dice lo STESSO esito della risposta",
                     outcomeInRegistry(log, "SERVICE_RESTART") == succeeded);
-            String after = new JSONObject(ask("GET", "/api/versioni", null, true).body()).getString("letteAlle");
+            String after = new JSONObject(ask("GET", "/api/versioni", null, true).body()).getString("readAt");
             real("dopo l'azione le versioni si rileggono, anche senza fresco: " + after, !after.equals(read));
         } finally {
             https.stop(0);

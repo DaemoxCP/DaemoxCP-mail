@@ -110,7 +110,7 @@ public final class I18n {
         return text != null ? text : key;
     }
 
-    /** Un testo con i suoi valori: {nome} diventa params.get("nome"). Il risultato non e' HTML. */
+    /** Un testo con i suoi valori: {nome} diventa params.get("name"). Il risultato non e' HTML. */
     public static String t(String lang, String key, Map<String, ?> params) {
         return format(t(lang, key), params);
     }
@@ -192,7 +192,7 @@ public final class I18n {
             var values = Object.assign({ n: count }, params || {});
             return t(key + (count === 1 ? '.one' : '.other'), values);
         }
-        // La frase tradotta come nodi: dove c'e' {nome} e params.nome e' un elemento (un <code>
+        // La frase tradotta come nodi: dove c'e' {nome} e params.name e' un elemento (un <code>
         // con un percorso, un badge), ci va quell'elemento; il resto e' testo. Cosi' la frase resta
         // intera nella sua lingua e niente diventa HTML: el.append(...tNodes('chiave', { file: code })).
         function tNodes(key, params) {

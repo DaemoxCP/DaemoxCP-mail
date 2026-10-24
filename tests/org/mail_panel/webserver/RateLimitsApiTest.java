@@ -166,7 +166,7 @@ public class RateLimitsApiTest {
                     count(c, "SELECT COUNT(*) FROM rate_limits WHERE target_type='global'") == 1
                     && count(c, "SELECT COUNT(*) FROM rate_limits WHERE target_type='global' AND target_id=0 AND max_per_hour=30 AND max_per_day=300") == 1);
             JSONObject read = new JSONObject(send("GET", "/api/ratelimits", null, en).body());
-            check("read back: 30 and 300", read.getJSONObject("globale").getInt("hourly") == 30 && read.getJSONObject("globale").getInt("daily") == 300);
+            check("read back: 30 and 300", read.getJSONObject("global").getInt("hourly") == 30 && read.getJSONObject("global").getInt("daily") == 300);
             check("in the audit log: RATELIMIT_GLOBAL", waitForLine(audit, "RATELIMIT_GLOBAL"));
 
             System.out.println("\n== A mailbox limit ==");

@@ -46,51 +46,51 @@ public class MtaStsSequenceTest {
         System.out.println("\n== comeVoci(): l'esito tradotto per la pagina DNS ==");
         JSONObject outcome = new JSONObject()
             .put("success", true)
-            .put("passi", new JSONArray()
-                .put(new JSONObject().put("chiave", "include").put("titolo", "Riga di include")
-                        .put("ok", true).put("messaggio", "era gia' a posto"))
-                .put(new JSONObject().put("chiave", "cname").put("titolo", "CNAME mta-sts")
-                        .put("dettaglio", new JSONArray()
-                            .put(new JSONObject().put("dominio", "domain-d.test").put("ok", true)
-                                    .put("messaggio", "Record CNAME creato"))))
-                .put(new JSONObject().put("chiave", "txt").put("titolo", "Prova e record TXT")
-                        .put("dettaglio", new JSONArray()
-                            .put(new JSONObject().put("dominio", "a.it").put("ok", true).put("messaggio", "ok"))
-                            .put(new JSONObject().put("dominio", "b.it").put("ok", false)
-                                    .put("messaggio", "la politica non risponde ancora")))));
+            .put("steps", new JSONArray()
+                .put(new JSONObject().put("key", "include").put("title", "Riga di include")
+                        .put("ok", true).put("messageText", "era gia' a posto"))
+                .put(new JSONObject().put("key", "cname").put("title", "CNAME mta-sts")
+                        .put("detail", new JSONArray()
+                            .put(new JSONObject().put("domain", "domain-d.test").put("ok", true)
+                                    .put("messageText", "Record CNAME creato"))))
+                .put(new JSONObject().put("key", "txt").put("title", "Prova e record TXT")
+                        .put("detail", new JSONArray()
+                            .put(new JSONObject().put("domain", "a.it").put("ok", true).put("messageText", "ok"))
+                            .put(new JSONObject().put("domain", "b.it").put("ok", false)
+                                    .put("messageText", "la politica non risponde ancora")))));
 
         JSONArray v = MtaStsSetup.asEntries(outcome);
         require("tre passi diventano tre righe", v.length() == 3);
         require("il passo semplice conserva titolo ed esito",
-                v.getJSONObject(0).getString("titolo").equals("Riga di include")
+                v.getJSONObject(0).getString("title").equals("Riga di include")
                 && v.getJSONObject(0).getBoolean("ok"));
         require("un passo per dominio tutto riuscito e' verde", v.getJSONObject(1).getBoolean("ok"));
         require("il dominio compare nel messaggio",
-                v.getJSONObject(1).getString("messaggio").contains("domain-d.test"));
+                v.getJSONObject(1).getString("messageText").contains("domain-d.test"));
         // La riga rossa e' l'unica che spiega: se una sola fallisce, il passo NON e' verde.
         require("basta una riga fallita perche' il passo non sia verde",
                 !v.getJSONObject(2).getBoolean("ok"));
         require("nel messaggio ci sono ENTRAMBE le righe, non solo la prima",
-                v.getJSONObject(2).getString("messaggio").contains("a.it")
-                && v.getJSONObject(2).getString("messaggio").contains("b.it"));
+                v.getJSONObject(2).getString("messageText").contains("a.it")
+                && v.getJSONObject(2).getString("messageText").contains("b.it"));
 
         System.out.println("\n== comeVoci(): una sequenza interrotta non sparisce ==");
         JSONObject broken = new JSONObject().put("success", false)
             .put("error", "Senza la 443 configurata la politica non puo' rispondere: mi fermo.")
-            .put("passi", new JSONArray()
-                .put(new JSONObject().put("titolo", "Riga di include").put("ok", true)
-                        .put("messaggio", "fatto")));
+            .put("steps", new JSONArray()
+                .put(new JSONObject().put("title", "Riga di include").put("ok", true)
+                        .put("messageText", "fatto")));
         JSONArray vr = MtaStsSetup.asEntries(broken);
         require("i passi gia' fatti restano", vr.length() == 2);
         // Un elenco di passi riusciti che si interrompe senza dire perche' somiglia a un successo.
         require("in fondo c'e' la riga rossa che dice perche' si e' fermata",
                 !vr.getJSONObject(1).getBoolean("ok")
-                && vr.getJSONObject(1).getString("messaggio").contains("443"));
+                && vr.getJSONObject(1).getString("messageText").contains("443"));
 
         System.out.println("\n== comeVoci(): un passo per dominio VUOTO non e' un successo ==");
         JSONArray vv = MtaStsSetup.asEntries(new JSONObject().put("success", true)
-            .put("passi", new JSONArray().put(new JSONObject().put("titolo", "CNAME")
-                    .put("dettaglio", new JSONArray()))));
+            .put("steps", new JSONArray().put(new JSONObject().put("title", "CNAME")
+                    .put("detail", new JSONArray()))));
         require("nessuna riga esaminata non puo' valere verde", !vv.getJSONObject(0).getBoolean("ok"));
 
         System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));

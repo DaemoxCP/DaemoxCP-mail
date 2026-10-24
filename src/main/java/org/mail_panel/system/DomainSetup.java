@@ -51,7 +51,7 @@ public class DomainSetup {
         try {
             MailDatabase.Domain d = find(domainId);
             if (d == null) return r.put("success", false).put("error", I18n.tr("server.cfgdom.notFound"));
-            r.put("dominio", d.domain);
+            r.put("domain", d.domain);
             if (job != null) job.write("=== " + I18n.tr("server.cfgdom.title", java.util.Map.of("d", String.valueOf(d.domain))) + " ===");
 
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
@@ -63,15 +63,15 @@ public class DomainSetup {
             steps.put(reduce("SPF", auto.crea(domainId, "spf", "")));
 
             // 3. La cassetta dei rapporti, con la destinazione copiata da un altro dominio.
-            String verso = existingReportDestination();
+            String target = existingReportDestination();
             JSONObject deliveryState = auto.reportDelivery(d);
-            if (deliveryState.optBoolean("esiste", false))
-                steps.put(entry(I18n.tr("server.cfgdom.reportBox"), true, I18n.tr("server.cfgdom.boxPresent", java.util.Map.of("kind", String.valueOf(deliveryState.optString("tipo"))))));
-            else if (verso == null)
+            if (deliveryState.optBoolean("exists", false))
+                steps.put(entry(I18n.tr("server.cfgdom.reportBox"), true, I18n.tr("server.cfgdom.boxPresent", java.util.Map.of("kind", String.valueOf(deliveryState.optString("type"))))));
+            else if (target == null)
                 steps.put(entry(I18n.tr("server.cfgdom.reportBox"), false,
                         I18n.tr("server.cfgdom.boxNoSource")));
             else
-                steps.put(reduce(I18n.tr("server.cfgdom.reportBox"), auto.createReportAlias(domainId, verso)));
+                steps.put(reduce(I18n.tr("server.cfgdom.reportBox"), auto.createReportAlias(domainId, target)));
 
             // 4. DMARC, sempre in osservazione: si stringe dopo aver letto i rapporti.
             steps.put(reduce("DMARC (p=none)", auto.crea(domainId, "dmarc", "none")));
@@ -110,11 +110,11 @@ public class DomainSetup {
             for (int i = 0; i < steps.length(); i++)
                 if (steps.getJSONObject(i).optBoolean("ok", false)) succeeded++;
 
-            return r.put("success", true).put("passi", steps)
-                    .put("riusciti", succeeded).put("totale", steps.length())
-                    .put("nota", I18n.tr("server.cfgdom.summary", java.util.Map.of("ok", String.valueOf(succeeded), "tot", String.valueOf(steps.length()))));
+            return r.put("success", true).put("steps", steps)
+                    .put("succeeded", succeeded).put("total", steps.length())
+                    .put("note", I18n.tr("server.cfgdom.summary", java.util.Map.of("ok", String.valueOf(succeeded), "tot", String.valueOf(steps.length()))));
         } catch (Exception e) {
-            return r.put("success", false).put("passi", steps)
+            return r.put("success", false).put("steps", steps)
                     .put("error", I18n.tr("server.cfgdom.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
@@ -186,16 +186,16 @@ public class DomainSetup {
     /** Riduce l'esito di un'operazione a una riga leggibile. */
     private static JSONObject reduce(String title, JSONObject e) {
         boolean ok = e.optBoolean("success", false);
-        String msg = ok ? e.optString("nota", I18n.tr("server.cfgdom.done"))
+        String msg = ok ? e.optString("note", I18n.tr("server.cfgdom.done"))
                         : e.optString("error", I18n.tr("server.cfgdom.failed"));
         // "Esiste gia'" non e' un fallimento: e' la regola che protegge cio' che c'era.
-        if (!ok && (e.optBoolean("esisteGia", false) || e.optBoolean("invariato", false)))
+        if (!ok && (e.optBoolean("alreadyExists", false) || e.optBoolean("unchanged", false)))
             return entry(title, true, msg);
         return entry(title, ok, msg);
     }
 
     private static JSONObject entry(String title, boolean ok, String message) {
-        return new JSONObject().put("titolo", title).put("ok", ok)
-                .put("messaggio", message == null ? "" : message);
+        return new JSONObject().put("title", title).put("ok", ok)
+                .put("messageText", message == null ? "" : message);
     }
 }

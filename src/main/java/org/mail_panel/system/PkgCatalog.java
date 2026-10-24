@@ -55,8 +55,8 @@ public final class PkgCatalog {
             if (line.trim().matches("/[A-Za-z0-9._/+-]*")) dir = line.trim();
         Shell.Result vv = Shell.run(Duration.ofSeconds(60), "pkg", "-vv");
         List<String> enabledOnes = vv.success() ? enabledOnes(vv.output()) : null;
-        JSONObject c = data(dir, enabledOnes, System.currentTimeMillis() / 1000).put("cartella", dir);
-        return c.put("nota", note(c));
+        JSONObject c = data(dir, enabledOnes, System.currentTimeMillis() / 1000).put("folder", dir);
+        return c.put("note", note(c));
     }
 
     /**
@@ -116,10 +116,10 @@ public final class PkgCatalog {
         JSONArray missing = new JSONArray();
         JSONObject oldest = null;
         for (String name : names) {
-            JSONObject o = new JSONObject().put("nome", name);
+            JSONObject o = new JSONObject().put("name", name);
             list.put(o);
             if (!REPO_NAME.matcher(name).matches()) {
-                o.put("trovato", false).put("errore", I18n.tr("server.catalog.badRepoName"));
+                o.put("found", false).put("error", I18n.tr("server.catalog.badRepoName"));
                 missing.put(name);
                 continue;
             }
@@ -132,25 +132,25 @@ public final class PkgCatalog {
                 if (file != null) published = Files.getLastModifiedTime(file).to(TimeUnit.SECONDS);
             } catch (Exception e) { /* resta -1 */ }
             if (published < 0) {
-                o.put("trovato", false).put("cercato", Paths.get(dir, "repos", name, "db").toString());
+                o.put("found", false).put("searched", Paths.get(dir, "repos", name, "db").toString());
                 missing.put(name);
                 continue;
             }
             // Un orologio un po' indietro rispetto al server darebbe un'eta' negativa: e' "oggi".
             long seconds = Math.max(0, now - published);
-            o.put("trovato", true).put("file", file.toString()).put("pubblicato", published)
+            o.put("found", true).put("file", file.toString()).put("published", published)
              .put("data", DateTimeFormatter.ofPattern(I18n.tr("server.catalog.dateTime")).format(Instant.ofEpochSecond(published).atZone(ZoneId.systemDefault())))
-             .put("ore", seconds / 3600).put("giorni", seconds / 86400);
-            if (oldest == null || seconds / 3600 > oldest.getLong("ore")) oldest = o;
+             .put("hours", seconds / 3600).put("days", seconds / 86400);
+            if (oldest == null || seconds / 3600 > oldest.getLong("hours")) oldest = o;
         }
 
-        return new JSONObject().put("repository", list).put("mancanti", missing).put("daPkg", daPkg)
-                .put("datato", oldest != null)
-                .put("ore", oldest == null ? -1 : oldest.getLong("ore"))
-                .put("giorni", oldest == null ? -1 : oldest.getLong("giorni"))
+        return new JSONObject().put("repository", list).put("missing", missing).put("daPkg", daPkg)
+                .put("dated", oldest != null)
+                .put("hours", oldest == null ? -1 : oldest.getLong("hours"))
+                .put("days", oldest == null ? -1 : oldest.getLong("days"))
                 .put("data", oldest == null ? "" : oldest.getString("data"))
                 .put("file", oldest == null ? "" : oldest.getString("file"))
-                .put("piuVecchio", oldest == null ? "" : oldest.getString("nome"));
+                .put("oldest", oldest == null ? "" : oldest.getString("name"));
     }
 
     /** "oggi", "ieri", "N giorni fa". */
@@ -162,20 +162,20 @@ public final class PkgCatalog {
     /** La frase sul catalogo, per la Home e per il rapporto: una sola, scritta qui. */
     static String note(JSONObject c) {
         JSONArray el = c.optJSONArray("repository");
-        JSONArray missing = c.optJSONArray("mancanti");
+        JSONArray missing = c.optJSONArray("missing");
         StringBuilder t = new StringBuilder();
-        if (c.optBoolean("datato")) {
+        if (c.optBoolean("dated")) {
             List<String> date = new ArrayList<>();
             for (int i = 0; el != null && i < el.length(); i++) {
                 JSONObject o = el.getJSONObject(i);
-                if (o.optBoolean("trovato"))
-                    date.add(I18n.tr("server.catalog.repoOn", java.util.Map.of("name", String.valueOf(o.getString("nome")), "date", String.valueOf(o.getString("data")), "ago", String.valueOf(howMuch(o.getLong("giorni"))))));
+                if (o.optBoolean("found"))
+                    date.add(I18n.tr("server.catalog.repoOn", java.util.Map.of("name", String.valueOf(o.getString("name")), "date", String.valueOf(o.getString("data")), "ago", String.valueOf(howMuch(o.getLong("days"))))));
             }
             t.append(date.size() == 1
                      ? I18n.tr("server.catalog.published.one", java.util.Map.of("list", String.valueOf(String.join("; ", date))))
                      : I18n.tr("server.catalog.published.other", java.util.Map.of("list", String.valueOf(String.join("; ", date)))));
             if (date.size() > 1)
-                t.append(" ").append(I18n.tr("server.catalog.oldest", java.util.Map.of("name", String.valueOf(c.optString("piuVecchio")))));
+                t.append(" ").append(I18n.tr("server.catalog.oldest", java.util.Map.of("name", String.valueOf(c.optString("oldest")))));
             t.append(" ").append(I18n.tr("server.catalog.serverDate"));
             if (missing != null && missing.length() > 0) {
                 List<String> n = new ArrayList<>();
@@ -189,9 +189,9 @@ public final class PkgCatalog {
         } else {
             List<String> searched = new ArrayList<>();
             for (int i = 0; el != null && i < el.length(); i++)
-                searched.add(el.getJSONObject(i).optString("cercato", el.getJSONObject(i).optString("nome")));
+                searched.add(el.getJSONObject(i).optString("searched", el.getJSONObject(i).optString("name")));
             t.append(searched.isEmpty()
-                     ? I18n.tr("server.catalog.unknownNoRepos", java.util.Map.of("dir", String.valueOf(c.optString("cartella", "/var/db/pkg"))))
+                     ? I18n.tr("server.catalog.unknownNoRepos", java.util.Map.of("dir", String.valueOf(c.optString("folder", "/var/db/pkg"))))
                      : I18n.tr("server.catalog.unknownMissing", java.util.Map.of("list", String.valueOf(String.join(", ", searched)))));
         }
         return t.toString();

@@ -17,19 +17,19 @@ public class PfComparisonTest {
         String real = "pfctl -a f2b/mailpanel-pubblico -t f2b-mailpanel-pubblico -T add <ip>";
         Fail2banManager.PfTarget b = Fail2banManager.targetFromCommand(real);
         real("comando reale: riconosciuto", b != null);
-        same("comando reale: tabella", "f2b-mailpanel-pubblico", b == null ? null : b.tabella);
-        same("comando reale: ancora", "f2b/mailpanel-pubblico", b == null ? null : b.ancora);
+        same("comando reale: tabella", "f2b-mailpanel-pubblico", b == null ? null : b.table);
+        same("comando reale: ancora", "f2b/mailpanel-pubblico", b == null ? null : b.anchor);
 
         // Su piu' righe, come lo restituisce fail2ban-client quando l'azione ne ha piu' d'una.
         Fail2banManager.PfTarget m = Fail2banManager.targetFromCommand(
             "pfctl -a f2b/dovecot -t f2b-dovecot -T add <ip>\npfctl -a f2b/dovecot -T show");
-        same("piu' righe: tabella", "f2b-dovecot", m == null ? null : m.tabella);
+        same("piu' righe: tabella", "f2b-dovecot", m == null ? null : m.table);
 
         // Senza ancora: tabella globale. Deve funzionare lo stesso, con ancora nulla.
         Fail2banManager.PfTarget g = Fail2banManager.targetFromCommand("pfctl -t permaban -T add <ip>");
         real("senza ancora: riconosciuto", g != null);
-        same("senza ancora: tabella", "permaban", g == null ? null : g.tabella);
-        real("senza ancora: nessuna ancora certa", g != null && g.ancora == null);
+        same("senza ancora: tabella", "permaban", g == null ? null : g.table);
+        real("senza ancora: nessuna ancora certa", g != null && g.anchor == null);
 
         // --- Il caso vero, ed e' quello che mi era sfuggito ---
         // fail2ban restituisce il comando con i segnaposto NON espansi, e il file dell'azione
@@ -38,8 +38,8 @@ public class PfComparisonTest {
         // avrebbe dato "non esiste" per ogni jail sana. Va ricavata dalla tabella.
         Fail2banManager.PfTarget v = Fail2banManager.targetFromCommand("<pfctl> -t f2b-dovecot -T add <ip>");
         real("segnaposto <pfctl>: riconosciuto come pf", v != null);
-        same("segnaposto: tabella", "f2b-dovecot", v == null ? null : v.tabella);
-        real("segnaposto: nessuna ancora certa nel testo", v != null && v.ancora == null);
+        same("segnaposto: tabella", "f2b-dovecot", v == null ? null : v.table);
+        real("segnaposto: nessuna ancora certa nel testo", v != null && v.anchor == null);
         same("segnaposto: ancora ricavata dalle definizioni", "f2b/dovecot",
             v == null ? null : v.stillLikely);
         // Il nome puo' contenere trattini: si divide al PRIMO, che separa il prefisso f2b.

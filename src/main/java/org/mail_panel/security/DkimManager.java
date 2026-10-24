@@ -377,60 +377,60 @@ public class DkimManager {
         int withoutKey = 0, unverifiable = 0, withoutRotation = 0;
         try {
             for (MailDatabase.Domain d : database.getDomains()) {
-                org.json.JSONObject j = new org.json.JSONObject().put("dominio", d.domain);
+                org.json.JSONObject j = new org.json.JSONObject().put("domain", d.domain);
                 try {
                     DkimInfo info = getDkimInfo(d.id);
                     boolean hasKey = info != null && info.configured;
-                    j.put("haChiave", hasKey);
-                    j.put("selettore", info == null || info.selector == null ? "" : info.selector);
+                    j.put("hasKey", hasKey);
+                    j.put("selector", info == null || info.selector == null ? "" : info.selector);
                     if (!hasKey) {
                         withoutKey++;
                         // Niente chiave vuol dire niente signature: e' il caso piu' grave e non
                         // deve nascondersi in mezzo a righe che parlano di rotazioni.
-                        j.put("stato", "assente");
-                        j.put("nota", I18n.tr("server.dkimm.noPanelKey"));
+                        j.put("state", "assente");
+                        j.put("note", I18n.tr("server.dkimm.noPanelKey"));
                         lines.put(j);
                         continue;
                     }
 
                     // La verifica vera: la chiave pubblicata coincide con quella del pannello?
                     ActiveKeyVerifyResult v = verifyActiveKeyInDns(d.id);
-                    j.put("verificaRiuscita", v != null && v.success);
-                    j.put("corrisponde", v != null && v.match);
-                    j.put("messaggio", v == null ? "" : (v.message == null ? "" : v.message));
+                    j.put("checkSucceeded", v != null && v.success);
+                    j.put("matches", v != null && v.match);
+                    j.put("messageText", v == null ? "" : (v.message == null ? "" : v.message));
                     if (v == null || !v.success) {
                         unverifiable++;
-                        j.put("stato", "incerto");
+                        j.put("state", "incerto");
                     } else if (!v.match) {
-                        j.put("stato", "non_corrisponde");
+                        j.put("state", "non_corrisponde");
                     } else {
-                        j.put("stato", "ok");
+                        j.put("state", "ok");
                     }
 
                     // Eta' della chiave e rotazione programmata.
                     ScheduleResult sc = getRotationSchedule(d.id);
                     if (sc != null) {
-                        j.put("intervalloGiorni", sc.intervalDays);
+                        j.put("intervalDays", sc.intervalDays);
                         if (sc.lastRotationAt != null) {
-                            j.put("ultimaRotazione", sc.lastRotationAt.toString());
+                            j.put("lastRotation", sc.lastRotationAt.toString());
                             long days = (System.currentTimeMillis() - sc.lastRotationAt.getTime())
                                         / 86400000L;
-                            j.put("giorniDallUltima", days);
+                            j.put("daysSinceLast", days);
                         }
                         if (sc.nextRotationAt != null)
-                            j.put("prossimaRotazione", sc.nextRotationAt.toString());
+                            j.put("nextRotation", sc.nextRotationAt.toString());
                         if (sc.intervalDays <= 0) withoutRotation++;
                     }
 
                     RotationInfo ri = getRotationInfo(d.id);
                     if (ri != null && ri.rotationState != null && !ri.rotationState.isBlank()) {
-                        j.put("rotazioneInCorso", ri.rotationState);
-                        j.put("selettorePrecedente",
+                        j.put("rotationInProgress", ri.rotationState);
+                        j.put("previousSelector",
                                 ri.previousSelector == null ? "" : ri.previousSelector);
                     }
                 } catch (Exception e) {
                     unverifiable++;
-                    j.put("stato", "incerto").put("messaggio", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                    j.put("state", "incerto").put("messageText", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
                 }
                 lines.put(j);
             }
@@ -438,9 +438,9 @@ public class DkimManager {
             return new org.json.JSONObject().put("success", false)
                     .put("error", I18n.tr("server.dkimm.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
-        r.put("domini", lines);
-        r.put("senzaChiave", withoutKey).put("nonVerificabili", unverifiable)
-         .put("senzaRotazione", withoutRotation);
+        r.put("domains", lines);
+        r.put("withoutKey", withoutKey).put("unverifiable", unverifiable)
+         .put("withoutRotation", withoutRotation);
         return r;
     }
 

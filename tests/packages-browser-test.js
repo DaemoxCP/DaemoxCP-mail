@@ -27,11 +27,11 @@ function vero(cosa, ok) {
 const richieste = [];
 let giri = 0, letture = 0;
 
-const VULN_NGINX = { verdict: 'si-risolve-aggiornando', installata: '1.30.4,3', catalogo: '1.30.5_1,3', firstFixed: '1.30.5,3',
+const VULN_NGINX = { verdict: 'si-risolve-aggiornando', installedVersion: '1.30.4,3', catalog: '1.30.5_1,3', firstFixed: '1.30.5,3',
     explanation: 'Si: aggiornare alla 1.30.5_1,3, che il tuo catalogo offre, corregge il problema.',
     issues: [{ description: 'nginx -- buffer overflow <img src=x onerror="window.iniettato=1">', cve: ['CVE-2026-90439'],
                  url: 'https://vuxml.FreeBSD.org/freebsd/7dc8fd4b.html' }] };
-const VULN_EXPAT = { verdict: 'aggiornamento-non-basta', installata: '2.8.1', catalogo: '2.8.4', firstFixed: '2.8.5',
+const VULN_EXPAT = { verdict: 'aggiornamento-non-basta', installedVersion: '2.8.1', catalog: '2.8.4', firstFixed: '2.8.5',
     explanation: 'Il catalogo offre 2.8.4, ma VuXML la considera ancora vulnerabile. La fix e\' dalla 2.8.5.',
     issues: [{ description: 'libexpat -- Improper Handling of Unicode Encoding', cve: ['CVE-2026-93990'], url: 'https://vuxml.FreeBSD.org/freebsd/7fed71c4.html' }] };
 
@@ -71,7 +71,7 @@ async function servi(route) {
         return route.fulfill({ status: 200, contentType: tipo, body: fs.readFileSync(f) });
     }
     const corpo = req.postData() ? JSON.parse(req.postData()) : null;
-    richieste.push({ metodo: req.method(), percorso: p, corpo });
+    richieste.push({ metodo: req.method(), path: p, body: corpo });
     if (p !== '/api/updates' || !corpo) return json(route, { success: true });
     switch (corpo.action) {
         case 'packages_overview': letture++; return json(route, quadro());
@@ -81,8 +81,8 @@ async function servi(route) {
             services: [{ name: 'nginx', running: true }],
             checks: [{ level: 'ok', label: 'Pacchetto installato', detail: 'nginx 1.30.4,3' },
                      { level: 'verifica', label: 'Avvertenza', detail: 'Ricontrolla i virtual host dopo il riavvio.' }],
-            piano: { measured: true, unlockedPackages: ['nginx'], comando: 'pkg upgrade -n -U nginx', onBackup: true,
-                     changes: [{ tipo: 'aggiorna', nome: 'nginx', da: '1.30.4,3', a: '1.30.5_1,3', reason: '', repo: 'FreeBSD-ports' }], blockers: [] } });
+            plan: { measured: true, unlockedPackages: ['nginx'], command: 'pkg upgrade -n -U nginx', onBackup: true,
+                     changes: [{ type: 'aggiorna', name: 'nginx', from: '1.30.4,3', to: '1.30.5_1,3', reason: '', repo: 'FreeBSD-ports' }], blockers: [] } });
         case 'package_update':
             giri = 0;
             return json(route, { success: true, jobId: 'guid-1', async: true });
@@ -93,8 +93,8 @@ async function servi(route) {
                 consoleLog: '[3/6] Aggiornamento...\n[6/6] Riblocco...\n=== nginx 1.30.5_1,3 in servizio ===\n' } });
         case 'updates_status': return json(route, { success: true, dryRun: 'Your packages are up to date.', upToDate: false,
             vulnerable: [
-                { name: 'expat', role: '', locked: false, fixedByUpgrade: true, aggiornamentoDisponibile: true, cve: ['CVE-2026-93990'], fix: VULN_EXPAT },
-                { name: 'nginx', role: 'Web server della webmail', locked: true, fixedByUpgrade: false, aggiornamentoDisponibile: true, cve: ['CVE-2026-90439'], fix: VULN_NGINX },
+                { name: 'expat', role: '', locked: false, fixedByUpgrade: true, updateAvailable: true, cve: ['CVE-2026-93990'], fix: VULN_EXPAT },
+                { name: 'nginx', role: 'Web server della webmail', locked: true, fixedByUpgrade: false, updateAvailable: true, cve: ['CVE-2026-90439'], fix: VULN_NGINX },
             ], lockedUpdates: [], affectedMailPackages: [] });
         default: return json(route, { success: true });
     }
@@ -146,8 +146,8 @@ async function servi(route) {
     let prima = richieste.length;
     await page.click('#pk-body button[data-pkg="clamav"]:has-text("Blocca")');
     await page.waitForFunction(() => document.getElementById('pk-result').textContent.includes('clamav'));
-    const lock = richieste.slice(prima).find(r => r.corpo && r.corpo.action === 'packages_lock');
-    vero('Blocca clamav: manda nome, lock=true e token CSRF', lock && lock.corpo.package === 'clamav' && lock.corpo.lock === true && lock.corpo.csrf_token === 'csrf-prova');
+    const lock = richieste.slice(prima).find(r => r.body && r.body.action === 'packages_lock');
+    vero('Blocca clamav: manda nome, lock=true e token CSRF', lock && lock.body.package === 'clamav' && lock.body.lock === true && lock.body.csrf_token === 'csrf-prova');
     await page.waitForSelector('#pk-body table');
     vero('e la tabella si rilegge', letture >= 2);
 
@@ -167,9 +167,9 @@ async function servi(route) {
     prima = richieste.length;
     await page.click('#pkUpdGo');
     await page.waitForSelector('#pkUpdResult .alert-success', { timeout: 15000 });
-    const upd = richieste.slice(prima).find(r => r.corpo && r.corpo.action === 'package_update');
-    vero('package_update con pacchetto, conferma, fingerprint e CSRF', upd && upd.corpo.package === 'nginx' && upd.corpo.confirm === 'nginx'
-        && upd.corpo.signature === '0123456789abcdef' && upd.corpo.csrf_token === 'csrf-prova');
+    const upd = richieste.slice(prima).find(r => r.body && r.body.action === 'package_update');
+    vero('package_update con pacchetto, conferma, fingerprint e CSRF', upd && upd.body.package === 'nginx' && upd.body.confirm === 'nginx'
+        && upd.body.signature === '0123456789abcdef' && upd.body.csrf_token === 'csrf-prova');
     vero('il registro del lavoro e l\'esito', (await page.textContent('#pkUpdLog')).includes('in servizio')
         && (await page.textContent('#pkUpdResult')).includes('nginx è aggiornato'));
     if (foto) await page.locator('#pkUpdModal .modal-content').screenshot({ path: path.join(foto, 'pacchetti-finestra.png') });

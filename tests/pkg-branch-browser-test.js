@@ -26,19 +26,19 @@ const richieste = [];
 let ramoAdesso = 'quarterly', cambioRiesce = true, letture = 0, giri = 0;
 function stato() {
     const latest = ramoAdesso === 'latest';
-    return { success: true, branch: ramoAdesso, changeable: true, verso: [latest ? 'quarterly' : 'latest'],
+    return { success: true, branch: ramoAdesso, changeable: true, destination: [latest ? 'quarterly' : 'latest'],
         explanation: latest ? 'Ramo continuo: le versioni arrivano appena il port e\' aggiornato e compilato.'
                             : 'Ramo trimestrale: si stacca dallo sviluppo dei port a gennaio, aprile, luglio e ottobre.',
         fingerprint: latest ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa',
         file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf', panelOwnedFile: latest,
         repository: [
-            { nome: 'FreeBSD-ports', ruolo: 'Pacchetti (port)', branch: ramoAdesso, acceso: true, tipo: 'pacchetti',
+            { name: 'FreeBSD-ports', role: 'Pacchetti (port)', branch: ramoAdesso, enabled: true, type: 'pacchetti',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/' + ramoAdesso },
-            { nome: 'FreeBSD-ports-kmods', ruolo: 'Moduli del kernel', branch: ramoAdesso, acceso: true, tipo: 'moduli',
+            { name: 'FreeBSD-ports-kmods', role: 'Moduli del kernel', branch: ramoAdesso, enabled: true, type: 'moduli',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/kmods_' + ramoAdesso + '_0' },
-            { nome: 'FreeBSD-base', ruolo: 'Sistema base', branch: 'release', acceso: false, tipo: 'base',
+            { name: 'FreeBSD-base', role: 'Sistema base', branch: 'release', enabled: false, type: 'base',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/base_release_0' },
-            { nome: 'mio<b>repo</b>', ruolo: 'Repository non ufficiale', branch: '', acceso: true, tipo: 'esterno',
+            { name: 'mio<b>repo</b>', role: 'Repository non ufficiale', branch: '', enabled: true, type: 'esterno',
               url: 'file:///usr/local/<img src=x onerror="window.iniettato=1">' },
         ] };
 }
@@ -62,15 +62,15 @@ async function servi(route) {
         return route.fulfill({ status: 200, contentType: tipo, body: fs.readFileSync(f) });
     }
     const corpo = req.postData() ? JSON.parse(req.postData()) : null;
-    richieste.push({ metodo: req.method(), percorso: p, corpo });
+    richieste.push({ metodo: req.method(), path: p, body: corpo });
     if (p !== '/api/updates' || !corpo) return json(route, { success: true });
     switch (corpo.action) {
         case 'branch_status': letture++; return json(route, stato());
-        case 'branch_preview': return json(route, { success: true, possibile: true, da: ramoAdesso, verso: corpo.verso,
+        case 'branch_preview': return json(route, { success: true, possible: true, from: ramoAdesso, destination: corpo.destination,
             fingerprint: stato().fingerprint, file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf',
-            changes: [{ nome: 'FreeBSD-ports', da: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', a: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
+            changes: [{ name: 'FreeBSD-ports', from: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', to: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
             warnings: ['Non si aggiorna nessun pacchetto: cambia da dove pkg li prende.', 'Su latest il prossimo aggiornamento puo\' portare versioni maggiori nuove.'],
-            contenuto: '# Scritto dal pannello\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', comeTorna: '' });
+            content: '# Scritto dal pannello\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', howToReturn: '' });
         case 'branch_change':
             if (!cambioRiesce) return json(route, { success: false, error: 'C\'e\' gia\' un lavoro sui pacchetti in corso (aggiornamento di nginx).' });
             giri = 0;
@@ -124,9 +124,9 @@ async function servi(route) {
 
     console.log('\n== Il cambio, seguito fino all\'esito ==');
     await page.click('#branch-go');
-    const post = richieste.find(r => r.corpo && r.corpo.action === 'branch_change');
-    vero('la richiesta: ramo, conferma, fingerprint dell\'anteprima, token CSRF', post && post.corpo.verso === 'latest'
-        && post.corpo.confirm === 'latest' && post.corpo.fingerprint === 'aaaaaaaaaaaaaaaa' && post.corpo.csrf_token === 'csrf-prova');
+    const post = richieste.find(r => r.body && r.body.action === 'branch_change');
+    vero('la richiesta: ramo, conferma, fingerprint dell\'anteprima, token CSRF', post && post.body.destination === 'latest'
+        && post.body.confirm === 'latest' && post.body.fingerprint === 'aaaaaaaaaaaaaaaa' && post.body.csrf_token === 'csrf-prova');
     await page.waitForFunction(() => document.getElementById('branch-outcome').textContent.includes('Adesso i pacchetti arrivano'), null, { timeout: 15000 });
     vero('il registro del lavoro si vede', (await page.textContent('#branch-log')).includes('All repositories are up to date'));
     vero('l\'esito, in verde', await page.locator('#branch-outcome .alert-success').count() === 1);

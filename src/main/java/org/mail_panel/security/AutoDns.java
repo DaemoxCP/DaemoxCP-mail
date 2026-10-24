@@ -49,28 +49,28 @@ public class AutoDns {
         try {
             MailDatabase.Domain d = findDomain(domainId);
             if (d == null) return error(I18n.tr("server.adns.domainNotFound"));
-            r.put("dominio", d.domain);
+            r.put("domain", d.domain);
 
             MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
             if (acct == null)
                 return r.put("cloudflare", false)
-                        .put("nota", I18n.tr("server.adns.noAccount", java.util.Map.of("d", String.valueOf(d.domain))));
+                        .put("note", I18n.tr("server.adns.noAccount", java.util.Map.of("d", String.valueOf(d.domain))));
             r.put("cloudflare", true).put("account", acct.label);
 
             CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
             if (!zl.found)
-                return r.put("zona", false)
-                        .put("nota", I18n.tr("server.adns.zoneNotSeen", java.util.Map.of("a", String.valueOf(acct.label), "d", String.valueOf(d.domain), "e", String.valueOf(zl.error))));
-            r.put("zona", true).put("zoneId", zl.zoneId);
+                return r.put("zone", false)
+                        .put("note", I18n.tr("server.adns.zoneNotSeen", java.util.Map.of("a", String.valueOf(acct.label), "d", String.valueOf(d.domain), "e", String.valueOf(zl.error))));
+            r.put("zone", true).put("zoneId", zl.zoneId);
 
             JSONArray record = new JSONArray();
             record.put(describe(acct.apiToken, zl.zoneId, "spf", d));
             record.put(describe(acct.apiToken, zl.zoneId, "dmarc", d));
             r.put("record", record);
-            r.put("opzionali", optionalState(acct.apiToken, zl.zoneId, d));
+            r.put("optionalItems", optionalState(acct.apiToken, zl.zoneId, d));
 
             // Dove finirebbero i rapporti, e se quella cassetta esiste davvero.
-            r.put("rapporti", reportDelivery(d));
+            r.put("reports", reportDelivery(d));
             return r;
         } catch (Exception e) {
             return error(I18n.tr("server.adns.readState", java.util.Map.of("m", String.valueOf(e.getMessage()))));
@@ -94,17 +94,17 @@ public class AutoDns {
      * Cosa c'e' adesso su quel nome e cosa ci andrebbe. La differenza con la versione
      * precedente sta tutta qui: si separano i record DI QUEL TIPO da tutti gli altri TXT.
      */
-    private JSONObject describe(String token, String zoneId, String quale, MailDatabase.Domain d) {
-        boolean spf = "spf".equals(quale);
+    private JSONObject describe(String token, String zoneId, String which, MailDatabase.Domain d) {
+        boolean spf = "spf".equals(which);
         String name = spf ? d.domain : "_dmarc." + d.domain;
-        JSONObject o = new JSONObject().put("quale", quale).put("nome", name);
+        JSONObject o = new JSONObject().put("which", which).put("name", name);
 
         String proposed = spf ? spfValue() : dmarcValue(d.domain, "none");
         if (proposed == null) {
-            o.put("proposto", JSONObject.NULL)
-             .put("bloccato", I18n.tr("server.adns.noIpSpf"));
+            o.put("proposed", JSONObject.NULL)
+             .put("locked", I18n.tr("server.adns.noIpSpf"));
         } else {
-            o.put("proposto", proposed);
+            o.put("proposed", proposed);
         }
 
         List<CloudflareManager.TxtRecordInfo> tutti = txtAtName(token, zoneId, name);
@@ -112,12 +112,12 @@ public class AutoDns {
         for (CloudflareManager.TxtRecordInfo t : tutti) contents.add(DnsRules.cloudflareContent(t.content));
 
         List<String> pertinent = spf ? DnsRules.soloSpf(contents) : DnsRules.soloDmarc(contents);
-        o.put("quanti", pertinent.size())
-         .put("esiste", !pertinent.isEmpty())
-         .put("altriTxt", tutti.size() - pertinent.size());
+        o.put("howMany", pertinent.size())
+         .put("exists", !pertinent.isEmpty())
+         .put("otherTxt", tutti.size() - pertinent.size());
 
         if (!pertinent.isEmpty()) {
-            o.put("contenuto", String.join("  ||  ", pertinent));
+            o.put("content", String.join("  ||  ", pertinent));
             for (CloudflareManager.TxtRecordInfo t : tutti)
                 if (pertinent.contains(DnsRules.cloudflareContent(t.content))) { o.put("recordId", t.id); break; }
         }
@@ -136,7 +136,7 @@ public class AutoDns {
                     warnings.put(I18n.tr("server.adns.spfNotAuth", java.util.Map.of("ip", String.valueOf(ipDelServer()))));
             } else {
                 DnsRules.DmarcOutcome e = DnsRules.analyzeDmarc(contents, d.domain);
-                if (e.valid) o.put("politicaAttuale", e.policy == null ? "none" : e.policy);
+                if (e.valid) o.put("currentPolicy", e.policy == null ? "none" : e.policy);
                 for (String x : e.warnings) warnings.put(x);
                 if (!e.toAuthorize.isEmpty())
                     warnings.put(I18n.tr("server.adns.ruaOutside", java.util.Map.of("r", String.valueOf(String.join(", ", e.toAuthorize)))));
@@ -150,10 +150,10 @@ public class AutoDns {
      * Scrittura
      * =================================================================== */
 
-    public JSONObject crea(int domainId, String quale, String policy) {
-        JSONObject r = new JSONObject().put("quale", quale);
-        boolean spf = "spf".equals(quale);
-        if (!spf && !"dmarc".equals(quale)) return error(I18n.tr("server.adns.unknownRecord", java.util.Map.of("q", String.valueOf(quale))));
+    public JSONObject crea(int domainId, String which, String policy) {
+        JSONObject r = new JSONObject().put("which", which);
+        boolean spf = "spf".equals(which);
+        if (!spf && !"dmarc".equals(which)) return error(I18n.tr("server.adns.unknownRecord", java.util.Map.of("q", String.valueOf(which))));
 
         // Chi non sceglie, sceglie "none": e' quello che RFC 9989 §5.1.5 chiede di fare per
         // primo, e l'unico valore che non puo' fermare posta legittima il giorno stesso.
@@ -171,14 +171,14 @@ public class AutoDns {
 
             String name = spf ? d.domain : "_dmarc." + d.domain;
             String value = spf ? spfValue() : dmarcValue(d.domain, pol);
-            r.put("nome", name).put("dominio", d.domain).put("account", acct.label);
+            r.put("name", name).put("domain", d.domain).put("account", acct.label);
 
             // Un SPF senza IP non e' un SPF incompleto: e' un record invalido, che fa perdere
             // a tutto il dominio la protezione che credeva di avere.
             if (value == null)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.adns.noIpWrite"));
-            r.put("valore", value);
+            r.put("value", value);
 
             List<CloudflareManager.TxtRecordInfo> tutti = txtAtName(acct.apiToken, zl.zoneId, name);
             List<String> contents = new ArrayList<>();
@@ -187,8 +187,8 @@ public class AutoDns {
 
             // Il controllo che vale piu' di tutti gli altri, ora fatto sul contenuto.
             if (!pertinent.isEmpty())
-                return r.put("success", false).put("esisteGia", true)
-                        .put("contenuto", String.join("  ||  ", pertinent))
+                return r.put("success", false).put("alreadyExists", true)
+                        .put("content", String.join("  ||  ", pertinent))
                         .put("error", (pertinent.size() == 1
                                    ? I18n.tr("server.adns.existsOne", java.util.Map.of("nome", String.valueOf(name), "tipo", String.valueOf(spf ? "SPF" : "DMARC")))
                                    : I18n.tr("server.adns.existsMany", java.util.Map.of("nome", String.valueOf(name), "n", String.valueOf(pertinent.size()), "tipo", String.valueOf(spf ? "SPF" : "DMARC")))) + " "
@@ -201,15 +201,15 @@ public class AutoDns {
             // I TXT non pertinenti non sono un ostacolo: un record di verifica di un servizio
             // terzo sull'apice non ha nulla a che vedere con l'SPF, e non deve impedirlo.
             int others = tutti.size() - pertinent.size();
-            if (others > 0) r.put("altriTxt", others);
+            if (others > 0) r.put("otherTxt", others);
 
             // DMARC senza una casella che riceva i rapporti e' una richiesta che rimbalza.
             if (!spf) {
                 JSONObject rec = reportDelivery(d);
-                r.put("rapporti", rec);
-                if (!rec.optBoolean("esiste", false))
-                    return r.put("success", false).put("mancaCasella", true)
-                            .put("error", I18n.tr("server.adns.ruaMissing", java.util.Map.of("a", String.valueOf(rec.optString("indirizzo")))));
+                r.put("reports", rec);
+                if (!rec.optBoolean("exists", false))
+                    return r.put("success", false).put("mailboxMissing", true)
+                            .put("error", I18n.tr("server.adns.ruaMissing", java.util.Map.of("a", String.valueOf(rec.optString("address")))));
             }
 
             CloudflareManager.RecordOp op = cloudflare.createTxtRecord(acct.apiToken, zl.zoneId, name, value, 3600);
@@ -219,7 +219,7 @@ public class AutoDns {
 
             // L'esito non e' "l'API ha detto ok": e' il record che si vede da fuori.
             return r.put("success", true).put("recordId", op.recordId)
-                    .put("nota", I18n.tr("server.adns.created", java.util.Map.of("z", String.valueOf(zl.zoneName)))
+                    .put("note", I18n.tr("server.adns.created", java.util.Map.of("z", String.valueOf(zl.zoneName)))
                             + (spf ? "" : " " + ("none".equals(pol)
                                 ? I18n.tr("server.adns.policyNone", java.util.Map.of("p", String.valueOf(pol)))
                                 : I18n.tr("server.adns.policyActive", java.util.Map.of("p", String.valueOf(pol))))));
@@ -254,7 +254,7 @@ public class AutoDns {
             if (!zl.found) return error(I18n.tr("server.adns.zoneNotVisible", java.util.Map.of("d", String.valueOf(d.domain), "e", String.valueOf(zl.error))));
 
             String name = "_dmarc." + d.domain;
-            r.put("nome", name).put("dominio", d.domain).put("nuovaPolitica", n);
+            r.put("name", name).put("domain", d.domain).put("newPolicy", n);
 
             CloudflareManager.TxtRecordInfo target = null;
             java.util.List<String> dmarc = new ArrayList<>();
@@ -277,15 +277,15 @@ public class AutoDns {
             if (after == null)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.adns.cannotEdit", java.util.Map.of("v", String.valueOf(before))));
-            r.put("prima", before).put("dopo", after);
+            r.put("before", before).put("after", after);
 
             if (before.equals(after))
-                return r.put("success", true).put("invariato", true)
-                        .put("nota", I18n.tr("server.adns.policySame", java.util.Map.of("p", String.valueOf(n))));
+                return r.put("success", true).put("unchanged", true)
+                        .put("note", I18n.tr("server.adns.policySame", java.util.Map.of("p", String.valueOf(n))));
 
             if (!confirmed)
-                return r.put("success", true).put("anteprima", true)
-                        .put("nota", I18n.tr("server.adns.onlyP"));
+                return r.put("success", true).put("preview", true)
+                        .put("note", I18n.tr("server.adns.onlyP"));
 
             CloudflareManager.RecordOp op = cloudflare.updateTxtRecord(
                     acct.apiToken, zl.zoneId, target.id, name, after, 3600);
@@ -303,11 +303,11 @@ public class AutoDns {
                 }
             }
             if (verified == null || !verified.equals(after))
-                return r.put("success", false).put("riletto", verified == null ? "" : verified)
+                return r.put("success", false).put("reread", verified == null ? "" : verified)
                         .put("error", I18n.tr("server.adns.notChanged"));
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.adns.policySet", java.util.Map.of("p", String.valueOf(n), "nome", String.valueOf(name))) + " "
+                    .put("note", I18n.tr("server.adns.policySet", java.util.Map.of("p", String.valueOf(n), "nome", String.valueOf(name))) + " "
                             + ("reject".equals(n)
                                ? I18n.tr("server.adns.rejectNow")
                                : "quarantine".equals(n)
@@ -333,15 +333,15 @@ public class AutoDns {
             MailDatabase.Domain d = findDomain(domainId);
             if (d == null) return error(I18n.tr("server.adns.domainNotFound"));
             String name = "_mta-sts." + d.domain;
-            r.put("nome", name).put("dominio", d.domain);
+            r.put("name", name).put("domain", d.domain);
 
             JSONObject publishableState = org.mail_panel.system.MtaSts.publishable(d.domain);
-            r.put("prova", publishableState.optJSONObject("prova"));
-            if (!publishableState.optBoolean("pubblicabile", false))
+            r.put("test", publishableState.optJSONObject("test"));
+            if (!publishableState.optBoolean("publishable", false))
                 return r.put("success", false).put("error", publishableState.optString("reason"));
 
-            String value = publishableState.getString("valore");
-            r.put("valore", value);
+            String value = publishableState.getString("value");
+            r.put("value", value);
 
             MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
             if (acct == null) return error(I18n.tr("server.adns.noAccountFor", java.util.Map.of("d", String.valueOf(d.domain))));
@@ -395,7 +395,7 @@ public class AutoDns {
                 String c = DnsRules.cloudflareContent(t.content);
                 CloudflareManager.RecordOp del = cloudflare.deleteRecord(token, zoneId, t.id);
                 if (del == null || !del.success)
-                    return r.put("success", false).put("tolti", new JSONArray(removed))
+                    return r.put("success", false).put("removed", new JSONArray(removed))
                             .put("error", I18n.tr("server.adns.stsManyDelFail", java.util.Map.of("nome", String.valueOf(name), "n", String.valueOf(sts.size()), "c", String.valueOf(c), "e", String.valueOf(del == null ? I18n.tr("server.adns.noAnswer") : del.error)))
                                     + (removed.isEmpty() ? "." : ". " + I18n.tr("server.adns.removedSoFar", java.util.Map.of("elenco", String.valueOf(String.join("  ||  ", removed))))));
                 removed.add(c);
@@ -410,13 +410,13 @@ public class AutoDns {
                 CloudflareManager.RecordOp up = cloudflare.updateTxtRecord(
                         token, zoneId, keep.id, name, value, 3600);
                 if (up == null || !up.success)
-                    return r.put("success", false).put("contenuto", c).put("tolti", new JSONArray(removed))
+                    return r.put("success", false).put("content", c).put("removed", new JSONArray(removed))
                             .put("error", I18n.tr("server.adns.stsUpdateFail", java.util.Map.of("nome", String.valueOf(name), "c", String.valueOf(c), "e", String.valueOf(up == null ? I18n.tr("server.adns.noAnswer") : up.error)))
                                     + (removed.isEmpty() ? "" : ". " + I18n.tr("server.adns.othersRemoved", java.util.Map.of("elenco", String.valueOf(String.join("  ||  ", removed))))));
                 before = c;
             } else if (removed.isEmpty()) {
-                return r.put("success", true).put("invariato", true).put("contenuto", c)
-                        .put("nota", I18n.tr("server.adns.alreadyRight", java.util.Map.of("nome", String.valueOf(name))));
+                return r.put("success", true).put("unchanged", true).put("content", c)
+                        .put("note", I18n.tr("server.adns.alreadyRight", java.util.Map.of("nome", String.valueOf(name))));
             }
         }
 
@@ -429,10 +429,10 @@ public class AutoDns {
             String c = DnsRules.cloudflareContent(t.content);
             if (DnsRules.eMtaSts(c)) remain.add(c.trim());
         }
-        if (!removed.isEmpty()) r.put("tolti", new JSONArray(removed));
-        if (before != null) r.put("aggiornato", true).put("prima", before).put("dopo", value);
+        if (!removed.isEmpty()) r.put("removed", new JSONArray(removed));
+        if (before != null) r.put("updated", true).put("before", before).put("after", value);
         if (remain.size() != 1 || !remain.get(0).equals(value.trim()))
-            return r.put("success", false).put("riletto", String.join("  ||  ", remain))
+            return r.put("success", false).put("reread", String.join("  ||  ", remain))
                     .put("error", (remain.isEmpty()
                                ? I18n.tr("server.adns.stsReadNone", java.util.Map.of("nome", String.valueOf(name)))
                                : remain.size() == 1
@@ -447,7 +447,7 @@ public class AutoDns {
             note = I18n.tr("server.adns.stsUpdated", java.util.Map.of("nome", String.valueOf(name)));
         else
             note = I18n.tr("server.adns.stsPublished", java.util.Map.of("nome", String.valueOf(name)));
-        return r.put("success", true).put("nota", note);
+        return r.put("success", true).put("note", note);
     }
 
     /* ===================================================================
@@ -458,21 +458,21 @@ public class AutoDns {
     public JSONObject reportDelivery(MailDatabase.Domain d) {
         JSONObject o = new JSONObject();
         String address = "dmarc@" + d.domain;
-        o.put("indirizzo", address).put("dominio", d.domain);
+        o.put("address", address).put("domain", d.domain);
         try {
             for (MailDatabase.Mailbox m : database.getMailboxes(d.id))
                 if (m.email != null && m.email.equalsIgnoreCase(address))
-                    return o.put("esiste", true).put("tipo", "casella");
+                    return o.put("exists", true).put("type", "casella");
             for (MailDatabase.Alias a : database.getAliases(d.id))
                 if (a.source != null && a.source.equalsIgnoreCase(address))
-                    return o.put("esiste", true).put("tipo", "alias")
-                            .put("verso", a.destination == null ? "" : a.destination);
+                    return o.put("exists", true).put("type", "alias")
+                            .put("destination", a.destination == null ? "" : a.destination);
             // La nota NON ripete "non esiste": quello lo dice gia' l'interfaccia, e ripeterlo
             // due volte di fila fa sembrare rotto il pannello invece del DNS.
-            return o.put("esiste", false)
-                    .put("nota", I18n.tr("server.adns.ruaInside"));
+            return o.put("exists", false)
+                    .put("note", I18n.tr("server.adns.ruaInside"));
         } catch (Exception e) {
-            return o.put("esiste", false).put("errore", I18n.tr("server.adns.readBoxes", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return o.put("exists", false).put("error", I18n.tr("server.adns.readBoxes", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -488,7 +488,7 @@ public class AutoDns {
             MailDatabase.Domain d = findDomain(domainId);
             if (d == null) return error(I18n.tr("server.adns.domainNotFound"));
             String address = "dmarc@" + d.domain;
-            r.put("indirizzo", address).put("dominio", d.domain).put("verso", destination);
+            r.put("address", address).put("domain", d.domain).put("destination", destination);
 
             if (destination == null || destination.isBlank())
                 return error(I18n.tr("server.adns.needDest"));
@@ -498,9 +498,9 @@ public class AutoDns {
                 return error(I18n.tr("server.adns.destLoop"));
 
             JSONObject already = reportDelivery(d);
-            if (already.optBoolean("esiste", false))
-                return r.put("success", false).put("esisteGia", true)
-                        .put("error", I18n.tr("server.adns.existsAs", java.util.Map.of("indirizzo", String.valueOf(address), "tipo", String.valueOf(already.optString("tipo")), "verso", String.valueOf(already.has("verso") ? " (" + I18n.tr("server.adns.toAddr", java.util.Map.of("v", String.valueOf(already.optString("verso")))) + ")" : ""))));
+            if (already.optBoolean("exists", false))
+                return r.put("success", false).put("alreadyExists", true)
+                        .put("error", I18n.tr("server.adns.existsAs", java.util.Map.of("indirizzo", String.valueOf(address), "tipo", String.valueOf(already.optString("type")), "verso", String.valueOf(already.has("destination") ? " (" + I18n.tr("server.adns.toAddr", java.util.Map.of("v", String.valueOf(already.optString("destination")))) + ")" : ""))));
 
             // Whitelist di caratteri ammessi: si dichiara cosa PUO' esserci, non cosa non puo'.
             if (!dest.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}$"))
@@ -514,18 +514,18 @@ public class AutoDns {
             for (MailDatabase.Domain dom : database.getDomains())
                 for (MailDatabase.Mailbox m : database.getMailboxes(dom.id))
                     if (m.email != null && m.email.equalsIgnoreCase(dest)) internal = true;
-            r.put("destinazioneInterna", internal);
+            r.put("internalDestination", internal);
 
             int id = database.addAlias(d.id, address, dest);
             if (id <= 0) return r.put("success", false).put("error", I18n.tr("server.adns.aliasNotCreated"));
 
             JSONObject after = reportDelivery(d);
-            if (!after.optBoolean("esiste", false))
+            if (!after.optBoolean("exists", false))
                 return r.put("success", false)
                         .put("error", I18n.tr("server.adns.aliasNotReread"));
 
             return r.put("success", true).put("aliasId", id)
-                    .put("nota", I18n.tr("server.adns.aliasCreated", java.util.Map.of("a", String.valueOf(address), "d", String.valueOf(dest), "dom", String.valueOf(d.domain)))
+                    .put("note", I18n.tr("server.adns.aliasCreated", java.util.Map.of("a", String.valueOf(address), "d", String.valueOf(dest), "dom", String.valueOf(d.domain)))
                             + (internal ? "" : " " + I18n.tr("server.adns.aliasExternal", java.util.Map.of("d", String.valueOf(dest)))));
         } catch (Exception e) {
             return error(I18n.tr("server.adns.aliasError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
@@ -543,19 +543,19 @@ public class AutoDns {
             MailDatabase.Domain d = findDomain(domainId);
             if (d == null) return error(I18n.tr("server.adns.domainNotFound"));
             String address = "dmarc@" + d.domain;
-            r.put("indirizzo", address).put("dominio", d.domain);
+            r.put("address", address).put("domain", d.domain);
 
             JSONObject already = reportDelivery(d);
-            if (already.optBoolean("esiste", false))
-                return r.put("success", false).put("esisteGia", true)
-                        .put("error", I18n.tr("server.adns.existsAsShort", java.util.Map.of("indirizzo", String.valueOf(address), "tipo", String.valueOf(already.optString("tipo")), "verso", String.valueOf(already.has("verso") ? " (" + I18n.tr("server.adns.toAddr", java.util.Map.of("v", String.valueOf(already.optString("verso")))) + ")" : ""))));
+            if (already.optBoolean("exists", false))
+                return r.put("success", false).put("alreadyExists", true)
+                        .put("error", I18n.tr("server.adns.existsAsShort", java.util.Map.of("indirizzo", String.valueOf(address), "tipo", String.valueOf(already.optString("type")), "verso", String.valueOf(already.has("destination") ? " (" + I18n.tr("server.adns.toAddr", java.util.Map.of("v", String.valueOf(already.optString("destination")))) + ")" : ""))));
 
             String password = randomPassword();
             int id = database.addMailbox(d.id, address, password, I18n.tr("server.adns.dmarcBoxName", java.util.Map.of("d", String.valueOf(d.domain))), 512);
             if (id <= 0) return r.put("success", false).put("error", I18n.tr("server.adns.boxNotCreated"));
 
             JSONObject after = reportDelivery(d);
-            if (!after.optBoolean("esiste", false))
+            if (!after.optBoolean("exists", false))
                 return r.put("success", false)
                         .put("error", I18n.tr("server.adns.boxNotReread"));
 
@@ -563,7 +563,7 @@ public class AutoDns {
             // (AES-256-GCM), e la pagina Caselle la rivede con "Rivela". Dirla irrecuperabile
             // sarebbe far credere a chi legge che il pannello sia meno capace di com'e'.
             return r.put("success", true).put("mailboxId", id).put("password", password)
-                    .put("nota", I18n.tr("server.adns.boxCreated", java.util.Map.of("a", String.valueOf(address), "dom", String.valueOf(d.domain))));
+                    .put("note", I18n.tr("server.adns.boxCreated", java.util.Map.of("a", String.valueOf(address), "dom", String.valueOf(d.domain))));
         } catch (Exception e) {
             return error(I18n.tr("server.adns.boxError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
@@ -590,7 +590,7 @@ public class AutoDns {
             for (MailDatabase.Domain dom : database.getDomains())
                 for (MailDatabase.Mailbox m : database.getMailboxes(dom.id))
                     if (m.email != null && !m.email.isBlank()) list.put(m.email);
-            return r.put("caselle", list);
+            return r.put("mailboxes", list);
         } catch (Exception e) {
             return error(I18n.tr("server.adns.readMailboxes", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
@@ -666,10 +666,10 @@ public class AutoDns {
         for (String[] o : OPTIONAL_ITEMS) {
             String fullName = o[2] + "." + d.domain;
             JSONObject j = new JSONObject()
-                    .put("quale", o[0]).put("tipo", o[1]).put("nome", fullName)
-                    .put("aCosaServe", I18n.tr(o[4]))
-                    .put("premessa", o[5].isEmpty() ? "" : I18n.tr(o[5]))
-                    .put("proposto", "SRV".equals(o[1])
+                    .put("which", o[0]).put("type", o[1]).put("name", fullName)
+                    .put("purpose", I18n.tr(o[4]))
+                    .put("premise", o[5].isEmpty() ? "" : I18n.tr(o[5]))
+                    .put("proposed", "SRV".equals(o[1])
                             ? "0 1 " + o[3] + " " + target
                             : target);
 
@@ -679,7 +679,7 @@ public class AutoDns {
             for (CloudflareManager.DnsRecordInfo t : here)
                 (o[1].equalsIgnoreCase(t.type) ? sameKind : otherKind).add(t);
 
-            j.put("esiste", !sameKind.isEmpty());
+            j.put("exists", !sameKind.isEmpty());
             if (!sameKind.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (CloudflareManager.DnsRecordInfo t : sameKind) {
@@ -691,11 +691,11 @@ public class AutoDns {
                     sb.append(fullSrv(t));
                     if (t.proxied) sb.append("  (proxato)");
                 }
-                j.put("contenuto", sb.toString());
+                j.put("content", sb.toString());
                 boolean proxied = false;
                 for (CloudflareManager.DnsRecordInfo t : sameKind) if (t.proxied) proxied = true;
                 if (proxied)
-                    j.put("avviso", I18n.tr("server.adns.proxied"));
+                    j.put("warning", I18n.tr("server.adns.proxied"));
             } else if (!otherKind.isEmpty()) {
                 // Il DNS non ammette un CNAME accanto ad altri dati sullo stesso nome.
                 StringBuilder sb = new StringBuilder();
@@ -703,7 +703,7 @@ public class AutoDns {
                     if (sb.length() > 0) sb.append(", ");
                     sb.append(t.type).append(" ").append(t.content);
                 }
-                j.put("conflitto", I18n.tr("server.adns.typeConflict", java.util.Map.of("nome", String.valueOf(fullName), "altro", String.valueOf(sb), "tipo", String.valueOf(o[1]))));
+                j.put("conflict", I18n.tr("server.adns.typeConflict", java.util.Map.of("nome", String.valueOf(fullName), "altro", String.valueOf(sb), "tipo", String.valueOf(o[1]))));
             }
             out.put(j);
         }
@@ -715,7 +715,7 @@ public class AutoDns {
      * e l'esito si verifica rileggendo la zona invece di fidarsi della risposta dell'API.
      */
     public JSONObject createOptional(int domainId, String key) {
-        JSONObject r = new JSONObject().put("quale", key);
+        JSONObject r = new JSONObject().put("which", key);
         String[] def = definition(key);
         if (def == null) return error(I18n.tr("server.adns.unknownOptional", java.util.Map.of("k", String.valueOf(key))));
         try {
@@ -726,17 +726,17 @@ public class AutoDns {
             // i due casi, altrimenti finisce per dare un errore rosso a una configurazione
             // legittima — o, peggio, per dare un verde a una che non ha controllato.
             if (acct == null) return error(I18n.tr("server.adns.noAccountFor", java.util.Map.of("d", String.valueOf(d.domain))))
-                    .put("nonGestito", true);
+                    .put("unmanaged", true);
             CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
             if (!zl.found) return error(I18n.tr("server.adns.zoneNotVisible", java.util.Map.of("d", String.valueOf(d.domain), "e", String.valueOf(zl.error))))
-                    .put("nonGestito", true);
+                    .put("unmanaged", true);
 
             String fullName = def[2] + "." + d.domain;
             String target = mailHost(d.domain);
             boolean srv = "SRV".equals(def[1]);
             int port = srv ? Integer.parseInt(def[3]) : 0;
-            r.put("nome", fullName).put("tipo", def[1]).put("dominio", d.domain)
-             .put("valore", srv ? "0 1 " + port + " " + target : target);
+            r.put("name", fullName).put("type", def[1]).put("domain", d.domain)
+             .put("value", srv ? "0 1 " + port + " " + target : target);
 
             if (target == null || target.isBlank() || !target.contains("."))
                 return r.put("success", false)
@@ -746,7 +746,7 @@ public class AutoDns {
                     atName(cloudflare.listRecords(acct.apiToken, zl.zoneId), fullName);
             for (CloudflareManager.DnsRecordInfo t : here) {
                 if (!def[1].equalsIgnoreCase(t.type))
-                    return r.put("success", false).put("conflitto", true)
+                    return r.put("success", false).put("conflict", true)
                             .put("error", I18n.tr("server.adns.recordConflict", java.util.Map.of("nome", String.valueOf(fullName), "tipoEsistente", String.valueOf(t.type), "contenuto", String.valueOf(t.content), "tipo", String.valueOf(def[1]))));
 
                 // "Esiste" non vuol dire "e' giusto".
@@ -762,8 +762,8 @@ public class AutoDns {
                 // dichiarazioni di altri servizi, e quelli non si toccano mai alla cieca.
                 boolean right = coincide(t, srv, target, port);
                 if (right && !t.proxied)
-                    return r.put("success", true).put("invariato", true).put("contenuto", t.content)
-                            .put("nota", I18n.tr("server.adns.alreadyRightOn", java.util.Map.of("nome", String.valueOf(fullName))));
+                    return r.put("success", true).put("unchanged", true).put("content", t.content)
+                            .put("note", I18n.tr("server.adns.alreadyRightOn", java.util.Map.of("nome", String.valueOf(fullName))));
 
                 java.util.List<String> whatIsWrong = new ArrayList<>();
                 if (!right) whatIsWrong.add(I18n.tr("server.adns.pointedTo", java.util.Map.of("prima", String.valueOf(t.content), "giusto", String.valueOf(srv ? "0 1 " + port + " " + target : target))));
@@ -773,11 +773,11 @@ public class AutoDns {
                         ? cloudflare.updateSrv(acct.apiToken, zl.zoneId, t.id, fullName, target, 0, 1, port)
                         : cloudflare.updateCname(acct.apiToken, zl.zoneId, t.id, fullName, target);
                 if (op == null || !op.success)
-                    return r.put("success", false).put("contenuto", t.content)
+                    return r.put("success", false).put("content", t.content)
                             .put("error", I18n.tr("server.adns.fixRefused", java.util.Map.of("nome", String.valueOf(fullName), "cosa", String.valueOf(String.join("; ", whatIsWrong)), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error))));
-                return r.put("success", true).put("corretto", true)
-                        .put("prima", t.content).put("dopo", srv ? "0 1 " + port + " " + target : target)
-                        .put("nota", I18n.tr("server.adns.fixed", java.util.Map.of("nome", String.valueOf(fullName), "cosa", String.valueOf(String.join("; ", whatIsWrong)))));
+                return r.put("success", true).put("correct", true)
+                        .put("before", t.content).put("after", srv ? "0 1 " + port + " " + target : target)
+                        .put("note", I18n.tr("server.adns.fixed", java.util.Map.of("nome", String.valueOf(fullName), "cosa", String.valueOf(String.join("; ", whatIsWrong)))));
             }
 
             CloudflareManager.RecordOp op = srv
@@ -797,7 +797,7 @@ public class AutoDns {
                         .put("error", I18n.tr("server.adns.createdNotFound"));
 
             return r.put("success", true).put("recordId", op.recordId)
-                    .put("nota", I18n.tr("server.adns.createdOn", java.util.Map.of("tipo", String.valueOf(def[1]), "nome", String.valueOf(fullName), "z", String.valueOf(zl.zoneName))));
+                    .put("note", I18n.tr("server.adns.createdOn", java.util.Map.of("tipo", String.valueOf(def[1]), "nome", String.valueOf(fullName), "z", String.valueOf(zl.zoneName))));
         } catch (Exception e) {
             return error(I18n.tr("server.adns.createError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }

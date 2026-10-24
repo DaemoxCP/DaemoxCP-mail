@@ -106,7 +106,7 @@ public class ResetDatabaseTest {
         }
         insert(c, "INSERT INTO estranea_prova (id, nota) VALUES (?, ?)", 1, "non e' del pannello");
         List<String> before = tables(c);
-        before.remove("estranea_prova");
+        before.remove("foreign_test");
         List<String> empty = before.stream().filter(t -> lines(c, t) == 0).toList();
         real("una riga in ognuna delle " + before.size() + " tabelle del pannello" + (empty.isEmpty() ? "" : " (vuote: " + empty + ")"),
                 empty.isEmpty() && before.size() == n + 3);
@@ -246,9 +246,9 @@ public class ResetDatabaseTest {
         return t;
     }
 
-    static int lines(Connection c, String tabella) {
+    static int lines(Connection c, String table) {
         try (Statement st = c.createStatement();
-             ResultSet r = st.executeQuery("SELECT COUNT(*) FROM `" + tabella.replace("`", "") + "`")) {
+             ResultSet r = st.executeQuery("SELECT COUNT(*) FROM `" + table.replace("`", "") + "`")) {
             r.next();
             return r.getInt(1);
         } catch (SQLException e) {

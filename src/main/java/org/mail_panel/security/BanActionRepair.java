@@ -58,10 +58,10 @@ public final class BanActionRepair {
                 // lascia a chi legge nessun modo di sapere. Con l'uscita, il passo successivo lo
                 // puo' fare chiunque guardi la pagina.
                 notJudged.put(new JSONObject().put("jail", jail)
-                    .put("perche", I18n.tr("server.banfix.noCommand"))
+                    .put("why", I18n.tr("server.banfix.noCommand"))
                     .put("output", actionsOutput(jail))
                     .put("log", logErrorsFor(jail))
-                    .put("sezioni", sectionsDefining(jail))
+                    .put("sections", sectionsDefining(jail))
                     .put("dump", readConfiguration(jail)));
                 continue;
             }
@@ -71,19 +71,19 @@ public final class BanActionRepair {
                 // taciuto — una jail saltata in silenzio fa diventare verde un controllo che
                 // semplicemente non l'ha guardata, che e' il difetto che qui si sta cercando.
                 notJudged.put(new JSONObject().put("jail", jail)
-                    .put("perche", I18n.tr("server.banfix.noProgram"))
-                    .put("comando", cmd));
+                    .put("why", I18n.tr("server.banfix.noProgram"))
+                    .put("command", cmd));
                 continue;
             }
             reviewed++;
             if (exists(runnable)) continue;
             broken.put(new JSONObject()
-                .put("jail", jail).put("comando", cmd).put("runnable", runnable));
+                .put("jail", jail).put("command", cmd).put("runnable", runnable));
         }
-        return r.put("success", true).put("rotte", broken)
-                .put("esaminate", reviewed)
-                .put("non_giudicate", notJudged)
-                .put("riparabili", broken.length() > 0);
+        return r.put("success", true).put("broken", broken)
+                .put("reviewed", reviewed)
+                .put("not_judged", notJudged)
+                .put("repairable", broken.length() > 0);
     }
 
     /** Scrive l'azione pf dove manca, ricarica, e verifica chiedendo di nuovo a fail2ban. */
@@ -127,15 +127,15 @@ public final class BanActionRepair {
                 String before = Files.readString(loc, StandardCharsets.UTF_8);
                 Outcome e = withPfAction(before, "mail-panel-auth");
                 switch (e.type) {
-                    case ASSENTE -> steps.put(step("mail-panel-auth", true,
+                    case ABSENT -> steps.put(step("mail-panel-auth", true,
                         I18n.tr("server.banfix.noSection")));
-                    case GIA_A_POSTO -> steps.put(step("mail-panel-auth", true,
+                    case ALREADY_IN_PLACE -> steps.put(step("mail-panel-auth", true,
                         I18n.tr("server.banfix.alreadyOk")));
-                    case DA_GUARDARE -> {
+                    case TO_REVIEW -> {
                         steps.put(step("mail-panel-auth", false, e.reason));
                         toReviewByHand = true;
                     }
-                    case MODIFICATO -> {
+                    case MODIFIED -> {
                         copies.add(copy(loc));
                         Files.writeString(loc, e.content, StandardCharsets.UTF_8);
                         touched = true;
@@ -158,7 +158,7 @@ public final class BanActionRepair {
                     if (c == null || c.isEmpty()) mute.add(jail);
                 }
                 if (mute.isEmpty())
-                    return r.put("success", true).put("passi", steps)
+                    return r.put("success", true).put("steps", steps)
                             .put("message", I18n.tr("server.banfix.nothingNeeded"));
 
                 steps.put(step("configurazione", true,
@@ -166,7 +166,7 @@ public final class BanActionRepair {
                 touched = true;
             }
             if (!touched)
-                return r.put("success", false).put("passi", steps)
+                return r.put("success", false).put("steps", steps)
                         .put("message", I18n.tr("server.banfix.untouched"));
 
             // 3. Ricarica.
@@ -176,7 +176,7 @@ public final class BanActionRepair {
                 Shell.run(Duration.ofSeconds(30), CLIENT, "reload");
                 steps.put(step("reload", false,
                     I18n.tr("server.banfix.rejected", java.util.Map.of("out", String.valueOf(rel.output().trim())))));
-                return r.put("success", false).put("passi", steps)
+                return r.put("success", false).put("steps", steps)
                         .put("message", I18n.tr("server.banfix.cancelled"));
             }
             steps.put(step("reload", true,
@@ -212,32 +212,32 @@ public final class BanActionRepair {
                     boolean jailExists = st.success() && !st.output().contains("does not exist");
                     if (!jailExists) {
                         verification.put(new JSONObject().put("jail", jail).put("ok", true)
-                            .put("nota", I18n.tr("server.banfix.notActive")));
+                            .put("note", I18n.tr("server.banfix.notActive")));
                         continue;
                     }
                     allOk = false;
                     verification.put(new JSONObject().put("jail", jail).put("ok", false)
-                        .put("nota", I18n.tr("server.banfix.noActionAfter", java.util.Map.of("out", String.valueOf(actionsOutput(jail)))))
+                        .put("note", I18n.tr("server.banfix.noActionAfter", java.util.Map.of("out", String.valueOf(actionsOutput(jail)))))
                         .put("log", logErrorsFor(jail))
-                        .put("sezioni", sectionsDefining(jail))
+                        .put("sections", sectionsDefining(jail))
                         .put("dump", readConfiguration(jail)));
                     continue;
                 }
                 if (!ok) allOk = false;
                 verification.put(new JSONObject().put("jail", jail).put("ok", ok)
-                    .put("comando", cmd));
+                    .put("command", cmd));
             }
             steps.put(step("verifica", allOk,
                 allOk ? I18n.tr("server.banfix.allBan")
                         : I18n.tr("server.banfix.stillNotBan")));
 
-            return r.put("success", allOk).put("passi", steps).put("verifica", verification)
+            return r.put("success", allOk).put("steps", steps).put("verification", verification)
                     .put("message", allOk
                         ? I18n.tr("server.banfix.verified")
                         : I18n.tr("server.banfix.notConfirmed"));
         } catch (Exception e) {
             try { restore(copies); Shell.run(Duration.ofSeconds(30), CLIENT, "reload"); } catch (Exception ignore) { }
-            return r.put("success", false).put("passi", steps)
+            return r.put("success", false).put("steps", steps)
                     .put("message", I18n.tr("server.banfix.errorRestored", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
@@ -320,15 +320,15 @@ public final class BanActionRepair {
 
     /** Cosa e' successo alla sezione, senza doverne rileggere il testo per capirlo. */
     static final class Outcome {
-        enum Kind { ASSENTE, GIA_A_POSTO, MODIFICATO, DA_GUARDARE }
+        enum Kind { ABSENT, ALREADY_IN_PLACE, MODIFIED, TO_REVIEW }
         final Kind type;
         final String content;
         final String reason;
         private Outcome(Kind t, String c, String m) { type = t; content = c; reason = m; }
-        static Outcome absent()            { return new Outcome(Kind.ASSENTE, null, null); }
-        static Outcome alreadyInPlace()          { return new Outcome(Kind.GIA_A_POSTO, null, null); }
-        static Outcome modified(String c) { return new Outcome(Kind.MODIFICATO, c, null); }
-        static Outcome toReview(String m) { return new Outcome(Kind.DA_GUARDARE, null, m); }
+        static Outcome absent()            { return new Outcome(Kind.ABSENT, null, null); }
+        static Outcome alreadyInPlace()          { return new Outcome(Kind.ALREADY_IN_PLACE, null, null); }
+        static Outcome modified(String c) { return new Outcome(Kind.MODIFIED, c, null); }
+        static Outcome toReview(String m) { return new Outcome(Kind.TO_REVIEW, null, m); }
     }
 
     /**
@@ -573,6 +573,6 @@ public final class BanActionRepair {
     }
 
     private static JSONObject step(String name, boolean ok, String text) {
-        return new JSONObject().put("passo", name).put("ok", ok).put("testo", text);
+        return new JSONObject().put("step", name).put("ok", ok).put("text", text);
     }
 }

@@ -258,7 +258,7 @@
                     // Si mostra il valore COMPLETO quando esiste: per MX e SRV "value" contiene
                     // la sola destinazione, e sotto un'etichetta che dice "consigliato" quello
                     // sarebbe un record da copiare a cui mancano dei campi.
-                    html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValue')) + '</strong> <code class="record-value" style="word-break:break-all">' + escHtml(r.valoreCompleto || r.value) + '</code></div>';
+                    html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValue')) + '</strong> <code class="record-value" style="word-break:break-all">' + escHtml(r.fullValue || r.value) + '</code></div>';
                     html += '<small class="text-muted">' + r.description + '</small>';
                     // Area dettagli verifica (popolata dopo verifyDnsAuto)
                     html += '<div class="record-verify-detail mt-2" data-detail-key="' + recordKey + '"></div>';
@@ -526,9 +526,9 @@
         // e' acceso" e' un avvertimento generico che scarica su chi legge il compito di andare
         // a controllare da un'altra parte; il pannello quel dato ce l'ha e puo' dirlo.
         function fraseAvvioAutomatico(data) {
-            if (data.avvio_automatico === true)
+            if (data.auto_start === true)
                 return escHtml(t('dns.autostartYes'));
-            if (data.avvio_automatico === false)
+            if (data.auto_start === false)
                 return '<span class="text-warning">' + escHtml(t('dns.autostartNo')) + '</span>';
             // Il campo non e' arrivato: si dice quel che si sa, senza inventare un verdetto.
             return escHtml(t('dns.autostartUnknown'));
@@ -828,19 +828,19 @@
                 return;
             }
 
-            const lines = r.domini || [];
+            const lines = r.domains || [];
             // Il titolo dice la cosa peggiore per prima: un dominio senza chiave non deve
             // finire in fondo a un elenco che comincia con "tutto bene".
             let cls = 'success', testo = t('dns.sumAllMatch');
-            if (r.senzaChiave > 0) {
+            if (r.withoutKey > 0) {
                 cls = 'danger';
-                testo = tn('dns.sumNoKey', r.senzaChiave);
+                testo = tn('dns.sumNoKey', r.withoutKey);
             } else if (lines.some(d => d.state === 'non_corrisponde')) {
                 cls = 'danger';
                 testo = t('dns.sumMismatch');
-            } else if (r.nonVerificabili > 0) {
+            } else if (r.unverifiable > 0) {
                 cls = 'warning';
-                testo = tn('dns.sumUnverifiable', r.nonVerificabili);
+                testo = tn('dns.sumUnverifiable', r.unverifiable);
             }
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + escapeHtmlBl(testo) + '</div>';
 
@@ -860,30 +860,30 @@
                     state = '<span class="badge bg-secondary">' + escHtml(t('dns.unverifiable')) + '</span>';
 
                 let eta = '<span class="text-muted">&mdash;</span>';
-                if (d.giorniDallUltima !== undefined && d.giorniDallUltima !== null) {
-                    const g = d.giorniDallUltima;
+                if (d.daysSinceLast !== undefined && d.daysSinceLast !== null) {
+                    const g = d.daysSinceLast;
                     // Oltre l'intervallo scelto la chiave e' in ritardo; senza intervallo il
                     // riferimento e' 90 giorni, la cadenza che il pannello consiglia.
-                    const limit = (d.intervalloGiorni && d.intervalloGiorni > 0) ? d.intervalloGiorni : 90;
+                    const limit = (d.intervalDays && d.intervalDays > 0) ? d.intervalDays : 90;
                     eta = escHtml(tn('dns.days', g))
                         + (g > limit ? ' <span class="badge bg-warning text-dark">' + escHtml(t('dns.overLimit', { limit: limit })) + '</span>' : '');
                 }
 
                 let rot;
                 if (d.state === 'assente') rot = '<span class="text-muted">&mdash;</span>';
-                else if (d.intervalloGiorni && d.intervalloGiorni > 0)
-                    rot = escHtml(tn('dns.every', d.intervalloGiorni))
-                        + (d.prossimaRotazione ? '<div class="small text-muted">' + escHtml(t('dns.nextShort', { date: String(d.prossimaRotazione).substring(0, 10) })) + '</div>' : '');
+                else if (d.intervalDays && d.intervalDays > 0)
+                    rot = escHtml(tn('dns.every', d.intervalDays))
+                        + (d.nextRotation ? '<div class="small text-muted">' + escHtml(t('dns.nextShort', { date: String(d.nextRotation).substring(0, 10) })) + '</div>' : '');
                 else
                     rot = '<span class="badge bg-warning text-dark">' + escHtml(t('dns.off')) + '</span>';
 
-                h += '<tr class="upd-cell"><td><code class="small">' + escapeHtmlBl(d.dominio) + '</code></td>'
-                   + '<td><code class="small">' + escapeHtmlBl(d.selettore || '') + '</code>'
-                   + (d.rotazioneInCorso ? '<div class="small text-muted">' + escHtml(t('dns.rotatingNow', { state: d.rotazioneInCorso })) + '</div>' : '')
+                h += '<tr class="upd-cell"><td><code class="small">' + escapeHtmlBl(d.domain) + '</code></td>'
+                   + '<td><code class="small">' + escapeHtmlBl(d.selector || '') + '</code>'
+                   + (d.rotationInProgress ? '<div class="small text-muted">' + escHtml(t('dns.rotatingNow', { state: d.rotationInProgress })) + '</div>' : '')
                    + '</td>'
                    + '<td>' + state
                    + (d.state === 'ok' ? '' : '<div class="small text-muted">'
-                        + escapeHtmlBl(d.nota || d.messaggio || '') + '</div>')
+                        + escapeHtmlBl(d.note || d.messageText || '') + '</div>')
                    + '</td>'
                    + '<td>' + eta + '</td><td>' + rot + '</td></tr>';
             });

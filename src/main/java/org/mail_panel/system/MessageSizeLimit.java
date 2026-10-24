@@ -52,7 +52,7 @@ public class MessageSizeLimit {
      * Imposta il limite. Restituisce sempre un esito leggibile, mai un'eccezione muta.
      */
     public static JSONObject set(int mb) {
-        JSONObject r = new JSONObject().put("megabyte", mb);
+        JSONObject r = new JSONObject().put("megabytes", mb);
         if (mb < 1 || mb > 1024)
             return r.put("success", false)
                     .put("error", I18n.tr("server.size.outOfRange", Map.of("mb", mb)));
@@ -61,10 +61,10 @@ public class MessageSizeLimit {
         if (before < 0)
             return r.put("success", false)
                     .put("error", I18n.tr("server.size.unreadable"));
-        r.put("prima", before);
+        r.put("before", before);
         if (before == mb)
-            return r.put("success", true).put("invariato", true)
-                    .put("nota", I18n.tr("server.size.unchanged", Map.of("mb", mb)));
+            return r.put("success", true).put("unchanged", true)
+                    .put("note", I18n.tr("server.size.unchanged", Map.of("mb", mb)));
 
         RunResult set = run("postconf", "-e", "message_size_limit=" + toBytes(mb));
         if (set.code != 0)
@@ -74,7 +74,7 @@ public class MessageSizeLimit {
         RunResult check = run("postfix", "check");
         if (check.code != 0) {
             run("postconf", "-e", "message_size_limit=" + toBytes(before));
-            return r.put("success", false).put("ripristinato", true)
+            return r.put("success", false).put("restored", true)
                     .put("error", I18n.tr("server.size.checkFailed", Map.of("before", before, "output", check.output.trim())));
         }
 
@@ -82,19 +82,19 @@ public class MessageSizeLimit {
         if (reload.code != 0) {
             run("postconf", "-e", "message_size_limit=" + toBytes(before));
             run("postfix", "reload");
-            return r.put("success", false).put("ripristinato", true)
+            return r.put("success", false).put("restored", true)
                     .put("error", I18n.tr("server.size.reloadFailed", Map.of("before", before, "output", reload.output.trim())));
         }
 
         // Non basta che i comandi non abbiano protestato: si rilegge.
         int after = readMegabytes();
-        r.put("dopo", after);
+        r.put("after", after);
         if (after != mb)
             return r.put("success", false)
                     .put("error", I18n.tr("server.size.readBackDiffers", Map.of("mb", mb, "after", after)));
 
         return r.put("success", true)
-                .put("nota", I18n.tr("server.size.changed", Map.of("before", before, "mb", mb)));
+                .put("note", I18n.tr("server.size.changed", Map.of("before", before, "mb", mb)));
     }
 
     private record RunResult(int code, String output) {}

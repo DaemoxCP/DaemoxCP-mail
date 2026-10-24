@@ -9,10 +9,10 @@
                 : '<div class="small fw-bold mt-2 mb-1">' + escHtml(titolo) + ' (' + voci.length + ')</div>'
                   + '<div class="small" style="line-height:1.9">'
                   + voci.map(c => '<code class="me-2">' + updEsc(c) + '</code>').join('') + '</div>';
-            return uno('Cloudflare IPv4', r.listaV4)
-                 + uno('Cloudflare IPv6', r.listaV6)
-                 + uno(t('cfi.local'), r.listaLocali)
-                 + '<div class="small text-muted mt-2">' + escHtml(t('cfi.compiledOn', { date: r.aggiornataIl || '?' })) + ' '
+            return uno('Cloudflare IPv4', r.listV4)
+                 + uno('Cloudflare IPv6', r.listV6)
+                 + uno(t('cfi.local'), r.localList)
+                 + '<div class="small text-muted mt-2">' + escHtml(t('cfi.compiledOn', { date: r.updatedOn || '?' })) + ' '
                  + t('cfi.bitwise.html') + '</div>';
         }
 
@@ -27,18 +27,18 @@
                              + '</div>' + cfElenchi(r);
                 return;
             }
-            const mancanti = r.mancanti || [], inPiu = r.inPiu || [];
+            const mancanti = r.missing || [], inPiu = r.extra || [];
             const cls = mancanti.length ? 'danger' : (inPiu.length ? 'warning' : 'success');
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">'
                   + '<i class="fas fa-' + (cls === 'success' ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
-                  + updEsc(r.nota) + '</div>';
+                  + updEsc(r.note) + '</div>';
 
             h += '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                + '<tr class="upd-cell"><td style="width:16rem"><strong>' + escHtml(t('cfi.official')) + '</strong></td><td>'
-               + updEsc(r.ufficialiV4) + ' IPv4 &middot; ' + updEsc(r.ufficialiV6) + ' IPv6</td></tr>'
+               + updEsc(r.officialV4) + ' IPv4 &middot; ' + updEsc(r.officialV6) + ' IPv6</td></tr>'
                + '<tr class="upd-cell"><td><strong>' + escHtml(t('cfi.compiled')) + '</strong></td><td>'
-               + updEsc(r.compilatiV4) + ' IPv4 &middot; ' + updEsc(r.compilatiV6) + ' IPv6'
-               + '<div class="small text-muted">' + escHtml(t('cfi.alignedOn', { date: r.aggiornataIl })) + '</div></td></tr>'
+               + updEsc(r.compiledV4) + ' IPv4 &middot; ' + updEsc(r.compiledV6) + ' IPv6'
+               + '<div class="small text-muted">' + escHtml(t('cfi.alignedOn', { date: r.updatedOn })) + '</div></td></tr>'
                + '</tbody></table></div>';
 
             if (mancanti.length) {

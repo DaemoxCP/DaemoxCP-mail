@@ -108,7 +108,7 @@ public class MtaStsRecordTest {
     }
 
     static String removed(JSONObject r) {
-        JSONArray a = r.optJSONArray("tolti");
+        JSONArray a = r.optJSONArray("removed");
         return a == null ? "[]" : a.toString();
     }
 
@@ -125,26 +125,26 @@ public class MtaStsRecordTest {
         System.out.println("\n== nessun record: si crea ==");
         FakeCloudflare cf = new FakeCloudflare();
         JSONObject r = write(cf);
-        require("riuscito: " + r.optString("nota", r.optString("error")), r.optBoolean("success"));
+        require("riuscito: " + r.optString("note", r.optString("error")), r.optBoolean("success"));
         require("sul nome c'e' un record, quello giusto: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
 
         System.out.println("\n== un record giusto: non si tocca niente ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + RIGHT + "\"");
         r = write(cf);
-        require("invariato", r.optBoolean("success") && r.optBoolean("invariato"));
+        require("invariato", r.optBoolean("success") && r.optBoolean("unchanged"));
         require("nessuna operazione su Cloudflare: " + cf.operations, cf.operations.isEmpty());
 
         System.out.println("\n== un record con l'id vecchio: si aggiorna ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, OLD);   // senza virgolette, come a volte lo da' Cloudflare
         r = write(cf);
-        require("riuscito e aggiornato", r.optBoolean("success") && r.optBoolean("aggiornato"));
+        require("riuscito e aggiornato", r.optBoolean("success") && r.optBoolean("updated"));
         require("resta un record, quello giusto: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
 
         System.out.println("\n== due record, il primo gia' giusto (il caso che prima diceva \"invariato\") ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + RIGHT + "\"").put(NAME_PATTERN, "\"" + OLD + "\"");
         r = write(cf);
-        require("riuscito: " + r.optString("nota", r.optString("error")), r.optBoolean("success"));
-        require("NON dice invariato", !r.optBoolean("invariato"));
+        require("riuscito: " + r.optString("note", r.optString("error")), r.optBoolean("success"));
+        require("NON dice invariato", !r.optBoolean("unchanged"));
         require("resta un record solo, quello giusto: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
         require("toglie solo il vecchio, senza aggiornare niente: " + cf.operations,
                 cf.operations.equals(List.of("togli r2")));
@@ -168,7 +168,7 @@ public class MtaStsRecordTest {
         System.out.println("\n== tre record, uno scritto in maiuscolo, e TXT che non c'entrano ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + OLD + "\"").put(NAME_PATTERN, "\"V=STSV1; id=9\"")
                 .put(NAME_PATTERN, "\"google-site-verification=abc\"").put(NAME_PATTERN, "\"" + RIGHT + "\"")
-                .put("domain-d.test", "\"v=spf1 mx -all\"").put("_mta-sts.altro.it", "\"" + OLD + "\"");
+                .put("domain-d.test", "\"v=spf1 mx -all\"").put("_mta-sts.other.it", "\"" + OLD + "\"");
         r = write(cf);
         require("riuscito, con un record solo e giusto: " + cf.mtaSts(),
                 r.optBoolean("success") && cf.mtaSts().equals(List.of(RIGHT)));
@@ -210,7 +210,7 @@ public class MtaStsRecordTest {
         String oldLine = NAME_PATTERN + ".\t3498\tIN\tTXT\t\"" + OLD + "\"\n";
         java.util.function.Function<String, JSONObject> answers = d -> new JSONObject().put("ok", true);
         java.util.function.Function<String, JSONObject> silent =
-                d -> new JSONObject().put("ok", false).put("errore", "526 (finto).");
+                d -> new JSONObject().put("ok", false).put("error", "526 (finto).");
         DnsRecordsGenerator.DnsCheck c = DnsRecordsGenerator.mtaStsCheck("domain-d.test",
                 org.mail_panel.system.MtaStsSetup.parseTxt(0, head + rightLine), answers);
         require("un record e la politica che risponde: verde (" + c.message + ")", c.passed);

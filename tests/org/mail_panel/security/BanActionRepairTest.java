@@ -27,7 +27,7 @@ public class BanActionRepairTest {
     public static void main(String[] args) {
         // --- Il caso vero: sezione senza azione, come sul server ---
         BanActionRepair.Outcome e = BanActionRepair.withPfAction(REAL, "mail-panel-auth");
-        real("sezione senza azione: modificata", e.type == BanActionRepair.Outcome.Kind.MODIFICATO);
+        real("sezione senza azione: modificata", e.type == BanActionRepair.Outcome.Kind.MODIFIED);
         real("azione pf inserita", e.content.contains("action   = pf[name=mail-panel-auth, port=\"0:65535\"]"));
         // Non basta che ci sia "pf": senza una porta l'azione usa il valore predefinito
         // "any port $port", e con la porta vuota pf rifiuta la regola lasciando la tabella senza
@@ -52,19 +52,19 @@ public class BanActionRepairTest {
 
         // --- Applicarlo due volte non deve aggiungerne due ---
         BanActionRepair.Outcome bis = BanActionRepair.withPfAction(e.content, "mail-panel-auth");
-        real("seconda passata: gia' a posto", bis.type == BanActionRepair.Outcome.Kind.GIA_A_POSTO);
+        real("seconda passata: gia' a posto", bis.type == BanActionRepair.Outcome.Kind.ALREADY_IN_PLACE);
 
         // --- Un'azione iptables va sostituita, non affiancata ---
         String ipt = REAL + "action   = iptables-multiport[name=x, port=\"http\"]\n";
         BanActionRepair.Outcome s = BanActionRepair.withPfAction(ipt, "mail-panel-auth");
-        real("iptables: sostituita", s.type == BanActionRepair.Outcome.Kind.MODIFICATO);
+        real("iptables: sostituita", s.type == BanActionRepair.Outcome.Kind.MODIFIED);
         real("iptables: sparito", !s.content.contains("iptables"));
         same("una sola azione", 1, count(s.content, "action   = pf"));
 
         // banaction e' l'altro nome della stessa cosa e va trattato uguale.
         BanActionRepair.Outcome ba = BanActionRepair.withPfAction(
             REAL + "banaction = iptables-allports\n", "mail-panel-auth");
-        real("banaction: sostituita", ba.type == BanActionRepair.Outcome.Kind.MODIFICATO);
+        real("banaction: sostituita", ba.type == BanActionRepair.Outcome.Kind.MODIFIED);
         real("banaction: iptables sparito", !ba.content.contains("iptables"));
 
         // --- Un segnaposto non risolto non e' "gia' a posto" ---
@@ -73,14 +73,14 @@ public class BanActionRepairTest {
         BanActionRepair.Outcome ph = BanActionRepair.withPfAction(
             REAL + "action   = pf[name=mail-panel-auth, actiontype=<allports>]\n", "mail-panel-auth");
         real("segnaposto nel valore: da riscrivere",
-            ph.type == BanActionRepair.Outcome.Kind.MODIFICATO);
+            ph.type == BanActionRepair.Outcome.Kind.MODIFIED);
         real("segnaposto sostituito col valore letterale",
             ph.content.contains("port=\"0:65535\"") && !ph.content.contains("<allports>"));
         // Ma la forma gia' corretta non si tocca: riscriverla a ogni passaggio farebbe ricaricare
         // fail2ban senza motivo, e un rimedio che agisce sempre non si distingue da un difetto.
         real("forma corretta lasciata stare",
             BanActionRepair.withPfAction(REAL + "action   = pf[name=mail-panel-auth, port=\"0:65535\"]\n",
-                "mail-panel-auth").type == BanActionRepair.Outcome.Kind.GIA_A_POSTO);
+                "mail-panel-auth").type == BanActionRepair.Outcome.Kind.ALREADY_IN_PLACE);
 
         // --- La forma che fail2ban rifiuta va riscritta, non promossa ---
         // "pf[name=x, actiontype=any]" comincia con "pf[" e non contiene segnaposto: un
@@ -89,30 +89,30 @@ public class BanActionRepairTest {
         BanActionRepair.Outcome at = BanActionRepair.withPfAction(
             REAL + "action   = pf[name=mail-panel-auth, actiontype=any]\n", "mail-panel-auth");
         real("actiontype senza porta: da riscrivere",
-            at.type == BanActionRepair.Outcome.Kind.MODIFICATO);
+            at.type == BanActionRepair.Outcome.Kind.MODIFIED);
         real("riscritta con la porta e senza actiontype",
             at.content.contains("port=\"0:65535\"") && !at.content.contains("actiontype"));
         // Una porta scelta da chi amministra NON si tocca: e' una configurazione, non un guasto.
         real("porta personalizzata rispettata",
             BanActionRepair.withPfAction(REAL + "action   = pf[name=mail-panel-auth, port=\"smtp,imaps\"]\n",
-                "mail-panel-auth").type == BanActionRepair.Outcome.Kind.GIA_A_POSTO);
+                "mail-panel-auth").type == BanActionRepair.Outcome.Kind.ALREADY_IN_PLACE);
 
         // --- Il caso che NON si deve provare a riparare ---
         String multi = REAL + "action   = iptables-multiport[name=x]\n         sendmail[dest=root]\n";
         BanActionRepair.Outcome m = BanActionRepair.withPfAction(multi, "mail-panel-auth");
-        real("azione su piu' righe: si ferma", m.type == BanActionRepair.Outcome.Kind.DA_GUARDARE);
+        real("azione su piu' righe: si ferma", m.type == BanActionRepair.Outcome.Kind.TO_REVIEW);
         real("azione su piu' righe: niente contenuto scritto", m.content == null);
         real("azione su piu' righe: dice dove guardare", m.reason != null && m.reason.contains("riga"));
 
         // --- Sezione assente: non si inventa niente ---
         real("sezione assente",
             BanActionRepair.withPfAction("[altra]\nenabled = true\n", "mail-panel-auth").type
-                == BanActionRepair.Outcome.Kind.ASSENTE);
+                == BanActionRepair.Outcome.Kind.ABSENT);
 
         // --- Il rischio peggiore: scrivere nella sezione di un'altra jail ---
         String due = REAL + "\n[sshd]\nenabled  = true\nmaxretry = 3\n";
         BanActionRepair.Outcome d = BanActionRepair.withPfAction(due, "mail-panel-auth");
-        real("due sezioni: modificata", d.type == BanActionRepair.Outcome.Kind.MODIFICATO);
+        real("due sezioni: modificata", d.type == BanActionRepair.Outcome.Kind.MODIFIED);
         String sshd = d.content.substring(d.content.indexOf("[sshd]"));
         same("la sezione sshd e' intatta", "[sshd]\nenabled  = true\nmaxretry = 3\n", sshd);
         real("l'azione sta PRIMA di [sshd]",

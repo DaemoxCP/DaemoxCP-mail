@@ -1916,25 +1916,25 @@ public class Fail2banManager {
                 c.jails.add(j);
                 continue;
             }
-            j.tabella = b.tabella;
+            j.table = b.table;
 
             // Si prova dove la tabella puo' stare, e si tiene il posto dove ha risposto. Cosi'
             // "non esiste" lo si dice solo dopo aver guardato in tutti i posti sensati.
             java.util.List<String> candidates = new ArrayList<>();
-            if (b.ancora != null) candidates.add(b.ancora);
-            if (b.stillLikely != null && !b.stillLikely.equals(b.ancora)) candidates.add(b.stillLikely);
+            if (b.anchor != null) candidates.add(b.anchor);
+            if (b.stillLikely != null && !b.stillLikely.equals(b.anchor)) candidates.add(b.stillLikely);
             candidates.add(null);
 
             TableReading t = null;
             String stillUsed = null;
             for (String cand : candidates) {
-                TableReading test = addressesInPfTable(cand, b.tabella);
+                TableReading test = addressesInPfTable(cand, b.table);
                 if (test.read && !test.missing) { t = test; stillUsed = cand; break; }
                 if (t == null) { t = test; stillUsed = cand; }   // il primo esito, se nessuno trova
             }
-            j.ancora = stillUsed == null ? I18n.tr("server.f2bm.mainRuleset") : stillUsed;
+            j.anchor = stillUsed == null ? I18n.tr("server.f2bm.mainRuleset") : stillUsed;
             if (!t.read) {
-                j.note = I18n.tr("server.f2bm.tableUnreadable", java.util.Map.of("t", String.valueOf(b.tabella))) + (t.error.isEmpty() ? "" : " (" + t.error + ")");
+                j.note = I18n.tr("server.f2bm.tableUnreadable", java.util.Map.of("t", String.valueOf(b.table))) + (t.error.isEmpty() ? "" : " (" + t.error + ")");
                 c.jails.add(j);
                 continue;
             }
@@ -1951,7 +1951,7 @@ public class Fail2banManager {
                 j.ruleVerified = false;
             } else {
                 j.ruleVerified = true;
-                j.rulePresent = rules.contains(b.tabella);
+                j.rulePresent = rules.contains(b.table);
             }
             j.inFirewall.addAll(t.addresses);
             for (String ip : j.believedBanned) if (!j.inFirewall.contains(ip)) j.soloInFail2ban.add(ip);
@@ -1966,15 +1966,15 @@ public class Fail2banManager {
      * confronto: sono identiche per tutte le jail che condividono l'ancora, e rileggerle a ogni
      * jail vorrebbe dire eseguire pfctl sette volte per avere sette volte lo stesso testo.
      */
-    private String rulesOf(String ancora, PfComparison memoria) {
-        String key = ancora == null ? "" : ancora;
+    private String rulesOf(String anchor, PfComparison memoria) {
+        String key = anchor == null ? "" : anchor;
         String already = memoria.rules.get(key);
         if (already != null) return already;
         String text = null;   // null = non letto. Diverso da "letto e non contiene niente".
         try {
             java.util.List<String> argv = new ArrayList<>();
             argv.add("/sbin/pfctl");
-            if (ancora != null) { argv.add("-a"); argv.add(ancora); }
+            if (anchor != null) { argv.add("-a"); argv.add(anchor); }
             argv.add("-sr");
             org.mail_panel.util.Shell.Result r = org.mail_panel.util.Shell.run(
                 java.time.Duration.ofSeconds(20), argv.toArray(new String[0]));
@@ -2040,13 +2040,13 @@ public class Fail2banManager {
     }
 
     /** Il contenuto di una tabella pf. Una tabella assente non e' un errore: e' una risposta. */
-    private TableReading addressesInPfTable(String ancora, String tabella) {
+    private TableReading addressesInPfTable(String anchor, String table) {
         TableReading t = new TableReading();
         try {
             java.util.List<String> argv = new ArrayList<>();
             argv.add("/sbin/pfctl");
-            if (ancora != null) { argv.add("-a"); argv.add(ancora); }
-            argv.add("-t"); argv.add(tabella);
+            if (anchor != null) { argv.add("-a"); argv.add(anchor); }
+            argv.add("-t"); argv.add(table);
             argv.add("-T"); argv.add("show");
             org.mail_panel.util.Shell.Result r = org.mail_panel.util.Shell.run(
                 java.time.Duration.ofSeconds(20), argv.toArray(new String[0]));
@@ -2101,10 +2101,10 @@ public class Fail2banManager {
         java.util.regex.Matcher mt = Pattern.compile("-t\\s+(\\S+)").matcher(cmd);
         if (!mt.find()) return null;
         PfTarget b = new PfTarget();
-        b.tabella = mt.group(1);
+        b.table = mt.group(1);
 
         java.util.regex.Matcher ma = Pattern.compile("-a\\s+(\\S+)").matcher(cmd);
-        if (ma.find()) { b.ancora = ma.group(1); return b; }
+        if (ma.find()) { b.anchor = ma.group(1); return b; }
 
         // Nessun "-a" nel testo non vuol dire nessuna ancora. Il file dell'azione definisce
         //     pfctl = pfctl -a f2b/<name>
@@ -2117,16 +2117,16 @@ public class Fail2banManager {
         // l'ancora "f2b/<name>", quindi condividono <name>. Non e' una convenzione indovinata,
         // e' la lettura delle due righe che la compongono. Resta comunque un candidato da
         // provare, non una certezza: chi legge prova e guarda se la tabella risponde.
-        int dash = b.tabella.indexOf('-');
-        if (dash > 0 && dash < b.tabella.length() - 1)
-            b.stillLikely = "f2b/" + b.tabella.substring(dash + 1);
+        int dash = b.table.indexOf('-');
+        if (dash > 0 && dash < b.table.length() - 1)
+            b.stillLikely = "f2b/" + b.table.substring(dash + 1);
         return b;
     }
 
     static class PfTarget {
-        String ancora;          // scritta nel comando: certa
+        String anchor;          // scritta nel comando: certa
         String stillLikely; // ricavata dalle definizioni dell'azione: da provare
-        String tabella;
+        String table;
     }
 
     private static class TableReading {
@@ -2186,7 +2186,7 @@ public class Fail2banManager {
     }
 
     public static class JailPf {
-        public String jail = "", ancora = "", tabella = "", note = "";
+        public String jail = "", anchor = "", table = "", note = "";
         public boolean read, missingTable;
         /** Esiste una regola pf che legge questa tabella? Senza, la tabella non blocca nulla. */
         public boolean rulePresent;

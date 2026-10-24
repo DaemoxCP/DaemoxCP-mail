@@ -783,7 +783,7 @@ final class InstallSideEffects {
         Set<String> r = new TreeSet<>();
         JSONArray changes = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; changes != null && i < changes.length(); i++) {
-            String n = changes.getJSONObject(i).optString("nome");
+            String n = changes.getJSONObject(i).optString("name");
             if (!n.isEmpty()) r.add(n);
         }
         for (int i = 0; outsidePlan != null && i < outsidePlan.length(); i++) {

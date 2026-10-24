@@ -65,8 +65,8 @@ public class PackagePlanTest {
         real("kafka da solo: measured", p.getBoolean("measured"));
         JSONObject k = p.getJSONArray("changes").getJSONObject(0);
         real("kafka da solo: 4.3.0 -> 4.3.1",
-            "aggiorna".equals(k.getString("tipo")) && "kafka".equals(k.getString("nome"))
-            && "4.3.0".equals(k.getString("da")) && "4.3.1".equals(k.getString("a")));
+            "aggiorna".equals(k.getString("type")) && "kafka".equals(k.getString("name"))
+            && "4.3.0".equals(k.getString("from")) && "4.3.1".equals(k.getString("to")));
         real("kafka da solo: non ancora vulnerabile", !k.getBoolean("stillVulnerable"));
 
         String large = String.join("\n",
@@ -95,15 +95,15 @@ public class PackagePlanTest {
         p = PackagePlan.readPlan(large);
         real("piano grande: measured e con 5 changes", p.getBoolean("measured") && p.getJSONArray("changes").length() == 5);
         real("piano grande: la rimozione ha nome, versione e motivo",
-            find(p, "php84-pecl-rdkafka").getString("tipo").equals("rimuove")
-            && find(p, "php84-pecl-rdkafka").getString("da").equals("6.0.3_1")
+            find(p, "php84-pecl-rdkafka").getString("type").equals("rimuove")
+            && find(p, "php84-pecl-rdkafka").getString("from").equals("6.0.3_1")
             && find(p, "php84-pecl-rdkafka").getString("reason").startsWith("conflicts with"));
-        real("piano grande: l'installazione nuova", "10.45".equals(find(p, "pcre2").getString("a")));
+        real("piano grande: l'installazione nuova", "10.45".equals(find(p, "pcre2").getString("to")));
         real("piano grande: la reinstallazione separa nome e versione",
-            "8.4.19".equals(find(p, "php84").getString("da")) && find(p, "php84").getString("reason").contains("pcre2"));
-        real("piano grande: nginx con l'epoch", "1.30.5,3".equals(find(p, "nginx").getString("a")));
+            "8.4.19".equals(find(p, "php84").getString("from")) && find(p, "php84").getString("reason").contains("pcre2"));
+        real("piano grande: nginx con l'epoch", "1.30.5,3".equals(find(p, "nginx").getString("to")));
         real("piano grande: openssl ancora vulnerabile dopo l'aggiornamento",
-            find(p, "openssl35").getBoolean("stillVulnerable") && "3.5.3".equals(find(p, "openssl35").getString("a")));
+            find(p, "openssl35").getBoolean("stillVulnerable") && "3.5.3".equals(find(p, "openssl35").getString("to")));
 
         p = PackagePlan.readPlan(String.join("\n",
             "Installed packages LOCKED:",
@@ -116,8 +116,8 @@ public class PackagePlanTest {
         real("protetto nel piano: measured", p.getBoolean("measured"));
         JSONObject b = p.getJSONArray("lockedPackages").getJSONObject(0);
         real("protetto nel piano: nome, versione e dove andrebbe",
-            "openjdk21".equals(b.getString("nome")) && "21.0.8+9.1".equals(b.getString("versione"))
-            && "21.0.9+10.1".equals(b.getString("verso")));
+            "openjdk21".equals(b.getString("name")) && "21.0.8+9.1".equals(b.getString("version"))
+            && "21.0.9+10.1".equals(b.getString("destination")));
 
         p = PackagePlan.readPlan(String.join("\n",
             "Checking integrity... done (0 conflicting)",
@@ -126,13 +126,13 @@ public class PackagePlanTest {
             "Your packages are up to date."));
         real("protetto come evento (pkg piu' vecchio): il nome con i trattini",
             p.getJSONArray("lockedPackages").length() == 1
-            && "php84-pecl-rdkafka".equals(p.getJSONArray("lockedPackages").getJSONObject(0).getString("nome")));
+            && "php84-pecl-rdkafka".equals(p.getJSONArray("lockedPackages").getJSONObject(0).getString("name")));
 
         p = PackagePlan.readPlan("Checking for upgrades (1 candidates): 100%\nYour packages are up to date.");
         real("niente da fare", p.getBoolean("measured") && p.getBoolean("nothingToDo") && p.getJSONArray("changes").isEmpty());
 
         p = PackagePlan.readPlan("pkg: No packages available to upgrade matching 'kafka' have been found in the repositories");
-        real("errore di pkg riportato, non taciuto", p.getJSONArray("erroriPkg").length() == 1);
+        real("errore di pkg riportato, non taciuto", p.getJSONArray("pkgErrors").length() == 1);
 
         p = PackagePlan.readPlan(String.join("\n",
             "Installed packages to be UPGRADED:",
@@ -153,7 +153,7 @@ public class PackagePlanTest {
             "\tkafka 4.3.0 4.3.1",
             "",
             "Number of packages to be upgraded: 1"));
-        real("riga illeggibile: non measured", !p.getBoolean("measured") && p.getJSONArray("illeggibili").length() == 1);
+        real("riga illeggibile: non measured", !p.getBoolean("measured") && p.getJSONArray("unreadable").length() == 1);
         p = PackagePlan.readPlan(String.join("\n",
             "Installed packages to be UPGRADED:",
             "\tkafka: 4.3.0 -> 4.3.1"));
@@ -296,14 +296,14 @@ public class PackagePlanTest {
         // pkg si aggiorna da solo prima di tutto, ma con -n non lo dice: il piano lo deve dire lui.
         JSONObject first = p.getJSONArray("changes").getJSONObject(0);
         real("simulazione: pkg che aggiorna se stesso e' in testa al piano",
-            "pkg".equals(first.getString("nome")) && "2.1.0".equals(first.getString("da")) && "2.2.0".equals(first.getString("a")));
+            "pkg".equals(first.getString("name")) && "2.1.0".equals(first.getString("from")) && "2.2.0".equals(first.getString("to")));
         real("simulazione: runnable e con fingerprint", p.getBoolean("runnable") && p.getString("signature").length() == 16);
         real("simulazione: il database VERO e' ancora protetto",
             Files.exists(locked.resolve("kafka")) && Files.exists(locked.resolve("openjdk21")));
         real("simulazione: la copia e' stata cancellata", remainingCopies() == copiesBefore);
 
         p = PackagePlan.planFor(List.of("kafka"), protectedNames,
-                x -> x.getString("nome").equals("openjdk21") && x.getString("verso").equals("21.0.9+10.1")
+                x -> x.getString("name").equals("openjdk21") && x.getString("destination").equals("21.0.9+10.1")
                      ? "e' il JDK su cui gira il pannello" : null);
         real("simulazione: il JDK del pannello resta un impedimento con il suo motivo",
             p.getJSONArray("blockers").length() == 1
@@ -418,7 +418,7 @@ public class PackagePlanTest {
 
     private static JSONObject find(JSONObject plan, String name) {
         JSONArray c = plan.getJSONArray("changes");
-        for (int i = 0; i < c.length(); i++) if (name.equals(c.getJSONObject(i).getString("nome"))) return c.getJSONObject(i);
+        for (int i = 0; i < c.length(); i++) if (name.equals(c.getJSONObject(i).getString("name"))) return c.getJSONObject(i);
         return null;
     }
 

@@ -44,11 +44,11 @@ public class HeldUpdatesReportTest {
         catalog.put("libzip", "1.12.1");                     // non e' dello stack: non c'entra
 
         JSONObject c = UpdateManager.countUpdates(lines, catalog);
-        check("conta i pacchetti dello stack", c.getInt("totali") == 5);
-        check("conta i protetti", c.getInt("protetti") == 3);
-        check("conta gli aggiornamenti disponibili", c.getInt("conAggiornamento") == 3);
-        check("conta quanti di quelli il blocco trattiene", c.getInt("trattenuti") == 2);
-        String list = c.getJSONArray("daAggiornare").toString();
+        check("conta i pacchetti dello stack", c.getInt("totals") == 5);
+        check("conta i protetti", c.getInt("protectedNames") == 3);
+        check("conta gli aggiornamenti disponibili", c.getInt("withUpdate") == 3);
+        check("conta quanti di quelli il blocco trattiene", c.getInt("heldBack") == 2);
+        String list = c.getJSONArray("toUpdate").toString();
         check("l'elenco dice da quale versione a quale", list.contains("nginx 1.30.5_2,3 -> 1.30.6,3"));
         check("l'elenco segna i trattenuti", list.contains("nginx 1.30.5_2,3 -> 1.30.6,3 ("));
         check("e non segna chi non e' protetto", list.contains("redis 8.10.2 -> 8.11.0\"")
@@ -57,13 +57,13 @@ public class HeldUpdatesReportTest {
         // Stessa versione nel catalogo: non e' un aggiornamento.
         JSONObject same = UpdateManager.countUpdates(
                 new JSONArray().put(line("redis", "8.10.2", false)), Map.of("redis", "8.10.2"));
-        check("la stessa versione non e' un aggiornamento", same.getInt("conAggiornamento") == 0);
+        check("la stessa versione non e' un aggiornamento", same.getInt("withUpdate") == 0);
 
         // Catalogo vuoto (pkg version non ha risposto): zero, e zero protetti trattenuti.
         JSONObject empty = UpdateManager.countUpdates(lines, Map.of());
         check("senza catalogo non si inventa niente",
-             empty.getInt("conAggiornamento") == 0 && empty.getInt("trattenuti") == 0);
-        check("ma i pacchetti si contano comunque", empty.getInt("totali") == 5);
+             empty.getInt("withUpdate") == 0 && empty.getInt("heldBack") == 0);
+        check("ma i pacchetti si contano comunque", empty.getInt("totals") == 5);
 
         // Il difetto, come caso di prova: una riga con le chiavi SBAGLIATE non conta niente.
         // Serve a dire perche' lo strato 2 esiste: qui dentro il conto e' giusto e il
@@ -73,7 +73,7 @@ public class HeldUpdatesReportTest {
                 .put("locked", true));
         JSONObject old = UpdateManager.countUpdates(oldKeys, catalog);
         check("una riga senza la chiave 'version' non puo' dire la versione installata",
-             old.getJSONArray("daAggiornare").getString(0).startsWith("nginx  -> "));
+             old.getJSONArray("toUpdate").getString(0).startsWith("nginx  -> "));
 
         // ===== 2. Il contratto con packagesStatus =====
         if (!hasPkg()) {
@@ -96,7 +96,7 @@ public class HeldUpdatesReportTest {
                 // ===== 3. L'accordo con l'altra strada =====
                 JSONArray heldBackElsewhere = UpdateManager.lockedUpdates();
                 JSONObject report = UpdateManager.reportData(false);
-                int fromReport = report.optInt("pacchettiTrattenuti", -1);
+                int fromReport = report.optInt("heldBackPackages", -1);
                 if (heldBackElsewhere.length() == 0) {
                     skip("l'accordo fra il rapporto e lockedUpdates: su questa macchina nessun"
                         + " pacchetto protetto ha un aggiornamento, non c'e' niente da misurare");
@@ -105,11 +105,11 @@ public class HeldUpdatesReportTest {
                          + fromReport + " contro " + heldBackElsewhere.length() + ")",
                          fromReport == heldBackElsewhere.length());
                     check("e allora la riga 'con aggiornamento' non puo' essere zero",
-                         report.optInt("pacchettiConAggiornamento", 0) >= heldBackElsewhere.length());
+                         report.optInt("packagesWithUpdate", 0) >= heldBackElsewhere.length());
                     boolean said = false;
                     JSONArray toDo = report.optJSONArray("daFare");
                     for (int i = 0; toDo != null && i < toDo.length(); i++)
-                        if (toDo.getJSONObject(i).optString("cosa").contains("pkg upgrade")) said = true;
+                        if (toDo.getJSONObject(i).optString("what").contains("pkg upgrade")) said = true;
                     check("fra le cose da fare c'e' scritto che pkg upgrade li salta", said);
                 }
             }

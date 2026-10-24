@@ -91,7 +91,7 @@ public class DestructivePlanTest {
     }
 
     private static JSONObject change(String type, String name, String from, String a) {
-        return new JSONObject().put("tipo", type).put("nome", name).put("da", from).put("a", a);
+        return new JSONObject().put("type", type).put("name", name).put("from", from).put("to", a);
     }
 
     private static JSONObject plan(JSONObject... changeList) {

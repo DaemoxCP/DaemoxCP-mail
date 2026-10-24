@@ -109,7 +109,7 @@ public class StandardsWatch {
                 .build();
 
         for (String[] s : STANDARD) {
-            JSONObject o = new JSONObject().put("rfc", s[0]).put("governa", I18n.tr(s[1]));
+            JSONObject o = new JSONObject().put("rfc", s[0]).put("governs", I18n.tr(s[1]));
             try {
                 HttpRequest req = HttpRequest.newBuilder()
                         .uri(URI.create("https://www.rfc-editor.org/rfc/rfc" + s[0] + ".json"))
@@ -118,42 +118,42 @@ public class StandardsWatch {
                         .GET().build();
                 HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() != 200) {
-                    o.put("letto", false).put("problema", I18n.tr("server.watch.editorStatus", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
+                    o.put("read", false).put("problem", I18n.tr("server.watch.editorStatus", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
                     unread++; lines.put(o); continue;
                 }
                 JSONObject j = new JSONObject(resp.body());
-                o.put("letto", true).put("titolo", j.optString("title", ""))
-                 .put("stato", j.optString("status", ""));
+                o.put("read", true).put("title", j.optString("title", ""))
+                 .put("state", j.optString("status", ""));
 
                 List<String> obs = list(j.optJSONArray("obsoleted_by"));
                 List<String> upd = list(j.optJSONArray("updated_by"));
                 List<String> newObs = news(s[2], obs);
                 List<String> newUpd = news(s[3], upd);
 
-                o.put("sostituitoDa", new JSONArray(newObs));
-                o.put("aggiornatoDa", new JSONArray(newUpd));
+                o.put("replacedBy", new JSONArray(newObs));
+                o.put("updatedBy", new JSONArray(newUpd));
                 if (!newObs.isEmpty()) {
                     replaced++;
-                    o.put("gravita", 2).put("commento", I18n.tr("server.watch.obsoleted", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(describe(newObs)), "topic", String.valueOf(I18n.tr(s[1])))));
+                    o.put("severity", 2).put("comment", I18n.tr("server.watch.obsoleted", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(describe(newObs)), "topic", String.valueOf(I18n.tr(s[1])))));
                 } else if (!newUpd.isEmpty()) {
                     updated++;
-                    o.put("gravita", 1).put("commento", I18n.tr("server.watch.updated", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(describe(newUpd)), "topic", String.valueOf(I18n.tr(s[1])))));
+                    o.put("severity", 1).put("comment", I18n.tr("server.watch.updated", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(describe(newUpd)), "topic", String.valueOf(I18n.tr(s[1])))));
                 } else {
-                    o.put("gravita", 0).put("commento", I18n.tr("server.watch.nothingNew"));
+                    o.put("severity", 0).put("comment", I18n.tr("server.watch.nothingNew"));
                 }
             } catch (Exception e) {
                 // Un controllo che non e' riuscito non e' un "tutto a posto".
-                o.put("letto", false).put("gravita", 3)
-                 .put("problema", I18n.tr("server.watch.editorFailed", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
+                o.put("read", false).put("severity", 3)
+                 .put("problem", I18n.tr("server.watch.editorFailed", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
                 unread++;
             }
             lines.put(o);
         }
 
-        r.put("standard", lines).put("sostituiti", replaced)
-         .put("aggiornati", updated).put("nonLetti", unread);
-        r.put("fonte", "https://www.rfc-editor.org/rfc/rfcNNNN.json");
-        r.put("nota", replaced > 0
+        r.put("standard", lines).put("replaced", replaced)
+         .put("updated", updated).put("unread", unread);
+        r.put("source", "https://www.rfc-editor.org/rfc/rfcNNNN.json");
+        r.put("note", replaced > 0
                 ? (replaced == 1 ? I18n.tr("server.watch.sumObsoleted.one")
                                    : I18n.tr("server.watch.sumObsoleted.other", java.util.Map.of("n", String.valueOf(replaced))))
                 : updated > 0
@@ -185,8 +185,8 @@ public class StandardsWatch {
         if (a == null) return outside;
         for (int i = 0; i < a.length(); i++) {
             JSONObject o = a.getJSONObject(i);
-            int g = o.optInt("gravita", 0);
-            if (g == 1 || g == 2) outside.add(o.optString("commento"));
+            int g = o.optInt("severity", 0);
+            if (g == 1 || g == 2) outside.add(o.optString("comment"));
         }
         return outside;
     }
@@ -309,16 +309,16 @@ public class StandardsWatch {
                 return r.put("success", false)
                         .put("error", I18n.tr("server.watch.editorStatus", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
             String text = resp.body();
-            r.put("success", true).put("byte", text.length());
+            r.put("success", true).put("bytes", text.length());
 
             String changes = changeList(text);
             if (changes != null) {
-                r.put("tipo", "elenco").put("testo", changes)
-                 .put("nota", I18n.tr("server.watch.changeList"));
+                r.put("type", "elenco").put("text", changes)
+                 .put("note", I18n.tr("server.watch.changeList"));
                 // Incrocio con cio' che il pannello usa davvero.
                 List<String> touches = linesTouching(changes, identifiersOf(reference));
-                r.put("tiRiguarda", new JSONArray(touches));
-                r.put("notaIncrocio", touches.isEmpty()
+                r.put("concernsYou", new JSONArray(touches));
+                r.put("crossNote", touches.isEmpty()
                         ? I18n.tr("server.watch.crossNone")
                         : touches.size() == 1
                           ? I18n.tr("server.watch.crossSome.one")
@@ -328,8 +328,8 @@ public class StandardsWatch {
 
             String ab = abstractDi(text);
             if (ab != null)
-                return r.put("tipo", "abstract").put("testo", ab)
-                        .put("nota", I18n.tr("server.watch.abstract"));
+                return r.put("type", "abstract").put("text", ab)
+                        .put("note", I18n.tr("server.watch.abstract"));
 
             return r.put("success", false)
                     .put("error", I18n.tr("server.watch.noChangesNoAbstract"));

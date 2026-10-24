@@ -67,7 +67,9 @@ import java.util.stream.Stream;
  *              il parametro o la variabile dichiarata su quella riga
  *          type:org.mail_panel.system.PackageQueue$Turno Turn
  *              un tipo annidato, con i suoi costruttori (i tipi in un giro a parte)
- *        Le costanti di enum non si scelgono: il loro nome e' un valore che esce dal codice.
+ *          enum:org.mail_panel.system.SubmissionPort$Outcome#AGGIUNTA ADDED
+ *              una costante di enum; solo cosi', perche' il suo nome e' un valore che puo' uscire
+ *              dal codice (name(), valueOf()) e chi lo legge fuori va cambiato nello stesso passo.
  *        Un componente di record si sceglie come un campo (member:), e porta con se' il suo
  *        accessore implicito.
  */
@@ -376,6 +378,12 @@ public class JavaRename {
                                                 "ext:METHOD:" + canon + "." + m.getValue() + "[]");
                         }
                     }
+                } else if (sel.startsWith("enum:")) {
+                    // Una costante di enum, scelta apposta: il suo nome e' un valore che puo' uscire
+                    // dal codice (name(), valueOf()), e chi lo legge fuori va cambiato insieme.
+                    String[] cm = sel.substring("enum:".length()).split("#");
+                    if (cm.length == 2 && d.owner().equals(cm[0]) && d.name().equals(cm[1]) && d.kind().equals("enumconst"))
+                        chosen.add(d);
                 } else if (sel.startsWith("type:")) {
                     String bin = sel.substring("type:".length());
                     if (d.owner().equals(bin) && d.kind().equals("type")) {

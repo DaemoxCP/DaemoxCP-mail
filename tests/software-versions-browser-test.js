@@ -23,31 +23,31 @@ function vero(cosa, ok) {
 
 const richieste = [];
 const VERSIONI = {
-    success: true, letteAlle: '2026-10-03T14:00:05+02:00', branch: 'quarterly',
-    servizi: {
-        postfix: { chiave: 'postfix', nome: 'Postfix', ruolo: 'Server SMTP', installato: true, versione: '3.10.4', fonte: '/usr/local/sbin/postconf -h mail_version',
-            pacchetto: 'postfix-mysql-3.10.4,1', riavvio: true,
-            notaRiavvio: "Postfix e' partito il 28/09/2026 08:15, prima dell'installazione del pacchetto (02/10/2026 09:00): sta eseguendo la versione di prima. Riavvialo per usare quella installata." },
-        dovecot: { chiave: 'dovecot', nome: 'Dovecot', ruolo: 'IMAP', installato: true, versione: '2.3.21.1', fonte: '/usr/local/sbin/dovecot --version', pacchetto: 'dovecot-mysql-2.3.21.1_8' },
-        mysql: { chiave: 'mysql', nome: 'MySQL', ruolo: 'Database', installato: true, versione: '8.0.42', fonte: 'SELECT VERSION() sulla connessione del pannello',
-            inEsecuzione: true, pacchetto: 'mysql80-server-8.0.43', riavvio: true, installata: '8.0.43',
-            notaRiavvio: "MySQL in esecuzione e' la 8.0.42, quella installata la 8.0.43: riavvia MySQL per usare quella installata." },
-        rspamd: { chiave: 'rspamd', nome: 'Rspamd', ruolo: 'Antispam', installato: true, versione: '<img src=x onerror="window.iniettato=1">',
-            fonte: 'prova', pacchetto: 'rspamd-3.12.1' },
-        redis: { chiave: 'redis', nome: 'Redis', ruolo: 'Archivio', installato: false },
-        clamav: { chiave: 'clamav', nome: 'ClamAV', ruolo: 'Antivirus', installato: true, versione: '1.4.3', inEsecuzione: true, firme: '27780',
-            dettaglio: 'firme 27780 del 02/10/2026 08:24', pacchetto: 'clamav-1.4.3,1' },
-        roundcube: { chiave: 'roundcube', nome: 'Roundcube', ruolo: 'Webmail', installato: true, versione: '1.6.11', pacchetto: 'roundcube-php84-1.6.11,1' },
+    success: true, readAt: '2026-10-03T14:00:05+02:00', branch: 'quarterly',
+    services: {
+        postfix: { key: 'postfix', name: 'Postfix', role: 'Server SMTP', installed: true, version: '3.10.4', source: '/usr/local/sbin/postconf -h mail_version',
+            pkgName: 'postfix-mysql-3.10.4,1', restart: true,
+            restartNote: "Postfix e' partito il 28/09/2026 08:15, prima dell'installazione del pacchetto (02/10/2026 09:00): sta eseguendo la versione di prima. Riavvialo per usare quella installata." },
+        dovecot: { key: 'dovecot', name: 'Dovecot', role: 'IMAP', installed: true, version: '2.3.21.1', source: '/usr/local/sbin/dovecot --version', pkgName: 'dovecot-mysql-2.3.21.1_8' },
+        mysql: { key: 'mysql', name: 'MySQL', role: 'Database', installed: true, version: '8.0.42', source: 'SELECT VERSION() sulla connessione del pannello',
+            running: true, pkgName: 'mysql80-server-8.0.43', restart: true, installedVersion: '8.0.43',
+            restartNote: "MySQL in esecuzione e' la 8.0.42, quella installata la 8.0.43: riavvia MySQL per usare quella installata." },
+        rspamd: { key: 'rspamd', name: 'Rspamd', role: 'Antispam', installed: true, version: '<img src=x onerror="window.iniettato=1">',
+            source: 'prova', pkgName: 'rspamd-3.12.1' },
+        redis: { key: 'redis', name: 'Redis', role: 'Archivio', installed: false },
+        clamav: { key: 'clamav', name: 'ClamAV', role: 'Antivirus', installed: true, version: '1.4.3', running: true, signatures: '27780',
+            detail: 'firme 27780 del 02/10/2026 08:24', pkgName: 'clamav-1.4.3,1' },
+        roundcube: { key: 'roundcube', name: 'Roundcube', role: 'Webmail', installed: true, version: '1.6.11', pkgName: 'roundcube-php84-1.6.11,1' },
     },
-    altro: [
-        { chiave: 'freebsd', nome: 'FreeBSD', ruolo: 'Sistema operativo', installato: true, versione: '15.0-RELEASE-p3', dettaglio: 'kernel in esecuzione 15.0-RELEASE-p2',
-            riavvio: true, notaRiavvio: "Il kernel installato e' 15.0-RELEASE-p3, quello in esecuzione 15.0-RELEASE-p2: serve un riavvio del server." },
-        { chiave: 'openssl', nome: 'OpenSSL', ruolo: 'Libreria TLS del sistema base: la usano i pacchetti ufficiali', installato: true, versione: '3.5.1', dettaglio: 'rilasciata il 01/07/2025' },
-        { chiave: 'nginx', nome: 'nginx', ruolo: 'Web server: webmail, MTA-STS, configurazione automatica dei client', installato: true, versione: '1.28.0', pacchetto: 'nginx-1.28.0_3,3' },
-        { chiave: 'php', nome: 'PHP-FPM', ruolo: 'Esegue la webmail', installato: true, versione: '8.4.13', pacchetto: 'php84-8.4.13' },
-        { chiave: 'pigeonhole', nome: 'Pigeonhole', ruolo: 'Filtri Sieve e risposte automatiche', installato: false },
-        { chiave: 'java', nome: 'Java', ruolo: 'Esegue questo pannello', installato: true, versione: '25.0.1+8-1', inEsecuzione: true, pacchetto: 'openjdk25-25.0.1+8.1' },
-        { chiave: 'clamav', nome: 'ClamAV', ruolo: 'Antivirus', installato: true, versione: '1.4.3', avviso: 'Le firme hanno 19 giorni: freshclam non le sta aggiornando, e i virus nuovi passano.' },
+    other: [
+        { key: 'freebsd', name: 'FreeBSD', role: 'Sistema operativo', installed: true, version: '15.0-RELEASE-p3', detail: 'kernel in esecuzione 15.0-RELEASE-p2',
+            restart: true, restartNote: "Il kernel installato e' 15.0-RELEASE-p3, quello in esecuzione 15.0-RELEASE-p2: serve un riavvio del server." },
+        { key: 'openssl', name: 'OpenSSL', role: 'Libreria TLS del sistema base: la usano i pacchetti ufficiali', installed: true, version: '3.5.1', detail: 'rilasciata il 01/07/2025' },
+        { key: 'nginx', name: 'nginx', role: 'Web server: webmail, MTA-STS, configurazione automatica dei client', installed: true, version: '1.28.0', pkgName: 'nginx-1.28.0_3,3' },
+        { key: 'php', name: 'PHP-FPM', role: 'Esegue la webmail', installed: true, version: '8.4.13', pkgName: 'php84-8.4.13' },
+        { key: 'pigeonhole', name: 'Pigeonhole', role: 'Filtri Sieve e risposte automatiche', installed: false },
+        { key: 'java', name: 'Java', role: 'Esegue questo pannello', installed: true, version: '25.0.1+8-1', running: true, pkgName: 'openjdk25-25.0.1+8.1' },
+        { key: 'clamav', name: 'ClamAV', role: 'Antivirus', installed: true, version: '1.4.3', warning: 'Le firme hanno 19 giorni: freshclam non le sta aggiornando, e i virus nuovi passano.' },
     ],
 };
 // L'ultima riga di "altro" e' finta (ClamAV non sta li'): serve a vedere l'avviso in rosso.
@@ -71,12 +71,12 @@ async function servi(route) {
         return route.fulfill({ status: 200, contentType: tipo, body: fs.readFileSync(f) });
     }
     const corpo = req.postData() ? JSON.parse(req.postData()) : null;
-    richieste.push({ metodo: req.method(), percorso: p + url.search, corpo });
+    richieste.push({ metodo: req.method(), path: p + url.search, body: corpo });
     if (p === '/api/status') return json(route, { postfix: true, dovecot: true, mysql: true, rspamd: true, redis: false, clamav: true, roundcube: true,
         domains: 2, mailboxes: 5, aliases: 3, mail_hostname: '', server_ip: '' });
     if (p === '/api/versioni') return json(route, VERSIONI);
     if (p === '/api/service') return json(route, { success: true });
-    if (p === '/api/updates') return json(route, { success: true, attivo: true, reason: 'Il pannello riparte da solo.' });
+    if (p === '/api/updates') return json(route, { success: true, active: true, reason: 'Il pannello riparte da solo.' });
     return json(route, { success: true });
 }
 
@@ -134,16 +134,16 @@ async function servi(route) {
     await page.click('button[aria-label="Ferma Postfix"]');
     await page.waitForTimeout(300);
     vero('Ferma Postfix: chiede, e dice cosa succede — ' + domanda, domanda.startsWith('Fermare Postfix?') && domanda.includes('smette di ricevere'));
-    vero('annullato: nessuna richiesta', !richieste.slice(prima).some(r => r.percorso === '/api/service'));
+    vero('annullato: nessuna richiesta', !richieste.slice(prima).some(r => r.path === '/api/service'));
     const dialoghi = [];
     page.on('dialog', d => { dialoghi.push(d.message()); d.accept(); });
     await page.click('button[aria-label="Ferma Postfix"]');
     await page.waitForFunction(() => true);
     await page.waitForTimeout(500);
-    const post = richieste.find(r => r.percorso === '/api/service');
-    vero('confermato: POST con servizio, azione e token CSRF', post && post.corpo.service === 'postfix' && post.corpo.action === 'stop'
-        && post.corpo.csrf_token === 'csrf-prova');
-    vero('dopo il comando si rileggono le versioni subito (?fresco=1)', richieste.some(r => r.percorso === '/api/versioni?fresco=1'));
+    const post = richieste.find(r => r.path === '/api/service');
+    vero('confermato: POST con servizio, azione e token CSRF', post && post.body.service === 'postfix' && post.body.action === 'stop'
+        && post.body.csrf_token === 'csrf-prova');
+    vero('dopo il comando si rileggono le versioni subito (?fresco=1)', richieste.some(r => r.path === '/api/versioni?fresco=1'));
     dialoghi.length = 0;
     await page.click('button[aria-label="Riavvia Postfix"]');
     await page.waitForTimeout(400);
@@ -152,13 +152,13 @@ async function servi(route) {
     await page.click('button[aria-label="Riavvia MySQL"]');
     await page.waitForTimeout(400);
     vero('Riavvia MySQL: chiede prima — ' + dialoghi[0], dialoghi.length === 2 && dialoghi[0].startsWith('Riavviare MySQL?'));
-    const mysql = richieste.filter(r => r.percorso === '/api/service').pop();
-    vero('e manda mysql-server', mysql.corpo.service === 'mysql-server' && mysql.corpo.action === 'restart');
-    const n = richieste.filter(r => r.percorso === '/api/versioni?fresco=1').length;
+    const mysql = richieste.filter(r => r.path === '/api/service').pop();
+    vero('e manda mysql-server', mysql.body.service === 'mysql-server' && mysql.body.action === 'restart');
+    const n = richieste.filter(r => r.path === '/api/versioni?fresco=1').length;
     await page.click('#versioniRileggi');
     await page.waitForFunction(k => true, n);
     await page.waitForTimeout(300);
-    vero('"Rileggi le versioni" chiede una lettura fresca', richieste.filter(r => r.percorso === '/api/versioni?fresco=1').length === n + 1);
+    vero('"Rileggi le versioni" chiede una lettura fresca', richieste.filter(r => r.path === '/api/versioni?fresco=1').length === n + 1);
 
     console.log('\n== Tema scuro e telefono ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));

@@ -1996,7 +1996,7 @@ public class SSLMailServer {
         regenerateMailConfigs();
         String note = afterAliases(alias.source, alias.domainId);
         if (note != null)
-            r.put("nota", I18n.tr(newState ? (active ? "server.alias.reactivated" : "server.alias.deactivated") : "server.alias.modified") + " " + note);
+            r.put("note", I18n.tr(newState ? (active ? "server.alias.reactivated" : "server.alias.deactivated") : "server.alias.modified") + " " + note);
         return r.put("success", true);
     }
 
@@ -2090,7 +2090,7 @@ public class SSLMailServer {
                                 regenerateMailConfigs();
                                 // Se la sorgente e' anche una casella, da ora la sua posta va solo alle destinazioni.
                                 String note = afterAliases(source, domain.id);
-                                if (note != null) response.put("nota", I18n.tr("server.alias.created") + " " + note);
+                                if (note != null) response.put("note", I18n.tr("server.alias.created") + " " + note);
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.alias.alreadyExists"));
@@ -2135,7 +2135,7 @@ public class SSLMailServer {
                                     via != null ? via.source + " -> " + via.destination + " (ID " + id + ")" : "Alias ID: " + id);
                             regenerateMailConfigs();
                             String note = via != null ? afterAliases(via.source, via.domainId) : null;
-                            if (note != null) response.put("nota", I18n.tr("server.alias.deleted") + " " + note);
+                            if (note != null) response.put("note", I18n.tr("server.alias.deleted") + " " + note);
                         }
                     } else {
                         response.put("success", false);
@@ -2428,7 +2428,7 @@ public class SSLMailServer {
         String no = org.mail_panel.system.AddressTransform.noMailboxReason(s);
         if (no != null) return r.put("success", false).put("error", no);
         if (!org.mail_panel.system.AddressTransform.fingerprint(s).equals(req.optString("fingerprint", "")))
-            return r.put("success", false).put("cambiato", true).put("error",
+            return r.put("success", false).put("changed", true).put("error",
                     I18n.tr("server.convert.changedToMailbox"));
         String password = req.optString("password", "");
         if (!SecurityUtils.isValidMailboxPassword(password))
@@ -2438,9 +2438,9 @@ public class SSLMailServer {
             return r.put("success", false).put("error", I18n.tr("server.convert.badName"));
         int quota = req.opt("quota_mb") instanceof Number n ? n.intValue() : 1024;
         if (quota < 0 || quota > 1_048_576) return r.put("success", false).put("error", I18n.tr("server.convert.badQuota"));
-        if (!(req.opt("tieni_inoltri") instanceof Boolean keep))
+        if (!(req.opt("keep_forwards") instanceof Boolean keep))
             return r.put("success", false).put("error", I18n.tr("server.convert.keepMissing"));
-        String old = req.optString("posta_vecchia", "");
+        String old = req.optString("old_mail", "");
         boolean archive = false;
         if (s.mail().present()) {
             if (!old.equals("ritrova") && !old.equals("archivia"))
@@ -2491,15 +2491,15 @@ public class SSLMailServer {
         MailDatabase.Mailbox m = id > 0 ? Main.mailDatabase.getMailbox(id) : null;
         if (m == null) return r.put("success", false).put("error", I18n.tr("server.mailbox.notFound"));
         String address = m.email.toLowerCase(java.util.Locale.ROOT);
-        if (!address.equals(req.optString("conferma", "").trim().toLowerCase(java.util.Locale.ROOT)))
+        if (!address.equals(req.optString("confirmation", "").trim().toLowerCase(java.util.Locale.ROOT)))
             return r.put("success", false).put("error", I18n.tr("server.convert.typeAddress", Map.of("address", address)));
         org.mail_panel.system.AddressTransform.AddressState s = org.mail_panel.system.AddressTransform.state(Main.mailDatabase, address);
         if (!org.mail_panel.system.AddressTransform.fingerprint(s).equals(req.optString("fingerprint", "")))
-            return r.put("success", false).put("cambiato", true).put("error",
+            return r.put("success", false).put("changed", true).put("error",
                     I18n.tr("server.convert.changedToAlias"));
         List<String> destinations;
         try {
-            destinations = org.mail_panel.system.AddressTransform.destinations(s, req.optJSONArray("destinazioni"),
+            destinations = org.mail_panel.system.AddressTransform.destinations(s, req.optJSONArray("destinations"),
                     org.mail_panel.system.AddressTransform.network(Main.mailDatabase));
         } catch (IllegalArgumentException e) {
             return r.put("success", false).put("error", e.getMessage());
@@ -3352,8 +3352,8 @@ public class SSLMailServer {
                         // Lo scheduler vive dentro questo server web: se il pannello non
                         // riparte da solo dopo un riavvio, i passi 3 e 4 restano fermi. La
                         // scheda deve poterlo DIRE, non lasciarlo scoprire.
-                        response.put("avvio_automatico",
-                            UpdateManager.autoStart().optBoolean("attivo", false));
+                        response.put("auto_start",
+                            UpdateManager.autoStart().optBoolean("active", false));
                         putTs(response, "started_at", info.startedAt);
                         if (info.activatedAt != null) {
                             putTs(response, "activated_at", info.activatedAt);
@@ -3496,8 +3496,8 @@ public class SSLMailServer {
                         // lo schedule resta inattivo" — proprio sotto al riquadro che diceva
                         // "account collegato: Pietro". Un dato che si legge dall'aria dipende
                         // dall'ordine di due richieste, e prima o poi quell'ordine cambia.
-                        response.put("avvio_automatico",
-                            UpdateManager.autoStart().optBoolean("attivo", false));
+                        response.put("auto_start",
+                            UpdateManager.autoStart().optBoolean("active", false));
                         try {
                             response.put("cloudflare_configured",
                                 dkimManager.getRotationInfo(domainId) != null
@@ -3637,7 +3637,7 @@ public class SSLMailServer {
                         recordJson.put("description", record.description);
                         recordJson.put("required", record.required);
                         if (record.checkType != null) recordJson.put("checkType", record.checkType);
-                        if (record.fullValue != null) recordJson.put("valoreCompleto", record.fullValue);
+                        if (record.fullValue != null) recordJson.put("fullValue", record.fullValue);
                         if (record.dnsZone != null) {
                             recordJson.put("dnsZone", record.dnsZone);
                         }
@@ -3674,7 +3674,7 @@ public class SSLMailServer {
                         checkJson.put("type", check.recordType);
                         checkJson.put("name", check.recordName);
                         checkJson.put("passed", check.passed);
-                        checkJson.put("informativo", check.informational);
+                        checkJson.put("informational", check.informational);
                         checkJson.put("message", check.message);
                         if (check.currentValue != null) {
                             checkJson.put("current_value", check.currentValue);
@@ -5117,10 +5117,10 @@ public class SSLMailServer {
                         jailJson.put("total_banned", jail.totalBanned);
                         jailJson.put("currently_failed", jail.currentlyFailed);
                         jailJson.put("total_failed", jail.totalFailed);
-                        jailJson.put("porte", jail.ports);
-                        jailJson.put("porta_dichiarata", jail.declaredPort);
-                        jailJson.put("ban_usa_la_porta", jail.banUsesPort);
-                        jailJson.put("comando_ban", jail.banCommand);
+                        jailJson.put("ports", jail.ports);
+                        jailJson.put("declared_port", jail.declaredPort);
+                        jailJson.put("ban_uses_port", jail.banUsesPort);
+                        jailJson.put("ban_command", jail.banCommand);
                         if (jail.logFile != null) jailJson.put("log", jail.logFile);
 
                         JSONArray bannedIps = new JSONArray();
@@ -5241,7 +5241,7 @@ public class SSLMailServer {
                     for (String ip : fileList) {
                         arr.put(new JSONObject()
                             .put("ip", ip)
-                            .put("in_runtime", runtimeSet.contains(ip)));
+                            .put("at_runtime", runtimeSet.contains(ip)));
                     }
                     response.put("success", true);
                     response.put("permabans", arr);
@@ -5300,8 +5300,8 @@ public class SSLMailServer {
                         Fail2banManager.FilterCheck c = fail2banManager.verifyFilter(jail);
                         response.put("success", true)
                                 .put("jail", c.jail).put("log", c.log)
-                                .put("verificato", c.verified).put("agganci", c.hooks)
-                                .put("righe_log", c.logLines2).put("messaggio", c.message)
+                                .put("verified", c.verified).put("hooks", c.hooks)
+                                .put("log_lines", c.logLines2).put("messageText", c.message)
                                 .put("output", c.output);
                     }
                     // Legge e basta: mette a confronto gli indirizzi che Fail2ban crede
@@ -5312,25 +5312,25 @@ public class SSLMailServer {
                         JSONArray jj = new JSONArray();
                         for (Fail2banManager.JailPf j : c.jails) {
                             jj.put(new JSONObject()
-                                .put("jail", j.jail).put("ancora", j.ancora).put("tabella", j.tabella)
-                                .put("letta", j.read).put("tabella_mancante", j.missingTable)
-                                .put("regola_presente", j.rulePresent)
-                                .put("nota", j.note)
-                                .put("creduti_bannati", new JSONArray(j.believedBanned))
-                                .put("nel_firewall", new JSONArray(j.inFirewall))
+                                .put("jail", j.jail).put("anchor", j.anchor).put("table", j.table)
+                                .put("read", j.read).put("missing_table", j.missingTable)
+                                .put("rule_present", j.rulePresent)
+                                .put("note", j.note)
+                                .put("believed_banned", new JSONArray(j.believedBanned))
+                                .put("in_firewall", new JSONArray(j.inFirewall))
                                 .put("solo_in_fail2ban", new JSONArray(j.soloInFail2ban))
                                 .put("solo_in_pf", new JSONArray(j.soloInPf))
-                                .put("comandi_ban", new JSONArray(j.banCommands))
-                                .put("uscita_azioni", j.actionsOutput)
+                                .put("ban_commands", new JSONArray(j.banCommands))
+                                .put("actions_output", j.actionsOutput)
                                 .put("log", j.logFail2ban)
-                                .put("sezioni", j.sections)
+                                .put("sections", j.sections)
                                 .put("dump", j.dump));
                         }
                         response.put("success", true).put("jails", jj)
-                                .put("non_applicati", c.totalNotApplied())
-                                .put("non_misurate", c.totalUnmeasured())
-                                .put("ban_non_verificati", c.unverifiedBans())
-                                .put("senza_regola", c.totalWithoutRule());
+                                .put("not_applied", c.totalNotApplied())
+                                .put("unmeasured", c.totalUnmeasured())
+                                .put("unverified_bans", c.unverifiedBans())
+                                .put("without_rule", c.totalWithoutRule());
                     }
                     case "ban" -> {
                         String ip = json.getString("ip");
@@ -5510,7 +5510,7 @@ public class SSLMailServer {
                         for (String ip : fileList) {
                             arr.put(new JSONObject()
                                 .put("ip", ip)
-                                .put("in_runtime", runtimeSet.contains(ip)));
+                                .put("at_runtime", runtimeSet.contains(ip)));
                         }
                         response.put("success", true);
                         response.put("permabans", arr);
@@ -7031,17 +7031,17 @@ public class SSLMailServer {
                 case "mysql_client_diag" -> response = UpdateManager.mysqlClientDiagnostics();
                 case "defaults_check" -> response = UpdateManager.defaultsConsistency();
                 case "branch_status" -> response = UpdateManager.branchStatus();
-                case "branch_preview" -> response = UpdateManager.branchPreview(req.optString("verso", ""));
+                case "branch_preview" -> response = UpdateManager.branchPreview(req.optString("destination", ""));
                 case "branch_change" -> {
                     // La conferma e' il nome del ramo scritto a mano, e l'fingerprint e' quella
                     // dell'anteprima: si cambia solo cio' che si e' visto.
-                    String verso = req.optString("verso", "");
-                    if (verso.isEmpty() || !verso.equals(req.optString("confirm", ""))) {
+                    String target = req.optString("destination", "");
+                    if (target.isEmpty() || !target.equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.updates.typeBranch"));
                         break;
                     }
-                    response = UpdateManager.startBranchChange(verso, req.optString("fingerprint", ""));
-                    logAudit("PKG_BRANCH_CHANGE", ip, "to " + verso + (response.optBoolean("success")
+                    response = UpdateManager.startBranchChange(target, req.optString("fingerprint", ""));
+                    logAudit("PKG_BRANCH_CHANGE", ip, "to " + target + (response.optBoolean("success")
                             ? " (started, job " + response.optString("jobId") + ")" : " (not started: " + response.optString("error") + ")"));
                 }
                 case "system_report" -> response = UpdateManager.systemReport();
@@ -7057,7 +7057,7 @@ public class SSLMailServer {
                         break;
                     }
                     logAudit("SERVER_REBOOT", ip, "requested from the panel");
-                    response = UpdateManager.restartServer(true, req.optInt("minuti", 1));
+                    response = UpdateManager.restartServer(true, req.optInt("minutes", 1));
                 }
                 case "rc_stato" -> response = UpdateManager.autoStart();
                 case "riepilogo_sistema" -> response = UpdateManager.systemSummary();
@@ -7079,7 +7079,7 @@ public class SSLMailServer {
                         break;
                     }
                     response = UpdateManager.panelRcScript(true);
-                    logAudit("RC_SCRIPT_INSTALL", ip, response.optString("percorso", ""));
+                    logAudit("RC_SCRIPT_INSTALL", ip, response.optString("path", ""));
                 }
                 case "os_upgrade_targets" -> response = UpdateManager.targetVersions();
                 case "os_upgrade_preflight" -> response = UpdateManager.systemUpgradePreflight(
@@ -7091,18 +7091,18 @@ public class SSLMailServer {
                 case "be_list" -> response = UpdateManager.bootEnvironments();
                 case "ssl_uso" -> response = UpdateManager.opensslUsage();
                 case "removal_candidates" -> response = UpdateManager.removalCandidates();
-                case "panel_uses" -> response = UpdateManager.panelUsage(req.optString("nome", ""));
-                case "deep_scan" -> response = UpdateManager.deepAnalysis(req.optString("nome", ""));
+                case "panel_uses" -> response = UpdateManager.panelUsage(req.optString("name", ""));
+                case "deep_scan" -> response = UpdateManager.deepAnalysis(req.optString("name", ""));
                 case "panel_env" -> response = UpdateManager.panelBootEnvironment();
                 case "dovecot24_preview" -> response = UpdateManager.dovecot24Preview();
                 case "rspamd_timeout" -> response = UpdateManager.rspamdTimeoutDiagnostics();
                 case "web_diagnosi" -> response = org.mail_panel.system.WebDiagnostics.state();
                 case "web443_status" -> response = org.mail_panel.system.WebProtection.state();
                 case "web443_config" -> response = new JSONObject().put("success", true)
-                        .put("configurazione", org.mail_panel.system.WebProtection.configuration(
+                        .put("configuration", org.mail_panel.system.WebProtection.configuration(
                                 "/usr/local/etc/ssl/mail/fullchain.pem",
                                 "/usr/local/etc/ssl/mail/privkey.pem"))
-                        .put("filtro", org.mail_panel.system.WebProtection.filter())
+                        .put("filter", org.mail_panel.system.WebProtection.filter())
                         .put("jail", org.mail_panel.system.WebProtection.jail());
                 case "mtasts_piano" -> response = org.mail_panel.system.MtaStsSetup.plan();
                 case "mtasts_attiva" -> {
@@ -7146,7 +7146,7 @@ public class SSLMailServer {
                         // Per un aggiornamento il documento nuovo e la specifica del pannello
                         // sono due numeri diversi: gli identificatori da incrociare sono quelli
                         // della specifica, non del documento che la aggiorna.
-                        req.optString("riferimento", req.optString("rfc", "")));
+                        req.optString("reference", req.optString("rfc", "")));
                 case "openssl_scadenza" -> response = org.mail_panel.system.OpensslExpiry.state();
                 case "porta465_status" -> response = org.mail_panel.system.SubmissionPort.state();
                 case "porta465_apply" -> {
@@ -7163,8 +7163,8 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.raisePostfixCompatibilityLevel(req.optString("livello", ""));
-                    logAudit("POSTFIX_LEVEL", ip, req.optString("livello", "")
+                    response = UpdateManager.raisePostfixCompatibilityLevel(req.optString("level", ""));
+                    logAudit("POSTFIX_LEVEL", ip, req.optString("level", "")
                             + (response.optBoolean("success") ? " - done" : " - NOT done: "
                                + response.optString("error", "?")));
                 }
@@ -7173,8 +7173,8 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.removePackage(req.optString("nome", ""));
-                    logAudit("PKG_REMOVE", ip, req.optString("nome", "")
+                    response = UpdateManager.removePackage(req.optString("name", ""));
+                    logAudit("PKG_REMOVE", ip, req.optString("name", "")
                             + (response.optBoolean("success") ? " - removed" : " - NOT removed: "
                                + response.optString("error", "?")));
                 }
@@ -7183,8 +7183,8 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.deleteBootEnvironment(req.optString("nome", ""));
-                    logAudit("BE_DESTROY", ip, req.optString("nome", "")
+                    response = UpdateManager.deleteBootEnvironment(req.optString("name", ""));
+                    logAudit("BE_DESTROY", ip, req.optString("name", "")
                             + (response.optBoolean("success") ? " - deleted"
                                : " - NOT deleted: " + response.optString("error", "?")));
                 }
@@ -7220,7 +7220,7 @@ public class SSLMailServer {
                         break;
                     }
                     response = UpdateManager.pythonLeftovers(true);
-                    logAudit("PYTHON_LEFTOVERS_CLEAN", ip, response.optString("tolti", ""));
+                    logAudit("PYTHON_LEFTOVERS_CLEAN", ip, response.optString("removed", ""));
                 }
                 case "python_move" -> {
                     if (!"SPOSTA PYTHON".equals(req.optString("confirm", ""))) {
@@ -7265,8 +7265,8 @@ public class SSLMailServer {
                         break;
                     }
                     response = UpdateManager.startForeignClientCleanup(
-                            req.optString("estraneo", ""), req.optString("corretto", ""));
-                    logAudit("MYSQL_CLIENT_CLEANUP", ip, req.optString("estraneo", ""));
+                            req.optString("foreign", ""), req.optString("correct", ""));
+                    logAudit("MYSQL_CLIENT_CLEANUP", ip, req.optString("foreign", ""));
                 }
                 case "relink" -> {
                     if (!"RICOLLEGA".equals(req.optString("confirm", ""))) {
@@ -8493,20 +8493,20 @@ public class SSLMailServer {
         // contavano i tentativi e incrementavano i ban — 14.370 e 46 su mailpanel-pubblico —
         // senza bloccare niente, e nessuna schermata poteva accorgersene perche' nessuna
         // guardava se il comando di ban fosse un comando. Questo lo guarda.
-        JSONObject diagBan = new JSONObject().put("rotte", new JSONArray());
+        JSONObject diagBan = new JSONObject().put("broken", new JSONArray());
         boolean banRunnable = true;
         String banDetail;
         try {
             if (f2bRunning) diagBan = org.mail_panel.security.BanActionRepair.diagnosis();
         } catch (Exception ignored) { }
-        JSONArray broken = diagBan.optJSONArray("rotte");
+        JSONArray broken = diagBan.optJSONArray("broken");
         if (broken == null) broken = new JSONArray();
         if (!f2bRunning) {
             banRunnable = false;
             banDetail = I18n.tr("server.f2b.ban.notRunning");
         } else if (broken.length() == 0) {
-            int reviewedBans = diagBan.optInt("esaminate", 0);
-            JSONArray notJudged = diagBan.optJSONArray("non_giudicate");
+            int reviewedBans = diagBan.optInt("reviewed", 0);
+            JSONArray notJudged = diagBan.optJSONArray("not_judged");
             if (reviewedBans == 0) {
                 banRunnable = false;
                 banDetail = I18n.tr("server.f2b.ban.noneJudged");
@@ -8522,7 +8522,7 @@ public class SSLMailServer {
                     for (int i = 0; i < notJudged.length(); i++) {
                         JSONObject x = notJudged.getJSONObject(i);
                         if (ng.length() > 0) ng.append(" | ");
-                        ng.append(x.optString("jail")).append(": ").append(x.optString("perche"));
+                        ng.append(x.optString("jail")).append(": ").append(x.optString("why"));
                         // L'evidenza accanto al verdict: cosa ha risposto fail2ban, e cosa ha
                         // scritto nel proprio log. Senza, la riga dice solo che non si sa.
                         String u = x.optString("output", "");
@@ -8583,7 +8583,7 @@ public class SSLMailServer {
                         if (!j.read) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notMeasured")); continue; }
                         if (j.missingTable) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noTable")); continue; }
                         if (j.ruleVerified && !j.rulePresent) {
-                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noRule", Map.of("table", String.valueOf(j.tabella))));
+                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noRule", Map.of("table", String.valueOf(j.table))));
                             continue;
                         }
                         if (!j.soloInFail2ban.isEmpty())
@@ -9255,8 +9255,8 @@ public class SSLMailServer {
         // FreeBSD non esiste, e bannavano nel vuoto contando i ban come riusciti.
         try {
             JSONObject diag = org.mail_panel.security.BanActionRepair.diagnosis();
-            JSONArray broken = diag.optJSONArray("rotte");
-            JSONArray notJudged = diag.optJSONArray("non_giudicate");
+            JSONArray broken = diag.optJSONArray("broken");
+            JSONArray notJudged = diag.optJSONArray("not_judged");
             boolean toRepair = (broken != null && broken.length() > 0)
                               || (notJudged != null && notJudged.length() > 0);
             if (toRepair) {
@@ -9604,24 +9604,24 @@ public class SSLMailServer {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                String quale = req.optString("quale", "");
+                String which = req.optString("which", "");
                 // Il predefinito e' "none", non "quarantine": RFC 9989 §5.1.5. Un valore
                 // predefinito che blocca posta e' una trappola per chi preme senza scegliere.
-                response = auto.crea(domainId, quale, req.optString("politica", "none"));
-                logAudit("AUTODNS_CREATE", ip, quale + " on domain " + domainId
+                response = auto.crea(domainId, which, req.optString("policy", "none"));
+                logAudit("AUTODNS_CREATE", ip, which + " on domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
             case "change_policy" -> {
-                response = auto.changePolicy(domainId, req.optString("politica", ""),
+                response = auto.changePolicy(domainId, req.optString("policy", ""),
                         "CAMBIA".equals(req.optString("confirm", "")));
                 if ("CAMBIA".equals(req.optString("confirm", "")))
                     logAudit("AUTODNS_POLITICA", ip, "domain " + domainId + " -> p="
-                            + req.optString("politica", "") + (response.optBoolean("success")
+                            + req.optString("policy", "") + (response.optBoolean("success")
                             ? " - done" : " - NOT done: " + response.optString("error", "?")));
             }
             case "mtasts_status" -> response = org.mail_panel.system.MtaSts.state();
-            case "mtasts_mode" -> response = org.mail_panel.system.MtaSts.setMode(req.optString("modo", ""));
+            case "mtasts_mode" -> response = org.mail_panel.system.MtaSts.setMode(req.optString("mode", ""));
             case "mtasts_txt" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
@@ -9630,7 +9630,7 @@ public class SSLMailServer {
                 response = auto.creaTxtMtaSts(domainId);
                 // I record MTA-STS in piu' che la scrittura toglie sono cancellazioni nel DNS:
                 // restano scritte anche qui, non solo nella risposta.
-                JSONArray removed = response.optJSONArray("tolti");
+                JSONArray removed = response.optJSONArray("removed");
                 logAudit("MTASTS_TXT", ip, "domain " + domainId
                         + (response.optBoolean("success") ? " - published" : " - NOT published: "
                            + response.optString("error", "?"))
@@ -9642,7 +9642,7 @@ public class SSLMailServer {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                String q = req.optString("quale", "");
+                String q = req.optString("which", "");
                 response = auto.createOptional(domainId, q);
                 logAudit("AUTODNS_OPZIONALE", ip, q + " on domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
@@ -9676,9 +9676,9 @@ public class SSLMailServer {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                String verso = req.optString("verso", "");
-                response = auto.createReportAlias(domainId, verso);
-                logAudit("AUTODNS_ALIAS", ip, "alias dmarc@ domain " + domainId + " to " + verso
+                String target = req.optString("destination", "");
+                response = auto.createReportAlias(domainId, target);
+                logAudit("AUTODNS_ALIAS", ip, "alias dmarc@ domain " + domainId + " to " + target
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
@@ -9703,16 +9703,16 @@ public class SSLMailServer {
             case "identity" -> response = org.mail_panel.system.PeriodicReport.identityState();
             case "preview" -> response = org.mail_panel.system.PeriodicReport.preview();
             case "save" -> response = org.mail_panel.system.PeriodicReport.saveSettings(
-                    req.optString("destinatario", ""), req.optString("mittente", ""),
-                    req.optString("frequenza", ""), req.optString("ora", ""),
-                    req.optBoolean("attivo", false));
+                    req.optString("recipient", ""), req.optString("sender", ""),
+                    req.optString("frequency", ""), req.optString("now", ""),
+                    req.optBoolean("active", false));
             case "identity_create" -> {
                 if (!"CREA".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = org.mail_panel.system.PeriodicReport.createIdentity(req.optString("indirizzo", ""));
-                logAudit("REPORT_IDENTITY", ip, req.optString("indirizzo", "")
+                response = org.mail_panel.system.PeriodicReport.createIdentity(req.optString("address", ""));
+                logAudit("REPORT_IDENTITY", ip, req.optString("address", "")
                         + (response.optBoolean("success") ? " - created" : " - NOT created"));
             }
             case "send" -> {
@@ -9720,8 +9720,8 @@ public class SSLMailServer {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = org.mail_panel.system.PeriodicReport.sendNow(req.optString("destinatario", ""));
-                logAudit("REPORT_SEND", ip, req.optString("destinatario", "")
+                response = org.mail_panel.system.PeriodicReport.sendNow(req.optString("recipient", ""));
+                logAudit("REPORT_SEND", ip, req.optString("recipient", "")
                         + (response.optBoolean("success") ? " - sent" : " - NOT sent"));
             }
             default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
@@ -10319,16 +10319,16 @@ public class SSLMailServer {
                     }
                     if (global == null)
                         global = new JSONObject().put("hourly", 50).put("daily", 500)
-                                                 .put("max_recipients", 50).put("nonImpostato", true);
+                                                 .put("max_recipients", 50).put("notSet", true);
                     // La dimensione massima non sta nel database: e' un parametro di Postfix,
                     // e si legge da li' invece di tenerne una copia che diverge.
                     int mb = org.mail_panel.system.MessageSizeLimit.readMegabytes();
                     global.put("max_size_mb", mb < 0 ? JSONObject.NULL : mb);
-                    if (mb < 0) global.put("max_size_nota", I18n.tr("server.rl.sizeUnreadable"));
+                    if (mb < 0) global.put("max_size_note", I18n.tr("server.rl.sizeUnreadable"));
 
                     response.put("success", true);
                     response.put("limits", limits);
-                    response.put("globale", global);
+                    response.put("global", global);
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
@@ -10394,9 +10394,9 @@ public class SSLMailServer {
                             String note = I18n.tr("server.rl.globalSaved", Map.of("hourly", hourly, "daily", daily));
                             if (maxSize > 0) {
                                 JSONObject dim = org.mail_panel.system.MessageSizeLimit.set(maxSize);
-                                response.put("dimensione", dim);
+                                response.put("size", dim);
                                 if (dim.optBoolean("success", false)) {
-                                    note += " " + dim.optString("nota", "");
+                                    note += " " + dim.optString("note", "");
                                 } else {
                                     // I limiti sono salvati, la dimensione no: si dice esattamente
                                     // questo, invece di un "errore" generico che farebbe credere

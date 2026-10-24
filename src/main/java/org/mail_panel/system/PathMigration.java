@@ -47,8 +47,8 @@ public final class PathMigration {
         rename(db + "prova-copia.sql", db + "test-dump.sql");
         rename(db + "ssl-precedente", db + "ssl-previous");
         rename(db + "mailpanel-pubblico.conf-precedente", db + "mailpanel-public.conf-previous");
-        rename(db + "mailpanel.rc.prova", db + "mailpanel.rc.test");
-        rename(db + "mailpanel.rc.rimosso", db + "mailpanel.rc.removed");
+        rename(db + "mailpanel.rc.test", db + "mailpanel.rc.test");
+        rename(db + "mailpanel.rc.removed", db + "mailpanel.rc.removed");
         rename(db + "master.cf-prima-della-465", db + "master.cf-before-465");
         rename(db + "nginx-prima-di-autoconfig.conf", db + "nginx-before-autoconfig.conf");
         rename(db + "nginx.conf-prima-di-include", db + "nginx.conf-before-include");

@@ -86,7 +86,7 @@ public class AppleProfile {
                 <dict>
                   <key>PayloadType</key>        <string>com.apple.mail.managed</string>
                   <key>PayloadVersion</key>     <integer>1</integer>
-                  <key>PayloadIdentifier</key>  <string>%s.posta</string>
+                  <key>PayloadIdentifier</key>  <string>%s.mail</string>
                   <key>PayloadUUID</key>        <string>%s</string>
                   <key>PayloadDisplayName</key> <string>Account %s</string>
 
@@ -162,8 +162,8 @@ public class AppleProfile {
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         String host = mailHost();
-        r.put("hostDiPosta", host);
-        r.put("portaImap", IMAP_PORT).put("portaSmtp", SMTP_PORT);
+        r.put("mailHost", host);
+        r.put("imapPort", IMAP_PORT).put("smtpPort", SMTP_PORT);
         if (host == null || host.isBlank())
             return r.put("success", false)
                     .put("error", I18n.tr("server.appleprof.noHostnameProfile"));
@@ -176,7 +176,7 @@ public class AppleProfile {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.mailboxesUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
-        return r.put("caselle", mailboxes);
+        return r.put("mailboxes", mailboxes);
     }
 
     /** L'anteprima del profilo, per guardarlo prima di scaricarlo. */
@@ -190,7 +190,7 @@ public class AppleProfile {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.noHostname"));
         return new JSONObject().put("success", true).put("email", c.email())
-                .put("profilo", mobileconfig(c.email(), c.name(), host, host));
+                .put("profile", mobileconfig(c.email(), c.name(), host, host));
     }
 
     /**

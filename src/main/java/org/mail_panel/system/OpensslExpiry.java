@@ -120,18 +120,18 @@ public class OpensslExpiry {
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         LocalDate today = LocalDate.now();
-        r.put("oggi", today.toString());
+        r.put("today", today.toString());
 
         JSONArray found = new JSONArray();
         found.put(review("base", "/usr/bin/openssl", today,
                 I18n.tr("server.sslexp.base")));
         found.put(review("port", "/usr/local/bin/openssl", today,
                 I18n.tr("server.sslexp.port")));
-        r.put("installazioni", found);
+        r.put("installs", found);
 
         // Chi vince nel PATH del pannello: e' quello che finirebbe negli script.
-        RunResult quale = run("sh", "-c", "command -v openssl");
-        r.put("nelPath", quale.code == 0 ? quale.output.trim() : "");
+        RunResult which = run("sh", "-c", "command -v openssl");
+        r.put("inPath", which.code == 0 ? which.output.trim() : "");
 
         RunResult fv = run("freebsd-version", "-k");
         if (fv.code == 0) r.put("freebsd", fv.output.trim());
@@ -141,12 +141,12 @@ public class OpensslExpiry {
         boolean something = false;
         for (int i = 0; i < found.length(); i++) {
             JSONObject o = found.getJSONObject(i);
-            if (!o.optBoolean("presente", false)) continue;
+            if (!o.optBoolean("present", false)) continue;
             something = true;
-            worst = Math.max(worst, o.optInt("urgenza", 3));
+            worst = Math.max(worst, o.optInt("urgency", 3));
         }
-        r.put("urgenza", something ? worst : 3);
-        r.put("nota", !something
+        r.put("urgency", something ? worst : 3);
+        r.put("note", !something
                 ? I18n.tr("server.sslexp.noBinary")
                 : worst == 0 ? I18n.tr("server.sslexp.allSupported")
                 : worst == 1 ? I18n.tr("server.sslexp.soon")
@@ -156,26 +156,26 @@ public class OpensslExpiry {
     }
 
     private static JSONObject review(String type, String path, LocalDate today, String whatItMeans) {
-        JSONObject o = new JSONObject().put("tipo", type).put("percorso", path)
-                .put("cosaSignifica", whatItMeans);
+        JSONObject o = new JSONObject().put("type", type).put("path", path)
+                .put("whatItMeans", whatItMeans);
         RunResult v = run(path, "version");
-        if (v.code != 0) return o.put("presente", false);
+        if (v.code != 0) return o.put("present", false);
 
         String version = extractVersion(v.output);
-        o.put("presente", true).put("output", v.output.trim()).put("versione", version == null ? "" : version);
+        o.put("present", true).put("output", v.output.trim()).put("version", version == null ? "" : version);
         if (version == null)
-            return o.put("urgenza", 3)
-                    .put("commento", I18n.tr("server.sslexp.unreadable", java.util.Map.of("out", String.valueOf(v.output.trim()))));
+            return o.put("urgency", 3)
+                    .put("comment", I18n.tr("server.sslexp.unreadable", java.util.Map.of("out", String.valueOf(v.output.trim()))));
 
         String end = endOfSupport(version);
         Long days = daysLeft(version, today);
         int u = urgency(version, today);
-        o.put("branch", branch(version)).put("lts", isLts(version)).put("urgenza", u);
+        o.put("branch", branch(version)).put("lts", isLts(version)).put("urgency", u);
         if (end == null)
-            return o.put("commento", I18n.tr("server.sslexp.notInTable", java.util.Map.of("b", String.valueOf(branch(version)))));
+            return o.put("comment", I18n.tr("server.sslexp.notInTable", java.util.Map.of("b", String.valueOf(branch(version)))));
 
-        o.put("fineSupporto", end).put("giorni", days);
-        o.put("commento", u == 2
+        o.put("endOfSupport", end).put("days", days);
+        o.put("comment", u == 2
                 ? I18n.tr("server.sslexp.outSince", java.util.Map.of("date", String.valueOf(end), "d", String.valueOf(-days)))
                 : u == 1 ? I18n.tr("server.sslexp.leaves", java.util.Map.of("date", String.valueOf(end), "d", String.valueOf(days)))
                 : I18n.tr("server.sslexp.until", java.util.Map.of("date", String.valueOf(end), "lts", String.valueOf(isLts(version) ? " (LTS)" : ""), "d", String.valueOf(days))));

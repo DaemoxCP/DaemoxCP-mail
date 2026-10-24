@@ -89,8 +89,8 @@ public class PackageCatalogTest {
         file(pkg.resolve("repos/FreeBSD/db"), 24 * 400);
         file(pkg.resolve("local.sqlite"), 0);
         JSONObject c = PkgCatalog.data(pkg.toString(), enabledOnes, NOW);
-        require("vale il piu' vecchio fra gli accesi: " + c.optString("piuVecchio") + ", " + c.optLong("giorni") + " giorni",
-                "FreeBSD-ports-kmods".equals(c.optString("piuVecchio")) && c.optLong("giorni") == 2 && c.optLong("ore") == 50);
+        require("vale il piu' vecchio fra gli accesi: " + c.optString("oldest") + ", " + c.optLong("days") + " giorni",
+                "FreeBSD-ports-kmods".equals(c.optString("oldest")) && c.optLong("days") == 2 && c.optLong("hours") == 50);
         require("solo i due accesi", c.getJSONArray("repository").length() == 2);
         String note = PkgCatalog.note(c);
         System.out.println("  nota: " + note);
@@ -102,15 +102,15 @@ public class PackageCatalogTest {
         Path pkg2 = root.resolve("db2");
         file(pkg2.resolve("repos/FreeBSD-ports/db"), 3);
         c = PkgCatalog.data(pkg2.toString(), enabledOnes, NOW);
-        require("oggi, e FreeBSD-ports-kmods fra i mancanti", c.optLong("giorni") == 0
-                && c.getJSONArray("mancanti").toList().equals(List.of("FreeBSD-ports-kmods")));
+        require("oggi, e FreeBSD-ports-kmods fra i mancanti", c.optLong("days") == 0
+                && c.getJSONArray("missing").toList().equals(List.of("FreeBSD-ports-kmods")));
         require("la nota lo dice", PkgCatalog.note(c).contains("Il repository FreeBSD-ports-kmods è acceso ma non ha"));
         Path pkg3 = root.resolve("db3");
         Files.createDirectories(pkg3);
         c = PkgCatalog.data(pkg3.toString(), enabledOnes, NOW);
         note = PkgCatalog.note(c);
         require("nessun catalogo: giorni -1, e la nota dice dove ha guardato: " + note,
-                c.optLong("giorni") == -1 && note.contains("repos/FreeBSD-ports/db"));
+                c.optLong("days") == -1 && note.contains("repos/FreeBSD-ports/db"));
         c = PkgCatalog.data(pkg.toString(), List.of(), NOW);
         require("tutti spenti: lo dice, invece di \"non so\": " + PkgCatalog.note(c),
                 PkgCatalog.note(c).startsWith("Nessun repository di pkg è acceso"));
@@ -123,18 +123,18 @@ public class PackageCatalogTest {
         c = PkgCatalog.data(pkg.toString(), null, NOW);
         require("senza pkg -vv si prendono i cataloghi che ci sono (4)", c.getJSONArray("repository").length() == 4);
         c = PkgCatalog.data(pkg.toString(), List.of("../../etc"), NOW);
-        require("un nome con ../ non finisce in un percorso", c.getJSONArray("repository").getJSONObject(0).has("errore"));
+        require("un nome con ../ non finisce in un percorso", c.getJSONArray("repository").getJSONObject(0).has("error"));
         Path pkg5 = root.resolve("db5");
         file(pkg5.resolve("repos/FreeBSD-ports/db"), -2);
         c = PkgCatalog.data(pkg5.toString(), List.of("FreeBSD-ports"), NOW);
-        require("data nel futuro: oggi, non un'eta' negativa", c.optLong("giorni") == 0);
+        require("data nel futuro: oggi, non un'eta' negativa", c.optLong("days") == 0);
 
         System.out.println("\n== il rapporto ==");
         c = PkgCatalog.data(pkg.toString(), enabledOnes, NOW);
-        c.put("nota", PkgCatalog.note(c));
+        c.put("note", PkgCatalog.note(c));
         String t = PeriodicReport.compose(new JSONObject()
-                .put("catalogo", c).put("catalogoGiorni", c.optLong("giorni")).put("catalogoData", c.optString("data"))
-                .put("catalogoRinfrescato", true).put("vulnDbGiorni", 0),
+                .put("catalog", c).put("catalogDays", c.optLong("days")).put("catalogDate", c.optString("data"))
+                .put("refreshedCatalog", true).put("vulnDbDays", 0),
                 "freebsd", "noreply@esempio.it", "admin@esempio.it");
         String line = t.lines().filter(l -> l.startsWith("Database delle vulnerabilità")).findFirst().orElse("");
         System.out.println("  " + line);
