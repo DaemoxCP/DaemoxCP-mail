@@ -29,11 +29,17 @@ import java.util.TreeSet;
  *    /tmp/agg.log della VM. Gira ovunque.
  *
  * B. I tre lavori veri — aggiornamento guidato, aggiornamento dei non protetti, manutenzione
- *    completa — su un pacchetto finto, drift-probe, costruito qui con {@code pkg create}. La
- *    sua versione 1.1 fa quello che ha fatto lo script di postfix: stampa un «COMPATIBILITY:
+ *    completa — su un pacchetto finto, nginx-drift-probe, costruito qui con {@code pkg create}.
+ *    La sua versione 1.1 fa quello che ha fatto lo script di postfix: stampa un «COMPATIBILITY:
  *    editing», aggiunge {@code protocols = ipv4} alla configurazione viva, e il servizio
- *    smette di ascoltare in IPv6. La versione 1.2 cambia solo i file suoi, e deve passare
- *    pulita: e' la direzione che dice che il controllo non grida al lupo.
+ *    smette di ascoltare in IPv6; e scrive anche un file in /etc, che prima nessuno guardava.
+ *    La versione 1.2 cambia solo i file suoi e crea il suo utente, come fanno i port: deve
+ *    passare pulita, ed e' la direzione che dice che il controllo non grida al lupo.
+ *
+ *    Il nome comincia con «nginx» apposta: il pannello lo prende per un pezzo di nginx, quindi
+ *    l'aggiornamento guidato ha un servizio vero da riavviare — innocuo da riavviare sulla VM.
+ *    Nel caso sporco NON lo deve riavviare (il riavvio metterebbe in vigore una configurazione
+ *    che nessuno ha letto); nel caso pulito si'. Lo dice il pid di nginx.
  *
  *    Il servizio e' un nc in ascolto su 127.0.0.1 e ::1, porta 47425. Lo script della 1.1
  *    non lo riavvia: spegne il lato IPv6, che e' l'effetto del riavvio. Il motivo e' misurato:
@@ -172,11 +178,14 @@ public class InstallScriptDriftTest {
 
     // ===================== B. i tre lavori veri =====================
 
-    static final String PKG = "drift-probe";
+    static final String PKG = "nginx-drift-probe";
+    static final String ETC_FILE = "/etc/drift-probe.conf";
+    static final String USER = "driftprobe";
+    static final String NGINX_PID = "/var/run/nginx.pid";
     static final String CONF = "/usr/local/etc/drift-probe/drift-probe.conf";
     static final String RESTART = "/usr/local/libexec/drift-probe/restart";
     static final String REPO_CONF = "/usr/local/etc/pkg/repos/zzz-drift-probe.conf";
-    static final String REPO_DB = "/var/db/pkg/repos/drift-probe";
+    static final String REPO_DB = "/var/db/pkg/repos/" + PKG;
     static final String PID4 = "/var/run/drift-probe.4.pid", PID6 = "/var/run/drift-probe.6.pid";
     static final int PORT = 47425;
     static Path work;
@@ -191,6 +200,7 @@ public class InstallScriptDriftTest {
         removePackage();
         sh("rm -f " + REPO_CONF + "; rm -rf " + REPO_DB);
         String packagesBefore = sh("pkg query %n-%v | sort | sha256");
+        String savedBefore = sh("ls " + InstallSideEffects.BEFORE_UPDATE_DIR + " 2>/dev/null");
         Set<String> lockedBefore = locked();
         work = Files.createTempDirectory(Path.of("/var/tmp"), "drift-probe");
         try {
@@ -213,6 +223,11 @@ public class InstallScriptDriftTest {
         } finally {
             removePackage();
             sh("rm -f " + REPO_CONF + "; rm -rf " + REPO_DB + " " + work);
+            // Le copie «di prima» che i casi sporchi hanno messo da parte: sono della prova.
+            for (String d : sh("ls " + InstallSideEffects.BEFORE_UPDATE_DIR + " 2>/dev/null").split("\n"))
+                if (!d.isBlank() && !savedBefore.contains(d.trim())) sh("rm -rf " + InstallSideEffects.BEFORE_UPDATE_DIR + "/" + d.trim());
+            // E la nota e i cartelli dei pacchetti bloccati, che dopo il pacchetto tolto vanno riallineati.
+            UpdateManager.refreshLockTrace();
             String after = sh("pkg query %n-%v | sort | sha256");
             check("alla fine: gli stessi pacchetti di prima, alle stesse versioni", after.equals(packagesBefore));
             check("alla fine: gli stessi pacchetti protetti di prima", locked().equals(lockedBefore));
@@ -220,6 +235,10 @@ public class InstallScriptDriftTest {
                     sh("pkg -vv 2>/dev/null | grep -A3 '^  FreeBSD-ports: {' | grep -c 'enabled *: yes'").trim().equals("1"));
             check("alla fine: niente in ascolto sulla porta della prova",
                     sh("sockstat -46lq -P tcp -p " + PORT).trim().isEmpty());
+            check("alla fine: niente file di prova in /etc, nessun utente di prova",
+                    !Files.exists(Path.of(ETC_FILE)) && !sh("pw usershow " + USER + " 2>&1").startsWith(USER + ":"));
+            check("alla fine: le copie «di prima» sono quelle che c'erano",
+                    sh("ls " + InstallSideEffects.BEFORE_UPDATE_DIR + " 2>/dev/null").equals(savedBefore));
         }
     }
 
@@ -232,6 +251,7 @@ public class InstallScriptDriftTest {
         Files.writeString(Path.of(CONF), Files.readString(Path.of(CONF)) + "banner = drift probe\n", StandardCharsets.UTF_8);
         sh(RESTART);
         if (!waitListening(true)) { check(flow + " " + version + ": il servizio di prova ascolta in IPv4 e IPv6 prima del lavoro", false); return; }
+        String nginxPidBefore = sh("cat " + NGINX_PID + " 2>/dev/null").trim();
         Path repo = work.resolve("repo");
         sh("rm -rf " + repo + " && mkdir -p " + repo + " && cp " + work.resolve("pkgs/" + PKG + "-" + version + ".pkg") + " " + repo
                 + " && pkg repo " + repo + " >/dev/null 2>&1 && pkg update -f -r " + PKG + " >/dev/null 2>&1");
@@ -281,25 +301,56 @@ public class InstallScriptDriftTest {
         long deadline = System.currentTimeMillis() + 600_000;
         while (PackageQueue.chi() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
         JSONObject job = UpdateManager.jobStatus(id).getJSONObject("job");
+        // -De2e.dump=<cartella>: il JSON del lavoro com'e', quello che la pagina riceve da
+        // job_status. Serve a far vedere a un browser l'esito vero, non uno scritto a mano.
+        String dump = System.getProperty("e2e.dump");
+        if (dump != null) Files.writeString(Path.of(dump, flow + "-" + version + ".json"),
+                new JSONObject().put("success", true).put("job", job).toString(2));
         String log = job.optString("consoleLog"), error = job.optString("errorMessage"), status = job.optString("status");
         System.out.println("     esito: " + status + " in " + job.optLong("elapsedSeconds") + " s"
                 + (error.isEmpty() ? "" : "\n     errore: " + error));
         for (String l : log.split("\n")) System.out.println("       | " + l);
 
+        String nginxPidAfter = sh("cat " + NGINX_PID + " 2>/dev/null").trim();
         String label = flow + " 1.0 -> " + version + ": ";
         if (dirty) {
             check(label + "il lavoro NON si dichiara riuscito", "error".equals(status));
             check(label + "l'esito nomina il file che lo script ha cambiato", error.contains(CONF));
+            check(label + "  e quello che ha scritto in /etc", error.contains(ETC_FILE));
             check(label + "l'esito nomina l'indirizzo perso", error.contains("[::1]:" + PORT));
             check(label + "il log mostra la riga che lo script ha aggiunto", log.contains("+ protocols = ipv4"));
             String header = I18n.tr("server.um.runAggiornamentoGuidato.33");
             int h = log.lastIndexOf(header);
             check(label + "e ristampa alla fine l'avviso COMPATIBILITY dello script",
                     h >= 0 && log.indexOf("COMPATIBILITY: editing", h) > h);
+            // La versione di prima, messa da parte: il percorso lo dice il log, il contenuto lo
+            // sa la prova, perche' e' quello che ha scritto lei prima del lavoro.
+            String saved = null;
+            for (String l : log.split("\n")) {
+                int c = l.indexOf("cp -p ");
+                if (c >= 0 && l.trim().endsWith(" " + CONF)) saved = l.substring(c + 6, l.lastIndexOf(" " + CONF)).trim();
+            }
+            check(label + "la versione di prima di " + CONF + " e' messa da parte, ed e' quella giusta",
+                    saved != null && Files.exists(Path.of(saved))
+                    && Files.readString(Path.of(saved)).equals("port = " + PORT + "\nbanner = drift probe\n"));
+            check(label + "  e il log dice che " + ETC_FILE + " prima non c'era",
+                    log.contains(I18n.tr("server.drift.savedCreated", java.util.Map.of("path", ETC_FILE))));
+            if (flow.equals("guided")) {
+                check(label + "nginx NON e' stato riavviato (pid " + nginxPidBefore + " -> " + nginxPidAfter + ")",
+                        !nginxPidBefore.isEmpty() && nginxPidBefore.equals(nginxPidAfter));
+                check(label + "  e l'esito lo dice, col comando per farlo dopo",
+                        error.contains(I18n.tr("server.drift.restartHeldProblem", java.util.Map.of("list", "nginx")))
+                        && log.contains("service nginx restart"));
+            }
         } else {
             check(label + "riuscito, senza allarmi", "completed".equals(status) && error.isEmpty());
             check(label + "  e il controllo della configurazione c'e' stato", log.contains(I18n.tr("server.drift.configHeader")));
             check(label + "  e quello degli indirizzi pure", log.contains(I18n.tr("server.drift.listenHeader")));
+            check(label + "  l'utente creato dal pacchetto si dice, senza allarme",
+                    log.contains("/etc/passwd: ") && log.contains(I18n.tr("server.drift.kind.accounts")));
+            if (flow.equals("guided"))
+                check(label + "nginx riavviato come sempre (pid " + nginxPidBefore + " -> " + nginxPidAfter + ")",
+                        !nginxPidAfter.isEmpty() && !nginxPidBefore.equals(nginxPidAfter));
         }
     }
 
@@ -322,18 +373,26 @@ public class InstallScriptDriftTest {
         sh("chmod 755 " + libexec.resolve("restart"));
         String postInstall = "C=" + CONF + "\n[ -f $C ] || cp $C.sample $C\n";
         if (dirty) postInstall += String.join("\n",
+                "echo 'daily_drift_probe_enable=\"YES\"' > " + ETC_FILE,
                 "echo \"    COMPATIBILITY: editing $C, setting\"",
                 "echo \"    protocols=ipv4.  Specify protocols explicitly if you want to enable IPv6.\"",
                 "grep -q '^protocols' $C || echo 'protocols = ipv4' >> $C",
                 "[ -f " + PID6 + " ] && kill $(cat " + PID6 + ") 2>/dev/null",
                 "rm -f " + PID6, "");
         postInstall += "exit 0\n";
+        // Come lo fanno i port con USERS e GROUPS: il gruppo e l'utente, se non ci sono.
+        String preInstall = "1.2".equals(version)
+                ? "pw groupshow " + USER + " >/dev/null 2>&1 || pw groupadd " + USER + "\n"
+                + "pw usershow " + USER + " >/dev/null 2>&1 || pw useradd " + USER + " -g " + USER
+                + " -d /nonexistent -s /usr/sbin/nologin -c 'drift probe'\nexit 0\n"
+                : "exit 0\n";
         String preDeinstall = "C=" + CONF + "\nif cmp -s $C $C.sample; then rm -f $C; else "
                 + "echo \"You may need to manually remove $C if it is no longer needed.\"; fi\nexit 0\n";
         Path manifest = work.resolve("manifest-" + version);
         Files.writeString(manifest, "name: " + PKG + "\nversion: \"" + version + "\"\norigin: misc/" + PKG
                 + "\ncomment: \"prova del reperto 42\"\ndesc: \"prova del reperto 42\"\nmaintainer: root@localhost\n"
                 + "www: https://localhost/\nprefix: /usr/local\nscripts: {\n"
+                + "  pre-install: <<EOD\n" + preInstall + "EOD\n"
                 + "  post-install: <<EOD\n" + postInstall + "EOD\n"
                 + "  pre-deinstall: <<EOD\n" + preDeinstall + "EOD\n}\n");
         Path plist = work.resolve("plist-" + version);
@@ -348,7 +407,8 @@ public class InstallScriptDriftTest {
         sh("for f in " + PID4 + " " + PID6 + "; do [ -f $f ] && kill $(cat $f) 2>/dev/null; rm -f $f; done; "
          + "pkill -f 'nc -dkl 127.0.0.1 " + PORT + "'; pkill -f 'nc -6 -dkl ::1 " + PORT + "'; "
          + "pkg unlock -y " + PKG + " >/dev/null 2>&1; pkg delete -y " + PKG + " >/dev/null 2>&1; "
-         + "rm -rf /usr/local/etc/drift-probe /usr/local/libexec/drift-probe; true");
+         + "rm -rf /usr/local/etc/drift-probe /usr/local/libexec/drift-probe " + ETC_FILE + "; "
+         + "pw userdel " + USER + " >/dev/null 2>&1; pw groupdel " + USER + " >/dev/null 2>&1; true");
     }
 
     private static boolean waitListening(boolean both) throws Exception {

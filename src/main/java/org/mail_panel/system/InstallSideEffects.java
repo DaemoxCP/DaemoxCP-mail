@@ -59,20 +59,50 @@ final class InstallSideEffects {
     private InstallSideEffects() {}
 
     /**
-     * Dove sta la configurazione viva: tutta /usr/local/etc, e i file che decidono che cosa
-     * parte all'avvio. A queste si aggiungono, una per una, le cartelle in cui un pacchetto
+     * Dove sta la configurazione viva: tutta /usr/local/etc, tutta /etc, e la configurazione
+     * del caricatore. A queste si aggiungono, una per una, le cartelle in cui un pacchetto
      * installato tiene i suoi .sample fuori da /usr/local/etc (Roundcube, in
      * /usr/local/www/roundcube/config): la configurazione sta dove sta il suo esempio.
+     *
+     * Di /etc prima si guardavano solo i file di rc.conf, e uno script che scrivesse in
+     * /etc/periodic.conf non si sarebbe visto. Misurato sulla VM il 24/10/2026: 574 file, 3 MB,
+     * nessuno di un pacchetto. Quello che ci cambia da solo, sempre misurato sulla VM negli
+     * ultimi due giorni, ha una regola sua e non da' allarme: gli utenti che un pacchetto crea
+     * (vedi {@link #ACCOUNT_FILES}), i file rigenerati da un altro (vedi {@link #isDerived}), e
+     * resolv.conf (vedi {@link #EXCLUDED}).
      */
     static final List<String> CONFIG_ROOTS = List.of(
-            "/usr/local/etc", "/etc/rc.conf", "/etc/rc.conf.local", "/etc/rc.conf.d");
+            "/usr/local/etc", "/etc", "/boot/loader.conf", "/boot/loader.conf.local", "/boot/loader.conf.d");
 
     /**
-     * La cartella del pannello. La scrive il pannello stesso, in qualunque momento (la
-     * configurazione del firewall, i segreti), e nessun pacchetto ci installa niente: un suo
-     * cambiamento durante l'aggiornamento non dice niente sugli script di installazione.
+     * Cio' che si scrive da solo, in qualunque momento, e che nessun pacchetto installa:
+     *  - la cartella del pannello: la scrive il pannello stesso (la configurazione del
+     *    firewall, i segreti);
+     *  - /etc/resolv.conf: lo riscrivono dhclient e resolvconf a ogni rinnovo dell'indirizzo.
+     *    Misurato: riscritto all'avvio della VM. Dentro un aggiornamento sarebbe un allarme
+     *    contro uno script che non c'entra, e un allarme ferma i riavvii del guidato.
+     * Un loro cambiamento durante l'aggiornamento non dice niente sugli script di installazione.
      */
-    static final List<String> EXCLUDED = List.of("/usr/local/etc/mail-panel");
+    static final List<String> EXCLUDED = List.of("/usr/local/etc/mail-panel", "/etc/resolv.conf");
+
+    /**
+     * Gli elenchi di utenti e gruppi. Un pacchetto che ha bisogno di un utente lo crea nel suo
+     * script di pre-installazione («===> Creating users», misurato nell'uscita di postfix): una
+     * RIGA AGGIUNTA qui e' un pacchetto che fa il suo mestiere, e si dice senza allarme. Una
+     * riga tolta o cambiata no: e' un utente esistente toccato da uno script.
+     */
+    static final Set<String> ACCOUNT_FILES = Set.of("/etc/passwd", "/etc/group", "/etc/master.passwd");
+
+    /**
+     * La versione di prima dei file che uno script ha cambiato, per poterla rimettere. Sotto
+     * /var/db/mailpanel, accanto alla nota dei blocchi, e non accanto ai file: in cartelle come
+     * /usr/local/etc/newsyslog.conf.d o /usr/local/etc/periodic si legge, o si ESEGUE, ogni
+     * file che c'e', e una copia messa li' diventerebbe configurazione anche lei.
+     */
+    static final Path BEFORE_UPDATE_DIR = Paths.get("/var/db/mailpanel/config-before-update");
+
+    /** Quante copie si tengono: le piu' vecchie si tolgono. Contengono anche password, come i file da cui vengono. */
+    static final int BEFORE_UPDATE_KEPT = 10;
 
     /** Il contenuto si tiene, per mostrare che cosa e' cambiato, solo fino a questa misura. */
     static final int MAX_KEPT_BYTES = 256 * 1024;
@@ -268,13 +298,14 @@ final class InstallSideEffects {
 
             String kind;
             if (owner != null && changedPackages.contains(owner)) kind = "package";
+            else if (owner == null && isDerived(p, before, after)) kind = "derived";
             else if (owner == null && a != null && isNewDefault(p, a, after, changedPackages)) kind = "newDefault";
             else if (owner == null && a == null && sampleWentWithPackage(p, before, after, changedPackages)) kind = "package";
             else kind = "script";
 
             // Che cosa e' cambiato dentro, quando lo si puo' sapere. Il contenuto si legge
             // per decidere se sono solo commenti anche quando non lo si puo' mostrare.
-            if (!"package".equals(kind) && !"newDefault".equals(kind)) {
+            if (!"package".equals(kind) && !"newDefault".equals(kind) && !"derived".equals(kind)) {
                 byte[] oldC = b == null ? new byte[0] : b.content();
                 byte[] newC = a == null ? new byte[0] : a.content();
                 if (oldC != null && newC != null && isText(oldC) && isText(newC)) {
@@ -286,6 +317,9 @@ final class InstallSideEffects {
                             && (!d.get(0).isEmpty() || !d.get(1).isEmpty())
                             && allComments(d.get(0)) && allComments(d.get(1)))
                         kind = "commentsOnly";
+                    else if ("changed".equals(happened) && !c.has("permissionsFrom")
+                            && ACCOUNT_FILES.contains(p) && d.get(0).isEmpty() && !d.get(1).isEmpty())
+                        kind = "accounts";
                     boolean readable = (b == null || b.worldReadable()) && (a == null || a.worldReadable());
                     if ("changed".equals(happened) && d.get(0).isEmpty() && d.get(1).isEmpty()) {
                         // Stesse righe, altro ordine: in un file di configurazione l'ordine
@@ -309,6 +343,79 @@ final class InstallSideEffects {
             r.put(c);
         }
         return r;
+    }
+
+    /**
+     * Un file che si rigenera da un altro, e che quindi cambia quando cambia la sua fonte:
+     * l'allarme, se c'e', lo da' la fonte.
+     *  - X.db, X.lmdb, X.cdb accanto a X: le mappe di postmap e newaliases (/etc/aliases.db),
+     *    /etc/login.conf.db;
+     *  - /etc/pwd.db e /etc/spwd.db, che pwd_mkdb ricava da /etc/master.passwd;
+     *  - /etc/ssl/cert.pem, /etc/ssl/certs e /etc/ssl/untrusted, che certctl ricava
+     *    dall'archivio dei certificati. Misurato: circa 190 file rigenerati sulla VM negli
+     *    ultimi due giorni, nessuno scritto da una persona.
+     */
+    static boolean isDerived(String p, ConfigSnapshot before, ConfigSnapshot after) {
+        if (p.equals("/etc/pwd.db") || p.equals("/etc/spwd.db") || p.equals("/etc/ssl/cert.pem")
+                || p.startsWith("/etc/ssl/certs/") || p.startsWith("/etc/ssl/untrusted/")) return true;
+        for (String ext : new String[]{".db", ".lmdb", ".cdb"}) {
+            if (!p.endsWith(ext)) continue;
+            String source = p.substring(0, p.length() - ext.length());
+            if (before.files().containsKey(source) || after.files().containsKey(source)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Mette da parte la versione di prima dei file indicati, sotto {@code dir} con il loro
+     * percorso intero, con gli stessi permessi, proprietario e gruppo: cosi' {@code cp -p} la
+     * rimette com'era. La cartella e' leggibile solo da root, perche' fra quei file ci sono le
+     * mappe con le password.
+     *
+     * @return percorso -> dove e' la copia, oppure il motivo per cui non c'e' ("created": non
+     *         c'era prima; "tooLarge": non se ne teneva il contenuto; "error: ...")
+     */
+    static Map<String, String> saveBefore(ConfigSnapshot before, List<String> paths, Path dir) {
+        Map<String, String> r = new LinkedHashMap<>();
+        for (String p : paths) {
+            FileState b = before.files().get(p);
+            if (b == null) { r.put(p, "created"); continue; }
+            if (b.content() == null) { r.put(p, "tooLarge"); continue; }
+            try {
+                Files.createDirectories(dir, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+                Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwx------"));
+                Path copy = dir.resolve(p.substring(1));
+                Files.createDirectories(copy.getParent());
+                Files.write(copy, b.content());
+                String[] perm = b.permissions().split(" ", 2);
+                Files.setPosixFilePermissions(copy, PosixFilePermissions.fromString(perm[0]));
+                String[] og = perm.length > 1 ? perm[1].split(":", 2) : new String[0];
+                var lookup = copy.getFileSystem().getUserPrincipalLookupService();
+                if (og.length == 2) {
+                    Files.setOwner(copy, lookup.lookupPrincipalByName(og[0]));
+                    Files.getFileAttributeView(copy, java.nio.file.attribute.PosixFileAttributeView.class)
+                         .setGroup(lookup.lookupPrincipalByGroupName(og[1]));
+                }
+                r.put(p, copy.toString());
+            } catch (IOException | RuntimeException e) {
+                r.put(p, "error: " + e.getMessage());
+            }
+        }
+        return r;
+    }
+
+    /** Toglie le copie piu' vecchie, tenendo le ultime {@code kept}: i nomi sono date UTC, quindi l'ordine e' quello dei nomi. */
+    static void pruneBefore(Path root, int kept) {
+        try (var s = Files.list(root)) {
+            List<Path> dirs = new ArrayList<>(s.filter(Files::isDirectory).sorted().toList());
+            for (int i = 0; i < dirs.size() - kept; i++) {
+                try (var w = Files.walk(dirs.get(i))) {
+                    for (Path x : w.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(x);
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            LOGGER.warning("could not prune " + root + ": " + e.getMessage());
+        }
     }
 
     /** Il file vivo e' identico al .sample del suo pacchetto, cioe' e' il predefinito nuovo. */
@@ -444,6 +551,7 @@ final class InstallSideEffects {
      */
     static final class Watch {
         private boolean taken;
+        private boolean changedByScript;
         private ConfigSnapshot configBefore;
         private Map<String, String> listeningBefore;
         private final List<String> problems = new ArrayList<>();
@@ -487,12 +595,13 @@ final class InstallSideEffects {
                 job.scrivi("    ?   " + I18n.tr("server.drift.configUnknown"));
                 return;
             }
-            int packageFiles = 0;
+            int packageFiles = 0, derivedFiles = 0;
             List<String> alarmed = new ArrayList<>();
             for (int i = 0; i < changes.length(); i++) {
                 JSONObject c = changes.getJSONObject(i);
                 String kind = c.getString("kind");
                 if ("package".equals(kind)) { packageFiles++; continue; }
+                if ("derived".equals(kind)) { derivedFiles++; continue; }
                 String mark = c.getBoolean("alarm") ? "NO  " : "--  ";
                 job.scrivi("    " + mark + c.getString("path") + ": "
                         + I18n.tr("server.drift.happened." + c.getString("happened"))
@@ -506,14 +615,23 @@ final class InstallSideEffects {
                     job.scrivi("          " + I18n.tr("server.drift.hidden." + c.getString("hidden")));
                 if (c.getBoolean("alarm")) alarmed.add(c.getString("path"));
             }
-            if (alarmed.isEmpty() && changes.length() == packageFiles) {
+            if (alarmed.isEmpty() && changes.length() == packageFiles + derivedFiles) {
                 job.scrivi("    ok  " + I18n.tr("server.drift.configClean", Map.of("n", String.valueOf(packageFiles))));
+                if (derivedFiles > 0)
+                    job.scrivi("    " + I18n.tr("server.drift.derivedFiles", Map.of("n", String.valueOf(derivedFiles))));
                 return;
             }
             if (packageFiles > 0)
                 job.scrivi("    " + I18n.tr("server.drift.packageFiles", Map.of("n", String.valueOf(packageFiles))));
+            if (derivedFiles > 0)
+                job.scrivi("    " + I18n.tr("server.drift.derivedFiles", Map.of("n", String.valueOf(derivedFiles))));
             if (alarmed.isEmpty()) return;
-            job.scrivi("  " + I18n.tr(restartFollows ? "server.drift.configNoteRestart" : "server.drift.configNoteLater"));
+            changedByScript = true;
+            writeSaved(job, saveBefore(configBefore, alarmed, BEFORE_UPDATE_DIR.resolve(
+                    java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+                            .withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.now()))));
+            pruneBefore(BEFORE_UPDATE_DIR, BEFORE_UPDATE_KEPT);
+            job.scrivi("  " + I18n.tr(restartFollows ? "server.drift.configNoteHeld" : "server.drift.configNoteLater"));
             problems.add(I18n.tr("server.drift.configProblem", Map.of("files", String.join(", ", alarmed))));
             // Fuori dal log del lavoro, che vive in memoria: una configurazione cambiata che
             // nessuno ha approvato deve restare scritta. Solo i percorsi, nessun contenuto (r19).
@@ -567,6 +685,32 @@ final class InstallSideEffects {
 
         /** I problemi da mettere nell'esito del lavoro; vuoti se il confronto non ha trovato niente. */
         List<String> problems() { return new ArrayList<>(problems); }
+
+        /**
+         * True se uno script ha cambiato la configurazione fuori dai file dei pacchetti (un
+         * allarme, non un predefinito rimesso o dei commenti). L'aggiornamento guidato lo
+         * chiede prima di riavviare: vedi runAggiornamentoGuidato.
+         */
+        boolean configChangedByScript() { return changedByScript; }
+
+        /** Dove e' la versione di prima di ogni file, e come la si rimette. */
+        private static void writeSaved(UpdateManager.Job job, Map<String, String> saved) {
+            String dir = null;
+            for (Map.Entry<String, String> e : saved.entrySet()) {
+                String v = e.getValue();
+                if (v.equals("created")) job.scrivi("    " + I18n.tr("server.drift.savedCreated", Map.of("path", e.getKey())));
+                else if (v.equals("tooLarge")) job.scrivi("    " + I18n.tr("server.drift.savedTooLarge", Map.of("path", e.getKey())));
+                else if (v.startsWith("error: ")) job.scrivi("    " + I18n.tr("server.drift.savedError",
+                        Map.of("path", e.getKey(), "error", v.substring(7))));
+                else {
+                    if (dir == null) {
+                        dir = v.substring(0, v.length() - e.getKey().length());
+                        job.scrivi("  " + I18n.tr("server.drift.savedHeader", Map.of("dir", dir)));
+                    }
+                    job.scrivi("      cp -p " + v + " " + e.getKey());
+                }
+            }
+        }
 
         private static void writeLines(UpdateManager.Job job, JSONObject c, String key, String countKey, String sign) {
             JSONArray lines = c.optJSONArray(key);
