@@ -2495,6 +2495,7 @@
   "server.drift.kind.accounts": "ma solo con righe aggiunte: un pacchetto che crea il suo utente",
   "server.drift.kind.commentsOnly": "ma solo in righe di commento o vuote: non cambia quello che il servizio legge",
   "server.drift.kind.newDefault": "era il predefinito mai modificato, e pkg l'ha sostituito con il predefinito nuovo del pacchetto",
+  "server.drift.kind.rebuilt": "ma con gli stessi utenti SASL di prima: lo script di cyrus-sasl ricrea il database a ogni reinstallazione",
   "server.drift.kind.script": "e non è un file dei pacchetti aggiornati: l'ha fatto uno script di installazione",
   "server.drift.listenHeader": "Indirizzi in ascolto, confrontati con prima dell'aggiornamento:",
   "server.drift.listenProblem": "Indirizzi che erano in ascolto e adesso non lo sono: {list}.",
