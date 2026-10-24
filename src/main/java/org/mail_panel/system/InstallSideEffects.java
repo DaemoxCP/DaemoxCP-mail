@@ -268,6 +268,8 @@ final class InstallSideEffects {
      *  - "newDefault": il file vivo non e' di nessuno ed e' adesso identico al .sample nuovo
      *    del suo pacchetto. Non era mai stato modificato e pkg l'ha sostituito con il
      *    predefinito nuovo, che e' cio' che fa con un esempio intatto.
+     *  - "rebuilt": il database degli utenti SASL ricreato con gli stessi utenti (vedi
+     *    {@link #SASLDB_NAME}). Si dice, senza allarme.
      *  - "commentsOnly": cambiato da uno script, ma solo in righe di commento o vuote. Si dice,
      *    non cambia niente di quello che il servizio legge. Misurato: lo script di postfix
      *    aggiunge a master.cf quattro voci commentate.
@@ -338,6 +340,11 @@ final class InstallSideEffects {
                 } else if (!"permissions".equals(happened)) {
                     c.put("hidden", oldC == null || newC == null ? "tooLarge" : "binary");
                 }
+            }
+            if ("script".equals(kind) && "changed".equals(happened) && !c.has("permissionsFrom")
+                    && p.endsWith("/" + SASLDB_NAME) && b.content() != null && a.content() != null) {
+                String usersBefore = saslUsers(b.content()), usersAfter = saslUsers(a.content());
+                if (usersBefore != null && usersBefore.equals(usersAfter)) kind = "rebuilt";
             }
             c.put("kind", kind).put("alarm", "script".equals(kind));
             r.put(c);
@@ -438,6 +445,41 @@ final class InstallSideEffects {
                 return true;
         }
         return false;
+    }
+
+    /**
+     * Il database degli utenti SASL. A ogni reinstallazione di cyrus-sasl lo script di
+     * disinstallazione lo cancella se non contiene utenti, e quello di installazione lo ricrea
+     * vuoto: stesso contenuto, byte diversi. Misurato su latest il 24/10/2026, nell'aggiornamento
+     * dei non protetti («reinstalla cyrus-sasl 2.1.28_6»): un allarme che sarebbe suonato a ogni
+     * reinstallazione, e che nel guidato avrebbe fermato il riavvio di postfix, che dipende da
+     * cyrus-sasl. Con utenti dentro lo script lo lascia stare.
+     */
+    static final String SASLDB_NAME = "sasldb2.db";
+
+    /**
+     * Gli utenti di un database SASL letti dal suo strumento, {@code sasldblistusers2}: righe
+     * «utente@dominio: tipo di attributo», mai i valori. Si confrontano questi, non i byte, che
+     * per un database ricreato cambiano sempre. Null se non si e' potuto leggere (strumento
+     * assente, file illeggibile): allora l'allarme resta.
+     */
+    static String saslUsers(byte[] content) {
+        Path tmp = null;
+        try {
+            tmp = Files.createTempFile("sasldb", ".db",
+                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            Files.write(tmp, content);
+            Shell.Result r = Shell.runShell(Duration.ofSeconds(20), "sasldblistusers2 -f '" + tmp + "' 2>/dev/null");
+            if (r.exitCode() != 0) return null;
+            List<String> lines = new ArrayList<>();
+            for (String l : r.output().split("\n")) if (!l.isBlank()) lines.add(l.trim());
+            java.util.Collections.sort(lines);
+            return String.join("\n", lines);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        } finally {
+            if (tmp != null) try { Files.deleteIfExists(tmp); } catch (IOException ignored) {}
+        }
     }
 
     static boolean isText(byte[] b) {

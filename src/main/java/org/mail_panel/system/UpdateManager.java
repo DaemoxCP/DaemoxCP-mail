@@ -5845,7 +5845,12 @@ public final class UpdateManager {
         {"^dovecot[0-9]*-pigeonhole.*",       "dovecot"},
         {"^rspamd$",                          "rspamd"},
         {"^redis.*",                          "redis"},
+        // Lo stesso pacchetto fa girare due demoni, e tutti e due caricano libclamav. Con la
+        // sola riga di clamd, misurato su latest il 24/10/2026: clamav 1.5.4_1,1 -> 1.5.4_2,1,
+        // clamd riavviato, e freshclam ancora col programma di prima (procstat non trovava piu'
+        // il suo eseguibile) sotto un «clamav in servizio».
         {"^clamav.*",                         "clamav_clamd"},
+        {"^clamav.*",                         "clamav_freshclam"},
         {"^nginx.*",                          "nginx"},
         {"^php[0-9]+.*",                      "php_fpm"},
         {"^mysql[0-9]+-server$",              "mysql-server"},
@@ -5857,9 +5862,11 @@ public final class UpdateManager {
     private static final String LIBRERIE_CONDIVISE =
             "^(openssl[0-9]*|expat|libxml2|zlib|libiconv|pcre2?|curl|libssh2|nghttp2|icu|libsodium)$";
 
-    private static String servizioDiretto(String pacchetto) {
-        for (String[] r : SERVICE_OF) if (pacchetto.matches(r[0])) return r[1];
-        return null;
+    /** Tutti i servizi di un pacchetto: un pacchetto puo' farne girare piu' d'uno (clamav). */
+    private static java.util.List<String> directServices(String pacchetto) {
+        java.util.List<String> r = new ArrayList<>();
+        for (String[] row : SERVICE_OF) if (pacchetto.matches(row[0])) r.add(row[1]);
+        return r;
     }
 
     /**
@@ -5870,14 +5877,12 @@ public final class UpdateManager {
      */
     static java.util.List<String> serviziDaRiavviare(String pacchetto) {
         java.util.LinkedHashSet<String> servizi = new java.util.LinkedHashSet<>();
-        String diretto = servizioDiretto(pacchetto);
-        if (diretto != null) servizi.add(diretto);
+        servizi.addAll(directServices(pacchetto));
         if (!isValidName(pacchetto)) return new ArrayList<>(servizi);
         for (String riga : sh("pkg query %rn " + pacchetto + " 2>/dev/null", 30).split("\n")) {
             String dip = riga.trim();
             if (!isValidName(dip)) continue;
-            String s = servizioDiretto(dip);
-            if (s != null) servizi.add(s);
+            servizi.addAll(directServices(dip));
         }
         return new ArrayList<>(servizi);
     }

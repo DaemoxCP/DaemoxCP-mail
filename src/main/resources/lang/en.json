@@ -2495,6 +2495,7 @@
   "server.drift.kind.accounts": "but only with added lines: a package creating its own user",
   "server.drift.kind.commentsOnly": "but only in comment or blank lines: it does not change what the service reads",
   "server.drift.kind.newDefault": "it was the untouched default, and pkg replaced it with the package's new default",
+  "server.drift.kind.rebuilt": "but with the same SASL users as before: the cyrus-sasl script recreates the database at every reinstall",
   "server.drift.kind.script": "and it is not a file of the updated packages: an installation script did it",
   "server.drift.listenHeader": "Listening addresses, compared with before the update:",
   "server.drift.listenProblem": "Addresses that were listening and now are not: {list}.",

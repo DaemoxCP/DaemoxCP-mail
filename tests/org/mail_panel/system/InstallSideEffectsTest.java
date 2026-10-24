@@ -33,6 +33,7 @@ public class InstallSideEffectsTest {
     public static void main(String[] args) throws Exception {
         configuration();
         etc();
+        sasl();
         savedCopies();
         lines();
         owners();
@@ -197,6 +198,47 @@ public class InstallSideEffectsTest {
                 && InstallSideEffects.CONFIG_ROOTS.contains("/boot/loader.conf"));
         check("/etc/resolv.conf no: lo riscrive dhclient", InstallSideEffects.excluded("/etc/resolv.conf")
                 && !InstallSideEffects.excluded("/etc/resolv.conf.d/x") && !InstallSideEffects.excluded("/etc/rc.conf"));
+    }
+
+    // ===== sasldb2.db: si confrontano gli utenti, non i byte =====
+    // Con i database veri, fatti da saslpasswd2 come li fa lo script di cyrus-sasl: crea
+    // l'utente cyrus e lo toglie. Serve cyrus-sasl, quindi gira solo dove c'e'.
+    private static void sasl() throws Exception {
+        if (org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(10), "command -v saslpasswd2").exitCode() != 0) {
+            System.out.println("  --   SALTATA: sasldb2.db, qui non c'e' saslpasswd2 (cyrus-sasl): gira sulla VM");
+            return;
+        }
+        Path d = Files.createTempDirectory("sasl");
+        try {
+            byte[] empty1 = emptySasldb(d.resolve("uno.db")), empty2 = emptySasldb(d.resolve("due.db"));
+            org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(10),
+                    "echo x | saslpasswd2 -p -f " + d.resolve("utente.db") + " -c probeuser");
+            byte[] withUser = Files.readAllBytes(d.resolve("utente.db"));
+            check("due database vuoti ricreati hanno byte diversi (se no la prova non prova niente)",
+                    !java.util.Arrays.equals(empty1, empty2));
+            String path = "/usr/local/etc/sasldb2.db";
+            Map<String, InstallSideEffects.FileState> b = new TreeMap<>(), a = new TreeMap<>(), u = new TreeMap<>();
+            b.put(path, new InstallSideEffects.FileState("x1", "rw-r----- cyrus:mail", false, empty1));
+            a.put(path, new InstallSideEffects.FileState("x2", "rw-r----- cyrus:mail", false, empty2));
+            u.put(path, new InstallSideEffects.FileState("x3", "rw-r----- cyrus:mail", false, withUser));
+            JSONArray same = InstallSideEffects.configChanges(new InstallSideEffects.ConfigSnapshot(b, Map.of()),
+                    new InstallSideEffects.ConfigSnapshot(a, Map.of()), Set.of());
+            check("sasldb2.db ricreato vuoto com'era: si dice, senza allarme",
+                    "rebuilt".equals(kindOf(same, path)) && !find(same, path).getBoolean("alarm"));
+            JSONArray added = InstallSideEffects.configChanges(new InstallSideEffects.ConfigSnapshot(b, Map.of()),
+                    new InstallSideEffects.ConfigSnapshot(u, Map.of()), Set.of());
+            check("sasldb2.db con un utente in piu': allarme", "script".equals(kindOf(added, path)));
+            check("gli utenti si leggono, mai le password: «utente@dominio: attributo»",
+                    InstallSideEffects.saslUsers(withUser).matches("(?s)probeuser@\\S+: \\w+.*"));
+        } finally {
+            try (var st = Files.walk(d)) { st.sorted(java.util.Comparator.reverseOrder()).forEach(x -> x.toFile().delete()); }
+        }
+    }
+
+    private static byte[] emptySasldb(Path f) throws Exception {
+        org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(10),
+                "echo test | saslpasswd2 -p -f " + f + " -c cyrus && saslpasswd2 -f " + f + " -d cyrus");
+        return Files.readAllBytes(f);
     }
 
     // ===== la versione di prima, messa da parte =====
