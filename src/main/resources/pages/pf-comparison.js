@@ -13,7 +13,7 @@
             fetch('/api/fail2ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.getElementById('csrf_token').value },
-                body: JSON.stringify({ action: 'confronto_pf' })
+                body: JSON.stringify({ action: 'pf_comparison' })
             })
             .then(r => r.json())
             .then(d => {

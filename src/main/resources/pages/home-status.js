@@ -31,7 +31,7 @@
         async function homeStato() {
             const el = document.getElementById('home-avvio');
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + homeEsc(t('hs.reading')) + '</span>';
-            const r = await homeApi('rc_stato');
+            const r = await homeApi('rc_state');
             if (!r || r.success === false) {
                 el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                              + '<i class="fas fa-question-circle me-1" aria-hidden="true"></i>'
@@ -59,7 +59,7 @@
             const el = document.getElementById('home-fiducia');
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + homeEsc(t('hs.comparingCf')) + '</span>';
-            const r = await homeApi('cf_intervalli');
+            const r = await homeApi('cf_intervals');
             if (!r || !r.success) {
                 el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                              + '<i class="fas fa-question-circle me-1" aria-hidden="true"></i>'
@@ -124,7 +124,7 @@
             if (!el) return;
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + homeEsc(t('hs.readingSystem')) + '</span>';
-            const r = await homeApi('riepilogo_sistema');
+            const r = await homeApi('system_summary');
             if (!r || !r.success) {
                 el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                              + '<i class="fas fa-question-circle me-1" aria-hidden="true"></i>'

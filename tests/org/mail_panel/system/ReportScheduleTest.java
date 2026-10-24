@@ -26,42 +26,42 @@ public class ReportScheduleTest {
         // fa. Senza la fix qui si riprovava, e si sarebbe riprovato al tick dopo, e al
         // tick dopo ancora, indefinitamente.
         real("dopo un fallimento non riprova subito",
-            !PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(0), "fallito: auth", NOW));
+            !PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), hoursAgo(0), "fallito: auth", NOW));
         real("non riprova nemmeno dopo 5 ore",
-            !PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(5), "fallito: auth", NOW));
+            !PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), hoursAgo(5), "fallito: auth", NOW));
         // Ma non deve nemmeno smettere per sempre: dopo la pausa si riprova.
         real("dopo 6 ore riprova",
-            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(6), "fallito: auth", NOW));
+            PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), hoursAgo(6), "fallito: auth", NOW));
         real("dopo 7 ore riprova",
-            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(7), "fallito: auth", NOW));
+            PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), hoursAgo(7), "fallito: auth", NOW));
 
         // --- La pausa NON deve rallentare il caso normale ---
         real("ultimo esito riuscito: parte come prima",
-            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(0), "riuscito", NOW));
+            PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), hoursAgo(0), "riuscito", NOW));
         real("mai inviato: parte",
-            PeriodicReport.isTheMoment("settimanale", "8", "", "", "", NOW));
+            PeriodicReport.isTheMoment("weekly", "8", "", "", "", NOW));
         real("settimanale, 3 giorni fa: NON parte",
-            !PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 3), "", "", NOW));
+            !PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 3), "", "", NOW));
         real("giornaliero, 21 ore fa: parte",
-            PeriodicReport.isTheMoment("giornaliero", "8", hoursAgo(21), "", "", NOW));
+            PeriodicReport.isTheMoment("daily", "8", hoursAgo(21), "", "", NOW));
         real("mensile, 10 giorni fa: NON parte",
-            !PeriodicReport.isTheMoment("mensile", "8", hoursAgo(24 * 10), "", "", NOW));
+            !PeriodicReport.isTheMoment("monthly", "8", hoursAgo(24 * 10), "", "", NOW));
         real("prima dell'ora impostata: NON parte",
-            !PeriodicReport.isTheMoment("settimanale", "20", hoursAgo(24 * 8), "", "", NOW));
+            !PeriodicReport.isTheMoment("weekly", "20", hoursAgo(24 * 8), "", "", NOW));
 
         // --- Un dato illeggibile non deve bloccare per sempre ---
         // La pausa esiste per non martellare un server altrui, non per zittire il rapporto:
         // se la data del tentativo non si sa leggere, si procede invece di restare fermi.
         real("data del tentativo illeggibile: non blocca",
-            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), "boh", "fallito: auth", NOW));
+            PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), "boh", "fallito: auth", NOW));
         real("tentativo mai registrato: non blocca",
-            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), "", "fallito: auth", NOW));
+            PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), "", "fallito: auth", NOW));
         real("esito assente: non blocca",
-            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(0), "", NOW));
+            PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), hoursAgo(0), "", NOW));
 
         // --- Orologio andato indietro ---
         real("tentativo nel futuro: non blocca",
-            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), NOW.plusHours(3).format(ISO),
+            PeriodicReport.isTheMoment("weekly", "8", hoursAgo(24 * 8), NOW.plusHours(3).format(ISO),
                 "fallito: auth", NOW));
 
         System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");

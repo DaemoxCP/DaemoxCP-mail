@@ -129,11 +129,11 @@ public class SSLMailServer {
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
         "packages_status", "packages_overview", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
         "mysql84_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "branch_status", "branch_preview",
-        "system_report", "os_status", "reboot_preview", "rc_stato", "riepilogo_sistema", "cf_intervalli",
+        "system_report", "os_status", "reboot_preview", "rc_state", "system_summary", "cf_intervals",
         "rc_remove_preview", "rc_preview", "os_upgrade_targets", "os_upgrade_preflight", "os_upgrade_instructions",
-        "os_upgrade_verify", "salto_stato", "be_list", "ssl_uso", "removal_candidates", "panel_uses", "deep_scan",
-        "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosi", "web443_status", "web443_config",
-        "mtasts_piano", "sorveglianza", "sorveglianza_cambi", "openssl_scadenza", "porta465_status",
+        "os_upgrade_verify", "jump_state", "be_list", "ssl_usage", "removal_candidates", "panel_uses", "deep_scan",
+        "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosis", "web443_status", "web443_config",
+        "mtasts_plan", "watch", "watch_changes", "openssl_expiry", "port465_status",
         "python_preflight", "python_leftovers", "java_preflight", "java_status", "roundcube_preflight",
         "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status");
 
@@ -223,7 +223,7 @@ public class SSLMailServer {
         // ---------- Sicurezza ----------
         context("/security", Access.page(SECURITY_VIEW), this::handleProtectedPage);
         context("/firewall", Access.page(SECURITY_VIEW), this::handleProtectedPage);
-        context("/api/fail2ban", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "verifica_filtro", "confronto_pf")), this::handleApiFail2ban);
+        context("/api/fail2ban", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "verify_filter", "pf_comparison")), this::handleApiFail2ban);
         context("/api/fail2ban_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE), this::handleApiFail2banHealth);
         context("/api/clamav_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "test_eicar")), this::handleApiClamavHealth);
         context("/api/unbound_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "test_query")), this::handleApiUnboundHealth);
@@ -2443,10 +2443,10 @@ public class SSLMailServer {
         String old = req.optString("old_mail", "");
         boolean archive = false;
         if (s.mail().present()) {
-            if (!old.equals("ritrova") && !old.equals("archivia"))
+            if (!old.equals("recover") && !old.equals("archive"))
                 return r.put("success", false).put("error",
                         I18n.tr("server.convert.oldMailChoice"));
-            archive = old.equals("archivia");
+            archive = old.equals("archive");
         }
         MailDatabase.Domain domain = Main.mailDatabase.getDomainByName(address.substring(address.lastIndexOf('@') + 1));
         if (domain == null) return r.put("success", false).put("error", I18n.tr("server.convert.domainNotInPanel"));
@@ -2919,7 +2919,7 @@ public class SSLMailServer {
             case "status" -> response = org.mail_panel.system.Autoconfig.state();
             case "preview" -> response = org.mail_panel.system.Autoconfig.preview();
             case "install" -> {
-                if (!"INSTALLA".equals(req.optString("confirm", ""))) {
+                if (!"INSTALL".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
@@ -5295,7 +5295,7 @@ public class SSLMailServer {
                     // Legge e basta: fa girare fail2ban-regex sul log della jail e dice se il
                     // filtro aggancia qualcosa. Serve a distinguere "nessuno ha attaccato" da
                     // "la jail non vede niente", che a schermo sono lo stesso zero.
-                    case "verifica_filtro" -> {
+                    case "verify_filter" -> {
                         String jail = json.optString("jail", "");
                         Fail2banManager.FilterCheck c = fail2banManager.verifyFilter(jail);
                         response.put("success", true)
@@ -5307,7 +5307,7 @@ public class SSLMailServer {
                     // Legge e basta: mette a confronto gli indirizzi che Fail2ban crede
                     // bannati con quelli che pf blocca davvero. "Currently banned" dice che il
                     // comando di ban e' stato eseguito, non che l'indirizzo sia bloccato.
-                    case "confronto_pf" -> {
+                    case "pf_comparison" -> {
                         Fail2banManager.PfComparison c = fail2banManager.compareBansWithPf();
                         JSONArray jj = new JSONArray();
                         for (Fail2banManager.JailPf j : c.jails) {
@@ -7059,9 +7059,9 @@ public class SSLMailServer {
                     logAudit("SERVER_REBOOT", ip, "requested from the panel");
                     response = UpdateManager.restartServer(true, req.optInt("minutes", 1));
                 }
-                case "rc_stato" -> response = UpdateManager.autoStart();
-                case "riepilogo_sistema" -> response = UpdateManager.systemSummary();
-                case "cf_intervalli" -> response = UpdateManager.cloudflareRanges();
+                case "rc_state" -> response = UpdateManager.autoStart();
+                case "system_summary" -> response = UpdateManager.systemSummary();
+                case "cf_intervals" -> response = UpdateManager.cloudflareRanges();
                 case "rc_remove_preview" -> response = UpdateManager.removePanelRcScript(false);
                 case "rc_remove" -> {
                     if (!"RIMUOVI RC".equals(req.optString("confirm", ""))) {
@@ -7087,16 +7087,16 @@ public class SSLMailServer {
                 case "os_upgrade_instructions" -> response = UpdateManager.systemUpgradeInstructions(
                         req.optString("target", "15.1"));
                 case "os_upgrade_verify" -> response = UpdateManager.verifyAfterUpdate();
-                case "salto_stato" -> response = UpdateManager.versionJumpStatus();
+                case "jump_state" -> response = UpdateManager.versionJumpStatus();
                 case "be_list" -> response = UpdateManager.bootEnvironments();
-                case "ssl_uso" -> response = UpdateManager.opensslUsage();
+                case "ssl_usage" -> response = UpdateManager.opensslUsage();
                 case "removal_candidates" -> response = UpdateManager.removalCandidates();
                 case "panel_uses" -> response = UpdateManager.panelUsage(req.optString("name", ""));
                 case "deep_scan" -> response = UpdateManager.deepAnalysis(req.optString("name", ""));
                 case "panel_env" -> response = UpdateManager.panelBootEnvironment();
                 case "dovecot24_preview" -> response = UpdateManager.dovecot24Preview();
                 case "rspamd_timeout" -> response = UpdateManager.rspamdTimeoutDiagnostics();
-                case "web_diagnosi" -> response = org.mail_panel.system.WebDiagnostics.state();
+                case "web_diagnosis" -> response = org.mail_panel.system.WebDiagnostics.state();
                 case "web443_status" -> response = org.mail_panel.system.WebProtection.state();
                 case "web443_config" -> response = new JSONObject().put("success", true)
                         .put("configuration", org.mail_panel.system.WebProtection.configuration(
@@ -7104,9 +7104,9 @@ public class SSLMailServer {
                                 "/usr/local/etc/ssl/mail/privkey.pem"))
                         .put("filter", org.mail_panel.system.WebProtection.filter())
                         .put("jail", org.mail_panel.system.WebProtection.jail());
-                case "mtasts_piano" -> response = org.mail_panel.system.MtaStsSetup.plan();
-                case "mtasts_attiva" -> {
-                    if (!"ATTIVA".equals(req.optString("confirm", ""))) {
+                case "mtasts_plan" -> response = org.mail_panel.system.MtaStsSetup.plan();
+                case "mtasts_enable" -> {
+                    if (!"ENABLE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7114,7 +7114,7 @@ public class SSLMailServer {
                     logAudit("MTASTS_ATTIVA", ip, "started as job " + response.optString("jobId", ""));
                 }
                 case "web443_include" -> {
-                    if (!"AGGIUNGI".equals(req.optString("confirm", ""))) {
+                    if (!"ADD".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7123,7 +7123,7 @@ public class SSLMailServer {
                             ? "include added" : "NOT added: " + response.optString("error", "?"));
                 }
                 case "web443_install" -> {
-                    if (!"APRI".equals(req.optString("confirm", ""))) {
+                    if (!"OPEN".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7132,7 +7132,7 @@ public class SSLMailServer {
                             ? "443 open with minimal surface" : "NOT open: " + response.optString("error", "?"));
                 }
                 case "web443_jail" -> {
-                    if (!"ATTIVA".equals(req.optString("confirm", ""))) {
+                    if (!"ENABLE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7140,17 +7140,17 @@ public class SSLMailServer {
                     logAudit("WEB443_JAIL", ip, response.optBoolean("success")
                             ? "jail active" : "NOT active: " + response.optString("error", "?"));
                 }
-                case "sorveglianza" -> response = org.mail_panel.system.StandardsWatch.check();
-                case "sorveglianza_cambi" -> response = org.mail_panel.system.StandardsWatch.whatChanged(
+                case "watch" -> response = org.mail_panel.system.StandardsWatch.check();
+                case "watch_changes" -> response = org.mail_panel.system.StandardsWatch.whatChanged(
                         req.optString("rfc", ""),
                         // Per un aggiornamento il documento nuovo e la specifica del pannello
                         // sono due numeri diversi: gli identificatori da incrociare sono quelli
                         // della specifica, non del documento che la aggiorna.
                         req.optString("reference", req.optString("rfc", "")));
-                case "openssl_scadenza" -> response = org.mail_panel.system.OpensslExpiry.state();
-                case "porta465_status" -> response = org.mail_panel.system.SubmissionPort.state();
-                case "porta465_apply" -> {
-                    if (!"APPLICA".equals(req.optString("confirm", ""))) {
+                case "openssl_expiry" -> response = org.mail_panel.system.OpensslExpiry.state();
+                case "port465_status" -> response = org.mail_panel.system.SubmissionPort.state();
+                case "port465_apply" -> {
+                    if (!"APPLY".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7169,7 +7169,7 @@ public class SSLMailServer {
                                + response.optString("error", "?")));
                 }
                 case "pkg_remove" -> {
-                    if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
+                    if (!"REMOVE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7179,7 +7179,7 @@ public class SSLMailServer {
                                + response.optString("error", "?")));
                 }
                 case "be_destroy" -> {
-                    if (!"ELIMINA".equals(req.optString("confirm", ""))) {
+                    if (!"DELETE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7188,7 +7188,7 @@ public class SSLMailServer {
                             + (response.optBoolean("success") ? " - deleted"
                                : " - NOT deleted: " + response.optString("error", "?")));
                 }
-                case "salto_prosegui" -> {
+                case "jump_continue" -> {
                     if (!"PROSEGUI".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
@@ -7260,7 +7260,7 @@ public class SSLMailServer {
                     logAudit("ROUNDCUBE_UPDATE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "clean_client" -> {
-                    if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
+                    if (!"REMOVE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7322,7 +7322,7 @@ public class SSLMailServer {
                 case "updates_apply" -> {
                     // La conferma scritta a mano non e' burocrazia: distingue un click di
                     // riflesso da una decisione. Qui si modifica un server di posta vivo.
-                    if (!"AGGIORNA".equals(req.optString("confirm", ""))) {
+                    if (!"UPDATE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -8075,7 +8075,7 @@ public class SSLMailServer {
                         logAudit(res.success ? "FAIL2BAN_MAIL_JAILS_INSTALLED" : "FAIL2BAN_MAIL_JAILS_FAILED",
                             clientIp, res.success ? res.configPath : (res.error != null ? res.error : ""));
                     }
-                    case "ripara_azione_ban" -> {
+                    case "repair_ban_action" -> {
                         JSONObject rr = org.mail_panel.security.BanActionRepair.repair();
                         response = rr;
                         logAudit(rr.optBoolean("success", false) ? "FAIL2BAN_BANACTION_RIPARATA"
@@ -8549,7 +8549,7 @@ public class SSLMailServer {
             banDetail,
             banRunnable ? null
                 : I18n.tr("server.f2b.ban.impact"),
-            (banRunnable || !f2bRunning) ? null : "ripara_azione_ban",
+            (banRunnable || !f2bRunning) ? null : "repair_ban_action",
             I18n.tr("server.f2b.ban.fix")));
 
         // ========== I ban arrivano davvero a pf? ==========
@@ -9261,15 +9261,15 @@ public class SSLMailServer {
                               || (notJudged != null && notJudged.length() > 0);
             if (toRepair) {
                 JSONObject rr = org.mail_panel.security.BanActionRepair.repair();
-                steps.put(buildStep("ripara_azione_ban",
+                steps.put(buildStep("repair_ban_action",
                     I18n.tr("server.f2bfix.banAction"), rr));
                 if (!rr.optBoolean("success", false)) anyFailed = true;
             } else {
-                steps.put(buildSkipStep("ripara_azione_ban",
+                steps.put(buildSkipStep("repair_ban_action",
                     I18n.tr("server.f2bfix.banActionOk")));
             }
         } catch (Exception e) {
-            steps.put(buildErrorStep("ripara_azione_ban", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
+            steps.put(buildErrorStep("repair_ban_action", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
             anyFailed = true;
         }
 
@@ -9600,7 +9600,7 @@ public class SSLMailServer {
         switch (req.optString("action", "")) {
             case "status" -> response = auto.state(domainId);
             case "create" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
@@ -9614,8 +9614,8 @@ public class SSLMailServer {
             }
             case "change_policy" -> {
                 response = auto.changePolicy(domainId, req.optString("policy", ""),
-                        "CAMBIA".equals(req.optString("confirm", "")));
-                if ("CAMBIA".equals(req.optString("confirm", "")))
+                        "CHANGE".equals(req.optString("confirm", "")));
+                if ("CHANGE".equals(req.optString("confirm", "")))
                     logAudit("AUTODNS_POLITICA", ip, "domain " + domainId + " -> p="
                             + req.optString("policy", "") + (response.optBoolean("success")
                             ? " - done" : " - NOT done: " + response.optString("error", "?")));
@@ -9623,7 +9623,7 @@ public class SSLMailServer {
             case "mtasts_status" -> response = org.mail_panel.system.MtaSts.state();
             case "mtasts_mode" -> response = org.mail_panel.system.MtaSts.setMode(req.optString("mode", ""));
             case "mtasts_txt" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
@@ -9638,7 +9638,7 @@ public class SSLMailServer {
                            : " - removed " + removed.length() + " extra MTA-STS records: " + removed.join("  ||  ")));
             }
             case "create_optional" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
@@ -9651,8 +9651,8 @@ public class SSLMailServer {
             // La pagina DNS deve poter seguire il lavoro che ha appena avviato: senza questo
             // caso resterebbe con un identificativo e nessun modo di sapere com'e' finito.
             case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
-            case "configura_tutto" -> {
-                if (!"CONFIGURA".equals(req.optString("confirm", ""))) {
+            case "configure_all" -> {
+                if (!"CONFIGURE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
@@ -9662,7 +9662,7 @@ public class SSLMailServer {
             }
             case "mailboxes" -> response = auto.availableMailboxes();
             case "mailbox_create" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
@@ -9672,7 +9672,7 @@ public class SSLMailServer {
                            + response.optString("error", "?")));
             }
             case "alias_create" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
@@ -9707,7 +9707,7 @@ public class SSLMailServer {
                     req.optString("frequency", ""), req.optString("now", ""),
                     req.optBoolean("active", false));
             case "identity_create" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }

@@ -68,13 +68,13 @@ public class PackageQueueTest {
             try { leave.await(); } catch (InterruptedException ignored) { }
         });
         inside.await(5, TimeUnit.SECONDS);
-        real("mentre gira, il turno resta suo", PackageQueue.take("altro", "altro") != null);
+        real("mentre gira, il turno resta suo", PackageQueue.take("other", "other") != null);
         leave.countDown();
         real("finito il lavoro, il turno si libera", waitUntilFree());
 
         Thread.setDefaultUncaughtExceptionHandler((t, x) -> { });   // l'eccezione voluta non sporca l'uscita
-        real("lavoro che fallisce: prende il turno", PackageQueue.take("rotto", "lavoro rotto") == null);
-        PackageQueue.start("rotto", "prova-rotto", () -> { throw new IllegalStateException("prova"); });
+        real("lavoro che fallisce: prende il turno", PackageQueue.take("broken", "lavoro rotto") == null);
+        PackageQueue.start("broken", "prova-rotto", () -> { throw new IllegalStateException("prova"); });
         real("anche se fallisce, il turno si libera", waitUntilFree());
 
         // --- L'elenco su disco ---

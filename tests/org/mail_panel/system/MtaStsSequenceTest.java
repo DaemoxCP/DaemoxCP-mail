@@ -79,7 +79,7 @@ public class MtaStsSequenceTest {
             .put("error", "Senza la 443 configurata la politica non puo' rispondere: mi fermo.")
             .put("steps", new JSONArray()
                 .put(new JSONObject().put("title", "Riga di include").put("ok", true)
-                        .put("messageText", "fatto")));
+                        .put("messageText", "done")));
         JSONArray vr = MtaStsSetup.asEntries(broken);
         require("i passi gia' fatti restano", vr.length() == 2);
         // Un elenco di passi riusciti che si interrompe senza dire perche' somiglia a un successo.

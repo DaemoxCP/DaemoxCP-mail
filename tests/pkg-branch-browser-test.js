@@ -32,13 +32,13 @@ function stato() {
         fingerprint: latest ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa',
         file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf', panelOwnedFile: latest,
         repository: [
-            { name: 'FreeBSD-ports', role: 'Pacchetti (port)', branch: ramoAdesso, enabled: true, type: 'pacchetti',
+            { name: 'FreeBSD-ports', role: 'Pacchetti (port)', branch: ramoAdesso, enabled: true, type: 'packages',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/' + ramoAdesso },
-            { name: 'FreeBSD-ports-kmods', role: 'Moduli del kernel', branch: ramoAdesso, enabled: true, type: 'moduli',
+            { name: 'FreeBSD-ports-kmods', role: 'Moduli del kernel', branch: ramoAdesso, enabled: true, type: 'modules',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/kmods_' + ramoAdesso + '_0' },
             { name: 'FreeBSD-base', role: 'Sistema base', branch: 'release', enabled: false, type: 'base',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/base_release_0' },
-            { name: 'mio<b>repo</b>', role: 'Repository non ufficiale', branch: '', enabled: true, type: 'esterno',
+            { name: 'mio<b>repo</b>', role: 'Repository non ufficiale', branch: '', enabled: true, type: 'external',
               url: 'file:///usr/local/<img src=x onerror="window.iniettato=1">' },
         ] };
 }

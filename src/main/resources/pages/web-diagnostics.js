@@ -2,7 +2,7 @@
         async function webDiag() {
             const el = document.getElementById('upd-web');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('wd.reading')) + '';
-            const r = await updApi('web_diagnosi');
+            const r = await updApi('web_diagnosis');
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error || t('wd.failed')) + '</div>';
                 return;

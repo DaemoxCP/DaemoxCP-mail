@@ -65,7 +65,7 @@ public class PackagePlanTest {
         real("kafka da solo: measured", p.getBoolean("measured"));
         JSONObject k = p.getJSONArray("changes").getJSONObject(0);
         real("kafka da solo: 4.3.0 -> 4.3.1",
-            "aggiorna".equals(k.getString("type")) && "kafka".equals(k.getString("name"))
+            "upgrade".equals(k.getString("type")) && "kafka".equals(k.getString("name"))
             && "4.3.0".equals(k.getString("from")) && "4.3.1".equals(k.getString("to")));
         real("kafka da solo: non ancora vulnerabile", !k.getBoolean("stillVulnerable"));
 
@@ -95,7 +95,7 @@ public class PackagePlanTest {
         p = PackagePlan.readPlan(large);
         real("piano grande: measured e con 5 changes", p.getBoolean("measured") && p.getJSONArray("changes").length() == 5);
         real("piano grande: la rimozione ha nome, versione e motivo",
-            find(p, "php84-pecl-rdkafka").getString("type").equals("rimuove")
+            find(p, "php84-pecl-rdkafka").getString("type").equals("remove")
             && find(p, "php84-pecl-rdkafka").getString("from").equals("6.0.3_1")
             && find(p, "php84-pecl-rdkafka").getString("reason").startsWith("conflicts with"));
         real("piano grande: l'installazione nuova", "10.45".equals(find(p, "pcre2").getString("to")));
@@ -271,7 +271,7 @@ public class PackagePlanTest {
             && "1.5.4_1,1".equals(ins.get("clamav")[0]) && "0".equals(ins.get("clamav")[1]));
         org.mail_panel.i18n.I18n.setCurrent("en");
         real("quadro: il tipo di cambiamento si legge nella lingua di chi guarda",
-            "upgrade".equals(PackagePlan.typeName("aggiorna")) && "remove".equals(PackagePlan.typeName("rimuove")));
+            "upgrade".equals(PackagePlan.typeName("upgrade")) && "remove".equals(PackagePlan.typeName("remove")));
 
         end();
     }

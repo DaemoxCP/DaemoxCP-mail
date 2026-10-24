@@ -227,7 +227,7 @@ public final class BanActionRepair {
                 verification.put(new JSONObject().put("jail", jail).put("ok", ok)
                     .put("command", cmd));
             }
-            steps.put(step("verifica", allOk,
+            steps.put(step("review", allOk,
                 allOk ? I18n.tr("server.banfix.allBan")
                         : I18n.tr("server.banfix.stillNotBan")));
 

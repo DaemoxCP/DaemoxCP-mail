@@ -71,6 +71,36 @@ public final class PeriodicReport {
 
     // ===================== impostazioni =====================
 
+    /**
+     * La frequenza salvata, con i nomi di adesso. Fino al 24/10/2026 si salvava "giornaliero",
+     * "settimanale" o "mensile": una pianificazione gia' fatta deve continuare a valere.
+     */
+    static String normalizedFrequency(String f) {
+        return switch (f) {
+            case "giornaliero" -> "daily";
+            case "settimanale" -> "weekly";
+            case "mensile" -> "monthly";
+            default -> f;
+        };
+    }
+
+    /** L'esito di un invio fallito comincia cosi', e lo scheduler lo riconosce da qui. */
+    static final String FAILED_PREFIX = "failed: ";
+    /** Il prefisso che si scriveva fino al 24/10/2026: un esito gia' salvato va riconosciuto. */
+    static final String OLD_FAILED_PREFIX = "fallito: ";
+
+    static boolean isFailedOutcome(String outcome) {
+        return outcome.startsWith(FAILED_PREFIX) || outcome.startsWith(OLD_FAILED_PREFIX);
+    }
+
+    /** L'esito come lo legge chi apre la pagina: il prefisso e' un codice, non un testo. */
+    static String shownOutcome(String outcome) {
+        for (String p : new String[]{FAILED_PREFIX, OLD_FAILED_PREFIX})
+            if (outcome.startsWith(p))
+                return I18n.tr("server.rp.lastFailed", java.util.Map.of("error", outcome.substring(p.length())));
+        return outcome;
+    }
+
     private static String imp(String key, String defaultValue) {
         try { return Main.mailDatabase.getSetting(key, defaultValue); }
         catch (Exception e) { return defaultValue; }
@@ -109,11 +139,11 @@ public final class PeriodicReport {
                 .put("active", "1".equals(imp("report_enabled", "0")))
                 .put("sender", imp("report_from", "no-reply@" + domain))
                 .put("recipient", imp("report_to", ""))
-                .put("frequency", imp("report_freq", "settimanale"))
+                .put("frequency", normalizedFrequency(imp("report_freq", "weekly")))
                 .put("now", imp("report_hour", "8"))
                 .put("domain", domain)
                 .put("lastSend", last)
-                .put("lastOutcome", imp("report_last_result", ""));
+                .put("lastOutcome", shownOutcome(imp("report_last_result", "")));
         r.put("next", describeNext(r));
         return r;
     }
@@ -123,8 +153,8 @@ public final class PeriodicReport {
         String freq = s.getString("frequency");
         String now = s.getString("now");
         String u = s.getString("lastSend");
-        String every = "giornaliero".equals(freq) ? I18n.tr("server.rp.everyDay")
-                    : "mensile".equals(freq) ? I18n.tr("server.rp.everyMonth") : I18n.tr("server.rp.everyWeek");
+        String every = "daily".equals(freq) ? I18n.tr("server.rp.everyDay")
+                    : "monthly".equals(freq) ? I18n.tr("server.rp.everyMonth") : I18n.tr("server.rp.everyWeek");
         return I18n.tr("server.rp.schedule", java.util.Map.of("ogni", String.valueOf(every), "ora", String.valueOf(now)))
                 + " " + (u.isEmpty() ? I18n.tr("server.rp.neverSent")
                                : I18n.tr("server.rp.lastSent", java.util.Map.of("quando", String.valueOf(u.replace('T', ' ')))));
@@ -169,7 +199,7 @@ public final class PeriodicReport {
         for (String v : new String[]{recipient, sender})
             if (v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0 || v.indexOf('\0') >= 0)
                 return r.put("success", false).put("error", I18n.tr("server.rp.badAddress"));
-        if (!java.util.List.of("giornaliero", "settimanale", "mensile").contains(frequency))
+        if (!java.util.List.of("daily", "weekly", "monthly").contains(frequency))
             return r.put("success", false).put("error", I18n.tr("server.rp.badFreq"));
         int h;
         try { h = Integer.parseInt(now.trim()); }
@@ -240,7 +270,7 @@ public final class PeriodicReport {
             throws Exception {
         for (var m : Main.mailDatabase.getMailboxes(dom.id))
             if (m.email != null && m.email.equalsIgnoreCase(address))
-                return new JSONObject().put("type", "casella").put("name", m.name == null ? "" : m.name)
+                return new JSONObject().put("type", "mailbox").put("name", m.name == null ? "" : m.name)
                         .put("created", m.createdAt == null ? "" : m.createdAt.toString());
         for (var a : Main.mailDatabase.getAliases(dom.id))
             if (a.source != null && a.source.equalsIgnoreCase(address))
@@ -410,7 +440,7 @@ public final class PeriodicReport {
         // Quindi si guarda anche l'ULTIMO TENTATIVO, riuscito o no. La data del tentativo viene
         // scritta PRIMA di provare, non dopo: se il processo muore a meta' invio, al riavvio non
         // deve ricominciare subito.
-        if (lastOutcome != null && lastOutcome.startsWith("fallito")
+        if (lastOutcome != null && isFailedOutcome(lastOutcome)
                 && lastAttemptIso != null && !lastAttemptIso.isBlank()) {
             try {
                 long fromAttempt = java.time.temporal.ChronoUnit.HOURS.between(
@@ -428,8 +458,8 @@ public final class PeriodicReport {
         long hours = java.time.temporal.ChronoUnit.HOURS.between(last, now);
         if (hours < 0) return false;                                      // orologio andato indietro
         switch (frequency == null ? "" : frequency) {
-            case "giornaliero": return hours >= 20;
-            case "mensile":     return hours >= 24 * 29;
+            case "daily": return hours >= 20;
+            case "monthly":     return hours >= 24 * 29;
             default:            return hours >= 24 * 6;                   // settimanale
         }
     }
@@ -438,7 +468,7 @@ public final class PeriodicReport {
     static final int HOURS_AFTER_FAILURE = 6;
 
     private boolean isTheMoment() {
-        return isTheMoment(imp("report_freq", "settimanale"), imp("report_hour", "8"),
+        return isTheMoment(normalizedFrequency(imp("report_freq", "weekly")), imp("report_hour", "8"),
                 imp("report_last", ""), imp("report_last_try", ""), imp("report_last_result", ""),
                 LocalDateTime.now());
     }
@@ -495,12 +525,12 @@ public final class PeriodicReport {
         if (outcome.optBoolean("success")) {
             String now = LocalDateTime.now().format(ISO);
             impSet("report_last", now);
-            impSet("report_last_result", outcome.optString("outcome", "riuscito"));
+            impSet("report_last_result", outcome.optString("outcome", I18n.tr("server.rp.lastSucceeded")));
             return r.put("success", true).put("when", now)
                     .put("warning", outcome.optBoolean("warning", false))
                     .put("note", outcome.optString("note", ""));
         }
-        impSet("report_last_result", "fallito: " + outcome.optString("error", "?"));
+        impSet("report_last_result", FAILED_PREFIX + outcome.optString("error", "?"));
         return r.put("success", false).put("error", outcome.optString("error", I18n.tr("server.rp.sendFailed")));
     }
 
@@ -687,14 +717,14 @@ public final class PeriodicReport {
     /**
      * Guarda il log finche' Postfix non dice com'e' andata, per al massimo SECONDS_IN_LOG.
      * Una consegna normale si conclude in un paio di secondi; se il server del destinatario non
-     * risponde, Postfix aspetta i suoi tempi e l'esito resta "in coda".
+     * risponde, Postfix aspetta i suoi tempi e l'esito resta "queued".
      */
     private static JSONObject followInLog(long from, String messageId, String recipient) {
         long expiry = System.nanoTime() + TimeUnit.SECONDS.toNanos(SECONDS_IN_LOG);
         while (true) {
             JSONObject e = outcomeInLog(logLines(from), messageId, recipient);
             String state = e.optString("state", "");
-            if ((!state.isEmpty() && !"in coda".equals(state)) || System.nanoTime() >= expiry) return e;
+            if ((!state.isEmpty() && !"queued".equals(state)) || System.nanoTime() >= expiry) return e;
             try { Thread.sleep(1000); }
             catch (InterruptedException ie) { Thread.currentThread().interrupt(); return e; }
         }
@@ -709,7 +739,7 @@ public final class PeriodicReport {
      * riga non la scrivono: se manca, Postfix il messaggio non l'ha visto, e lo "stato" resta
      * vuoto invece di diventare "riuscito".
      *
-     * Stati: "" (Postfix non l'ha visto), "in coda" (visto, esito non ancora scritto),
+     * Stati: "" (Postfix non l'ha visto), "queued" (visto, esito non ancora scritto),
      * "consegnato", "rimandato" (Postfix riprovera' da solo), "respinto" (dal server del
      * destinatario), "rifiutato" (da Postfix stesso, prima di partire: milter o controlli).
      */
@@ -723,7 +753,7 @@ public final class PeriodicReport {
             if (m.find()) { queue = m.group(1); break; }
         }
         if (queue == null) return r;
-        r.put("queue", queue).put("state", "in coda");
+        r.put("queue", queue).put("state", "queued");
 
         // Le righe di QUESTO messaggio: il numero di coda come parola intera, seguito da ": ".
         java.util.regex.Pattern sue = java.util.regex.Pattern.compile(
@@ -757,10 +787,10 @@ public final class PeriodicReport {
             s.find();
             String relay = fra(rest, "relay=", ",");
             r.put("relay", relay).put("answer", s.group(2)).put("state", switch (s.group(1)) {
-                case "sent" -> "consegnato";
-                case "deferred" -> "rimandato";
-                case "bounced", "expired" -> "respinto";
-                default -> "in coda";
+                case "sent" -> "delivered";
+                case "deferred" -> "deferred";
+                case "bounced", "expired" -> "rejected";
+                default -> "queued";
             });
             // Se la connessione era cifrata, il processo smtp che ha consegnato lo scrive quando la
             // apre (con smtp_tls_loglevel >= 1). E' quello che Gmail chiama "crittografia standard".
@@ -778,7 +808,7 @@ public final class PeriodicReport {
             // Un rifiuto temporaneo (4.x.x) non e' la fine: Postfix riprova.
             boolean temporary = java.util.regex.Pattern.compile("(?:^|\\s)4\\.\\d{1,3}\\.\\d{1,3}(?:\\s|$)")
                     .matcher(refusal).find();
-            r.put("state", temporary ? "rimandato" : "rifiutato").put("answer", refusal);
+            r.put("state", temporary ? "deferred" : "refused").put("answer", refusal);
         }
 
         java.util.Collections.sort(indexes);
@@ -866,26 +896,26 @@ public final class PeriodicReport {
         String tls = log.optString("tls", "");
         JSONObject v = new JSONObject();
         switch (log.optString("state", "")) {
-            case "consegnato" -> {
+            case "delivered" -> {
                 String where = relay + (tls.isEmpty() ? "" : " " + I18n.tr("server.rp.withTls", java.util.Map.of("tls", String.valueOf(tls))));
                 return v.put("success", true).put("warning", false)
                         .put("outcome", brief(I18n.tr("server.rp.deliveredTo", java.util.Map.of("dove", String.valueOf(where), "risposta", String.valueOf(answer)))))
                         .put("note", I18n.tr("server.rp.deliveredNote", java.util.Map.of("dove", String.valueOf(where), "risposta", String.valueOf(answer))));
             }
-            case "rimandato" -> {
+            case "deferred" -> {
                 return v.put("success", true).put("warning", true)
                         .put("outcome", brief(I18n.tr("server.rp.deferred", java.util.Map.of("risposta", String.valueOf(answer)))))
                         .put("note", I18n.tr("server.rp.deferredNote", java.util.Map.of("coda", String.valueOf(queue), "risposta", String.valueOf(answer))));
             }
-            case "respinto" -> {
+            case "rejected" -> {
                 return v.put("success", false).put("error", brief(relay.isEmpty() || "none".equals(relay)
                         ? I18n.tr("server.rp.bounced", java.util.Map.of("risposta", String.valueOf(answer)))
                         : I18n.tr("server.rp.bouncedBy", java.util.Map.of("relay", String.valueOf(relay), "risposta", String.valueOf(answer)))));
             }
-            case "rifiutato" -> {
+            case "refused" -> {
                 return v.put("success", false).put("error", brief(I18n.tr("server.rp.rejected", java.util.Map.of("risposta", String.valueOf(answer)))));
             }
-            case "in coda" -> {
+            case "queued" -> {
                 return v.put("success", true).put("warning", true)
                         .put("outcome", I18n.tr("server.rp.accepted", java.util.Map.of("coda", String.valueOf(queue))))
                         .put("note", I18n.tr("server.rp.acceptedNote", java.util.Map.of("coda", String.valueOf(queue), "s", String.valueOf(SECONDS_IN_LOG), "log", String.valueOf(org.mail_panel.monitoring.LogManager.MAILLOG))));

@@ -370,7 +370,7 @@
             const pfActions = { 'start_pf': true, 'enable_pf_at_boot': true, 'add_pf_anchor': true };
             let confirmMsg = t('sj.confirmOne');
             if (pfActions[action]) confirmMsg = t('sj.confirmPf');
-            if (action === 'ripara_azione_ban') confirmMsg = t('sj.confirmBanAction');
+            if (action === 'repair_ban_action') confirmMsg = t('sj.confirmBanAction');
             if (!confirm(confirmMsg)) return;
             const original = btn.innerHTML;
             btn.disabled = true;
@@ -503,7 +503,7 @@
                 const res = await fetch('/api/fail2ban', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'verifica_filtro', jail: nome,
+                    body: JSON.stringify({ action: 'verify_filter', jail: nome,
                         csrf_token: document.getElementById('csrf_token').value })
                 });
                 const r = await res.json();

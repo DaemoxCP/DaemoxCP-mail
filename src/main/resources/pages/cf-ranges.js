@@ -19,7 +19,7 @@
         async function cfIntervalli() {
             const el = document.getElementById('cf-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('cfi.downloading')) + '';
-            const r = await updApi('cf_intervalli');
+            const r = await updApi('cf_intervals');
             if (!r.success) {
                 // "Non ho potuto controllare" non e' "va bene", e non deve sembrarlo.
                 el.innerHTML = '<div class="alert alert-secondary py-2 small mb-2">'

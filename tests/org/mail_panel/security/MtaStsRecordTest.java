@@ -131,7 +131,7 @@ public class MtaStsRecordTest {
         System.out.println("\n== un record giusto: non si tocca niente ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + RIGHT + "\"");
         r = write(cf);
-        require("invariato", r.optBoolean("success") && r.optBoolean("unchanged"));
+        require("unchanged", r.optBoolean("success") && r.optBoolean("unchanged"));
         require("nessuna operazione su Cloudflare: " + cf.operations, cf.operations.isEmpty());
 
         System.out.println("\n== un record con l'id vecchio: si aggiorna ==");
@@ -239,7 +239,7 @@ public class MtaStsRecordTest {
         String before = howItWroteBefore(cf);
         System.out.println("  diceva: " + before + "; sul nome restavano " + cf.mtaSts().size() + " record");
         require("prima diceva \"invariato\" e lasciava due record: i controlli qui sopra lo vedono",
-                before.equals("invariato") && cf.mtaSts().size() == 2);
+                before.equals("unchanged") && cf.mtaSts().size() == 2);
 
         System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
         if (failed > 0) System.exit(1);
@@ -251,11 +251,11 @@ public class MtaStsRecordTest {
             if (!t.name.equals(NAME_PATTERN)) continue;
             String c = DnsRules.cloudflareContent(t.content);
             if (!c.toLowerCase(java.util.Locale.ROOT).startsWith("v=stsv1")) continue;
-            if (c.trim().equals(RIGHT.trim())) return "invariato";
+            if (c.trim().equals(RIGHT.trim())) return "unchanged";
             cf.updateTxtRecord("token", "zona", t.id, NAME_PATTERN, RIGHT, 3600);
-            return "aggiornato";
+            return "updated";
         }
         cf.createTxtRecord("token", "zona", NAME_PATTERN, RIGHT, 3600);
-        return "creato";
+        return "created";
     }
 }

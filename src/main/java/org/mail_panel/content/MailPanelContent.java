@@ -1412,7 +1412,7 @@ public class MailPanelContent {
                     stato.appendChild(document.createTextNode(' ' + t('ver.branch') + ' '));
                     const a = document.createElement('a');
                     a.href = '/updates#ramo';
-                    a.textContent = d.branch === 'misti' ? t('ver.branchMixed') : d.branch === 'nessuno' ? t('ver.branchNone') : d.branch;
+                    a.textContent = d.branch === 'mixed' ? t('ver.branchMixed') : d.branch === 'none' ? t('ver.branchNone') : d.branch;
                     stato.appendChild(a);
                     stato.appendChild(document.createTextNode('.'));
                 }
@@ -2031,11 +2031,11 @@ public class MailPanelContent {
                             <legend class="fs-6 float-none w-auto px-1 mb-0">{{t:ac.oldMail}}</legend>
                             <p class="small mb-2" id="acPostaInfo"></p>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acPosta" id="acRitrova" value="ritrova">
+                                <input class="form-check-input" type="radio" name="acPosta" id="acRitrova" value="recover">
                                 <label class="form-check-label" for="acRitrova">{{t:ac.recover}}</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acPosta" id="acArchivia" value="archivia">
+                                <input class="form-check-input" type="radio" name="acPosta" id="acArchivia" value="archive">
                                 <label class="form-check-label" for="acArchivia">{{t:ac.archive}}</label>
                             </div>
                         </fieldset>
@@ -12358,7 +12358,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!r.success) { body.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
             pkUpd.signature = r.signature || '';
             const blocchi = (r.checks || []).filter(c => c.level === 'block');
-            const warnings = (r.checks || []).filter(c => c.level === 'verifica' || c.level === 'warn' || c.level === 'attendi');
+            const warnings = (r.checks || []).filter(c => c.level === 'review' || c.level === 'warn' || c.level === 'wait');
             const servizi = (r.services || []).map(x => typeof x === 'string' ? x : x.name);
             let h = '<p class="mb-2"><code>' + escHtml(r.name) + '</code> ' + escHtml(r.current) + ' &rarr; <strong>' + escHtml(r.available || '?') + '</strong></p>';
             if ((r.cve || []).length) h += '<div class="small mb-2"><strong>' + escHtml(t('up.closes')) + '</strong> ' + r.cve.map(c => '<span class="badge bg-dark me-1">' + escHtml(c) + '</span>').join('') + '</div>';
@@ -12509,8 +12509,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // "NOTA" e' diverso da "VERIFICA": VERIFICA chiede qualcosa a chi legge, NOTA
             // racconta soltanto cosa fara' la procedura. Messe sotto la stessa etichetta
             // gialla, una riga puramente descrittiva sembra una cosa rimasta da fare.
-            if (level === 'nota') return '<span class="badge upd-badge-info">' + escHtml(t('up.bNote')) + '</span>';
-            if (level === 'verifica') return '<span class="badge upd-badge-warn">' + escHtml(t('up.bCheck')) + '</span>';
+            if (level === 'note') return '<span class="badge upd-badge-info">' + escHtml(t('up.bNote')) + '</span>';
+            if (level === 'review') return '<span class="badge upd-badge-warn">' + escHtml(t('up.bCheck')) + '</span>';
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.bWait')) + '</span>';
         }
 
@@ -12647,10 +12647,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                        + '<th scope="col">' + escHtml(t('up.colConstruct')) + '</th><th scope="col">' + escHtml(t('up.colChanges')) + '</th><th scope="col">' + escHtml(t('up.colWhere')) + '</th></tr></thead><tbody>';
                     is.forEach(x => {
                         h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x.construct) + '</code><br>'
-                           + '<span class="badge ' + (x.type === 'rotto' ? 'upd-badge-stop'
-                                : (x.type === 'predefinito' ? 'upd-badge-info' : 'upd-badge-warn'))
-                           + '">' + escHtml(x.type === 'rotto' ? t('up.noLongerValid')
-                                : (x.type === 'predefinito' ? t('up.pkgDefaultOnly') : t('up.behaviour')))
+                           + '<span class="badge ' + (x.type === 'broken' ? 'upd-badge-stop'
+                                : (x.type === 'default' ? 'upd-badge-info' : 'upd-badge-warn'))
+                           + '">' + escHtml(x.type === 'broken' ? t('up.noLongerValid')
+                                : (x.type === 'default' ? t('up.pkgDefaultOnly') : t('up.behaviour')))
                            + '</span></td>'
                            + '<td class="small">' + updEsc(x.whatChanges) + '</td>'
                            + '<td class="small">'
@@ -12738,7 +12738,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConferma('', t('up.wRemove'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
-            const r = await updApi('clean_client', { confirm: 'RIMUOVI', foreign: estraneo, correct: corretto });
+            const r = await updApi('clean_client', { confirm: 'REMOVE', foreign: estraneo, correct: corretto });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.cleaning')) + '</span>';
             pre.style.display = 'block';
@@ -12941,7 +12941,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function beElimina(nome) {
             if (!updConferma(t('up.confirmBeDelete', { name: nome }), t('up.wDelete'))) return;
             const el = document.getElementById('up-body');
-            const r = await updApi('be_destroy', { confirm: 'ELIMINA', name: nome });
+            const r = await updApi('be_destroy', { confirm: 'DELETE', name: nome });
             const box = document.createElement('div');
             box.className = 'alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mt-2';
             box.textContent = r.note || r.error || t('shu.unknownResult');
@@ -12953,7 +12953,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function saltoStato() {
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingWhere')) + '';
-            const r = await updApi('salto_stato');
+            const r = await updApi('jump_state');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
@@ -12979,7 +12979,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (r.restartNeeded) {
                 h += '<div class="alert alert-warning py-2">' + t('up.rebootFirst.html') + '</div>'
                    + '<button class="btn btn-danger" onclick="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.goReboot')) + '</button>';
-            } else if (r.phase === 'finito') {
+            } else if (r.phase === 'finished') {
                 h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.jumpDone')) + '</div>';
             } else {
                 h += '<div class="alert alert-info py-2">' + t('up.jumpInfo.html') + '</div>'
@@ -12992,7 +12992,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function saltoVai() {
             if (!updConferma('', t('up.wContinue'))) return;
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
-            const r = await updApi('salto_prosegui', { confirm: 'PROSEGUI', target: upTarget() });
+            const r = await updApi('jump_continue', { confirm: 'PROSEGUI', target: upTarget() });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -13044,7 +13044,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
@@ -13091,7 +13091,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>'
@@ -13191,7 +13191,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col">' + escHtml(t('up.colComponent')) + '</th><th scope="col">' + escHtml(t('up.colFbsdDefault')) + '</th><th scope="col">' + escHtml(t('up.colInstalled')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
             (r.lines || []).forEach(x => {
-                const cls = x.outcome === 'coerente' ? 'upd-badge-ok'
+                const cls = x.outcome === 'consistent' ? 'upd-badge-ok'
                           : (x.outcome === 'DIVERGE' ? 'upd-badge-stop' : 'upd-badge-warn');
                 const fuori = x.outsideDefault
                     ? '<br><span class="small text-danger">' + escHtml(t('up.outsideDefault')) + ' <code>'
@@ -13231,7 +13231,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const el = document.getElementById('ssl-uso');
             el.innerHTML = '<div class="alert alert-secondary py-2 mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + escHtml(t('up.lookingProcs')) + '</div>';
-            const r = await updApi('ssl_uso');
+            const r = await updApi('ssl_usage');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             const cls = r.verdict === 'NESSUNO LO USA' ? 'success'
                       : (r.verdict === 'IN USO ADESSO' || r.verdict === 'RICHIESTO') ? 'danger' : 'warning';
@@ -13320,7 +13320,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const apri = forza === undefined ? chiusa : forza;
             c.style.display = apri ? '' : 'none';
             if (tog) { tog.innerHTML = '<i class="fas fa-chevron-' + (apri ? 'up' : 'down') + '" aria-hidden="true"></i>'; tog.setAttribute('aria-expanded', String(apri)); }
-            try { localStorage.setItem('mp-' + id, apri ? 'aperta' : 'chiusa'); } catch (e) { }
+            try { localStorage.setItem('mp-' + id, apri ? 'open' : 'closed'); } catch (e) { }
         }
 
         function procInit() {
@@ -13330,7 +13330,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 let voluta = null;
                 try { voluta = localStorage.getItem('mp-' + id); } catch (e) { }
                 // Chiuse per impostazione predefinita: si aprono se le hai aperte tu.
-                procApri(id, voluta === 'aperta');
+                // 'aperta' e' come lo salvava la pagina fino al 24/10/2026: chi aveva lasciato una
+                // scheda aperta la ritrova aperta.
+                procApri(id, voluta === 'open' || voluta === 'aperta');
                 // E si aprono DA SOLE quando hanno qualcosa da dire: premere un pulsante
                 // dell'intestazione scrive nel corpo, e un corpo nascosto non si vedrebbe.
                 try {
@@ -13431,8 +13433,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="alert alert-info py-2 small">' + updEsc(r.caveat) + '</div>';
 
             const v = r.checks || [];
-            const conf = v.filter(x => x.state === 'confermato');
-            const dub = v.filter(x => x.state !== 'confermato');
+            const conf = v.filter(x => x.state === 'confirmed');
+            const dub = v.filter(x => x.state !== 'confirmed');
             h += '<h6 class="mb-1">' + escHtml(t('up.verifiedDocs')) + '</h6>'
                + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
             conf.forEach(x => {
@@ -13441,7 +13443,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
             dub.forEach(x => {
-                h += '<tr class="upd-cell"><td><span class="badge ' + (x.state === 'criterio' ? 'upd-badge-info' : 'upd-badge-warn')
+                h += '<tr class="upd-cell"><td><span class="badge ' + (x.state === 'criterion' ? 'upd-badge-info' : 'upd-badge-warn')
                    + '">' + escHtml(({ criterio: t('up.sCriterion'), 'da verificare': t('up.sToCheck') })[x.state] || x.state) + '</span></td>'
                    + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
                    + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
@@ -13476,7 +13478,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + '<th scope="col">' + escHtml(t('up.colCommand')) + '</th><th scope="col">' + escHtml(t('up.colWhatFor')) + '</th><th scope="col">' + escHtml(t('up.colResolves')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th>'
                   + '</tr></thead><tbody>';
             (r.tools || []).forEach(x => {
-                const b = x.state === 'raggiungibile' ? 'upd-badge-ok'
+                const b = x.state === 'reachable' ? 'upd-badge-ok'
                         : (x.state === 'non installato' ? 'upd-badge-warn' : 'upd-badge-stop');
                 h += '<tr class="upd-cell"><td><code>' + updEsc(x.command) + '</code></td>'
                    + '<td class="small text-muted">' + updEsc(x.purpose) + '</td>'
@@ -13643,7 +13645,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConferma(t('up.confirmRemovePkg', { pkg: nome }), t('up.wRemove'))) return;
             const el = document.getElementById('rim-esec-' + nome);
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingChecking')) + '';
-            const r = await updApi('pkg_remove', { confirm: 'RIMUOVI', name: nome });
+            const r = await updApi('pkg_remove', { confirm: 'REMOVE', name: nome });
             let h = '<div class="alert alert-' + (!r.success ? 'danger' : (r.fault ? 'danger' : 'success'))
                   + ' py-2 small mb-1">' + updEsc(r.error || r.note || t('shu.unknownResult')) + '</div>';
             if (r.before !== undefined) {
@@ -13734,8 +13736,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- piano di manutenzione ----------
         function planBadge(stato) {
-            if (stato === 'fatto')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.pDone')) + '</span>';
-            if (stato === 'manuale') return '<span class="badge upd-badge-warn">' + escHtml(t('up.pManual')) + '</span>';
+            if (stato === 'done')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.pDone')) + '</span>';
+            if (stato === 'manual') return '<span class="badge upd-badge-warn">' + escHtml(t('up.pManual')) + '</span>';
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.pTodo')) + '</span>';
         }
 
@@ -13751,8 +13753,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let primoDaFare = true;
 
             function riga(p, etichetta) {
-                const attivo = p.state === 'dafare' && primoDaFare;
-                if (p.state === 'dafare') primoDaFare = false;
+                const attivo = p.state === 'todo' && primoDaFare;
+                if (p.state === 'todo') primoDaFare = false;
                 let h = '<div class="border rounded p-2 mb-2' + (attivo ? ' border-primary' : '') + '">'
                       + '<div class="d-flex justify-content-between align-items-center">'
                       + '<span><strong>' + etichetta + updEsc(p.title) + '</strong> ' + planBadge(p.state) + '</span>';
@@ -13791,7 +13793,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             passi.forEach(p => {
                 // La lettera arriva dal backend, legata alla chiave del passo: non si ricava
                 // dalla posizione, altrimenti una fase che compare farebbe scorrere le altre.
-                const etichetta = p.group === 'fase' ? escHtml(t('up.phase', { letter: p.letter })) + ' &mdash; ' : '';
+                const etichetta = p.group === 'phase' ? escHtml(t('up.phase', { letter: p.letter })) + ' &mdash; ' : '';
                 h += riga(p, etichetta);
             });
 
@@ -13951,7 +13953,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
@@ -13980,7 +13982,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
@@ -14065,7 +14067,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
@@ -14102,7 +14104,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
@@ -14319,7 +14321,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConferma('', t('up.wUpgrade'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('updates_apply', { confirm: 'AGGIORNA', signature: updFirmaNonProtetti });
+            const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updFirmaNonProtetti });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
             pre.style.display = 'block';

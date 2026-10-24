@@ -52,25 +52,25 @@ public final class PackagePlan {
 
     /** Le intestazioni che pkg stampa per ogni tipo di cambiamento, e il nome che usiamo qui. */
     private static final String[][] SECTIONS = {
-        {"Installed packages to be UPGRADED:",    "aggiorna"},
-        {"Installed packages to be DOWNGRADED:",  "retrocede"},
-        {"New packages to be INSTALLED:",         "installa"},
-        {"Installed packages to be REINSTALLED:", "reinstalla"},
-        {"Installed packages to be REMOVED:",     "rimuove"},
-        {"Installed packages LOCKED:",            "protetto"},
-        {"New packages to be FETCHED:",           "scarica"},
-        {"New groups to be UPGRADED:",            "gruppo"},
-        {"New groups to be INSTALLED:",           "gruppo"},
+        {"Installed packages to be UPGRADED:",    "upgrade"},
+        {"Installed packages to be DOWNGRADED:",  "downgrade"},
+        {"New packages to be INSTALLED:",         "install"},
+        {"Installed packages to be REINSTALLED:", "reinstall"},
+        {"Installed packages to be REMOVED:",     "remove"},
+        {"Installed packages LOCKED:",            "locked"},
+        {"New packages to be FETCHED:",           "download"},
+        {"New groups to be UPGRADED:",            "group"},
+        {"New groups to be INSTALLED:",           "group"},
     };
 
     /** I totali che pkg scrive in fondo al piano: il controllo incrociato del parser. */
     private static final String[][] TOTALS = {
-        {"Number of packages to be upgraded: ",    "aggiorna"},
-        {"Number of packages to be downgraded: ",  "retrocede"},
-        {"Number of packages to be installed: ",   "installa"},
-        {"Number of packages to be reinstalled: ", "reinstalla"},
-        {"Number of packages to be removed: ",     "rimuove"},
-        {"Number of packages to be fetched: ",     "scarica"},
+        {"Number of packages to be upgraded: ",    "upgrade"},
+        {"Number of packages to be downgraded: ",  "downgrade"},
+        {"Number of packages to be installed: ",   "install"},
+        {"Number of packages to be reinstalled: ", "reinstall"},
+        {"Number of packages to be removed: ",     "remove"},
+        {"Number of packages to be fetched: ",     "download"},
     };
 
     private static final String VULNERABLE = " (vulnerable!)";
@@ -109,7 +109,7 @@ public final class PackagePlan {
 
             if (section != null && line.startsWith("\t") && !t.isEmpty()) {
                 if (!readEntry(section, t, changes, lockedPackages, alreadyLocked)) unreadable.put(t);
-                else if (!"protetto".equals(section) && !"gruppo".equals(section))
+                else if (!"locked".equals(section) && !"group".equals(section))
                     counted.merge(section, 1, Integer::sum);
                 continue;
             }
@@ -168,34 +168,34 @@ public final class PackagePlan {
         String s = vulnerable ? t.substring(0, t.length() - VULNERABLE.length()) : t;
         Matcher m;
         switch (section) {
-            case "aggiorna", "retrocede" -> {
+            case "upgrade", "downgrade" -> {
                 m = DA_A.matcher(s);
                 if (!m.find()) return false;
                 changes.put(entry(section, m.group(1), m.group(2), m.group(3), "", m.group(4), vulnerable));
             }
-            case "installa" -> {
+            case "install" -> {
                 m = REPO_VERSION_NAME.matcher(s);
                 if (!m.find()) return false;
                 changes.put(entry(section, m.group(1), "", m.group(2), "", m.group(3), vulnerable));
             }
-            case "reinstalla" -> {
+            case "reinstall" -> {
                 m = REINSTALL.matcher(s);
                 if (!m.find()) return false;
                 changes.put(entry(section, m.group(1), m.group(2), m.group(2), m.group(4), m.group(3), vulnerable));
             }
-            case "rimuove" -> {
+            case "remove" -> {
                 m = REMOVES.matcher(s);
                 if (!m.find()) return false;
                 changes.put(entry(section, m.group(1), m.group(2), "", m.group(3), null, false));
             }
-            case "protetto" -> {
+            case "locked" -> {
                 m = PROTECTED_IN_PLAN.matcher(s);
                 if (!m.find()) return false;
                 if (alreadyLocked.add(m.group(1)))
                     lockedPackages.put(new JSONObject().put("name", m.group(1)).put("version", m.group(2))
                             .put("action", m.group(3)).put("destination", m.group(4) == null ? "" : m.group(4)));
             }
-            case "scarica", "gruppo" -> { /* non cambiano pacchetti installati */ }
+            case "download", "group" -> { /* non cambiano pacchetti installati */ }
             default -> { return false; }
         }
         return true;
@@ -282,11 +282,11 @@ public final class PackagePlan {
     /** Il tipo di cambiamento ("aggiorna", "rimuove"...) detto nella lingua di chi legge. */
     public static String typeName(String type) {
         return switch (type == null ? "" : type) {
-            case "aggiorna" -> I18n.tr("up.tUpgrade");
-            case "installa" -> I18n.tr("up.tInstall");
-            case "reinstalla" -> I18n.tr("up.tReinstall");
-            case "rimuove" -> I18n.tr("up.tRemove");
-            case "retrocede" -> I18n.tr("up.tDowngrade");
+            case "upgrade" -> I18n.tr("up.tUpgrade");
+            case "install" -> I18n.tr("up.tInstall");
+            case "reinstall" -> I18n.tr("up.tReinstall");
+            case "remove" -> I18n.tr("up.tRemove");
+            case "downgrade" -> I18n.tr("up.tDowngrade");
             default -> String.valueOf(type);
         };
     }
@@ -457,7 +457,7 @@ public final class PackagePlan {
             boolean already = false;
             for (int i = 0; i < changes.length(); i++) if ("pkg".equals(changes.getJSONObject(i).optString("name"))) already = true;
             if (!already) {
-                JSONArray conPkg = new JSONArray().put(entry("aggiorna", "pkg", before.getString("from"), before.getString("to"),
+                JSONArray conPkg = new JSONArray().put(entry("upgrade", "pkg", before.getString("from"), before.getString("to"),
                         I18n.tr("server.plan.pkgFirst"), "", false));
                 for (int i = 0; i < changes.length(); i++) conPkg.put(changes.get(i));
                 plan.put("changes", conPkg);
@@ -509,7 +509,7 @@ public final class PackagePlan {
         JSONArray changes = plan.optJSONArray("changes");
         for (int i = 0; changes != null && i < changes.length(); i++) {
             JSONObject c = changes.getJSONObject(i);
-            if (!"installa".equals(c.optString("type"))) continue;
+            if (!"install".equals(c.optString("type"))) continue;
             String newName = c.optString("name");
             String twin = installedTwin == null ? null : installedTwin.apply(newName);
             if (twin == null || twin.equals(newName) || unlock.contains(twin)
@@ -628,9 +628,9 @@ public final class PackagePlan {
             // Nel piano c'era: il tipo e la versione di arrivo devono combaciare.
             String type = p.optString("type"), expected = p.optString("to");
             boolean matches = switch (happened) {
-                case "removed" -> "rimuove".equals(type);
-                case "installed" -> "installa".equals(type) && expected.equals(versionB);
-                default -> ("aggiorna".equals(type) || "retrocede".equals(type)) && expected.equals(versionB);
+                case "removed" -> "remove".equals(type);
+                case "installed" -> "install".equals(type) && expected.equals(versionB);
+                default -> ("upgrade".equals(type) || "downgrade".equals(type)) && expected.equals(versionB);
             };
             if (matches) continue;
             outside.put(divergenceEntry(name, happened, versionA, versionB,
@@ -671,7 +671,7 @@ public final class PackagePlan {
             String name = x.optString("name");
             if (!isValidName(name)) continue;
             String now = sh("pkg query %v " + name + " 2>/dev/null", 30);
-            String expected = "rimuove".equals(x.optString("type")) ? "" : x.optString("to");
+            String expected = "remove".equals(x.optString("type")) ? "" : x.optString("to");
             outcome.put(new JSONObject().put("name", name).put("type", x.optString("type"))
                     .put("expected", expected.isEmpty() ? I18n.tr("server.plan.removed") : expected)
                     .put("found", now.isEmpty() ? I18n.tr("server.plan.notInstalled") : now)

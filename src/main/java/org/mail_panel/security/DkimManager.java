@@ -387,7 +387,7 @@ public class DkimManager {
                         withoutKey++;
                         // Niente chiave vuol dire niente signature: e' il caso piu' grave e non
                         // deve nascondersi in mezzo a righe che parlano di rotazioni.
-                        j.put("state", "assente");
+                        j.put("state", "absent");
                         j.put("note", I18n.tr("server.dkimm.noPanelKey"));
                         lines.put(j);
                         continue;
@@ -400,7 +400,7 @@ public class DkimManager {
                     j.put("messageText", v == null ? "" : (v.message == null ? "" : v.message));
                     if (v == null || !v.success) {
                         unverifiable++;
-                        j.put("state", "incerto");
+                        j.put("state", "uncertain");
                     } else if (!v.match) {
                         j.put("state", "non_corrisponde");
                     } else {
@@ -430,7 +430,7 @@ public class DkimManager {
                     }
                 } catch (Exception e) {
                     unverifiable++;
-                    j.put("state", "incerto").put("messageText", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                    j.put("state", "uncertain").put("messageText", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
                 }
                 lines.put(j);
             }

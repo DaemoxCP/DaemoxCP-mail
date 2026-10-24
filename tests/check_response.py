@@ -31,18 +31,22 @@ import sys
 radice = sys.argv[1] if len(sys.argv) > 1 else "."
 PAGINA = os.path.join(radice, "src/main/java/org/mail_panel/content/MailPanelContent.java")
 ROTTE = os.path.join(radice, "src/main/java/org/mail_panel/webserver/SSLMailServer.java")
-SERVER = [
-    "src/main/java/org/mail_panel/system/UpdateManager.java",
-    "src/main/java/org/mail_panel/system/PackagePlan.java",
-    "src/main/java/org/mail_panel/system/PkgBranch.java",
-    "src/main/java/org/mail_panel/system/PkgCatalog.java",
-    "src/main/java/org/mail_panel/system/SoftwareVersions.java",
-]
+# Tutte le classi del progetto fuori dalla pagina: le rotte chiamano anche Autoconfig, AppleProfile,
+# PeriodicReport, AutoDns. Con le sole cinque classi di prima, un'azione di quelle risultava
+# "non verificabile" o, peggio, attribuita a un metodo omonimo di un'altra rotta.
+import glob as _g
+SERVER = sorted(os.path.relpath(f, radice) for f in _g.glob(os.path.join(radice, "src/main/java/org/mail_panel/**/*.java"), recursive=True)
+                if "/content/" not in f)
+CLASSI = sorted({os.path.splitext(os.path.basename(f))[0] for f in SERVER}, key=len, reverse=True)
 
 # La busta che ogni risposta ha, messa dai percorsi comuni e non dal metodo dell'azione.
 BUSTA = {"success", "error", "jobId", "async", "job", "warning"}
 
 pagina = open(PAGINA, encoding="utf-8", errors="replace").read()
+# E le pagine scritte come file a parte (vedi check_api.py: lo stesso buco).
+import glob as _glob
+for _f in sorted(_glob.glob(os.path.join(radice, "src/main/resources/pages/*.js"))):
+    pagina += "\n" + open(_f, encoding="utf-8", errors="replace").read()
 rotte = open(ROTTE, encoding="utf-8", errors="replace").read()
 server = {}
 for rel in SERVER:
@@ -52,23 +56,23 @@ for rel in SERVER:
 
 
 def corpo_metodo(testo, nome):
-    """Il corpo di un metodo, bilanciando le graffe dalla sua firma. '' se non c'e'."""
-    m = re.search(r"\b(?:JSONObject|JSONArray|String|boolean|int|long)\s+" + re.escape(nome) + r"\s*\(", testo)
-    if not m:
-        return ""
-    i = testo.find("{", m.end())
-    if i < 0:
-        return ""
-    liv, j = 0, i
-    while j < len(testo):
-        if testo[j] == "{":
-            liv += 1
-        elif testo[j] == "}":
-            liv -= 1
-            if liv == 0:
-                return testo[i:j + 1]
-        j += 1
-    return ""
+    """I corpi di un metodo e dei suoi overload, bilanciando le graffe dalla firma. '' se non c'e'."""
+    corpi = []
+    for m in re.finditer(r"\b(?:JSONObject|JSONArray|String|boolean|int|long)\s+" + re.escape(nome) + r"\s*\(", testo):
+        i = testo.find("{", m.end())
+        if i < 0:
+            continue
+        liv, j = 0, i
+        while j < len(testo):
+            if testo[j] == "{":
+                liv += 1
+            elif testo[j] == "}":
+                liv -= 1
+                if liv == 0:
+                    corpi.append(testo[i:j + 1])
+                    break
+            j += 1
+    return "\n".join(corpi)
 
 
 def chiavi_di(nome, profondita=1, visti=None):
@@ -93,11 +97,19 @@ def chiavi_di(nome, profondita=1, visti=None):
 CASO = re.compile(r'case\s+"([a-z0-9_]+)"\s*->')
 casi = [(m.group(1), m.start()) for m in CASO.finditer(rotte)]
 metodi = {}
+nel_blocco = {}
 for n, (azione, inizio) in enumerate(casi):
     fine = casi[n + 1][1] if n + 1 < len(casi) else len(rotte)
     blocco = rotte[inizio:fine]
+    # la risposta puo' essere costruita nella rotta stessa: response.put("chiave", ...)
+    nel_blocco.setdefault(azione, set()).update(re.findall(r'\.put\("([A-Za-z_][A-Za-z0-9_]*)"', blocco))
     metodi.setdefault(azione, set()).update(
-        re.findall(r"\b(?:UpdateManager|PackagePlan|PkgBranch|PkgCatalog|SoftwareVersions)\.([a-zA-Z_][A-Za-z0-9_]*)\s*\(", blocco))
+        re.findall(r"\b(?:" + "|".join(CLASSI) + r")\.([a-zA-Z_][A-Za-z0-9_]*)\s*\(", blocco)
+        # e i metodi chiamati su un'istanza (autoDns.create(...)): conta solo se il metodo esiste
+        # in una classe del progetto, cioe' se chiavi_di trova il suo corpo
+        + [n for n in re.findall(r"\b[a-z][A-Za-z0-9_]*\.([a-z][A-Za-z0-9_]*)\s*\(", blocco)
+           if n not in ("put", "opt", "optString", "optInt", "optLong", "optBoolean", "optJSONArray", "optJSONObject",
+                        "getString", "getInt", "getBoolean", "has", "equals", "length", "isEmpty", "trim", "toString")])
 
 # --- 2. la pagina: funzione che chiama updApi('azione') -> campi letti ---
 FUNZIONE = re.compile(r"(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
@@ -106,7 +118,7 @@ letti = {}
 for n, (nomeFn, inizio) in enumerate(inizi):
     fine = inizi[n + 1][1] if n + 1 < len(inizi) else len(pagina)
     corpo = pagina[inizio:fine]
-    for m in re.finditer(r"(?:const|let|var)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*await\s+updApi\(\s*'([a-z0-9_]+)'", corpo):
+    for m in re.finditer(r"(?:const|let|var)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*await\s+[a-zA-Z]+Api\(\s*'([a-z0-9_]+)'", corpo):
         var, azione = m.group(1), m.group(2)
         campi = set(re.findall(r"\b" + re.escape(var) + r"\.([A-Za-z_][A-Za-z0-9_]*)", corpo))
         letti.setdefault(azione, set()).update(campi)
@@ -119,7 +131,7 @@ for azione in sorted(letti):
         # puo' dire niente, e si dice che non si puo'.
         print(f"    --  {azione}: risposta costruita nella rotta, non verificabile qui")
         continue
-    disponibili = set(BUSTA)
+    disponibili = set(BUSTA) | nel_blocco.get(azione, set())
     for me in metodi[azione]:
         disponibili |= chiavi_di(me)
     for k in sorted(letti[azione] - disponibili):

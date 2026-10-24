@@ -199,7 +199,7 @@
             }
             if (!adConferma(t('ad.confirmFwd', { to: verso }), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingFwd'));
-            const r = await autoDnsApi('alias_create', { confirm: 'CREA', destination: verso });
+            const r = await autoDnsApi('alias_create', { confirm: 'CREATE', destination: verso });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + adEsc(r.note || r.error) + '</div>';
             // Si ricarica anche quando il pannello si RIFIUTA: il rifiuto "esiste gia'" vuol
@@ -212,7 +212,7 @@
             const el = document.getElementById('adAliasOutcome');
             if (!adConferma(t('ad.confirmBox'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingBox'));
-            const r = await autoDnsApi('mailbox_create', { confirm: 'CREA' });
+            const r = await autoDnsApi('mailbox_create', { confirm: 'CREATE' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                   + adEsc(r.note || r.error) + '</div>';
             if (r.success && r.password)
@@ -295,7 +295,7 @@
             const el = document.getElementById('adOpzOutcome');
             if (!adConferma(t('ad.confirmOpt'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
-            const r = await autoDnsApi('create_optional', { confirm: 'CREA', which: quale });
+            const r = await autoDnsApi('create_optional', { confirm: 'CREATE', which: quale });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + adEsc(r.note || r.error) + '</div>';
             if (r.success) setTimeout(autoDnsCarica, 1200);
@@ -316,7 +316,7 @@
             for (const x of mancanti) {
                 el.innerHTML = esiti + '<div class="small text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                              + escHtml(t('ad.creatingName', { name: x.name })) + '</div>';
-                const r = await autoDnsApi('create_optional', { confirm: 'CREA', which: x.which });
+                const r = await autoDnsApi('create_optional', { confirm: 'CREATE', which: x.which });
                 esiti += '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
                        + '<code>' + adEsc(x.name) + '</code> &mdash; ' + adEsc(r.note || r.error) + '</div>';
             }
@@ -359,7 +359,7 @@
                      + warning, t('ad.wordChange'))) return;
 
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.editingCf'));
-            const r = await autoDnsApi('change_policy', { policy: nuova, confirm: 'CAMBIA' });
+            const r = await autoDnsApi('change_policy', { policy: nuova, confirm: 'CHANGE' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + adEsc(r.note || r.error) + '</div>';
             if (r.success) setTimeout(autoDnsCarica, 1500);
@@ -372,7 +372,7 @@
             if (!adConferma(t('ad.confirmCreate', { record: che }), t('ad.wordCreate'))) return;
             const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
-            const r = await autoDnsApi('create', { confirm: 'CREA', which: quale, policy: politica });
+            const r = await autoDnsApi('create', { confirm: 'CREATE', which: quale, policy: politica });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
                   + adEsc(r.note || r.error) + '</div>';
             if (r.content)
@@ -395,7 +395,7 @@
 
             const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.starting'));
-            const r = await autoDnsApi('configura_tutto', { confirm: 'CONFIGURA' });
+            const r = await autoDnsApi('configure_all', { confirm: 'CONFIGURE' });
             if (!r.success || !r.jobId) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">'
                              + adEsc(r.error || t('ad.startFailed')) + '</div>';

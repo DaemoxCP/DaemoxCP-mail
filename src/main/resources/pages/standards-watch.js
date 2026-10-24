@@ -7,8 +7,8 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sv.querying')) + '';
             // Una alla volta, per lo stesso motivo: il lucchetto di updApi fa fallire la
             // seconda chiamata parallela, e la sezione delle scadenze restava vuota.
-            const r = await updApi('sorveglianza');
-            const o = await updApi('openssl_scadenza');
+            const r = await updApi('watch');
+            const o = await updApi('openssl_expiry');
 
             let h = '';
 
@@ -92,7 +92,7 @@
         async function sorvCambi(rfc, riferimento) {
             const el = document.getElementById('sorv-changes');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sv.downloadingRfc', { rfc: rfc }));
-            const r = await updApi('sorveglianza_cambi', { rfc: rfc, reference: riferimento || rfc });
+            const r = await updApi('watch_changes', { rfc: rfc, reference: riferimento || rfc });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
                 return;
