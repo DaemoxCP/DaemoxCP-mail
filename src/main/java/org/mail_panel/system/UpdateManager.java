@@ -6423,6 +6423,9 @@ public final class UpdateManager {
         // Cio' che il piano non puo' dire: che cosa fanno gli script di installazione alla
         // configurazione viva e agli indirizzi in ascolto (vedi InstallSideEffects).
         InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
+        // I servizi che questo lavoro NON ha riavviato perche' uno script ha cambiato la
+        // configurazione: vanno nell'esito, con il comando per riavviarli dopo averla guardata.
+        java.util.List<String> heldRestarts = new ArrayList<>();
         try {
             job.avanza(1, TOT);
             job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.1", java.util.Map.of("nome", String.valueOf(nome))));
@@ -6595,7 +6598,25 @@ public final class UpdateManager {
                     ricontrolloManuale = true;
                 }
             }
+            // Uno script ha cambiato la configurazione e il piano non lo diceva: riavviare
+            // metterebbe in vigore una modifica che nessuno ha letto. E' il reperto 42 —
+            // inet_protocols = ipv4 scritto in main.cf, e il riavvio che toglie IPv6 a un server
+            // di posta che risultava «in servizio». Allora non si riavvia: i servizi restano con
+            // la configurazione di prima, ancora in memoria, e chi legge decide. Il costo e'
+            // scritto qui sotto, ed e' lo stesso stato in cui la manutenzione completa lascia
+            // sempre la macchina: aggiornata, con i processi vecchi finche' qualcuno non li
+            // riavvia.
+            boolean holdRestarts = sideEffects.configChangedByScript() && !servizi.isEmpty();
+            if (holdRestarts) {
+                job.scrivi(I18n.tr("server.drift.restartHeld", java.util.Map.of("list", String.join(", ", servizi))));
+                job.scrivi(I18n.tr("server.drift.restartHeldCost"));
+            }
             for (String s : servizi) {
+                if (holdRestarts) {
+                    heldRestarts.add(s);
+                    job.scrivi("      service " + s + " restart");
+                    continue;
+                }
                 if (!Boolean.TRUE.equals(attivoPrima.get(s))) {
                     job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.21", java.util.Map.of("s", String.valueOf(s))));
                     continue;
@@ -6670,6 +6691,8 @@ public final class UpdateManager {
             boolean caduto = serviziCaduti(job, serviziPrima);
             sideEffects.checkListening(job);
             java.util.List<String> effetti = sideEffects.problems();
+            if (!heldRestarts.isEmpty())
+                effetti.add(I18n.tr("server.drift.restartHeldProblem", java.util.Map.of("list", String.join(", ", heldRestarts))));
 
             if (pianoNonRispettato || !fuoriDalPiano.isEmpty()) {
                 // Due guasti diversi, e il messaggio li distingue: "piano non rispettato" e'

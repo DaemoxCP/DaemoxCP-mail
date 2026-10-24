@@ -32,6 +32,8 @@ public class InstallSideEffectsTest {
 
     public static void main(String[] args) throws Exception {
         configuration();
+        etc();
+        savedCopies();
         lines();
         owners();
         listening();
@@ -157,6 +159,103 @@ public class InstallSideEffectsTest {
                 s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
             }
         }
+    }
+
+    // ===== /etc: utenti, file rigenerati, resolv.conf =====
+    // Fotografie costruite a mano con i percorsi veri di /etc: le regole dipendono dal percorso,
+    // e su una cartella temporanea /etc/passwd non c'e'.
+    private static void etc() {
+        Map<String, InstallSideEffects.FileState> b = new TreeMap<>(), a = new TreeMap<>();
+        String pw = "root:*:0:0:Charlie &:/root:/bin/sh\npostfix:*:125:125:Postfix:/var/spool/postfix:/usr/sbin/nologin\n";
+        put(b, "/etc/passwd", pw, true);
+        put(a, "/etc/passwd", pw + "driftprobe:*:1001:1001:drift probe:/nonexistent:/usr/sbin/nologin\n", true);
+        put(b, "/etc/master.passwd", "root:$6$x:0:0::0:0:Charlie &:/root:/bin/sh\n", false);
+        put(a, "/etc/master.passwd", "root:$6$x:0:0::0:0:Charlie &:/root:/bin/sh\ndriftprobe:*:1001:1001::0:0:drift probe:/nonexistent:/usr/sbin/nologin\n", false);
+        put(b, "/etc/group", "wheel:*:0:root\n", true);
+        put(a, "/etc/group", "wheel:*:0:root,driftprobe\n", true);       // un utente esistente toccato
+        put(b, "/etc/pwd.db", "\u0000uno", true);   put(a, "/etc/pwd.db", "\u0000due", true);
+        put(b, "/etc/aliases", "root: admin\n", true); put(a, "/etc/aliases", "root: admin\n", true);
+        put(b, "/etc/aliases.db", "\u0000a", true);  put(a, "/etc/aliases.db", "\u0000b", true);
+        put(b, "/etc/ssl/certs/0179095f.0", "certA", true); put(a, "/etc/ssl/certs/0179095f.0", "certB", true);
+        put(b, "/etc/orphan.db", "\u0000a", true);   put(a, "/etc/orphan.db", "\u0000b", true);
+        put(a, "/etc/periodic.conf", "daily_x_enable=\"YES\"\n", true);
+        JSONArray c = InstallSideEffects.configChanges(new InstallSideEffects.ConfigSnapshot(b, Map.of()),
+                new InstallSideEffects.ConfigSnapshot(a, Map.of()), Set.of());
+        JSONObject passwd = find(c, "/etc/passwd"), master = find(c, "/etc/master.passwd"), group = find(c, "/etc/group");
+        check("/etc/passwd con un utente aggiunto: si dice, senza allarme", passwd != null
+                && "accounts".equals(passwd.getString("kind")) && !passwd.getBoolean("alarm")
+                && passwd.getJSONArray("addedLines").toList().toString().contains("driftprobe"));
+        check("/etc/master.passwd uguale, ma senza mostrarlo", master != null && "accounts".equals(master.getString("kind"))
+                && "notWorldReadable".equals(master.optString("hidden")) && !c.toString().contains("$6$x"));
+        check("/etc/group con un utente esistente toccato: allarme", group != null && group.getBoolean("alarm"));
+        check("/etc/pwd.db, ricavato da master.passwd: niente allarme", "derived".equals(kindOf(c, "/etc/pwd.db")));
+        check("/etc/aliases.db accanto ad aliases: niente allarme", "derived".equals(kindOf(c, "/etc/aliases.db")));
+        check("i certificati rigenerati da certctl: niente allarme", "derived".equals(kindOf(c, "/etc/ssl/certs/0179095f.0")));
+        check("un .db senza la sua fonte: allarme", "script".equals(kindOf(c, "/etc/orphan.db")));
+        check("/etc/periodic.conf creato: allarme", "script".equals(kindOf(c, "/etc/periodic.conf")));
+        check("tutta /etc e il caricatore sono fra le radici", InstallSideEffects.CONFIG_ROOTS.contains("/etc")
+                && InstallSideEffects.CONFIG_ROOTS.contains("/boot/loader.conf"));
+        check("/etc/resolv.conf no: lo riscrive dhclient", InstallSideEffects.excluded("/etc/resolv.conf")
+                && !InstallSideEffects.excluded("/etc/resolv.conf.d/x") && !InstallSideEffects.excluded("/etc/rc.conf"));
+    }
+
+    // ===== la versione di prima, messa da parte =====
+    private static void savedCopies() throws Exception {
+        Path d = Files.createTempDirectory("saved");
+        try {
+            Path src = Files.createDirectories(d.resolve("live/postfix"));
+            write(src.resolve("main.cf"), "inet_protocols = all\n", "rw-r--r--");
+            write(src.resolve("mysql.cf"), "password = segreta\n", "rw-r-----");
+            InstallSideEffects.ConfigSnapshot before =
+                    InstallSideEffects.configSnapshot(List.of(d.resolve("live")), List.of(), Map.of());
+            Map<String, InstallSideEffects.FileState> big = new TreeMap<>(before.files());
+            big.put("/nowhere/huge.cf", new InstallSideEffects.FileState("x", "rw-r--r-- root:wheel", true, null));
+            InstallSideEffects.ConfigSnapshot withBig = new InstallSideEffects.ConfigSnapshot(big, Map.of());
+            Path backups = d.resolve("backups/20261024T090000Z");
+            String mainCf = src.resolve("main.cf").toString(), mysqlCf = src.resolve("mysql.cf").toString();
+            Map<String, String> r = InstallSideEffects.saveBefore(withBig,
+                    List.of(mainCf, mysqlCf, "/nowhere/new.cf", "/nowhere/huge.cf"), backups);
+            Path copy = Path.of(r.get(mainCf));
+            check("la copia di main.cf c'e', col percorso intero sotto la cartella", Files.exists(copy)
+                    && copy.toString().equals(backups + mainCf));
+            check("  con il contenuto di prima", Files.readString(copy).equals("inet_protocols = all\n"));
+            check("  e gli stessi permessi, cosi' cp -p la rimette com'era",
+                    PosixFilePermissions.toString(Files.getPosixFilePermissions(copy)).equals("rw-r--r--")
+                    && PosixFilePermissions.toString(Files.getPosixFilePermissions(Path.of(r.get(mysqlCf)))).equals("rw-r-----"));
+            check("la cartella delle copie la legge solo il proprietario",
+                    PosixFilePermissions.toString(Files.getPosixFilePermissions(backups)).equals("rwx------"));
+            check("un file che prima non c'era: niente copia, e lo dice", "created".equals(r.get("/nowhere/new.cf")));
+            check("un file troppo grande per tenerne il contenuto: lo dice", "tooLarge".equals(r.get("/nowhere/huge.cf")));
+
+            for (String n : new String[]{"20261020T080000Z", "20261021T080000Z", "20261022T080000Z", "20261023T080000Z"})
+                Files.createDirectories(d.resolve("backups/" + n + "/x"));
+            InstallSideEffects.pruneBefore(d.resolve("backups"), 2);
+            List<String> left;
+            try (var st = Files.list(d.resolve("backups"))) { left = st.map(x -> x.getFileName().toString()).sorted().toList(); }
+            check("se ne tengono le ultime, e si tolgono le piu' vecchie: " + left,
+                    left.equals(List.of("20261023T080000Z", "20261024T090000Z")));
+        } finally {
+            try (var s = Files.walk(d)) {
+                s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+            }
+        }
+    }
+
+    private static void put(Map<String, InstallSideEffects.FileState> m, String path, String text, boolean worldReadable) {
+        byte[] b = text.getBytes(StandardCharsets.UTF_8);
+        m.put(path, new InstallSideEffects.FileState(Integer.toHexString(java.util.Arrays.hashCode(b)),
+                (worldReadable ? "rw-r--r--" : "rw-------") + " root:wheel", worldReadable, b));
+    }
+
+    private static String kindOf(JSONArray c, String path) {
+        JSONObject o = find(c, path);
+        return o == null ? null : o.getString("kind");
+    }
+
+    private static JSONObject find(JSONArray c, String path) {
+        for (int i = 0; i < c.length(); i++)
+            if (c.getJSONObject(i).getString("path").equals(path)) return c.getJSONObject(i);
+        return null;
     }
 
     // ===== le righe =====
