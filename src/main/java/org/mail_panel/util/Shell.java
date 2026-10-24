@@ -200,12 +200,12 @@ public final class Shell {
      * trasforma un prompt in un errore — chi aggiunge un comando che chiede qualcosa deve
      * controllare l'esito della lettura.
      */
-    private static final java.io.File NIENTE_STDIN = new java.io.File("/dev/null");
+    private static final java.io.File NO_STDIN = new java.io.File("/dev/null");
 
     private static Result runInternal(Duration timeout, List<String> cmd) {
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.environment().put("PATH", PATH_COMPLETO);
-        pb.redirectInput(ProcessBuilder.Redirect.from(NIENTE_STDIN));
+        pb.redirectInput(ProcessBuilder.Redirect.from(NO_STDIN));
         pb.redirectErrorStream(true);
         Process p = null;
         try {

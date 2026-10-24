@@ -244,17 +244,17 @@ public final class PackagePlan {
      * quella sola ragione; questa risponde alla domanda che conta, cioe' "pkg farebbe le
      * stesse cose?".
      */
-    public static String firmaDeiCambi(JSONObject piano) {
-        List<String> righe = new ArrayList<>();
-        JSONArray c = piano == null ? null : piano.optJSONArray("changes");
+    public static String changesSignature(JSONObject plan) {
+        List<String> lines = new ArrayList<>();
+        JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            righe.add(x.optString("tipo") + " " + x.optString("nome") + " " + x.optString("da") + " " + x.optString("a"));
+            lines.add(x.optString("tipo") + " " + x.optString("nome") + " " + x.optString("da") + " " + x.optString("a"));
         }
-        java.util.Collections.sort(righe);
+        java.util.Collections.sort(lines);
         try {
             byte[] h = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(String.join("\n", righe).getBytes(StandardCharsets.UTF_8));
+                    .digest(String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(h).substring(0, 16);
         } catch (Exception e) {
             throw new IllegalStateException("SHA-256 not available", e);
@@ -262,18 +262,18 @@ public final class PackagePlan {
     }
 
     /** I cambiamenti del piano in righe leggibili, per mostrare due piani a confronto. */
-    public static List<String> cambiInRighe(JSONObject piano) {
-        List<String> righe = new ArrayList<>();
-        JSONArray c = piano == null ? null : piano.optJSONArray("changes");
+    public static List<String> changesInLines(JSONObject plan) {
+        List<String> lines = new ArrayList<>();
+        JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
             String a = x.optString("a");
-            righe.add(typeName(x.optString("tipo")) + " " + x.optString("nome")
+            lines.add(typeName(x.optString("tipo")) + " " + x.optString("nome")
                     + (x.optString("da").isEmpty() ? "" : " " + x.optString("da"))
                     + (a.isEmpty() || a.equals(x.optString("da")) ? "" : " -> " + a));
         }
-        java.util.Collections.sort(righe);
-        return righe;
+        java.util.Collections.sort(lines);
+        return lines;
     }
 
     // ===================== chiedere il piano a pkg =====================
@@ -370,9 +370,9 @@ public final class PackagePlan {
      *                          e, se pkg la dice, la versione a cui andrebbe); restituisce null se
      *                          si puo' sbloccare, altrimenti il perche'
      */
-    public static JSONObject pianoPer(List<String> pacchetti, Set<String> protetti,
+    public static JSONObject planFor(List<String> pacchetti, Set<String> protetti,
                                       Function<JSONObject, String> motivoPerNonSbloccare) {
-        return pianoPer(pacchetti, protetti, motivoPerNonSbloccare, n -> null);
+        return planFor(pacchetti, protetti, motivoPerNonSbloccare, n -> null);
     }
 
     /**
@@ -381,12 +381,12 @@ public final class PackagePlan {
      *                          stessa famiglia, o null. Serve a riconoscere quando pkg sta
      *                          girando attorno a un blocco: vedi il ciclo di pianoCon.
      */
-    public static JSONObject pianoPer(List<String> pacchetti, Set<String> protetti,
-                                      Function<JSONObject, String> motivoPerNonSbloccare,
-                                      Function<String, String> gemelloInstallato) {
+    public static JSONObject planFor(List<String> packages, Set<String> protectedNames,
+                                      Function<JSONObject, String> reasonNotToUnlock,
+                                      Function<String, String> installedTwin) {
         LinkedHashSet<String> sblocca = new LinkedHashSet<>();
-        for (String p : pacchetti) if (protetti.contains(p)) sblocca.add(p);
-        return pianoCon(pacchetti, sblocca, protetti, motivoPerNonSbloccare, gemelloInstallato, true);
+        for (String p : packages) if (protectedNames.contains(p)) sblocca.add(p);
+        return pianoCon(packages, sblocca, protectedNames, reasonNotToUnlock, installedTwin, true);
     }
 
     /**
@@ -395,24 +395,24 @@ public final class PackagePlan {
      * impedimento: e' uno di quelli trattenuti apposta, pkg lo salta e aggiorna il resto. Resta
      * nel piano, con il suo motivo, perche' chi legge sappia cosa NON verra' aggiornato.
      */
-    public static JSONObject pianoTotale(Set<String> daSbloccare, Set<String> protetti,
+    public static JSONObject fullPlan(Set<String> daSbloccare, Set<String> protetti,
                                          Function<JSONObject, String> motivoPerNonSbloccare) {
-        return pianoTotale(daSbloccare, protetti, motivoPerNonSbloccare, n -> null);
+        return fullPlan(daSbloccare, protetti, motivoPerNonSbloccare, n -> null);
     }
 
-    public static JSONObject pianoTotale(Set<String> daSbloccare, Set<String> protetti,
-                                         Function<JSONObject, String> motivoPerNonSbloccare,
-                                         Function<String, String> gemelloInstallato) {
-        return pianoCon(List.of(), new LinkedHashSet<>(daSbloccare), protetti, motivoPerNonSbloccare,
-                gemelloInstallato, false);
+    public static JSONObject fullPlan(Set<String> toUnlock, Set<String> protectedNames,
+                                         Function<JSONObject, String> reasonNotToUnlock,
+                                         Function<String, String> installedTwin) {
+        return pianoCon(List.of(), new LinkedHashSet<>(toUnlock), protectedNames, reasonNotToUnlock,
+                installedTwin, false);
     }
 
     private static JSONObject pianoCon(List<String> pacchetti, LinkedHashSet<String> sblocca, Set<String> protetti,
-                                       Function<JSONObject, String> motivoPerNonSbloccare,
-                                       Function<String, String> gemelloInstallato, boolean impedimentiBloccano) {
+                                       Function<JSONObject, String> reasonNotToUnlock,
+                                       Function<String, String> installedTwin, boolean blockersBlock) {
         JSONObject piano = null;
         JSONArray blockers = new JSONArray();
-        JSONArray famigliaSbloccata = new JSONArray();
+        JSONArray unlockedFamily = new JSONArray();
         for (int giro = 0; giro < 6; giro++) {
             piano = simula(new ArrayList<>(sblocca), pacchetti);
             if (!piano.optBoolean("success") || !piano.optBoolean("measured")) break;
@@ -425,17 +425,17 @@ public final class PackagePlan {
                 if (sblocca.contains(n)) continue;
                 String no = !protetti.contains(n)
                         ? I18n.tr("server.plan.lockedUnknown")
-                        : motivoPerNonSbloccare.apply(blocco);
+                        : reasonNotToUnlock.apply(blocco);
                 if (no != null) { blockers.put(new JSONObject().put("nome", n).put("reason", no)); continue; }
                 sblocca.add(n);
                 aggiunti = true;
             }
-            if (aggiuntaFamiglia(piano, sblocca, protetti, gemelloInstallato, blockers, famigliaSbloccata))
+            if (familyAddition(piano, sblocca, protetti, installedTwin, blockers, unlockedFamily))
                 aggiunti = true;
             if (!aggiunti) break;
         }
         piano.put("unlockedPackages", new JSONArray(new ArrayList<>(sblocca))).put("blockers", blockers)
-             .put("familyUnlocked", famigliaSbloccata);
+             .put("familyUnlocked", unlockedFamily);
 
         // I pacchetti chiesti che il piano NON cambia: pkg li lascerebbe dove sono.
         JSONArray fermi = new JSONArray();
@@ -466,7 +466,7 @@ public final class PackagePlan {
         }
 
         boolean runnable = piano.optBoolean("success") && piano.optBoolean("measured")
-                && (!impedimentiBloccano || (blockers.isEmpty() && piano.optJSONArray("lockedPackages") != null
+                && (!blockersBlock || (blockers.isEmpty() && piano.optJSONArray("lockedPackages") != null
                                              && piano.getJSONArray("lockedPackages").length() == 0))
                 && piano.getJSONArray("erroriPkg").length() == 0 && !piano.optBoolean("hasConflicts")
                 && changes != null && changes.length() > 0
@@ -502,50 +502,50 @@ public final class PackagePlan {
      *
      * @return true se ha allargato l'elenco da sbloccare, cioe' se il piano va rifatto
      */
-    private static boolean aggiuntaFamiglia(JSONObject piano, LinkedHashSet<String> sblocca,
-                                            Set<String> protetti, Function<String, String> gemelloInstallato,
-                                            JSONArray blockers, JSONArray famigliaSbloccata) {
-        boolean aggiunti = false;
-        JSONArray changes = piano.optJSONArray("changes");
+    private static boolean familyAddition(JSONObject plan, LinkedHashSet<String> unlock,
+                                            Set<String> protectedNames, Function<String, String> installedTwin,
+                                            JSONArray blockers, JSONArray unlockedFamily) {
+        boolean added = false;
+        JSONArray changes = plan.optJSONArray("changes");
         for (int i = 0; changes != null && i < changes.length(); i++) {
             JSONObject c = changes.getJSONObject(i);
             if (!"installa".equals(c.optString("tipo"))) continue;
-            String nuovo = c.optString("nome");
-            String gemello = gemelloInstallato == null ? null : gemelloInstallato.apply(nuovo);
-            if (gemello == null || gemello.equals(nuovo) || sblocca.contains(gemello)
-                    || !isValidName(gemello)) continue;
-            if (gia(blockers, gemello)) continue;
-            if (!protetti.contains(gemello)) {
-                blockers.put(new JSONObject().put("nome", nuovo)
+            String newName = c.optString("nome");
+            String twin = installedTwin == null ? null : installedTwin.apply(newName);
+            if (twin == null || twin.equals(newName) || unlock.contains(twin)
+                    || !isValidName(twin)) continue;
+            if (alreadyBlocked(blockers, twin)) continue;
+            if (!protectedNames.contains(twin)) {
+                blockers.put(new JSONObject().put("nome", newName)
                         .put("reason", I18n.tr("server.plan.familyConflict",
-                                java.util.Map.of("nuovo", String.valueOf(nuovo), "gemello", String.valueOf(gemello)))));
+                                java.util.Map.of("nuovo", String.valueOf(newName), "gemello", String.valueOf(twin)))));
                 continue;
             }
-            String installata = sh("pkg query %v " + gemello + " 2>/dev/null", 20).trim();
-            String catalogo = "";
-            for (String riga : sh("pkg rquery -U %v " + gemello + " 2>/dev/null", 30).split("\n")) {
-                String x = riga.trim();
-                if (versioneValida(x)) { catalogo = x; break; }
+            String installed = sh("pkg query %v " + twin + " 2>/dev/null", 20).trim();
+            String catalog = "";
+            for (String line : sh("pkg rquery -U %v " + twin + " 2>/dev/null", 30).split("\n")) {
+                String x = line.trim();
+                if (versioneValida(x)) { catalog = x; break; }
             }
-            if (!versioneValida(installata) || !installata.equals(catalogo)) {
-                blockers.put(new JSONObject().put("nome", gemello)
+            if (!versioneValida(installed) || !installed.equals(catalog)) {
+                blockers.put(new JSONObject().put("nome", twin)
                         .put("reason", I18n.tr("server.plan.familyLockedNewer",
-                                java.util.Map.of("nuovo", String.valueOf(nuovo), "gemello", String.valueOf(gemello),
-                                        "installata", String.valueOf(installata.isEmpty() ? "?" : installata),
-                                        "catalogo", String.valueOf(catalogo.isEmpty() ? "?" : catalogo)))));
+                                java.util.Map.of("nuovo", String.valueOf(newName), "gemello", String.valueOf(twin),
+                                        "installata", String.valueOf(installed.isEmpty() ? "?" : installed),
+                                        "catalogo", String.valueOf(catalog.isEmpty() ? "?" : catalog)))));
                 continue;
             }
-            sblocca.add(gemello);
-            famigliaSbloccata.put(new JSONObject().put("installed", gemello).put("wouldInstall", nuovo)
-                    .put("version", installata));
-            aggiunti = true;
+            unlock.add(twin);
+            unlockedFamily.put(new JSONObject().put("installed", twin).put("wouldInstall", newName)
+                    .put("version", installed));
+            added = true;
         }
-        return aggiunti;
+        return added;
     }
 
-    private static boolean gia(JSONArray blockers, String nome) {
+    private static boolean alreadyBlocked(JSONArray blockers, String name) {
         for (int i = 0; i < blockers.length(); i++)
-            if (nome.equals(blockers.getJSONObject(i).optString("nome"))) return true;
+            if (name.equals(blockers.getJSONObject(i).optString("nome"))) return true;
         return false;
     }
 
@@ -563,10 +563,10 @@ public final class PackagePlan {
     }
 
     /** Le versioni installate senza lo stato di blocco: {@code nome -> versione}. */
-    public static Map<String, String> soloVersioni(Map<String, String[]> installati) {
+    public static Map<String, String> versionsOnly(Map<String, String[]> installed) {
         Map<String, String> r = new java.util.TreeMap<>();
-        if (installati != null)
-            for (Map.Entry<String, String[]> e : installati.entrySet())
+        if (installed != null)
+            for (Map.Entry<String, String[]> e : installed.entrySet())
                 if (e.getValue() != null && e.getValue().length > 0) r.put(e.getKey(), e.getValue()[0]);
         return r;
     }
@@ -596,67 +596,67 @@ public final class PackagePlan {
      * @return una voce per divergenza: {@code name}, {@code happened}
      *         ("removed", "installed", "changed"), {@code from}, {@code to}, {@code why}
      */
-    public static JSONArray divergenze(Map<String, String> prima, Map<String, String> dopo,
-                                       JSONObject piano) {
-        Map<String, String> a = prima == null ? Map.of() : prima;
-        Map<String, String> b = dopo == null ? Map.of() : dopo;
+    public static JSONArray divergences(Map<String, String> before, Map<String, String> after,
+                                       JSONObject plan) {
+        Map<String, String> a = before == null ? Map.of() : before;
+        Map<String, String> b = after == null ? Map.of() : after;
 
         // Le righe del piano per nome. Un nome puo' comparire una volta sola: se comparisse
         // due volte il piano sarebbe ambiguo, e si tiene la prima perche' e' quella mostrata.
-        Map<String, JSONObject> pianificato = new HashMap<>();
-        JSONArray c = piano == null ? null : piano.optJSONArray("changes");
+        Map<String, JSONObject> planned = new HashMap<>();
+        JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            pianificato.putIfAbsent(x.optString("nome"), x);
+            planned.putIfAbsent(x.optString("nome"), x);
         }
 
-        Set<String> nomi = new java.util.TreeSet<>(a.keySet());
-        nomi.addAll(b.keySet());
-        JSONArray fuori = new JSONArray();
-        for (String nome : nomi) {
-            String va = a.get(nome), vb = b.get(nome);
-            String avvenuto = va == null ? "installed" : vb == null ? "removed"
-                            : va.equals(vb) ? null : "changed";
-            if (avvenuto == null) continue;   // niente e' cambiato per questo pacchetto
+        Set<String> names = new java.util.TreeSet<>(a.keySet());
+        names.addAll(b.keySet());
+        JSONArray outside = new JSONArray();
+        for (String name : names) {
+            String versionA = a.get(name), versionB = b.get(name);
+            String happened = versionA == null ? "installed" : versionB == null ? "removed"
+                            : versionA.equals(versionB) ? null : "changed";
+            if (happened == null) continue;   // niente e' cambiato per questo pacchetto
 
-            JSONObject p = pianificato.get(nome);
+            JSONObject p = planned.get(name);
             if (p == null) {
-                fuori.put(voceDivergenza(nome, avvenuto, va, vb,
+                outside.put(divergenceEntry(name, happened, versionA, versionB,
                         I18n.tr("server.plan.d.notInPlan")));
                 continue;
             }
             // Nel piano c'era: il tipo e la versione di arrivo devono combaciare.
-            String tipo = p.optString("tipo"), atteso = p.optString("a");
-            boolean coincide = switch (avvenuto) {
-                case "removed" -> "rimuove".equals(tipo);
-                case "installed" -> "installa".equals(tipo) && atteso.equals(vb);
-                default -> ("aggiorna".equals(tipo) || "retrocede".equals(tipo)) && atteso.equals(vb);
+            String type = p.optString("tipo"), expected = p.optString("a");
+            boolean matches = switch (happened) {
+                case "removed" -> "rimuove".equals(type);
+                case "installed" -> "installa".equals(type) && expected.equals(versionB);
+                default -> ("aggiorna".equals(type) || "retrocede".equals(type)) && expected.equals(versionB);
             };
-            if (coincide) continue;
-            fuori.put(voceDivergenza(nome, avvenuto, va, vb,
+            if (matches) continue;
+            outside.put(divergenceEntry(name, happened, versionA, versionB,
                     I18n.tr("server.plan.d.planSaid", java.util.Map.of(
-                            "kind", String.valueOf(typeName(tipo)),
-                            "expected", String.valueOf(atteso.isEmpty() ? I18n.tr("server.plan.removed") : atteso)))));
+                            "kind", String.valueOf(typeName(type)),
+                            "expected", String.valueOf(expected.isEmpty() ? I18n.tr("server.plan.removed") : expected)))));
         }
-        return fuori;
+        return outside;
     }
 
-    private static JSONObject voceDivergenza(String nome, String avvenuto, String da, String a, String why) {
-        return new JSONObject().put("name", nome).put("happened", avvenuto)
-                .put("from", da == null ? "" : da).put("to", a == null ? "" : a)
+    private static JSONObject divergenceEntry(String name, String happened, String from, String a, String why) {
+        return new JSONObject().put("name", name).put("happened", happened)
+                .put("from", from == null ? "" : from).put("to", a == null ? "" : a)
                 .put("why", why);
     }
 
     /** Una divergenza detta in una riga, nella lingua di chi legge. */
-    public static String divergenzaInRiga(JSONObject d) {
-        String nome = d.optString("name");
-        String testo = switch (d.optString("happened")) {
-            case "removed" -> I18n.tr("server.plan.d.removed", java.util.Map.of("name", nome, "version", String.valueOf(d.optString("from"))));
-            case "installed" -> I18n.tr("server.plan.d.installed", java.util.Map.of("name", nome, "version", String.valueOf(d.optString("to"))));
-            default -> I18n.tr("server.plan.d.changed", java.util.Map.of("name", nome,
+    public static String divergenceInLine(JSONObject d) {
+        String name = d.optString("name");
+        String text = switch (d.optString("happened")) {
+            case "removed" -> I18n.tr("server.plan.d.removed", java.util.Map.of("name", name, "version", String.valueOf(d.optString("from"))));
+            case "installed" -> I18n.tr("server.plan.d.installed", java.util.Map.of("name", name, "version", String.valueOf(d.optString("to"))));
+            default -> I18n.tr("server.plan.d.changed", java.util.Map.of("name", name,
                     "from", String.valueOf(d.optString("from")), "to", String.valueOf(d.optString("to"))));
         };
-        return testo + " — " + d.optString("why");
+        return text + " — " + d.optString("why");
     }
 
     /**

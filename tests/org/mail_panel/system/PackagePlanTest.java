@@ -46,8 +46,8 @@ public class PackagePlanTest {
         if (args.length > 0 && args[0].equals("simulazione")) { simulazione(); fine(); return; }
         // I due casi del gemello di famiglia che hanno bisogno di un pkg finto diverso: lo
         // script li lancia a parte, con V_CAT e MYSQL97 (vedi tests/pkg-simulation-test.sh).
-        if (args.length > 0 && args[0].equals("famiglia-catalogo-nuovo")) { famigliaCatalogoNuovo(); fine(); return; }
-        if (args.length > 0 && args[0].equals("famiglia-conflitto-vero")) { famigliaConflittoVero(); fine(); return; }
+        if (args.length > 0 && args[0].equals("famiglia-catalogo-nuovo")) { familyNewCatalog(); fine(); return; }
+        if (args.length > 0 && args[0].equals("famiglia-conflitto-vero")) { familyRealConflict(); fine(); return; }
 
         // ---------------- il piano ----------------
 
@@ -287,7 +287,7 @@ public class PackagePlanTest {
         Set<String> protetti = Set.of("kafka", "openjdk21", "nginx");
         int copiePrima = copieRimaste();
 
-        JSONObject p = PackagePlan.pianoPer(List.of("kafka"), protetti, x -> null);
+        JSONObject p = PackagePlan.planFor(List.of("kafka"), protetti, x -> null);
         vero("simulazione: riuscita e misurata", p.optBoolean("success") && p.optBoolean("measured"));
         vero("simulazione: pkg ha nominato openjdk21 e l'ho aggiunto",
             p.getJSONArray("unlockedPackages").toList().equals(List.of("kafka", "openjdk21")));
@@ -302,7 +302,7 @@ public class PackagePlanTest {
             Files.exists(locked.resolve("kafka")) && Files.exists(locked.resolve("openjdk21")));
         vero("simulazione: la copia e' stata cancellata", copieRimaste() == copiePrima);
 
-        p = PackagePlan.pianoPer(List.of("kafka"), protetti,
+        p = PackagePlan.planFor(List.of("kafka"), protetti,
                 x -> x.getString("nome").equals("openjdk21") && x.getString("verso").equals("21.0.9+10.1")
                      ? "e' il JDK su cui gira il pannello" : null);
         vero("simulazione: il JDK del pannello resta un impedimento con il suo motivo",
@@ -311,7 +311,7 @@ public class PackagePlanTest {
         vero("simulazione: con un impedimento non e' runnable", !p.getBoolean("runnable"));
         vero("simulazione: anche qui la copia e' sparita", copieRimaste() == copiePrima);
 
-        p = PackagePlan.pianoPer(List.of("nginx"), protetti, x -> null);
+        p = PackagePlan.planFor(List.of("nginx"), protetti, x -> null);
         vero("simulazione: nginx non ha aggiornamenti, e lo dice", p.getJSONArray("unchangedPackages").toList().equals(List.of("nginx"))
             && !p.getBoolean("runnable"));
 
@@ -323,11 +323,11 @@ public class PackagePlanTest {
         // file, quindi l'esecuzione muore a meta'. Misurato sulla VM il 23/10/2026: uscita 3,
         // «mysql97-client conflicts with mysql84-client (installs files into the same place)»;
         // e sbloccando anche mysql84-client, nella stessa simulazione mysql97-client sparisce.
-        Set<String> protettiMysql = Set.of("kafka", "openjdk21", "nginx",
+        Set<String> mysqlProtected = Set.of("kafka", "openjdk21", "nginx",
                 "mysql84-client", "mysql84-server", "postfix-mysql");
 
-        p = PackagePlan.pianoPer(List.of("postfix-mysql"), protettiMysql, x -> null,
-                UpdateManager::gemelloInstallatoDellaFamiglia);
+        p = PackagePlan.planFor(List.of("postfix-mysql"), mysqlProtected, x -> null,
+                UpdateManager::installedFamilyTwin);
         vero("famiglia: il piano e' misurato", p.optBoolean("measured"));
         vero("famiglia: sblocca anche il gemello protetto",
             p.getJSONArray("unlockedPackages").toList().contains("mysql84-client"));
@@ -335,24 +335,24 @@ public class PackagePlanTest {
         vero("famiglia: l'aggiornamento chiesto c'e' ancora", trova(p, "postfix-mysql") != null);
         vero("famiglia: nessun impedimento, quindi si puo' eseguire",
             p.getJSONArray("blockers").isEmpty() && p.getBoolean("runnable"));
-        JSONArray fu = p.getJSONArray("familyUnlocked");
+        JSONArray familyUnlocked = p.getJSONArray("familyUnlocked");
         vero("famiglia: il piano dice QUALE gemello ha sbloccato e perche'",
-            fu.length() == 1 && "mysql84-client".equals(fu.getJSONObject(0).getString("installed"))
-            && "mysql97-client".equals(fu.getJSONObject(0).getString("wouldInstall")));
-        vero("famiglia: e a quale versione", "8.4.11_1".equals(fu.getJSONObject(0).getString("version")));
+            familyUnlocked.length() == 1 && "mysql84-client".equals(familyUnlocked.getJSONObject(0).getString("installed"))
+            && "mysql97-client".equals(familyUnlocked.getJSONObject(0).getString("wouldInstall")));
+        vero("famiglia: e a quale versione", "8.4.11_1".equals(familyUnlocked.getJSONObject(0).getString("version")));
 
         // Lo scheletro del nome: due condizioni, perche' una sola sbaglia.
         vero("scheletro: le cifre diventano #",
-            "mysql#-client".equals(UpdateManager.scheletroDelNome("mysql84-client"))
-            && "mysql#-client".equals(UpdateManager.scheletroDelNome("mysql97-client")));
+            "mysql#-client".equals(UpdateManager.nameSkeleton("mysql84-client"))
+            && "mysql#-client".equals(UpdateManager.nameSkeleton("mysql97-client")));
         vero("scheletro: il server NON e' lo stesso posto del client",
-            !UpdateManager.scheletroDelNome("mysql84-server").equals(UpdateManager.scheletroDelNome("mysql97-client")));
+            !UpdateManager.nameSkeleton("mysql84-server").equals(UpdateManager.nameSkeleton("mysql97-client")));
         vero("gemello: mysql84-server non e' il gemello di mysql97-client",
-            "mysql84-client".equals(UpdateManager.gemelloInstallatoDellaFamiglia("mysql97-client")));
+            "mysql84-client".equals(UpdateManager.installedFamilyTwin("mysql97-client")));
         vero("gemello: python312 non ha gemelli, non e' una famiglia dichiarata",
-            UpdateManager.gemelloInstallatoDellaFamiglia("python313") == null);
+            UpdateManager.installedFamilyTwin("python313") == null);
         vero("gemello: un nome che non passa il filtro non interroga niente",
-            UpdateManager.gemelloInstallatoDellaFamiglia("mysql97-client; rm -rf /") == null);
+            UpdateManager.installedFamilyTwin("mysql97-client; rm -rf /") == null);
 
         JSONObject s = PackagePlan.simula(List.of("ka fka"), List.of("kafka"));
         vero("simulazione: un nome con uno spazio non arriva alla shell", !s.optBoolean("success"));
@@ -366,20 +366,20 @@ public class PackagePlanTest {
      * dice di aspettare. Allora resta un impedimento, col suo motivo. Il pkg finto lo dice
      * con V_CAT.
      */
-    static void famigliaCatalogoNuovo() throws Exception {
+    static void familyNewCatalog() throws Exception {
         if (System.getenv("FINTO_DB") == null) { vero("FINTO_DB impostato", false); return; }
-        Set<String> protetti = Set.of("kafka", "openjdk21", "nginx",
+        Set<String> protectedNames = Set.of("kafka", "openjdk21", "nginx",
                 "mysql84-client", "mysql84-server", "postfix-mysql");
-        JSONObject p = PackagePlan.pianoPer(List.of("postfix-mysql"), protetti, x -> null,
-                UpdateManager::gemelloInstallatoDellaFamiglia);
+        JSONObject p = PackagePlan.planFor(List.of("postfix-mysql"), protectedNames, x -> null,
+                UpdateManager::installedFamilyTwin);
         vero("catalogo nuovo: il gemello NON viene sbloccato", p.getJSONArray("familyUnlocked").isEmpty()
             && !p.getJSONArray("unlockedPackages").toList().contains("mysql84-client"));
         vero("catalogo nuovo: c'e' un impedimento", p.getJSONArray("blockers").length() == 1);
-        String motivo = p.getJSONArray("blockers").length() == 1
+        String reason = p.getJSONArray("blockers").length() == 1
                 ? p.getJSONArray("blockers").getJSONObject(0).getString("reason") : "";
         vero("catalogo nuovo: il motivo nomina le due versioni",
-            motivo.contains("8.4.11_1") && motivo.contains("8.4.12"));
-        vero("catalogo nuovo: e dice che prima va aggiornato il gemello", motivo.contains("mysql84-client"));
+            reason.contains("8.4.11_1") && reason.contains("8.4.12"));
+        vero("catalogo nuovo: e dice che prima va aggiornato il gemello", reason.contains("mysql84-client"));
         vero("catalogo nuovo: quindi non e' eseguibile", !p.getBoolean("runnable"));
         vero("catalogo nuovo: e mysql97-client resta nel piano, non si finge che sia sparito",
             trova(p, "mysql97-client") != null);
@@ -390,18 +390,18 @@ public class PackagePlanTest {
      * (MYSQL97=sempre). Qui il blocco non c'entra: e' un conflitto vero fra due membri della
      * famiglia, e si dichiara invece di sbloccare qualcosa che non e' bloccato.
      */
-    static void famigliaConflittoVero() throws Exception {
+    static void familyRealConflict() throws Exception {
         if (System.getenv("FINTO_DB") == null) { vero("FINTO_DB impostato", false); return; }
-        Set<String> protetti = Set.of("kafka", "openjdk21", "nginx", "postfix-mysql");
-        JSONObject p = PackagePlan.pianoPer(List.of("postfix-mysql"), protetti, x -> null,
-                UpdateManager::gemelloInstallatoDellaFamiglia);
+        Set<String> protectedNames = Set.of("kafka", "openjdk21", "nginx", "postfix-mysql");
+        JSONObject p = PackagePlan.planFor(List.of("postfix-mysql"), protectedNames, x -> null,
+                UpdateManager::installedFamilyTwin);
         vero("conflitto vero: non si sblocca niente", p.getJSONArray("familyUnlocked").isEmpty());
         vero("conflitto vero: c'e' un impedimento", p.getJSONArray("blockers").length() == 1);
-        String motivo = p.getJSONArray("blockers").length() == 1
+        String reason = p.getJSONArray("blockers").length() == 1
                 ? p.getJSONArray("blockers").getJSONObject(0).getString("reason") : "";
         vero("conflitto vero: il motivo nomina i due pacchetti",
-            motivo.contains("mysql97-client") && motivo.contains("mysql84-client"));
-        vero("conflitto vero: e dice che il blocco non c'entra", !motivo.isEmpty());
+            reason.contains("mysql97-client") && reason.contains("mysql84-client"));
+        vero("conflitto vero: e dice che il blocco non c'entra", !reason.isEmpty());
         vero("conflitto vero: non e' eseguibile", !p.getBoolean("runnable"));
     }
 

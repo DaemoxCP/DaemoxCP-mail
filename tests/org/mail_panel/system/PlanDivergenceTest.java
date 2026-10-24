@@ -24,172 +24,172 @@ import org.json.JSONObject;
  */
 public class PlanDivergenceTest {
 
-    private static int falliti = 0, saltati = 0;
+    private static int failures = 0, skipped = 0;
 
     public static void main(String[] args) {
 
         // ===== 1. Il reperto 14, con i suoi dati =====
         // Prima: lmdb installato. Il piano: installa lmdb0, aggiorna nginx, reinstalla
         // cyrus-sasl. Nessuna rimozione. Dopo: lmdb non c'e' piu'.
-        Map<String, String> prima = PackagePlan.soloVersioni(PackagePlan.installati(
+        Map<String, String> before = PackagePlan.versionsOnly(PackagePlan.installati(
                 "lmdb\t1.0.2,1\t0\n"
               + "nginx\t1.30.5_1,3\t1\n"
               + "cyrus-sasl\t2.1.28_5\t0\n"));
-        Map<String, String> dopo = PackagePlan.soloVersioni(PackagePlan.installati(
+        Map<String, String> after = PackagePlan.versionsOnly(PackagePlan.installati(
                 "lmdb0\t0.9.35\t0\n"
               + "nginx\t1.30.5_4,3\t1\n"
               + "cyrus-sasl\t2.1.28_5\t0\n"));
-        JSONObject piano = piano(
-                cambio("installa", "lmdb0", "", "0.9.35"),
-                cambio("aggiorna", "nginx", "1.30.5_1,3", "1.30.5_4,3"),
-                cambio("reinstalla", "cyrus-sasl", "2.1.28_5", "2.1.28_5"));
+        JSONObject plan = plan(
+                change("installa", "lmdb0", "", "0.9.35"),
+                change("aggiorna", "nginx", "1.30.5_1,3", "1.30.5_4,3"),
+                change("reinstalla", "cyrus-sasl", "2.1.28_5", "2.1.28_5"));
 
-        JSONArray d = PackagePlan.divergenze(prima, dopo, piano);
-        vero("il reperto 14: la rimozione fuori dal piano viene vista", d.length() == 1);
+        JSONArray d = PackagePlan.divergences(before, after, plan);
+        check("il reperto 14: la rimozione fuori dal piano viene vista", d.length() == 1);
         if (d.length() == 1) {
             JSONObject x = d.getJSONObject(0);
-            vero("  e' lmdb", "lmdb".equals(x.optString("name")));
-            vero("  ed e' stato rimosso", "removed".equals(x.optString("happened")));
-            vero("  con la versione che c'era", "1.0.2,1".equals(x.optString("from")));
-            vero("  e il motivo e' che nel piano non c'era", !x.optString("why").isEmpty());
-            vero("  la riga da mostrare nomina il pacchetto",
-                 PackagePlan.divergenzaInRiga(x).contains("lmdb"));
+            check("  e' lmdb", "lmdb".equals(x.optString("name")));
+            check("  ed e' stato rimosso", "removed".equals(x.optString("happened")));
+            check("  con la versione che c'era", "1.0.2,1".equals(x.optString("from")));
+            check("  e il motivo e' che nel piano non c'era", !x.optString("why").isEmpty());
+            check("  la riga da mostrare nomina il pacchetto",
+                 PackagePlan.divergenceInLine(x).contains("lmdb"));
         }
-        vero("l'installazione prevista e l'aggiornamento previsto non sono divergenze",
+        check("l'installazione prevista e l'aggiornamento previsto non sono divergenze",
              d.length() == 1);
 
         // ===== 2. Tutto come previsto: nessuna divergenza =====
-        vero("piano rispettato alla lettera: nessuna divergenza",
-             PackagePlan.divergenze(
-                 PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.5_1,3\t1\nredis\t8.10.2\t1\n")),
-                 PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.6,3\t1\nredis\t8.10.2\t1\n")),
-                 piano(cambio("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3"))).isEmpty());
+        check("piano rispettato alla lettera: nessuna divergenza",
+             PackagePlan.divergences(
+                 PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.5_1,3\t1\nredis\t8.10.2\t1\n")),
+                 PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.6,3\t1\nredis\t8.10.2\t1\n")),
+                 plan(change("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3"))).isEmpty());
 
         // ===== 3. Un pacchetto installato che nel piano non c'era =====
-        JSONArray inst = PackagePlan.divergenze(
-                PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.6,3\t1\n")),
-                PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.6,3\t1\nlibzip\t1.12.1\t0\n")),
-                piano());
-        vero("un'installazione fuori dal piano viene vista",
-             inst.length() == 1 && "installed".equals(campo(inst, "happened"))
-             && "libzip".equals(campo(inst, "name")));
-        vero("  e dice a quale versione", "1.12.1".equals(campo(inst, "to")));
+        JSONArray inst = PackagePlan.divergences(
+                PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.6,3\t1\n")),
+                PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.6,3\t1\nlibzip\t1.12.1\t0\n")),
+                plan());
+        check("un'installazione fuori dal piano viene vista",
+             inst.length() == 1 && "installed".equals(field(inst, "happened"))
+             && "libzip".equals(field(inst, "name")));
+        check("  e dice a quale versione", "1.12.1".equals(field(inst, "to")));
 
         // ===== 4. Nel piano c'era, ma e' finito a una versione DIVERSA =====
-        JSONArray altra = PackagePlan.divergenze(
-                PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.5_1,3\t1\n")),
-                PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.31.0,3\t1\n")),
-                piano(cambio("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3")));
-        vero("una versione di arrivo diversa da quella approvata viene vista", altra.length() == 1);
-        vero("  e il motivo dice che cosa diceva il piano", campo(altra, "why").contains("1.30.6,3"));
+        JSONArray other = PackagePlan.divergences(
+                PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.5_1,3\t1\n")),
+                PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.31.0,3\t1\n")),
+                plan(change("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3")));
+        check("una versione di arrivo diversa da quella approvata viene vista", other.length() == 1);
+        check("  e il motivo dice che cosa diceva il piano", field(other, "why").contains("1.30.6,3"));
 
         // ===== 5. Una rimozione PREVISTA non e' una divergenza =====
-        vero("una rimozione prevista non e' una divergenza",
-             PackagePlan.divergenze(
-                 PackagePlan.soloVersioni(PackagePlan.installati("lmdb\t1.0.2,1\t0\n")),
-                 PackagePlan.soloVersioni(PackagePlan.installati("")),
-                 piano(cambio("rimuove", "lmdb", "1.0.2,1", ""))).isEmpty());
+        check("una rimozione prevista non e' una divergenza",
+             PackagePlan.divergences(
+                 PackagePlan.versionsOnly(PackagePlan.installati("lmdb\t1.0.2,1\t0\n")),
+                 PackagePlan.versionsOnly(PackagePlan.installati("")),
+                 plan(change("rimuove", "lmdb", "1.0.2,1", ""))).isEmpty());
 
         // ===== 6. Una reinstallazione non lascia traccia nell'inventario =====
         // Stessa versione prima e dopo: da qui non si vede, e non si DEVE vedere. Che la
         // reinstallazione sia avvenuta lo controlla verificaEsito, che confronta le versioni
         // del piano. I due controlli sono complementari: questo guarda cio' che e' cambiato
         // senza permesso, quello cio' che era promesso e non e' avvenuto.
-        vero("una reinstallazione non produce divergenze",
-             PackagePlan.divergenze(
-                 PackagePlan.soloVersioni(PackagePlan.installati("cyrus-sasl\t2.1.28_5\t0\n")),
-                 PackagePlan.soloVersioni(PackagePlan.installati("cyrus-sasl\t2.1.28_5\t0\n")),
-                 piano(cambio("reinstalla", "cyrus-sasl", "2.1.28_5", "2.1.28_5"))).isEmpty());
+        check("una reinstallazione non produce divergenze",
+             PackagePlan.divergences(
+                 PackagePlan.versionsOnly(PackagePlan.installati("cyrus-sasl\t2.1.28_5\t0\n")),
+                 PackagePlan.versionsOnly(PackagePlan.installati("cyrus-sasl\t2.1.28_5\t0\n")),
+                 plan(change("reinstalla", "cyrus-sasl", "2.1.28_5", "2.1.28_5"))).isEmpty());
 
         // ===== 7. Un aggiornamento promesso e non avvenuto NON e' una divergenza =====
         // Non e' una dimenticanza: nell'inventario non e' cambiato niente, e quel caso lo
         // prende verificaEsito ("atteso 1.30.6,3, trovato 1.30.5_1,3"). Se un giorno
         // qualcuno lo facesse comparire anche qui, lo stesso guasto verrebbe detto due volte
         // con due nomi diversi.
-        vero("un aggiornamento promesso e non avvenuto non compare qui (lo prende verificaEsito)",
-             PackagePlan.divergenze(
-                 PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.5_1,3\t1\n")),
-                 PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.5_1,3\t1\n")),
-                 piano(cambio("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3"))).isEmpty());
+        check("un aggiornamento promesso e non avvenuto non compare qui (lo prende verificaEsito)",
+             PackagePlan.divergences(
+                 PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.5_1,3\t1\n")),
+                 PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.5_1,3\t1\n")),
+                 plan(change("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3"))).isEmpty());
 
         // ===== 8. Una retrocessione prevista, e il pkg che aggiorna se stesso =====
-        vero("una retrocessione prevista non e' una divergenza",
-             PackagePlan.divergenze(
-                 PackagePlan.soloVersioni(PackagePlan.installati("redis\t8.10.2\t1\n")),
-                 PackagePlan.soloVersioni(PackagePlan.installati("redis\t8.9.0\t1\n")),
-                 piano(cambio("retrocede", "redis", "8.10.2", "8.9.0"))).isEmpty());
-        vero("il pkg che aggiorna se stesso, se il piano lo dichiara, non e' una divergenza",
-             PackagePlan.divergenze(
-                 PackagePlan.soloVersioni(PackagePlan.installati("pkg\t2.1.0\t0\n")),
-                 PackagePlan.soloVersioni(PackagePlan.installati("pkg\t2.2.0\t0\n")),
-                 piano(cambio("aggiorna", "pkg", "2.1.0", "2.2.0"))).isEmpty());
-        vero("e se il piano NON lo dichiara, si', e' una divergenza",
-             PackagePlan.divergenze(
-                 PackagePlan.soloVersioni(PackagePlan.installati("pkg\t2.1.0\t0\n")),
-                 PackagePlan.soloVersioni(PackagePlan.installati("pkg\t2.2.0\t0\n")),
-                 piano()).length() == 1);
+        check("una retrocessione prevista non e' una divergenza",
+             PackagePlan.divergences(
+                 PackagePlan.versionsOnly(PackagePlan.installati("redis\t8.10.2\t1\n")),
+                 PackagePlan.versionsOnly(PackagePlan.installati("redis\t8.9.0\t1\n")),
+                 plan(change("retrocede", "redis", "8.10.2", "8.9.0"))).isEmpty());
+        check("il pkg che aggiorna se stesso, se il piano lo dichiara, non e' una divergenza",
+             PackagePlan.divergences(
+                 PackagePlan.versionsOnly(PackagePlan.installati("pkg\t2.1.0\t0\n")),
+                 PackagePlan.versionsOnly(PackagePlan.installati("pkg\t2.2.0\t0\n")),
+                 plan(change("aggiorna", "pkg", "2.1.0", "2.2.0"))).isEmpty());
+        check("e se il piano NON lo dichiara, si', e' una divergenza",
+             PackagePlan.divergences(
+                 PackagePlan.versionsOnly(PackagePlan.installati("pkg\t2.1.0\t0\n")),
+                 PackagePlan.versionsOnly(PackagePlan.installati("pkg\t2.2.0\t0\n")),
+                 plan()).length() == 1);
 
         // ===== 9. Nessun piano misurabile: non si inventa un verdetto =====
-        vero("con un piano senza cambi, ogni cambiamento e' fuori dal piano",
-             PackagePlan.divergenze(
-                 PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.5_1,3\t1\n")),
-                 PackagePlan.soloVersioni(PackagePlan.installati("nginx\t1.30.6,3\t1\n")),
+        check("con un piano senza cambi, ogni cambiamento e' fuori dal piano",
+             PackagePlan.divergences(
+                 PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.5_1,3\t1\n")),
+                 PackagePlan.versionsOnly(PackagePlan.installati("nginx\t1.30.6,3\t1\n")),
                  new JSONObject()).length() == 1);
-        vero("inventari identici e piano vuoto: niente da dire",
-             PackagePlan.divergenze(Map.of("nginx", "1.30.6,3"), Map.of("nginx", "1.30.6,3"),
+        check("inventari identici e piano vuoto: niente da dire",
+             PackagePlan.divergences(Map.of("nginx", "1.30.6,3"), Map.of("nginx", "1.30.6,3"),
                  new JSONObject()).isEmpty());
 
         // ===== 10. Il contratto con pkg vero =====
-        if (!cEPkg()) {
-            salta("l'inventario vero di pkg: pkg non c'e' su questa macchina");
+        if (!hasPkg()) {
+            skip("l'inventario vero di pkg: pkg non c'e' su questa macchina");
         } else {
-            Map<String, String> inventario = PackagePlan.soloVersioni(PackagePlan.installati());
-            vero("l'inventario vero non e' vuoto", !inventario.isEmpty());
-            boolean versioniSensate = true;
-            for (Map.Entry<String, String> e : inventario.entrySet())
-                if (e.getValue() == null || e.getValue().isEmpty()) versioniSensate = false;
-            vero("e ogni pacchetto ha una versione", versioniSensate);
+            Map<String, String> inventory = PackagePlan.versionsOnly(PackagePlan.installati());
+            check("l'inventario vero non e' vuoto", !inventory.isEmpty());
+            boolean sensibleVersions = true;
+            for (Map.Entry<String, String> e : inventory.entrySet())
+                if (e.getValue() == null || e.getValue().isEmpty()) sensibleVersions = false;
+            check("e ogni pacchetto ha una versione", sensibleVersions);
             // Due inventari di fila, senza aver toccato niente: zero divergenze. Se questo
             // fallisse, il confronto darebbe falsi allarmi a ogni aggiornamento.
-            vero("due inventari di fila non producono divergenze",
-                 PackagePlan.divergenze(inventario, PackagePlan.soloVersioni(PackagePlan.installati()),
+            check("due inventari di fila non producono divergenze",
+                 PackagePlan.divergences(inventory, PackagePlan.versionsOnly(PackagePlan.installati()),
                          new JSONObject()).isEmpty());
         }
 
         System.out.println();
-        if (saltati > 0) System.out.println(saltati + " PROVE SALTATE (lo dicono sopra)");
-        System.out.println(falliti == 0 ? "TUTTO OK" : falliti + " PROVE FALLITE");
-        if (falliti > 0) System.exit(1);
+        if (skipped > 0) System.out.println(skipped + " PROVE SALTATE (lo dicono sopra)");
+        System.out.println(failures == 0 ? "TUTTO OK" : failures + " PROVE FALLITE");
+        if (failures > 0) System.exit(1);
     }
 
     /** Un campo della prima divergenza, o stringa vuota se non ce n'e' nessuna: una prova
      *  che fallisce deve dire TUTTO quello che non va, non fermarsi alla prima mancanza. */
-    private static String campo(JSONArray d, String chiave) {
-        return d.length() == 0 ? "" : d.getJSONObject(0).optString(chiave);
+    private static String field(JSONArray d, String key) {
+        return d.length() == 0 ? "" : d.getJSONObject(0).optString(key);
     }
 
-    private static JSONObject cambio(String tipo, String nome, String da, String a) {
-        return new JSONObject().put("tipo", tipo).put("nome", nome).put("da", da).put("a", a);
+    private static JSONObject change(String type, String name, String from, String a) {
+        return new JSONObject().put("tipo", type).put("nome", name).put("da", from).put("a", a);
     }
 
-    private static JSONObject piano(JSONObject... cambi) {
+    private static JSONObject plan(JSONObject... changeList) {
         JSONArray c = new JSONArray();
-        for (JSONObject x : cambi) c.put(x);
+        for (JSONObject x : changeList) c.put(x);
         return new JSONObject().put("changes", c).put("measured", true);
     }
 
-    private static boolean cEPkg() {
+    private static boolean hasPkg() {
         return org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(15),
                 "pkg -N >/dev/null 2>&1").success();
     }
 
-    private static void vero(String nome, boolean ok) {
-        System.out.println((ok ? "  ok   " : "  NO   ") + nome);
-        if (!ok) falliti++;
+    private static void check(String name, boolean ok) {
+        System.out.println((ok ? "  ok   " : "  NO   ") + name);
+        if (!ok) failures++;
     }
 
-    private static void salta(String nome) {
-        System.out.println("  --   SALTATA: " + nome);
-        saltati++;
+    private static void skip(String name) {
+        System.out.println("  --   SALTATA: " + name);
+        skipped++;
     }
 }
