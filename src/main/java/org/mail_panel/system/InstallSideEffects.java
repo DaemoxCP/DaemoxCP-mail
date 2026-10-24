@@ -280,7 +280,10 @@ final class InstallSideEffects {
                 if (oldC != null && newC != null && isText(oldC) && isText(newC)) {
                     List<List<String>> d = lineDiff(new String(oldC, StandardCharsets.UTF_8),
                                                     new String(newC, StandardCharsets.UTF_8));
-                    if ("changed".equals(happened) && (!d.get(0).isEmpty() || !d.get(1).isEmpty())
+                    // Con i permessi cambiati no: un file reso illeggibile al demone, o leggibile a
+                    // tutti, conta anche se dentro sono cambiati solo i commenti.
+                    if ("changed".equals(happened) && !c.has("permissionsFrom")
+                            && (!d.get(0).isEmpty() || !d.get(1).isEmpty())
                             && allComments(d.get(0)) && allComments(d.get(1)))
                         kind = "commentsOnly";
                     boolean readable = (b == null || b.worldReadable()) && (a == null || a.worldReadable());

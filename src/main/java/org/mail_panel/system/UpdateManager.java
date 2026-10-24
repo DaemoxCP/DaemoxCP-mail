@@ -5758,8 +5758,11 @@ public final class UpdateManager {
      */
     static java.util.List<String> messaggiCheChiedonoAzione(String outputPkg) {
         java.util.List<String> fuori = new ArrayList<>();
+        // Il rientro comune si toglie, non solo quello della prima riga: uno script che
+        // scrive tutto rientrato di quattro spazi, ristampato con trim(), avrebbe la prima
+        // riga a sinistra e le altre spostate.
         for (String blocco : outputBlocks(outputPkg))
-            if (chiedeAzione(blocco)) fuori.add(blocco.trim());
+            if (chiedeAzione(blocco)) fuori.add(blocco.stripTrailing().stripIndent().strip());
         return fuori;
     }
 

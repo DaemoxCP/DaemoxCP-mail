@@ -60,6 +60,7 @@ public class InstallSideEffectsTest {
             write(etc.resolve("perms.cf"), "y = 2\n", "rw-------");
             write(etc.resolve("order.cf"), "a = 1\nb = 2\n", "rw-r--r--");
             write(etc.resolve("untouched.cf"), "z = 3\n", "rw-r--r--");
+            write(etc.resolve("comments-perms.cf"), "w = 4\n", "rw-r-----");
             // Un file di un ALTRO pacchetto, che il lavoro non ha toccato.
             write(other.resolve("dovecot-owned.conf"), "protocols = imap\n", "rw-r--r--");
 
@@ -86,6 +87,7 @@ public class InstallSideEffectsTest {
             Files.setPosixFilePermissions(etc.resolve("perms.cf"), PosixFilePermissions.fromString("rw-r--r--"));
             write(etc.resolve("order.cf"), "b = 2\na = 1\n", "rw-r--r--");
             write(other.resolve("dovecot-owned.conf"), "protocols = imap pop3\n", "rw-r--r--");
+            write(etc.resolve("comments-perms.cf"), "w = 4\n# nuovo commento\n", "rw-rw-rw-");
 
             InstallSideEffects.ConfigSnapshot after =
                     InstallSideEffects.configSnapshot(List.of(d.resolve("etc")), List.of(), owners);
@@ -135,6 +137,9 @@ public class InstallSideEffectsTest {
             JSONObject foreign = find(c, other.resolve("dovecot-owned.conf"));
             check("un file di un pacchetto che il lavoro NON ha cambiato: allarme", foreign != null
                     && foreign.getBoolean("alarm") && "dovecot".equals(foreign.getString("owner")));
+            JSONObject commentsPerms = find(c, etc.resolve("comments-perms.cf"));
+            check("solo commenti, ma con i permessi cambiati: allarme", commentsPerms != null
+                    && commentsPerms.getBoolean("alarm") && "script".equals(commentsPerms.getString("kind")));
             check("un file non toccato non compare", find(c, etc.resolve("untouched.cf")) == null);
             check("e nemmeno il .sample del pacchetto, che e' suo", find(c, etc.resolve("main.cf.sample")) == null);
 
@@ -203,7 +208,7 @@ public class InstallSideEffectsTest {
                 "rspamd rspamd-4.1 28334 15 tcp4  127.0.0.1:11333       *:*",
                 "redis  redis-serv 34997  7 tcp6  [::1]:6379            *:*");
         Map<String, String> p = InstallSideEffects.parseSockstat(before);
-        check("sockstat: sette indirizzi TCP distinti", p.size() == 7);
+        check("sockstat: otto indirizzi TCP distinti (2096, 25 e 587 in v4 e v6, 8443, 11333, 6379)", p.size() == 8);
         check("  i processi di nginx contano una volta", p.containsKey("tcp4 *:8443"));
         check("  le udp no", p.keySet().stream().noneMatch(k -> k.startsWith("udp")));
         check("  tcp46 si'", "java".equals(p.get("tcp46 *:2096")));
