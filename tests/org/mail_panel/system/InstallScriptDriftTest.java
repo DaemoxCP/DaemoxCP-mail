@@ -192,6 +192,7 @@ public class InstallScriptDriftTest {
     static final String PID4 = "/var/run/drift-probe.4.pid", PID6 = "/var/run/drift-probe.6.pid";
     static final int PORT = 47425;
     static Path work;
+    static boolean createdReposDir;
 
     private static boolean onFreeBsdAsRoot() {
         return sh("uname -s").trim().equals("FreeBSD") && sh("id -u").trim().equals("0");
@@ -210,6 +211,12 @@ public class InstallScriptDriftTest {
             buildPackage("1.0", false);
             buildPackage("1.1", true);    // lo script sporco
             buildPackage("1.2", false);   // cambia solo i file suoi
+            // Su una macchina appena installata la cartella non c'e': la crea il cambio di ramo.
+            // Misurato sulla VM ripristinata il 24/10/2026, dove la prova cadeva qui.
+            if (!Files.isDirectory(Path.of(REPO_CONF).getParent())) {
+                Files.createDirectories(Path.of(REPO_CONF).getParent());
+                createdReposDir = true;
+            }
             Files.writeString(Path.of(REPO_CONF),
                     "FreeBSD-ports: { enabled: no }\nFreeBSD-ports-kmods: { enabled: no }\n"
                   + PKG + ": { url: \"file://" + work.resolve("repo") + "\", signature_type: \"none\", enabled: yes }\n");
@@ -226,6 +233,7 @@ public class InstallScriptDriftTest {
         } finally {
             removePackage();
             sh("rm -f " + REPO_CONF + "; rm -rf " + REPO_DB + " " + work);
+            if (createdReposDir) sh("rmdir " + Path.of(REPO_CONF).getParent());
             // Le copie «di prima» che i casi sporchi hanno messo da parte: sono della prova.
             for (String d : sh("ls " + SAVED_DIR + " 2>/dev/null").split("\n"))
                 if (!d.isBlank() && !savedBefore.contains(d.trim())) sh("rm -rf " + SAVED_DIR + "/" + d.trim());
