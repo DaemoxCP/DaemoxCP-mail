@@ -215,6 +215,41 @@ for f in sorgenti_js:
             guasti.append(f"{os.path.basename(f)}: {funzione}('{chiave}') passa {{{nome}}}, il testo chiede {sorted(chiesti)}")
 print(f"  chiamate del JavaScript con segnaposto: {chiamate_js}, con nomi che il testo non chiede: {js_diversi}")
 
+# --- 8. ogni chiave che il codice usa esiste ---
+#
+# Il contrario del controllo 1: una chiave rinominata nel file di lingua e non nel codice (o il
+# contrario) fa comparire in pagina il NOME della chiave, senza errori. Si cercano le chiavi
+# letterali di I18n.tr, t/tn/tNodes, {{t:...}} e data-i18n, e devono esistere (per tn bastano
+# chiave.one e chiave.other). Quelle costruite con un prefisso + valore non si possono
+# controllare qui, e si contano. Nel Java le righe di commento non contano: un commento puo'
+# citare {{t:chiave}} come esempio.
+USI = [
+    re.compile(r"""\bI18n\.tr(?:In)?\(\s*(?:[^,()"]+,\s*)?"([A-Za-z][\w.\-]*)\""""),
+    re.compile(r"""\b(?:t|tn|tNodes)\(\s*\\?['"]([A-Za-z][\w.\-]*)\\?['"]"""),
+    re.compile(r"""\{\{t:([A-Za-z][\w.\-]*)\}\}"""),
+    re.compile(r"""data-i18n(?:-[a-z]+)?=\\?["']([A-Za-z][\w.\-]*)\\?["']"""),
+]
+COSTRUITE = [
+    re.compile(r"""\bI18n\.tr(?:In)?\(\s*(?:[^,()"]+,\s*)?"([A-Za-z][\w.\-]*\.)"\s*\+"""),
+    re.compile(r"""\b(?:t|tn|tNodes)\(\s*\\?['"]([A-Za-z][\w.\-]*\.)\\?['"]\s*\+"""),
+]
+usate, costruite = {}, set()
+for f in glob.glob(os.path.join(radice, "src/main/java/**/*.java"), recursive=True) + \
+         glob.glob(os.path.join(radice, "src/main/resources/pages/*")):
+    testo = open(f, encoding="utf-8", errors="replace").read()
+    if f.endswith(".java"):
+        testo = "\n".join(r for r in testo.split("\n") if not r.lstrip().startswith(("*", "//", "/*")))
+    for rx in USI:
+        for k in rx.findall(testo): usate.setdefault(k, os.path.basename(f))
+    for rx in COSTRUITE:
+        costruite |= set(rx.findall(testo))
+assenti = sorted(k for k in usate if k not in it and not (k + ".one" in it and k + ".other" in it)
+                 and not k.endswith(".") and not any(k.startswith(p) for p in costruite))
+print(f"  chiavi usate dal codice: {len(usate)}, che i file di lingua non hanno: {len(assenti)}"
+      f"   (costruite con un prefisso, non controllabili: {len(costruite)})")
+for k in assenti[:20]:
+    guasti.append(f"il codice usa la chiave {k}, che non c'e' nei file di lingua ({usate[k]})")
+
 if guasti:
     print()
     for g in guasti:

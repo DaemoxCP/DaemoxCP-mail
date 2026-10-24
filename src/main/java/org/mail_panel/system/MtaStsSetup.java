@@ -113,10 +113,10 @@ public class MtaStsSetup {
             blindOnes.add(I18n.tr("server.sts.notExamined", java.util.Map.of("n", String.valueOf((domainCount - reviews.size())))));
         List<String> cnameTroubles = new ArrayList<>(absent); cnameTroubles.addAll(crooked);
         String cnameDetail;
-        if (!cnameTroubles.isEmpty()) cnameDetail = I18n.tr("server.sts.toFix", java.util.Map.of("elenco", String.valueOf(String.join("; ", cnameTroubles))));
-        else if (!blindOnes.isEmpty()) cnameDetail = I18n.tr("server.sts.unverifiable", java.util.Map.of("elenco", String.valueOf(String.join("; ", blindOnes))));
+        if (!cnameTroubles.isEmpty()) cnameDetail = I18n.tr("server.sts.toFix", java.util.Map.of("list", String.valueOf(String.join("; ", cnameTroubles))));
+        else if (!blindOnes.isEmpty()) cnameDetail = I18n.tr("server.sts.unverifiable", java.util.Map.of("list", String.valueOf(String.join("; ", blindOnes))));
         else if (!propagating.isEmpty())
-            cnameDetail = I18n.tr("server.sts.propagating", java.util.Map.of("elenco", String.valueOf(String.join(", ", propagating))));
+            cnameDetail = I18n.tr("server.sts.propagating", java.util.Map.of("list", String.valueOf(String.join(", ", propagating))));
         else if (!proxied.isEmpty())
             cnameDetail = I18n.tr("server.sts.allPresentProxy");
         else cnameDetail = I18n.tr("server.sts.allPresentOk");
@@ -128,7 +128,7 @@ public class MtaStsSetup {
         // 4-bis: i record che devono puntare DRITTI al server
         boolean blind = !blindOnes.isEmpty();
         steps.add(step("proxy", I18n.tr("server.sts.stepProxy"),
-                !proxied.isEmpty() ? I18n.tr("server.sts.viaCf", java.util.Map.of("elenco", String.valueOf(String.join(", ", proxied))))
+                !proxied.isEmpty() ? I18n.tr("server.sts.viaCf", java.util.Map.of("list", String.valueOf(String.join(", ", proxied))))
                         : (blind ? I18n.tr("server.sts.checkedVisible")
                                  : I18n.tr("server.sts.noneViaCf")),
                 !proxied.isEmpty() ? "da fare" : (blind ? "uncertain" : "done"),
@@ -144,10 +144,10 @@ public class MtaStsSetup {
         for (String n : servedNames) if (!certificateCovers(n)) uncovered.add(n);
         List<String> excluded = domainsOnOtherAccount();
         steps.add(step("certificato", I18n.tr("server.sts.stepCert"),
-                uncovered.isEmpty() ? I18n.tr("server.sts.allCovered") : I18n.tr("server.sts.uncovered", java.util.Map.of("elenco", String.valueOf(String.join(", ", uncovered)))),
+                uncovered.isEmpty() ? I18n.tr("server.sts.allCovered") : I18n.tr("server.sts.uncovered", java.util.Map.of("list", String.valueOf(String.join(", ", uncovered)))),
                 uncovered.isEmpty() ? "done" : "da fare",
                 excluded.isEmpty() ? null
-                    : I18n.tr("server.sts.otherAccount", java.util.Map.of("elenco", String.valueOf(String.join(", ", excluded))))));
+                    : I18n.tr("server.sts.otherAccount", java.util.Map.of("list", String.valueOf(String.join(", ", excluded))))));
 
         // 6-7: la prova e il record
         List<TxtReview> txtReviews = new ArrayList<>();
@@ -181,9 +181,9 @@ public class MtaStsSetup {
         r.put("note", complete
                 ? I18n.tr("server.sts.complete")
                 : daFare == 0
-                  ? I18n.tr("server.sts.onlyUncertain", java.util.Map.of("passi", String.valueOf(uncertainCount)))
+                  ? I18n.tr("server.sts.onlyUncertain", java.util.Map.of("steps", String.valueOf(uncertainCount)))
                   : (daFare == 1 ? I18n.tr("server.sts.missing.one") : I18n.tr("server.sts.missing.other", java.util.Map.of("n", String.valueOf(daFare))))
-                    + (uncertain > 0 ? ", " + I18n.tr("server.sts.plusUncertain", java.util.Map.of("passi", String.valueOf(uncertainCount))) : "")
+                    + (uncertain > 0 ? ", " + I18n.tr("server.sts.plusUncertain", java.util.Map.of("steps", String.valueOf(uncertainCount))) : "")
                     + ". " + I18n.tr("server.sts.buttonRuns"));
         return r;
     }
@@ -231,16 +231,16 @@ public class MtaStsSetup {
         steps.add(step("prova", I18n.tr("server.sts.stepTest"),
                 notAnswering.isEmpty()
                     ? I18n.tr("server.sts.answersAll")
-                    : I18n.tr("server.sts.noAnswerFor", java.util.Map.of("elenco", String.valueOf(String.join(", ", notAnswering)))),
+                    : I18n.tr("server.sts.noAnswerFor", java.util.Map.of("list", String.valueOf(String.join(", ", notAnswering)))),
                 notAnswering.isEmpty() ? "done" : "da fare", null));
 
         String txtDetail, txtState, txtReason = null;
         if (!unmaintained.isEmpty()) {
-            txtDetail = I18n.tr("server.sts.notKept", java.util.Map.of("elenco", String.valueOf(String.join("; ", unmaintained))));
+            txtDetail = I18n.tr("server.sts.notKept", java.util.Map.of("list", String.valueOf(String.join("; ", unmaintained))));
             txtState = "da fare";
             txtReason = I18n.tr("server.sts.notKeptWhy");
         } else if (!tooMany.isEmpty()) {
-            txtDetail = I18n.tr("server.sts.moreThanOne", java.util.Map.of("elenco", String.valueOf(String.join(", ", tooMany))));
+            txtDetail = I18n.tr("server.sts.moreThanOne", java.util.Map.of("list", String.valueOf(String.join(", ", tooMany))));
             txtState = "da fare";
             txtReason = I18n.tr("server.sts.moreThanOneWhy");
         } else if (!unknownTxt.isEmpty()) {
@@ -250,7 +250,7 @@ public class MtaStsSetup {
         } else if (!notAnswering.isEmpty()) {
             txtDetail = I18n.tr("server.sts.waitingPrev"); txtState = "da fare";
         } else if (!withoutTxt.isEmpty()) {
-            txtDetail = I18n.tr("server.sts.missingList", java.util.Map.of("elenco", String.valueOf(String.join(", ", withoutTxt)))); txtState = "da fare";
+            txtDetail = I18n.tr("server.sts.missingList", java.util.Map.of("list", String.valueOf(String.join(", ", withoutTxt)))); txtState = "da fare";
         } else {
             txtDetail = I18n.tr("server.sts.allPublished"); txtState = "done";
         }
@@ -337,7 +337,7 @@ public class MtaStsSetup {
         while (true) {
             remain.removeIf(answers);
             if (remain.isEmpty() || clock.now() >= expiry) break;
-            log.accept("    " + I18n.tr("server.sts.stillNotAnswering", java.util.Map.of("elenco", String.valueOf(String.join(", ", remain)), "s", String.valueOf((intervalMs / 1000)))));
+            log.accept("    " + I18n.tr("server.sts.stillNotAnswering", java.util.Map.of("list", String.valueOf(String.join(", ", remain)), "s", String.valueOf((intervalMs / 1000)))));
             try {
                 clock.sleep(intervalMs);
             } catch (InterruptedException ie) {
@@ -517,19 +517,19 @@ public class MtaStsSetup {
                     visto = true;
                     if (!t.proxied) {
                         straight++;
-                        proxy.put(note(d.domain, true, I18n.tr("server.sts.pointsStraight", java.util.Map.of("tipo", String.valueOf(t.type)))));
+                        proxy.put(note(d.domain, true, I18n.tr("server.sts.pointsStraight", java.util.Map.of("kind", String.valueOf(t.type)))));
                         continue;
                     }
                     CloudflareManager.RecordOp op = cf.setProxy(a.apiToken, zl.zoneId, t.id, false);
                     boolean done = op != null && op.success;
                     if (done) { fixed++; justChanged.add(d.domain); }
                     proxy.put(note(d.domain, done,
-                            done ? I18n.tr("server.sts.proxyRemoved", java.util.Map.of("tipo", String.valueOf(t.type)))
-                                  : I18n.tr("server.sts.proxyNotRemoved", java.util.Map.of("tipo", String.valueOf(t.type), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error)))));
+                            done ? I18n.tr("server.sts.proxyRemoved", java.util.Map.of("kind", String.valueOf(t.type)))
+                                  : I18n.tr("server.sts.proxyNotRemoved", java.util.Map.of("kind", String.valueOf(t.type), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error)))));
                 }
                 if (!visto) {
                     blind++;
-                    proxy.put(note(d.domain, false, I18n.tr("server.sts.noRecordNamed", java.util.Map.of("nome", String.valueOf(name)))));
+                    proxy.put(note(d.domain, false, I18n.tr("server.sts.noRecordNamed", java.util.Map.of("name", String.valueOf(name)))));
                 }
             }
         } catch (Exception e) {
@@ -606,7 +606,7 @@ public class MtaStsSetup {
                     line -> { if (job != null) job.write(line); });
             if (job != null) job.write(remain.isEmpty()
                     ? "    " + I18n.tr("server.sts.allAnswer")
-                    : "    " + I18n.tr("server.sts.stillNot", java.util.Map.of("elenco", String.valueOf(String.join(", ", remain)))));
+                    : "    " + I18n.tr("server.sts.stillNot", java.util.Map.of("list", String.valueOf(String.join(", ", remain)))));
         }
 
         // 6-7. la prova e il record, dominio per dominio
@@ -856,8 +856,8 @@ public class MtaStsSetup {
                         // Niente parentesi qui dentro: questo motivo viene mostrato gia' dentro
                         // una parentesi, e due livelli annidati si leggono male.
                         why = ", " + (jolly.proxied
-                                ? I18n.tr("server.sts.wildcardProxied", java.util.Map.of("d", String.valueOf(d.domain), "tipo", String.valueOf(jolly.type), "v", String.valueOf(jolly.content)))
-                                : I18n.tr("server.sts.wildcardStraight", java.util.Map.of("d", String.valueOf(d.domain), "tipo", String.valueOf(jolly.type), "v", String.valueOf(jolly.content))));
+                                ? I18n.tr("server.sts.wildcardProxied", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(jolly.type), "v", String.valueOf(jolly.content)))
+                                : I18n.tr("server.sts.wildcardStraight", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(jolly.type), "v", String.valueOf(jolly.content))));
                     else if (resolves)
                         why = ", " + I18n.tr("server.sts.answersFromOutside", java.util.Map.of("d", String.valueOf(d.domain)));
                     else why = "";
@@ -870,7 +870,7 @@ public class MtaStsSetup {
                 List<String> male = new ArrayList<>();
                 boolean crooked = false;
                 if (!"CNAME".equalsIgnoreCase(found.type)) {
-                    male.add(I18n.tr("server.sts.notCname", java.util.Map.of("tipo", String.valueOf(found.type))));
+                    male.add(I18n.tr("server.sts.notCname", java.util.Map.of("kind", String.valueOf(found.type))));
                     crooked = true;
                 } else if (!DnsRules.sameName(found.content, target)) {
                     male.add(I18n.tr("server.sts.pointsElsewhere", java.util.Map.of("v", String.valueOf(found.content), "b", String.valueOf(target))));

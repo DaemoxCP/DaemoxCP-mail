@@ -623,7 +623,7 @@ public class DkimManager {
                     if (recordId.equals(entry.recordId)) {
                         // Protezione 1: blocca cancellazione di record current/pending/previous
                         if (entry.isCurrent || entry.isPending || entry.isPrevious) {
-                            return new RotationActionResult(false, I18n.tr("server.dkimm.blockedActive", java.util.Map.of("s", String.valueOf(entry.selector), "stato", String.valueOf(entry.isCurrent ? I18n.tr("server.dkimm.stateActive") : entry.isPending ? "PENDING" : "PREVIOUS"))));
+                            return new RotationActionResult(false, I18n.tr("server.dkimm.blockedActive", java.util.Map.of("s", String.valueOf(entry.selector), "state", String.valueOf(entry.isCurrent ? I18n.tr("server.dkimm.stateActive") : entry.isPending ? "PENDING" : "PREVIOUS"))));
                         }
                         // Protezione 2: blocca cancellazione di orfani ancora in grace period
                         if (entry.inGracePeriod && entry.gracePeriodEndsAt != null) {
@@ -900,7 +900,7 @@ public class DkimManager {
                 "Key promoted: " + oldSelector + " → " + newSelector + ". Rspamd reloaded. Old key kept for the grace period.");
 
             return new RotationActionResult(true,
-                I18n.tr("server.dkimm.activated", java.util.Map.of("nuovo", String.valueOf(newSelector), "vecchio", String.valueOf(oldSelector))));
+                I18n.tr("server.dkimm.activated", java.util.Map.of("newer", String.valueOf(newSelector), "old", String.valueOf(oldSelector))));
         } catch (Exception e) {
             return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }

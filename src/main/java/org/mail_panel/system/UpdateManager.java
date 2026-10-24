@@ -108,20 +108,20 @@ public final class UpdateManager {
         {"^dovecot[0-9]*-pigeonhole(-.*)?$", "server.um.role.sieve"},
         {"^dovecot[0-9]*-.*$",         "server.um.role.dovecotPart"},
         {"^rspamd$",                   "server.um.role.rspamd"},
-        {"^redis(-.*)?$",              "server.um.bloccato.1"},
+        {"^redis(-.*)?$",              "server.um.locked.1"},
         {"^clamav(-.*)?$",             "Antivirus"},
         {"^roundcube(-php[0-9]+)?$",   "Webmail (Roundcube)"},
-        {"^nginx(-.*)?$",              "server.um.bloccato.2"},
+        {"^nginx(-.*)?$",              "server.um.locked.2"},
         {"^php[0-9]+$",                "PHP"},
         {"^php[0-9]+-.+$",             "server.um.role.phpExt"},
         {"^mysql[0-9]+-server$",       "Database (server)"},
         {"^mysql[0-9]+-client$",       "Database (client)"},
         {"^py[0-9]+-fail2ban$",        "server.um.role.fail2ban"},
-        {"^(py[0-9]+-)?certbot$",      "server.um.bloccato.3"},
+        {"^(py[0-9]+-)?certbot$",      "server.um.locked.3"},
         {"^unbound$",                  "server.um.role.unbound"},
         {"^opendkim$",                 "server.um.role.opendkim"},
         {"^openssl[0-9]*$",            "server.um.role.openssl"},
-        {"^openjdk[0-9]*$",            "server.um.bloccato.4"},
+        {"^openjdk[0-9]*$",            "server.um.locked.4"},
     };
 
     /** Ruolo del pacchetto nello stack di posta, o null se non lo riguarda. */
@@ -279,7 +279,7 @@ public final class UpdateManager {
 
     private static JSONObject changeLocks(boolean lock, String onlyThis) {
         if (!onlyThis.isEmpty() && !isValidName(onlyThis)) {
-            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.cambiaProtezioni.1"));
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
         }
         StringBuilder log = new StringBuilder();
         int changedCount = 0;
@@ -696,35 +696,35 @@ public final class UpdateManager {
      */
     private static final String[][] WARNINGS = {
         {"^dovecot.*", "wait",
-         "server.um.cambiaProtezioni.2"},
+         "server.um.changeLocks.2"},
         {"^roundcube.*", "wait",
-         "server.um.cambiaProtezioni.3"},
+         "server.um.changeLocks.3"},
         {"^php[0-9]+.*", "wait",
-         "server.um.cambiaProtezioni.4"},
+         "server.um.changeLocks.4"},
         {"^mysql[0-9]+-server$", "wait",
-         "server.um.cambiaProtezioni.5"},
+         "server.um.changeLocks.5"},
         {"^mysql[0-9]+-client$", "wait",
-         "server.um.cambiaProtezioni.6"},
+         "server.um.changeLocks.6"},
         {"^postfix.*", "review",
-         "server.um.cambiaProtezioni.7"},
+         "server.um.changeLocks.7"},
         {"^rspamd$", "review",
-         "server.um.cambiaProtezioni.8"},
+         "server.um.changeLocks.8"},
         {"^redis.*", "review",
-         "server.um.cambiaProtezioni.9"},
+         "server.um.changeLocks.9"},
         {"^clamav.*", "review",
-         "server.um.cambiaProtezioni.10"},
+         "server.um.changeLocks.10"},
         {"^nginx.*", "review",
-         "server.um.cambiaProtezioni.11"},
+         "server.um.changeLocks.11"},
         {"^py[0-9]+-fail2ban$", "review",
-         "server.um.cambiaProtezioni.12"},
+         "server.um.changeLocks.12"},
         {"^(py[0-9]+-)?certbot$", "review",
-         "server.um.cambiaProtezioni.13"},
+         "server.um.changeLocks.13"},
         {"^unbound$", "review",
-         "server.um.cambiaProtezioni.14"},
+         "server.um.changeLocks.14"},
         {"^openjdk[0-9]*$", "wait",
-         "server.um.cambiaProtezioni.15"},
+         "server.um.changeLocks.15"},
         {"^openssl[0-9]*$", "review",
-         "server.um.cambiaProtezioni.16"},
+         "server.um.changeLocks.16"},
     };
 
     /**
@@ -787,18 +787,18 @@ public final class UpdateManager {
             if (!name.matches(a[0])) continue;
             if (!majorJump && "wait".equals(a[1]) && !versionIndependentRisk(name)) {
                 return new JSONObject().put("level", "ok").put("text",
-                        I18n.tr("server.um.avvertenzaPer.1"));
+                        I18n.tr("server.um.warningFor.1"));
             }
             // Un'avvertenza scritta per il caso peggiore, mostrata su un aggiornamento di
             // sole cifre finali, dice il falso: parla di "cambio maggiore" quando il salto
             // non c'e'. Chi legge o si allarma per niente, o smette di fidarsi del testo.
             String text = majorJump ? I18n.tr(a[2])
-                    : I18n.tr("server.um.avvertenzaPer.2", java.util.Map.of("p", I18n.tr(a[2])));
+                    : I18n.tr("server.um.warningFor.2", java.util.Map.of("p", I18n.tr(a[2])));
             return new JSONObject().put("level", a[1]).put("text", text);
         }
         if (majorJump) {
             return new JSONObject().put("level", "review").put("text",
-                    I18n.tr("server.um.avvertenzaPer.3"));
+                    I18n.tr("server.um.warningFor.3"));
         }
         return null;
     }
@@ -863,7 +863,7 @@ public final class UpdateManager {
             shown.append(l).append("\n");
         }
         r.put("dryRun", shown.toString().trim()
-                + (omitted > 0 ? I18n.tr("server.um.updatesStatus.1", java.util.Map.of("omesse", String.valueOf(omitted))) : ""));
+                + (omitted > 0 ? I18n.tr("server.um.updatesStatus.1", java.util.Map.of("omitted", String.valueOf(omitted))) : ""));
         r.put("upToDate", fullSimulation.contains("Your packages are up to date"));
 
         // Quali pacchetti DELLA POSTA verrebbero toccati, e se sono protetti.
@@ -1269,7 +1269,7 @@ public final class UpdateManager {
         JSONArray issues = new JSONArray();
         if (file.isEmpty()) {
             r.put("scanned", false);
-            r.put("note", I18n.tr("server.um.dovecotCompatibility.1", java.util.Map.of("dOVECOT_DIR", String.valueOf(DOVECOT_DIR))));
+            r.put("note", I18n.tr("server.um.dovecotCompatibility.1", java.util.Map.of("dovecotDir", String.valueOf(DOVECOT_DIR))));
         } else {
             r.put("scanned", true);
             String list = String.join(" ", file);
@@ -1327,15 +1327,15 @@ public final class UpdateManager {
     /** Opzioni del my.cnf vivo che MySQL 8.4 ha rimosso: con una sola di queste il server non parte. */
     private static final String[][] MYCNF_REMOVED_84 = {
         {"default_authentication_plugin", "authentication_policy"},
-        {"expire_logs_days",              "server.um.versioneMinore.1"},
-        {"master_info_repository",        "server.um.versioneMinore.2"},
-        {"relay_log_info_repository",     "server.um.versioneMinore.2"},
-        {"slave_rows_search_algorithms",  "server.um.versioneMinore.2"},
-        {"transaction_write_set_extraction", "server.um.versioneMinore.2"},
-        {"binlog_transaction_dependency_tracking", "server.um.versioneMinore.3"},
-        {"log_bin_use_v1_events",         "server.um.versioneMinore.2"},
+        {"expire_logs_days",              "server.um.minorVersion.1"},
+        {"master_info_repository",        "server.um.minorVersion.2"},
+        {"relay_log_info_repository",     "server.um.minorVersion.2"},
+        {"slave_rows_search_algorithms",  "server.um.minorVersion.2"},
+        {"transaction_write_set_extraction", "server.um.minorVersion.2"},
+        {"binlog_transaction_dependency_tracking", "server.um.minorVersion.3"},
+        {"log_bin_use_v1_events",         "server.um.minorVersion.2"},
         {"skip_host_cache",               "host_cache_size = 0"},
-        {"character_set_client_handshake", "server.um.versioneMinore.2"},
+        {"character_set_client_handshake", "server.um.minorVersion.2"},
     };
 
     public static JSONObject mysqlCompatibility() {
@@ -1461,13 +1461,13 @@ public final class UpdateManager {
      * Fonte: COMPATIBILITY_README di Postfix (postfix.org), letto il 01/09/2026.
      */
     private static final String[][] POSTFIX_LEVELS = {
-        {"1", "server.um.oscuraCredenziali.1",
+        {"1", "server.um.maskCredentials.1",
          "append_dot_mydomain smtpd_relay_restrictions smtputf8_enable"},
-        {"2", "server.um.oscuraCredenziali.2",
+        {"2", "server.um.maskCredentials.2",
          "mynetworks_style relay_domains"},
-        {"3.6", "server.um.oscuraCredenziali.3",
+        {"3.6", "server.um.maskCredentials.3",
          "smtpd_tls_fingerprint_digest smtp_tls_fingerprint_digest lmtp_tls_fingerprint_digest respectful_logging"},
-        {"3.11", "server.um.oscuraCredenziali.4",
+        {"3.11", "server.um.maskCredentials.4",
          "smtp_tlsrpt_skip_reused_handshakes@smtp_tlsrpt_enable=yes smtp_tls_security_level"},
     };
 
@@ -1568,10 +1568,10 @@ public final class UpdateManager {
         r.put("back", back);
         r.put("verdict", back ? "IL LIVELLO E' INDIETRO" : "ALLINEATO");
         r.put("explanation", back
-                ? I18n.tr("server.um.postfixCompatibility.4", java.util.Map.of("impostato", String.valueOf(set), "consigliato", String.valueOf(recommended)))
+                ? I18n.tr("server.um.postfixCompatibility.4", java.util.Map.of("configured", String.valueOf(set), "recommended", String.valueOf(recommended)))
                 : (set.isBlank()
                    ? I18n.tr("server.um.postfixCompatibility.5")
-                   : I18n.tr("server.um.postfixCompatibility.6", java.util.Map.of("impostato", String.valueOf(set)))));
+                   : I18n.tr("server.um.postfixCompatibility.6", java.util.Map.of("configured", String.valueOf(set)))));
         int openTotal = 0;
         for (int i = 0; i < changes.length(); i++) openTotal += changes.getJSONObject(i).getInt("openHere");
         r.put("openHere", openTotal);
@@ -1582,7 +1582,7 @@ public final class UpdateManager {
                       ? I18n.tr("server.um.x.pfOpen.one")
                       : I18n.tr("server.um.x.pfOpen.other", java.util.Map.of("n", String.valueOf(openTotal))))));
         r.put("howToRaise", back
-                ? I18n.tr("server.um.postfixCompatibility.10", java.util.Map.of("consigliato", String.valueOf(recommended)))
+                ? I18n.tr("server.um.postfixCompatibility.10", java.util.Map.of("recommended", String.valueOf(recommended)))
                 : "");
         r.put("source", I18n.tr("server.um.postfixCompatibility.11"));
         return r;
@@ -1683,11 +1683,11 @@ public final class UpdateManager {
         // puo' semplicemente non essere passato il messaggio lento che farebbe scattare il caso.
         boolean wideSample = logLines2 >= 1000;
         String period = r.optString("since", "").isEmpty() ? ""
-                : " " + I18n.tr("server.um.x.rsLogSpan", java.util.Map.of("dal", String.valueOf(r.optString("since")), "al", String.valueOf(r.optString("until"))));
+                : " " + I18n.tr("server.um.x.rsLogSpan", java.util.Map.of("since", String.valueOf(r.optString("since")), "until", String.valueOf(r.optString("until"))));
         String rotate = r.optInt("rotations", 0) > 0
                 ? " " + (r.optInt("compressedRotations", 0) > 0
-                     ? I18n.tr("server.um.x.rsRotZ", java.util.Map.of("n", String.valueOf(r.optInt("rotations")), "z", String.valueOf(r.optInt("compressedRotations")), "righe", String.valueOf(r.optInt("currentLines", 0))))
-                     : I18n.tr("server.um.x.rsRot", java.util.Map.of("n", String.valueOf(r.optInt("rotations")), "righe", String.valueOf(r.optInt("currentLines", 0)))))
+                     ? I18n.tr("server.um.x.rsRotZ", java.util.Map.of("n", String.valueOf(r.optInt("rotations")), "z", String.valueOf(r.optInt("compressedRotations")), "lines", String.valueOf(r.optInt("currentLines", 0))))
+                     : I18n.tr("server.um.x.rsRot", java.util.Map.of("n", String.valueOf(r.optInt("rotations")), "lines", String.valueOf(r.optInt("currentLines", 0)))))
                 : I18n.tr("server.um.rspamdTimeoutDiagnostics.2");
         r.put("wideSample", wideSample);
         int interruptions = r.optInt("interruptions", occ);
@@ -1696,19 +1696,19 @@ public final class UpdateManager {
                                     : (wideSample ? "NESSUNA ANALISI INTERROTTA"
                                                      : "NESSUNA TRACCIA, MA IL LOG E' CORTO")));
         String decomposition = occ == 0 ? ""
-                : " " + I18n.tr("server.um.x.rsSplit", java.util.Map.of("occ", String.valueOf(occ), "warnings", String.valueOf(r.optInt("warningRepeats", 0)), "interruzioni", String.valueOf(interruptions)));
+                : " " + I18n.tr("server.um.x.rsSplit", java.util.Map.of("occurrences", String.valueOf(occ), "warnings", String.valueOf(r.optInt("warningRepeats", 0)), "interruptions", String.valueOf(interruptions)));
         r.put("explanation", !logC
                 ? I18n.tr("server.um.rspamdTimeoutDiagnostics.7", java.util.Map.of("log", String.valueOf(log)))
                 : (interruptions == 0
                    ? (occ == 0
-                        ? I18n.tr("server.um.rspamdTimeoutDiagnostics.8", java.util.Map.of("righeLog", String.valueOf(logLines2)))
-                        : I18n.tr("server.um.rspamdTimeoutDiagnostics.9", java.util.Map.of("righeLog", String.valueOf(logLines2), "scomposizione", String.valueOf(decomposition))))
+                        ? I18n.tr("server.um.rspamdTimeoutDiagnostics.8", java.util.Map.of("logLines", String.valueOf(logLines2)))
+                        : I18n.tr("server.um.rspamdTimeoutDiagnostics.9", java.util.Map.of("logLines", String.valueOf(logLines2), "breakdown", String.valueOf(decomposition))))
                      + period + rotate
                      + (wideSample
                         ? I18n.tr("server.um.rspamdTimeoutDiagnostics.10")
-                        : I18n.tr("server.um.rspamdTimeoutDiagnostics.11", java.util.Map.of("righeLog", String.valueOf(logLines2))))
+                        : I18n.tr("server.um.rspamdTimeoutDiagnostics.11", java.util.Map.of("logLines", String.valueOf(logLines2))))
                      + " " + I18n.tr("server.um.x.rsTheoretical")
-                   : I18n.tr("server.um.rspamdTimeoutDiagnostics.12", java.util.Map.of("interruzioni", String.valueOf(interruptions), "righeLog", String.valueOf(logLines2), "scomposizione", String.valueOf(decomposition), "periodo", String.valueOf(period), "rotate", String.valueOf(rotate)))));
+                   : I18n.tr("server.um.rspamdTimeoutDiagnostics.12", java.util.Map.of("interruptions", String.valueOf(interruptions), "logLines", String.valueOf(logLines2), "breakdown", String.valueOf(decomposition), "period", String.valueOf(period), "rotate", String.valueOf(rotate)))));
         r.put("ifNeeded", I18n.tr("server.um.rspamdTimeoutDiagnostics.13"));
         r.put("source", I18n.tr("server.um.rspamdTimeoutDiagnostics.14"));
         return r;
@@ -1729,7 +1729,7 @@ public final class UpdateManager {
     public static JSONObject raisePostfixCompatibilityLevel(String target) {
         JSONObject r = new JSONObject().put("pkgName", "postfix");
         if (target == null || !target.matches("[0-9]+(\\.[0-9]+)?"))
-            return r.put("success", false).put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.1", java.util.Map.of("bersaglio", String.valueOf(target))));
+            return r.put("success", false).put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.1", java.util.Map.of("target", String.valueOf(target))));
         if (!ok("command -v postconf >/dev/null 2>&1", 15))
             return r.put("success", false).put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.2"));
 
@@ -1739,11 +1739,11 @@ public final class UpdateManager {
         if (before.equals(target))
             return r.put("success", true).put("alreadyAtLevel", true).put("before", before).put("after", before)
                     .put("log", log.toString())
-                    .put("note", I18n.tr("server.um.raisePostfixCompatibilityLevel.3", java.util.Map.of("bersaglio", String.valueOf(target))));
+                    .put("note", I18n.tr("server.um.raisePostfixCompatibilityLevel.3", java.util.Map.of("target", String.valueOf(target))));
 
         if (levelNumber(target) < levelNumber(before))
             return r.put("success", false).put("before", before)
-                    .put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.4", java.util.Map.of("prima", String.valueOf(before), "bersaglio", String.valueOf(target))));
+                    .put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.4", java.util.Map.of("before", String.valueOf(before), "target", String.valueOf(target))));
 
         // La copia viene prima di tutto: e' cio' che rende reversibile il resto.
         String mainCf = sh("postconf -h config_directory 2>/dev/null", 20).trim();
@@ -1755,7 +1755,7 @@ public final class UpdateManager {
         sh("mkdir -p /var/db/mailpanel && cp -p " + mainCf + " " + copy, 30);
         boolean copyOk = ok("test -s " + copy, 15);
         r.put("copy", copy).put("copyOk", copyOk);
-        log.append(copyOk ? I18n.tr("server.um.raisePostfixCompatibilityLevel.6", java.util.Map.of("copia", String.valueOf(copy)))
+        log.append(copyOk ? I18n.tr("server.um.raisePostfixCompatibilityLevel.6", java.util.Map.of("copy", String.valueOf(copy)))
                            : I18n.tr("server.um.raisePostfixCompatibilityLevel.7"));
         if (!copyOk)
             return r.put("success", false).put("log", log.toString())
@@ -1771,7 +1771,7 @@ public final class UpdateManager {
             sh("cp -p " + copy + " " + mainCf, 30);
             log.append(I18n.tr("server.um.x.pfUnchanged")).append("\n");
             return r.put("success", false).put("log", log.toString())
-                    .put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.9", java.util.Map.of("dopo", String.valueOf(after))));
+                    .put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.9", java.util.Map.of("after", String.valueOf(after))));
         }
 
         log.append("--- ").append(I18n.tr("server.um.x.pfReload")).append(" ---\n")
@@ -1786,7 +1786,7 @@ public final class UpdateManager {
             sh("cp -p " + copy + " " + mainCf, 30);
             sh("service postfix start 2>&1 || postfix start 2>&1", 60);
             boolean climbed = ok("service postfix status", 30);
-            log.append(I18n.tr("server.um.x.pfRestored", java.util.Map.of("esito", String.valueOf(climbed ? I18n.tr("server.um.x.pfBackUp") : I18n.tr("server.um.raisePostfixCompatibilityLevel.10"))))).append("\n");
+            log.append(I18n.tr("server.um.x.pfRestored", java.util.Map.of("outcome", String.valueOf(climbed ? I18n.tr("server.um.x.pfBackUp") : I18n.tr("server.um.raisePostfixCompatibilityLevel.10"))))).append("\n");
             return r.put("success", false).put("log", log.toString())
                     .put("error", climbed
                             ? I18n.tr("server.um.x.pfDownBack")
@@ -1800,8 +1800,8 @@ public final class UpdateManager {
 
         return r.put("success", true).put("log", log.toString())
                 .put("note", warningVia
-                        ? I18n.tr("server.um.x.pfRaisedClean", java.util.Map.of("prima", String.valueOf(before), "dopo", String.valueOf(after), "copia", String.valueOf(copy)))
-                        : I18n.tr("server.um.x.pfRaisedWarn", java.util.Map.of("prima", String.valueOf(before), "dopo", String.valueOf(after), "copia", String.valueOf(copy))));
+                        ? I18n.tr("server.um.x.pfRaisedClean", java.util.Map.of("before", String.valueOf(before), "after", String.valueOf(after), "copy", String.valueOf(copy)))
+                        : I18n.tr("server.um.x.pfRaisedWarn", java.util.Map.of("before", String.valueOf(before), "after", String.valueOf(after), "copy", String.valueOf(copy))));
     }
 
     /** "3.11" -> 3.11, "2" -> 2. Serve solo a ordinare i livelli fra loro. */
@@ -1822,16 +1822,16 @@ public final class UpdateManager {
      * Le voci qui sotto vengono una per una dalle note ufficiali di rilascio 4.0 e 4.1.
      */
     private static final String[][] RSPAMD_CONSTRUCTS = {
-        {"(^|[^A-Za-z0-9_])ssl[[:space:]]*=[[:space:]]*true", "server.um.numeroLivello.1",
-         "server.um.numeroLivello.2", "broken"},
+        {"(^|[^A-Za-z0-9_])ssl[[:space:]]*=[[:space:]]*true", "server.um.levelNumber.1",
+         "server.um.levelNumber.2", "broken"},
         {"include_content_urls", "include_content_urls",
-         "server.um.numeroLivello.3", "comportamento"},
-        {"token_bucket", "server.um.numeroLivello.4",
-         "server.um.numeroLivello.5", "comportamento"},
+         "server.um.levelNumber.3", "comportamento"},
+        {"token_bucket", "server.um.levelNumber.4",
+         "server.um.levelNumber.5", "comportamento"},
         {"senderscore_reputation", "senderscore_reputation",
-         "server.um.numeroLivello.6", "comportamento"},
+         "server.um.levelNumber.6", "comportamento"},
         {"MX_NXDOMAIN|MX_MISSING", "server.um.rspamd4.mxSymbols",
-         "server.um.numeroLivello.7", "comportamento"},
+         "server.um.levelNumber.7", "comportamento"},
     };
 
     public static JSONObject rspamdCompatibility() {
@@ -1903,7 +1903,7 @@ public final class UpdateManager {
                 : (yoursTotal > 0 ? "DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE"
                                : "NIENTE DA SEGNALARE"));
         r.put("explanation", broken > 0
-                ? I18n.tr("server.um.rspamdCompatibility.7", java.util.Map.of("rotti", String.valueOf(broken)))
+                ? I18n.tr("server.um.rspamdCompatibility.7", java.util.Map.of("broken", String.valueOf(broken)))
                 : (yoursTotal > 0
                    ? I18n.tr("server.um.rspamdCompatibility.8")
                    : I18n.tr("server.um.x.rsClean")
@@ -2032,7 +2032,7 @@ public final class UpdateManager {
         Thread guard = localizedThread(() -> {
             try {
                 if (!p.waitFor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)) {
-                    job.write(I18n.tr("server.um.eseguiConLog.1", java.util.Map.of("timeoutSecondi", String.valueOf(timeoutSeconds))));
+                    job.write(I18n.tr("server.um.runLogged.1", java.util.Map.of("timeoutSeconds", String.valueOf(timeoutSeconds))));
                     p.destroyForcibly();
                 }
             } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
@@ -2208,7 +2208,7 @@ public final class UpdateManager {
         java.nio.file.Path script = null;
         try {
             job.advance(1, 3);
-            job.write(I18n.tr("server.um.runRigenerazioneDovecot.1"));
+            job.write(I18n.tr("server.um.runDovecotRegeneration.1"));
             job.write("");
 
             boolean activeBefore = ok("service dovecot status", 15);
@@ -2222,7 +2222,7 @@ public final class UpdateManager {
 
             job.advance(2, 3);
             job.write("");
-            job.write(I18n.tr("server.um.runRigenerazioneDovecot.2"));
+            job.write(I18n.tr("server.um.runDovecotRegeneration.2"));
             // La password passa dall'AMBIENTE: non nel testo dello script (che finisce su
             // disco) ne' sulla riga di comando (visibile nell'elenco dei processi).
             Map<String, String> environment = new LinkedHashMap<>();
@@ -2238,7 +2238,7 @@ public final class UpdateManager {
             int code = runLogged(job, "sh " + script, 300, null, environment);
             if (code != 0) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runRigenerazioneDovecot.3");
+                job.errorMessage = I18n.tr("server.um.runDovecotRegeneration.3");
                 job.write("");
                 job.write(job.errorMessage);
                 return;
@@ -2248,19 +2248,19 @@ public final class UpdateManager {
             job.write("");
             job.write(I18n.tr("server.um.x.dcReload33"));
             if (!activeBefore) {
-                job.write(I18n.tr("server.um.runRigenerazioneDovecot.4"));
+                job.write(I18n.tr("server.um.runDovecotRegeneration.4"));
                 job.status = "completed";
                 return;
             }
             boolean ok1 = ok("service dovecot reload", 60);
-            job.write("    reload: " + (ok1 ? I18n.tr("server.um.x.done") : I18n.tr("server.um.runRigenerazioneDovecot.5")));
+            job.write("    reload: " + (ok1 ? I18n.tr("server.um.x.done") : I18n.tr("server.um.runDovecotRegeneration.5")));
             if (!ok1) ok("service dovecot restart", 60);
 
             boolean activeAfter = ok("service dovecot status", 20);
             job.write("    " + (activeAfter ? I18n.tr("server.um.x.dcAfterUp") : I18n.tr("server.um.x.dcAfterDown")));
             if (!activeAfter) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runRigenerazioneDovecot.6");
+                job.errorMessage = I18n.tr("server.um.runDovecotRegeneration.6");
                 return;
             }
 
@@ -2274,14 +2274,14 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.x.authTest"));
             String mailbox = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
             if (mailbox.isEmpty()) {
-                job.write(I18n.tr("server.um.runRigenerazioneDovecot.7"));
+                job.write(I18n.tr("server.um.runDovecotRegeneration.7"));
                 job.status = "completed";
                 job.write("");
-                job.write(I18n.tr("server.um.runRigenerazioneDovecot.8"));
+                job.write(I18n.tr("server.um.runDovecotRegeneration.8"));
                 return;
             }
             if (!mailbox.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
-                job.write(I18n.tr("server.um.runRigenerazioneDovecot.9"));
+                job.write(I18n.tr("server.um.runDovecotRegeneration.9"));
                 job.status = "completed";
                 return;
             }
@@ -2289,13 +2289,13 @@ public final class UpdateManager {
             // password: interessa che la riga ci sia e sia raggiungibile, non il suo contenuto.
             String found = mysqlOut("SELECT COUNT(*) FROM mailboxes WHERE email='" + mailbox + "' AND active=1;").trim();
             if ("1".equals(found)) {
-                job.write(I18n.tr("server.um.runRigenerazioneDovecot.10", java.util.Map.of("casella", String.valueOf(mailbox))));
+                job.write(I18n.tr("server.um.runDovecotRegeneration.10", java.util.Map.of("mailbox", String.valueOf(mailbox))));
                 job.status = "completed";
                 job.write("");
-                job.write(I18n.tr("server.um.runRigenerazioneDovecot.11"));
+                job.write(I18n.tr("server.um.runDovecotRegeneration.11"));
             } else {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runRigenerazioneDovecot.12", java.util.Map.of("casella", String.valueOf(mailbox), "trovate", String.valueOf(found)));
+                job.errorMessage = I18n.tr("server.um.runDovecotRegeneration.12", java.util.Map.of("mailbox", String.valueOf(mailbox), "foundOnes", String.valueOf(found)));
                 job.write("    " + I18n.tr("server.um.x.alarm", java.util.Map.of("m", String.valueOf(job.errorMessage))));
             }
         } catch (Exception e) {
@@ -2402,7 +2402,7 @@ public final class UpdateManager {
 
     /** I plugin trovati, in forma leggibile. */
     private static String describePlugin(JSONArray a) {
-        if (a.length() == 0) return I18n.tr("server.um.descriviPlugin.1");
+        if (a.length() == 0) return I18n.tr("server.um.describePlugin.1");
         StringBuilder sb = new StringBuilder();
         int tot = 0;
         for (int i = 0; i < a.length(); i++) {
@@ -2411,7 +2411,7 @@ public final class UpdateManager {
             sb.append(o.getString("plugin")).append(' ').append(o.getInt("accounts"));
             tot += o.getInt("accounts");
         }
-        return I18n.tr("server.um.descriviPlugin.2", java.util.Map.of("sb", String.valueOf(sb), "tot", String.valueOf(tot)));
+        return I18n.tr("server.um.describePlugin.2", java.util.Map.of("sb", String.valueOf(sb), "tot", String.valueOf(tot)));
     }
 
     /** Numero da output di comando; 0 se non contiene cifre. */
@@ -2473,7 +2473,7 @@ public final class UpdateManager {
             job.write("  " + I18n.tr("server.um.x.planUnchanged", java.util.Map.of("f", String.valueOf(after))));
             return null;
         }
-        job.write("  " + I18n.tr("server.um.x.planGrew", java.util.Map.of("prima", String.valueOf(before), "dopo", String.valueOf(after))));
+        job.write("  " + I18n.tr("server.um.x.planGrew", java.util.Map.of("before", String.valueOf(before), "after", String.valueOf(after))));
         job.write("  " + I18n.tr("server.um.x.planApproved"));
         for (String r : PackagePlan.changesInLines(approved)) job.write("      " + r);
         job.write("  " + I18n.tr("server.um.x.planNow"));
@@ -2533,10 +2533,10 @@ public final class UpdateManager {
         JSONObject d = destructiveChanges(plan);
         java.util.List<String> reasons = new ArrayList<>();
         if (!d.getJSONArray("removes").isEmpty())
-            reasons.add(I18n.tr("server.um.x.planRemoves", java.util.Map.of("elenco",
+            reasons.add(I18n.tr("server.um.x.planRemoves", java.util.Map.of("list",
                     String.valueOf(String.join(", ", jsonArrayToList(d.getJSONArray("removes")))))));
         if (!d.getJSONArray("downgrades").isEmpty())
-            reasons.add(I18n.tr("server.um.x.planDowngrades", java.util.Map.of("elenco",
+            reasons.add(I18n.tr("server.um.x.planDowngrades", java.util.Map.of("list",
                     String.valueOf(String.join(", ", jsonArrayToList(d.getJSONArray("downgrades")))))));
         return reasons.isEmpty() ? null : String.join(" ", reasons);
     }
@@ -2551,9 +2551,9 @@ public final class UpdateManager {
     /** Il messaggio d'errore di un lavoro che ha trovato cambiamenti fuori dal piano. */
     private static String divergenceMessage(JSONArray d) {
         return d.length() == 1
-            ? I18n.tr("server.um.x.divergenceFound.one", java.util.Map.of("elenco", String.valueOf(divergenceList(d))))
+            ? I18n.tr("server.um.x.divergenceFound.one", java.util.Map.of("list", String.valueOf(divergenceList(d))))
             : I18n.tr("server.um.x.divergenceFound.other", java.util.Map.of(
-                    "n", String.valueOf(d.length()), "elenco", String.valueOf(divergenceList(d))));
+                    "n", String.valueOf(d.length()), "list", String.valueOf(divergenceList(d))));
     }
 
     /**
@@ -2749,7 +2749,7 @@ public final class UpdateManager {
             addCheck(checks, "auth", I18n.tr("server.um.mysql84Preflight.19"), nativeOnes.length() > 0 ? "review" : "ok",
                     nativeOnes.length() == 0
                         ? I18n.tr("server.um.mysql84Preflight.21", java.util.Map.of("p", String.valueOf(describePlugin(pluginInUse()))))
-                        : I18n.tr("server.um.x.nativeUsers", java.util.Map.of("n", String.valueOf(nativeOnes.length()), "elenco", String.valueOf(String.join(", ", jsonArrayToList(nativeOnes))))));
+                        : I18n.tr("server.um.x.nativeUsers", java.util.Map.of("n", String.valueOf(nativeOnes.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(nativeOnes))))));
         }
 
         // --- 7. Spazio per la copia fredda ---
@@ -2765,7 +2765,7 @@ public final class UpdateManager {
             block = true;
         } else {
             addCheck(checks, "spazio", I18n.tr("server.um.mysql84Preflight.22"), "ok",
-                    I18n.tr("server.um.x.dataDirSpace", java.util.Map.of("dir", String.valueOf(dataDir), "mb", String.valueOf((dirKb / 1024)), "liberi", String.valueOf((freeKb / 1024)))));
+                    I18n.tr("server.um.x.dataDirSpace", java.util.Map.of("dir", String.valueOf(dataDir), "mb", String.valueOf((dirKb / 1024)), "free", String.valueOf((freeKb / 1024)))));
         }
 
         // --- 8. Inventario, per riconfrontare a fine migrazione ---
@@ -2777,7 +2777,7 @@ public final class UpdateManager {
         }
         r.put("schemaCount", schemes).put("tableCount", tables).put("mailboxCount", mailboxes);
         addCheck(checks, "inventario", I18n.tr("server.um.mysql84Preflight.24"), schemes > 0 ? "ok" : "review",
-                schemes > 0 ? I18n.tr("server.um.mysql84Preflight.25", java.util.Map.of("schemi", String.valueOf(schemes), "tabelle", String.valueOf(tables), "caselle", String.valueOf(mailboxes)))
+                schemes > 0 ? I18n.tr("server.um.mysql84Preflight.25", java.util.Map.of("schemas", String.valueOf(schemes), "tables", String.valueOf(tables), "mailboxes", String.valueOf(mailboxes)))
                            : I18n.tr("server.um.mysql84Preflight.26"));
 
         // --- 9. Cosa si ferma, e per quanto ---
@@ -2903,12 +2903,12 @@ public final class UpdateManager {
             job.advance(1, TOT);
             job.write("=== " + I18n.tr("server.um.x.jobMy84Title") + " ===");
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.1", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.1", java.util.Map.of("total", String.valueOf(TOT))));
             JSONObject pf = mysql84Preflight();
             if (!pf.optBoolean("canProceed", false)) {
                 job.status = "error";
                 job.errorMessage = pf.optBoolean("alreadyDone", false)
-                        ? I18n.tr("server.um.runMigrazione84.2") : I18n.tr("server.um.runMigrazione84.3");
+                        ? I18n.tr("server.um.runMigration84.2") : I18n.tr("server.um.runMigration84.3");
                 JSONArray ck = pf.optJSONArray("checks");
                 for (int i = 0; ck != null && i < ck.length(); i++) {
                     JSONObject c = ck.getJSONObject(i);
@@ -2916,7 +2916,7 @@ public final class UpdateManager {
                         job.write("  [" + c.optString("level").toUpperCase() + "] " + c.optString("label")
                                 + ": " + c.optString("detail"));
                 }
-                job.write(I18n.tr("server.um.runMigrazione84.4"));
+                job.write(I18n.tr("server.um.runMigration84.4"));
                 return;
             }
             srvPkg = pf.optString("srvPkg", "");
@@ -2927,20 +2927,20 @@ public final class UpdateManager {
             mailboxesBefore = pf.optLong("mailboxCount", 0);
             testMailbox = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
             job.write("  " + srvPkg + " + " + cliPkg + " -> mysql84-server + mysql84-client");
-            job.write(I18n.tr("server.um.runMigrazione84.5", java.util.Map.of("schemiPrima", String.valueOf(schemesBefore), "tabellePrima", String.valueOf(tablesBefore), "casellePrima", String.valueOf(mailboxesBefore))));
+            job.write(I18n.tr("server.um.runMigration84.5", java.util.Map.of("schemasBefore", String.valueOf(schemesBefore), "tablesBefore", String.valueOf(tablesBefore), "mailboxesBefore", String.valueOf(mailboxesBefore))));
             job.write("  " + (testMailbox.isEmpty()
                     ? I18n.tr("server.um.x.testBoxNone")
-                    : I18n.tr("server.um.x.testBox", java.util.Map.of("casella", String.valueOf(testMailbox)))));
+                    : I18n.tr("server.um.x.testBox", java.util.Map.of("mailbox", String.valueOf(testMailbox)))));
 
             job.advance(2, TOT);
             job.write("");
             job.write("[2/" + TOT + "] " + I18n.tr("server.um.x.stopPfDc"));
             postfixEra = ok("service postfix status", 20);
             dovecotEra = ok("service dovecot status", 20);
-            if (postfixEra) { ok("service postfix stop", 60); job.write(I18n.tr("server.um.runMigrazione84.6")); }
-            else job.write(I18n.tr("server.um.runMigrazione84.7"));
-            if (dovecotEra) { ok("service dovecot stop", 60); job.write(I18n.tr("server.um.runMigrazione84.8")); }
-            else job.write(I18n.tr("server.um.runMigrazione84.9"));
+            if (postfixEra) { ok("service postfix stop", 60); job.write(I18n.tr("server.um.runMigration84.6")); }
+            else job.write(I18n.tr("server.um.runMigration84.7"));
+            if (dovecotEra) { ok("service dovecot stop", 60); job.write(I18n.tr("server.um.runMigration84.8")); }
+            else job.write(I18n.tr("server.um.runMigration84.9"));
 
             job.advance(3, TOT);
             job.write("");
@@ -2957,14 +2957,14 @@ public final class UpdateManager {
 
             job.advance(4, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.10", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.10", java.util.Map.of("total", String.valueOf(TOT))));
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date for the copy");
             backupDir = MYSQL84_BACKUP + "/" + ts;
             if (!ok("mkdir -p " + backupDir + "/pkg", 30)) throw new IllegalStateException("cannot create " + backupDir);
             ok("cp -p /usr/local/etc/mysql/my.cnf " + backupDir + "/my.cnf", 30);
             ok("printf '%s\\n%s\\n' " + srvPkg + " " + cliPkg + " > " + backupDir + "/pacchetti.txt", 20);
-            job.write(I18n.tr("server.um.runMigrazione84.11"));
+            job.write(I18n.tr("server.um.runMigration84.11"));
             ok("pkg fetch -y -o " + backupDir + "/pkg " + srvPkg + " " + cliPkg + " >/dev/null 2>&1", 600);
             job.write("    " + I18n.tr("server.um.x.pkgsKept", java.util.Map.of("n", String.valueOf(number(sh("find " + backupDir + "/pkg -name '*.pkg' | wc -l", 30))))));
 
@@ -2987,8 +2987,8 @@ public final class UpdateManager {
                 throw new IllegalStateException("ibdata1 is missing from the copy: it is not a data folder that can be restored");
             }
             ok("printf '%s\\n%s\\n' " + before[0] + " " + before[1] + " > " + backupDir + "/manifest.txt", 20);
-            job.write(I18n.tr("server.um.runMigrazione84.12", java.util.Map.of("p", String.valueOf(after[0]), "p2", String.valueOf((after[1] / 1024 / 1024)))));
-            job.write(I18n.tr("server.um.runMigrazione84.13", java.util.Map.of("backupDir", String.valueOf(backupDir))));
+            job.write(I18n.tr("server.um.runMigration84.12", java.util.Map.of("p", String.valueOf(after[0]), "p2", String.valueOf((after[1] / 1024 / 1024)))));
+            job.write(I18n.tr("server.um.runMigration84.13", java.util.Map.of("backupDir", String.valueOf(backupDir))));
 
             job.advance(5, TOT);
             job.write("");
@@ -3006,18 +3006,18 @@ public final class UpdateManager {
 
             job.advance(6, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.14", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.14", java.util.Map.of("total", String.valueOf(TOT))));
             boolean lost = false;
             for (String d : new String[]{"postfix-mysql", "dovecot-mysql"}) {
                 boolean c = ok("pkg info -e " + d, 20);
                 job.write("    " + d + ": " + (c ? I18n.tr("server.um.x.present") : I18n.tr("server.um.x.missing")));
                 if (!c) lost = true;
             }
-            if (lost) job.write(I18n.tr("server.um.runMigrazione84.15"));
+            if (lost) job.write(I18n.tr("server.um.runMigration84.15"));
 
             job.advance(7, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.16", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.16", java.util.Map.of("total", String.valueOf(TOT))));
             if (ok("test -f " + backupDir + "/my.cnf", 15)) {
                 ok("cp -p " + backupDir + "/my.cnf /usr/local/etc/mysql/my.cnf", 30);
                 ok("chmod 644 /usr/local/etc/mysql/my.cnf", 15);
@@ -3032,12 +3032,12 @@ public final class UpdateManager {
                 // nessun account. Su questa macchina il ramo non scatta, ma un difetto che non
                 // si vede oggi e' solo un difetto che aspetta.
                 job.write("    " + (addMysqldDirective("mysql-native-password=ON")
-                        ? I18n.tr("server.um.runMigrazione84.17") : I18n.tr("server.um.runMigrazione84.18")));
+                        ? I18n.tr("server.um.runMigration84.17") : I18n.tr("server.um.runMigration84.18")));
             }
 
             job.advance(8, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.19", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.19", java.util.Map.of("total", String.valueOf(TOT))));
             String bin = sh("which mysqld 2>/dev/null", 15);
             if (bin.isEmpty()) bin = "/usr/local/libexec/mysqld";
             String val = sh("su -m mysql -c '" + bin + " --validate-config' 2>&1", 120);
@@ -3051,14 +3051,14 @@ public final class UpdateManager {
 
             job.advance(9, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.21", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.21", java.util.Map.of("total", String.valueOf(TOT))));
             ok("service mysql-server start", 120);
             String newVer = "";
             for (int i = 0; i < 200; i++) {
                 newVer = mysqlOut("SELECT VERSION();").trim();
                 if (!newVer.isEmpty()) break;
                 try { Thread.sleep(3000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
-                if (i % 5 == 4) job.write(I18n.tr("server.um.runMigrazione84.22", java.util.Map.of("p", String.valueOf(((i + 1) * 3)))));
+                if (i % 5 == 4) job.write(I18n.tr("server.um.runMigration84.22", java.util.Map.of("p", String.valueOf(((i + 1) * 3)))));
             }
             if (newVer.isEmpty()) throw new IllegalStateException("MySQL 8.4 does not answer: the copy is in " + backupDir);
             mysqlStopped = false;
@@ -3071,22 +3071,22 @@ public final class UpdateManager {
             long sd = number(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
             long td = number(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
             long cd = number(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
-            job.write(I18n.tr("server.um.runMigrazione84.23", java.util.Map.of("schemiPrima", String.valueOf(schemesBefore), "sd", String.valueOf(sd), "tabellePrima", String.valueOf(tablesBefore), "td", String.valueOf(td), "casellePrima", String.valueOf(mailboxesBefore), "cd", String.valueOf(cd))));
+            job.write(I18n.tr("server.um.runMigration84.23", java.util.Map.of("schemasBefore", String.valueOf(schemesBefore), "schemasAfter", String.valueOf(sd), "tablesBefore", String.valueOf(tablesBefore), "tablesAfter2", String.valueOf(td), "mailboxesBefore", String.valueOf(mailboxesBefore), "mailboxesAfter", String.valueOf(cd))));
             boolean inventoryOk = sd >= schemesBefore && td >= tablesBefore && cd >= mailboxesBefore;
-            if (!inventoryOk) job.write(I18n.tr("server.um.runMigrazione84.24", java.util.Map.of("backupDir", String.valueOf(backupDir))));
+            if (!inventoryOk) job.write(I18n.tr("server.um.runMigration84.24", java.util.Map.of("backupDir", String.valueOf(backupDir))));
             else job.write("    " + I18n.tr("server.um.x.inventoryIntact"));
 
             job.advance(11, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.25", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.25", java.util.Map.of("total", String.valueOf(TOT))));
             boolean l1 = ok("pkg lock -y mysql84-server", 30), l2 = ok("pkg lock -y mysql84-client", 30);
             job.write("    " + I18n.tr("server.um.x.protect84", java.util.Map.of("s", String.valueOf(l1 ? "ok" : I18n.tr("server.um.x.failedF")), "c", String.valueOf(l2 ? "ok" : I18n.tr("server.um.x.failedF")))));
-            if (postfixEra) { ok("service postfix start", 120); job.write("    postfix: " + (ok("service postfix status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26"))); }
-            if (dovecotEra) { ok("service dovecot start", 120); job.write("    dovecot: " + (ok("service dovecot status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26"))); }
+            if (postfixEra) { ok("service postfix start", 120); job.write("    postfix: " + (ok("service postfix status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26"))); }
+            if (dovecotEra) { ok("service dovecot start", 120); job.write("    dovecot: " + (ok("service dovecot status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26"))); }
 
             job.advance(12, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.27", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.27", java.util.Map.of("total", String.valueOf(TOT))));
             // "Il servizio e' attivo" non basta: dopo aver sostituito la libreria client il
             // punto e' se Postfix e Dovecot RIESCONO ANCORA a interrogare il database.
             boolean testOk = true;
@@ -3096,11 +3096,11 @@ public final class UpdateManager {
             // diversi e' il modo in cui una svista sopravvive.
             if (!testMailbox.isEmpty()
                     && !testMailbox.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
-                job.write(I18n.tr("server.um.runMigrazione84.28"));
+                job.write(I18n.tr("server.um.runMigration84.28"));
                 testMailbox = "";
             }
             if (testMailbox.isEmpty()) {
-                job.write(I18n.tr("server.um.runMigrazione84.29"));
+                job.write(I18n.tr("server.um.runMigration84.29"));
             } else {
                 // QUESTA e' la prova che conta: postmap interroga MySQL attraverso la
                 // libreria client appena sostituita. Se funziona, la sostituzione ha retto.
@@ -3118,11 +3118,11 @@ public final class UpdateManager {
                             && !ql.contains("dlopen") && !ql.contains("unsupported")
                             && !ql.startsWith("postmap:");
                     job.write("    " + (pOk
-                            ? I18n.tr("server.um.x.pfQueryYes", java.util.Map.of("casella", String.valueOf(testMailbox), "r", String.valueOf(q.trim())))
-                            : I18n.tr("server.um.x.pfQueryNo", java.util.Map.of("casella", String.valueOf(testMailbox), "r", String.valueOf(q.trim())))));
+                            ? I18n.tr("server.um.x.pfQueryYes", java.util.Map.of("mailbox", String.valueOf(testMailbox), "r", String.valueOf(q.trim())))
+                            : I18n.tr("server.um.x.pfQueryNo", java.util.Map.of("mailbox", String.valueOf(testMailbox), "r", String.valueOf(q.trim())))));
                     if (!pOk) testOk = false;
                 } else {
-                    job.write(I18n.tr("server.um.runMigrazione84.30", java.util.Map.of("mapFile", String.valueOf(mapFile))));
+                    job.write(I18n.tr("server.um.runMigration84.30", java.util.Map.of("mapFile", String.valueOf(mapFile))));
                     testOk = false;
                 }
 
@@ -3132,8 +3132,8 @@ public final class UpdateManager {
                 String du = sh("doveadm user '" + testMailbox + "' 2>&1 | head -5", 60);
                 boolean dOk = du.toLowerCase().contains("uid") || du.toLowerCase().contains("home");
                 job.write("    " + (dOk
-                        ? I18n.tr("server.um.x.dcResolveYes", java.util.Map.of("casella", String.valueOf(testMailbox)))
-                        : I18n.tr("server.um.x.dcResolveNo", java.util.Map.of("casella", String.valueOf(testMailbox), "r", String.valueOf(du.trim())))));
+                        ? I18n.tr("server.um.x.dcResolveYes", java.util.Map.of("mailbox", String.valueOf(testMailbox)))
+                        : I18n.tr("server.um.x.dcResolveNo", java.util.Map.of("mailbox", String.valueOf(testMailbox), "r", String.valueOf(du.trim())))));
                 if (!dOk) testOk = false;
 
                 // Il percorso SQL di Dovecot si prova cosi': la stessa query che sta nel suo
@@ -3142,24 +3142,24 @@ public final class UpdateManager {
                         + "' AND active=1;").trim();
                 boolean sOk = "1".equals(lines);
                 job.write("    " + (sOk
-                        ? I18n.tr("server.um.x.dcAuthYes", java.util.Map.of("casella", String.valueOf(testMailbox)))
-                        : I18n.tr("server.um.x.dcAuthNo", java.util.Map.of("casella", String.valueOf(testMailbox), "righe", String.valueOf(lines)))));
+                        ? I18n.tr("server.um.x.dcAuthYes", java.util.Map.of("mailbox", String.valueOf(testMailbox)))
+                        : I18n.tr("server.um.x.dcAuthNo", java.util.Map.of("mailbox", String.valueOf(testMailbox), "lines", String.valueOf(lines)))));
                 if (!sOk) testOk = false;
             }
 
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.31"));
+            job.write(I18n.tr("server.um.runMigration84.31"));
             boolean fallen = fallenServices(job, servicesBefore);
 
             reachedEnd = true;
             if (!inventoryOk || !testOk || fallen || lost || !l1 || !l2) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMigrazione84.32", java.util.Map.of("backupDir", String.valueOf(backupDir)));
+                job.errorMessage = I18n.tr("server.um.runMigration84.32", java.util.Map.of("backupDir", String.valueOf(backupDir)));
             } else {
                 job.status = "completed";
                 job.write("");
-                job.write(I18n.tr("server.um.runMigrazione84.33", java.util.Map.of("nuovaVer", String.valueOf(newVer))));
-                job.write(I18n.tr("server.um.runMigrazione84.34", java.util.Map.of("backupDir", String.valueOf(backupDir))));
+                job.write(I18n.tr("server.um.runMigration84.33", java.util.Map.of("newVer", String.valueOf(newVer))));
+                job.write(I18n.tr("server.um.runMigration84.34", java.util.Map.of("backupDir", String.valueOf(backupDir))));
             }
         } catch (Exception e) {
             job.status = "error";
@@ -3170,14 +3170,14 @@ public final class UpdateManager {
             if (!reachedEnd) {
                 if (mysqlStopped && !replacedPackages) {
                     job.write("");
-                    job.write(I18n.tr("server.um.runMigrazione84.35"));
+                    job.write(I18n.tr("server.um.runMigration84.35"));
                     ok("service mysql-server start", 120);
                     if (postfixEra) ok("service postfix start", 120);
                     if (dovecotEra) ok("service dovecot start", 120);
                 } else if (replacedPackages) {
                     job.write("");
-                    job.write(I18n.tr("server.um.runMigrazione84.36"));
-                    if (!backupDir.isEmpty()) job.write(I18n.tr("server.um.runMigrazione84.37", java.util.Map.of("backupDir", String.valueOf(backupDir))));
+                    job.write(I18n.tr("server.um.runMigration84.36"));
+                    if (!backupDir.isEmpty()) job.write(I18n.tr("server.um.runMigration84.37", java.util.Map.of("backupDir", String.valueOf(backupDir))));
                 }
             }
             job.finishedAt = System.currentTimeMillis();
@@ -3201,7 +3201,7 @@ public final class UpdateManager {
         JSONObject r = new JSONObject().put("ok", false);
         try {
             java.nio.file.Path f = Paths.get(RC_DIR + "/config/config.inc.php");
-            if (!Files.exists(f)) return r.put("error", I18n.tr("server.um.dsnRoundcube.1", java.util.Map.of("rC_DIR", String.valueOf(RC_DIR))));
+            if (!Files.exists(f)) return r.put("error", I18n.tr("server.um.dsnRoundcube.1", java.util.Map.of("rcDir", String.valueOf(RC_DIR))));
             Pattern pat = Pattern.compile("db_dsnw'?\\]?\\s*=\\s*['\"]([a-z]+)://([^:]+):([^@]*)@([^/]+)/([A-Za-z0-9_]+)");
             // Riga per riga, non su tutto il testo, per due motivi che una ricerca globale
             // sbaglia entrambi: le righe COMMENTATE non contano — un DSN vecchio lasciato li'
@@ -3329,7 +3329,7 @@ public final class UpdateManager {
                         || ok("test -f " + RC_DIR + "/bin/updatedb.sh", 15);
         addCheck(checks, "updatedb", I18n.tr("server.um.roundcubePreflight.7"), updatedb ? "ok" : "block",
                 updatedb ? I18n.tr("server.um.x.updatedbPresent", java.util.Map.of("file", String.valueOf(RC_DIR + "/bin/updatedb.sh")))
-                         : I18n.tr("server.um.roundcubePreflight.8", java.util.Map.of("rC_DIR", String.valueOf(RC_DIR))));
+                         : I18n.tr("server.um.roundcubePreflight.8", java.util.Map.of("rcDir", String.valueOf(RC_DIR))));
         if (!updatedb) block = true;
 
         // Credenziali e stato del database, letti dalla configurazione di Roundcube.
@@ -3337,7 +3337,7 @@ public final class UpdateManager {
         long tables = 0;
         if (!dsn.optBoolean("ok")) {
             addCheck(checks, "dsn", I18n.tr("server.um.roundcubePreflight.9"), "block",
-                    I18n.tr("server.um.x.rcNoCreds", java.util.Map.of("errore", String.valueOf(dsn.optString("error", "")))));
+                    I18n.tr("server.um.x.rcNoCreds", java.util.Map.of("error", String.valueOf(dsn.optString("error", "")))));
             block = true;
         } else {
             tables = number(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
@@ -3349,7 +3349,7 @@ public final class UpdateManager {
                 block = true;
             } else {
                 addCheck(checks, "dsn", I18n.tr("server.um.roundcubePreflight.9"), "ok",
-                        I18n.tr("server.um.x.rcDbOk", java.util.Map.of("db", String.valueOf(dsn.getString("db")), "user", String.valueOf(dsn.getString("user")), "tabelle", String.valueOf(tables))));
+                        I18n.tr("server.um.x.rcDbOk", java.util.Map.of("db", String.valueOf(dsn.getString("db")), "user", String.valueOf(dsn.getString("user")), "tables", String.valueOf(tables))));
             }
         }
 
@@ -3360,7 +3360,7 @@ public final class UpdateManager {
             String ered = inheritedOptions();
             String gtid = gtidState();
             addCheck(checks, "copia", I18n.tr("server.um.roundcubePreflight.10"), "block",
-                    I18n.tr("server.um.x.rcCopyFails", java.util.Map.of("db", String.valueOf(dbName), "errore", String.valueOf(test.optString("error"))))
+                    I18n.tr("server.um.x.rcCopyFails", java.util.Map.of("db", String.valueOf(dbName), "error", String.valueOf(test.optString("error"))))
                     + (ered.isEmpty() ? ""
                        : "  ||  " + I18n.tr("server.um.x.rcDumpOpts", java.util.Map.of("o", String.valueOf(ered))))
                     + "  ||  " + (gtid.isEmpty() ? I18n.tr("server.um.x.gtidUnreadable")
@@ -3368,13 +3368,13 @@ public final class UpdateManager {
             block = true;
         } else if ("server.um.dumpMode.root".equals(test.optString("mode"))) {
             addCheck(checks, "copia", I18n.tr("server.um.roundcubePreflight.10"), "wait",
-                    I18n.tr("server.um.x.rcCopyRoot", java.util.Map.of("db", String.valueOf(dbName), "storia", String.valueOf(test.optString("history")), "gtid", String.valueOf(gtidState()))));
+                    I18n.tr("server.um.x.rcCopyRoot", java.util.Map.of("db", String.valueOf(dbName), "history", String.valueOf(test.optString("history")), "gtid", String.valueOf(gtidState()))));
         } else if (!"server.um.dumpMode.full".equals(test.optString("mode"))) {
             addCheck(checks, "copia", I18n.tr("server.um.roundcubePreflight.10"), "wait",
-                    I18n.tr("server.um.x.rcCopyReduced", java.util.Map.of("db", String.valueOf(dbName), "modo", String.valueOf(I18n.tr(test.getString("mode"))), "storia", String.valueOf(test.optString("history")))));
+                    I18n.tr("server.um.x.rcCopyReduced", java.util.Map.of("db", String.valueOf(dbName), "mode", String.valueOf(I18n.tr(test.getString("mode"))), "history", String.valueOf(test.optString("history")))));
         } else {
             addCheck(checks, "copia", I18n.tr("server.um.roundcubePreflight.10"), "ok",
-                    I18n.tr("server.um.roundcubePreflight.11", java.util.Map.of("nomeDb", String.valueOf(dbName))));
+                    I18n.tr("server.um.roundcubePreflight.11", java.util.Map.of("dbName", String.valueOf(dbName))));
         }
 
         // Non chiede niente a chi legge: dice cosa fa la procedura. Sotto l'etichetta gialla
@@ -3401,10 +3401,10 @@ public final class UpdateManager {
         r.put("roots", roots).put("rootChange", serve);
         if (!demands) {
             addCheck(checks, "root", I18n.tr("server.um.roundcubePreflight.14"), "ok",
-                    I18n.tr("server.um.roundcubePreflight.15", java.util.Map.of("disp", String.valueOf(available))));
+                    I18n.tr("server.um.roundcubePreflight.15", java.util.Map.of("available", String.valueOf(available))));
         } else if (roots.length() == 0) {
             addCheck(checks, "root", I18n.tr("server.um.roundcubePreflight.14"), "block",
-                    I18n.tr("server.um.roundcubePreflight.16", java.util.Map.of("disp", String.valueOf(available))));
+                    I18n.tr("server.um.roundcubePreflight.16", java.util.Map.of("available", String.valueOf(available))));
             block = true;
         } else if (toMove.isEmpty()) {
             addCheck(checks, "root", I18n.tr("server.um.roundcubePreflight.14"), "ok",
@@ -3413,8 +3413,8 @@ public final class UpdateManager {
             addCheck(checks, "root", I18n.tr("server.um.roundcubePreflight.14"), "wait",
                     (already17
                      ? I18n.tr("server.um.roundcubePreflight.18", java.util.Map.of("ver", String.valueOf(ver)))
-                     : I18n.tr("server.um.roundcubePreflight.19", java.util.Map.of("disp", String.valueOf(available))))
-                    + I18n.tr("server.um.x.rcRootFix", java.util.Map.of("n", String.valueOf(toMove.size()), "righe", String.valueOf(String.join(" ; ", toMove)))));
+                     : I18n.tr("server.um.roundcubePreflight.19", java.util.Map.of("available", String.valueOf(available))))
+                    + I18n.tr("server.um.x.rcRootFix", java.util.Map.of("n", String.valueOf(toMove.size()), "lines", String.valueOf(String.join(" ; ", toMove)))));
         }
 
         r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
@@ -3442,21 +3442,21 @@ public final class UpdateManager {
                 // farsi tornare indietro senza motivo. Chi giudica resta la prova finale: se
                 // la webmail non risponde, lo dice quella.
                 if (!ok("test -d " + root + "/public_html", 10)) {
-                    job.write(I18n.tr("server.um.spostaRadiceNginx.1", java.util.Map.of("root", String.valueOf(root))));
-                    job.write(I18n.tr("server.um.spostaRadiceNginx.2"));
+                    job.write(I18n.tr("server.um.moveNginxRoot.1", java.util.Map.of("root", String.valueOf(root))));
+                    job.write(I18n.tr("server.um.moveNginxRoot.2"));
                     return "unneeded";
                 }
                 String name = file.replaceAll(".*/", "");
                 ok("cp -p " + file + " " + backupDir + "/nginx-" + name, 30);
                 java.util.List<String> lines = Files.readAllLines(Paths.get(file));
                 int n = x.getInt("line") - 1;
-                if (n < 0 || n >= lines.size()) { job.write(I18n.tr("server.um.spostaRadiceNginx.3", java.util.Map.of("file", String.valueOf(file), "p", String.valueOf((n + 1))))); return "failed"; }
+                if (n < 0 || n >= lines.size()) { job.write(I18n.tr("server.um.moveNginxRoot.3", java.util.Map.of("file", String.valueOf(file), "p", String.valueOf((n + 1))))); return "failed"; }
                 String old = lines.get(n);
-                if (!old.contains(root)) { job.write("    " + I18n.tr("server.um.x.lineNoLonger", java.util.Map.of("file", String.valueOf(file), "riga", String.valueOf((n + 1)), "root", String.valueOf(root)))); return "failed"; }
+                if (!old.contains(root)) { job.write("    " + I18n.tr("server.um.x.lineNoLonger", java.util.Map.of("file", String.valueOf(file), "line", String.valueOf((n + 1)), "root", String.valueOf(root)))); return "failed"; }
                 // Puntare a una cartella che esiste non basta: dev'esserci cosa servire.
                 if (!ok("test -f " + root + "/public_html/index.php", 10)) {
-                    job.write(I18n.tr("server.um.spostaRadiceNginx.4", java.util.Map.of("root", String.valueOf(root))));
-                    job.write(I18n.tr("server.um.spostaRadiceNginx.5"));
+                    job.write(I18n.tr("server.um.moveNginxRoot.4", java.util.Map.of("root", String.valueOf(root))));
+                    job.write(I18n.tr("server.um.moveNginxRoot.5"));
                     return "failed";
                 }
                 lines.set(n, old.replace(root + ";", root + "/public_html;"));
@@ -3464,7 +3464,7 @@ public final class UpdateManager {
                 touched.add(file);
                 job.write("    " + file + ":" + (n + 1) + "  root -> " + root + "/public_html");
             }
-            if (touched.isEmpty()) { job.write(I18n.tr("server.um.spostaRadiceNginx.6")); return "unneeded"; }
+            if (touched.isEmpty()) { job.write(I18n.tr("server.um.moveNginxRoot.6")); return "unneeded"; }
 
             // Prima di ricaricare: nginx accetta questa configurazione?
             String test = sh("nginx -t 2>&1", 60);
@@ -3475,17 +3475,17 @@ public final class UpdateManager {
                     String name = f.replaceAll(".*/", "");
                     ok("cp -p " + backupDir + "/nginx-" + name + " " + f, 30);
                 }
-                job.write(I18n.tr("server.um.spostaRadiceNginx.7"));
+                job.write(I18n.tr("server.um.moveNginxRoot.7"));
                 return "failed";
             }
-            job.write(I18n.tr("server.um.spostaRadiceNginx.8"));
+            job.write(I18n.tr("server.um.moveNginxRoot.8"));
             String svc = realServiceName("nginx");
-            if (svc == null) { job.write(I18n.tr("server.um.spostaRadiceNginx.9")); return "failed"; }
+            if (svc == null) { job.write(I18n.tr("server.um.moveNginxRoot.9")); return "failed"; }
             boolean ric = ok("service " + svc + " reload", 60);
             job.write("    " + (ric ? I18n.tr("server.um.x.reloadedYes") : I18n.tr("server.um.x.reloadedNo")));
             return ric ? "done" : "failed";
         } catch (Exception e) {
-            job.write(I18n.tr("server.um.spostaRadiceNginx.10", java.util.Map.of("message", String.valueOf(e.getMessage()))));
+            job.write(I18n.tr("server.um.moveNginxRoot.10", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             return "failed";
         }
     }
@@ -3594,7 +3594,7 @@ public final class UpdateManager {
                     .put("error", I18n.tr("server.um.x.credsUnreadable", java.util.Map.of("reason", String.valueOf(d.optString("error", I18n.tr("server.um.x.reasonUnknown"))))));
         if (!ok("which mysqldump >/dev/null 2>&1", 20))
             return new JSONObject().put("ok", false)
-                    .put("error", I18n.tr("server.um.provaCopia.1"));
+                    .put("error", I18n.tr("server.um.testCopy.1"));
         StringBuilder history = new StringBuilder();
         try {
             for (String[] m : COPY_MODES) {
@@ -3627,7 +3627,7 @@ public final class UpdateManager {
                 || !host.matches("[A-Za-z0-9._-]{1,128}"))
             return r.put("error", I18n.tr("server.um.rcDump.1", java.util.Map.of("u", String.valueOf(u), "host", String.valueOf(host), "db", String.valueOf(db))));
         if (!ok("which mysqldump >/dev/null 2>&1", 20))
-            return r.put("error", I18n.tr("server.um.provaCopia.1"));
+            return r.put("error", I18n.tr("server.um.testCopy.1"));
 
         StringBuilder history = new StringBuilder();
         for (String[] t : COPY_MODES) {
@@ -3661,7 +3661,7 @@ public final class UpdateManager {
             Process pr = pb.start();
             if (!pr.waitFor(1800, java.util.concurrent.TimeUnit.SECONDS)) {
                 pr.destroyForcibly();
-                return r.put("error", I18n.tr("server.um.rcDumpUnTentativo.1"));
+                return r.put("error", I18n.tr("server.um.rcDumpOneAttempt.1"));
             }
             String message = sh("cat " + err + " 2>/dev/null", 30).replace("\n", " ").trim();
             if (pr.exitValue() != 0)
@@ -3701,7 +3701,7 @@ public final class UpdateManager {
     private static JSONObject testWebmailOrigin() {
         JSONObject r = new JSONObject().put("ok", false);
         JSONArray roots = nginxRoundcubeRoots();
-        if (roots.length() == 0) return r.put("error", I18n.tr("server.um.provaWebmailOrigine.1"));
+        if (roots.length() == 0) return r.put("error", I18n.tr("server.um.testWebmailOrigin.1"));
         String file = roots.getJSONObject(0).getString("file");
         int line = roots.getJSONObject(0).getInt("line");
         // listen e server_name stanno nello stesso blocco, poche righe sopra la radice.
@@ -3714,12 +3714,12 @@ public final class UpdateManager {
             Matcher mn = Pattern.compile("^\\s*server_name\\s+([A-Za-z0-9._-]+)\\s*;").matcher(l);
             if (mn.find() && !"_".equals(mn.group(1))) name = mn.group(1);
         }
-        if (port.isEmpty()) return r.put("error", I18n.tr("server.um.provaWebmailOrigine.2"));
+        if (port.isEmpty()) return r.put("error", I18n.tr("server.um.testWebmailOrigin.2"));
         if (name.isEmpty()) {
             try { name = org.mail_panel.Main.dbManager.getRoundcubeDomain(); } catch (Exception ignored) {}
         }
         if (name == null || !name.matches("[A-Za-z0-9._-]{1,255}"))
-            return r.put("error", I18n.tr("server.um.provaWebmailOrigine.3"));
+            return r.put("error", I18n.tr("server.um.testWebmailOrigin.3"));
         // --resolve mette a posto sia il nome nell'intestazione Host sia quello nel TLS,
         // ma manda la richiesta all'indirizzo locale: e' il modo di parlare col server e basta.
         String url = "https://" + name + ":" + port + "/";
@@ -3729,7 +3729,7 @@ public final class UpdateManager {
         String code = mc.find() ? mc.group(1) : "";
         boolean cdn = out.toLowerCase().contains("cf-ray") || out.toLowerCase().contains("server: cloudflare");
         return r.put("ok", code.startsWith("2") || code.startsWith("3"))
-                .put("code", code.isEmpty() ? I18n.tr("server.um.provaWebmailOrigine.4") : code)
+                .put("code", code.isEmpty() ? I18n.tr("server.um.testWebmailOrigin.4") : code)
                 .put("url", url).put("viaCdn", cdn).put("headers", out.trim());
     }
 
@@ -3783,12 +3783,12 @@ public final class UpdateManager {
     private static String summarizeOutput(String out) {
         if (out == null) return I18n.tr("server.um.x.nothing");
         String t = out.trim();
-        if (t.isEmpty()) return I18n.tr("server.um.riassumiUscita.1");
+        if (t.isEmpty()) return I18n.tr("server.um.summarizeOutput.1");
         String first = t.length() > 200 ? t.substring(0, 200) : t;
         boolean looksLikeCss = t.contains("{") && (t.contains(";") || t.contains("}"));
         boolean looksLikeError = t.toLowerCase().contains("not found") || t.toLowerCase().contains("404")
                 || t.toLowerCase().contains("fatal") || t.toLowerCase().contains("warning");
-        return (looksLikeError ? I18n.tr("server.um.riassumiUscita.2") : looksLikeCss ? I18n.tr("server.um.riassumiUscita.3") : I18n.tr("server.um.x.output"))
+        return (looksLikeError ? I18n.tr("server.um.summarizeOutput.2") : looksLikeCss ? I18n.tr("server.um.summarizeOutput.3") : I18n.tr("server.um.x.output"))
                 + " " + I18n.tr("server.um.x.charsPlus", java.util.Map.of("n", String.valueOf(t.length()))) + "\n" + first.replace("\n", " ");
     }
 
@@ -3805,7 +3805,7 @@ public final class UpdateManager {
         String res = "--resolve " + name + ":" + port + ":127.0.0.1 ";
         String html = sh("curl -sk -m 20 " + res + base + "/ 2>/dev/null | head -80", 60);
         Matcher m = Pattern.compile("href=\"([^\"]*\\.css[^\"]*)\"").matcher(html);
-        if (!m.find()) return r.put("error", I18n.tr("server.um.provaAssetCss.1"));
+        if (!m.find()) return r.put("error", I18n.tr("server.um.testCssAsset.1"));
         String css = m.group(1).replace("&amp;", "&");
         // Il link e' relativo ("static.php/skins/..."): va reso assoluto, altrimenti curl
         // non ha un URL da chiamare e risponde 000 — che sembrerebbe un guasto del server.
@@ -3851,7 +3851,7 @@ public final class UpdateManager {
         try {
             JSONArray roots = nginxRoundcubeRoots();
             if (roots.length() == 0)
-                return r.put("success", false).put("error", I18n.tr("server.um.provaWebmailOrigine.1"));
+                return r.put("success", false).put("error", I18n.tr("server.um.testWebmailOrigin.1"));
             String file = roots.getJSONObject(0).getString("file");
             int rootLine = roots.getJSONObject(0).getInt("line");
             java.util.List<String> lines = Files.readAllLines(Paths.get(file));
@@ -4037,7 +4037,7 @@ public final class UpdateManager {
             JSONObject pw = testWebmailOrigin();
             entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.8"))
                     .put("text", pw.optBoolean("ok")
-                            ? I18n.tr("server.um.x.urlAnswers", java.util.Map.of("url", String.valueOf(pw.optString("url")), "codice", String.valueOf(pw.optString("code")))) + "\n\n"
+                            ? I18n.tr("server.um.x.urlAnswers", java.util.Map.of("url", String.valueOf(pw.optString("url")), "code", String.valueOf(pw.optString("code")))) + "\n\n"
                               + pw.optString("headers")
                             : I18n.tr("server.um.x.noAnswer", java.util.Map.of("r", String.valueOf(pw.optString("code", pw.optString("error")))))
                               + (pw.optBoolean("viaCdn") ? "  " + I18n.tr("server.um.x.cdnAnswered") : "")
@@ -4121,7 +4121,7 @@ public final class UpdateManager {
             if (!"?".equals(file)) {
                 int line = roots.getJSONObject(0).getInt("line");
                 int from = Math.max(1, line - 12), a2 = line + 22;
-                entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.20", java.util.Map.of("riga", String.valueOf(line))))
+                entries.put(new JSONObject().put("title", I18n.tr("server.um.roundcubeDiagnostics.20", java.util.Map.of("line", String.valueOf(line))))
                         .put("text", sh("sed -n '" + from + "," + a2 + "p' " + file + " 2>&1", 30)));
             }
             return r.put("success", true).put("entries", entries);
@@ -4152,13 +4152,13 @@ public final class UpdateManager {
         String pkg = "", backupDir = "";
         try {
             job.advance(1, TOT);
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.1"));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.1"));
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.1", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.1", java.util.Map.of("total", String.valueOf(TOT))));
             JSONObject pf = roundcubePreflight();
             if (!pf.optBoolean("canProceed", false)) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMigrazione84.3");
+                job.errorMessage = I18n.tr("server.um.runMigration84.3");
                 JSONArray ck = pf.optJSONArray("checks");
                 for (int i = 0; ck != null && i < ck.length(); i++) {
                     JSONObject c = ck.getJSONObject(i);
@@ -4166,7 +4166,7 @@ public final class UpdateManager {
                         job.write("  [" + c.optString("level").toUpperCase() + "] " + c.optString("label")
                                 + ": " + c.optString("detail"));
                 }
-                job.write(I18n.tr("server.um.runMigrazione84.4"));
+                job.write(I18n.tr("server.um.runMigration84.4"));
                 return;
             }
             pkg = pf.optString("pkg", "");
@@ -4176,7 +4176,7 @@ public final class UpdateManager {
 
             job.advance(2, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.2", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.2", java.util.Map.of("total", String.valueOf(TOT))));
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
             backupDir = "/var/db/mailpanel/roundcube/" + ts;
@@ -4189,16 +4189,16 @@ public final class UpdateManager {
                         + "without a way back. The reason is the line above.");
             }
             if (cp.has("reduced")) {
-                job.write("    " + I18n.tr("server.um.x.copyReduced", java.util.Map.of("modo", String.valueOf(I18n.tr(cp.optString("mode"))))));
+                job.write("    " + I18n.tr("server.um.x.copyReduced", java.util.Map.of("mode", String.valueOf(I18n.tr(cp.optString("mode"))))));
                 job.write("    " + I18n.tr("server.um.x.didNotPass", java.util.Map.of("r", String.valueOf(cp.getString("reduced")))));
-                job.write(I18n.tr("server.um.runAggiornamentoRoundcube.3"));
+                job.write(I18n.tr("server.um.runRoundcubeUpdate.3"));
             }
             job.write("    " + I18n.tr("server.um.x.copyVerified", java.util.Map.of("file", String.valueOf(backupDir + "/roundcube.sql"), "kb", String.valueOf(number(sh("wc -c < " + backupDir + "/roundcube.sql", 30)) / 1024))));
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.4"));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.4"));
 
             job.advance(3, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.5", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.5", java.util.Map.of("total", String.valueOf(TOT))));
             if (locked(sh("pkg lock -l 2>/dev/null"), pkg)) {
                 // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
                 String stateError = PackageQueue.writeState(java.util.List.of(pkg));
@@ -4223,17 +4223,17 @@ public final class UpdateManager {
 
             job.advance(4, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.6", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.6", java.util.Map.of("total", String.valueOf(TOT))));
             // Il pacchetto puo' aver messo un config di esempio al posto del tuo.
             JSONObject dsnAfter = dsnRoundcube();
             if (!dsnAfter.optBoolean("ok")) {
                 ok("cp -p " + backupDir + "/config.inc.php " + RC_DIR + "/config/config.inc.php", 30);
-                job.write(I18n.tr("server.um.runAggiornamentoRoundcube.7"));
+                job.write(I18n.tr("server.um.runRoundcubeUpdate.7"));
             } else job.write("    " + I18n.tr("server.um.x.confIntact"));
 
             job.advance(5, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.8", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.8", java.util.Map.of("total", String.valueOf(TOT))));
             String out = sh("cd " + RC_DIR + " && php bin/updatedb.sh --package=roundcube --dir=SQL 2>&1", 900);
             for (String l : out.split("\n")) if (!l.trim().isEmpty()) job.write("      " + l);
             String ol = out.toLowerCase();
@@ -4244,32 +4244,32 @@ public final class UpdateManager {
 
             job.advance(6, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.9", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.9", java.util.Map.of("total", String.valueOf(TOT))));
             String rootOutcome = "unneeded";
             if (pf.optBoolean("rootChange", false)) {
                 rootOutcome = moveNginxRoot(job, backupDir);
                 if ("failed".equals(rootOutcome))
-                    job.write(I18n.tr("server.um.runAggiornamentoRoundcube.10", java.util.Map.of("backupDir", String.valueOf(backupDir))));
-            } else job.write(I18n.tr("server.um.runAggiornamentoRoundcube.11"));
+                    job.write(I18n.tr("server.um.runRoundcubeUpdate.10", java.util.Map.of("backupDir", String.valueOf(backupDir))));
+            } else job.write(I18n.tr("server.um.runRoundcubeUpdate.11"));
             boolean rootOk = !"failed".equals(rootOutcome);
 
             job.advance(7, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.12", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.12", java.util.Map.of("total", String.valueOf(TOT))));
             String svc = realServiceName("php_fpm");
             if (svc != null) {
                 ok("service " + svc + " restart", 120);
-                job.write("    " + svc + ": " + (ok("service " + svc + " status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26")));
-            } else job.write(I18n.tr("server.um.runAggiornamentoRoundcube.13"));
+                job.write("    " + svc + ": " + (ok("service " + svc + " status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26")));
+            } else job.write(I18n.tr("server.um.runRoundcubeUpdate.13"));
 
             job.advance(8, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.14", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.14", java.util.Map.of("total", String.valueOf(TOT))));
             long tablesAfter = number(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
                     + pf.optString("db") + "';"));
-            job.write(I18n.tr("server.um.runAggiornamentoRoundcube.15", java.util.Map.of("tabellePrima", String.valueOf(tablesBefore), "tabelleDopo", String.valueOf(tablesAfter))));
+            job.write(I18n.tr("server.um.runRoundcubeUpdate.15", java.util.Map.of("tablesBefore", String.valueOf(tablesBefore), "tablesAfter", String.valueOf(tablesAfter))));
             boolean tabOk = tablesAfter >= tablesBefore;
-            if (!tabOk) job.write(I18n.tr("server.um.runAggiornamentoRoundcube.16"));
+            if (!tabOk) job.write(I18n.tr("server.um.runRoundcubeUpdate.16"));
 
             // La webmail risponde davvero? Non basta che i file siano aggiornati.
             //
@@ -4284,11 +4284,11 @@ public final class UpdateManager {
                 job.write("    " + I18n.tr("server.um.x.webTestNotRun", java.util.Map.of("e", String.valueOf(pw.optString("error")))));
                 webOk = true;   // non provata non vuol dire guasta: non boccio cio' che non ho measured
             } else if (webOk) {
-                job.write("    " + I18n.tr("server.um.x.urlAnswersOrigin", java.util.Map.of("url", String.valueOf(pw.optString("url")), "codice", String.valueOf(pw.optString("code")))));
+                job.write("    " + I18n.tr("server.um.x.urlAnswersOrigin", java.util.Map.of("url", String.valueOf(pw.optString("url")), "code", String.valueOf(pw.optString("code")))));
             } else {
-                job.write("    " + I18n.tr("server.um.x.urlAnswersBad", java.util.Map.of("url", String.valueOf(pw.optString("url")), "codice", String.valueOf(pw.optString("code")))));
+                job.write("    " + I18n.tr("server.um.x.urlAnswersBad", java.util.Map.of("url", String.valueOf(pw.optString("url")), "code", String.valueOf(pw.optString("code")))));
                 if (pw.optBoolean("viaCdn"))
-                    job.write(I18n.tr("server.um.runAggiornamentoRoundcube.17"));
+                    job.write(I18n.tr("server.um.runRoundcubeUpdate.17"));
             }
 
             if (tabOk && webOk && rootOk) {
@@ -4298,17 +4298,17 @@ public final class UpdateManager {
                 // prova il lavoro puo' essere andato benissimo, ma il verdict sarebbe piu' verde
                 // delle prove che ho: allora lo dico, e la verifica la fai tu.
                 job.write(testedWeb
-                        ? I18n.tr("server.um.runAggiornamentoRoundcube.18")
-                        : I18n.tr("server.um.runAggiornamentoRoundcube.19"));
+                        ? I18n.tr("server.um.runRoundcubeUpdate.18")
+                        : I18n.tr("server.um.runRoundcubeUpdate.19"));
                 if (!testedWeb)
-                    job.write(I18n.tr("server.um.runAggiornamentoRoundcube.20"));
+                    job.write(I18n.tr("server.um.runRoundcubeUpdate.20"));
                 if ("unneeded".equals(rootOutcome) && pf.optBoolean("rootChange", false))
-                    job.write(I18n.tr("server.um.runAggiornamentoRoundcube.21"));
-                job.write(I18n.tr("server.um.runAggiornamentoRoundcube.22", java.util.Map.of("backupDir", String.valueOf(backupDir))));
-                job.write(I18n.tr("server.um.runAggiornamentoRoundcube.23"));
+                    job.write(I18n.tr("server.um.runRoundcubeUpdate.21"));
+                job.write(I18n.tr("server.um.runRoundcubeUpdate.22", java.util.Map.of("backupDir", String.valueOf(backupDir))));
+                job.write(I18n.tr("server.um.runRoundcubeUpdate.23"));
             } else {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runAggiornamentoRoundcube.24", java.util.Map.of("backupDir", String.valueOf(backupDir)));
+                job.errorMessage = I18n.tr("server.um.runRoundcubeUpdate.24", java.util.Map.of("backupDir", String.valueOf(backupDir)));
             }
         } catch (Exception e) {
             job.status = "error";
@@ -4429,8 +4429,8 @@ public final class UpdateManager {
                 .put("line", "/usr/sbin/daemon -f -o " + PANEL_LOG + " -t mailpanel"
                         + " -- /bin/sh -c \"cd '" + dir + "' && exec " + command + "\"")
                 .put("note", jar.isEmpty()
-                        ? I18n.tr("server.um.strategiaRiavvio.1")
-                        : I18n.tr("server.um.strategiaRiavvio.2", java.util.Map.of("p", String.valueOf(startCommand(false)))))
+                        ? I18n.tr("server.um.restartStrategy.1")
+                        : I18n.tr("server.um.restartStrategy.2", java.util.Map.of("p", String.valueOf(startCommand(false)))))
                 .put("ok", !jar.isEmpty());
     }
 
@@ -4547,11 +4547,11 @@ public final class UpdateManager {
             r.put("spaceMb", free).put("jdkMb", large);
             if (large > 0 && free < large * 2) {
                 addCheck(checks, "spazio", I18n.tr("server.um.javaPreflight.10"), "block",
-                        I18n.tr("server.um.javaPreflight.11", java.util.Map.of("p", String.valueOf((large * 2)), "liberi", String.valueOf(free))));
+                        I18n.tr("server.um.javaPreflight.11", java.util.Map.of("p", String.valueOf((large * 2)), "free", String.valueOf(free))));
                 lock = true;
             } else {
                 addCheck(checks, "spazio", I18n.tr("server.um.javaPreflight.10"), "ok",
-                        I18n.tr("server.um.javaPreflight.12", java.util.Map.of("grande", String.valueOf(large), "jDK_DIR", String.valueOf(JDK_DIR), "liberi", String.valueOf(free))));
+                        I18n.tr("server.um.javaPreflight.12", java.util.Map.of("size", String.valueOf(large), "jdkDir", String.valueOf(JDK_DIR), "free", String.valueOf(free))));
             }
 
             addCheck(checks, "down", "Interruzione", "wait",
@@ -4586,9 +4586,9 @@ public final class UpdateManager {
             if (!pf.optBoolean("canProceed", false))
                 return new JSONObject().put("success", false)
                         .put("error", pf.optBoolean("already", false)
-                                ? I18n.tr("server.um.x.alreadyLatest") : I18n.tr("server.um.avviaAggiornamentoJavaOra.1"));
+                                ? I18n.tr("server.um.x.alreadyLatest") : I18n.tr("server.um.startJavaUpdateNow.1"));
             String pkg = pf.getString("pkg");
-            if (!isValidName(pkg)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.cambiaProtezioni.1"));
+            if (!isValidName(pkg)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
             JSONObject st = pf.getJSONObject("restart");
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}"))
@@ -4596,7 +4596,7 @@ public final class UpdateManager {
             String bk = JDK_DIR + "/" + ts;
             String log = bk + ".log";
             if (!ok("mkdir -p " + bk, 30))
-                return new JSONObject().put("success", false).put("error", I18n.tr("server.um.avviaAggiornamentoJavaOra.2", java.util.Map.of("bk", String.valueOf(bk))));
+                return new JSONObject().put("success", false).put("error", I18n.tr("server.um.startJavaUpdateNow.2", java.util.Map.of("backup", String.valueOf(bk))));
 
             long pid = ProcessHandle.current().pid();
             int port = listeningPort(pid);
@@ -4611,7 +4611,7 @@ public final class UpdateManager {
             String syntaxCheck = sh("sh -n " + path + " 2>&1", 30);
             if (!syntaxCheck.trim().isEmpty())
                 return new JSONObject().put("success", false)
-                        .put("error", I18n.tr("server.um.avviaAggiornamentoJavaOra.4", java.util.Map.of("trim", String.valueOf(syntaxCheck.trim()))));
+                        .put("error", I18n.tr("server.um.startJavaUpdateNow.4", java.util.Map.of("trim", String.valueOf(syntaxCheck.trim()))));
 
             // Il pannello segna i pacchetti unlockedPackages: se lo script morisse a meta', al prossimo
             // avvio restoreLocksAfterCrash() li riprotegge da solo. Se l'elenco non si scrive,
@@ -4620,11 +4620,11 @@ public final class UpdateManager {
             String stateError = PackageQueue.writeState(java.util.List.of(pkg));
             if (stateError != null)
                 return new JSONObject().put("success", false)
-                        .put("error", I18n.tr("server.um.avviaAggiornamentoJavaOra.5", java.util.Map.of("errStato", String.valueOf(stateError))));
+                        .put("error", I18n.tr("server.um.startJavaUpdateNow.5", java.util.Map.of("stateError", String.valueOf(stateError))));
             if (!ok("/usr/sbin/daemon -f -- /bin/sh " + path, 30)) {
                 clearState();
                 return new JSONObject().put("success", false)
-                        .put("error", I18n.tr("server.um.avviaAggiornamentoJavaOra.6", java.util.Map.of("path", String.valueOf(path))));
+                        .put("error", I18n.tr("server.um.startJavaUpdateNow.6", java.util.Map.of("path", String.valueOf(path))));
             }
             return new JSONObject().put("success", true).put("log", log)
                     .put("note", st.getString("note"));
@@ -4731,8 +4731,8 @@ public final class UpdateManager {
              + "  if sockstat -46l -p " + port + " 2>/dev/null | grep -qE '[:.]" + port + "([[:space:]]|$)'; then SU=0; break; fi\n"
              + "  j=$((j+1)); sleep 1\n"
              + "done\n"
-             + "[ $SU -eq 0 ] && " + echo(I18n.tr("server.um.jvs.listening", java.util.Map.of("porta", String.valueOf(port))))
-             + " || " + echo(I18n.tr("server.um.jvs.notListening", java.util.Map.of("porta", String.valueOf(port)))) + "\n"
+             + "[ $SU -eq 0 ] && " + echo(I18n.tr("server.um.jvs.listening", java.util.Map.of("port", String.valueOf(port))))
+             + " || " + echo(I18n.tr("server.um.jvs.notListening", java.util.Map.of("port", String.valueOf(port)))) + "\n"
              : echo(I18n.tr("server.um.jvs.noPort")) + "\nSU=0\n")
           + "\n"
           + "if [ $ESITO_UP -eq 0 ] && [ $SU -eq 0 ]; then\n"
@@ -4874,20 +4874,20 @@ public final class UpdateManager {
             r.put("newVersion", fresh);
             if (old == null) {
                 addCheck(checks, "ver", I18n.tr("server.um.pythonPreflight.1"), "ok",
-                        I18n.tr("server.um.pythonPreflight.2", java.util.Map.of("nuovo", String.valueOf(fresh))));
+                        I18n.tr("server.um.pythonPreflight.2", java.util.Map.of("newer", String.valueOf(fresh))));
                 return r.put("success", true).put("checks", checks)
                         .put("canProceed", false).put("blocked", false).put("already", true);
             }
             r.put("old", old);
             addCheck(checks, "ver", I18n.tr("server.um.pythonPreflight.1"), "wait",
-                    I18n.tr("server.um.pythonPreflight.3", java.util.Map.of("vecchio", String.valueOf(old), "nuovo", String.valueOf(fresh))));
+                    I18n.tr("server.um.pythonPreflight.3", java.util.Map.of("old", String.valueOf(old), "newer", String.valueOf(fresh))));
 
             final String vec = old;
             java.util.List<String> leaf = pythonToMove(vec);
             long tot = sh("pkg query %n 2>/dev/null").lines().filter(x -> x.startsWith("py" + vec + "-")).count();
             if (leaf.isEmpty()) {
                 addCheck(checks, "leaf", I18n.tr("server.um.pythonPreflight.4"), "block",
-                        I18n.tr("server.um.pythonPreflight.5", java.util.Map.of("tot", String.valueOf(tot), "vecchio", String.valueOf(old))));
+                        I18n.tr("server.um.pythonPreflight.5", java.util.Map.of("tot", String.valueOf(tot), "old", String.valueOf(old))));
                 lock = true;
             } else {
                 addCheck(checks, "leaf", I18n.tr("server.um.pythonPreflight.4"), "ok",
@@ -4906,11 +4906,11 @@ public final class UpdateManager {
             r.put("newPackages", new JSONArray(newOnes));
             if (!missing.isEmpty()) {
                 addCheck(checks, "repo", I18n.tr("server.um.pythonPreflight.6"), "block",
-                        I18n.tr("server.um.x.pyNoCounterpart", java.util.Map.of("nuovo", String.valueOf(fresh), "elenco", String.valueOf(String.join(", ", missing)))));
+                        I18n.tr("server.um.x.pyNoCounterpart", java.util.Map.of("newer", String.valueOf(fresh), "list", String.valueOf(String.join(", ", missing)))));
                 lock = true;
             } else if (!newOnes.isEmpty()) {
                 addCheck(checks, "repo", I18n.tr("server.um.pythonPreflight.6"), "ok",
-                        I18n.tr("server.um.x.pyAllCounterparts", java.util.Map.of("elenco", String.valueOf(String.join(", ", newOnes)))));
+                        I18n.tr("server.um.x.pyAllCounterparts", java.util.Map.of("list", String.valueOf(String.join(", ", newOnes)))));
             }
 
             // Chi dipende dai pacchetti che sto per togliere? Se qualcuno dipende, toglierli
@@ -4932,7 +4932,7 @@ public final class UpdateManager {
             }
             if (!withDependents.isEmpty()) {
                 addCheck(checks, "dip", I18n.tr("server.um.pythonPreflight.7"), "block",
-                        I18n.tr("server.um.x.rmPullsOthers", java.util.Map.of("elenco", String.valueOf(String.join(" ; ", withDependents)))));
+                        I18n.tr("server.um.x.rmPullsOthers", java.util.Map.of("list", String.valueOf(String.join(" ; ", withDependents)))));
                 lock = true;
             } else {
                 addCheck(checks, "dip", I18n.tr("server.um.pythonPreflight.7"), "ok",
@@ -4948,7 +4948,7 @@ public final class UpdateManager {
                     java.util.List<String> lines = new ArrayList<>();
                     for (String l2 : sim.split("\n")) if (l2.toLowerCase().contains("conflict")) lines.add(l2.trim());
                     addCheck(checks, "sim", I18n.tr("server.um.pythonPreflight.9"), "wait",
-                            I18n.tr("server.um.x.pyCollide", java.util.Map.of("righe", String.valueOf(String.join(" | ", lines)), "vecchio", String.valueOf(old))));
+                            I18n.tr("server.um.x.pyCollide", java.util.Map.of("lines", String.valueOf(String.join(" | ", lines)), "old", String.valueOf(old))));
                 } else {
                     addCheck(checks, "sim", I18n.tr("server.um.pythonPreflight.9"), "ok",
                             I18n.tr("server.um.pythonPreflight.10"));
@@ -4965,7 +4965,7 @@ public final class UpdateManager {
             r.put("services", new JSONArray(touchedServices));
             addCheck(checks, "svc", I18n.tr("server.um.x.servicesInvolved"), "ok", touchedServices.isEmpty()
                     ? I18n.tr("server.um.pythonPreflight.11")
-                    : I18n.tr("server.um.x.svcStopStart", java.util.Map.of("elenco", String.valueOf(String.join(", ", touchedServices)))));
+                    : I18n.tr("server.um.x.svcStopStart", java.util.Map.of("list", String.valueOf(String.join(", ", touchedServices)))));
 
             // Cosa toglierebbe autoremove. Se tocca roba che non e' py<vecchio>, non lo si esegue.
             JSONObject an = analyzeAutoremove(sh("pkg autoremove -n 2>&1", 180), "py" + vec + "-");
@@ -4978,8 +4978,8 @@ public final class UpdateManager {
                 addCheck(checks, "auto", I18n.tr("server.um.x.autoremoveTitle"), foreign.isEmpty() ? "ok" : "wait",
                         foreign.isEmpty()
                         ? (an.optInt("howMany", 0) == 0 ? I18n.tr("server.um.x.noOrphans")
-                           : I18n.tr("server.um.x.onlyPyOrphans", java.util.Map.of("vec", String.valueOf(vec), "n", String.valueOf(an.optInt("howMany", 0)))))
-                        : I18n.tr("server.um.x.foreignOrphans", java.util.Map.of("elenco", String.valueOf(String.join(", ", foreign)))));
+                           : I18n.tr("server.um.x.onlyPyOrphans", java.util.Map.of("oldVer", String.valueOf(vec), "n", String.valueOf(an.optInt("howMany", 0)))))
+                        : I18n.tr("server.um.x.foreignOrphans", java.util.Map.of("list", String.valueOf(String.join(", ", foreign)))));
             }
 
             addCheck(checks, "backup", I18n.tr("server.um.pythonPreflight.13"), "ok",
@@ -5089,7 +5089,7 @@ public final class UpdateManager {
                     + " " + file + " 2>/dev/null | head -c 160", 20).trim();
             JSONObject v = new JSONObject().put("file", file).put("line", line)
                     .put("owner", name.isEmpty()
-                            ? (prop.isEmpty() ? I18n.tr("server.um.riferimentiInterprete.1") : prop) : name);
+                            ? (prop.isEmpty() ? I18n.tr("server.um.interpreterReferences.1") : prop) : name);
             v.put("runnable", runnable).put("executionPlace", executionPlace);
             if (ofFamily) harmless.put(v);
             else if (runnable || executionPlace) issues.put(v);
@@ -5120,7 +5120,7 @@ public final class UpdateManager {
             }
             if (old.isEmpty())
                 return r.put("success", true).put("nothing", true)
-                        .put("note", I18n.tr("server.um.restiPythonOra.1", java.util.Map.of("nuovo", String.valueOf(fresh))));
+                        .put("note", I18n.tr("server.um.pythonLeftoversNow.1", java.util.Map.of("newer", String.valueOf(fresh))));
             r.put("old", new JSONArray(old));
 
             java.util.List<String> family = new ArrayList<>();
@@ -5210,14 +5210,14 @@ public final class UpdateManager {
         java.util.List<String> listOnDisk = new ArrayList<>();
         try {
             job.advance(1, TOT);
-            job.write(I18n.tr("server.um.runPassaggioPython.1"));
+            job.write(I18n.tr("server.um.runPythonTransition.1"));
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.1", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.1", java.util.Map.of("total", String.valueOf(TOT))));
             JSONObject pf = pythonPreflight();
             if (!pf.optBoolean("canProceed", false)) {
                 job.status = "error";
                 job.errorMessage = pf.optBoolean("already", false)
-                        ? I18n.tr("server.um.runPassaggioPython.2") : I18n.tr("server.um.runMigrazione84.3");
+                        ? I18n.tr("server.um.runPythonTransition.2") : I18n.tr("server.um.runMigration84.3");
                 JSONArray ck = pf.optJSONArray("checks");
                 for (int i = 0; ck != null && i < ck.length(); i++) {
                     JSONObject c = ck.getJSONObject(i);
@@ -5225,7 +5225,7 @@ public final class UpdateManager {
                         job.write("  [" + c.optString("level").toUpperCase() + "] " + c.optString("label")
                                 + ": " + c.optString("detail"));
                 }
-                job.write(I18n.tr("server.um.runMigrazione84.4"));
+                job.write(I18n.tr("server.um.runMigration84.4"));
                 return;
             }
             String old = pf.getString("old"), fresh = pf.getString("newVersion");
@@ -5237,14 +5237,14 @@ public final class UpdateManager {
 
             job.advance(2, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runPassaggioPython.3", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runPythonTransition.3", java.util.Map.of("total", String.valueOf(TOT))));
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
             String bk = "/var/db/mailpanel/python/" + ts;
             if (!ok("mkdir -p " + bk, 30)) throw new IllegalStateException("cannot create " + bk);
             sh("pkg query '%n %v' > " + bk + "/pacchetti-prima.txt 2>/dev/null", 60);
             for (String d : new String[]{"/usr/local/etc/fail2ban", "/usr/local/etc/letsencrypt"}) {
-                if (!ok("test -d " + d, 10)) { job.write(I18n.tr("server.um.runPassaggioPython.5", java.util.Map.of("d", String.valueOf(d)))); continue; }
+                if (!ok("test -d " + d, 10)) { job.write(I18n.tr("server.um.runPythonTransition.5", java.util.Map.of("d", String.valueOf(d)))); continue; }
                 String name = d.substring(d.lastIndexOf('/') + 1);
                 if (!ok("tar -cf " + bk + "/" + name + ".tar -C " + d + " . 2>/dev/null", 300))
                     throw new IllegalStateException("copy of " + d + " failed");
@@ -5260,13 +5260,13 @@ public final class UpdateManager {
             if (services.isEmpty()) job.write("    " + I18n.tr("server.um.x.none"));
             for (String s : services) {
                 boolean era = ok("service " + s + " status", 20);
-                if (era) { ok("service " + s + " stop", 120); job.write(I18n.tr("server.um.runPassaggioPython.6", java.util.Map.of("s", String.valueOf(s)))); }
+                if (era) { ok("service " + s + " stop", 120); job.write(I18n.tr("server.um.runPythonTransition.6", java.util.Map.of("s", String.valueOf(s)))); }
                 else job.write("    " + s + ": " + I18n.tr("server.um.x.wasStopped"));
             }
 
             job.advance(4, TOT);
             job.write("");
-            job.write("[4/" + TOT + "] " + I18n.tr("server.um.x.pySwap", java.util.Map.of("vecchio", String.valueOf(old), "nuovo", String.valueOf(fresh))));
+            job.write("[4/" + TOT + "] " + I18n.tr("server.um.x.pySwap", java.util.Map.of("old", String.valueOf(old), "newer", String.valueOf(fresh))));
             String list = sh("pkg lock -l 2>/dev/null");
             java.util.List<String> toUnlock = new ArrayList<>();
             for (String v : leaf) if (locked(list, v)) toUnlock.add(v);
@@ -5281,7 +5281,7 @@ public final class UpdateManager {
                 throw new IllegalStateException("I could not save the list for the restore, so I did not touch anything: " + stateError);
             listOnDisk.addAll(toList);
             for (String v : toUnlock) { ok("pkg unlock -y " + v, 30); unlockedPackages.add(v); }
-            if (!unlockedPackages.isEmpty()) job.write("    " + I18n.tr("server.um.x.unlockedList", java.util.Map.of("elenco", String.valueOf(String.join(", ", unlockedPackages)))));
+            if (!unlockedPackages.isEmpty()) job.write("    " + I18n.tr("server.um.x.unlockedList", java.util.Map.of("list", String.valueOf(String.join(", ", unlockedPackages)))));
             // L'ordine conta: prima togliere, poi installare. Cosi' nessun file va forzato,
             // ed e' esattamente l'errore che ha rotto il client MySQL.
             StringBuilder catDel = new StringBuilder();
@@ -5291,7 +5291,7 @@ public final class UpdateManager {
             int ci = runLogged(job, "pkg install -y " + String.join(" ", newOnes) + " 2>&1", 1800, catIns);
             if (ci != 0) {
                 job.write("");
-                job.write(I18n.tr("server.um.runPassaggioPython.7"));
+                job.write(I18n.tr("server.um.runPythonTransition.7"));
                 job.write(I18n.tr("server.um.x.toGoBack", java.util.Map.of("cmd", String.valueOf("pkg install -y " + String.join(" ", leaf)))));
                 throw new IllegalStateException("pkg install exited with code " + ci);
             }
@@ -5301,39 +5301,39 @@ public final class UpdateManager {
 
             job.advance(5, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runPassaggioPython.8", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runPythonTransition.8", java.util.Map.of("total", String.valueOf(TOT))));
             String ar = sh("pkg autoremove -n 2>&1", 180);
             JSONObject an = analyzeAutoremove(ar, "py" + old + "-");
             java.util.List<String> foreign = jsonArrayToList(an.optJSONArray("foreign"));
             if (!an.optBoolean("readable", false)) {
-                job.write(I18n.tr("server.um.runPassaggioPython.9"));
-                job.write(I18n.tr("server.um.runPassaggioPython.10"));
+                job.write(I18n.tr("server.um.runPythonTransition.9"));
+                job.write(I18n.tr("server.um.runPythonTransition.10"));
                 for (String l2 : ar.split("\n")) if (!l2.trim().isEmpty()) job.write("      " + l2);
             } else if (!foreign.isEmpty()) {
-                job.write("    " + I18n.tr("server.um.x.skippedForeign", java.util.Map.of("elenco", String.valueOf(String.join(", ", foreign)))));
-                job.write(I18n.tr("server.um.runPassaggioPython.11", java.util.Map.of("vecchio", String.valueOf(old))));
+                job.write("    " + I18n.tr("server.um.x.skippedForeign", java.util.Map.of("list", String.valueOf(String.join(", ", foreign)))));
+                job.write(I18n.tr("server.um.runPythonTransition.11", java.util.Map.of("old", String.valueOf(old))));
             } else if (an.optInt("howMany", 0) == 0) {
-                job.write(I18n.tr("server.um.runPassaggioPython.12"));
+                job.write(I18n.tr("server.um.runPythonTransition.12"));
             } else {
-                job.write("    " + I18n.tr("server.um.x.toRemove", java.util.Map.of("elenco", String.valueOf(String.join(", ", jsonArrayToList(an.optJSONArray("removed")))))));
+                job.write("    " + I18n.tr("server.um.x.toRemove", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(an.optJSONArray("removed")))))));
                 runLogged(job, "pkg autoremove -y 2>&1", 900);
             }
 
             job.advance(6, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runPassaggioPython.13", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runPythonTransition.13", java.util.Map.of("total", String.valueOf(TOT))));
             boolean servicesOk = true;
             for (String s : services) {
                 ok("service " + s + " start", 120);
                 boolean su = ok("service " + s + " status", 30);
-                job.write("    " + s + ": " + (su ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runPassaggioPython.14")));
+                job.write("    " + s + ": " + (su ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runPythonTransition.14")));
                 if (!su) servicesOk = false;
             }
             if (services.isEmpty()) job.write("    " + I18n.tr("server.um.x.none"));
 
             job.advance(7, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runPassaggioPython.15", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runPythonTransition.15", java.util.Map.of("total", String.valueOf(TOT))));
             // Che il pacchetto sia installato non dice che il comando parta: e' la lezione
             // del client MySQL, dove tutto risultava a posto e postmap non trovava la libreria.
             // Non indovino il nome del comando dal nome del pacchetto: per py311-fail2ban
@@ -5358,19 +5358,19 @@ public final class UpdateManager {
                             + (bene ? o.split("\n")[0].trim() : I18n.tr("server.um.x.failedArrow", java.util.Map.of("o", String.valueOf(o.trim())))));
                     if (!bene) commandsOk = false;
                 }
-                if (tested == 0) job.write(I18n.tr("server.um.runPassaggioPython.16", java.util.Map.of("n", String.valueOf(n))));
+                if (tested == 0) job.write(I18n.tr("server.um.runPythonTransition.16", java.util.Map.of("n", String.valueOf(n))));
             }
             long left = sh("pkg query %n 2>/dev/null").lines().filter(x -> x.startsWith("py" + old + "-")).count();
-            job.write(I18n.tr("server.um.runPassaggioPython.17", java.util.Map.of("vecchio", String.valueOf(old), "rimasti", String.valueOf(left))));
+            job.write(I18n.tr("server.um.runPythonTransition.17", java.util.Map.of("old", String.valueOf(old), "left", String.valueOf(left))));
 
             if (servicesOk && commandsOk) {
                 job.status = "completed";
                 job.write("");
-                job.write(I18n.tr("server.um.runPassaggioPython.18", java.util.Map.of("nuovo", String.valueOf(fresh))));
-                job.write(I18n.tr("server.um.runPassaggioPython.19", java.util.Map.of("bk", String.valueOf(bk))));
+                job.write(I18n.tr("server.um.runPythonTransition.18", java.util.Map.of("newer", String.valueOf(fresh))));
+                job.write(I18n.tr("server.um.runPythonTransition.19", java.util.Map.of("backup", String.valueOf(bk))));
             } else {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runPassaggioPython.20", java.util.Map.of("bk", String.valueOf(bk)));
+                job.errorMessage = I18n.tr("server.um.runPythonTransition.20", java.util.Map.of("backup", String.valueOf(bk)));
             }
         } catch (Exception e) {
             job.status = "error";
@@ -5390,11 +5390,11 @@ public final class UpdateManager {
                 job.write("");
                 job.write(failed.isEmpty()
                         ? I18n.tr("server.um.x.reprotectAll", java.util.Map.of("n", String.valueOf(done)))
-                        : I18n.tr("server.um.x.reprotectSome", java.util.Map.of("elenco", String.valueOf(String.join(", ", failed)))));
+                        : I18n.tr("server.um.x.reprotectSome", java.util.Map.of("list", String.valueOf(String.join(", ", failed)))));
                 if (failed.isEmpty()) clearState();
-                else job.write(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
+                else job.write(I18n.tr("server.um.runPythonTransition.21", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
                 if (toRelock.isEmpty() && !unlockedPackages.isEmpty()) {
-                    job.write(I18n.tr("server.um.x.unlockedNotReplaced", java.util.Map.of("elenco", String.valueOf(String.join(", ", unlockedPackages)))));
+                    job.write(I18n.tr("server.um.x.unlockedNotReplaced", java.util.Map.of("list", String.valueOf(String.join(", ", unlockedPackages)))));
                 }
             }
             job.finishedAt = System.currentTimeMillis();
@@ -5440,7 +5440,7 @@ public final class UpdateManager {
         boolean allLocked = installed > 0 && protectedNames == installed;
         steps.put(repeatable(step("fase-protezione", "phase", I18n.tr("server.um.x.stepProtect"),
                 allLocked ? "done" : "todo",
-                I18n.tr("server.um.maintenancePlan.1", java.util.Map.of("protetti", String.valueOf(protectedNames), "installati", String.valueOf(installed))),
+                I18n.tr("server.um.maintenancePlan.1", java.util.Map.of("lockedNames", String.valueOf(protectedNames), "installedNames", String.valueOf(installed))),
                 I18n.tr("server.um.maintenancePlan.2"),
                 allLocked ? null : new JSONObject().put("type", "packages_lock_all")),
                 new JSONObject().put("type", "packages_lock_all")));
@@ -5454,7 +5454,7 @@ public final class UpdateManager {
         steps.put(step("fase-nonprotetti", "phase", I18n.tr("server.um.maintenancePlan.3"),
                 updatedContext ? "done" : "todo",
                 updatedContext ? I18n.tr("server.um.maintenancePlan.4")
-                        : I18n.tr("server.um.maintenancePlan.5", java.util.Map.of("daAggiornare", String.valueOf(toUpdate), "daInstallare", String.valueOf(toInstall))),
+                        : I18n.tr("server.um.maintenancePlan.5", java.util.Map.of("toUpdate", String.valueOf(toUpdate), "toInstall", String.valueOf(toInstall))),
                 I18n.tr("server.um.maintenancePlan.6"),
                 updatedContext ? null : new JSONObject().put("type", "updates_apply")));
 
@@ -5495,8 +5495,8 @@ public final class UpdateManager {
             boolean wait = v.has("warning") && "wait".equals(v.getJSONObject("warning").getString("level"));
             java.util.List<String> mem = familyMembers(name);
             String title = mem.size() > 1
-                    ? I18n.tr("server.um.x.updLinkedCve", java.util.Map.of("nome", String.valueOf(name), "n", String.valueOf((mem.size() - 1)), "cve", String.valueOf(v.getInt("cve"))))
-                    : I18n.tr("server.um.x.updCve", java.util.Map.of("nome", String.valueOf(name), "cve", String.valueOf(v.getInt("cve"))));
+                    ? I18n.tr("server.um.x.updLinkedCve", java.util.Map.of("name", String.valueOf(name), "n", String.valueOf((mem.size() - 1)), "cve", String.valueOf(v.getInt("cve"))))
+                    : I18n.tr("server.um.x.updCve", java.util.Map.of("name", String.valueOf(name), "cve", String.valueOf(v.getInt("cve"))));
             steps.put(step("pkg-" + name, "package", title,
                     wait ? "manual" : "todo",
                     name + " " + v.getString("cur") + " -> " + v.getString("av")
@@ -5520,7 +5520,7 @@ public final class UpdateManager {
                         I18n.tr("server.um.maintenancePlan.12"), null));
             } else if (!available84.isEmpty()) {
                 steps.put(step("fase-mysql84", "phase", I18n.tr("server.um.maintenancePlan.10"), "manual",
-                        I18n.tr("server.um.maintenancePlan.13", java.util.Map.of("srvMysql", String.valueOf(srvMysql), "disp84", String.valueOf(available84))),
+                        I18n.tr("server.um.maintenancePlan.13", java.util.Map.of("srvMysql", String.valueOf(srvMysql), "available84", String.valueOf(available84))),
                         I18n.tr("server.um.maintenancePlan.14"), null));
             }
         }
@@ -5549,18 +5549,18 @@ public final class UpdateManager {
             if (conflict != null) {
                 java.util.List<String> memC = familyMembers(name);
                 steps.put(step("pkg-" + name, "package", memC.size() > 1
-                            ? I18n.tr("server.um.maintenancePlan.17", java.util.Map.of("nome", String.valueOf(name), "p", String.valueOf(memC.size() - 1)))
-                            : I18n.tr("server.um.maintenancePlan.18", java.util.Map.of("nome", String.valueOf(name))),
+                            ? I18n.tr("server.um.maintenancePlan.17", java.util.Map.of("name", String.valueOf(name), "p", String.valueOf(memC.size() - 1)))
+                            : I18n.tr("server.um.maintenancePlan.18", java.util.Map.of("name", String.valueOf(name))),
                         "manual",
-                        I18n.tr("server.um.maintenancePlan.15", java.util.Map.of("nome", String.valueOf(name), "cur", String.valueOf(cur), "av", String.valueOf(av))),
-                        I18n.tr("server.um.maintenancePlan.16", java.util.Map.of("confl", String.valueOf(conflict))),
+                        I18n.tr("server.um.maintenancePlan.15", java.util.Map.of("name", String.valueOf(name), "cur", String.valueOf(cur), "av", String.valueOf(av))),
+                        I18n.tr("server.um.maintenancePlan.16", java.util.Map.of("conflict", String.valueOf(conflict))),
                         null));
                 continue;
             }
             java.util.List<String> mem = familyMembers(name);
             String title = mem.size() > 1
-                    ? I18n.tr("server.um.maintenancePlan.17", java.util.Map.of("nome", String.valueOf(name), "p", String.valueOf((mem.size() - 1))))
-                    : I18n.tr("server.um.maintenancePlan.18", java.util.Map.of("nome", String.valueOf(name)));
+                    ? I18n.tr("server.um.maintenancePlan.17", java.util.Map.of("name", String.valueOf(name), "p", String.valueOf((mem.size() - 1))))
+                    : I18n.tr("server.um.maintenancePlan.18", java.util.Map.of("name", String.valueOf(name)));
             steps.put(step("pkg-" + name, "package", title, wait ? "manual" : "todo",
                     name + " " + cur + " -> " + av
                         + (major ? I18n.tr("server.um.maintenancePlan.7") : I18n.tr("server.um.maintenancePlan.8"))
@@ -5594,7 +5594,7 @@ public final class UpdateManager {
                     new JSONObject().put("type", "rspamd_clean_cache")));
         } else if (rspamdPresent && rspamdFolder) {
             steps.put(step("fase-rspamd-cache", "phase", I18n.tr("server.um.maintenancePlan.26"), "done",
-                    I18n.tr("server.um.maintenancePlan.27", java.util.Map.of("fileRspamd", String.valueOf(fileRspamd))),
+                    I18n.tr("server.um.maintenancePlan.27", java.util.Map.of("rspamdFile", String.valueOf(fileRspamd))),
                     I18n.tr("server.um.maintenancePlan.28"), null));
         }
 
@@ -5642,7 +5642,7 @@ public final class UpdateManager {
                     rcUnknown ? I18n.tr("server.um.x.rcRepoUnknown", java.util.Map.of("pkg", String.valueOf(rcPkg), "cur", String.valueOf(cur.isEmpty() ? I18n.tr("server.um.x.unknownF") : cur)))
                         : !daFareRc ? I18n.tr("server.um.x.rcLatest", java.util.Map.of("pkg", String.valueOf(rcPkg), "cur", String.valueOf(cur)))
                         : (av.equals(cur)
-                           ? I18n.tr("server.um.maintenancePlan.33", java.util.Map.of("rcPkg", String.valueOf(rcPkg), "cur", String.valueOf(cur), "radiceStorta", String.valueOf(crookedRoot)))
+                           ? I18n.tr("server.um.maintenancePlan.33", java.util.Map.of("rcPkg", String.valueOf(rcPkg), "cur", String.valueOf(cur), "crookedRoot", String.valueOf(crookedRoot)))
                            : rcPkg + " " + cur + " -> " + av
                              + (crookedRoot != null ? I18n.tr("server.um.maintenancePlan.34") : "")),
                     daFareRc
@@ -5660,13 +5660,13 @@ public final class UpdateManager {
             String list = String.join(", ", pythonToMove(pyOld.iterator().next()));
             steps.put(step("fase-python", "phase", I18n.tr("server.um.maintenancePlan.37"),
                     "manual",
-                    I18n.tr("server.um.x.pyInstalled", java.util.Map.of("vecchie", String.valueOf(String.join("/py", pyOld)), "nuovo", String.valueOf(pyNew)))
+                    I18n.tr("server.um.x.pyInstalled", java.util.Map.of("oldOnes", String.valueOf(String.join("/py", pyOld)), "newer", String.valueOf(pyNew)))
                     + (list.isEmpty() ? "." : ": " + list),
-                    I18n.tr("server.um.maintenancePlan.38", java.util.Map.of("p", String.valueOf(pyOld.iterator().next()), "pyNuovo", String.valueOf(pyNew))), null));
+                    I18n.tr("server.um.maintenancePlan.38", java.util.Map.of("p", String.valueOf(pyOld.iterator().next()), "pyNew", String.valueOf(pyNew))), null));
         } else {
             steps.put(step("fase-python", "phase", I18n.tr("server.um.maintenancePlan.37"),
-                    "done", I18n.tr("server.um.maintenancePlan.39", java.util.Map.of("pyNuovo", String.valueOf(pyNew))),
-                    I18n.tr("server.um.runPassaggioPython.2"), null));
+                    "done", I18n.tr("server.um.maintenancePlan.39", java.util.Map.of("pyNew", String.valueOf(pyNew))),
+                    I18n.tr("server.um.runPythonTransition.2"), null));
         }
 
         // JVM: il pannello ci gira sopra, quindi non puo' aggiornarla restando acceso.
@@ -5772,8 +5772,8 @@ public final class UpdateManager {
      * un'operazione che non puo' riuscire.
      */
     private static final String[][] FAMILIES = {
-        {"^mysql[0-9]+-(server|client)$",  "server.um.passo.1"},
-        {"^php[0-9]+(-.+)?$",              "server.um.passo.2"},
+        {"^mysql[0-9]+-(server|client)$",  "server.um.step.1"},
+        {"^php[0-9]+(-.+)?$",              "server.um.step.2"},
         {"^dovecot[0-9]*(-.+)?$",          "server.um.family.dovecot"},
     };
 
@@ -6030,8 +6030,8 @@ public final class UpdateManager {
         java.util.List<String> messages = messagesAskingForAction(pkgOutput);
         if (messages.isEmpty()) return;
         job.write("");
-        job.write(I18n.tr("server.um.runAggiornamentoGuidato.33"));
-        job.write(I18n.tr("server.um.runAggiornamentoGuidato.34"));
+        job.write(I18n.tr("server.um.runGuidedUpdate.33"));
+        job.write(I18n.tr("server.um.runGuidedUpdate.34"));
         for (String m : messages) {
             for (String l : m.split("\n")) if (!l.trim().isEmpty()) job.write("  " + l);
             job.write("");
@@ -6069,7 +6069,7 @@ public final class UpdateManager {
      * controllava niente: un'avvertenza che non verifica e' solo una frase.
      */
     private static final String[][] TEST_AFTER = {
-        {"redis", "redis-cli DBSIZE 2>/dev/null", "server.um.provaConfigDi.1"},
+        {"redis", "redis-cli DBSIZE 2>/dev/null", "server.um.testConfigOf.1"},
     };
 
     private static String[] testAfterOf(String service) {
@@ -6092,7 +6092,7 @@ public final class UpdateManager {
      */
     public static JSONObject packagePreflight(String name) {
         JSONObject r = new JSONObject();
-        if (!isValidName(name)) return r.put("success", false).put("error", I18n.tr("server.um.cambiaProtezioni.1"));
+        if (!isValidName(name)) return r.put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
         JSONArray checks = new JSONArray();
         boolean block = false;
 
@@ -6104,7 +6104,7 @@ public final class UpdateManager {
         String version = sh("pkg query %v " + name + " 2>/dev/null", 20);
         if (version.isEmpty()) {
             addCheck(checks, "installato", I18n.tr("server.um.packagePreflight.1"), "block",
-                    I18n.tr("server.um.packagePreflight.2", java.util.Map.of("nome", String.valueOf(name))));
+                    I18n.tr("server.um.packagePreflight.2", java.util.Map.of("name", String.valueOf(name))));
             block = true;
         } else {
             addCheck(checks, "installato", I18n.tr("server.um.packagePreflight.1"), "ok", name + " " + version);
@@ -6154,7 +6154,7 @@ public final class UpdateManager {
                     }
                 }
                 addCheck(checks, "mysqlfamiglia", I18n.tr("server.um.packagePreflight.8"), "block",
-                        I18n.tr("server.um.x.mysqlFamilyBlock", java.util.Map.of("chi", String.valueOf(chi.length() > 0 ? chi.toString() : name), "richiesto", String.valueOf(required), "installato", String.valueOf(mysqlInstalled), "versione", String.valueOf(required.replace("-client", "")))));
+                        I18n.tr("server.um.x.mysqlFamilyBlock", java.util.Map.of("chi", String.valueOf(chi.length() > 0 ? chi.toString() : name), "required", String.valueOf(required), "installedValue", String.valueOf(mysqlInstalled), "version", String.valueOf(required.replace("-client", "")))));
                 block = true;
                 r.put("mysqlFamilyConflict", required);
             }
@@ -6206,19 +6206,19 @@ public final class UpdateManager {
                 services.length() == 0
                     ? (foundDeps.length() == 0
                        ? I18n.tr("server.um.x.noSvcZero")
-                       : I18n.tr("server.um.x.noSvcSome", java.util.Map.of("n", String.valueOf(foundDeps.length()), "elenco", String.valueOf(String.join(", ", jsonArrayToList(foundDeps))))))
+                       : I18n.tr("server.um.x.noSvcSome", java.util.Map.of("n", String.valueOf(foundDeps.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(foundDeps))))))
                     : I18n.tr("server.um.packagePreflight.11", java.util.Map.of("length", String.valueOf(services.length()))));
 
         if (Files.exists(Paths.get(MAINTENANCE_STATE))) {
             addCheck(checks, "stato", I18n.tr("server.um.packagePreflight.12"), "block",
-                    I18n.tr("server.um.packagePreflight.13", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
+                    I18n.tr("server.um.packagePreflight.13", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
             block = true;
         }
 
         r.put("family", new JSONArray(family));
         if (family.size() > 1) {
             addCheck(checks, "famiglia", I18n.tr("server.um.packagePreflight.14"), "review",
-                    I18n.tr("server.um.x.familyTogether", java.util.Map.of("n", String.valueOf(family.size()), "reason", String.valueOf(familyReason(name)), "elenco", String.valueOf(String.join(", ", family)))));
+                    I18n.tr("server.um.x.familyTogether", java.util.Map.of("n", String.valueOf(family.size()), "reason", String.valueOf(familyReason(name)), "list", String.valueOf(String.join(", ", family)))));
         }
 
         String lockList = sh("pkg lock -l 2>/dev/null");
@@ -6256,7 +6256,7 @@ public final class UpdateManager {
             for (int i = 0; i < imp.length(); i++) {
                 JSONObject x = imp.getJSONObject(i);
                 addCheck(checks, "piano-impedimento", I18n.tr("server.um.packagePreflight.16"), "block",
-                        I18n.tr("server.um.x.blockedBy", java.util.Map.of("nome", String.valueOf(x.getString("name")), "reason", String.valueOf(x.getString("reason")))));
+                        I18n.tr("server.um.x.blockedBy", java.util.Map.of("name", String.valueOf(x.getString("name")), "reason", String.valueOf(x.getString("reason")))));
                 block = true;
             }
             JSONArray err = plan.getJSONArray("pkgErrors");
@@ -6267,34 +6267,34 @@ public final class UpdateManager {
             }
             if (!removed.isEmpty()) {
                 addCheck(checks, "piano-rimozioni", I18n.tr("server.um.packagePreflight.18"), "block",
-                        I18n.tr("server.um.x.planRemoves", java.util.Map.of("elenco", String.valueOf(String.join(", ", removed)))));
+                        I18n.tr("server.um.x.planRemoves", java.util.Map.of("list", String.valueOf(String.join(", ", removed)))));
                 block = true;
             }
             if (!downgrades.isEmpty()) {
                 addCheck(checks, "piano-retrocede", I18n.tr("server.um.packagePreflight.19"), "block",
-                        I18n.tr("server.um.x.planDowngrades", java.util.Map.of("elenco", String.valueOf(String.join(", ", downgrades)))));
+                        I18n.tr("server.um.x.planDowngrades", java.util.Map.of("list", String.valueOf(String.join(", ", downgrades)))));
                 block = true;
             }
             if (jsonArrayToList(plan.getJSONArray("unchangedPackages")).contains(name)) {
                 addCheck(checks, "piano-fermo", I18n.tr("server.um.packagePreflight.20"), "block",
-                        I18n.tr("server.um.packagePreflight.21", java.util.Map.of("nome", String.valueOf(name))));
+                        I18n.tr("server.um.packagePreflight.21", java.util.Map.of("name", String.valueOf(name))));
                 block = true;
             }
             if (!stillVulnerable.isEmpty()) {
                 addCheck(checks, "piano-vulnerabili", I18n.tr("server.um.packagePreflight.22"), "review",
-                        I18n.tr("server.um.x.stillVulnerable", java.util.Map.of("elenco", String.valueOf(String.join(", ", stillVulnerable)))));
+                        I18n.tr("server.um.x.stillVulnerable", java.util.Map.of("list", String.valueOf(String.join(", ", stillVulnerable)))));
             }
             java.util.List<String> extra = new ArrayList<>(jsonArrayToList(plan.getJSONArray("unlockedPackages")));
             extra.removeAll(family);
             if (!extra.isEmpty()) {
                 addCheck(checks, "piano-dipendenze", I18n.tr("server.um.packagePreflight.23"), "review",
-                        I18n.tr("server.um.x.depsProtected", java.util.Map.of("elenco", String.valueOf(String.join(", ", extra)))));
+                        I18n.tr("server.um.x.depsProtected", java.util.Map.of("list", String.valueOf(String.join(", ", extra)))));
             }
             if (!block) {
                 addCheck(checks, "piano", I18n.tr("server.um.packagePreflight.15"), "ok",
                         (changes.length() == 1
-                         ? I18n.tr("server.um.x.pkgChanges.one", java.util.Map.of("righe", String.valueOf(String.join("; ", lines))))
-                         : I18n.tr("server.um.x.pkgChanges.other", java.util.Map.of("n", String.valueOf(changes.length()), "righe", String.valueOf(String.join("; ", lines))))));
+                         ? I18n.tr("server.um.x.pkgChanges.one", java.util.Map.of("lines", String.valueOf(String.join("; ", lines))))
+                         : I18n.tr("server.um.x.pkgChanges.other", java.util.Map.of("n", String.valueOf(changes.length()), "lines", String.valueOf(String.join("; ", lines))))));
             }
             // I servizi da riavviare si calcolano su tutto cio' che il piano cambia, non solo
             // sulla famiglia: una dipendenza come openssl tiene in memoria i suoi utenti.
@@ -6310,12 +6310,12 @@ public final class UpdateManager {
                     services.put(new JSONObject().put("name", real)
                             .put("running", ok("service " + real + " status", 15))
                             .put("pid", servicePid(real)));
-                    forDependencies.add(real + " " + I18n.tr("server.um.x.forPkg", java.util.Map.of("nome", String.valueOf(c.getString("name")))));
+                    forDependencies.add(real + " " + I18n.tr("server.um.x.forPkg", java.util.Map.of("name", String.valueOf(c.getString("name")))));
                 }
             }
             if (!forDependencies.isEmpty()) {
                 addCheck(checks, "piano-servizi", I18n.tr("server.um.packagePreflight.24"), "review",
-                        I18n.tr("server.um.x.depsServices", java.util.Map.of("elenco", String.valueOf(String.join(", ", forDependencies)))));
+                        I18n.tr("server.um.x.depsServices", java.util.Map.of("list", String.valueOf(String.join(", ", forDependencies)))));
             }
         }
         r.put("plan", planForCard(plan)).put("signature", plan.optString("signature", ""));
@@ -6325,7 +6325,7 @@ public final class UpdateManager {
         addCheck(checks, "protezione", I18n.tr("server.um.packagePreflight.25"), "ok",
                 toUnlock.isEmpty()
                     ? I18n.tr("server.um.packagePreflight.26")
-                    : I18n.tr("server.um.x.willUnlock", java.util.Map.of("elenco", String.valueOf(String.join(", ", toUnlock)))));
+                    : I18n.tr("server.um.x.willUnlock", java.util.Map.of("list", String.valueOf(String.join(", ", toUnlock)))));
 
         // Se fra quelli da sbloccare c'e' un pacchetto che nessuno ha chiesto, il perche' va
         // detto: sta li' perche' altrimenti pkg installerebbe un altro membro della sua
@@ -6335,9 +6335,9 @@ public final class UpdateManager {
             JSONObject f = family2.getJSONObject(i);
             addCheck(checks, "famigliasbloccata", I18n.tr("server.um.x.familyUnlockedLabel"), "review",
                     I18n.tr("server.um.x.familyUnlockedWhy", java.util.Map.of(
-                            "gemello", String.valueOf(f.optString("installed")),
-                            "versione", String.valueOf(f.optString("version")),
-                            "nuovo", String.valueOf(f.optString("wouldInstall")))));
+                            "twin", String.valueOf(f.optString("installed")),
+                            "version", String.valueOf(f.optString("version")),
+                            "newer", String.valueOf(f.optString("wouldInstall")))));
         }
 
         r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
@@ -6388,7 +6388,7 @@ public final class UpdateManager {
      *                       piano che nessuno ha visto.
      */
     public static JSONObject startGuidedUpdate(String name, String approvedSignature) {
-        if (!isValidName(name)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.cambiaProtezioni.1"));
+        if (!isValidName(name)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
         if (approvedSignature == null || !approvedSignature.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.um.startGuidedUpdate.1"));
@@ -6397,7 +6397,7 @@ public final class UpdateManager {
         // Il turno si prende qui, prima dei controlli e di ogni sblocco: due aggiornamenti
         // approvati da due schede non possono partire insieme.
         final String pkgName2 = name;
-        return startOnTurn(id, j, I18n.tr("server.um.startGuidedUpdate.2", java.util.Map.of("nome", String.valueOf(name))), "guided-update",
+        return startOnTurn(id, j, I18n.tr("server.um.startGuidedUpdate.2", java.util.Map.of("name", String.valueOf(name))), "guided-update",
                 () -> runGuidedUpdate(j, pkgName2, approvedSignature));
     }
 
@@ -6433,13 +6433,13 @@ public final class UpdateManager {
         java.util.List<String> heldRestarts = new ArrayList<>();
         try {
             job.advance(1, TOT);
-            job.write(I18n.tr("server.um.runAggiornamentoGuidato.1", java.util.Map.of("nome", String.valueOf(name))));
+            job.write(I18n.tr("server.um.runGuidedUpdate.1", java.util.Map.of("name", String.valueOf(name))));
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.1", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.1", java.util.Map.of("total", String.valueOf(TOT))));
             JSONObject pf = packagePreflight(name);
             if (!pf.optBoolean("canProceed", false)) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMigrazione84.3");
+                job.errorMessage = I18n.tr("server.um.runMigration84.3");
                 JSONArray ck = pf.optJSONArray("checks");
                 for (int i = 0; ck != null && i < ck.length(); i++) {
                     JSONObject c = ck.getJSONObject(i);
@@ -6448,7 +6448,7 @@ public final class UpdateManager {
                                 + c.optString("label") + ": " + c.optString("detail"));
                     }
                 }
-                job.write(I18n.tr("server.um.runMigrazione84.4"));
+                job.write(I18n.tr("server.um.runMigration84.4"));
                 return;
             }
             String versionBefore = pf.optString("current", "");
@@ -6463,9 +6463,9 @@ public final class UpdateManager {
             String currentSignature = pf.optString("signature", "");
             if (!currentSignature.equals(approvedSignature)) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.2");
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.3", java.util.Map.of("firmaApprovata", String.valueOf(approvedSignature), "firmaOra", String.valueOf(currentSignature))));
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.4"));
+                job.errorMessage = I18n.tr("server.um.runGuidedUpdate.2");
+                job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature), "currentSignature", String.valueOf(currentSignature))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.4"));
                 return;
             }
             job.write("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(currentSignature))));
@@ -6489,15 +6489,15 @@ public final class UpdateManager {
             }
             job.write("  " + name + " " + versionBefore + " -> " + wait);
             if (pkgFamily.size() > 1) {
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.5", java.util.Map.of("p", String.valueOf((pkgFamily.size() - 1)), "p2", String.valueOf(familyReason(name)))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.5", java.util.Map.of("p", String.valueOf((pkgFamily.size() - 1)), "p2", String.valueOf(familyReason(name)))));
             }
-            job.write("  " + I18n.tr("server.um.x.svcInvolvedList", java.util.Map.of("elenco", String.valueOf(services.isEmpty() ? I18n.tr("server.um.x.none") : String.join(", ", services)))));
+            job.write("  " + I18n.tr("server.um.x.svcInvolvedList", java.util.Map.of("list", String.valueOf(services.isEmpty() ? I18n.tr("server.um.x.none") : String.join(", ", services)))));
 
             job.advance(2, TOT);
             job.write("");
             job.write("[2/" + TOT + "] " + I18n.tr("server.um.x.tempUnlock"));
             if (protectedNames.isEmpty()) {
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.6"));
+                job.write(I18n.tr("server.um.runGuidedUpdate.6"));
             } else {
                 // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il
                 // ripristino all'avvio sa cosa riproteggere. Se non si scrive, non si sblocca
@@ -6507,21 +6507,21 @@ public final class UpdateManager {
                 String stateError = PackageQueue.writeState(protectedNames);
                 if (stateError != null)
                     throw new IllegalStateException("I could not save the list for the restore, so I did not unlock anything: " + stateError);
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.7", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.7", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
                 // Da riproteggere tutti, anche uno sblocco fallito o scaduto a meta': pkg lock su un
                 // pacchetto gia' protetto non cambia niente, e cosi' l'elenco su disco si chiude
                 // solo quando tutti risultano protetti.
                 toRelock2.addAll(protectedNames);
                 for (String m : protectedNames) {
                     boolean u = ok("pkg unlock -y " + m, 30);
-                    job.write("    " + m + ": " + (u ? I18n.tr("server.um.x.unlocked") : I18n.tr("server.um.runAggiornamentoGuidato.8")));
+                    job.write("    " + m + ": " + (u ? I18n.tr("server.um.x.unlocked") : I18n.tr("server.um.runGuidedUpdate.8")));
                     if (!u) throw new IllegalStateException("I could not unlock " + m);
                 }
             }
 
             job.advance(3, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoGuidato.9", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runGuidedUpdate.9", java.util.Map.of("total", String.valueOf(TOT))));
             StringBuilder list = new StringBuilder();
             for (String m : pkgFamily) if (isValidName(m)) list.append(' ').append(m);
 
@@ -6548,7 +6548,7 @@ public final class UpdateManager {
             // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
             // da sole e fanno il resto; se questa si e' fermata li', la si rilancia una volta, uguale.
             if (code == 4) {
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.10"));
+                job.write(I18n.tr("server.um.runGuidedUpdate.10"));
                 code = runLogged(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, captured);
             }
 
@@ -6568,38 +6568,38 @@ public final class UpdateManager {
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
 
             String versionAfter = sh("pkg query %v " + name + " 2>/dev/null", 20);
-            job.write(I18n.tr("server.um.runAggiornamentoGuidato.11", java.util.Map.of("versioneDopo", String.valueOf(versionAfter))));
+            job.write(I18n.tr("server.um.runGuidedUpdate.11", java.util.Map.of("versionAfter", String.valueOf(versionAfter))));
             if (versionAfter.equals(versionBefore)) {
                 throw new IllegalStateException("the version did not change: the update had no effect");
             }
             // Ogni riga del piano, controllata: non "pkg e' uscito con 0", ma "ogni pacchetto e'
             // alla versione che il piano diceva".
-            job.write(I18n.tr("server.um.runAggiornamentoGuidato.12"));
+            job.write(I18n.tr("server.um.runGuidedUpdate.12"));
             JSONArray verification = PackagePlan.verifyOutcome(plan);
             for (int i = 0; i < verification.length(); i++) {
                 JSONObject v = verification.getJSONObject(i);
-                job.write("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("nome", String.valueOf(v.getString("name")), "atteso", String.valueOf(v.getString("expected")), "trovato", String.valueOf(v.getString("found")))));
+                job.write("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("name", String.valueOf(v.getString("name")), "expected", String.valueOf(v.getString("expected")), "found", String.valueOf(v.getString("found")))));
                 if (!v.getBoolean("ok")) planNotFollowed = true;
             }
-            if (planNotFollowed) job.write(I18n.tr("server.um.runAggiornamentoGuidato.13"));
+            if (planNotFollowed) job.write(I18n.tr("server.um.runGuidedUpdate.13"));
 
 
             job.advance(4, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoGuidato.14", java.util.Map.of("tOT", String.valueOf(TOT), "nome", String.valueOf(name))));
-            job.write(I18n.tr("server.um.runAggiornamentoGuidato.15"));
+            job.write(I18n.tr("server.um.runGuidedUpdate.14", java.util.Map.of("total", String.valueOf(TOT), "name", String.valueOf(name))));
+            job.write(I18n.tr("server.um.runGuidedUpdate.15"));
             boolean servicesProblem = false;
             if (services.isEmpty()) {
                 JSONArray rd = pf.optJSONArray("reverseDeps");
                 job.write("  " + (rd == null || rd.length() == 0
                         ? I18n.tr("server.um.x.noRestartZero")
-                        : I18n.tr("server.um.x.noRestartSome", java.util.Map.of("n", String.valueOf(rd.length()), "elenco", String.valueOf(String.join(", ", jsonArrayToList(rd)))))));
+                        : I18n.tr("server.um.x.noRestartSome", java.util.Map.of("n", String.valueOf(rd.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(rd)))))));
                 if (name.matches(SHARED_LIBRARIES)) {
-                    job.write(I18n.tr("server.um.runAggiornamentoGuidato.16", java.util.Map.of("nome", String.valueOf(name))));
-                    job.write(I18n.tr("server.um.runAggiornamentoGuidato.17"));
-                    job.write(I18n.tr("server.um.runAggiornamentoGuidato.18"));
-                    job.write(I18n.tr("server.um.runAggiornamentoGuidato.19"));
-                    job.write(I18n.tr("server.um.runAggiornamentoGuidato.20"));
+                    job.write(I18n.tr("server.um.runGuidedUpdate.16", java.util.Map.of("name", String.valueOf(name))));
+                    job.write(I18n.tr("server.um.runGuidedUpdate.17"));
+                    job.write(I18n.tr("server.um.runGuidedUpdate.18"));
+                    job.write(I18n.tr("server.um.runGuidedUpdate.19"));
+                    job.write(I18n.tr("server.um.runGuidedUpdate.20"));
                     manualRecheck = true;
                 }
             }
@@ -6623,7 +6623,7 @@ public final class UpdateManager {
                     continue;
                 }
                 if (!Boolean.TRUE.equals(activeBefore.get(s))) {
-                    job.write(I18n.tr("server.um.runAggiornamentoGuidato.21", java.util.Map.of("s", String.valueOf(s))));
+                    job.write(I18n.tr("server.um.runGuidedUpdate.21", java.util.Map.of("s", String.valueOf(s))));
                     continue;
                 }
                 // Si chiede al servizio se accetta la propria configurazione PRIMA di
@@ -6633,13 +6633,13 @@ public final class UpdateManager {
                 if (test != null) {
                     Shell.Result pr = Shell.runShell(Duration.ofSeconds(60), test + " 2>&1");
                     if (!pr.success()) {
-                        job.write(I18n.tr("server.um.runAggiornamentoGuidato.22", java.util.Map.of("s", String.valueOf(s))));
+                        job.write(I18n.tr("server.um.runGuidedUpdate.22", java.util.Map.of("s", String.valueOf(s))));
                         for (String l : pr.outputTrim().split("\n")) if (!l.trim().isEmpty()) job.write("      " + l);
-                        job.write(I18n.tr("server.um.runAggiornamentoGuidato.23"));
+                        job.write(I18n.tr("server.um.runGuidedUpdate.23"));
                         servicesProblem = true;
                         continue;
                     }
-                    job.write(I18n.tr("server.um.runAggiornamentoGuidato.24", java.util.Map.of("s", String.valueOf(s))));
+                    job.write(I18n.tr("server.um.runGuidedUpdate.24", java.util.Map.of("s", String.valueOf(s))));
                 }
                 boolean r1 = ok("service " + s + " restart", 120);
                 boolean active = ok("service " + s + " status", 20);
@@ -6648,11 +6648,11 @@ public final class UpdateManager {
                 String note = "";
                 if (!pidP.isEmpty() && !pidAfter.isEmpty()) {
                     note = pidP.equals(pidAfter)
-                        ? I18n.tr("server.um.runAggiornamentoGuidato.25", java.util.Map.of("pidDopo", String.valueOf(pidAfter)))
+                        ? I18n.tr("server.um.runGuidedUpdate.25", java.util.Map.of("pidAfter", String.valueOf(pidAfter)))
                         : "  (pid " + pidP + " -> " + pidAfter + ")";
                     if (pidP.equals(pidAfter)) servicesProblem = true;
                 }
-                job.write("    " + s + ": " + (r1 ? I18n.tr("server.um.x.restarted") : I18n.tr("server.um.runAggiornamentoGuidato.26"))
+                job.write("    " + s + ": " + (r1 ? I18n.tr("server.um.x.restarted") : I18n.tr("server.um.runGuidedUpdate.26"))
                         + ", " + (active ? I18n.tr("server.um.x.nowRunning") : I18n.tr("server.um.x.nowNotRunning")) + note);
                 if (!active) servicesProblem = true;
 
@@ -6661,10 +6661,10 @@ public final class UpdateManager {
                 if (after != null && active) {
                     String out = sh(after[1], 30).trim();
                     long n = number(out);
-                    job.write("      " + I18n.tr(after[2]) + ": " + (out.isEmpty() ? I18n.tr("server.um.runAggiornamentoGuidato.27") : String.valueOf(n)));
+                    job.write("      " + I18n.tr(after[2]) + ": " + (out.isEmpty() ? I18n.tr("server.um.runGuidedUpdate.27") : String.valueOf(n)));
                     if (n == 0) {
-                        job.write(I18n.tr("server.um.runAggiornamentoGuidato.28"));
-                        job.write(I18n.tr("server.um.runAggiornamentoGuidato.29"));
+                        job.write(I18n.tr("server.um.runGuidedUpdate.28"));
+                        job.write(I18n.tr("server.um.runGuidedUpdate.29"));
                         job.write("      " + I18n.tr("server.um.x.rsGreyLimits"));
                         servicesProblem = true;
                     }
@@ -6673,7 +6673,7 @@ public final class UpdateManager {
 
             job.advance(5, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoGuidato.30", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runGuidedUpdate.30", java.util.Map.of("total", String.valueOf(TOT))));
             // Sulla versione NUOVA, quella appena installata: chiedere col solo nome
             // risponderebbe a un'altra domanda (vedi auditReport).
             JSONObject reportAfter = auditReport(name, versionAfter);
@@ -6682,17 +6682,17 @@ public final class UpdateManager {
                 job.write("  " + reportAfter.optString("error"));
                 job.write("  " + I18n.tr("server.um.x.auditUncertain"));
             } else if (reportAfter.optInt("problems") == 0) {
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.31", java.util.Map.of("nome", String.valueOf(name))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.31", java.util.Map.of("name", String.valueOf(name))));
             } else {
-                job.write("  " + I18n.tr("server.um.x.cvesLeft", java.util.Map.of("n", String.valueOf(reportAfter.optInt("problems")), "nome", String.valueOf(name), "d", String.valueOf(reportAfter.getString("description")))));
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.32"));
+                job.write("  " + I18n.tr("server.um.x.cvesLeft", java.util.Map.of("n", String.valueOf(reportAfter.optInt("problems")), "name", String.valueOf(name), "d", String.valueOf(reportAfter.getString("description")))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.32"));
             }
 
             writeActionMessages(job, captured.toString());
 
             job.advance(6, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runAggiornamentoGuidato.35", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runGuidedUpdate.35", java.util.Map.of("total", String.valueOf(TOT))));
             boolean fallen = fallenServices(job, servicesBefore);
             sideEffects.checkListening(job);
             java.util.List<String> effects = sideEffects.problems();
@@ -6706,14 +6706,14 @@ public final class UpdateManager {
                 // insieme, quindi si dicono entrambi.
                 job.status = "error";
                 java.util.List<String> problems = new ArrayList<>();
-                if (planNotFollowed) problems.add(I18n.tr("server.um.runAggiornamentoGuidato.36"));
+                if (planNotFollowed) problems.add(I18n.tr("server.um.runGuidedUpdate.36"));
                 if (!outsidePlan.isEmpty()) problems.add(divergenceMessage(outsidePlan));
                 problems.addAll(effects);
                 job.errorMessage = String.join(" ", problems);
             } else if (servicesProblem || fallen) {
                 job.status = "error";
                 java.util.List<String> problems = new ArrayList<>();
-                problems.add(I18n.tr("server.um.runAggiornamentoGuidato.37"));
+                problems.add(I18n.tr("server.um.runGuidedUpdate.37"));
                 problems.addAll(effects);
                 job.errorMessage = String.join(" ", problems);
             } else if (!effects.isEmpty()) {
@@ -6727,13 +6727,13 @@ public final class UpdateManager {
                 // sarebbe affermare una cosa che il pannello non ha potuto controllare.
                 job.status = "completed";
                 job.write("");
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.38", java.util.Map.of("nome", String.valueOf(name), "versioneDopo", String.valueOf(versionAfter))));
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.39"));
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.40"));
+                job.write(I18n.tr("server.um.runGuidedUpdate.38", java.util.Map.of("name", String.valueOf(name), "versionAfter", String.valueOf(versionAfter))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.39"));
+                job.write(I18n.tr("server.um.runGuidedUpdate.40"));
             } else {
                 job.status = "completed";
                 job.write("");
-                job.write("=== " + I18n.tr("server.um.x.inService", java.util.Map.of("nome", String.valueOf(name), "v", String.valueOf(versionAfter))) + " ===");
+                job.write("=== " + I18n.tr("server.um.x.inService", java.util.Map.of("name", String.valueOf(name), "v", String.valueOf(versionAfter))) + " ===");
             }
         } catch (Exception e) {
             job.status = "error";
@@ -6750,15 +6750,15 @@ public final class UpdateManager {
                 for (String m : toRelock2) {
                     boolean relocked = ok("pkg info -e " + m, 15) && ok("pkg lock -y " + m, 30);
                     if (relocked) rip++;
-                    else job.write(I18n.tr("server.um.runAggiornamentoGuidato.41", java.util.Map.of("m", String.valueOf(m))));
+                    else job.write(I18n.tr("server.um.runGuidedUpdate.41", java.util.Map.of("m", String.valueOf(m))));
                 }
                 job.write("  " + rip + "/" + toRelock2.size() + " riprotetti");
                 if (rip == toRelock2.size()) clearState();
                 else {
-                    job.write(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
+                    job.write(I18n.tr("server.um.runPythonTransition.21", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
                     if ("completed".equals(job.status)) {
                         job.status = "error";
-                        job.errorMessage = I18n.tr("server.um.runAggiornamentoGuidato.42");
+                        job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
                     }
                 }
             }
@@ -6788,8 +6788,8 @@ public final class UpdateManager {
                 j.write(I18n.tr("server.um.startRspamdCacheCleanup.2"));
                 long unserBefore = number(sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null | wc -l", 60));
                 long othersBefore = number(sh("find " + DIR + " -type f ! -name '*.unser' 2>/dev/null | wc -l", 60));
-                j.write(I18n.tr("server.um.startRspamdCacheCleanup.3", java.util.Map.of("unserPrima", String.valueOf(unserBefore))));
-                j.write(I18n.tr("server.um.startRspamdCacheCleanup.4", java.util.Map.of("altriPrima", String.valueOf(othersBefore))));
+                j.write(I18n.tr("server.um.startRspamdCacheCleanup.3", java.util.Map.of("unserBefore", String.valueOf(unserBefore))));
+                j.write(I18n.tr("server.um.startRspamdCacheCleanup.4", java.util.Map.of("othersBefore", String.valueOf(othersBefore))));
                 if (unserBefore == 0) {
                     j.status = "completed";
                     j.write(I18n.tr("server.um.startRspamdCacheCleanup.5"));
@@ -6809,11 +6809,11 @@ public final class UpdateManager {
                 j.write(I18n.tr("server.um.startRspamdCacheCleanup.7"));
                 long unserAfter = number(sh("find " + DIR + " -type f -name '*.unser' 2>/dev/null | wc -l", 60));
                 long othersAfter = number(sh("find " + DIR + " -type f ! -name '*.unser' 2>/dev/null | wc -l", 60));
-                j.write(I18n.tr("server.um.startRspamdCacheCleanup.8", java.util.Map.of("unserDopo", String.valueOf(unserAfter))));
-                j.write(I18n.tr("server.um.startRspamdCacheCleanup.9", java.util.Map.of("altriPrima", String.valueOf(othersBefore), "altriDopo", String.valueOf(othersAfter))));
+                j.write(I18n.tr("server.um.startRspamdCacheCleanup.8", java.util.Map.of("unserAfter", String.valueOf(unserAfter))));
+                j.write(I18n.tr("server.um.startRspamdCacheCleanup.9", java.util.Map.of("othersBefore", String.valueOf(othersBefore), "othersAfter", String.valueOf(othersAfter))));
                 if (othersAfter != othersBefore) {
                     j.status = "error";
-                    j.errorMessage = I18n.tr("server.um.startRspamdCacheCleanup.10", java.util.Map.of("altriPrima", String.valueOf(othersBefore), "altriDopo", String.valueOf(othersAfter)));
+                    j.errorMessage = I18n.tr("server.um.startRspamdCacheCleanup.10", java.util.Map.of("othersBefore", String.valueOf(othersBefore), "othersAfter", String.valueOf(othersAfter)));
                     j.write("    " + I18n.tr("server.um.x.alarm", java.util.Map.of("m", String.valueOf(j.errorMessage))));
                     return;
                 }
@@ -6834,7 +6834,7 @@ public final class UpdateManager {
                 ok("service rspamd restart", 120);
                 boolean active = ok("service rspamd status", 30);
                 String pidAfter = servicePid("rspamd");
-                j.write("    rspamd: " + (active ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26"))
+                j.write("    rspamd: " + (active ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26"))
                         + (pidBefore.isEmpty() || pidAfter.isEmpty() ? "" : "  (pid " + pidBefore + " -> " + pidAfter + ")"));
                 if (!active) {
                     j.status = "error";
@@ -7025,7 +7025,7 @@ public final class UpdateManager {
         if (!isValidName(pkgName))
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.deepAnalysis.1"));
         if (!ok("pkg info -e " + pkgName, 20))
-            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.deepAnalysis.2", java.util.Map.of("pacchetto", String.valueOf(pkgName))));
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.deepAnalysis.2", java.util.Map.of("pkg", String.valueOf(pkgName))));
 
         JSONObject r = new JSONObject().put("success", true).put("pkgName", pkgName);
 
@@ -7143,8 +7143,8 @@ public final class UpdateManager {
         r.put("verdict", blocking ? "CI SONO RIFERIMENTI CHE SI ROMPEREBBERO" : "NESSUN RIFERIMENTO CHE SI ROMPA");
         int auto = inJar.length() - blockingJars;
         r.put("explanation", blocking
-                ? I18n.tr("server.um.deepAnalysis.5", java.util.Map.of("pacchetto", String.valueOf(pkgName)))
-                : I18n.tr("server.um.x.deepClean", java.util.Map.of("pacchetto", String.valueOf(pkgName), "n", String.valueOf(totalHold)))
+                ? I18n.tr("server.um.deepAnalysis.5", java.util.Map.of("pkg", String.valueOf(pkgName)))
+                : I18n.tr("server.um.x.deepClean", java.util.Map.of("pkg", String.valueOf(pkgName), "n", String.valueOf(totalHold)))
                   + (auto > 0
                      ? " " + (auto == 1
                         ? I18n.tr("server.um.x.deepSelf.one", java.util.Map.of("file", String.valueOf(myFile)))
@@ -7167,7 +7167,7 @@ public final class UpdateManager {
      */
     public static JSONObject removePackage(String name) {
         String id = "rimuovi-" + System.nanoTime();
-        String refusal = PackageQueue.take(id, I18n.tr("server.um.removePackage.1", java.util.Map.of("nome", String.valueOf(name))));
+        String refusal = PackageQueue.take(id, I18n.tr("server.um.removePackage.1", java.util.Map.of("name", String.valueOf(name))));
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
         try { return removePackageNow(name); }
         finally { refreshLockTrace(); PackageQueue.release(id); }
@@ -7180,7 +7180,7 @@ public final class UpdateManager {
         JSONObject r = new JSONObject().put("pkgName", name);
 
         if (!ok("pkg info -e " + name, 20)) {
-            log.append(I18n.tr("server.um.x.rmNotInstalled", java.util.Map.of("nome", String.valueOf(name)))).append("\n")
+            log.append(I18n.tr("server.um.x.rmNotInstalled", java.util.Map.of("name", String.valueOf(name)))).append("\n")
                .append(I18n.tr("server.um.x.rmChecksAnyway")).append("\n");
             JSONObject lib0 = packagesWithMissingLibraries();
             JSONArray broken0 = lib0.optJSONArray("packages");
@@ -7189,19 +7189,19 @@ public final class UpdateManager {
              .put("removed", true).put("alreadyAbsent", true).put("fault", fault0)
              .put("after", countLines(sh("pkg query %n 2>/dev/null", 60)));
             log.append("--- ").append(I18n.tr("server.um.x.check")).append(" ---\n")
-               .append(fault0 ? I18n.tr("server.um.rimuoviPacchettoOra.1", java.util.Map.of("length", String.valueOf(broken0.length())))
-                               : I18n.tr("server.um.rimuoviPacchettoOra.2")).append("\n");
+               .append(fault0 ? I18n.tr("server.um.removePackageNow.1", java.util.Map.of("length", String.valueOf(broken0.length())))
+                               : I18n.tr("server.um.removePackageNow.2")).append("\n");
             return r.put("success", true).put("log", log.toString())
                     .put("note", fault0
-                            ? I18n.tr("server.um.rimuoviPacchettoOra.3", java.util.Map.of("nome", String.valueOf(name), "nome2", String.valueOf(name)))
-                            : I18n.tr("server.um.rimuoviPacchettoOra.4", java.util.Map.of("nome", String.valueOf(name))));
+                            ? I18n.tr("server.um.removePackageNow.3", java.util.Map.of("name", String.valueOf(name), "name2", String.valueOf(name)))
+                            : I18n.tr("server.um.removePackageNow.4", java.util.Map.of("name", String.valueOf(name))));
         }
 
         // --- chi lo dichiara: se qualcuno lo fa, non si tocca ---
         String declare = sh("pkg query %rn " + name + " 2>/dev/null", 30).trim();
         if (!declare.isEmpty())
             return new JSONObject().put("success", false)
-                    .put("error", I18n.tr("server.um.x.rmDeclaredDep", java.util.Map.of("elenco", String.valueOf(declare.replace("\n", ", ")))));
+                    .put("error", I18n.tr("server.um.x.rmDeclaredDep", java.util.Map.of("list", String.valueOf(declare.replace("\n", ", ")))));
 
         // --- e il pannello? la stessa misura della scheda, rifatta adesso ---
         JSONObject use = panelUsage(name);
@@ -7218,7 +7218,7 @@ public final class UpdateManager {
         r.put("deep", prof);
         if (prof.optBoolean("blocking"))
             return new JSONObject().put("success", false).put("deep", prof)
-                    .put("error", I18n.tr("server.um.rimuoviPacchettoOra.5", java.util.Map.of("nome", String.valueOf(name))));
+                    .put("error", I18n.tr("server.um.removePackageNow.5", java.util.Map.of("name", String.valueOf(name))));
 
         // --- fotografia prima, per poter confrontare dopo ---
         int before = countLines(sh("pkg query %n 2>/dev/null", 60));
@@ -7232,7 +7232,7 @@ public final class UpdateManager {
             if (locked(sh("pkg lock -l 2>/dev/null", 30), name)) {
                 log.append(I18n.tr("server.um.x.stillProtected")).append("\n");
                 return r.put("success", false).put("log", log.toString())
-                        .put("error", I18n.tr("server.um.rimuoviPacchettoOra.6", java.util.Map.of("nome", String.valueOf(name))));
+                        .put("error", I18n.tr("server.um.removePackageNow.6", java.util.Map.of("name", String.valueOf(name))));
             }
             log.append(I18n.tr("server.um.x.protRemoved")).append("\n");
         }
@@ -7251,7 +7251,7 @@ public final class UpdateManager {
             // Il motivo lo dice pkg nella sua uscita: riportarlo invece di lasciare
             // l'utente a leggersi il log per capire perche'.
             String why = deleteOutput.contains("locked")
-                    ? I18n.tr("server.um.rimuoviPacchettoOra.7")
+                    ? I18n.tr("server.um.removePackageNow.7")
                     : (deleteOutput.contains("vital") ? I18n.tr("server.um.x.markedVital") : "");
             return r.put("success", false).put("log", log.toString())
                     .put("error", I18n.tr("server.um.x.stillInstalled")
@@ -7266,12 +7266,12 @@ public final class UpdateManager {
 
         boolean fault = broken != null && broken.length() > 0;
         log.append("--- ").append(I18n.tr("server.um.x.check")).append(" ---\n")
-           .append(fault ? I18n.tr("server.um.rimuoviPacchettoOra.1", java.util.Map.of("length", String.valueOf(broken.length())))
-                          : I18n.tr("server.um.rimuoviPacchettoOra.2")).append("\n");
+           .append(fault ? I18n.tr("server.um.removePackageNow.1", java.util.Map.of("length", String.valueOf(broken.length())))
+                          : I18n.tr("server.um.removePackageNow.2")).append("\n");
         return r.put("success", true).put("log", log.toString()).put("fault", fault)
                 .put("note", fault
-                        ? I18n.tr("server.um.rimuoviPacchettoOra.8", java.util.Map.of("nome", String.valueOf(name), "nome2", String.valueOf(name)))
-                        : I18n.tr("server.um.rimuoviPacchettoOra.9"));
+                        ? I18n.tr("server.um.removePackageNow.8", java.util.Map.of("name", String.valueOf(name), "name2", String.valueOf(name)))
+                        : I18n.tr("server.um.removePackageNow.9"));
     }
 
     /**
@@ -7280,18 +7280,18 @@ public final class UpdateManager {
      * fallisce lontano da qui e con un messaggio che parla d'altro.
      */
     private static final String[][] TOOLS = {
-        {"mysqldump",       "/usr/local/bin",  "server.um.rimuoviPacchettoOra.10"},
-        {"mysql",           "/usr/local/bin",  "server.um.rimuoviPacchettoOra.11"},
-        {"doveadm",         "/usr/local/bin",  "server.um.rimuoviPacchettoOra.12"},
-        {"postmap",         "/usr/local/sbin", "server.um.rimuoviPacchettoOra.13"},
-        {"postconf",        "/usr/local/sbin", "server.um.rimuoviPacchettoOra.14"},
-        {"rspamadm",        "/usr/local/bin",  "server.um.rimuoviPacchettoOra.15"},
+        {"mysqldump",       "/usr/local/bin",  "server.um.removePackageNow.10"},
+        {"mysql",           "/usr/local/bin",  "server.um.removePackageNow.11"},
+        {"doveadm",         "/usr/local/bin",  "server.um.removePackageNow.12"},
+        {"postmap",         "/usr/local/sbin", "server.um.removePackageNow.13"},
+        {"postconf",        "/usr/local/sbin", "server.um.removePackageNow.14"},
+        {"rspamadm",        "/usr/local/bin",  "server.um.removePackageNow.15"},
         {"fail2ban-client", "/usr/local/bin",  "server.um.tool.fail2ban"},
-        {"nginx",           "/usr/local/sbin", "server.um.rimuoviPacchettoOra.16"},
-        {"pkg",             "/usr/local/sbin", "server.um.rimuoviPacchettoOra.17"},
-        {"openssl",         "/usr/bin",        "server.um.rimuoviPacchettoOra.18"},
-        {"procstat",        "/usr/bin",        "server.um.rimuoviPacchettoOra.19"},
-        {"bectl",           "/sbin",           "server.um.rimuoviPacchettoOra.20"},
+        {"nginx",           "/usr/local/sbin", "server.um.removePackageNow.16"},
+        {"pkg",             "/usr/local/sbin", "server.um.removePackageNow.17"},
+        {"openssl",         "/usr/bin",        "server.um.removePackageNow.18"},
+        {"procstat",        "/usr/bin",        "server.um.removePackageNow.19"},
+        {"bectl",           "/sbin",           "server.um.removePackageNow.20"},
     };
 
     /**
@@ -7320,9 +7320,9 @@ public final class UpdateManager {
         }
         return r.put("tools", a).put("unreachable", unreachable).put("absent", absent)
                 .put("explanation", unreachable > 0
-                        ? I18n.tr("server.um.panelBootEnvironment.3", java.util.Map.of("irraggiungibili", String.valueOf(unreachable)))
+                        ? I18n.tr("server.um.panelBootEnvironment.3", java.util.Map.of("unreachable", String.valueOf(unreachable)))
                         : (absent > 0
-                           ? I18n.tr("server.um.panelBootEnvironment.4", java.util.Map.of("assenti", String.valueOf(absent)))
+                           ? I18n.tr("server.um.panelBootEnvironment.4", java.util.Map.of("absent", String.valueOf(absent)))
                            : I18n.tr("server.um.panelBootEnvironment.5")));
     }
 
@@ -7450,14 +7450,14 @@ public final class UpdateManager {
         String kernel = os.optString("installedKernel", ""), running = os.optString("runningKernel", "");
         if (!kernel.isEmpty() && !running.isEmpty() && !kernel.equals(running))
             daFare.put(new JSONObject().put("urgency", 1)
-                    .put("what", I18n.tr("server.um.reportData.1", java.util.Map.of("kernel", String.valueOf(kernel), "inEsecuzione", String.valueOf(running))))
+                    .put("what", I18n.tr("server.um.reportData.1", java.util.Map.of("kernel", String.valueOf(kernel), "running", String.valueOf(running))))
                     .put("where", I18n.tr("server.um.reportData.2")));
         String end = os.optString("endOfSupport", "");
         long eolDays = daysToDate(end);
         r.put("daysToEndOfSupport", eolDays);
         if (eolDays >= 0 && eolDays < 120)
             daFare.put(new JSONObject().put("urgency", eolDays < 45 ? 1 : 3)
-                    .put("what", I18n.tr("server.um.reportData.3", java.util.Map.of("giorniEol", String.valueOf(eolDays), "fine", String.valueOf(end))))
+                    .put("what", I18n.tr("server.um.reportData.3", java.util.Map.of("eolDays", String.valueOf(eolDays), "end", String.valueOf(end))))
                     .put("where", I18n.tr("server.um.reportData.4")));
 
         // --- pacchetti ---
@@ -7523,7 +7523,7 @@ public final class UpdateManager {
             daFare.put(new JSONObject().put("urgency", 2)
                     .put("what", catalogDays < 0
                             ? I18n.tr("server.um.x.pkgUpdateFailed")
-                            : I18n.tr("server.um.x.pkgUpdateFailedDated", java.util.Map.of("quanto", String.valueOf(PkgCatalog.howMuch(catalogDays)), "data", String.valueOf(cat.optString("data")))))
+                            : I18n.tr("server.um.x.pkgUpdateFailedDated", java.util.Map.of("howMuch", String.valueOf(PkgCatalog.howMuch(catalogDays)), "data", String.valueOf(cat.optString("data")))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
         else if (catalogDays < 0)
             daFare.put(new JSONObject().put("urgency", 3)
@@ -7533,7 +7533,7 @@ public final class UpdateManager {
             // Dopo un "pkg update" riuscito, un catalogo vecchio e' l'ultimo che il server offre:
             // non c'e' niente da fare. Senza (l'anteprima), puo' esserci un catalogo piu' nuovo.
             daFare.put(new JSONObject().put("urgency", catalogDays >= 28 ? 2 : 3)
-                    .put("what", I18n.tr("server.um.x.catalogOld", java.util.Map.of("quanto", String.valueOf(PkgCatalog.howMuch(catalogDays)), "data", String.valueOf(cat.optString("data")))))
+                    .put("what", I18n.tr("server.um.x.catalogOld", java.util.Map.of("howMuch", String.valueOf(PkgCatalog.howMuch(catalogDays)), "data", String.valueOf(cat.optString("data")))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
 
         JSONArray withRemedy = new JSONArray(), withoutRemedy = new JSONArray();
@@ -7576,7 +7576,7 @@ public final class UpdateManager {
             int declaredPackages = Integer.parseInt(tot.group(2));
             r.put("vulnDeclaredPackages", declaredPackages);
             if (declaredPackages != found)
-                r.put("vulnCountMismatch", I18n.tr("server.um.reportData.6", java.util.Map.of("pacchettiDichiarati", String.valueOf(declaredPackages), "trovati", String.valueOf(found))));
+                r.put("vulnCountMismatch", I18n.tr("server.um.reportData.6", java.util.Map.of("declaredPackages", String.valueOf(declaredPackages), "foundCount", String.valueOf(found))));
         } else {
             r.put("vulnCountMismatch", I18n.tr("server.um.reportData.7"));
         }
@@ -7586,8 +7586,8 @@ public final class UpdateManager {
         if (withRemedy.length() > 0)
             daFare.put(new JSONObject().put("urgency", 1)
                     .put("what", withRemedy.length() == 1
-                            ? I18n.tr("server.um.x.vulnFix.one", java.util.Map.of("elenco", String.valueOf(String.join(", ", jsonArrayToList(withRemedy)))))
-                            : I18n.tr("server.um.x.vulnFix.other", java.util.Map.of("n", String.valueOf(withRemedy.length()), "elenco", String.valueOf(String.join(", ", jsonArrayToList(withRemedy))))))
+                            ? I18n.tr("server.um.x.vulnFix.one", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(withRemedy)))))
+                            : I18n.tr("server.um.x.vulnFix.other", java.util.Map.of("n", String.valueOf(withRemedy.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(withRemedy))))))
                     .put("where", I18n.tr("server.um.reportData.8")));
 
         // --- librerie mancanti ---
@@ -7607,7 +7607,7 @@ public final class UpdateManager {
         r.put("inactiveServices", down);
         if (down.length() > 0)
             daFare.put(new JSONObject().put("urgency", 0)
-                    .put("what", I18n.tr("server.um.x.svcDown", java.util.Map.of("elenco", String.valueOf(String.join(", ", jsonArrayToList(down))))))
+                    .put("what", I18n.tr("server.um.x.svcDown", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(down))))))
                     .put("where", I18n.tr("server.um.reportData.11")));
 
         // --- spazio ---
@@ -7619,7 +7619,7 @@ public final class UpdateManager {
             r.put("usedPercent", used);
             if (used >= 85)
                 daFare.put(new JSONObject().put("urgency", used >= 92 ? 0 : 2)
-                        .put("what", I18n.tr("server.um.reportData.12", java.util.Map.of("usata", String.valueOf(used))))
+                        .put("what", I18n.tr("server.um.reportData.12", java.util.Map.of("used", String.valueOf(used))))
                         .put("where", I18n.tr("server.um.reportData.13")));
         }
 
@@ -7683,7 +7683,7 @@ public final class UpdateManager {
         if (!isValidName(pkgName))
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.deepAnalysis.1"));
         if (!ok("pkg info -e " + pkgName, 20))
-            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.panelUsage.1", java.util.Map.of("pacchetto", String.valueOf(pkgName))));
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.panelUsage.1", java.util.Map.of("pkg", String.valueOf(pkgName))));
 
         // --- 1. quali eseguibili installa il pacchetto ---
         String list = sh("pkg query '%Fp' " + pkgName + " 2>/dev/null", 60);
@@ -7771,10 +7771,10 @@ public final class UpdateManager {
                     .put("effect", isItsOwn
                             ? (elsewhere.isEmpty()
                                ? I18n.tr("server.um.panelUsage.2")
-                               : I18n.tr("server.um.panelUsage.3", java.util.Map.of("altrove", String.valueOf(elsewhere))))
+                               : I18n.tr("server.um.panelUsage.3", java.util.Map.of("elsewhere", String.valueOf(elsewhere))))
                             : (inUseNow.isEmpty()
                                ? I18n.tr("server.um.panelUsage.4")
-                               : I18n.tr("server.um.panelUsage.5", java.util.Map.of("inUsoOra", String.valueOf(inUseNow))))));
+                               : I18n.tr("server.um.panelUsage.5", java.util.Map.of("inUseNow", String.valueOf(inUseNow))))));
         }
         // Un pacchetto puo' non avere nessun comando e servire lo stesso, perche' e' una
         // LIBRERIA: nessuno la digita, ma qualcuno ci si collega. giflib e' esattamente
@@ -7794,12 +7794,12 @@ public final class UpdateManager {
         } else if (used.length() == 0) {
             verdict = libraries.length() > 0 ? "NON NE USA I COMANDI, MA E' UNA LIBRERIA"
                                              : "IL PANNELLO NON LO USA";
-            explanation = I18n.tr("server.um.x.jarNoUse", java.util.Map.of("byte", String.valueOf(bytesRead), "n", String.valueOf(runnables.size()), "pacchetto", String.valueOf(pkgName)))
+            explanation = I18n.tr("server.um.x.jarNoUse", java.util.Map.of("byte", String.valueOf(bytesRead), "n", String.valueOf(runnables.size()), "pkg", String.valueOf(pkgName)))
                     + (libraries.length() > 0
-                       ? " " + I18n.tr("server.um.x.jarLibs", java.util.Map.of("n", String.valueOf(libraries.length()), "elenco", String.valueOf(String.join(", ", jsonArrayToList(libraries)))))
+                       ? " " + I18n.tr("server.um.x.jarLibs", java.util.Map.of("n", String.valueOf(libraries.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(libraries)))))
                        : "")
                     + (tooShort.isEmpty() ? ""
-                       : " " + I18n.tr("server.um.x.jarShortNames", java.util.Map.of("n", String.valueOf(tooShort.size()), "elenco", String.valueOf(String.join(", ", tooShort)))));
+                       : " " + I18n.tr("server.um.x.jarShortNames", java.util.Map.of("n", String.valueOf(tooShort.size()), "list", String.valueOf(String.join(", ", tooShort)))));
         } else {
             int withoutReplacement = 0, reallyItsOwn = 0;
             for (int i = 0; i < used.length(); i++) {
@@ -7813,8 +7813,8 @@ public final class UpdateManager {
                 // Li nomina, ma non e' questo pacchetto a fornire i binari che girano.
                 verdict = "LI NOMINA, MA NON SONO I SUOI";
                 explanation = used.length() == 1
-                        ? I18n.tr("server.um.x.namesOther.one", java.util.Map.of("pacchetto", String.valueOf(pkgName)))
-                        : I18n.tr("server.um.x.namesOther.other", java.util.Map.of("n", String.valueOf(used.length()), "pacchetto", String.valueOf(pkgName)));
+                        ? I18n.tr("server.um.x.namesOther.one", java.util.Map.of("pkg", String.valueOf(pkgName)))
+                        : I18n.tr("server.um.x.namesOther.other", java.util.Map.of("n", String.valueOf(used.length()), "pkg", String.valueOf(pkgName)));
                 return r.put("verdict", verdict).put("explanation", explanation)
                         .put("why", I18n.tr("server.um.panelUsage.10"));
             }
@@ -7948,7 +7948,7 @@ public final class UpdateManager {
         r.put("processes", processes).put("useThePort", useThePort)
          .put("processesWithTls", withLibssl).put("reliableMeasure", reliableMeasure)
          .put("howMeasured", hasProcstat
-                 ? I18n.tr("server.um.opensslUsage.3", java.util.Map.of("conLibssl", String.valueOf(withLibssl)))
+                 ? I18n.tr("server.um.opensslUsage.3", java.util.Map.of("withLibssl", String.valueOf(withLibssl)))
                  : I18n.tr("server.um.opensslUsage.4"));
 
         // --- il verdict, nell'ordine in cui le prove pesano ---
@@ -7960,10 +7960,10 @@ public final class UpdateManager {
                     : I18n.tr("server.um.x.portLibOpen.other", java.util.Map.of("n", String.valueOf(useThePort.length())));
         } else if (declare.length() > 0) {
             verdict = "RICHIESTO";
-            explanation = I18n.tr("server.um.x.declaredBy", java.util.Map.of("elenco", String.valueOf(String.join(", ", jsonArrayToList(declare)))));
+            explanation = I18n.tr("server.um.x.declaredBy", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(declare)))));
         } else if (portCommand) {
             verdict = "IL COMANDO E' SUO";
-            explanation = I18n.tr("server.um.x.cmdIsPort", java.util.Map.of("vincitore", String.valueOf(winner))) + " "
+            explanation = I18n.tr("server.um.x.cmdIsPort", java.util.Map.of("winner", String.valueOf(winner))) + " "
                     + (baseHasCommand
                        ? I18n.tr("server.um.x.baseHasCmd")
                        : I18n.tr("server.um.x.baseNoCmd"));
@@ -7972,7 +7972,7 @@ public final class UpdateManager {
             explanation = I18n.tr("server.um.opensslUsage.7");
         } else {
             verdict = "NESSUNO LO USA";
-            explanation = I18n.tr("server.um.opensslUsage.9", java.util.Map.of("conLibssl", String.valueOf(withLibssl)));
+            explanation = I18n.tr("server.um.opensslUsage.9", java.util.Map.of("withLibssl", String.valueOf(withLibssl)));
         }
         r.put("verdict", verdict).put("explanation", explanation);
 
@@ -8201,7 +8201,7 @@ public final class UpdateManager {
                 JSONObject os = operatingSystem();
                 if (!os.optBoolean("updatableWithFreebsdUpdate", false)) {
                     j.status = "error";
-                    j.errorMessage = os.optString("updatesNote", I18n.tr("server.um.cercaAggiornamentiSistema.1"));
+                    j.errorMessage = os.optString("updatesNote", I18n.tr("server.um.findSystemUpdates.1"));
                     j.write(I18n.tr("server.um.startSystemUpdateSearch.3", java.util.Map.of("errorMessage", String.valueOf(j.errorMessage))));
                     return;
                 }
@@ -8242,7 +8242,7 @@ public final class UpdateManager {
                 j.write("");
                 if (code != 0 && !nobody) {
                     j.status = "error";
-                    j.errorMessage = I18n.tr("server.um.startSystemUpdateSearch.8", java.util.Map.of("codice", String.valueOf(code)));
+                    j.errorMessage = I18n.tr("server.um.startSystemUpdateSearch.8", java.util.Map.of("code", String.valueOf(code)));
                     j.write(I18n.tr("server.um.startSystemUpdateSearch.3", java.util.Map.of("errorMessage", String.valueOf(j.errorMessage))));
                     return;
                 }
@@ -8275,7 +8275,7 @@ public final class UpdateManager {
             JSONObject os = operatingSystem();
             if (!os.optBoolean("updatableWithFreebsdUpdate", false))
                 return new JSONObject().put("success", false)
-                        .put("error", os.optString("updatesNote", I18n.tr("server.um.cercaAggiornamentiSistema.1")));
+                        .put("error", os.optString("updatesNote", I18n.tr("server.um.findSystemUpdates.1")));
             String out = sh("freebsd-update --not-running-from-cron fetch 2>&1", 900);
             String b = out.toLowerCase();
             boolean nobody = b.contains("no updates needed") || b.contains("has no updates available");
@@ -8283,7 +8283,7 @@ public final class UpdateManager {
                     .put("noUpdate", nobody)
                     .put("note", nobody
                         ? I18n.tr("server.um.startSystemUpdateSearch.9")
-                        : I18n.tr("server.um.cercaAggiornamentiSistema.2"));
+                        : I18n.tr("server.um.findSystemUpdates.2"));
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", e.getMessage());
         }
@@ -8378,8 +8378,8 @@ public final class UpdateManager {
             return new JSONObject().put("success", via).put("existedBefore", true)
                     .put("pid", pid).put("command", line)
                     .put("note", via
-                        ? I18n.tr("server.um.cancelReboot.2", java.util.Map.of("pid", String.valueOf(pid), "riga", String.valueOf(line)))
-                        : I18n.tr("server.um.cancelReboot.3", java.util.Map.of("ancora", String.valueOf(still), "ancora2", String.valueOf(still))))
+                        ? I18n.tr("server.um.cancelReboot.2", java.util.Map.of("pid", String.valueOf(pid), "line", String.valueOf(line)))
+                        : I18n.tr("server.um.cancelReboot.3", java.util.Map.of("still", String.valueOf(still), "still2", String.valueOf(still))))
                     .put("error", via ? "" : I18n.tr("server.um.cancelReboot.4"));
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", e.getMessage());
@@ -8531,7 +8531,7 @@ public final class UpdateManager {
             if (v4.size() < MIN_V4 || v6.size() < MIN_V6)
                 return r.put("success", false).put("verified", false)
                         .put("officialV4", v4.size()).put("officialV6", v6.size())
-                        .put("error", I18n.tr("server.um.cloudflareRanges.1", java.util.Map.of("size", String.valueOf(v4.size()), "size2", String.valueOf(v6.size()), "mINIMO_V4", String.valueOf(MIN_V4), "mINIMO_V6", String.valueOf(MIN_V6))));
+                        .put("error", I18n.tr("server.um.cloudflareRanges.1", java.util.Map.of("size", String.valueOf(v4.size()), "size2", String.valueOf(v6.size()), "minimumV4", String.valueOf(MIN_V4), "minimumV6", String.valueOf(MIN_V6))));
 
             java.util.List<String> myV4 = org.mail_panel.security.TrustedProxy.cloudflareV4();
             java.util.List<String> myV6 = org.mail_panel.security.TrustedProxy.cloudflareV6();
@@ -8771,9 +8771,9 @@ public final class UpdateManager {
 
             if (!run)
                 return r.put("success", true).put("executed", false)
-                        .put("note", joinNotes(I18n.tr("server.um.x.rcRmPreview", java.util.Map.of("azioni", String.valueOf((variableExists ? I18n.tr("server.um.x.rcRmVar") : "")
+                        .put("note", joinNotes(I18n.tr("server.um.x.rcRmPreview", java.util.Map.of("actions", String.valueOf((variableExists ? I18n.tr("server.um.x.rcRmVar") : "")
                                 + (variableExists && installed ? " " + I18n.tr("server.um.x.and") + " " : "")
-                                + (installed ? I18n.tr("server.um.x.rcRmFile", java.util.Map.of("file", String.valueOf(path), "copia", String.valueOf(copy))) : "")))), locksWarning));
+                                + (installed ? I18n.tr("server.um.x.rcRmFile", java.util.Map.of("file", String.valueOf(path), "copy", String.valueOf(copy))) : "")))), locksWarning));
 
             ok("mkdir -p /var/db/mailpanel", 20);
 
@@ -8782,7 +8782,7 @@ public final class UpdateManager {
                 ok("cp -p " + path + " " + copy, 20);
                 if (!ok("test -s " + copy, 10))
                     return r.put("success", false)
-                            .put("error", I18n.tr("server.um.removePanelRcScript.2", java.util.Map.of("percorso", String.valueOf(path), "copia", String.valueOf(copy))));
+                            .put("error", I18n.tr("server.um.removePanelRcScript.2", java.util.Map.of("path", String.valueOf(path), "copy", String.valueOf(copy))));
                 r.put("copyDone", true);
             }
 
@@ -8799,14 +8799,14 @@ public final class UpdateManager {
             boolean varStays = !after.optString("sysrcValue", "").trim().isEmpty();
             if (fileStays || varStays) {
                 java.util.List<String> stays = new java.util.ArrayList<>();
-                if (fileStays) stays.add(I18n.tr("server.um.removePanelRcScript.3", java.util.Map.of("percorso", String.valueOf(path))));
+                if (fileStays) stays.add(I18n.tr("server.um.removePanelRcScript.3", java.util.Map.of("path", String.valueOf(path))));
                 if (varStays) stays.add(I18n.tr("server.um.x.rcVarStill", java.util.Map.of("v", String.valueOf(after.optString("sysrcValue", "")))));
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.um.x.rcRmIncomplete", java.util.Map.of("resta", String.valueOf(String.join("; ", stays)), "copia", String.valueOf(copy))));
+                        .put("error", I18n.tr("server.um.x.rcRmIncomplete", java.util.Map.of("stays", String.valueOf(String.join("; ", stays)), "copy", String.valueOf(copy))));
             }
 
             return r.put("success", true).put("executed", true)
-                    .put("note", joinNotes(I18n.tr("server.um.removePanelRcScript.4", java.util.Map.of("copia", String.valueOf(copy))), locksWarning));
+                    .put("note", joinNotes(I18n.tr("server.um.removePanelRcScript.4", java.util.Map.of("copy", String.valueOf(copy))), locksWarning));
         } catch (Exception e) {
             return r.put("success", false).put("error", I18n.tr("server.um.removePanelRcScript.5", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         }
@@ -8914,7 +8914,7 @@ public final class UpdateManager {
             if (!syntaxCheck.isEmpty()) {
                 ok("rm -f " + tmp, 15);
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.um.panelRcScript.3", java.util.Map.of("sint", String.valueOf(syntaxCheck))));
+                        .put("error", I18n.tr("server.um.panelRcScript.3", java.util.Map.of("syntax", String.valueOf(syntaxCheck))));
             }
             if (exists) ok("cp -p " + path + " /var/db/mailpanel/mailpanel.rc.precedente", 20);
             Files.writeString(Paths.get(path), text);
@@ -8970,7 +8970,7 @@ public final class UpdateManager {
             Matcher m = Pattern.compile("^([0-9]+)\\.([0-9]+)$").matcher(series);
             if (!m.find())
                 return new JSONObject().put("success", false)
-                        .put("error", I18n.tr("server.um.targetVersions.1", java.util.Map.of("serie", String.valueOf(series))));
+                        .put("error", I18n.tr("server.um.targetVersions.1", java.util.Map.of("series", String.valueOf(series))));
             int majorExpected = Integer.parseInt(m.group(1)), minorExpected = Integer.parseInt(m.group(2));
             JSONArray outside = new JSONArray();
             for (String[] e : END_OF_SUPPORT) {
@@ -8986,8 +8986,8 @@ public final class UpdateManager {
                     .put("versions", outside)
                     .put("source", I18n.tr(SUPPORT_SOURCE))
                     .put("note", outside.length() == 0
-                        ? I18n.tr("server.um.targetVersions.2", java.util.Map.of("serie", String.valueOf(series)))
-                        : I18n.tr("server.um.targetVersions.3", java.util.Map.of("magAtt", String.valueOf(majorExpected), "p", String.valueOf((majorExpected + 1)))));
+                        ? I18n.tr("server.um.targetVersions.2", java.util.Map.of("series", String.valueOf(series)))
+                        : I18n.tr("server.um.targetVersions.3", java.util.Map.of("majorNow", String.valueOf(majorExpected), "p", String.valueOf((majorExpected + 1)))));
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", e.getMessage());
         }
@@ -9033,8 +9033,8 @@ public final class UpdateManager {
             if ("backward".equals(direction) || "same".equals(direction)) {
                 addCheck(checks, "direzione", I18n.tr("server.um.systemUpgradePreflight.7"), "block",
                         "same".equals(direction)
-                        ? I18n.tr("server.um.systemUpgradePreflight.8", java.util.Map.of("bersaglio", String.valueOf(targetVersion)))
-                        : I18n.tr("server.um.x.targetOlder", java.util.Map.of("bersaglio", String.valueOf(targetVersion), "serie", String.valueOf(os.optString("series")))));
+                        ? I18n.tr("server.um.systemUpgradePreflight.8", java.util.Map.of("target", String.valueOf(targetVersion)))
+                        : I18n.tr("server.um.x.targetOlder", java.util.Map.of("target", String.valueOf(targetVersion), "series", String.valueOf(os.optString("series")))));
                 return r.put("success", true).put("checks", checks)
                         .put("blocked", true).put("canProceed", false);
             }
@@ -9044,8 +9044,8 @@ public final class UpdateManager {
             if (!minor) lock = true;
             addCheck(checks, "abi", I18n.tr("server.um.systemUpgradePreflight.9"), minor ? "ok" : "block",
                     minor
-                    ? I18n.tr("server.um.systemUpgradePreflight.10", java.util.Map.of("abi", String.valueOf(abiName), "magAtt", String.valueOf(majorExpected), "magNew", String.valueOf(magNew)))
-                    : I18n.tr("server.um.systemUpgradePreflight.11", java.util.Map.of("magAtt", String.valueOf(majorExpected), "magNew", String.valueOf(magNew))));
+                    ? I18n.tr("server.um.systemUpgradePreflight.10", java.util.Map.of("abi", String.valueOf(abiName), "majorNow", String.valueOf(majorExpected), "magNew", String.valueOf(magNew)))
+                    : I18n.tr("server.um.systemUpgradePreflight.11", java.util.Map.of("majorNow", String.valueOf(majorExpected), "magNew", String.valueOf(magNew))));
 
             // Fine supporto della versione di arrivo: passare a qualcosa che scade fra poco
             // non risolve niente.
@@ -9054,8 +9054,8 @@ public final class UpdateManager {
             r.put("targetEndOfSupport", eolNew);
             addCheck(checks, "eol", I18n.tr("server.um.systemUpgradePreflight.12"), eolNew.isEmpty() ? "wait" : "ok",
                     eolNew.isEmpty()
-                    ? I18n.tr("server.um.systemUpgradePreflight.13", java.util.Map.of("bersaglio", String.valueOf(targetVersion)))
-                    : I18n.tr("server.um.x.supportedUntil", java.util.Map.of("target", String.valueOf(target), "eol", String.valueOf(eolNew), "note", String.valueOf(noteNew), "serie", String.valueOf(os.optString("series")), "fine", String.valueOf(os.optString("endOfSupport")))));
+                    ? I18n.tr("server.um.systemUpgradePreflight.13", java.util.Map.of("target", String.valueOf(targetVersion)))
+                    : I18n.tr("server.um.x.supportedUntil", java.util.Map.of("target", String.valueOf(target), "eol", String.valueOf(eolNew), "note", String.valueOf(noteNew), "series", String.valueOf(os.optString("series")), "end", String.valueOf(os.optString("endOfSupport")))));
 
             // Kernel personalizzato: l'Handbook avverte che non viene aggiornato.
             String kconf = sh("sysctl -n kern.conftxt 2>/dev/null | head -1", 20).trim();
@@ -9072,7 +9072,7 @@ public final class UpdateManager {
                 String list = sh("bectl list -H 2>/dev/null | awk '{print $1\" (\"$2\") \"$4}'", 30);
                 r.put("existingBes", list);
                 addCheck(checks, "be", I18n.tr("server.um.systemUpgradePreflight.15"), "ok",
-                        I18n.tr("server.um.x.beSupported", java.util.Map.of("elenco", String.valueOf(list.replace("\n", " | ")))));
+                        I18n.tr("server.um.x.beSupported", java.util.Map.of("list", String.valueOf(list.replace("\n", " | ")))));
             } else {
                 addCheck(checks, "be", I18n.tr("server.um.systemUpgradePreflight.15"), "wait",
                         I18n.tr("server.um.systemUpgradePreflight.16"));
@@ -9104,7 +9104,7 @@ public final class UpdateManager {
                     !rc
                     ? I18n.tr("server.um.systemUpgradePreflight.20")
                     : !enabled
-                    ? I18n.tr("server.um.systemUpgradePreflight.21", java.util.Map.of("abil", String.valueOf(enabledBy)))
+                    ? I18n.tr("server.um.systemUpgradePreflight.21", java.util.Map.of("enabled", String.valueOf(enabledBy)))
                     : tested
                     ? I18n.tr("server.um.systemUpgradePreflight.22")
                     : I18n.tr("server.um.systemUpgradePreflight.23"));
@@ -9162,20 +9162,20 @@ public final class UpdateManager {
         final int TOT = 4;
         try {
             job.advance(1, TOT);
-            job.write(I18n.tr("server.um.runPreparazioneSistema.1", java.util.Map.of("bersaglio", String.valueOf(target))));
+            job.write(I18n.tr("server.um.runSystemPreparation.1", java.util.Map.of("target", String.valueOf(target))));
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.1", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runMigration84.1", java.util.Map.of("total", String.valueOf(TOT))));
             JSONObject pf = systemUpgradePreflight(target);
             if (!pf.optBoolean("canProceed", false)) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMigrazione84.3");
+                job.errorMessage = I18n.tr("server.um.runMigration84.3");
                 JSONArray ck = pf.optJSONArray("checks");
                 for (int i = 0; ck != null && i < ck.length(); i++) {
                     JSONObject c = ck.getJSONObject(i);
                     if ("block".equals(c.optString("level")))
                         job.write("  [" + I18n.tr("server.um.x.blockTag") + "] " + c.optString("label") + ": " + c.optString("detail"));
                 }
-                job.write(I18n.tr("server.um.runMigrazione84.4"));
+                job.write(I18n.tr("server.um.runMigration84.4"));
                 return;
             }
             job.write("  " + pf.optString("current") + " -> " + pf.optString("target")
@@ -9189,7 +9189,7 @@ public final class UpdateManager {
 
             job.advance(2, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runPreparazioneSistema.2", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runSystemPreparation.2", java.util.Map.of("total", String.valueOf(TOT))));
             if (!ok("tar -cf " + bk + "/etc.tar -C /etc . 2>/dev/null", 600))
                 throw new IllegalStateException("copy of /etc failed");
             long entries = number(sh("tar -tf " + bk + "/etc.tar 2>/dev/null | wc -l", 120));
@@ -9204,34 +9204,34 @@ public final class UpdateManager {
                 el.append(sv.getJSONObject(i).getString("name")).append(' ')
                   .append(sv.getJSONObject(i).getBoolean("active") ? "active" : "stopped").append('\n');
             Files.writeString(Paths.get(bk + "/services.txt"), el.toString());
-            job.write(I18n.tr("server.um.runPreparazioneSistema.3"));
+            job.write(I18n.tr("server.um.runSystemPreparation.3"));
 
             job.advance(3, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runPreparazioneSistema.4", java.util.Map.of("tOT", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runSystemPreparation.4", java.util.Map.of("total", String.valueOf(TOT))));
             String beName = "prima-di-" + target.replace(".", "") + "-" + ts;
             if (!pf.optBoolean("bootEnvironment", false)) {
-                job.write(I18n.tr("server.um.runPreparazioneSistema.5"));
-                job.write(I18n.tr("server.um.runPreparazioneSistema.6"));
+                job.write(I18n.tr("server.um.runSystemPreparation.5"));
+                job.write(I18n.tr("server.um.runSystemPreparation.6"));
             } else if (ok("bectl create " + beName, 300)) {
                 boolean c1 = ok("bectl list -H 2>/dev/null | grep -q '^" + beName + "'", 30);
                 job.write("    " + (c1 ? I18n.tr("server.um.x.beCreatedOk", java.util.Map.of("be", String.valueOf(beName))) : I18n.tr("server.um.x.beCreatedMissing", java.util.Map.of("be", String.valueOf(beName)))));
                 if (!c1) throw new IllegalStateException("the boot environment does not appear to have been created: I stop");
-                job.write(I18n.tr("server.um.runPreparazioneSistema.8", java.util.Map.of("nomeBe", String.valueOf(beName))));
+                job.write(I18n.tr("server.um.runSystemPreparation.8", java.util.Map.of("beName", String.valueOf(beName))));
                 job.write("");
                 for (String l : sh("bectl list 2>/dev/null", 60).split("\n")) job.write("      " + l);
             } else throw new IllegalStateException("bectl create failed: without a way back I do not go on");
 
             job.advance(4, TOT);
             job.write("");
-            job.write(I18n.tr("server.um.runPreparazioneSistema.9", java.util.Map.of("tOT", String.valueOf(TOT))));
-            job.write(I18n.tr("server.um.runPreparazioneSistema.10"));
+            job.write(I18n.tr("server.um.runSystemPreparation.9", java.util.Map.of("total", String.valueOf(TOT))));
+            job.write(I18n.tr("server.um.runSystemPreparation.10"));
             String fetch = sh("freebsd-update --not-running-from-cron fetch 2>&1", 1800);
             for (String l : fetch.split("\n")) if (!l.trim().isEmpty()) job.write("      " + l);
             boolean none = fetch.toLowerCase().contains("no updates needed")
                     || fetch.toLowerCase().contains("has no updates available");
             if (none) {
-                job.write(I18n.tr("server.um.runPreparazioneSistema.11"));
+                job.write(I18n.tr("server.um.runSystemPreparation.11"));
             } else {
                 StringBuilder cat = new StringBuilder();
                 runLogged(job, "freebsd-update install 2>&1", 1800, cat);
@@ -9246,22 +9246,22 @@ public final class UpdateManager {
                 job.write("    userland:             " + afterJ.optString("userland"));
                 if (afterJ.optBoolean("restartNeeded")) {
                     job.write("");
-                    job.write(I18n.tr("server.um.runPreparazioneSistema.12"));
-                    job.write(I18n.tr("server.um.runPreparazioneSistema.13"));
-                    job.write(I18n.tr("server.um.runPreparazioneSistema.14"));
-                    job.write(I18n.tr("server.um.runPreparazioneSistema.15"));
-                    job.write(I18n.tr("server.um.runPreparazioneSistema.16"));
+                    job.write(I18n.tr("server.um.runSystemPreparation.12"));
+                    job.write(I18n.tr("server.um.runSystemPreparation.13"));
+                    job.write(I18n.tr("server.um.runSystemPreparation.14"));
+                    job.write(I18n.tr("server.um.runSystemPreparation.15"));
+                    job.write(I18n.tr("server.um.runSystemPreparation.16"));
                 } else {
-                    job.write(I18n.tr("server.um.runPreparazioneSistema.17"));
+                    job.write(I18n.tr("server.um.runSystemPreparation.17"));
                 }
             }
 
             job.status = "completed";
             job.write("");
             job.write("=== " + I18n.tr("server.um.x.prepDone") + " ===");
-            job.write(I18n.tr("server.um.runPreparazioneSistema.18", java.util.Map.of("bk", String.valueOf(bk), "nomeBe", String.valueOf(beName))));
-            job.write(I18n.tr("server.um.runPreparazioneSistema.19"));
-            job.write(I18n.tr("server.um.runPreparazioneSistema.20"));
+            job.write(I18n.tr("server.um.runSystemPreparation.18", java.util.Map.of("backup", String.valueOf(bk), "beName", String.valueOf(beName))));
+            job.write(I18n.tr("server.um.runSystemPreparation.19"));
+            job.write(I18n.tr("server.um.runSystemPreparation.20"));
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = e.getMessage();
@@ -9313,7 +9313,7 @@ public final class UpdateManager {
                 .put("note", returnsOnly
                     ? (rcP
                        ? I18n.tr("server.um.x.rcBackTested")
-                       : I18n.tr("server.um.x.rcBackUntested", java.util.Map.of("dir", String.valueOf(dir), "avvio", String.valueOf(startup))))
+                       : I18n.tr("server.um.x.rcBackUntested", java.util.Map.of("dir", String.valueOf(dir), "startup", String.valueOf(startup))))
                     : I18n.tr("server.um.systemUpgradeInstructions.7")));
             steps.put(new JSONObject().put("n", 4)
                 .put("title", I18n.tr("server.um.systemUpgradeInstructions.8"))
@@ -9337,12 +9337,12 @@ public final class UpdateManager {
             steps.put(new JSONObject().put("n", 7)
                 .put("title", I18n.tr("server.um.systemUpgradeInstructions.14"))
                 .put("cmd", "shutdown -r now")
-                .put("note", I18n.tr("server.um.systemUpgradeInstructions.15", java.util.Map.of("bersaglio", String.valueOf(target)))));
+                .put("note", I18n.tr("server.um.systemUpgradeInstructions.15", java.util.Map.of("target", String.valueOf(target)))));
             steps.put(new JSONObject().put("n", 8)
                 .put("title", returnsOnly ? I18n.tr("server.um.x.checkTitle") : I18n.tr("server.um.systemUpgradeInstructions.16"))
                 .put("cmd", returnsOnly ? I18n.tr("server.um.systemUpgradeInstructions.17") : "cd " + dir + " && " + startup)
                 .put("note", returnsOnly
-                    ? I18n.tr("server.um.systemUpgradeInstructions.18", java.util.Map.of("dir", String.valueOf(dir), "avvio", String.valueOf(startup)))
+                    ? I18n.tr("server.um.systemUpgradeInstructions.18", java.util.Map.of("dir", String.valueOf(dir), "startup", String.valueOf(startup)))
                     : I18n.tr("server.um.systemUpgradeInstructions.19")));
 
             return new JSONObject().put("success", true).put("steps", steps)
@@ -9495,18 +9495,18 @@ public final class UpdateManager {
             JSONArray steps = st.optJSONArray("steps") == null ? new JSONArray() : st.getJSONArray("steps");
             if (!target.isEmpty()) st.put("target", target);
 
-            job.write(I18n.tr("server.um.runProseguiSalto.1"));
+            job.write(I18n.tr("server.um.runJumpContinuation.1"));
             JSONObject before = operatingSystem();
             job.write(I18n.tr("server.um.x.kernelLine", java.util.Map.of("k", String.valueOf(before.optString("installedKernel")), "u", String.valueOf(before.optString("uname")), "l", String.valueOf(before.optString("userland")))));
             job.write("");
 
             if (before.optBoolean("restartNeeded")) {
-                job.write(I18n.tr("server.um.runProseguiSalto.2"));
-                job.write(I18n.tr("server.um.runProseguiSalto.3"));
+                job.write(I18n.tr("server.um.runJumpContinuation.2"));
+                job.write(I18n.tr("server.um.runJumpContinuation.3"));
                 st.put("phase", "awaiting-restart").put("steps", steps);
                 writeJumpState(st);
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runProseguiSalto.4");
+                job.errorMessage = I18n.tr("server.um.runJumpContinuation.4");
                 return;
             }
 
@@ -9525,15 +9525,15 @@ public final class UpdateManager {
                         "restart".equals(asks) ? I18n.tr("server.um.x.fuAsksRestart")
                       : "finished".equals(asks)  ? I18n.tr("server.um.x.fuAsksNothing")
                       : "ancora-ricostruisci".equals(asks)
-                        ? I18n.tr("server.um.runProseguiSalto.5")
-                      : I18n.tr("server.um.runProseguiSalto.6")));
+                        ? I18n.tr("server.um.runJumpContinuation.5")
+                      : I18n.tr("server.um.runJumpContinuation.6")));
                 if ("ancora-ricostruisci".equals(asks)) {
                     rebuildRequested = true;
                     job.write("");
-                    job.write(I18n.tr("server.um.runProseguiSalto.7"));
-                    job.write(I18n.tr("server.um.runProseguiSalto.8"));
-                    job.write(I18n.tr("server.um.runProseguiSalto.9"));
-                    job.write(I18n.tr("server.um.runProseguiSalto.10"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.7"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.8"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.9"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.10"));
                 }
                 job.write("    " + I18n.tr("server.um.x.kernelNow", java.util.Map.of("k", String.valueOf(after.optString("installedKernel")), "u", String.valueOf(after.optString("uname")), "l", String.valueOf(after.optString("userland")))));
 
@@ -9541,17 +9541,17 @@ public final class UpdateManager {
                     st.put("phase", "error").put("steps", steps);
                     writeJumpState(st);
                     job.status = "error";
-                    job.errorMessage = I18n.tr("server.um.runProseguiSalto.11", java.util.Map.of("codice", String.valueOf(code)));
-                    job.write(I18n.tr("server.um.runProseguiSalto.12", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
+                    job.errorMessage = I18n.tr("server.um.runJumpContinuation.11", java.util.Map.of("code", String.valueOf(code)));
+                    job.write(I18n.tr("server.um.runJumpContinuation.12", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                     return;
                 }
                 if ("restart".equals(asks)) {
                     st.put("phase", "awaiting-restart").put("steps", steps);
                     writeJumpState(st);
                     job.write("");
-                    job.write(I18n.tr("server.um.runProseguiSalto.13"));
-                    job.write(I18n.tr("server.um.runProseguiSalto.14"));
-                    job.write(I18n.tr("server.um.runProseguiSalto.15"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.13"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.14"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.15"));
                     job.status = "completed";
                     return;
                 }
@@ -9559,10 +9559,10 @@ public final class UpdateManager {
                     st.put("phase", "finished").put("steps", steps);
                     writeJumpState(st);
                     job.write("");
-                    job.write(I18n.tr("server.um.runProseguiSalto.16"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.16"));
                     if (after.optBoolean("restartNeeded")) {
-                        job.write(I18n.tr("server.um.runProseguiSalto.17"));
-                        job.write(I18n.tr("server.um.runProseguiSalto.18"));
+                        job.write(I18n.tr("server.um.runJumpContinuation.17"));
+                        job.write(I18n.tr("server.um.runJumpContinuation.18"));
                         st.put("phase", "awaiting-final-restart");
                         writeJumpState(st);
                     } else {
@@ -9578,20 +9578,20 @@ public final class UpdateManager {
                         JSONArray broken = lib.optJSONArray("packages");
                         int howMany = broken == null ? 0 : broken.length();
                         if (howMany == 0) {
-                            job.write(I18n.tr("server.um.runProseguiSalto.19"));
-                            job.write(I18n.tr("server.um.runProseguiSalto.20"));
-                            job.write(I18n.tr("server.um.runProseguiSalto.21"));
+                            job.write(I18n.tr("server.um.runJumpContinuation.19"));
+                            job.write(I18n.tr("server.um.runJumpContinuation.20"));
+                            job.write(I18n.tr("server.um.runJumpContinuation.21"));
                         } else {
-                            job.write(I18n.tr("server.um.runProseguiSalto.22", java.util.Map.of("quanti", String.valueOf(howMany))));
+                            job.write(I18n.tr("server.um.runJumpContinuation.22", java.util.Map.of("howMany", String.valueOf(howMany))));
                             for (int i = 0; i < Math.min(howMany, 20); i++)
                                 job.write("      " + broken.getJSONObject(i).optString("name")
                                         + "  ->  " + broken.getJSONObject(i).optString("missing"));
-                            job.write(I18n.tr("server.um.runProseguiSalto.23"));
-                            job.write(I18n.tr("server.um.runProseguiSalto.24"));
+                            job.write(I18n.tr("server.um.runJumpContinuation.23"));
+                            job.write(I18n.tr("server.um.runJumpContinuation.24"));
                         }
-                        st.put("rebuild", howMany == 0 ? I18n.tr("server.um.runProseguiSalto.25") : I18n.tr("server.um.x.neededN", java.util.Map.of("n", String.valueOf(howMany))));
+                        st.put("rebuild", howMany == 0 ? I18n.tr("server.um.runJumpContinuation.25") : I18n.tr("server.um.x.neededN", java.util.Map.of("n", String.valueOf(howMany))));
                     }
-                    job.write(I18n.tr("server.um.runProseguiSalto.26"));
+                    job.write(I18n.tr("server.um.runJumpContinuation.26"));
                     job.status = "completed";
                     return;
                 }
@@ -9599,7 +9599,7 @@ public final class UpdateManager {
             st.put("phase", "too-many-rounds").put("steps", steps);
             writeJumpState(st);
             job.status = "error";
-            job.errorMessage = I18n.tr("server.um.runProseguiSalto.27");
+            job.errorMessage = I18n.tr("server.um.runJumpContinuation.27");
             job.write(I18n.tr("server.um.startSystemUpdateSearch.3", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
         } catch (Exception e) {
             job.status = "error";
@@ -9695,10 +9695,10 @@ public final class UpdateManager {
                 if (name.equals(environment.getJSONObject(i).getString("name"))) found = environment.getJSONObject(i);
             if (found == null)
                 return new JSONObject().put("success", false)
-                        .put("error", I18n.tr("server.um.deleteBootEnvironment.2", java.util.Map.of("nome", String.valueOf(name))));
+                        .put("error", I18n.tr("server.um.deleteBootEnvironment.2", java.util.Map.of("name", String.valueOf(name))));
             if (!found.getBoolean("deletable"))
                 return new JSONObject().put("success", false)
-                        .put("error", I18n.tr("server.um.x.beNoDelete", java.util.Map.of("nome", String.valueOf(name), "stato", String.valueOf(found.getString("state")), "perche", String.valueOf(found.getString("why")))));
+                        .put("error", I18n.tr("server.um.x.beNoDelete", java.util.Map.of("name", String.valueOf(name), "state", String.valueOf(found.getString("state")), "why", String.valueOf(found.getString("why")))));
 
             String output = sh("bectl destroy -F " + name + " 2>&1", 300).trim();
             // La prova e' che non compaia piu' nella lista, non che il comando sia uscito con zero.
@@ -9707,7 +9707,7 @@ public final class UpdateManager {
                     .put("space", found.getString("space"))
                     .put("output", output)
                     .put("note", via
-                        ? I18n.tr("server.um.x.beDeleted", java.util.Map.of("nome", String.valueOf(name), "spazio", String.valueOf(found.getString("space"))))
+                        ? I18n.tr("server.um.x.beDeleted", java.util.Map.of("name", String.valueOf(name), "space", String.valueOf(found.getString("space"))))
                         : I18n.tr("server.um.deleteBootEnvironment.3"))
                     .put("error", via ? "" : I18n.tr("server.um.deleteBootEnvironment.4", java.util.Map.of("output", String.valueOf(output))));
         } catch (Exception e) {
@@ -9728,7 +9728,7 @@ public final class UpdateManager {
             JSONObject os = operatingSystem();
             String before = sh("(cat " + dir + "/version.txt 2>/dev/null || cat " + dir + "/versione.txt 2>/dev/null) | tr '\n' ' '", 30).trim();
             addCheck(checks, "ver", I18n.tr("server.um.x.version"), "ok",
-                    I18n.tr("server.um.x.versionBeforeNow", java.util.Map.of("prima", String.valueOf(before), "k", String.valueOf(os.optString("installedKernel")), "l", String.valueOf(os.optString("userland")))));
+                    I18n.tr("server.um.x.versionBeforeNow", java.util.Map.of("before", String.valueOf(before), "k", String.valueOf(os.optString("installedKernel")), "l", String.valueOf(os.optString("userland")))));
             if (os.optBoolean("restartNeeded")) {
                 addCheck(checks, "riavvio", I18n.tr("server.um.x.restartTitle"), "wait",
                         I18n.tr("server.um.x.restartMissing", java.util.Map.of("k", String.valueOf(os.optString("installedKernel")), "u", String.valueOf(os.optString("uname")))));
@@ -9751,10 +9751,10 @@ public final class UpdateManager {
             addCheck(checks, "servizi", I18n.tr("server.um.verifyAfterUpdate.3"),
                     (off.isEmpty() && absent.isEmpty()) ? "ok" : "block",
                     (off.isEmpty() && absent.isEmpty())
-                    ? I18n.tr("server.um.verifyAfterUpdate.4", java.util.Map.of("controllati", String.valueOf(checked)))
+                    ? I18n.tr("server.um.verifyAfterUpdate.4", java.util.Map.of("checked", String.valueOf(checked)))
                     : I18n.tr("server.um.x.svcMissing", java.util.Map.of("n", String.valueOf(checked))) + " "
-                      + (off.isEmpty() ? "" : I18n.tr("server.um.x.svcOff", java.util.Map.of("elenco", String.valueOf(String.join(", ", off)))) + "  ")
-                      + (absent.isEmpty() ? "" : I18n.tr("server.um.x.svcGone", java.util.Map.of("elenco", String.valueOf(String.join(", ", absent))))));
+                      + (off.isEmpty() ? "" : I18n.tr("server.um.x.svcOff", java.util.Map.of("list", String.valueOf(String.join(", ", off)))) + "  ")
+                      + (absent.isEmpty() ? "" : I18n.tr("server.um.x.svcGone", java.util.Map.of("list", String.valueOf(String.join(", ", absent))))));
 
             // Pacchetti: nessuno deve essere sparito.
             java.util.Map<String, String> now = new java.util.HashMap<>();
@@ -9774,9 +9774,9 @@ public final class UpdateManager {
             }
             addCheck(checks, "pkg", I18n.tr("server.um.x.packages"), missing.isEmpty() ? "ok" : "block",
                     missing.isEmpty()
-                    ? I18n.tr("server.um.x.pkgsNoneGone", java.util.Map.of("prima", String.valueOf(totalBefore), "ora", String.valueOf(now.size())))
-                      + (different.isEmpty() ? "" : ". " + I18n.tr("server.um.x.pkgsChanged", java.util.Map.of("elenco", String.valueOf(String.join(", ", different)))))
-                    : I18n.tr("server.um.x.pkgsGone", java.util.Map.of("n", String.valueOf(missing.size()), "elenco", String.valueOf(String.join(", ", missing)))));
+                    ? I18n.tr("server.um.x.pkgsNoneGone", java.util.Map.of("before", String.valueOf(totalBefore), "now", String.valueOf(now.size())))
+                      + (different.isEmpty() ? "" : ". " + I18n.tr("server.um.x.pkgsChanged", java.util.Map.of("list", String.valueOf(String.join(", ", different)))))
+                    : I18n.tr("server.um.x.pkgsGone", java.util.Map.of("n", String.valueOf(missing.size()), "list", String.valueOf(String.join(", ", missing)))));
 
             // Protezione: dopo un'operazione di questa portata va riconfermata.
             JSONObject st = packagesStatus();
@@ -9793,7 +9793,7 @@ public final class UpdateManager {
                 int free = 0;
                 for (int i = 0; i < el.length(); i++) if (el.getJSONObject(i).getBoolean("deletable")) free++;
                 addCheck(checks, "be", I18n.tr("server.um.verifyAfterUpdate.5"), "ok",
-                        I18n.tr("server.um.verifyAfterUpdate.6", java.util.Map.of("length", String.valueOf(el.length()), "liberi", String.valueOf(free))));
+                        I18n.tr("server.um.verifyAfterUpdate.6", java.util.Map.of("length", String.valueOf(el.length()), "free", String.valueOf(free))));
             }
 
             boolean fault = false;
@@ -9823,7 +9823,7 @@ public final class UpdateManager {
             if (os.optBoolean("restartNeeded"))
                 t.append(I18n.tr("server.um.x.repRestartNeeded")).append('\n');
             if (!os.optString("endOfSupport").isEmpty())
-                t.append(I18n.tr("server.um.x.repEol", java.util.Map.of("serie", String.valueOf(os.optString("series")), "fine", String.valueOf(os.optString("endOfSupport")), "note", String.valueOf(os.optString("supportNotes"))))).append('\n');
+                t.append(I18n.tr("server.um.x.repEol", java.util.Map.of("series", String.valueOf(os.optString("series")), "end", String.valueOf(os.optString("endOfSupport")), "note", String.valueOf(os.optString("supportNotes"))))).append('\n');
             else
                 t.append(I18n.tr("server.um.x.repEolUnknown")).append('\n');
             t.append(I18n.tr("server.um.x.repSource", java.util.Map.of("f", String.valueOf(os.optString("supportSource"))))).append('\n');
@@ -9922,7 +9922,7 @@ public final class UpdateManager {
                 for (String c : cand)
                     if (ok("test -f /usr/local/etc/rc.d/" + c + " -o -f /etc/rc.d/" + c, 10)) { svc = c; break; }
                 if (svc == null) continue;
-                t.append(String.format("  %-18s %s%n", svc, ok("service " + svc + " status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runPassaggioPython.14")));
+                t.append(String.format("  %-18s %s%n", svc, ok("service " + svc + " status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runPythonTransition.14")));
             }
 
             t.append("\n--- ").append(I18n.tr("server.um.x.repSpace")).append(" ---\n");
@@ -9973,7 +9973,7 @@ public final class UpdateManager {
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.startBranchChange.1"));
         String id = "ramo-" + System.currentTimeMillis();
         Job j = new Job(id, "pkg_branch");
-        return startOnTurn(id, j, I18n.tr("server.um.startBranchChange.2", java.util.Map.of("verso", String.valueOf(target))), "pkg-branch", () -> {
+        return startOnTurn(id, j, I18n.tr("server.um.startBranchChange.2", java.util.Map.of("destination", String.valueOf(target))), "pkg-branch", () -> {
             j.status = "running";
             try {
                 JSONObject r = PkgBranch.change(PkgBranch.real(), j::write, target, fingerprint);
@@ -10075,9 +10075,9 @@ public final class UpdateManager {
             boolean unlocked = false;
             try {
                 j.advance(1, 5);
-                j.write(I18n.tr("server.um.startForeignClientCleanup.3", java.util.Map.of("estraneo", String.valueOf(foreign), "corretto", String.valueOf(correct))));
+                j.write(I18n.tr("server.um.startForeignClientCleanup.3", java.util.Map.of("foreign", String.valueOf(foreign), "correct", String.valueOf(correct))));
                 j.write("");
-                j.write(I18n.tr("server.um.startForeignClientCleanup.4", java.util.Map.of("estraneo", String.valueOf(foreign))));
+                j.write(I18n.tr("server.um.startForeignClientCleanup.4", java.util.Map.of("foreign", String.valueOf(foreign))));
                 String dip = sh("pkg query %rn " + foreign + " 2>/dev/null", 30).trim();
                 if (!dip.isEmpty()) {
                     j.status = "error";
@@ -10085,7 +10085,7 @@ public final class UpdateManager {
                     j.write("    " + j.errorMessage);
                     return;
                 }
-                j.write(I18n.tr("server.um.startForeignClientCleanup.5", java.util.Map.of("estraneo", String.valueOf(foreign))));
+                j.write(I18n.tr("server.um.startForeignClientCleanup.5", java.util.Map.of("foreign", String.valueOf(foreign))));
                 String libBefore = sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.os.24 2>/dev/null", 20).trim();
                 j.write("    " + I18n.tr("server.um.x.libOwner", java.util.Map.of("p", String.valueOf(libBefore.isEmpty() ? I18n.tr("server.um.x.nobodyP") : libBefore))));
 
@@ -10098,7 +10098,7 @@ public final class UpdateManager {
 
                 j.advance(3, 5);
                 j.write("");
-                j.write(I18n.tr("server.um.startForeignClientCleanup.6", java.util.Map.of("corretto", String.valueOf(correct))));
+                j.write(I18n.tr("server.um.startForeignClientCleanup.6", java.util.Map.of("correct", String.valueOf(correct))));
                 if (locked(sh("pkg lock -l 2>/dev/null"), correct)) {
                     // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
                     String stateError = PackageQueue.writeState(java.util.List.of(correct));
@@ -10118,7 +10118,7 @@ public final class UpdateManager {
                 String chk = sh("pkg check -s " + correct + " 2>&1", 300);
                 long nonconforming = 0;
                 for (String l : chk.split("\n")) if (l.contains("checksum mismatch")) nonconforming++;
-                j.write(I18n.tr("server.um.startForeignClientCleanup.8", java.util.Map.of("difformi", String.valueOf(nonconforming))));
+                j.write(I18n.tr("server.um.startForeignClientCleanup.8", java.util.Map.of("nonconforming", String.valueOf(nonconforming))));
                 if (nonconforming > 0) {
                     for (String l : chk.split("\n")) if (l.contains("checksum mismatch")) j.write("      " + l.trim());
                 }
@@ -10138,8 +10138,8 @@ public final class UpdateManager {
                     postfixOk = !q.trim().isEmpty() && !ql.contains("error") && !ql.contains("fatal")
                             && !ql.contains("not found") && !ql.contains("dlopen") && !ql.startsWith("postmap:");
                     j.write("    " + (postfixOk
-                            ? I18n.tr("server.um.x.pfResolveYes", java.util.Map.of("casella", String.valueOf(mailbox), "r", String.valueOf(q.trim())))
-                            : I18n.tr("server.um.x.pfResolveNo", java.util.Map.of("casella", String.valueOf(mailbox), "r", String.valueOf(q.trim())))));
+                            ? I18n.tr("server.um.x.pfResolveYes", java.util.Map.of("mailbox", String.valueOf(mailbox), "r", String.valueOf(q.trim())))
+                            : I18n.tr("server.um.x.pfResolveNo", java.util.Map.of("mailbox", String.valueOf(mailbox), "r", String.valueOf(q.trim())))));
                 }
                 if (nonconforming == 0 && broken.length() == 0 && !libAfter.isEmpty() && postfixOk) {
                     j.status = "completed";
@@ -10180,13 +10180,13 @@ public final class UpdateManager {
         java.util.List<String> unlockedPackages = new ArrayList<>();
         try {
             job.advance(1, 5);
-            job.write(I18n.tr("server.um.runRicollegamento.1"));
+            job.write(I18n.tr("server.um.runRelinking.1"));
             job.write("");
-            job.write(I18n.tr("server.um.runRicollegamento.2"));
+            job.write(I18n.tr("server.um.runRelinking.2"));
             JSONObject d = packagesWithMissingLibraries();
             JSONArray broken = d.getJSONArray("packages");
             if (broken.length() == 0) {
-                job.write(I18n.tr("server.um.runRicollegamento.3"));
+                job.write(I18n.tr("server.um.runRelinking.3"));
                 job.status = "completed";
                 return;
             }
@@ -10211,12 +10211,12 @@ public final class UpdateManager {
                 // Da riproteggere tutti, anche uno sblocco fallito: cosi' l'elenco su disco si chiude.
                 unlockedPackages.addAll(toUnlock);
                 for (String n : toUnlock)
-                    job.write("    " + n + ": " + (ok("pkg unlock -y " + n, 30) ? I18n.tr("server.um.x.unlocked") : I18n.tr("server.um.runRicollegamento.4")));
-            } else job.write(I18n.tr("server.um.runRicollegamento.5"));
+                    job.write("    " + n + ": " + (ok("pkg unlock -y " + n, 30) ? I18n.tr("server.um.x.unlocked") : I18n.tr("server.um.runRelinking.4")));
+            } else job.write(I18n.tr("server.um.runRelinking.5"));
 
             job.advance(3, 5);
             job.write("");
-            job.write(I18n.tr("server.um.runRicollegamento.6"));
+            job.write(I18n.tr("server.um.runRelinking.6"));
             StringBuilder el = new StringBuilder();
             for (String n : names) el.append(' ').append(n);
             // PRIMA una simulazione: se pkg segnala hasConflicts di file, ci si ferma.
@@ -10225,7 +10225,7 @@ public final class UpdateManager {
             // file del client MySQL 8.4 con quelli di un altro pacchetto.
             String simulation = sh("pkg install -f -n" + el + " 2>&1", 600);
             if (simulation.toLowerCase().contains("conflicts with")) {
-                job.write(I18n.tr("server.um.runRicollegamento.7"));
+                job.write(I18n.tr("server.um.runRelinking.7"));
                 for (String l : simulation.split("\n")) {
                     if (l.toLowerCase().contains("conflict")) job.write("      " + l.trim());
                 }
@@ -10237,7 +10237,7 @@ public final class UpdateManager {
 
             job.advance(4, 5);
             job.write("");
-            job.write(I18n.tr("server.um.runRicollegamento.8"));
+            job.write(I18n.tr("server.um.runRelinking.8"));
             java.util.LinkedHashSet<String> services = new java.util.LinkedHashSet<>();
             for (String n : names) services.addAll(servicesToRestart(n));
             for (String logical : services) {
@@ -10245,25 +10245,25 @@ public final class UpdateManager {
                 if (real == null) continue;
                 String test = testConfigOf(real);
                 if (test != null && !Shell.runShell(Duration.ofSeconds(60), test + " 2>&1").success()) {
-                    job.write(I18n.tr("server.um.runRicollegamento.9", java.util.Map.of("reale", String.valueOf(real))));
+                    job.write(I18n.tr("server.um.runRelinking.9", java.util.Map.of("real", String.valueOf(real))));
                     continue;
                 }
                 ok("service " + real + " restart", 120);
-                job.write("    " + real + ": " + (ok("service " + real + " status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigrazione84.26")));
+                job.write("    " + real + ": " + (ok("service " + real + " status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26")));
             }
 
             job.advance(5, 5);
             job.write("");
-            job.write(I18n.tr("server.um.runRicollegamento.10"));
+            job.write(I18n.tr("server.um.runRelinking.10"));
             JSONArray still = packagesWithMissingLibraries().getJSONArray("packages");
             if (still.length() == 0) {
-                job.write(I18n.tr("server.um.runRicollegamento.11"));
+                job.write(I18n.tr("server.um.runRelinking.11"));
                 job.status = "completed";
                 job.write("");
-                job.write(I18n.tr("server.um.runRicollegamento.12"));
+                job.write(I18n.tr("server.um.runRelinking.12"));
             } else {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runRicollegamento.13", java.util.Map.of("length", String.valueOf(still.length())));
+                job.errorMessage = I18n.tr("server.um.runRelinking.13", java.util.Map.of("length", String.valueOf(still.length())));
                 for (int i = 0; i < still.length(); i++) {
                     JSONObject o = still.getJSONObject(i);
                     job.write("    " + I18n.tr("server.um.x.stillBroken", java.util.Map.of("name", String.valueOf(o.getString("name")), "lib", String.valueOf(o.getString("lib")))));
@@ -10331,7 +10331,7 @@ public final class UpdateManager {
             if (!currentSignature.equals(approvedSignature)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runUpdateJob.7");
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.3", java.util.Map.of("firmaApprovata", String.valueOf(approvedSignature), "firmaOra", String.valueOf(currentSignature))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature), "currentSignature", String.valueOf(currentSignature))));
                 job.write(I18n.tr("server.um.runUpdateJob.8"));
                 job.finishedAt = System.currentTimeMillis();
                 return;
@@ -10341,7 +10341,7 @@ public final class UpdateManager {
             // lanciava un pkg upgrade che non faceva niente e si dichiarava riuscito.
             if (!plan.optBoolean("runnable")) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errori", String.valueOf(String.join(" | ", jsonArrayToList(plan.getJSONArray("pkgErrors"))))))
+                job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errors", String.valueOf(String.join(" | ", jsonArrayToList(plan.getJSONArray("pkgErrors"))))))
                         + (plan.getJSONArray("changes").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
                 job.write(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                 job.finishedAt = System.currentTimeMillis();
@@ -10397,7 +10397,7 @@ public final class UpdateManager {
             JSONArray verification = PackagePlan.verifyOutcome(plan);
             for (int i = 0; i < verification.length(); i++) {
                 JSONObject v2 = verification.getJSONObject(i);
-                job.write("    " + (v2.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("nome", String.valueOf(v2.getString("name")), "atteso", String.valueOf(v2.getString("expected")), "trovato", String.valueOf(v2.getString("found")))));
+                job.write("    " + (v2.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("name", String.valueOf(v2.getString("name")), "expected", String.valueOf(v2.getString("expected")), "found", String.valueOf(v2.getString("found")))));
                 if (!v2.getBoolean("ok")) planNotFollowed = true;
             }
             JSONArray outsidePlan = compareWithInventory(job, inventoryBefore, plan,
@@ -10411,7 +10411,7 @@ public final class UpdateManager {
             job.write("");
             job.write(I18n.tr("server.um.runUpdateJob.4", java.util.Map.of("code", String.valueOf(code))));
             job.write("");
-            job.write(I18n.tr("server.um.runMigrazione84.31"));
+            job.write(I18n.tr("server.um.runMigration84.31"));
             boolean fallen = fallenServices(job, servicesBefore);
             sideEffects.checkListening(job);
             java.util.List<String> problems = new ArrayList<>();
@@ -10495,7 +10495,7 @@ public final class UpdateManager {
         try {
             if (Files.exists(Paths.get(MAINTENANCE_STATE))) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMaintenanceJob.1", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE)));
+                job.errorMessage = I18n.tr("server.um.runMaintenanceJob.1", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE)));
                 job.write(I18n.tr("server.um.runMaintenanceJob.2", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                 job.write(I18n.tr("server.um.runMaintenanceJob.3"));
                 return;
@@ -10507,7 +10507,7 @@ public final class UpdateManager {
             lockedBefore = lockedNames();
             servicesBefore = servicesState();
             job.write(I18n.tr("server.um.x.initialState", java.util.Map.of("n", String.valueOf(lockedBefore.size()))));
-            job.write(I18n.tr("server.um.x.svcRunningList", java.util.Map.of("elenco", String.valueOf(servicesBefore.entrySet().stream()
+            job.write(I18n.tr("server.um.x.svcRunningList", java.util.Map.of("list", String.valueOf(servicesBefore.entrySet().stream()
                     .filter(Map.Entry::getValue).map(Map.Entry::getKey)
                     .collect(java.util.stream.Collectors.joining(", "))))));
             job.write("");
@@ -10528,13 +10528,13 @@ public final class UpdateManager {
             if (!plan.optString("signature", "").equals(approvedSignature)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runMaintenanceJob.6");
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.3", java.util.Map.of("firmaApprovata", String.valueOf(approvedSignature), "firmaOra", String.valueOf(plan.optString("signature")))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature), "currentSignature", String.valueOf(plan.optString("signature")))));
                 job.write(I18n.tr("server.um.runMaintenanceJob.7"));
                 return;
             }
             if (!plan.optBoolean("runnable")) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errori", String.valueOf(String.join(" | ", jsonArrayToList(plan.getJSONArray("pkgErrors"))))))
+                job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errors", String.valueOf(String.join(" | ", jsonArrayToList(plan.getJSONArray("pkgErrors"))))))
                         + (plan.getJSONArray("changes").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
                 job.write(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                 return;
@@ -10574,12 +10574,12 @@ public final class UpdateManager {
                 if (stateError != null) {
                     toRelock.clear();   // non si e' sbloccato niente: niente da riproteggere
                     job.status = "error";
-                    job.errorMessage = I18n.tr("server.um.runMaintenanceJob.10", java.util.Map.of("errStato", String.valueOf(stateError)));
+                    job.errorMessage = I18n.tr("server.um.runMaintenanceJob.10", java.util.Map.of("stateError", String.valueOf(stateError)));
                     job.write(I18n.tr("server.um.runMaintenanceJob.11", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                     return;
                 }
                 stateWritten = true;
-                job.write(I18n.tr("server.um.runAggiornamentoGuidato.7", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
+                job.write(I18n.tr("server.um.runGuidedUpdate.7", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
             }
             for (String n : toRelock) ok("pkg unlock -y " + n, 30);
 
@@ -10616,7 +10616,7 @@ public final class UpdateManager {
             JSONArray verification = PackagePlan.verifyOutcome(plan);
             for (int i = 0; i < verification.length(); i++) {
                 JSONObject v = verification.getJSONObject(i);
-                job.write("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("nome", String.valueOf(v.getString("name")), "atteso", String.valueOf(v.getString("expected")), "trovato", String.valueOf(v.getString("found")))));
+                job.write("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of("name", String.valueOf(v.getString("name")), "expected", String.valueOf(v.getString("expected")), "found", String.valueOf(v.getString("found")))));
                 if (!v.getBoolean("ok")) planNotFollowed = true;
             }
 
@@ -10654,7 +10654,7 @@ public final class UpdateManager {
             }
             if (!toRestart.isEmpty()) {
                 job.write("");
-                job.write(I18n.tr("server.um.x.toRestart", java.util.Map.of("elenco", String.valueOf(String.join(", ", toRestart)))));
+                job.write(I18n.tr("server.um.x.toRestart", java.util.Map.of("list", String.valueOf(String.join(", ", toRestart)))));
                 job.write(I18n.tr("server.um.runMaintenanceJob.15"));
             }
             writeActionMessages(job, captured.toString());
@@ -10676,7 +10676,7 @@ public final class UpdateManager {
             if (done == toRelock.size()) { if (stateWritten) clearState(); }
             else {
                 job.write(I18n.tr("server.um.runMaintenanceJob.18"));
-                job.write(I18n.tr("server.um.runPassaggioPython.21", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE))));
+                job.write(I18n.tr("server.um.runPythonTransition.21", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
             }
 
             // === Verifica del proprio operato: non basta aver eseguito i passi. ===
@@ -10691,7 +10691,7 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runMaintenanceJob.20", java.util.Map.of("size", String.valueOf(lockedAfter.size()))));
             } else {
                 alarm = true;
-                job.write("  " + I18n.tr("server.um.x.protLost", java.util.Map.of("elenco", String.valueOf(String.join(", ", missing)))));
+                job.write("  " + I18n.tr("server.um.x.protLost", java.util.Map.of("list", String.valueOf(String.join(", ", missing)))));
             }
 
             // Questo confronto era giusto solo qui, e scritto a mano: adesso e' lo stesso

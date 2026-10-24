@@ -12084,13 +12084,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-binoculars me-2" aria-hidden="true"></i><strong>{{t:up.sorv}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.sorvSub}}</span></span>
+                    <span><i class="fas fa-binoculars me-2" aria-hidden="true"></i><strong>{{t:up.watch}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.watchSub}}</span></span>
                     <button class="btn btn-sm btn-outline-primary" onclick="sorvCarica()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.sorvIntro1.html}}</p>
-                    <p class="small text-muted mb-2">{{t:up.sorvIntro2.html}}</p>
+                    <p class="small text-muted mb-2">{{t:up.watchIntro1.html}}</p>
+                    <p class="small text-muted mb-2">{{t:up.watchIntro2.html}}</p>
                     <div id="upd-sorv"><span class="text-muted">{{t:up.phCheck}}</span></div>
                 </div>
             </div>

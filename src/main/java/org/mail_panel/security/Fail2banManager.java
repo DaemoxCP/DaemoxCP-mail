@@ -1909,8 +1909,8 @@ public class Fail2banManager {
                     ? I18n.tr("server.f2bm.restarting")
                     : j.banCommands.isEmpty()
                     ? I18n.tr("server.f2bm.noBanCmd")
-                      + (j.seenActions.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsRead", java.util.Map.of("elenco", String.valueOf(String.join(", ", j.seenActions)))))
-                      + (j.discardedActions.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsDropped", java.util.Map.of("elenco", String.valueOf(String.join(", ", j.discardedActions)))))
+                      + (j.seenActions.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsRead", java.util.Map.of("list", String.valueOf(String.join(", ", j.seenActions)))))
+                      + (j.discardedActions.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsDropped", java.util.Map.of("list", String.valueOf(String.join(", ", j.discardedActions)))))
                       + " " + I18n.tr("server.f2bm.actionsAnswer", java.util.Map.of("o", String.valueOf(j.actionsOutput)))
                     : I18n.tr("server.f2bm.noPfTable", java.util.Map.of("cmd", String.valueOf(String.join(" ; ", j.banCommands))));
                 c.jails.add(j);

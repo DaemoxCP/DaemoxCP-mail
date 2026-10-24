@@ -288,7 +288,7 @@ public final class PkgBranch {
             warnings.put(I18n.tr("server.branch.onLatest"));
         JSONArray after = st.optJSONArray("fileAfter");
         if (after != null && !after.isEmpty())
-            warnings.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(FOLDER), "elenco", String.valueOf(String.join(", ", strings(after))))));
+            warnings.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(FOLDER), "list", String.valueOf(String.join(", ", strings(after))))));
         return r.put("possible", true).put("changes", changes).put("warnings", warnings).put("file", FILE.toString())
                 .put("content", content(repos, target, s.now()))
                 .put("howToReturn", st.optBoolean("panelOwnedFile")
@@ -323,7 +323,7 @@ public final class PkgBranch {
         if (target.equals(from)) return error(log, I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(target))));
         List<Repo> repos = repository(s.pkgVv());
         String before = s.read(FILE);
-        log.line(I18n.tr("server.branch.nowAsked", java.util.Map.of("da", String.valueOf(from), "verso", String.valueOf(target))));
+        log.line(I18n.tr("server.branch.nowAsked", java.util.Map.of("from", String.valueOf(from), "destination", String.valueOf(target))));
         try {
             boolean done = false;
             if (before != null) {
@@ -346,8 +346,8 @@ public final class PkgBranch {
             if (!target.equals(now)) {
                 restore(s, before);
                 List<String> after = fileAfter(s);
-                return error(log, I18n.tr("server.branch.wrongAfter", java.util.Map.of("ora", String.valueOf(now), "verso", String.valueOf(target))) + " "
-                        + (after.isEmpty() ? "" : I18n.tr("server.branch.decidedByLater", java.util.Map.of("elenco", String.valueOf(String.join(", ", after)))) + " ")
+                return error(log, I18n.tr("server.branch.wrongAfter", java.util.Map.of("now", String.valueOf(now), "destination", String.valueOf(target))) + " "
+                        + (after.isEmpty() ? "" : I18n.tr("server.branch.decidedByLater", java.util.Map.of("list", String.valueOf(String.join(", ", after)))) + " ")
                         + I18n.tr("server.branch.restored"));
             }
             log.line("[3/3] " + I18n.tr("server.branch.downloading", java.util.Map.of("r", String.valueOf(target))));
@@ -355,7 +355,7 @@ public final class PkgBranch {
             if (u.code() != 0) {
                 restore(s, before);
                 String matches = effective(s);
-                return error(log, I18n.tr("server.branch.catalogFails", java.util.Map.of("r", String.valueOf(target), "c", String.valueOf(u.code()), "torna", String.valueOf(matches))));
+                return error(log, I18n.tr("server.branch.catalogFails", java.util.Map.of("r", String.valueOf(target), "c", String.valueOf(u.code()), "returns", String.valueOf(matches))));
             }
         } catch (IOException e) {
             try { restore(s, before); } catch (IOException ignored) { /* detto sotto */ }
@@ -388,7 +388,7 @@ public final class PkgBranch {
         JSONObject r = new JSONObject().put("success", true).put("branch", target).put("messageText", msg.toString());
         if (v != null) {
             r.put("updatable", updatable).put("mostRecent", new JSONArray(mostRecent.size() > 30 ? mostRecent.subList(0, 30) : mostRecent));
-            if (!mostRecent.isEmpty()) log.line(I18n.tr("server.branch.newerList", java.util.Map.of("elenco", String.valueOf(String.join(", ", mostRecent.size() > 30 ? mostRecent.subList(0, 30) : mostRecent)))));
+            if (!mostRecent.isEmpty()) log.line(I18n.tr("server.branch.newerList", java.util.Map.of("list", String.valueOf(String.join(", ", mostRecent.size() > 30 ? mostRecent.subList(0, 30) : mostRecent)))));
         }
         return r;
     }
