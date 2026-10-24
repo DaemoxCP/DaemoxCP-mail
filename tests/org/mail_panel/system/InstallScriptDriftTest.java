@@ -182,6 +182,9 @@ public class InstallScriptDriftTest {
     static final String ETC_FILE = "/etc/drift-probe.conf";
     static final String USER = "driftprobe";
     static final String NGINX_PID = "/var/run/nginx.pid";
+    /** Dove il pannello deve mettere la versione di prima: scritto qui per esteso, perche' la
+     *  prova gira anche contro il jar senza la correzione, dove la costante non c'e'. */
+    static final String SAVED_DIR = "/var/db/mailpanel/config-before-update";
     static final String CONF = "/usr/local/etc/drift-probe/drift-probe.conf";
     static final String RESTART = "/usr/local/libexec/drift-probe/restart";
     static final String REPO_CONF = "/usr/local/etc/pkg/repos/zzz-drift-probe.conf";
@@ -200,7 +203,7 @@ public class InstallScriptDriftTest {
         removePackage();
         sh("rm -f " + REPO_CONF + "; rm -rf " + REPO_DB);
         String packagesBefore = sh("pkg query %n-%v | sort | sha256");
-        String savedBefore = sh("ls " + InstallSideEffects.BEFORE_UPDATE_DIR + " 2>/dev/null");
+        String savedBefore = sh("ls " + SAVED_DIR + " 2>/dev/null");
         Set<String> lockedBefore = locked();
         work = Files.createTempDirectory(Path.of("/var/tmp"), "drift-probe");
         try {
@@ -224,8 +227,8 @@ public class InstallScriptDriftTest {
             removePackage();
             sh("rm -f " + REPO_CONF + "; rm -rf " + REPO_DB + " " + work);
             // Le copie «di prima» che i casi sporchi hanno messo da parte: sono della prova.
-            for (String d : sh("ls " + InstallSideEffects.BEFORE_UPDATE_DIR + " 2>/dev/null").split("\n"))
-                if (!d.isBlank() && !savedBefore.contains(d.trim())) sh("rm -rf " + InstallSideEffects.BEFORE_UPDATE_DIR + "/" + d.trim());
+            for (String d : sh("ls " + SAVED_DIR + " 2>/dev/null").split("\n"))
+                if (!d.isBlank() && !savedBefore.contains(d.trim())) sh("rm -rf " + SAVED_DIR + "/" + d.trim());
             // E la nota e i cartelli dei pacchetti bloccati, che dopo il pacchetto tolto vanno riallineati.
             UpdateManager.refreshLockTrace();
             String after = sh("pkg query %n-%v | sort | sha256");
@@ -238,7 +241,7 @@ public class InstallScriptDriftTest {
             check("alla fine: niente file di prova in /etc, nessun utente di prova",
                     !Files.exists(Path.of(ETC_FILE)) && !sh("pw usershow " + USER + " 2>&1").startsWith(USER + ":"));
             check("alla fine: le copie «di prima» sono quelle che c'erano",
-                    sh("ls " + InstallSideEffects.BEFORE_UPDATE_DIR + " 2>/dev/null").equals(savedBefore));
+                    sh("ls " + SAVED_DIR + " 2>/dev/null").equals(savedBefore));
         }
     }
 
