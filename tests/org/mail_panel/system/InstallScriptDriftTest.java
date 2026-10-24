@@ -37,8 +37,8 @@ import java.util.TreeSet;
  *
  *    Il servizio e' un nc in ascolto su 127.0.0.1 e ::1, porta 47425. Lo script della 1.1
  *    non lo riavvia: spegne il lato IPv6, che e' l'effetto del riavvio. Il motivo e' misurato:
- *    pkg uccide i processi che uno script di installazione avvia, quindi un servizio
- *    rilanciato dallo script muore con lo script.
+ *    un servizio rilanciato dallo script di installazione non sopravvive all'installazione
+ *    (dopo l'aggiornamento non c'era piu' niente in ascolto, nemmeno in IPv4).
  *
  *    Per tenere fuori i pacchetti veri, durante la prova i repository FreeBSD-ports e
  *    FreeBSD-ports-kmods sono spenti (un file in /usr/local/etc/pkg/repos, tolto alla fine),
