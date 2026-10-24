@@ -13170,7 +13170,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         return """
         // L'esito arriva come codice del server; qui il nome nella lingua della pagina.
         function updOutcome(v) {
-            return ({ coerente: t('up.eConsistent'), DIVERGE: t('up.eDiverges'), MISTO: t('up.eMixed'), assente: t('up.eMissing'),
+            return ({ consistent: t('up.eConsistent'), DIVERGE: t('up.eDiverges'), MISTO: t('up.eMixed'), absent: t('up.eMissing'),
                       'port installato accanto al sistema base': t('up.ePortBeside') })[v] || v;
         }
 
@@ -13444,7 +13444,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
             doubtful.forEach(x => {
                 h += '<tr class="upd-cell"><td><span class="badge ' + (x.state === 'criterion' ? 'upd-badge-info' : 'upd-badge-warn')
-                   + '">' + escHtml(({ criterio: t('up.sCriterion'), 'da verificare': t('up.sToCheck') })[x.state] || x.state) + '</span></td>'
+                   + '">' + escHtml(({ criterion: t('up.sCriterion'), unconfirmed: t('up.sToCheck') })[x.state] || x.state) + '</span></td>'
                    + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
                    + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
@@ -13486,7 +13486,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + (!x.resolved && x.onDisk
                       ? '<br><span class="small text-danger">' + escHtml(t('up.existsIn', { dir: x.expectedIn })) + '</span>' : '')
                    + '</td>'
-                   + '<td><span class="badge ' + b + '">' + escHtml(({ raggiungibile: t('up.sReachable'), 'non installato': t('up.notInstalled'),
+                   + '<td><span class="badge ' + b + '">' + escHtml(({ reachable: t('up.sReachable'), 'non installato': t('up.notInstalled'),
                                                                         "C'E' MA IL PATH NON LO RAGGIUNGE": t('up.sUnreachable') })[x.state] || x.state) + '</span></td></tr>';
             });
             h += '</tbody></table></div>';
@@ -14152,10 +14152,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 return '<div class="alert alert-danger py-2 small mb-2">' + escHtml(t('up.planUnavailable')) + ' '
                      + updEsc(pn.error || pn.error || '?') + '</div>';
             }
-            const kindName = { aggiorna: t('up.tUpgrade'), installa: t('up.tInstall'), reinstalla: t('up.tReinstall'),
-                               rimuove: t('up.tRemove'), retrocede: t('up.tDowngrade') };
-            const kindCls = { aggiorna: 'bg-primary', installa: 'bg-info text-dark', reinstalla: 'bg-secondary',
-                              rimuove: 'bg-danger', retrocede: 'bg-danger' };
+            const kindName = { upgrade: t('up.tUpgrade'), install: t('up.tInstall'), reinstall: t('up.tReinstall'),
+                               remove: t('up.tRemove'), downgrade: t('up.tDowngrade') };
+            const kindCls = { upgrade: 'bg-primary', install: 'bg-info text-dark', reinstall: 'bg-secondary',
+                              remove: 'bg-danger', downgrade: 'bg-danger' };
             let h = '';
             if ((pn.changes || []).length) {
                 h += '<div class="small fw-bold mb-1">' + escHtml(tn('up.exactPlanN', pn.changes.length)) + '</div>'

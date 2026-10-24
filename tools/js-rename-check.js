@@ -17,7 +17,11 @@ function tokens(code) {
 function scripts(html) { const r = []; const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g; let m; while ((m = re.exec(html))) r.push(m[1]); return r; }
 let bad = 0, pages = 0, renamed = 0;
 const problem = s => { if (bad++ < 25) console.log('NON TORNA ' + s); };
-for (const f of fs.readdirSync(before).filter(f => f.endsWith('.html'))) {
+// le due cartelle devono avere le stesse pagine, e almeno una: con niente davanti non si verifica niente
+const listA = fs.readdirSync(before).filter(f => f.endsWith('.html')).sort(), listB = fs.readdirSync(after).filter(f => f.endsWith('.html')).sort();
+if (!listA.length) problem('nessuna pagina in ' + before);
+if (listA.join() !== listB.join()) problem('le pagine non sono le stesse: ' + listA.length + ' prima, ' + listB.length + ' dopo');
+for (const f of listA.filter(f => listB.includes(f))) {
   const A = fs.readFileSync(path.join(before, f), 'utf8'), B = fs.readFileSync(path.join(after, f), 'utf8');
   pages++;
   const sa = scripts(A), sb = scripts(B);

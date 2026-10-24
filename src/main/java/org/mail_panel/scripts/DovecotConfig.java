@@ -639,12 +639,12 @@ public final class DovecotConfig {
              + "l'accesso unico a Roundcube fa login come email*masteruser"},
             {"confirmed", "first_valid_uid / first_valid_gid / mail_privileged_group / ssl_cipher_list",
              "non compaiono fra le impostazioni rimosse: si tengono come nella 2.3"},
-            {"da confermare", "sieve_script { type = ... }",
+            {"unconfirmed", "sieve_script { type = ... }",
              "la descrizione elenca 'type' fra le chiavi, l'esempio ufficiale non lo scrive. Qui c'e': se doveconf lo rifiuta, va tolto"},
-            {"da confermare", "mail_uid / mail_gid",
+            {"unconfirmed", "mail_uid / mail_gid",
              "non citate fra le modifiche, quindi tenute. Se la 2.4 le avesse tolte, doveconf lo direbbe: "
              + "uid e gid arrivano comunque anche da userdb static, quindi togliendole non cambia niente"},
-            {"da confermare", "ssl = required, ssl_min_protocol, sendmail_path, !include",
+            {"unconfirmed", "ssl = required, ssl_min_protocol, sendmail_path, !include",
              "non citate fra le modifiche, quindi presumibilmente invariate"},
             {"criterion", "si tiene cio' che la 2.3 aveva, salvo changes documentati",
              "i due errori possibili non pesano uguale: un'impostazione che la 2.4 non conosce piu' fa "
