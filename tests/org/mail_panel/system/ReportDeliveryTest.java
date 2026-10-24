@@ -206,7 +206,7 @@ public class ReportDeliveryTest {
 
         // --- Visto da Postfix, esito non ancora scritto ---
         e = PeriodicReport.outcomeInLog(gmail.subList(0, 3), ID, A);
-        real("in coda: stato", "in coda".equals(e.optString("state")));
+        real("in coda: stato", "queued".equals(e.optString("state")));
         v = PeriodicReport.verdict(e);
         real("in coda: riuscito con avviso e il comando per cercarlo",
             v.optBoolean("success") && v.optBoolean("warning") && v.optString("note").contains("grep 4hB2Kq3Xz9zB6"));
@@ -237,7 +237,7 @@ public class ReportDeliveryTest {
             "Sep 25 18:50:00 mail postfix/cleanup[1]: 4ABC12: message-id=<" + ID + ">",
             "Sep 25 18:50:01 mail postfix/smtp[2]: X4ABC12: to=<owner@example.com>, relay=x[1.2.3.4]:25, delay=1, delays=0/0/0/1, dsn=5.0.0, status=bounced (no)");
         real("un numero di coda che finisce come il nostro non conta",
-            "in coda".equals(PeriodicReport.outcomeInLog(suffix, ID, A).optString("state")));
+            "queued".equals(PeriodicReport.outcomeInLog(suffix, ID, A).optString("state")));
 
         // --- Il Message-ID che il pannello genera ---
         String id1 = PeriodicReport.newMessageId("noreply-mailserver@domain-b.test");
