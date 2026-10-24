@@ -8,9 +8,9 @@
                 return;
             }
             const state = r.state;
-            let colore = state === 'ALREADY_PRESENT' ? 'success'
+            let color = state === 'ALREADY_PRESENT' ? 'success'
                        : state === 'ENTRY_MISSING' ? 'secondary' : 'warning';
-            let h = '<div class="alert alert-' + colore + ' py-2 small mb-2">'
+            let h = '<div class="alert alert-' + color + ' py-2 small mb-2">'
                   + '<i class="fas fa-' + (state === 'ALREADY_PRESENT' ? 'check-circle' : 'triangle-exclamation')
                   + ' me-1" aria-hidden="true"></i>' + updEsc(r.note) + '</div>';
 
@@ -28,7 +28,7 @@
                + '</td></tr></tbody></table>';
 
             if (state === 'ADDED')
-                h += '<button class="btn btn-sm btn-outline-warning" onclick="upd465Applica()"'
+                h += '<button class="btn btn-sm btn-outline-warning" onclick="upd465Apply()"'
                    + (r.safe ? '' : ' disabled')
                    + '><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('p465.apply')) + '</button>';
 
@@ -36,8 +36,8 @@
             el.innerHTML = h;
         }
 
-        async function upd465Applica() {
-            if (!updConferma(t('p465.confirm'), t('p465.wApply'))) return;
+        async function upd465Apply() {
+            if (!updConfirm(t('p465.confirm'), t('p465.wApply'))) return;
             const el = document.getElementById('upd-465-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('p465.applying')) + '';
             const r = await updApi('port465_apply', { confirm: 'APPLY' });

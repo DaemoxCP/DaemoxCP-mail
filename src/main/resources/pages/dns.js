@@ -318,10 +318,10 @@
                 // con l'altro e la scheda MX mostrava il verdetto dell'SPF. Il tipo lo dichiara
                 // il record stesso (checkType), cosi' l'accoppiamento e' un dato e non
                 // un'ipotesi ricavata dal nome.
-                const checkByTipo = new Map();
+                const checkByKind = new Map();
                 (data.checks || []).forEach(c => {
                     if (c.name) checkByFqdn.set(c.name.toLowerCase(), c);
-                    if (c.type) checkByTipo.set(c.type, c);
+                    if (c.type) checkByKind.set(c.type, c);
                 });
 
                 let okCount = 0, koCount = 0, unkCount = 0;
@@ -337,7 +337,7 @@
                     // Prima per tipo dichiarato: e' l'unico appaiamento che non puo' confondere
                     // due record diversi con lo stesso nome.
                     const ctype = card.getAttribute('data-check-type') || '';
-                    let check = ctype ? checkByTipo.get(ctype) : null;
+                    let check = ctype ? checkByKind.get(ctype) : null;
                     // Solo se il record non dichiara un tipo si ripiega sul nome, com'era prima.
                     if (!check) {
                         const fqdn = recordFqdn(rname, rzone).toLowerCase();
@@ -366,11 +366,11 @@
                             // host e il valore vero contiene anche priorita' e peso — e in piu'
                             // aggiungeva "e va bene cosi'", che e' un giudizio che questa riga
                             // non e' in grado di dare. Il giudizio lo da' gia' check.message.
-                            const vero = check.current_value;
-                            if (vero) {
-                                const corto = vero.length > 140 ? vero.substring(0, 140) + '…' : vero;
+                            const real = check.current_value;
+                            if (real) {
+                                const brief = real.length > 140 ? real.substring(0, 140) + '…' : real;
                                 ok += '<div class="mt-1"><span class="text-muted">' + escHtml(t('dns.published')) + '</span> '
-                                    + '<code class="small" style="word-break:break-all">' + escapeHtmlBl(corto) + '</code></div>';
+                                    + '<code class="small" style="word-break:break-all">' + escapeHtmlBl(brief) + '</code></div>';
                             }
                             detailWrap.innerHTML = ok + '</div>';
                         }
@@ -525,7 +525,7 @@
         // Lo scheduler vive dentro il server web del pannello. Dire "gira mentre il pannello
         // e' acceso" e' un avvertimento generico che scarica su chi legge il compito di andare
         // a controllare da un'altra parte; il pannello quel dato ce l'ha e puo' dirlo.
-        function fraseAvvioAutomatico(data) {
+        function autoStartSentence(data) {
             if (data.auto_start === true)
                 return escHtml(t('dns.autostartYes'));
             if (data.auto_start === false)
@@ -611,9 +611,9 @@
             // e' promettere al futuro una cosa gia' accaduta — ed e' esattamente cio' che
             // questo riquadro faceva. La data prossima tornera' ad avere senso a rotazione
             // conclusa, quando "ultima rotazione" sara' quella nuova.
-            const quando = nextRotationStatus(data);
-            if (quando === 'in_progress') {
-                const passi = {
+            const when = nextRotationStatus(data);
+            if (when === 'in_progress') {
+                const steps = {
                     'pending_dns': t('dns.stepPendingDns'),
                     'propagated': t('dns.stepPropagated'),
                     'active_grace': t('dns.stepActiveGrace')
@@ -621,15 +621,15 @@
                 nextEl.innerHTML = '<strong>' + escHtml(t('dns.rotationInProgress')) + '</strong> '
                     + '<span class="badge bg-info text-dark ms-1">' + escapeHtmlBl(data.rotation_state) + '</span>'
                     + '<div class="small text-muted">'
-                    + escHtml(passi[data.rotation_state] || t('dns.inProgress'))
+                    + escHtml(steps[data.rotation_state] || t('dns.inProgress'))
                     + (data.rotation_pending_selector
                         ? ' &mdash; ' + escHtml(t('dns.newSelector')) + ' <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>' : '')
                     + '. ' + escHtml(t('dns.stepsBelow')) + '</div>';
-            } else if (quando === 'disabled') {
+            } else if (when === 'disabled') {
                 nextEl.innerHTML = '<span class="text-muted"><i class="fas fa-pause-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.notScheduled')) + '</span>' +
                     '<div class="small text-muted">' + escHtml(t('dns.autoOff')) + '</div>';
             } else if (nextTs) {
-                if (quando === 'due') {
+                if (when === 'due') {
                     // Una data passata sotto l'etichetta "Prossima rotazione", con un bollino
                     // rosso e nient'altro, si legge come "il pannello sa di essere in ritardo e
                     // non fa niente". Non e' cosi': lo scheduler confronta (adesso - ultima)
@@ -638,7 +638,7 @@
                     nextEl.innerHTML = '<strong>' + escHtml(t('dns.due')) + '</strong> '
                         + '<span class="badge bg-warning text-dark ms-1">' + escHtml(t('dns.nextCheck')) + '</span>'
                         + '<div class="small text-muted">' + escHtml(t('dns.dueWas', { date: formatPanelDate(nextTs), rel: formatRelativeTime(nextTs), days: interval })) + ' '
-                        + escHtml(t('dns.dueHow')) + ' ' + fraseAvvioAutomatico(data) + '</div>';
+                        + escHtml(t('dns.dueHow')) + ' ' + autoStartSentence(data) + '</div>';
                 } else {
                     nextEl.innerHTML = '<strong>' + formatPanelDate(nextTs) + '</strong>' +
                         '<div class="small text-muted">' + escHtml(t('dns.relEvery', { rel: formatRelativeTime(nextTs), days: interval })) + '</div>';
@@ -701,32 +701,32 @@
                     // ma chi legge vede due date diverse a due righe di distanza e comincia a
                     // non fidarsi — e ha ragione a non fidarsi, perche' non ha modo di sapere
                     // che una delle due e' UTC.
-                    const lastQui = pickTs(data, 'last_rotation_at');
-                    const nextQui = pickTs(data, 'next_rotation_at');
-                    if (lastQui) {
-                        html += escHtml(t('dns.lastWas', { date: formatPanelDate(lastQui) })) + ' ';
+                    const lastHere = pickTs(data, 'last_rotation_at');
+                    const nextHere = pickTs(data, 'next_rotation_at');
+                    if (lastHere) {
+                        html += escHtml(t('dns.lastWas', { date: formatPanelDate(lastHere) })) + ' ';
                     } else if (data.last_rotation_at) {
                         html += escHtml(t('dns.lastWas', { date: data.last_rotation_at })) + ' ';
                     } else {
                         html += '<span class="text-warning">' + escHtml(t('dns.noRotationYet')) + '</span> ';
                     }
                     // Stessa domanda, stessa risposta del riquadro qui sopra.
-                    const quandoQui = nextRotationStatus(data);
-                    if (quandoQui === 'in_progress') {
+                    const whenHere = nextRotationStatus(data);
+                    if (whenHere === 'in_progress') {
                         html += escHtml(t('dns.alreadyRunning'))
                              + (data.rotation_pending_selector
                                  ? ' (' + escHtml(t('dns.newSelector')) + ' <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>)' : '')
                              + ': ' + escHtml(t('dns.nextAfter'));
-                    } else if (quandoQui === 'due') {
-                        html += escHtml(t('dns.dueAt', { date: nextQui ? formatPanelDate(nextQui) : data.next_rotation_at }));
+                    } else if (whenHere === 'due') {
+                        html += escHtml(t('dns.dueAt', { date: nextHere ? formatPanelDate(nextHere) : data.next_rotation_at }));
                     } else if (data.next_rotation_at) {
-                        html += escHtml(t('dns.nextAt', { date: nextQui ? formatPanelDate(nextQui) : data.next_rotation_at }));
+                        html += escHtml(t('dns.nextAt', { date: nextHere ? formatPanelDate(nextHere) : data.next_rotation_at }));
                     }
                     // Il flag arriva con la risposta; la globale resta solo come ripiego per
                     // non cambiare comportamento se il campo mancasse.
-                    const cfQui = (data.cloudflare_configured !== undefined)
+                    const cfHere = (data.cloudflare_configured !== undefined)
                         ? !!data.cloudflare_configured : cloudflareConfigured;
-                    if (!cfQui) {
+                    if (!cfHere) {
                         html += '<br><span class="text-warning"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('dns.needCf')) + '</span>';
                     } else {
                         html += '<br><small class="text-muted">' + escHtml(t('dns.schedulerPlan', { hours: data.auto_activate_after_hours || 24, days: data.grace_period_days || 7 })) + '</small>';
@@ -807,7 +807,7 @@
         // stanno messi tutti?": per saperlo si dovevano selezionare i domini uno per uno e
         // tenere a mente i numeri. Le cose che contano — un dominio senza chiave, uno fermo
         // da mesi mentre gli altri ruotano — si vedono solo mettendoli in fila.
-        async function dkRiepilogo() {
+        async function dkSummary() {
             const el = document.getElementById('dkRiepilogoBody');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('dns.sumAsking'));
             let r;
@@ -831,18 +831,18 @@
             const lines = r.domains || [];
             // Il titolo dice la cosa peggiore per prima: un dominio senza chiave non deve
             // finire in fondo a un elenco che comincia con "tutto bene".
-            let cls = 'success', testo = t('dns.sumAllMatch');
+            let cls = 'success', textValue = t('dns.sumAllMatch');
             if (r.withoutKey > 0) {
                 cls = 'danger';
-                testo = tn('dns.sumNoKey', r.withoutKey);
+                textValue = tn('dns.sumNoKey', r.withoutKey);
             } else if (lines.some(d => d.state === 'non_corrisponde')) {
                 cls = 'danger';
-                testo = t('dns.sumMismatch');
+                textValue = t('dns.sumMismatch');
             } else if (r.unverifiable > 0) {
                 cls = 'warning';
-                testo = tn('dns.sumUnverifiable', r.unverifiable);
+                textValue = tn('dns.sumUnverifiable', r.unverifiable);
             }
-            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + escapeHtmlBl(testo) + '</div>';
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + escapeHtmlBl(textValue) + '</div>';
 
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                + '<th scope="col">' + escHtml(t('st.colDomain')) + '</th><th scope="col">' + escHtml(t('dns.colSelector')) + '</th><th scope="col">' + escHtml(t('dns.colVerifies')) + '</th>'
@@ -859,13 +859,13 @@
                     // "Non ho potuto controllare" non e' "va bene", e non e' nemmeno "e' rotto".
                     state = '<span class="badge bg-secondary">' + escHtml(t('dns.unverifiable')) + '</span>';
 
-                let eta = '<span class="text-muted">&mdash;</span>';
+                let ageText = '<span class="text-muted">&mdash;</span>';
                 if (d.daysSinceLast !== undefined && d.daysSinceLast !== null) {
                     const g = d.daysSinceLast;
                     // Oltre l'intervallo scelto la chiave e' in ritardo; senza intervallo il
                     // riferimento e' 90 giorni, la cadenza che il pannello consiglia.
                     const limit = (d.intervalDays && d.intervalDays > 0) ? d.intervalDays : 90;
-                    eta = escHtml(tn('dns.days', g))
+                    ageText = escHtml(tn('dns.days', g))
                         + (g > limit ? ' <span class="badge bg-warning text-dark">' + escHtml(t('dns.overLimit', { limit: limit })) + '</span>' : '');
                 }
 
@@ -885,7 +885,7 @@
                    + (d.state === 'ok' ? '' : '<div class="small text-muted">'
                         + escapeHtmlBl(d.note || d.messageText || '') + '</div>')
                    + '</td>'
-                   + '<td>' + eta + '</td><td>' + rot + '</td></tr>';
+                   + '<td>' + ageText + '</td><td>' + rot + '</td></tr>';
             });
             h += '</tbody></table></div>'
                + '<div class="small text-muted">' + escHtml(t('dns.sumHow')) + '</div>';

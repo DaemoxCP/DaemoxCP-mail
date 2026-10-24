@@ -1,9 +1,9 @@
         // ---------- Configurazione automatica dei client (file XML di Thunderbird) ----------
-        async function acApi(azione, extra) {
+        async function acApi(actionItem, extra) {
             const r = await fetch('/api/autoconfig', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(Object.assign({ action: azione }, extra || {}))
+                body: JSON.stringify(Object.assign({ action: actionItem }, extra || {}))
             });
             return await r.json();
         }
@@ -14,7 +14,7 @@
             return d.innerHTML;
         }
 
-        async function acCarica() {
+        async function acLoad() {
             const el = document.getElementById('acBody');
             if (!el) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.reading'));
@@ -54,9 +54,9 @@
                 r.domains.forEach(d => {
                     const p = d.test || {};
                     h += '<tr><td><code class="small">' + acEsc(d.name) + '</code></td>'
-                       + '<td>' + acSpunta(d.dns) + '</td>'
-                       + '<td>' + acSpunta(d.certificate) + '</td>'
-                       + '<td>' + acSpunta(p.ok)
+                       + '<td>' + acTick(d.dns) + '</td>'
+                       + '<td>' + acTick(d.certificate) + '</td>'
+                       + '<td>' + acTick(p.ok)
                        + (p.ok ? '' : '<div class="small text-muted">' + acEsc(p.error || '') + '</div>')
                        + '</td></tr>';
                 });
@@ -65,10 +65,10 @@
             }
 
             h += '<div class="d-flex gap-2 flex-wrap">'
-               + '<button class="btn btn-sm btn-outline-secondary" onclick="acAnteprima()">'
+               + '<button class="btn btn-sm btn-outline-secondary" onclick="acPreview()">'
                + '<i class="fas fa-eye me-1" aria-hidden="true"></i>' + escHtml(t('acf.viewFile')) + '</button>'
                + ((r.ready || r.surface443) ? ''
-                  : '<button class="btn btn-sm btn-outline-success" onclick="acInstalla()">'
+                  : '<button class="btn btn-sm btn-outline-success" onclick="acInstall()">'
                     + '<i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>' + escHtml(t('acf.setUpNginx')) + '</button>')
                + '</div>'
                // Il pulsante sparisce anche quando il file NON arriva, se la superficie sulla
@@ -83,13 +83,13 @@
             el.innerHTML = h;
         }
 
-        function acSpunta(v) {
+        function acTick(v) {
             return v ? '<i class="fas fa-check-circle text-success" title="' + escHtml(t('dns.yes')) + '"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
                      : '<i class="fas fa-times-circle text-danger" title="' + escHtml(t('acf.no')) + '"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>';
         }
 
 
-        async function acAnteprima() {
+        async function acPreview() {
             const el = document.getElementById('acOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.generating'));
             const r = await acApi('preview');
@@ -102,13 +102,13 @@
                          + acEsc(r.xml) + '</pre>';
         }
 
-        async function acInstalla() {
-            if (!adConferma(t('acf.confirmInstall'), t('acf.wordInstall'))) return;
+        async function acInstall() {
+            if (!adConfirm(t('acf.confirmInstall'), t('acf.wordInstall'))) return;
             const el = document.getElementById('acOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.installing'));
             const r = await acApi('install', { confirm: 'INSTALL' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + acEsc(r.note || r.error) + '</div>'
                          + (r.restored ? '<div class="small text-muted mt-1">' + escHtml(t('acf.restored')) + '</div>' : '');
-            if (r.success) setTimeout(acCarica, 1200);
+            if (r.success) setTimeout(acLoad, 1200);
         }

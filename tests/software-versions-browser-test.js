@@ -11,18 +11,18 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
-const pagine = process.argv[2];
-const foto = process.argv[3];
-const risorse = path.join(__dirname, '..', 'src', 'main', 'resources');
+const pageList = process.argv[2];
+const photos = process.argv[3];
+const resourceList = path.join(__dirname, '..', 'src', 'main', 'resources');
 const BASE = 'http://pannello.test';
-let falliti = 0;
-function vero(cosa, ok) {
-    console.log((ok ? '  OK   ' : '  FALLITO ') + cosa);
-    if (!ok) falliti++;
+let failedOnes = 0;
+function real(whatItem, ok) {
+    console.log((ok ? '  OK   ' : '  FALLITO ') + whatItem);
+    if (!ok) failedOnes++;
 }
 
-const richieste = [];
-const VERSIONI = {
+const requests = [];
+const VERSIONS = {
     success: true, readAt: '2026-10-03T14:00:05+02:00', branch: 'quarterly',
     services: {
         postfix: { key: 'postfix', name: 'Postfix', role: 'Server SMTP', installed: true, version: '3.10.4', source: '/usr/local/sbin/postconf -h mail_version',
@@ -32,7 +32,7 @@ const VERSIONI = {
         mysql: { key: 'mysql', name: 'MySQL', role: 'Database', installed: true, version: '8.0.42', source: 'SELECT VERSION() sulla connessione del pannello',
             running: true, pkgName: 'mysql80-server-8.0.43', restart: true, installedVersion: '8.0.43',
             restartNote: "MySQL in esecuzione e' la 8.0.42, quella installata la 8.0.43: riavvia MySQL per usare quella installata." },
-        rspamd: { key: 'rspamd', name: 'Rspamd', role: 'Antispam', installed: true, version: '<img src=x onerror="window.iniettato=1">',
+        rspamd: { key: 'rspamd', name: 'Rspamd', role: 'Antispam', installed: true, version: '<img src=x onerror="window.injectedRan=1">',
             source: 'prova', pkgName: 'rspamd-3.12.1' },
         redis: { key: 'redis', name: 'Redis', role: 'Archivio', installed: false },
         clamav: { key: 'clamav', name: 'ClamAV', role: 'Antivirus', installed: true, version: '1.4.3', running: true, signatures: '27780',
@@ -52,29 +52,29 @@ const VERSIONI = {
 };
 // L'ultima riga di "altro" e' finta (ClamAV non sta li'): serve a vedere l'avviso in rosso.
 
-function json(route, corpo) { return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(corpo) }); }
+function json(route, bodyText) { return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bodyText) }); }
 
-async function servi(route) {
+async function served(route) {
     const req = route.request();
     const url = new URL(req.url());
     const p = url.pathname;
     if (p === '/') {
-        const html = fs.readFileSync(path.join(pagine, 'home.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-prova');
+        const html = fs.readFileSync(path.join(pageList, 'home.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-prova');
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
     }
     // The script dictionary (t() and the texts), as the panel serves it.
-    if (p.startsWith('/i18n/')) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(pagine, p)) });
+    if (p.startsWith('/i18n/')) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(pageList, p)) });
     if (p.startsWith('/vendor/') || p.startsWith('/fa/')) {
-        const f = path.join(risorse, p);
+        const f = path.join(resourceList, p);
         if (!fs.existsSync(f)) return route.fulfill({ status: 404, body: '' });
-        const tipo = p.endsWith('.css') ? 'text/css' : p.endsWith('.js') ? 'application/javascript' : p.endsWith('.woff2') ? 'font/woff2' : 'application/octet-stream';
-        return route.fulfill({ status: 200, contentType: tipo, body: fs.readFileSync(f) });
+        const kindValue = p.endsWith('.css') ? 'text/css' : p.endsWith('.js') ? 'application/javascript' : p.endsWith('.woff2') ? 'font/woff2' : 'application/octet-stream';
+        return route.fulfill({ status: 200, contentType: kindValue, body: fs.readFileSync(f) });
     }
-    const corpo = req.postData() ? JSON.parse(req.postData()) : null;
-    richieste.push({ metodo: req.method(), path: p + url.search, body: corpo });
+    const bodyText = req.postData() ? JSON.parse(req.postData()) : null;
+    requests.push({ metodo: req.method(), path: p + url.search, body: bodyText });
     if (p === '/api/status') return json(route, { postfix: true, dovecot: true, mysql: true, rspamd: true, redis: false, clamav: true, roundcube: true,
         domains: 2, mailboxes: 5, aliases: 3, mail_hostname: '', server_ip: '' });
-    if (p === '/api/versioni') return json(route, VERSIONI);
+    if (p === '/api/versioni') return json(route, VERSIONS);
     if (p === '/api/service') return json(route, { success: true });
     if (p === '/api/updates') return json(route, { success: true, active: true, reason: 'Il pannello riparte da solo.' });
     return json(route, { success: true });
@@ -83,101 +83,101 @@ async function servi(route) {
 (async () => {
     const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    await ctx.route('**/*', servi);
+    await ctx.route('**/*', served);
     const page = await ctx.newPage();
-    const errori = [];
-    page.on('pageerror', e => errori.push(String(e)));
-    page.on('console', m => { if (m.type() === 'error') errori.push(m.text()); });
+    const errorList = [];
+    page.on('pageerror', e => errorList.push(String(e)));
+    page.on('console', m => { if (m.type() === 'error') errorList.push(m.text()); });
 
     console.log('\n== Servizi Mail: la colonna Versione ==');
     await page.goto(BASE + '/');
     await page.waitForFunction(() => document.getElementById('versioniStato').textContent.startsWith('Lette'));
-    const righe = await page.$$eval('table[aria-label^="Servizi mail"] tbody tr', tr => tr.map(r => r.cells[0].textContent.trim()));
-    vero('sette righe, con MySQL e Redis: ' + righe.join(' | '), righe.length === 7 && righe[2] === 'MySQL (Database)' && righe[4] === 'Redis (dati di Rspamd)');
+    const lineItems = await page.$$eval('table[aria-label^="Servizi mail"] tbody tr', tr => tr.map(r => r.cells[0].textContent.trim()));
+    real('sette righe, con MySQL e Redis: ' + lineItems.join(' | '), lineItems.length === 7 && lineItems[2] === 'MySQL (Database)' && lineItems[4] === 'Redis (dati di Rspamd)');
     const pf = await page.textContent('#ver-postfix');
-    vero('Postfix: 3.10.4, il pacchetto e "da riavviare" con la nota', pf.includes('3.10.4') && pf.includes('pacchetto postfix-mysql-3.10.4,1')
+    real('Postfix: 3.10.4, il pacchetto e "da riavviare" con la nota', pf.includes('3.10.4') && pf.includes('pacchetto postfix-mysql-3.10.4,1')
         && pf.includes('da riavviare') && pf.includes('28/09/2026 08:15'));
-    vero('la fonte nel title della versione', await page.getAttribute('#ver-postfix strong', 'title') === 'Letta con: /usr/local/sbin/postconf -h mail_version');
+    real('la fonte nel title della versione', await page.getAttribute('#ver-postfix strong', 'title') === 'Letta con: /usr/local/sbin/postconf -h mail_version');
     const my = await page.textContent('#ver-mysql');
-    vero('MySQL: 8.0.42 (in esecuzione), da riavviare perche\' il pacchetto e\' la 8.0.43', my.includes('8.0.42') && my.includes('(in esecuzione)')
+    real('MySQL: 8.0.42 (in esecuzione), da riavviare perche\' il pacchetto e\' la 8.0.43', my.includes('8.0.42') && my.includes('(in esecuzione)')
         && my.includes('da riavviare') && my.includes('quella installata la 8.0.43'));
-    vero('ClamAV: motore e firme', (await page.textContent('#ver-clamav')).includes('firme 27780 del 02/10/2026 08:24'));
-    vero('Redis non installato', (await page.textContent('#ver-redis')).trim() === 'non installato');
-    vero('stato di Redis: Fermo; di MySQL: Attivo', (await page.textContent('#redis-status')) === 'Fermo' && (await page.textContent('#mysql-status')) === 'Attivo');
-    const iniettato = await page.evaluate(() => ({ img: document.querySelectorAll('#ver-rspamd img').length, flag: window.iniettato }));
-    vero('una versione con dentro HTML resta testo: nessun <img>, nessuno script', iniettato.img === 0 && iniettato.flag === undefined
+    real('ClamAV: motore e firme', (await page.textContent('#ver-clamav')).includes('firme 27780 del 02/10/2026 08:24'));
+    real('Redis non installato', (await page.textContent('#ver-redis')).trim() === 'non installato');
+    real('stato di Redis: Fermo; di MySQL: Attivo', (await page.textContent('#redis-status')) === 'Fermo' && (await page.textContent('#mysql-status')) === 'Attivo');
+    const injected = await page.evaluate(() => ({ img: document.querySelectorAll('#ver-rspamd img').length, flag: window.injectedRan }));
+    real('una versione con dentro HTML resta testo: nessun <img>, nessuno script', injected.img === 0 && injected.flag === undefined
         && (await page.textContent('#ver-rspamd strong')).startsWith('<img'));
-    const stato = await page.textContent('#versioniStato');
-    vero('riepilogo: ora della lettura e quanti da riavviare — ' + stato, stato.startsWith('Lette dal server alle 14:00:05.') && stato.includes('3 programmi vanno riavviati'));
-    vero('e il ramo dei pacchetti, con il collegamento alla scheda per cambiarlo', stato.includes('Pacchetti dal ramo quarterly.')
+    const stateValue = await page.textContent('#versioniStato');
+    real('riepilogo: ora della lettura e quanti da riavviare — ' + stateValue, stateValue.startsWith('Lette dal server alle 14:00:05.') && stateValue.includes('3 programmi vanno riavviati'));
+    real('e il ramo dei pacchetti, con il collegamento alla scheda per cambiarlo', stateValue.includes('Pacchetti dal ramo quarterly.')
         && await page.getAttribute('#versioniStato a', 'href') === '/updates#branch');
 
     console.log('\n== Altro software ==');
-    const altro = await page.$$eval('#altroSoftware tr', tr => tr.map(r => [...r.cells].map(c => c.textContent.trim())));
-    vero('una riga per programma: ' + altro.map(r => r[0]).join(', '), altro.length === 7 && altro[0][0] === 'FreeBSD' && altro[5][0] === 'Java');
-    vero('FreeBSD: userland, kernel in esecuzione, riavvio del server', altro[0][2].includes('15.0-RELEASE-p3') && altro[0][2].includes('kernel in esecuzione 15.0-RELEASE-p2')
-        && altro[0][2].includes('serve un riavvio del server'));
-    vero('a cosa serve: nginx', altro[2][1].startsWith('Web server'));
-    vero('Pigeonhole non installato', altro[4][2] === 'non installato');
-    vero("l'avviso e' rosso, la nota sul riavvio gialla", await page.locator('#altroSoftware .testo-rischio').count() === 1
+    const otherOne = await page.$$eval('#altroSoftware tr', tr => tr.map(r => [...r.cells].map(c => c.textContent.trim())));
+    real('una riga per programma: ' + otherOne.map(r => r[0]).join(', '), otherOne.length === 7 && otherOne[0][0] === 'FreeBSD' && otherOne[5][0] === 'Java');
+    real('FreeBSD: userland, kernel in esecuzione, riavvio del server', otherOne[0][2].includes('15.0-RELEASE-p3') && otherOne[0][2].includes('kernel in esecuzione 15.0-RELEASE-p2')
+        && otherOne[0][2].includes('serve un riavvio del server'));
+    real('a cosa serve: nginx', otherOne[2][1].startsWith('Web server'));
+    real('Pigeonhole non installato', otherOne[4][2] === 'non installato');
+    real("l'avviso e' rosso, la nota sul riavvio gialla", await page.locator('#altroSoftware .testo-rischio').count() === 1
         && await page.locator('#altroSoftware .testo-avviso').count() === 1);
-    vero('ogni cella ha la sua etichetta per il telefono', await page.locator('#altroSoftware td:not([data-label])').count() === 0);
-    if (foto) await page.screenshot({ path: path.join(foto, 'home-versioni.png'), fullPage: true });
+    real('ogni cella ha la sua etichetta per il telefono', await page.locator('#altroSoftware td:not([data-label])').count() === 0);
+    if (photos) await page.screenshot({ path: path.join(photos, 'home-versioni.png'), fullPage: true });
 
     console.log('\n== Comandi: nomi, conferme, CSRF ==');
-    vero('i pulsanti hanno un nome: Avvia/Riavvia/Ferma Postfix, Ferma la webmail',
+    real('i pulsanti hanno un nome: Avvia/Riavvia/Ferma Postfix, Ferma la webmail',
         await page.locator('button[aria-label="Avvia Postfix"]').count() === 1 && await page.locator('button[aria-label="Riavvia Postfix"]').count() === 1
         && await page.locator('button[aria-label="Ferma Postfix"]').count() === 1 && await page.locator('button[aria-label="Ferma la webmail"]').count() === 1);
-    let domanda = '';
-    page.once('dialog', d => { domanda = d.message(); d.dismiss(); });
-    const prima = richieste.length;
+    let question = '';
+    page.once('dialog', d => { question = d.message(); d.dismiss(); });
+    const beforeValue = requests.length;
     await page.click('button[aria-label="Ferma Postfix"]');
     await page.waitForTimeout(300);
-    vero('Ferma Postfix: chiede, e dice cosa succede — ' + domanda, domanda.startsWith('Fermare Postfix?') && domanda.includes('smette di ricevere'));
-    vero('annullato: nessuna richiesta', !richieste.slice(prima).some(r => r.path === '/api/service'));
-    const dialoghi = [];
-    page.on('dialog', d => { dialoghi.push(d.message()); d.accept(); });
+    real('Ferma Postfix: chiede, e dice cosa succede — ' + question, question.startsWith('Fermare Postfix?') && question.includes('smette di ricevere'));
+    real('annullato: nessuna richiesta', !requests.slice(beforeValue).some(r => r.path === '/api/service'));
+    const dialogs2 = [];
+    page.on('dialog', d => { dialogs2.push(d.message()); d.accept(); });
     await page.click('button[aria-label="Ferma Postfix"]');
     await page.waitForFunction(() => true);
     await page.waitForTimeout(500);
-    const post = richieste.find(r => r.path === '/api/service');
-    vero('confermato: POST con servizio, azione e token CSRF', post && post.body.service === 'postfix' && post.body.action === 'stop'
+    const post = requests.find(r => r.path === '/api/service');
+    real('confermato: POST con servizio, azione e token CSRF', post && post.body.service === 'postfix' && post.body.action === 'stop'
         && post.body.csrf_token === 'csrf-prova');
-    vero('dopo il comando si rileggono le versioni subito (?fresco=1)', richieste.some(r => r.path === '/api/versioni?fresco=1'));
-    dialoghi.length = 0;
+    real('dopo il comando si rileggono le versioni subito (?fresco=1)', requests.some(r => r.path === '/api/versioni?fresco=1'));
+    dialogs2.length = 0;
     await page.click('button[aria-label="Riavvia Postfix"]');
     await page.waitForTimeout(400);
-    vero('Riavvia Postfix: nessuna domanda, solo l\'esito', dialoghi.length === 1 && dialoghi[0] === 'Operazione completata');
-    dialoghi.length = 0;
+    real('Riavvia Postfix: nessuna domanda, solo l\'esito', dialogs2.length === 1 && dialogs2[0] === 'Operazione completata');
+    dialogs2.length = 0;
     await page.click('button[aria-label="Riavvia MySQL"]');
     await page.waitForTimeout(400);
-    vero('Riavvia MySQL: chiede prima — ' + dialoghi[0], dialoghi.length === 2 && dialoghi[0].startsWith('Riavviare MySQL?'));
-    const mysql = richieste.filter(r => r.path === '/api/service').pop();
-    vero('e manda mysql-server', mysql.body.service === 'mysql-server' && mysql.body.action === 'restart');
-    const n = richieste.filter(r => r.path === '/api/versioni?fresco=1').length;
+    real('Riavvia MySQL: chiede prima — ' + dialogs2[0], dialogs2.length === 2 && dialogs2[0].startsWith('Riavviare MySQL?'));
+    const mysql = requests.filter(r => r.path === '/api/service').pop();
+    real('e manda mysql-server', mysql.body.service === 'mysql-server' && mysql.body.action === 'restart');
+    const n = requests.filter(r => r.path === '/api/versioni?fresco=1').length;
     await page.click('#versioniRileggi');
     await page.waitForFunction(k => true, n);
     await page.waitForTimeout(300);
-    vero('"Rileggi le versioni" chiede una lettura fresca', richieste.filter(r => r.path === '/api/versioni?fresco=1').length === n + 1);
+    real('"Rileggi le versioni" chiede una lettura fresca', requests.filter(r => r.path === '/api/versioni?fresco=1').length === n + 1);
 
     console.log('\n== Tema scuro e telefono ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     await page.waitForTimeout(600);   // il cambio di tema ha una transizione
-    if (foto) await page.screenshot({ path: path.join(foto, 'home-versioni-scuro.png'), fullPage: true });
+    if (photos) await page.screenshot({ path: path.join(photos, 'home-versioni-scuro.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
     await page.waitForTimeout(300);
-    const largo = await page.evaluate(() => document.documentElement.scrollWidth);
-    vero('sul telefono la pagina non scorre di lato: ' + largo + 'px', largo <= 390);
-    vero('sul telefono le tabelle diventano schede (intestazioni nascoste)',
+    const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    real('sul telefono la pagina non scorre di lato: ' + pageWidth + 'px', pageWidth <= 390);
+    real('sul telefono le tabelle diventano schede (intestazioni nascoste)',
         await page.$eval('table[aria-label^="Servizi mail"] thead', t => getComputedStyle(t).display) === 'none');
-    if (foto) {
+    if (photos) {
         await page.locator('table[aria-label^="Servizi mail"]').scrollIntoViewIfNeeded();
-        await page.screenshot({ path: path.join(foto, 'home-versioni-telefono.png') });
+        await page.screenshot({ path: path.join(photos, 'home-versioni-telefono.png') });
     }
 
-    vero('nessun errore nella pagina' + (errori.length ? ': ' + errori.join(' | ') : ''), errori.length === 0);
+    real('nessun errore nella pagina' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();
-    console.log('\n' + (falliti === 0 ? 'TUTTO VERDE' : falliti + ' CONTROLLI FALLITI'));
-    process.exit(falliti ? 1 : 0);
+    console.log('\n' + (failedOnes === 0 ? 'TUTTO VERDE' : failedOnes + ' CONTROLLI FALLITI'));
+    process.exit(failedOnes ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

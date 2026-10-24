@@ -1,0 +1,9 @@
+json http https url uri id ids db sql api ui css js html xml utf ascii ip ipv ipv4 ipv6 tcp udp dns smtp imap pop pop3
+tls ssl ssh pkg pkgs jdk jvm sb str int len idx num msg msgs cfg conf config ctx req res resp err errs ok tmp src dst dest
+cmd cmds args arg argv param params buf val vals obj objs arr env pid uid gid cidr cidrs acme dkim dmarc spf mta sts
+otp totp csrf sso fail2ban pf mysql sqlite redis rspamd dovecot postfix clamav nginx php fpm roundcube freebsd
+rc init utc iso max min avg ts ms ns sec secs ttl uuid hex sha md5 hmac aes gcm rsa ec ed25519 b64 base64 auth
+lookup lookups upsert dedup jail jails ban bans unban whitelist blacklist geo asn mx ptr txt srv cname aaaa
+login logout admin admins webmail mailbox mailboxes passwd pw pwd usr var etc lib bin sbin repo repos
+vm vms cpu ram tls13 boot runnable timestamp timestamps hostname hostnames localhost cert certs csr pem der
+html5 dom ajax regex regexp ascii eof stdin stdout stderr iface ifaces dhcp vuln vulns vuxml cve cpe

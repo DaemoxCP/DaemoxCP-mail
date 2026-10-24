@@ -216,10 +216,10 @@ server {
         try_files $uri $uri/ /index.php?$args;
     }
 
-    # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
-    # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
+    # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: one script PHP
+    # con un percorso attaccato. Un location whichLabel chiede .php in fondo all'URI non lo prende,
     # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
-    # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga
+    # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La lineItem
     location ~ \\.php {
         include fastcgi_params;
         fastcgi_index index.php;

@@ -366,8 +366,8 @@ public class MailPanelContent {
         // pagina (data-theme-pref). Qui resta il contorno: icona, pulsante, e "auto" che segue il sistema.
         (function() {
             let savedTheme = document.documentElement.getAttribute('data-theme-pref');
-            const scrittoDalServer = savedTheme === 'auto' || savedTheme === 'light' || savedTheme === 'dark';
-            if (!scrittoDalServer) savedTheme = 'auto';
+            const writtenByServer = savedTheme === 'auto' || savedTheme === 'light' || savedTheme === 'dark';
+            if (!writtenByServer) savedTheme = 'auto';
 
             // Get browser preference
             function getBrowserTheme() {
@@ -426,7 +426,7 @@ public class MailPanelContent {
 
             // Initialize theme toggle
             document.addEventListener('DOMContentLoaded', function() {
-                if (!scrittoDalServer) loadTheme();
+                if (!writtenByServer) loadTheme();
                 const toggle = document.getElementById('themeToggle');
                 if (toggle) {
                     toggle.addEventListener('click', cycleTheme);
@@ -996,7 +996,7 @@ public class MailPanelContent {
 
             <div class="d-flex justify-content-between align-items-center mt-4 mb-1">
                 <h3 class="mb-0"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:home.services}}</h3>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="versioniRileggi" onclick="caricaVersioni(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.rereadVersions}}</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="versioniRileggi" onclick="loadVersions(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.rereadVersions}}</button>
             </div>
             <p class="small text-muted mb-2" id="versioniStato" role="status">{{t:home.readingVersions}}</p>
             <div class="table-responsive">
@@ -1026,7 +1026,7 @@ public class MailPanelContent {
     </div>
 """ + getFooterSection() + getScriptStart() + """
         // Fermare un servizio (e riavviare MySQL) tocca tutta la posta: prima si chiede, dicendo cosa succede.
-        const domandeServizi = {
+        const serviceQuestions = {
             'postfix:stop': t('home.confirm.postfix.stop'),
             'dovecot:stop': t('home.confirm.dovecot.stop'),
             'mysql-server:stop': t('home.confirm.mysql.stop'),
@@ -1038,8 +1038,8 @@ public class MailPanelContent {
         };
 
         function serviceAction(service, action) {
-            const domanda = domandeServizi[service + ':' + action];
-            if (domanda && !confirm(domanda)) return;
+            const question = serviceQuestions[service + ':' + action];
+            if (question && !confirm(question)) return;
             fetch('/api/service', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1050,7 +1050,7 @@ public class MailPanelContent {
                 if (data.csrf_token) csrfToken = data.csrf_token;
                 alert(data.success ? t('common.done') : t('common.error', { message: data.error || data.message || t('common.unknown') }));
                 checkStatus();
-                caricaVersioni(true);
+                loadVersions(true);
             })
             .catch(() => alert(t('home.noAnswer')));
         }
@@ -1166,10 +1166,10 @@ public class MailPanelContent {
                 const domain = hostname.indexOf('.') > 0 ? hostname.substring(hostname.indexOf('.') + 1) : hostname;
                 const subdomain = hostname.indexOf('.') > 0 ? hostname.substring(0, hostname.indexOf('.')) : hostname;
 
-                const avviso = document.getElementById('dnsSetupWarning');
+                const noticeText = document.getElementById('dnsSetupWarning');
 
                 if (data.all_passed) {
-                    if (avviso) avviso.style.display = 'none';
+                    if (noticeText) noticeText.style.display = 'none';
                     header.className = 'card-header bg-success text-white';
                     header.innerHTML = '<i class="fas fa-check-circle me-2" aria-hidden="true"></i>' + escHtml(t('home.dnsOk'));
                     summary.innerHTML = '<div class="alert alert-success mb-0 py-2">' +
@@ -1182,7 +1182,7 @@ public class MailPanelContent {
                     const failed = data.checks.filter(c => !c.passed);
                     // Le istruzioni per il record A si mostrano quando e' il record A a
                     // mancare, non ogni volta che un qualsiasi record opzionale non c'e'.
-                    if (avviso) avviso.style.display = failed.some(c => c.type === 'A') ? 'block' : 'none';
+                    if (noticeText) noticeText.style.display = failed.some(c => c.type === 'A') ? 'block' : 'none';
                     let advice = '';
 
                     failed.forEach(c => {
@@ -1334,94 +1334,94 @@ public class MailPanelContent {
     private static String getVersionsJs() {
         return """
         // ===== Versioni del software (SoftwareVersions sul server) =====
-        function verCella(cella, v) {
-            cella.textContent = '';
+        function verCell(cell, v) {
+            cell.textContent = '';
             if (!v || !v.installed) {
                 const n = document.createElement('span');
                 n.className = 'text-muted';
                 n.textContent = t('ver.notInstalled');
-                cella.appendChild(n);
+                cell.appendChild(n);
                 return;
             }
-            const riga = document.createElement('div');
+            const lineItem = document.createElement('div');
             const num = document.createElement('strong');
             num.textContent = v.version || t('ver.notRead');
             if (v.source) num.title = t('ver.readWith', { source: v.source });
-            riga.appendChild(num);
+            lineItem.appendChild(num);
             if (v.running) {
                 const e = document.createElement('span');
                 e.className = 'small text-muted ms-1';
                 e.textContent = t('ver.running');
-                riga.appendChild(e);
+                lineItem.appendChild(e);
             }
             if (v.restart) {
                 const b = document.createElement('span');
                 b.className = 'badge bg-warning text-dark ms-1';
                 b.textContent = t('ver.restartNeeded');
-                riga.appendChild(b);
+                lineItem.appendChild(b);
             }
-            cella.appendChild(riga);
+            cell.appendChild(lineItem);
             [[v.detail, 'small text-muted'], [v.pkgName ? t('ver.package', { name: v.pkgName }) : '', 'small text-muted'],
-             [v.restartNote, 'small testo-avviso'], [v.warning, 'small testo-rischio']].forEach(([testo, classe]) => {
-                if (!testo) return;
+             [v.restartNote, 'small testo-avviso'], [v.warning, 'small testo-rischio']].forEach(([textValue, cssClass]) => {
+                if (!textValue) return;
                 const d = document.createElement('div');
-                d.className = classe;
-                d.textContent = testo;
-                cella.appendChild(d);
+                d.className = cssClass;
+                d.textContent = textValue;
+                cell.appendChild(d);
             });
         }
 
-        function caricaVersioni(fresco) {
-            const stato = document.getElementById('versioniStato');
+        function loadVersions(freshRead) {
+            const stateValue = document.getElementById('versioniStato');
             const btn = document.getElementById('versioniRileggi');
             btn.disabled = true;
-            stato.textContent = t('home.readingVersions');
-            fetch('/api/versioni' + (fresco ? '?fresco=1' : '')).then(r => r.json()).then(d => {
+            stateValue.textContent = t('home.readingVersions');
+            fetch('/api/versioni' + (freshRead ? '?fresco=1' : '')).then(r => r.json()).then(d => {
                 btn.disabled = false;
                 if (!d.success) {
-                    stato.textContent = t('ver.readFailed', { error: d.error || t('common.unknownError') });
+                    stateValue.textContent = t('ver.readFailed', { error: d.error || t('common.unknownError') });
                     return;
                 }
                 Object.keys(d.services).forEach(k => {
-                    const cella = document.getElementById('ver-' + k);
-                    if (cella) verCella(cella, d.services[k]);
+                    const cell = document.getElementById('ver-' + k);
+                    if (cell) verCell(cell, d.services[k]);
                 });
-                const corpo = document.getElementById('altroSoftware');
-                corpo.textContent = '';
+                const bodyText = document.getElementById('altroSoftware');
+                bodyText.textContent = '';
                 d.other.forEach(v => {
                     const tr = document.createElement('tr');
-                    const nome = document.createElement('td');
-                    nome.setAttribute('data-label', 'Software');
-                    const forte = document.createElement('strong');
-                    forte.textContent = v.name;
-                    nome.appendChild(forte);
-                    const ruolo = document.createElement('td');
-                    ruolo.setAttribute('data-label', t('home.colPurpose'));
-                    ruolo.textContent = v.role;
+                    const entryName = document.createElement('td');
+                    entryName.setAttribute('data-label', 'Software');
+                    const strongEl = document.createElement('strong');
+                    strongEl.textContent = v.name;
+                    entryName.appendChild(strongEl);
+                    const roleName = document.createElement('td');
+                    roleName.setAttribute('data-label', t('home.colPurpose'));
+                    roleName.textContent = v.role;
                     const ver = document.createElement('td');
                     ver.setAttribute('data-label', t('home.colVersion'));
-                    verCella(ver, v);
-                    tr.append(nome, ruolo, ver);
-                    corpo.appendChild(tr);
+                    verCell(ver, v);
+                    tr.append(entryName, roleName, ver);
+                    bodyText.appendChild(tr);
                 });
-                const daRiavviare = Object.values(d.services).concat(d.other).filter(v => v.restart).length;
-                stato.textContent = t('ver.readAt', { time: d.readAt.substring(11, 19) })
-                    + (daRiavviare > 0 ? ' ' + tn('ver.toRestart', daRiavviare) : '');
+                const toRestart = Object.values(d.services).concat(d.other).filter(v => v.restart).length;
+                stateValue.textContent = t('ver.readAt', { time: d.readAt.substring(11, 19) })
+                    + (toRestart > 0 ? ' ' + tn('ver.toRestart', toRestart) : '');
                 if (d.branch) {
                     // Da quale ramo arrivano i pacchetti: lo si cambia in Aggiornamenti.
-                    stato.appendChild(document.createTextNode(' ' + t('ver.branch') + ' '));
+                    stateValue.appendChild(document.createTextNode(' ' + t('ver.branch') + ' '));
                     const a = document.createElement('a');
                     a.href = '/updates#ramo';
                     a.textContent = d.branch === 'mixed' ? t('ver.branchMixed') : d.branch === 'none' ? t('ver.branchNone') : d.branch;
-                    stato.appendChild(a);
-                    stato.appendChild(document.createTextNode('.'));
+                    stateValue.appendChild(a);
+                    stateValue.appendChild(document.createTextNode('.'));
                 }
             }).catch(() => {
                 btn.disabled = false;
-                stato.textContent = t('ver.noAnswer');
+                stateValue.textContent = t('ver.noAnswer');
             });
         }
-        caricaVersioni(false);
+        loadVersions(false);
 """;
     }
 
@@ -1567,12 +1567,12 @@ public class MailPanelContent {
             return d.innerHTML;
         }
 
-        function trovaDominio(id) {
+        function findDomain(id) {
             return (currentDomains || []).find(x => x.id === id) || null;
         }
 
         function editDomain(id) {
-            const d = trovaDominio(id);
+            const d = findDomain(id);
             if (!d) return;
             document.getElementById('editDomainId').value = d.id;
             document.getElementById('editDomainName').value = d.domain;
@@ -1581,7 +1581,7 @@ public class MailPanelContent {
         }
 
         function viewDnsById(id) {
-            const d = trovaDominio(id);
+            const d = findDomain(id);
             if (d) viewDns(d.domain);
         }
 
@@ -1892,10 +1892,10 @@ public class MailPanelContent {
         return """
                         <div class="input-group has-validation">
                             <input type="password" class="form-control font-monospace campo-password" id="%1$s" placeholder="%2$s" maxlength="128"
-                                   autocomplete="new-password" autocapitalize="off" spellcheck="false" oninput="pwControlla('%1$s')" aria-describedby="%1$sErr">
-                            <button class="btn btn-outline-secondary" type="button" id="%1$sMostra" onclick="pwMostra('%1$s')" title="{{t:pw.showHide}}" aria-label="{{t:pw.show}}"><i class="fas fa-eye" aria-hidden="true"></i></button>
-                            <button class="btn btn-outline-primary" type="button" onclick="pwGenera('%1$s')" title="{{t:pw.generateSafe}}" aria-label="{{t:pw.generateSafe}}"><i class="fas fa-magic" aria-hidden="true"></i><span class="d-none d-sm-inline ms-1">{{t:pw.generate}}</span></button>
-                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopia" onclick="pwCopia('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                                   autocomplete="new-password" autocapitalize="off" spellcheck="false" oninput="pwCheck('%1$s')" aria-describedby="%1$sErr">
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sMostra" onclick="pwShow('%1$s')" title="{{t:pw.showHide}}" aria-label="{{t:pw.show}}"><i class="fas fa-eye" aria-hidden="true"></i></button>
+                            <button class="btn btn-outline-primary" type="button" onclick="pwGenerate('%1$s')" title="{{t:pw.generateSafe}}" aria-label="{{t:pw.generateSafe}}"><i class="fas fa-magic" aria-hidden="true"></i><span class="d-none d-sm-inline ms-1">{{t:pw.generate}}</span></button>
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopia" onclick="pwDoCopy('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                             <div class="invalid-feedback" id="%1$sErr" role="alert"></div>
                         </div>
 """.formatted(id, placeholder);
@@ -1907,34 +1907,34 @@ public class MailPanelContent {
      */
     private static String getPasswordFieldJs() {
         // Righe normali, non text block: un text block comincia sempre a capo, e la regex si spezzerebbe.
-        String rule = "        const PW_CARATTERE = /^" + org.mail_panel.webserver.SecurityUtils.PASSWORD_CHARACTERS + "$/;\n"
+        String rule = "        const PW_CHARACTER = /^" + org.mail_panel.webserver.SecurityUtils.PASSWORD_CHARACTERS + "$/;\n"
                 + "        const PW_MIN = " + org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN
                 + ", PW_MAX = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX + ";\n"
-                + "        const PW_SIMBOLI = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SYMBOLS
+                + "        const PW_SYMBOLS = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SYMBOLS
                         .replace("\\", "\\\\").replace("'", "\\'") + "';\n";
         return """
         // ===== Campo password (componente condiviso, vedi campoPassword) =====
 """ + rule + """
 
-        function pwMostra(id, mostra) {
+        function pwShow(id, showIt) {
             const input = document.getElementById(id);
             const btn = document.getElementById(id + 'Mostra');
-            const visibile = mostra === undefined ? input.type === 'password' : mostra;
-            input.type = visibile ? 'text' : 'password';
-            btn.innerHTML = visibile ? '<i class="fas fa-eye-slash" aria-hidden="true"></i>' : '<i class="fas fa-eye" aria-hidden="true"></i>';
-            btn.setAttribute('aria-label', visibile ? t('pw.hide') : t('pw.show'));
+            const isVisible = showIt === undefined ? input.type === 'password' : showIt;
+            input.type = isVisible ? 'text' : 'password';
+            btn.innerHTML = isVisible ? '<i class="fas fa-eye-slash" aria-hidden="true"></i>' : '<i class="fas fa-eye" aria-hidden="true"></i>';
+            btn.setAttribute('aria-label', isVisible ? t('pw.hide') : t('pw.show'));
         }
 
         // Vuoto va bene (in Modifica vuol dire "non cambiare"): l'obbligo lo controlla chi salva.
-        function pwControlla(id) {
+        function pwCheck(id) {
             const input = document.getElementById(id);
             const v = input.value;
             let msg = '';
             if (v) {
-                const vietati = [...new Set([...v].filter(c => !PW_CARATTERE.test(c)))];
-                if (vietati.length) {
-                    msg = t('pw.badChar', { chars: vietati.map(c => c === ' ' ? t('pw.space') : c.trim() === '' ? t('pw.specialSpace') : c).join(' '),
-                                            symbols: PW_SIMBOLI.split('').join(' ') });
+                const forbidden = [...new Set([...v].filter(c => !PW_CHARACTER.test(c)))];
+                if (forbidden.length) {
+                    msg = t('pw.badChar', { chars: forbidden.map(c => c === ' ' ? t('pw.space') : c.trim() === '' ? t('pw.specialSpace') : c).join(' '),
+                                            symbols: PW_SYMBOLS.split('').join(' ') });
                 } else if (v.length < PW_MIN) {
                     msg = t('pw.min', { n: PW_MIN });
                 } else if (v.length > PW_MAX) {
@@ -1946,17 +1946,17 @@ public class MailPanelContent {
             return !msg;
         }
 
-        function pwMettiPassword(id, pw) {
+        function pwPutPassword(id, pw) {
             const input = document.getElementById(id);
             input.value = pw;
-            pwMostra(id, true);
-            pwControlla(id);
+            pwShow(id, true);
+            pwCheck(id);
         }
 
         // Il generatore completo, con le sue opzioni: la scelta torna nel campo da cui e' partito.
-        function pwGenera(id) {
+        function pwGenerate(id) {
             window.__pwGenCallback = function (pw) {
-                pwMettiPassword(id, pw);
+                pwPutPassword(id, pw);
                 const input = document.getElementById(id);
                 input.focus();
                 input.select();
@@ -1966,40 +1966,40 @@ public class MailPanelContent {
 
         // Una password proposta subito, con le impostazioni di default del generatore (sul server).
         // Se nel frattempo nel campo e' stato scritto o incollato qualcosa, la proposta si scarta.
-        function pwProponi(id) {
+        function pwPropose(id) {
             fetch('/api/mailboxes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'generate_password', csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
-                if (data.success && data.password && !document.getElementById(id).value) pwMettiPassword(id, data.password);
+                if (data.success && data.password && !document.getElementById(id).value) pwPutPassword(id, data.password);
             }).catch(() => {});
         }
 
-        function pwCopia(id) {
+        function pwDoCopy(id) {
             const input = document.getElementById(id);
             if (!input.value) { document.getElementById(id + 'Err').textContent = t('pw.empty'); input.classList.add('is-invalid'); return; }
-            const fatto = () => {
+            const done = () => {
                 const btn = document.getElementById(id + 'Copia');
                 btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i>';
                 btn.setAttribute('aria-label', t('pw.copied'));
                 setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy" aria-hidden="true"></i>'; btn.setAttribute('aria-label', t('pw.copy')); }, 1500);
             };
             if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(input.value).then(fatto).catch(() => { if (pwCopiaVecchioModo(input)) fatto(); });
-            } else if (pwCopiaVecchioModo(input)) {
-                fatto();
+                navigator.clipboard.writeText(input.value).then(done).catch(() => { if (pwCopyOldWay(input)) done(); });
+            } else if (pwCopyOldWay(input)) {
+                done();
             }
         }
 
         // execCommand('copy') non copia da un campo password: lo si rende leggibile per l'istante della copia.
-        function pwCopiaVecchioModo(input) {
-            const tipo = input.type;
+        function pwCopyOldWay(input) {
+            const kindValue = input.type;
             input.type = 'text';
             input.select();
             let ok = false;
             try { ok = document.execCommand('copy'); } catch (e) { }
-            input.type = tipo;
+            input.type = kindValue;
             return ok;
         }
 """;
@@ -2060,7 +2060,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" id="acVia" onclick="trasformaACasella()" disabled><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:ac.title}}</button>
+                    <button type="button" class="btn btn-mail" id="acVia" onclick="transformToMailbox()" disabled><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:ac.title}}</button>
                 </div>
             </div>
         </div>
@@ -2072,38 +2072,38 @@ public class MailPanelContent {
     private static String getAliasToMailboxJs() {
         return """
         // ===== Trasforma in casella (decide il server: AddressTransform) =====
-        let acDati = null;
-        function acMostra(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
+        let acInfo = null;
+        function acShow(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
         function acData(iso) { return iso ? iso.substring(8, 10) + '/' + iso.substring(5, 7) + '/' + iso.substring(0, 4) : ''; }
 
-        function apriACasella(id) {
+        function openToMailbox(id) {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
-            acDati = { address: a.source, fingerprint: '', mail: false };
+            acInfo = { address: a.source, fingerprint: '', mail: false };
             document.getElementById('aCasellaTitolo').textContent = t('ac.titleFor', { address: a.source });
             document.getElementById('acErr').textContent = '';
-            acMostra('acCaricamento', true);
-            acMostra('acNo', false);
-            acMostra('acSi', false);
+            acShow('acCaricamento', true);
+            acShow('acNo', false);
+            acShow('acSi', false);
             document.getElementById('acVia').disabled = true;
             document.getElementById('acTieni').checked = false;
             document.getElementById('acRitrova').checked = false;
             document.getElementById('acArchivia').checked = false;
             document.getElementById('acPass').value = '';
-            pwMostra('acPass', false);
-            pwControlla('acPass');
+            pwShow('acPass', false);
+            pwCheck('acPass');
             document.getElementById('acNome').value = '';
             document.getElementById('acQuota').value = '1024';
             bootstrap.Modal.getOrCreateInstance(document.getElementById('aCasellaModal')).show();
             fetch('/api/aliases?trasforma=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
-                acMostra('acCaricamento', false);
+                acShow('acCaricamento', false);
                 if (!d.success || !d.possible) {
                     document.getElementById('acNo').textContent = d.reason || d.error || t('conv.notPossible');
-                    acMostra('acNo', true);
+                    acShow('acNo', true);
                     return;
                 }
-                acDati.fingerprint = d.fingerprint;
-                acDati.mail = !!(d.mail && d.mail.present);
+                acInfo.fingerprint = d.fingerprint;
+                acInfo.mail = !!(d.mail && d.mail.present);
                 document.getElementById('acIndirizzo').textContent = d.address;
                 const box = document.getElementById('acDestinazioni');
                 box.textContent = '';
@@ -2121,25 +2121,25 @@ public class MailPanelContent {
                 const vq = (d.towardsHere || []).filter(x => x.active).map(x => x.source);
                 document.getElementById('acVersoQui').textContent = vq.length
                     ? t('ac.alsoFrom', { list: vq.join(', ') }) : '';
-                if (acDati.mail) {
+                if (acInfo.mail) {
                     const p = d.mail;
                     document.getElementById('acPostaInfo').textContent = t('ac.oldMailInfo', {
                             messages: (p.atLeast ? t('ac.atLeast') + ' ' : '') + tn('conv.messages', p.messages), size: p.size })
                         + (p.last ? ' ' + t('ac.lastOne', { date: acData(p.last) }) : '')
                         + (p.filters ? ' ' + t('ac.oldFilters') : '');
                 }
-                acMostra('acPostaBlocco', acDati.mail);
-                acMostra('acSi', true);
+                acShow('acPostaBlocco', acInfo.mail);
+                acShow('acSi', true);
                 document.getElementById('acVia').disabled = false;
-                pwProponi('acPass');
+                pwPropose('acPass');
             }).catch(() => {
-                acMostra('acCaricamento', false);
+                acShow('acCaricamento', false);
                 document.getElementById('acNo').textContent = t('common.noAnswer');
-                acMostra('acNo', true);
+                acShow('acNo', true);
             });
         }
 
-        function trasformaACasella() {
+        function transformToMailbox() {
             const err = document.getElementById('acErr');
             err.textContent = '';
             const pass = document.getElementById('acPass');
@@ -2148,12 +2148,12 @@ public class MailPanelContent {
                 pass.classList.add('is-invalid');
                 return;
             }
-            if (!pwControlla('acPass')) return;
-            let posta = '';
-            if (acDati.mail) {
-                const scelta = document.querySelector('input[name="acPosta"]:checked');
-                if (!scelta) { err.textContent = t('ac.chooseMail'); return; }
-                posta = scelta.value;
+            if (!pwCheck('acPass')) return;
+            let mail = '';
+            if (acInfo.mail) {
+                const choice = document.querySelector('input[name="acPosta"]:checked');
+                if (!choice) { err.textContent = t('ac.chooseMail'); return; }
+                mail = choice.value;
             }
             const quota = parseInt(document.getElementById('acQuota').value);
             const btn = document.getElementById('acVia');
@@ -2162,10 +2162,10 @@ public class MailPanelContent {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'trasforma_in_casella', source: acDati.address, password: pass.value,
+                    action: 'trasforma_in_casella', source: acInfo.address, password: pass.value,
                     name: document.getElementById('acNome').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
-                    keep_forwards: document.getElementById('acTieni').checked, old_mail: posta,
-                    fingerprint: acDati.fingerprint, csrf_token: csrfToken
+                    keep_forwards: document.getElementById('acTieni').checked, old_mail: mail,
+                    fingerprint: acInfo.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 btn.disabled = false;
@@ -2222,7 +2222,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-danger" id="aaVia" onclick="trasformaAAlias()" disabled><i class="fas fa-share me-1" aria-hidden="true"></i>{{t:mbx.toAlias}}</button>
+                    <button type="button" class="btn btn-danger" id="aaVia" onclick="transformToAlias()" disabled><i class="fas fa-share me-1" aria-hidden="true"></i>{{t:mbx.toAlias}}</button>
                 </div>
             </div>
         </div>
@@ -2234,80 +2234,80 @@ public class MailPanelContent {
     private static String getMailboxToAliasJs() {
         return """
         // ===== Trasforma in alias (decide il server: AddressTransform) =====
-        let aaDati = null;
-        function aaMostra(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
-        function aaVoce(lista, testo) {
+        let aaInfo = null;
+        function aaShow(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
+        function aaEntry(itemList, textValue) {
             const li = document.createElement('li');
-            li.textContent = testo;
-            document.getElementById(lista).appendChild(li);
+            li.textContent = textValue;
+            document.getElementById(itemList).appendChild(li);
         }
         function aaData(iso) { return iso ? iso.substring(8, 10) + '/' + iso.substring(5, 7) + '/' + iso.substring(0, 4) : ''; }
-        function mbMsg(testo, tipo) {
+        function mbMsg(textValue, kindValue) {
             const box = document.getElementById('mbMsg');
             box.textContent = '';
-            if (!testo) return;
+            if (!textValue) return;
             const div = document.createElement('div');
-            div.className = 'alert alert-' + tipo + ' py-2 small testo-lungo';
-            div.textContent = testo;
+            div.className = 'alert alert-' + kindValue + ' py-2 small testo-lungo';
+            div.textContent = textValue;
             box.appendChild(div);
         }
 
-        function apriAAlias(id) {
-            aaDati = { id: id, address: '', fingerprint: '' };
+        function openToAlias(id) {
+            aaInfo = { id: id, address: '', fingerprint: '' };
             document.getElementById('aaErr').textContent = '';
             document.getElementById('aaDest').value = '';
             document.getElementById('aaConferma').value = '';
             document.getElementById('aaPerdite').textContent = '';
             document.getElementById('aaResta').textContent = '';
-            aaMostra('aaCaricamento', true);
-            aaMostra('aaNo', false);
-            aaMostra('aaSi', false);
+            aaShow('aaCaricamento', true);
+            aaShow('aaNo', false);
+            aaShow('aaSi', false);
             document.getElementById('aaVia').disabled = true;
             bootstrap.Modal.getOrCreateInstance(document.getElementById('aAliasModal')).show();
             fetch('/api/mailboxes?trasforma=' + id).then(r => r.json()).then(d => {
-                aaMostra('aaCaricamento', false);
+                aaShow('aaCaricamento', false);
                 if (!d.success || !d.possible) {
                     document.getElementById('aaNo').textContent = d.reason || d.error || t('conv.notPossible');
-                    aaMostra('aaNo', true);
+                    aaShow('aaNo', true);
                     return;
                 }
-                aaDati.address = d.address;
-                aaDati.fingerprint = d.fingerprint;
+                aaInfo.address = d.address;
+                aaInfo.fingerprint = d.fingerprint;
                 document.getElementById('aAliasTitolo').textContent = t('aa.titleFor', { address: d.address });
                 document.getElementById('aaIndirizzo').textContent = d.address;
                 document.getElementById('aaIndirizzoConferma').textContent = d.address;
                 const p = d.losses;
-                aaVoce('aaPerdite', t('aa.lostLogin') + ' '
+                aaEntry('aaPerdite', t('aa.lostLogin') + ' '
                     + (p.lastAccess ? t('aa.lastLogin', { date: aaData(p.lastAccess) }) : t('aa.neverUsed')));
-                if (p.sendOnly) aaVoce('aaPerdite', t('aa.lostSendOnly'));
-                if (p.autoReply) aaVoce('aaPerdite', t('aa.lostAutoReply'));
-                if (p.filters) aaVoce('aaPerdite', tn('aa.lostFilters', p.filters));
-                if (p.forwards.length) aaVoce('aaPerdite', t('aa.lostForwards', { list: p.forwards.join(', ') }));
-                if (d.copy) aaVoce('aaPerdite', t('aa.lostSelfAlias', { address: d.address }));
-                const posta = d.mail;
-                aaVoce('aaResta', posta.present
-                    ? (posta.atLeast ? t('aa.keptMailAtLeast', { messages: tn('conv.messages', posta.messages), size: posta.size, folder: d.folder }) : t('aa.keptMail', { messages: tn('conv.messages', posta.messages), size: posta.size, folder: d.folder }))
+                if (p.sendOnly) aaEntry('aaPerdite', t('aa.lostSendOnly'));
+                if (p.autoReply) aaEntry('aaPerdite', t('aa.lostAutoReply'));
+                if (p.filters) aaEntry('aaPerdite', tn('aa.lostFilters', p.filters));
+                if (p.forwards.length) aaEntry('aaPerdite', t('aa.lostForwards', { list: p.forwards.join(', ') }));
+                if (d.copy) aaEntry('aaPerdite', t('aa.lostSelfAlias', { address: d.address }));
+                const mail = d.mail;
+                aaEntry('aaResta', mail.present
+                    ? (mail.atLeast ? t('aa.keptMailAtLeast', { messages: tn('conv.messages', mail.messages), size: mail.size, folder: d.folder }) : t('aa.keptMail', { messages: tn('conv.messages', mail.messages), size: mail.size, folder: d.folder }))
                     : t('aa.noMail'));
-                const gia = (d.alreadyForwarded || []).filter(x => x.active).map(x => x.destination);
-                if (gia.length) aaVoce('aaResta', t('aa.keptAliases', { list: gia.join(', ') }));
+                const already = (d.alreadyForwarded || []).filter(x => x.active).map(x => x.destination);
+                if (already.length) aaEntry('aaResta', t('aa.keptAliases', { list: already.join(', ') }));
                 const vq = (d.towardsHere || []).filter(x => x.active).map(x => x.source);
-                if (vq.length) aaVoce('aaResta', t('aa.keptIncoming', { list: vq.join(', ') }));
+                if (vq.length) aaEntry('aaResta', t('aa.keptIncoming', { list: vq.join(', ') }));
                 document.getElementById('aaDest').value = (d.proposals || []).join(String.fromCharCode(10));
-                aaMostra('aaSi', true);
-                aaControlla();
+                aaShow('aaSi', true);
+                aaCheck();
             }).catch(() => {
-                aaMostra('aaCaricamento', false);
+                aaShow('aaCaricamento', false);
                 document.getElementById('aaNo').textContent = t('common.noAnswer');
-                aaMostra('aaNo', true);
+                aaShow('aaNo', true);
             });
         }
 
-        function aaControlla() {
-            document.getElementById('aaVia').disabled = !aaDati || !aaDati.fingerprint
-                || document.getElementById('aaConferma').value.trim().toLowerCase() !== aaDati.address;
+        function aaCheck() {
+            document.getElementById('aaVia').disabled = !aaInfo || !aaInfo.fingerprint
+                || document.getElementById('aaConferma').value.trim().toLowerCase() !== aaInfo.address;
         }
 
-        function trasformaAAlias() {
+        function transformToAlias() {
             const err = document.getElementById('aaErr');
             err.textContent = '';
             const dest = document.getElementById('aaDest').value.split(String.fromCharCode(10)).map(x => x.trim()).filter(x => x);
@@ -2318,8 +2318,8 @@ public class MailPanelContent {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'trasforma_in_alias', id: aaDati.id, destinations: dest,
-                    confirmation: document.getElementById('aaConferma').value.trim(), fingerprint: aaDati.fingerprint, csrf_token: csrfToken
+                    action: 'trasforma_in_alias', id: aaInfo.id, destinations: dest,
+                    confirmation: document.getElementById('aaConferma').value.trim(), fingerprint: aaInfo.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 if (d.success) {
@@ -2328,14 +2328,14 @@ public class MailPanelContent {
                     loadMailboxes();
                 } else {
                     err.textContent = d.error || t('conv.failed');
-                    aaControlla();
+                    aaCheck();
                 }
             }).catch(() => {
                 err.textContent = t('conv.noAnswer');
-                aaControlla();
+                aaCheck();
             });
         }
-        document.getElementById('aaConferma').addEventListener('input', aaControlla);
+        document.getElementById('aaConferma').addEventListener('input', aaCheck);
 """;
     }
 
@@ -2430,12 +2430,12 @@ public class MailPanelContent {
                 }
                 document.getElementById('pwgenPreview').value = data.password;
                 const ent = data.entropy_bits || 0;
-                const livello = data.strength || '';
+                const levelValue = data.strength || '';
                 document.getElementById('pwgenEntropyText').textContent = t('pw.entropy', { bits: ent });
                 const badge = document.getElementById('pwgenStrengthBadge');
-                badge.textContent = ({ weak: t('pw.strength.weak'), fair: t('pw.strength.fair'), strong: t('pw.strength.strong'), very_strong: t('pw.strength.very_strong') })[livello] || '—';
-                if (livello === 'very_strong' || livello === 'strong') badge.className = 'badge bg-success';
-                else if (livello === 'fair')      badge.className = 'badge bg-warning text-dark';
+                badge.textContent = ({ weak: t('pw.strength.weak'), fair: t('pw.strength.fair'), strong: t('pw.strength.strong'), very_strong: t('pw.strength.very_strong') })[levelValue] || '—';
+                if (levelValue === 'very_strong' || levelValue === 'strong') badge.className = 'badge bg-success';
+                else if (levelValue === 'fair')      badge.className = 'badge bg-warning text-dark';
                 else                              badge.className = 'badge bg-danger';
                 document.getElementById('pwgenUseBtn').disabled = false;
             })
@@ -2695,12 +2695,12 @@ public class MailPanelContent {
                     return;
                 }
                 const ent = data.entropy_bits || 0;
-                const livello = data.strength || '';
-                const label = ({ weak: t('pw.strength.weak'), fair: t('pw.strength.fair'), strong: t('pw.strength.strong'), very_strong: t('pw.strength.very_strong') })[livello] || '—';
+                const levelValue = data.strength || '';
+                const label = ({ weak: t('pw.strength.weak'), fair: t('pw.strength.fair'), strong: t('pw.strength.strong'), very_strong: t('pw.strength.very_strong') })[levelValue] || '—';
                 let badgeClass = 'bg-secondary';
-                if (livello === 'very_strong' || livello === 'strong') badgeClass = 'bg-success';
-                else if (livello === 'fair') badgeClass = 'bg-warning text-dark';
-                else if (livello === 'weak') badgeClass = 'bg-danger';
+                if (levelValue === 'very_strong' || levelValue === 'strong') badgeClass = 'bg-success';
+                else if (levelValue === 'fair') badgeClass = 'bg-warning text-dark';
+                else if (levelValue === 'weak') badgeClass = 'bg-danger';
                 box.innerHTML = '<strong>' + escapeHtmlBl(t('bulk.example')) + '</strong> <code class="font-monospace">' + escapeHtmlBl(data.password) +
                     '</code>  <span class="badge ' + badgeClass + ' ms-1">' + escapeHtmlBl(label) + '</span>' +
                     ' <span class="text-muted">' + escapeHtmlBl(t('bulk.bits', { bits: ent })) + '</span>';
@@ -3218,7 +3218,7 @@ public class MailPanelContent {
                                     <li><a class="dropdown-item" href="#" onclick="openSieveFilters(${m.id}, '${m.email}')">
                                         <i class="fas fa-filter me-2" aria-hidden="true"></i>${escMbx(t('mbx.filters'))}
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="apriAAlias(${m.id}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="openToAlias(${m.id}); return false;">
                                         <i class="fas fa-share me-2" aria-hidden="true"></i>${escMbx(t('mbx.toAlias'))}
                                     </a></li>
                                     <li><hr class="dropdown-divider"></li>
@@ -3240,7 +3240,7 @@ public class MailPanelContent {
                 passInput.classList.add('is-invalid');
                 return;
             }
-            if (!pwControlla('mbPass')) return;
+            if (!pwCheck('mbPass')) return;
             const domainId = document.getElementById('mbDomain').value;
             const domainName = document.getElementById('mbDomain').selectedOptions[0].dataset.domain;
             const user = document.getElementById('mbUser').value;
@@ -3263,7 +3263,7 @@ public class MailPanelContent {
                     // Reset form
                     document.getElementById('mbUser').value = '';
                     document.getElementById('mbPass').value = '';
-                    pwControlla('mbPass');
+                    pwCheck('mbPass');
                     document.getElementById('mbName').value = '';
                     document.getElementById('mbQuota').value = '1024';
                     document.getElementById('mbReceive').checked = true;
@@ -3299,8 +3299,8 @@ public class MailPanelContent {
                     document.getElementById('editMbActive').checked = m.active;
                     document.getElementById('editMbReceive').checked = m.receive_enabled;
                     // Reset stato del campo password (sempre nascosto all'apertura)
-                    pwMostra('editMbPass', false);
-                    pwControlla('editMbPass');
+                    pwShow('editMbPass', false);
+                    pwCheck('editMbPass');
                     // Reset stato del riquadro vault
                     const vaultBox = document.getElementById('editMbVaultBox');
                     const revealedBox = document.getElementById('editMbRevealedBox');
@@ -3319,7 +3319,7 @@ public class MailPanelContent {
 """ + getPasswordFieldJs() + """
         // Una casella nuova parte con una password gia' proposta, in chiaro (vedi pwProponi).
         document.getElementById('addMailboxModal').addEventListener('show.bs.modal', function () {
-            if (!document.getElementById('mbPass').value) pwProponi('mbPass');
+            if (!document.getElementById('mbPass').value) pwPropose('mbPass');
         });
 
 """ + getPasswordGeneratorJs() + getMailboxToAliasJs() + """
@@ -3361,7 +3361,7 @@ public class MailPanelContent {
 
 """ + getBulkRotateMailboxesJs() + """
         function saveMailbox() {
-            if (!pwControlla('editMbPass')) return;
+            if (!pwCheck('editMbPass')) return;
             const id = parseInt(document.getElementById('editMbId').value);
             const data = {
                 id: id,
@@ -3841,7 +3841,7 @@ public class MailPanelContent {
 """ + resource("pages/apple-profile.js") + """
         loadDomains();
         loadMailboxes();
-        paCarica();
+        paLoad();
     </script>
 </body>
 </html>
@@ -3935,17 +3935,17 @@ public class MailPanelContent {
             return d.innerHTML;
         }
 
-        function aliasMsg(testo, tipo) {
-            document.getElementById('aliasMsg').innerHTML = testo
-                ? '<div class="alert alert-' + tipo + ' py-2 small">' + escAl(testo) + '</div>' : '';
+        function aliasMsg(textValue, kindValue) {
+            document.getElementById('aliasMsg').innerHTML = textValue
+                ? '<div class="alert alert-' + kindValue + ' py-2 small">' + escAl(textValue) + '</div>' : '';
         }
 
         function loadAliasDomains() {
             fetch('/api/domains').then(r => r.json()).then(data => {
-                const domini = data.domains || [];
+                const domainList = data.domains || [];
                 const select = document.getElementById('alDomain');
-                select.innerHTML = domini.map(d => '<option value="' + escAl(d.domain) + '">' + escAl(d.domain) + '</option>').join('');
-                if (domini.length === 0) {
+                select.innerHTML = domainList.map(d => '<option value="' + escAl(d.domain) + '">' + escAl(d.domain) + '</option>').join('');
+                if (domainList.length === 0) {
                     select.innerHTML = '<option value="">' + escAl(t('al.noDomain')) + '</option>';
                     document.getElementById('alErr').textContent = t('al.addDomainFirst');
                 }
@@ -3968,16 +3968,16 @@ public class MailPanelContent {
                 }
                 tbody.innerHTML = currentAliases.map(a => {
                     const id = parseInt(a.id);
-                    const chi = escAl(t('al.who', { source: a.source, dest: a.destination }));
+                    const whoText = escAl(t('al.who', { source: a.source, dest: a.destination }));
                     return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="testo-lungo">' + escAl(a.source) + '</td><td class="testo-lungo">' + escAl(a.destination)
                         + (a.active ? '' : ' <span class="badge bg-secondary ms-1">' + escAl(t('mbx.inactive')) + '</span>') + '</td>'
                         + '<td class="text-nowrap">'
-                        + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + chi + '">' + escAl(t('common.edit')) + '</button>'
-                        + (a.source.startsWith('@') ? '' : '<button type="button" class="btn btn-sm btn-outline-success me-1" onclick="apriACasella(' + id + ')"'
+                        + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + whoText + '">' + escAl(t('common.edit')) + '</button>'
+                        + (a.source.startsWith('@') ? '' : '<button type="button" class="btn btn-sm btn-outline-success me-1" onclick="openToMailbox(' + id + ')"'
                             + ' title="' + escAl(t('al.toMailboxHint')) + '" aria-label="' + escAl(t('al.toMailboxOf', { source: a.source })) + '">' + escAl(t('al.toMailboxShort')) + '</button>')
                         + '<button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="toggleAlias(' + id + ', ' + (a.active ? 'false' : 'true') + ')"'
-                        + ' aria-label="' + escAl(a.active ? t('al.disableOf') : t('al.enableOf')) + ' ' + chi + '">' + escAl(a.active ? t('al.disable') : t('al.enable')) + '</button>'
-                        + '<button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + id + ')" aria-label="' + escAl(t('al.deleteOf')) + ' ' + chi + '">' + escAl(t('common.delete')) + '</button>'
+                        + ' aria-label="' + escAl(a.active ? t('al.disableOf') : t('al.enableOf')) + ' ' + whoText + '">' + escAl(a.active ? t('al.disable') : t('al.enable')) + '</button>'
+                        + '<button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + id + ')" aria-label="' + escAl(t('al.deleteOf')) + ' ' + whoText + '">' + escAl(t('common.delete')) + '</button>'
                         + '</td></tr>';
                 }).join('');
             });
@@ -4015,16 +4015,16 @@ public class MailPanelContent {
             }).catch(() => { err.textContent = t('common.noAnswer'); });
         }
 
-        function toggleAlias(id, attiva) {
+        function toggleAlias(id, isOn) {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
-            if (!attiva && !confirm(t('al.confirmDisable', { source: a.source, dest: a.destination }))) return;
+            if (!isOn && !confirm(t('al.confirmDisable', { source: a.source, dest: a.destination }))) return;
             fetch('/api/aliases', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id, active: attiva, csrf_token: csrfToken })
+                body: JSON.stringify({ id: id, active: isOn, csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
-                if (data.success) aliasMsg(data.note || (attiva ? t('al.enabled', { source: a.source, dest: a.destination }) : t('al.disabled', { source: a.source, dest: a.destination })), data.note ? 'warning' : 'success');
+                if (data.success) aliasMsg(data.note || (isOn ? t('al.enabled', { source: a.source, dest: a.destination }) : t('al.disabled', { source: a.source, dest: a.destination })), data.note ? 'warning' : 'success');
                 else aliasMsg(data.error || t('common.failed'), 'danger');
                 loadAliases();
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
@@ -4175,10 +4175,10 @@ public class MailPanelContent {
                     // da solo trascorse le ore di propagazione, e piu' avanti completeRotation
                     // da solo a grazia finita. Dire a qualcuno che deve fare una cosa che
                     // avviene da se' lo tiene in attesa di un compito inesistente.
-                    const oreAuto = data.auto_activate_after_hours || 24;
+                    const autoHours = data.auto_activate_after_hours || 24;
                     html += '<div class="mt-2 small text-muted">' + escHtml(t('dns.newSelectorIs')) + ' <code>' + escapeHtmlBl(data.pending_selector || '') + '</code>. '
                         + escHtml(t('dns.oldKeyIs')) + ' <code>' + escapeHtmlBl(data.current_selector || '') + '</code> '
-                        + escHtml(cloudflareConfigured ? t('dns.oldSignsUntilAuto', { hours: oreAuto }) : t('dns.oldSignsUntilYou')) + '</div>';
+                        + escHtml(cloudflareConfigured ? t('dns.oldSignsUntilAuto', { hours: autoHours }) : t('dns.oldSignsUntilYou')) + '</div>';
                     html += '</div>';
 
                     if (state === 'pending_dns') {
@@ -4192,7 +4192,7 @@ public class MailPanelContent {
                     } else {
                         // propagated
                         html += '<div class="alert alert-info"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.recPublishedOk')) + ' ' + (cloudflareConfigured
-                            ? escHtml(t('dns.activationAuto', { hours: data.auto_activate_after_hours || 24, days: data.grace_period_days || 7 })) + ' ' + fraseAvvioAutomatico(data)
+                            ? escHtml(t('dns.activationAuto', { hours: data.auto_activate_after_hours || 24, days: data.grace_period_days || 7 })) + ' ' + autoStartSentence(data)
                             : escHtml(t('dns.activationYou'))) + '</div>';
                         html += '<div class="d-flex gap-2 flex-wrap">';
                         html += '<button class="btn btn-success" onclick="rotateDkimActivate(false)"><i class="fas fa-bolt me-1" aria-hidden="true"></i>' + escHtml(t('dns.activateNew')) + '</button>';
@@ -8081,7 +8081,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + resource("pages/report.js") + """
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
-        repCarica();
+        repLoad();
 
         let csrfToken = document.getElementById('csrf_token').value;
 """ + """
@@ -11865,7 +11865,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span>
                         <button class="btn btn-sm btn-outline-danger me-1" onclick="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>{{t:up.reboot}}</button>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcPrev()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>{{t:up.autostart}}</button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="osStato()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.sysState}}</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="osState()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.sysState}}</button>
                     </span>
                 </div>
                 <div class="card-body">
@@ -11930,10 +11930,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         <select id="os-target" class="form-select form-select-sm d-inline-block me-1" style="width:auto" aria-label="{{t:up.targetVersionLabel}}">
                             <option value="">{{t:up.targetVersion}}</option>
                         </select>
-                        <button class="btn btn-sm btn-warning me-1" onclick="saltoStato()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="upVerifica()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
+                        <button class="btn btn-sm btn-warning me-1" onclick="jumpState()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="upCheck()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="upPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-release-tog" onclick="procApri('proc-release')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-release-tog" onclick="procOpen('proc-release')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
                 <div class="card-body" id="proc-release" style="display:none">
@@ -11948,7 +11948,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-clipboard-list me-2" aria-hidden="true"></i><strong>{{t:up.report}}</strong>
                         <span class="small text-muted ms-2">{{t:up.reportSub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" id="rep-copy" onclick="repCopia()" style="display:none"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:common.copy}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" id="rep-copy" onclick="repCopy()" style="display:none"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:common.copy}}</button>
                         <button class="btn btn-sm btn-outline-info" onclick="repGen()"><i class="fas fa-file-lines me-1" aria-hidden="true"></i>{{t:up.genReport}}</button>
                     </span>
                 </div>
@@ -11989,7 +11989,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-hand me-2" aria-hidden="true"></i><strong>{{t:up.remove}}</strong>
                         <span class="small text-muted ms-2">{{t:up.removeSub}}</span></span>
                     <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-warning" onclick="rimCandidati()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates}}</button>
+                        <button class="btn btn-sm btn-outline-warning" onclick="rmCandidates()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates}}</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -12046,7 +12046,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i><strong>{{t:up.ams}}</strong>
                         <span class="small text-muted ms-2">{{t:up.amsSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="amsPiano()"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:up.state}}</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="amsPlan()"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:up.state}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.amsIntro1.html}}</p>
@@ -12060,7 +12060,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-shield-halved me-2" aria-hidden="true"></i><strong>{{t:up.w443}}</strong>
                         <span class="small text-muted ms-2">{{t:up.w443Sub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="w443Carica()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.state}}</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="w443Load()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.state}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.w443Intro1.html}}</p>
@@ -12086,7 +12086,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-binoculars me-2" aria-hidden="true"></i><strong>{{t:up.watch}}</strong>
                         <span class="small text-muted ms-2">{{t:up.watchSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="sorvCarica()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="watchLoad()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.watchIntro1.html}}</p>
@@ -12130,9 +12130,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fab fa-python me-2" aria-hidden="true"></i><strong>{{t:up.py}}</strong>
                         <span class="small text-muted ms-2">{{t:up.pySub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="pyResti()"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:up.leftovers}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="pyLeftovers()"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:up.leftovers}}</button>
                         <button class="btn btn-sm btn-outline-primary" onclick="pyPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-python-tog" onclick="procApri('proc-python')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-python-tog" onclick="procOpen('proc-python')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
                 <div class="card-body" id="proc-python" style="display:none">
@@ -12147,9 +12147,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fab fa-java me-2" aria-hidden="true"></i><strong>{{t:up.jvm}}</strong>
                         <span class="small text-muted ms-2">{{t:up.jvmSub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="jvStato()"><i class="fas fa-file-alt me-1" aria-hidden="true"></i>{{t:up.lastReport}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="jvState()"><i class="fas fa-file-alt me-1" aria-hidden="true"></i>{{t:up.lastReport}}</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="jvPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-jvm-tog" onclick="procApri('proc-jvm')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-jvm-tog" onclick="procOpen('proc-jvm')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
                 <div class="card-body" id="proc-jvm" style="display:none">
@@ -12167,7 +12167,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.whyNoAnswer}}</button>
                         <button class="btn btn-sm btn-outline-info me-1" onclick="rcNginx()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>{{t:up.assetsNoStyle}}</button>
                         <button class="btn btn-sm btn-outline-warning" onclick="rcPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-roundcube-tog" onclick="procApri('proc-roundcube')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-roundcube-tog" onclick="procOpen('proc-roundcube')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
                 <div class="card-body" id="proc-roundcube" style="display:none">
@@ -12182,7 +12182,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-database me-2" aria-hidden="true"></i><strong>{{t:up.my84}}</strong>
                         <span class="small text-muted ms-2">{{t:up.my84Sub}}</span></span>
                     <button class="btn btn-sm btn-outline-warning" onclick="my84Pre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-mysql-tog" onclick="procApri('proc-mysql')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-mysql-tog" onclick="procOpen('proc-mysql')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                 </div>
                 <div class="card-body" id="proc-mysql" style="display:none">
                     <p class="small text-muted mb-2">{{t:up.my84Intro.html}}</p>
@@ -12229,7 +12229,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         /* Il dettaglio di una riga: il perche' della vulnerabilita', le CVE, l'avvertenza. */
-        function pkDettaglio(p) {
+        function pkDetails(p) {
             let h = '';
             if (p.vuln) {
                 h += '<div class="small mb-1">' + escHtml(p.vuln.explanation || '') + '</div>';
@@ -12275,20 +12275,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                + '<th scope="col">' + escHtml(t('pkgs.colPackage')) + '</th><th scope="col">' + escHtml(t('pkgs.colInstalled')) + '</th><th scope="col">' + escHtml(t('pkgs.colAvailable')) + '</th>'
                + '<th scope="col">' + escHtml(t('pkgs.colSecurity')) + '</th><th scope="col">' + escHtml(t('pkgs.colLock')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th></tr></thead><tbody>';
             (r.packages || []).forEach((p, i) => {
-                const det = pkDettaglio(p);
-                let azioni = '';
+                const detailInfo = pkDetails(p);
+                let actionItems = '';
                 if (p.update) {
                     if (p.canUpdate) {
-                        azioni += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
+                        actionItems += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
                                 + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: p.available })) + '</button>';
                     } else if (p.javaFlow) {
-                        azioni += '<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1 text-nowrap" onclick="pkVaiJava()">'
+                        actionItems += '<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1 text-nowrap" onclick="pkGoJava()">'
                                 + '<i class="fab fa-java me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.javaFlow')) + '</button>';
                     } else {
-                        azioni += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
+                        actionItems += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
                     }
                 }
-                azioni += '<button type="button" class="btn btn-sm btn-outline-secondary mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" onclick="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
+                actionItems += '<button type="button" class="btn btn-sm btn-outline-secondary mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" onclick="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
                         + '<i class="fas ' + (p.locked ? 'fa-lock-open' : 'fa-lock') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.unlock') : t('pkgs.lock')) + '</button>';
                 h += '<tr class="upd-cell' + (p.vuln ? ' table-danger' : '') + '">'
                    + '<td data-label="' + escHtml(t('pkgs.colPackage')) + '"><code>' + escHtml(p.name) + '</code>'
@@ -12299,11 +12299,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         + (p.majorJump ? ' <span class="badge bg-danger">' + escHtml(t('pkgs.majorJump')) + '</span>' : '')
                         : '<span class="text-muted">' + escHtml(t('pkgs.upToDate')) + '</span>') + '</td>'
                    + '<td data-label="' + escHtml(t('pkgs.colSecurity')) + '">' + pkVulnBadge(p.vuln)
-                   + (det ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" onclick="pkDet(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
+                   + (detailInfo ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" onclick="pkDetail(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
                    + '<td data-label="' + escHtml(t('pkgs.colLock')) + '"><span class="badge ' + (p.locked ? 'bg-success' : 'bg-warning text-dark') + '"><i class="fas '
                    + (p.locked ? 'fa-lock' : 'fa-lock-open') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.locked') : t('pkgs.unlocked')) + '</span></td>'
-                   + '<td class="text-end">' + azioni + '</td></tr>';
-                if (det) h += '<tr id="pk-det-' + i + '" hidden><td colspan="6" class="small">' + det + '</td></tr>';
+                   + '<td class="text-end">' + actionItems + '</td></tr>';
+                if (detailInfo) h += '<tr id="pk-det-' + i + '" hidden><td colspan="6" class="small">' + detailInfo + '</td></tr>';
             });
             h += '</tbody></table></div>';
             if ((r.others || []).length) {
@@ -12315,7 +12315,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        function pkDet(btn, i) {
+        function pkDetail(btn, i) {
             const row = document.getElementById('pk-det-' + i);
             if (!row) return;
             row.hidden = !row.hidden;
@@ -12323,8 +12323,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         /* Il JDK del pannello ha la sua procedura: si apre la sua scheda. */
-        function pkVaiJava() {
-            procApri('proc-jvm', true);
+        function pkGoJava() {
+            procOpen('proc-jvm', true);
             const c = document.getElementById('proc-jvm');
             if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
@@ -12357,28 +12357,28 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('package_preflight', { package: name });
             if (!r.success) { body.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
             pkUpd.signature = r.signature || '';
-            const blocchi = (r.checks || []).filter(c => c.level === 'block');
+            const blocks = (r.checks || []).filter(c => c.level === 'block');
             const warnings = (r.checks || []).filter(c => c.level === 'review' || c.level === 'warn' || c.level === 'wait');
-            const servizi = (r.services || []).map(x => typeof x === 'string' ? x : x.name);
+            const services = (r.services || []).map(x => typeof x === 'string' ? x : x.name);
             let h = '<p class="mb-2"><code>' + escHtml(r.name) + '</code> ' + escHtml(r.current) + ' &rarr; <strong>' + escHtml(r.available || '?') + '</strong></p>';
             if ((r.cve || []).length) h += '<div class="small mb-2"><strong>' + escHtml(t('up.closes')) + '</strong> ' + r.cve.map(c => '<span class="badge bg-dark me-1">' + escHtml(c) + '</span>').join('') + '</div>';
-            if (blocchi.length) {
+            if (blocks.length) {
                 h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(t('pkgs.m.blocked')) + '</strong><ul class="mb-0">'
-                   + blocchi.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul></div>';
+                   + blocks.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul></div>';
             }
-            const sbl = (r.plan && r.plan.unlockedPackages) || [];
+            const unlockedList = (r.plan && r.plan.unlockedPackages) || [];
             h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.steps')) + '</h6><ol class="small">'
-               + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepUnlock', { list: sbl.join(', ') }) : t('pkgs.m.stepNoUnlock')) + '</li>'
+               + '<li>' + escHtml(unlockedList.length ? t('pkgs.m.stepUnlock', { list: unlockedList.join(', ') }) : t('pkgs.m.stepNoUnlock')) + '</li>'
                + '<li>' + escHtml(t('pkgs.m.stepUpgrade')) + '</li>'
-               + '<li>' + escHtml(servizi.length ? t('pkgs.m.stepRestart', { list: servizi.join(', ') }) : t('pkgs.m.stepNoRestart')) + '</li>'
-               + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepRelock') : t('pkgs.m.stepCheck')) + '</li></ol>'
-               + updPianoHtml(r.plan, r.signature);
+               + '<li>' + escHtml(services.length ? t('pkgs.m.stepRestart', { list: services.join(', ') }) : t('pkgs.m.stepNoRestart')) + '</li>'
+               + '<li>' + escHtml(unlockedList.length ? t('pkgs.m.stepRelock') : t('pkgs.m.stepCheck')) + '</li></ol>'
+               + updPlanHtml(r.plan, r.signature);
             if (warnings.length) {
                 h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.warnings')) + '</h6><ul class="small">'
                    + warnings.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul>';
             }
             body.innerHTML = h;
-            if (!blocchi.length && !r.blocked) {
+            if (!blocks.length && !r.blocked) {
                 const inp = document.getElementById('pkUpdName');
                 document.getElementById('pkUpdNameLabel').textContent = t('pkgs.m.confirm', { name: name });
                 inp.value = '';
@@ -12444,8 +12444,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // sta qui, in un punto solo, invece che dentro ogni funzione.
         async function updApi(action, extra) {
             if (updBusy) return { success: false, error: t('up.busy') };
-            const lento = action !== 'job_status';
-            if (lento) updBusy = true;
+            const slow = action !== 'job_status';
+            if (slow) updBusy = true;
             try {
                 const body = Object.assign({
                     action: action,
@@ -12460,14 +12460,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } catch (e) {
                 return { success: false, error: t('common.networkError', { message: e.message }) };
             } finally {
-                if (lento) updBusy = false;
+                if (slow) updBusy = false;
             }
         }
 
         // Conferma scritta: la parola si mostra nella lingua della pagina; al server va il suo codice.
-        function updConferma(testo, parola) {
-            const typed = prompt((testo ? testo + '\\n\\n' : '') + t('ad.typeToConfirm', { word: parola }));
-            return typed !== null && typed.trim().toUpperCase() === parola.toUpperCase();
+        function updConfirm(textValue, keyword) {
+            const typed = prompt((textValue ? textValue + '\\n\\n' : '') + t('ad.typeToConfirm', { word: keyword }));
+            return typed !== null && typed.trim().toUpperCase() === keyword.toUpperCase();
         }
 
         function updEsc(v) {
@@ -12478,7 +12478,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // I verdetti arrivano come codici: il server e la pagina li confrontano cosi' come sono,
         // e il testo da leggere si sceglie qui, nella lingua della pagina.
-        function updVerdetto(v) {
+        function updVerdict(v) {
             return ({
                 "IL LIVELLO E' INDIETRO": t('up.vLevelBehind'),
                 'ALLINEATO': t('up.vAligned'),
@@ -12563,7 +12563,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (d.source) {
                     h += '<p class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(d.source) + '</p>';
                 }
-                h += '<button class="btn btn-sm btn-outline-primary" onclick="dove24()">'
+                h += '<button class="btn btn-sm btn-outline-primary" onclick="where24()">'
                    + '<i class="fas fa-file-lines me-1" aria-hidden="true"></i>' + escHtml(t('up.see24')) + '</button>'
                    + '<div id="dove24-body" class="mt-2"></div>';
             }
@@ -12579,7 +12579,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.pfLine', { pkg: pf.package, version: pf.version, repo: pf.repoVersion || '?', level: pf.level || '?' }))
                    + ' ' + escHtml(pf.explicitLevel ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
                    + '<div class="alert alert-' + (pf.verdict === 'ALLINEATO' ? 'success' : 'warning')
-                   + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(pf.verdict)) + '</strong> &mdash; '
+                   + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(pf.verdict)) + '</strong> &mdash; '
                    + updEsc(pf.explanation) + '</div>';
                 const cb = pf.changes || [];
                 if (cb.length) {
@@ -12607,7 +12607,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 if (pf.back && pf.recommended) {
                     h += '<button class="btn btn-sm btn-outline-warning mb-1" data-level="' + escHtml(pf.recommended) + '" data-open="' + Number(pf.openHere || 0) + '"'
-                       + ' onclick="pfAlza(this.dataset.level, Number(this.dataset.open))">'
+                       + ' onclick="pfRaise(this.dataset.level, Number(this.dataset.open))">'
                        + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('up.raiseLevel', { level: pf.recommended }))
                        + '</button><div id="pf-outcome" class="mt-1"></div>'
                        + '<div class="small text-muted mb-2">' + t('up.raiseNote.html') + '</div>';
@@ -12639,7 +12639,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 const cls = rs.verdict === 'NIENTE DA SEGNALARE' ? 'success'
                           : (rs.verdict === 'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE' ? 'info' : 'danger');
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.filesRead })) + '</div>'
-                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(rs.verdict))
+                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(rs.verdict))
                    + '</strong> &mdash; ' + updEsc(rs.explanation) + '</div>';
                 const is = rs.issues || [];
                 if (is.length) {
@@ -12724,7 +12724,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updRegenDovecot() {
-            if (!updConferma(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
+            if (!updConfirm(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
             const r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
@@ -12734,11 +12734,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             updPoll(r.jobId, el, pre);
         }
 
-        async function cleanClient(estraneo, corretto) {
-            if (!updConferma('', t('up.wRemove'))) return;
+        async function cleanClient(foreign, correct) {
+            if (!updConfirm('', t('up.wRemove'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
-            const r = await updApi('clean_client', { confirm: 'REMOVE', foreign: estraneo, correct: corretto });
+            const r = await updApi('clean_client', { confirm: 'REMOVE', foreign: foreign, correct: correct });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.cleaning')) + '</span>';
             pre.style.display = 'block';
@@ -12776,7 +12776,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (r.gaScheduled) {
                 h += '<div class="alert alert-danger py-2">' + escHtml(t('up.rebootScheduled')) + ' <code>'
                    + updEsc(r.gaScheduled) + '</code> '
-                   + '<button class="btn btn-sm btn-light ms-2" onclick="rebAnnulla()">' + escHtml(t('up.cancelReboot')) + '</button></div>';
+                   + '<button class="btn btn-sm btn-light ms-2" onclick="rebCancel()">' + escHtml(t('up.cancelReboot')) + '</button></div>';
             }
             h += '<div class="alert alert-secondary py-2 small">' + t('up.rebootInfo.html') + '</div>'
                + '<button class="btn btn-danger" onclick="rebGo()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.scheduleReboot')) + '</button>';
@@ -12784,7 +12784,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rebGo() {
-            if (!updConferma('', t('up.wReboot'))) return;
+            if (!updConfirm('', t('up.wReboot'))) return;
             const el = document.getElementById('os-body');
             const r = await updApi('reboot_now', { confirm: 'RIAVVIA IL SERVER', minutes: 1 });
             if (!r.success) {
@@ -12795,13 +12795,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.note) + '</strong>'
                 + ' (' + escHtml(t('up.process', { pid: r.pid })) + ')'
                 + '<br>' + escHtml(t('up.pageWillStop'))
-                + '<br><button class="btn btn-light mt-2" onclick="rebAnnulla()">'
+                + '<br><button class="btn btn-light mt-2" onclick="rebCancel()">'
                 + '<i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('up.cancelReboot')) + '</button></div>';
         }
 
         // Su FreeBSD non esiste un'opzione per annullare: il manuale di shutdown(8) dice di
         // terminare il processo. Attenzione, "shutdown -c" NON annulla: e' power cycle.
-        async function rebAnnulla() {
+        async function rebCancel() {
             const el = document.getElementById('os-body');
             const r = await updApi('reboot_cancel');
             el.innerHTML = '<div class="alert alert-' + (r.success ? (r.existedBefore ? 'success' : 'secondary') : 'danger')
@@ -12830,7 +12830,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   // pulsante che, premuto, risponde "non c'e' niente da fare" e' un pulsante
                   // che non andava mostrato.
                   + ((r.exists || r.enabled)
-                     ? ' <button class="btn btn-outline-danger ms-2" onclick="rcRimuoviPrev()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
+                     ? ' <button class="btn btn-outline-danger ms-2" onclick="rcRemovePrev()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
                      : '');
             el.innerHTML = h;
         }
@@ -12839,7 +12839,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // Esiste perche' un pulsante che si puo' solo premere in un verso non e' una scelta:
         // e' una porta a senso unico. Il pannello web ha la rimozione da stamattina, qui
         // mancava.
-        async function rcRimuoviPrev() {
+        async function rcRemovePrev() {
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingRemove')) + '';
             const r = await updApi('rc_remove_preview');
@@ -12864,12 +12864,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 + '</tbody></table></div>'
                 + '<div class="alert alert-info py-2 mb-2"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>'
                 + t('up.rcRemoveInfo.html') + '</div>'
-                + '<button class="btn btn-danger" onclick="rcRimuoviGo()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
+                + '<button class="btn btn-danger" onclick="rcRemoveGo()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
                 + ' <button class="btn btn-outline-secondary ms-2" onclick="rcPrev()">' + escHtml(t('common.cancel')) + '</button>';
         }
 
-        async function rcRimuoviGo() {
-            if (!updConferma(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
+        async function rcRemoveGo() {
+            if (!updConfirm(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
             const el = document.getElementById('os-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingAutostart')) + '';
             const r = await updApi('rc_remove', { confirm: 'RIMUOVI RC' });
@@ -12880,7 +12880,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcGo() {
-            if (!updConferma('', t('up.wInstallRc'))) return;
+            if (!updConfirm('', t('up.wInstallRc'))) return;
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
             const r = await updApi('rc_install', { confirm: 'INSTALLA RC' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
@@ -12894,7 +12894,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- sistema operativo ----------
-        async function osStato() {
+        async function osState() {
             const el = document.getElementById('os-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingOs')) + '';
             const r = await updApi('os_status');
@@ -12917,7 +12917,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (r.updatableWithFreebsdUpdate) {
                 h += '<div class="alert alert-' + (r.readyExist ? 'warning' : 'secondary') + ' py-2">'
                    + '<strong>' + escHtml(t('up.baseFetched')) + '</strong> ' + updEsc(r.alreadyReady) + '</div>'
-                   + '<button class="btn btn-outline-primary" onclick="osCerca()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('up.fetchOs')) + '</button>'
+                   + '<button class="btn btn-outline-primary" onclick="osSearch()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('up.fetchOs')) + '</button>'
                    + '<span class="small text-muted ms-2">' + t('up.fetchOsNote.html') + '</span>';
             } else {
                 h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.updatesNote) + '</div>';
@@ -12925,8 +12925,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        async function osCerca() {
-            if (!updConferma(t('up.fetchNote'), t('up.wFetch'))) return;
+        async function osSearch() {
+            if (!updConfirm(t('up.fetchNote'), t('up.wFetch'))) return;
             const pre = document.getElementById('os-log');
             pre.style.display = 'block';
             pre.textContent = t('up.fetchRunning');
@@ -12938,19 +12938,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- eliminazione di un ambiente di avvio ----------
-        async function beElimina(nome) {
-            if (!updConferma(t('up.confirmBeDelete', { name: nome }), t('up.wDelete'))) return;
+        async function beDelete(entryName) {
+            if (!updConfirm(t('up.confirmBeDelete', { name: entryName }), t('up.wDelete'))) return;
             const el = document.getElementById('up-body');
-            const r = await updApi('be_destroy', { confirm: 'DELETE', name: nome });
+            const r = await updApi('be_destroy', { confirm: 'DELETE', name: entryName });
             const box = document.createElement('div');
             box.className = 'alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mt-2';
             box.textContent = r.note || r.error || t('shu.unknownResult');
             el.appendChild(box);
-            if (r.success) upVerifica();
+            if (r.success) upCheck();
         }
 
         // ---------- proseguimento del salto, che sopravvive ai riavvii ----------
-        async function saltoStato() {
+        async function jumpState() {
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingWhere')) + '';
             const r = await updApi('jump_state');
@@ -12983,14 +12983,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.jumpDone')) + '</div>';
             } else {
                 h += '<div class="alert alert-info py-2">' + t('up.jumpInfo.html') + '</div>'
-                   + '<button class="btn btn-warning" onclick="saltoVai()"><i class="fas fa-forward me-1" aria-hidden="true"></i>' + escHtml(t('up.continue')) + '</button>';
+                   + '<button class="btn btn-warning" onclick="jumpGo()"><i class="fas fa-forward me-1" aria-hidden="true"></i>' + escHtml(t('up.continue')) + '</button>';
             }
             el.innerHTML = h;
             pre.style.display = 'none';
         }
 
-        async function saltoVai() {
-            if (!updConferma('', t('up.wContinue'))) return;
+        async function jumpGo() {
+            if (!updConfirm('', t('up.wContinue'))) return;
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
             const r = await updApi('jump_continue', { confirm: 'PROSEGUI', target: upTarget() });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
@@ -13053,13 +13053,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else {
                 h += '<div class="alert alert-warning py-2">' + t('up.prepInfo.html') + '</div>'
                    + '<button class="btn btn-warning me-2" onclick="upPrep()"><i class="fas fa-shield-halved me-1" aria-hidden="true"></i>' + escHtml(t('up.prepare')) + '</button>'
-                   + '<button class="btn btn-outline-secondary" onclick="upIstr()"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>' + escHtml(t('up.showCommands')) + '</button>';
+                   + '<button class="btn btn-outline-secondary" onclick="upInstr()"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>' + escHtml(t('up.showCommands')) + '</button>';
             }
             el.innerHTML = h;
         }
 
         async function upPrep() {
-            if (!updConferma('', t('up.wPrepare'))) return;
+            if (!updConfirm('', t('up.wPrepare'))) return;
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
             const r = await updApi('os_upgrade_prepare', { confirm: 'PREPARA AGGIORNAMENTO', target: upTarget() });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
@@ -13068,22 +13068,22 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             planPoll(r.jobId, el, pre);
         }
 
-        async function upIstr() {
+        async function upInstr() {
             const pre = document.getElementById('up-log');
             pre.style.display = 'block';
             pre.textContent = t('up.genCommands');
             const r = await updApi('os_upgrade_instructions', { target: upTarget() });
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            let testo = t('up.jumpTitle', { version: r.target }) + '\\n'
+            let textValue = t('up.jumpTitle', { version: r.target }) + '\\n'
                   + t('up.sourceIs', { source: r.source }) + '\\n\\n';
             (r.steps || []).forEach(p => {
-                testo += p.n + '. ' + p.title + '\\n     ' + p.cmd + '\\n     ' + p.note + '\\n\\n';
+                textValue += p.n + '. ' + p.title + '\\n     ' + p.cmd + '\\n     ' + p.note + '\\n\\n';
             });
-            testo += t('up.wayBack') + '\\n     ' + r.returnInfo + '\\n';
-            pre.textContent = testo;
+            textValue += t('up.wayBack') + '\\n     ' + r.returnInfo + '\\n';
+            pre.textContent = textValue;
         }
 
-        async function upVerifica() {
+        async function upCheck() {
             const el = document.getElementById('up-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.comparingInventory')) + '';
             const r = await updApi('os_upgrade_verify');
@@ -13121,7 +13121,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                        + '<td class="text-end">' + updEsc(x.space) + '</td>'
                        + '<td class="small">' + updEsc(x.created)
                        + (x.deletable
-                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" data-name="' + escHtml(x.name) + '" onclick="beElimina(this.dataset.name)">'
+                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" data-name="' + escHtml(x.name) + '" onclick="beDelete(this.dataset.name)">'
                             + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('common.delete')) + '</button>'
                           : '')
                        + '</td></tr>';
@@ -13150,10 +13150,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 : '<span class="text-warning">' + escHtml(t('up.reportCut', { error: r.error })) + '</span>';
         }
 
-        async function repCopia() {
-            const testo = document.getElementById('rep-testo').textContent;
+        async function repCopy() {
+            const textValue = document.getElementById('rep-testo').textContent;
             try {
-                await navigator.clipboard.writeText(testo);
+                await navigator.clipboard.writeText(textValue);
                 document.getElementById('rep-stato').innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('fw.copied')) + '</span>';
             } catch (e) {
                 // Senza HTTPS o senza permesso la clipboard non c&#39;e&#39;: si seleziona a mano.
@@ -13169,7 +13169,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     private static String getUpdatesScript1b() {
         return """
         // L'esito arriva come codice del server; qui il nome nella lingua della pagina.
-        function updEsito(v) {
+        function updOutcome(v) {
             return ({ coerente: t('up.eConsistent'), DIVERGE: t('up.eDiverges'), MISTO: t('up.eMixed'), assente: t('up.eMissing'),
                       'port installato accanto al sistema base': t('up.ePortBeside') })[v] || v;
         }
@@ -13193,23 +13193,23 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             (r.lines || []).forEach(x => {
                 const cls = x.outcome === 'consistent' ? 'upd-badge-ok'
                           : (x.outcome === 'DIVERGE' ? 'upd-badge-stop' : 'upd-badge-warn');
-                const fuori = x.outsideDefault
+                const outside = x.outsideDefault
                     ? '<br><span class="small text-danger">' + escHtml(t('up.outsideDefault')) + ' <code>'
                       + updEsc(x.outsideDefault) + '</code></span>' : '';
-                let dip = '';
+                let dependentsHtml = '';
                 (x.dependents || []).forEach(d => {
                     const q = d.requiredBy || [];
                     // "si puo' togliere" era una conclusione, non una misura: %rn dice solo chi lo
                     // DICHIARA. Qui si dice esattamente questo, e per il port openssl si offre la
                     // misura vera, che guarda cosa i processi vivi hanno davvero aperto.
-                    dip += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-muted') + '">'
+                    dependentsHtml += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-muted') + '">'
                          + '<code>' + updEsc(d.pkgName) + '</code> '
                          + (q.length
                             ? escHtml(t('up.declaredBy', { list: q.join(', ') }))
                             : escHtml(t('up.declaredByNone')))
                          + '</span>';
                     if (d.pkgName === 'openssl') {
-                        dip += '<br><button class="btn btn-sm btn-outline-primary mt-1" onclick="sslUso()">'
+                        dependentsHtml += '<br><button class="btn btn-sm btn-outline-primary mt-1" onclick="sslUsage()">'
                              + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.whoUses')) + '</button>';
                     }
                 });
@@ -13217,7 +13217,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<span class="small text-muted">' + updEsc(x.why) + '</span></td>'
                    + '<td><code>' + updEsc(x.defaultValue) + '</code></td>'
                    + '<td><code>' + updEsc(x.installed || '-') + '</code></td>'
-                   + '<td><span class="badge ' + cls + '">' + escHtml(updEsito(x.outcome)) + '</span>' + fuori + dip + '</td></tr>';
+                   + '<td><span class="badge ' + cls + '">' + escHtml(updOutcome(x.outcome)) + '</span>' + outside + dependentsHtml + '</td></tr>';
             });
             h += '</tbody></table></div>'
                + '<div id="ssl-uso" class="mb-2"></div>'
@@ -13227,7 +13227,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- chi usa davvero il port openssl ----------
-        async function sslUso() {
+        async function sslUsage() {
             const el = document.getElementById('ssl-uso');
             el.innerHTML = '<div class="alert alert-secondary py-2 mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + escHtml(t('up.lookingProcs')) + '</div>';
@@ -13238,7 +13238,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // "IL COMANDO E' SUO" e "NON DETERMINABILE" restano gialli: non sono un divieto,
             // ma nemmeno un via libera.
             let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
-                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
+                  + '<strong>' + updEsc(updVerdict(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
                   + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.note) + '</div>'
                   + (r.whyItIsHere
                      ? '<div class="alert alert-secondary py-2 small mb-2"><strong>' + escHtml(t('up.whyHere')) + '</strong> '
@@ -13251,11 +13251,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colExecutable')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
                 bn.forEach(b => {
-                    const vince = b.path === r.commandInPath;
+                    const wins = b.path === r.commandInPath;
                     h += '<tr class="upd-cell"><td><code>' + updEsc(b.path) + '</code></td>'
                        + '<td class="small">' + updEsc(b.version) + '</td>'
                        + '<td class="small">' + updEsc(b.pkgName || t('up.baseSystem')) + '</td>'
-                       + '<td>' + (vince
+                       + '<td>' + (wins
                           ? '<span class="badge ' + (b.delPort ? 'upd-badge-warn' : 'upd-badge-ok') + '">'
                             + escHtml(t('up.winsPath')) + '</span>'
                           : '<span class="badge upd-badge-info">' + escHtml(t('up.presentNotChosen')) + '</span>') + '</td></tr>';
@@ -13298,7 +13298,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             if (r.panel && r.panel.success) {
                 h += '<h6 class="mt-2 mb-1">' + escHtml(t('up.panelUses')) + '</h6>'
-                   + rimRiquadro(r.panel);
+                   + rmBox(r.panel);
             }
             h += '<div class="alert alert-secondary py-2 small mb-0 mt-2"><strong>' + escHtml(t('up.ifRemoved')) + '</strong> '
                + updEsc(r.howToRemove) + '</div>';
@@ -13313,31 +13313,31 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         const PROCEDURE = ['proc-release', 'proc-python', 'proc-jvm',
                            'proc-roundcube', 'proc-mysql', 'proc-protetto'];
 
-        function procApri(id, forza) {
+        function procOpen(id, forced) {
             const c = document.getElementById(id), tog = document.getElementById(id + '-tog');
             if (!c) return;
-            const chiusa = c.style.display === 'none';
-            const apri = forza === undefined ? chiusa : forza;
-            c.style.display = apri ? '' : 'none';
-            if (tog) { tog.innerHTML = '<i class="fas fa-chevron-' + (apri ? 'up' : 'down') + '" aria-hidden="true"></i>'; tog.setAttribute('aria-expanded', String(apri)); }
-            try { localStorage.setItem('mp-' + id, apri ? 'open' : 'closed'); } catch (e) { }
+            const closed = c.style.display === 'none';
+            const open = forced === undefined ? closed : forced;
+            c.style.display = open ? '' : 'none';
+            if (tog) { tog.innerHTML = '<i class="fas fa-chevron-' + (open ? 'up' : 'down') + '" aria-hidden="true"></i>'; tog.setAttribute('aria-expanded', String(open)); }
+            try { localStorage.setItem('mp-' + id, open ? 'open' : 'closed'); } catch (e) { }
         }
 
         function procInit() {
             PROCEDURE.forEach(id => {
                 const c = document.getElementById(id);
                 if (!c) return;
-                let voluta = null;
-                try { voluta = localStorage.getItem('mp-' + id); } catch (e) { }
+                let wanted = null;
+                try { wanted = localStorage.getItem('mp-' + id); } catch (e) { }
                 // Chiuse per impostazione predefinita: si aprono se le hai aperte tu.
                 // 'aperta' e' come lo salvava la pagina fino al 24/10/2026: chi aveva lasciato una
                 // scheda aperta la ritrova aperta.
-                procApri(id, voluta === 'open' || voluta === 'aperta');
+                procOpen(id, wanted === 'open' || wanted === 'aperta');
                 // E si aprono DA SOLE quando hanno qualcosa da dire: premere un pulsante
                 // dell'intestazione scrive nel corpo, e un corpo nascosto non si vedrebbe.
                 try {
                     new MutationObserver(() => {
-                        if (c.style.display === 'none') procApri(id, true);
+                        if (c.style.display === 'none') procOpen(id, true);
                     }).observe(c, { childList: true, subtree: true, characterData: true });
                 } catch (e) { }
             });
@@ -13358,7 +13358,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const cls = r.verdict === 'NESSUNA ANALISI INTERROTTA' ? 'success'
                       : (r.verdict === 'CI SONO ANALISI INTERROTTE' ? 'danger'
                       : (r.verdict === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
-            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(r.verdict))
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
             if (r.warns) {
                 h += '<div class="small text-muted mb-1">task_timeout <code>' + updEsc(r.taskTimeout)
@@ -13396,12 +13396,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- alzare il livello di compatibilita' di Postfix ----------
-        async function pfAlza(livello, aperti) {
-            const avviso = aperti > 0 ? tn('up.paramsChange', aperti) : t('up.paramsSame');
-            if (!updConferma(t('up.confirmLevel', { level: livello, note: avviso }), t('up.wRaise'))) return;
+        async function pfRaise(levelValue, opened) {
+            const noticeText = opened > 0 ? tn('up.paramsChange', opened) : t('up.paramsSame');
+            if (!updConfirm(t('up.confirmLevel', { level: levelValue, note: noticeText }), t('up.wRaise'))) return;
             const el = document.getElementById('pf-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.raising')) + '';
-            const r = await updApi('postfix_level', { confirm: 'ALZA', level: livello });
+            const r = await updApi('postfix_level', { confirm: 'ALZA', level: levelValue });
             let h = '<div class="alert alert-' + (r.success ? (r.warningVia === false ? 'warning' : 'success') : 'danger')
                   + ' py-2 small mb-1">' + updEsc(r.error || r.note || t('shu.unknownResult')) + '</div>';
             if (r.before !== undefined) {
@@ -13417,15 +13417,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // far leggere "il livello e' indietro, 3.6" sotto un esito che dice 3.11.
             // Si rilegge tutto, e l'esito appena mostrato si riattacca in fondo.
             if (r.success) {
-                const esito = h;
+                const outcomeValue = h;
                 await updCompat();
-                const nuovo = document.getElementById('pf-outcome');
-                if (nuovo) nuovo.innerHTML = esito;
+                const newOne = document.getElementById('pf-outcome');
+                if (newOne) newOne.innerHTML = outcomeValue;
             }
         }
 
         // ---------- anteprima della configurazione Dovecot 2.4 ----------
-        async function dove24() {
+        async function where24() {
             const el = document.getElementById('dove24-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.buildingPreview')) + '';
             const r = await updApi('dovecot24_preview');
@@ -13434,7 +13434,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
             const v = r.checks || [];
             const conf = v.filter(x => x.state === 'confirmed');
-            const dub = v.filter(x => x.state !== 'confirmed');
+            const doubtful = v.filter(x => x.state !== 'confirmed');
             h += '<h6 class="mb-1">' + escHtml(t('up.verifiedDocs')) + '</h6>'
                + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
             conf.forEach(x => {
@@ -13442,7 +13442,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
                    + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
-            dub.forEach(x => {
+            doubtful.forEach(x => {
                 h += '<tr class="upd-cell"><td><span class="badge ' + (x.state === 'criterion' ? 'upd-badge-info' : 'upd-badge-warn')
                    + '">' + escHtml(({ criterio: t('up.sCriterion'), 'da verificare': t('up.sToCheck') })[x.state] || x.state) + '</span></td>'
                    + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
@@ -13494,7 +13494,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- prima di togliere un pacchetto ----------
-        async function rimCandidati() {
+        async function rmCandidates() {
             const el = document.getElementById('rim-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingUndeclared')) + '';
             const r = await updApi('removal_candidates');
@@ -13523,7 +13523,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td>' + (x.isProtected
                       ? '<span class="badge upd-badge-ok">' + escHtml(t('dns.yes')) + '</span>'
                       : '<span class="badge upd-badge-warn">' + escHtml(t('acf.no')) + '</span>') + '</td>'
-                   + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.name) + '" data-i="' + i + '" onclick="rimUsa(this.dataset.name, Number(this.dataset.i))">'
+                   + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.name) + '" data-i="' + i + '" onclick="rmUse(this.dataset.name, Number(this.dataset.i))">'
                    + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.check')) + '</button>'
                    + '<div id="rim-outcome-' + i + '" class="mt-1"></div></td></tr>';
             });
@@ -13532,13 +13532,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // Il riquadro che spiega l'esito, riusato sia qui sia dentro la scheda di openssl.
-        function rimRiquadro(r) {
+        function rmBox(r) {
             const cls = r.verdict === 'IL PANNELLO NON LO USA' ? 'success'
                       : r.verdict === "LO USA, E NON C'E' RICAMBIO" ? 'danger'
                       : r.verdict === 'LO USA' ? 'warning'
                       : r.verdict === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info'
                       : r.verdict === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
-            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdetto(r.verdict))
+            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdict(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
             const lb = r.providesLibraries || [];
             if (lb.length) {
@@ -13571,9 +13571,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                              || r.verdict === 'LI NOMINA, MA NON SONO I SUOI')) {
                 // L'analisi approfondita viene PRIMA del pulsante che toglie, ed e' l'unica che
                 // guarda gli script su disco: quelli girano dopo, e il jar non li contiene.
-                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rimProfonda(this.dataset.pkg)">'
+                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rmDeep(this.dataset.pkg)">'
                    + '<i class="fas fa-microscope me-1" aria-hidden="true"></i>' + escHtml(t('up.deepScan')) + '</button>'
-                   + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rimTogli(this.dataset.pkg)">'
+                   + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rmRemove(this.dataset.pkg)">'
                    + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removePkg', { pkg: r.pkgName })) + '</button>'
                    + '<div id="rim-prof-' + updEsc(r.pkgName) + '" class="mt-1"></div>'
                    + '<div id="rim-esec-' + updEsc(r.pkgName) + '" class="mt-1"></div>';
@@ -13582,23 +13582,23 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return h;
         }
 
-        async function rimUsa(nome, i) {
+        async function rmUse(entryName, i) {
             const el = document.getElementById('rim-outcome-' + i);
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
-            const r = await updApi('panel_uses', { name: nome });
-            el.innerHTML = r.success ? rimRiquadro(r)
+            const r = await updApi('panel_uses', { name: entryName });
+            el.innerHTML = r.success ? rmBox(r)
                                      : '<span class="text-danger small">' + updEsc(r.error) + '</span>';
         }
 
         // ---------- analisi approfondita: dove si nominano davvero i suoi file ----------
-        async function rimProfonda(nome) {
-            const el = document.getElementById('rim-prof-' + nome);
+        async function rmDeep(entryName) {
+            const el = document.getElementById('rim-prof-' + entryName);
             el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                          + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.deepScanning')) + '</div>';
-            const r = await updApi('deep_scan', { name: nome });
+            const r = await updApi('deep_scan', { name: entryName });
             if (!r.success) { el.innerHTML = '<span class="text-danger small">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="alert alert-' + (r.blocking ? 'danger' : 'success') + ' py-2 small mb-1">'
-                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
+                  + '<strong>' + updEsc(updVerdict(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
                   + '<div class="small text-muted mb-1">' + escHtml(t('up.searchedRefs')) + ' '
                   + (r.searched || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
 
@@ -13629,9 +13629,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       ? '<span class="badge upd-badge-stop">' + updEsc(x.breakOnes.length) + '</span>'
                       : '<span class="badge upd-badge-ok">0</span>') + '</td>'
                    + '<td class="text-end small text-muted">' + updEsc(x.hold) + '</td></tr>';
-                (x.breakOnes || []).forEach(riga => {
+                (x.breakOnes || []).forEach(lineItem => {
                     h += '<tr class="upd-cell"><td colspan="4" class="small text-danger">'
-                       + '<code>' + updEsc(riga) + '</code></td></tr>';
+                       + '<code>' + updEsc(lineItem) + '</code></td></tr>';
                 });
             });
             h += '</tbody></table></div>'
@@ -13641,11 +13641,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- togliere un pacchetto, dal pannello ----------
-        async function rimTogli(nome) {
-            if (!updConferma(t('up.confirmRemovePkg', { pkg: nome }), t('up.wRemove'))) return;
-            const el = document.getElementById('rim-esec-' + nome);
+        async function rmRemove(entryName) {
+            if (!updConfirm(t('up.confirmRemovePkg', { pkg: entryName }), t('up.wRemove'))) return;
+            const el = document.getElementById('rim-esec-' + entryName);
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingChecking')) + '';
-            const r = await updApi('pkg_remove', { confirm: 'REMOVE', name: nome });
+            const r = await updApi('pkg_remove', { confirm: 'REMOVE', name: entryName });
             let h = '<div class="alert alert-' + (!r.success ? 'danger' : (r.fault ? 'danger' : 'success'))
                   + ' py-2 small mb-1">' + updEsc(r.error || r.note || t('shu.unknownResult')) + '</div>';
             if (r.before !== undefined) {
@@ -13653,10 +13653,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             const sv = r.services || [];
             if (sv.length) {
-                const giu = sv.filter(x => !x.active);
-                h += '<div class="small ' + (giu.length ? 'text-danger' : 'text-success') + '">'
-                   + (giu.length
-                      ? escHtml(t('up.servicesDown', { list: giu.map(x => x.name).join(', ') }))
+                const down = sv.filter(x => !x.active);
+                h += '<div class="small ' + (down.length ? 'text-danger' : 'text-success') + '">'
+                   + (down.length
+                      ? escHtml(t('up.servicesDown', { list: down.map(x => x.name).join(', ') }))
                       : escHtml(tn('up.servicesUp', sv.length)))
                    + '</div>';
             }
@@ -13686,7 +13686,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function libsRelink() {
-            if (!updConferma('', t('up.wRelink'))) return;
+            if (!updConfirm('', t('up.wRelink'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
             const r = await updApi('relink', { confirm: 'RICOLLEGA' });
@@ -13721,51 +13721,51 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // Se ci sono due client e uno non serve a nessuno, si puo' ripulire.
             const cl = (r.mysqlPackages || []).filter(p => /-client$/.test(p.name)).map(p => p.name);
             if (cl.length > 1) {
-                const corretto = cl.find(n => (r.dependents || []).some(d =>
+                const correct = cl.find(n => (r.dependents || []).some(d =>
                     (d.repositoryDependencies || '').indexOf(n) >= 0));
-                const estraneo = cl.find(n => n !== corretto);
-                if (corretto && estraneo) {
+                const foreign = cl.find(n => n !== correct);
+                if (correct && foreign) {
                     h += '<div class="alert alert-warning py-2 mt-2 small">'
-                       + t('up.twoClients.html', { good: updEsc(corretto), bad: updEsc(estraneo) }) + '</div>'
-                       + '<button class="btn btn-warning" data-bad="' + escHtml(estraneo) + '" data-good="' + escHtml(corretto) + '" onclick="cleanClient(this.dataset.bad, this.dataset.good)">'
-                       + '<i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(t('up.cleanClient', { bad: estraneo, good: corretto })) + '</button>';
+                       + t('up.twoClients.html', { good: updEsc(correct), bad: updEsc(foreign) }) + '</div>'
+                       + '<button class="btn btn-warning" data-bad="' + escHtml(foreign) + '" data-good="' + escHtml(correct) + '" onclick="cleanClient(this.dataset.bad, this.dataset.good)">'
+                       + '<i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(t('up.cleanClient', { bad: foreign, good: correct })) + '</button>';
                 }
             }
             el.innerHTML = h;
         }
 
         // ---------- piano di manutenzione ----------
-        function planBadge(stato) {
-            if (stato === 'done')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.pDone')) + '</span>';
-            if (stato === 'manual') return '<span class="badge upd-badge-warn">' + escHtml(t('up.pManual')) + '</span>';
+        function planBadge(stateValue) {
+            if (stateValue === 'done')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.pDone')) + '</span>';
+            if (stateValue === 'manual') return '<span class="badge upd-badge-warn">' + escHtml(t('up.pManual')) + '</span>';
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.pTodo')) + '</span>';
         }
 
-        let planAzioni = [];
+        let planActions = [];
 
         async function planLoad() {
-            planAzioni = [];
+            planActions = [];
             const el = document.getElementById('plan-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingSystem')) + '';
             const r = await updApi('plan');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
 
-            let primoDaFare = true;
+            let firstToDo = true;
 
-            function riga(p, etichetta) {
-                const attivo = p.state === 'todo' && primoDaFare;
-                if (p.state === 'todo') primoDaFare = false;
-                let h = '<div class="border rounded p-2 mb-2' + (attivo ? ' border-primary' : '') + '">'
+            function lineItem(p, labelText) {
+                const activeNow = p.state === 'todo' && firstToDo;
+                if (p.state === 'todo') firstToDo = false;
+                let h = '<div class="border rounded p-2 mb-2' + (activeNow ? ' border-primary' : '') + '">'
                       + '<div class="d-flex justify-content-between align-items-center">'
-                      + '<span><strong>' + etichetta + updEsc(p.title) + '</strong> ' + planBadge(p.state) + '</span>';
-                if (attivo && p.action) {
-                    const idx = planAzioni.push(p.action) - 1;
+                      + '<span><strong>' + labelText + updEsc(p.title) + '</strong> ' + planBadge(p.state) + '</span>';
+                if (activeNow && p.action) {
+                    const idx = planActions.push(p.action) - 1;
                     h += '<button class="btn btn-sm btn-primary" onclick="planRun(' + idx + ')">'
                        + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runStep')) + '</button>';
                 } else if (p.redoAction) {
                     // Passo gia' fatto ma ripetibile: pulsante secondario, sempre disponibile,
                     // fuori dalla regola del "solo il primo" perche' non e' un passo da fare.
-                    const idx = planAzioni.push(p.redoAction) - 1;
+                    const idx = planActions.push(p.redoAction) - 1;
                     h += '<button class="btn btn-sm btn-outline-secondary" onclick="planRun(' + idx + ')" '
                        + 'title="' + escHtml(t('up.redoHint')) + '">'
                        + '<i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('up.redo')) + '</button>';
@@ -13777,7 +13777,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 return h;
             }
 
-            const passi = r.steps || [];
+            const steps = r.steps || [];
             let h = '<div class="mb-2 small">' + (r.daFare === 0
                 ? '<span class="text-success"><i class="fas fa-circle-check me-1" aria-hidden="true"></i><strong>' + escHtml(t('up.nothingToDo')) + '</strong></span>'
                 : '<strong>' + escHtml(tn('up.stepsToDo', r.daFare)) + '</strong> ' + escHtml(t('up.onlyFirst')))
@@ -13790,11 +13790,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // esecuzione, e ripetere "Fasi" e "Pacchetti" a ogni cambio faceva sembrare sezioni
             // separate cio' che e' una sequenza sola. Ogni riga si presenta gia' da se': le fasi
             // con la loro lettera, i pacchetti col loro nome.
-            passi.forEach(p => {
+            steps.forEach(p => {
                 // La lettera arriva dal backend, legata alla chiave del passo: non si ricava
                 // dalla posizione, altrimenti una fase che compare farebbe scorrere le altre.
-                const etichetta = p.group === 'phase' ? escHtml(t('up.phase', { letter: p.letter })) + ' &mdash; ' : '';
-                h += riga(p, etichetta);
+                const labelText = p.group === 'phase' ? escHtml(t('up.phase', { letter: p.letter })) + ' &mdash; ' : '';
+                h += lineItem(p, labelText);
             });
 
             if ((r.withoutRemedy || []).length) {
@@ -13806,18 +13806,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function planRun(idx) {
-            const azione = planAzioni[idx];
-            if (!azione) { alert(t('up.stepStale')); return; }
+            const actionItem = planActions[idx];
+            if (!actionItem) { alert(t('up.stepStale')); return; }
             const el = document.getElementById('plan-body');
             const pre = document.getElementById('plan-log');
             let r;
-            if (azione.type === 'packages_lock_all') {
+            if (actionItem.type === 'packages_lock_all') {
                 r = await updApi('packages_lock', { lock: true, package: '' });
                 if (!r.success) { alert(r.error || t('common.failed')); return; }
                 planLoad();
                 return;
             }
-            if (azione.type === 'updates_apply') {
+            if (actionItem.type === 'updates_apply') {
                 /* Non si parte da qui: questo aggiornamento ha un piano e una firma, e si
                    approva nella scheda che li mostra. Come per il JDK del pannello, si va
                    dove la decisione si puo' prendere guardandola. */
@@ -13828,16 +13828,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 alert(t('up.applyFromCard'));
                 return;
-            } else if (azione.type === 'package_update') {
+            } else if (actionItem.type === 'package_update') {
                 // L'aggiornamento di un pacchetto passa sempre dalla sua finestra: piano esatto,
                 // conferma con il nome, avanzamento.
-                pkUpdOpen(azione.package);
+                pkUpdOpen(actionItem.package);
                 return;
-            } else if (azione.type === 'rspamd_clean_cache') {
-                if (!updConferma('', t('up.wDeleteCache'))) return;
+            } else if (actionItem.type === 'rspamd_clean_cache') {
+                if (!updConfirm('', t('up.wDeleteCache'))) return;
                 r = await updApi('rspamd_clean_cache', { confirm: 'ELIMINA CACHE' });
-            } else if (azione.type === 'dovecot_config_regen') {
-                if (!updConferma('', t('up.wRegen'))) return;
+            } else if (actionItem.type === 'dovecot_config_regen') {
+                if (!updConfirm('', t('up.wRegen'))) return;
                 r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
             } else {
                 alert(t('up.noAutoAction'));
@@ -13877,7 +13877,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- passaggio Python ----------
         // ---------- resti della vecchia famiglia Python ----------
-        async function pyResti() {
+        async function pyLeftovers() {
             const el = document.getElementById('py-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingLeftovers')) + '';
             const r = await updApi('python_leftovers');
@@ -13886,9 +13886,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<p class="small text-muted mb-2">' + t('up.pyLeftIntro.html') + '</p>'
                   + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col" class="text-end">KB</th><th scope="col">' + escHtml(t('set.colState')) + '</th></tr></thead><tbody>';
-            let liberi = 0;
+            let free = 0;
             (r.detail || []).forEach(d => {
-                if (d.free) liberi++;
+                if (d.free) free++;
                 h += '<tr class="upd-cell"><td><code>' + updEsc(d.name) + '</code></td><td>' + updEsc(d.version) + '</td>'
                    + '<td class="text-end">' + updEsc(d.kb) + '</td><td>'
                    + (d.free ? '<span class="badge upd-badge-ok">' + escHtml(t('up.canRemove')) + '</span>'
@@ -13897,14 +13897,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
             h += '</tbody></table></div>';
             // Chi nomina il vecchio interprete fra cio' che RESTA: e' cio' che pkg non sa.
-            const rif = r.references || {};
-            const prob = rif.issues || [];
+            const refEl = r.references || {};
+            const prob = refEl.issues || [];
             h += '<h6 class="mt-3 mb-1">' + escHtml(t('up.whoRefsOld')) + '</h6>'
-               + '<p class="small text-muted mb-2">' + t('up.refsExamined.html', { n: updEsc(rif.reviewed || 0), gone: updEsc((rif.harmless || []).length) }) + '</p>';
-            const cit = rif.quotes || [];
-            if (cit.length) {
-                h += '<div class="alert alert-secondary py-2 small mb-2">' + t('up.citations.html', { n: cit.length }) + ' '
-                   + cit.map(x => '<code>' + updEsc(x.file) + '</code>').join(' ') + '</div>';
+               + '<p class="small text-muted mb-2">' + t('up.refsExamined.html', { n: updEsc(refEl.reviewed || 0), gone: updEsc((refEl.harmless || []).length) }) + '</p>';
+            const quoteList = refEl.quotes || [];
+            if (quoteList.length) {
+                h += '<div class="alert alert-secondary py-2 small mb-2">' + t('up.citations.html', { n: quoteList.length }) + ' '
+                   + quoteList.map(x => '<code>' + updEsc(x.file) + '</code>').join(' ') + '</div>';
             }
             if (prob.length === 0) {
                 h += '<div class="alert alert-success py-2">' + t('up.noOldRefs.html') + '</div>';
@@ -13918,9 +13918,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '</td><td>' + updEsc(x.owner) + '</td></tr>'; });
                 h += '</tbody></table></div>';
             }
-            h += (liberi > 0 && prob.length === 0)
-               ? '<button class="btn btn-warning" onclick="pyRestiGo()"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(tn('up.removeFree', liberi)) + '</button>'
-               : (liberi === 0
+            h += (free > 0 && prob.length === 0)
+               ? '<button class="btn btn-warning" onclick="pyLeftoversGo()"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(tn('up.removeFree', free)) + '</button>'
+               : (free === 0
                   ? '<div class="alert alert-info py-2 mb-0">' + escHtml(t('up.noneFree')) + '</div>'
                   : '');
             el.innerHTML = h;
@@ -13931,8 +13931,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     private static String getUpdatesScript2() {
         return """
 
-        async function pyRestiGo() {
-            if (!updConferma('', t('up.wCleanPython'))) return;
+        async function pyLeftoversGo() {
+            if (!updConfirm('', t('up.wCleanPython'))) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removing')) + '';
             const r = await updApi('python_leftovers_clean', { confirm: 'PULISCI PYTHON' });
@@ -13964,7 +13964,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function pyRun() {
-            if (!updConferma('', t('up.wMovePython'))) return;
+            if (!updConfirm('', t('up.wMovePython'))) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
             const r = await updApi('python_move', { confirm: 'SPOSTA PYTHON' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
@@ -13994,7 +13994,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function jvRun() {
-            if (!updConferma(t('up.javaStops'), t('up.wUpgradeJava'))) return;
+            if (!updConfirm(t('up.javaStops'), t('up.wUpgradeJava'))) return;
             const el = document.getElementById('jv-pre');
             const r = await updApi('java_update', { confirm: 'AGGIORNA JAVA' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
@@ -14002,7 +14002,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 + updEsc(r.note || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';
         }
 
-        async function jvStato() {
+        async function jvState() {
             const pre = document.getElementById('jv-log');
             pre.style.display = 'block';
             pre.textContent = t('up.reading');
@@ -14032,7 +14032,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcNginxGo() {
-            if (!updConferma('', t('up.wFixNginx'))) return;
+            if (!updConfirm('', t('up.wFixNginx'))) return;
             const pre = document.getElementById('rc-log');
             const el = document.getElementById('rc-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.inProgress')) + '';
@@ -14085,7 +14085,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcRun() {
-            if (!updConferma('', t('up.wUpgradeRc'))) return;
+            if (!updConfirm('', t('up.wUpgradeRc'))) return;
             const el = document.getElementById('rc-pre');
             const pre = document.getElementById('rc-log');
             const r = await updApi('roundcube_update', { confirm: 'AGGIORNA ROUNDCUBE' });
@@ -14129,7 +14129,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function my84Run() {
-            if (!updConferma('', t('up.wMigrate84'))) return;
+            if (!updConfirm('', t('up.wMigrate84'))) return;
             const el = document.getElementById('my84-pre');
             // Il log va nel riquadro DI QUESTA scheda: prima finiva in quello del piano, in
             // un'altra parte della pagina, e chi guardava sotto il messaggio di errore non
@@ -14143,18 +14143,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- aggiornamento guidato ----------
-        let updFirmaManutenzione = '';
+        let updMaintenanceSignature = '';
 
         /* Il piano esatto di pkg: ogni pacchetto che cambia, da quale versione a quale. */
-        function updPianoHtml(pn, signature) {
+        function updPlanHtml(pn, signature) {
             if (!pn) return '';
             if (!pn.measured) {
                 return '<div class="alert alert-danger py-2 small mb-2">' + escHtml(t('up.planUnavailable')) + ' '
                      + updEsc(pn.error || pn.error || '?') + '</div>';
             }
-            const tipoNome = { aggiorna: t('up.tUpgrade'), installa: t('up.tInstall'), reinstalla: t('up.tReinstall'),
+            const kindName = { aggiorna: t('up.tUpgrade'), installa: t('up.tInstall'), reinstalla: t('up.tReinstall'),
                                rimuove: t('up.tRemove'), retrocede: t('up.tDowngrade') };
-            const tipoCls = { aggiorna: 'bg-primary', installa: 'bg-info text-dark', reinstalla: 'bg-secondary',
+            const kindCls = { aggiorna: 'bg-primary', installa: 'bg-info text-dark', reinstalla: 'bg-secondary',
                               rimuove: 'bg-danger', retrocede: 'bg-danger' };
             let h = '';
             if ((pn.changes || []).length) {
@@ -14162,8 +14162,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<div class="table-responsive" style="max-height:24rem;overflow:auto"><table class="table table-sm align-middle mb-1"><thead><tr>'
                    + '<th scope="col" style="width:8rem"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colNote')) + '</th></tr></thead><tbody>';
                 pn.changes.forEach(c => {
-                    h += '<tr class="upd-cell"><td><span class="badge ' + (tipoCls[c.type] || 'bg-secondary') + '">'
-                       + updEsc(tipoNome[c.type] || c.type) + '</span></td>'
+                    h += '<tr class="upd-cell"><td><span class="badge ' + (kindCls[c.type] || 'bg-secondary') + '">'
+                       + updEsc(kindName[c.type] || c.type) + '</span></td>'
                        + '<td><code>' + updEsc(c.name) + '</code></td>'
                        + '<td class="small">' + updEsc(c.from || '-') + '</td>'
                        + '<td class="small">' + updEsc(c.to || '-') + '</td>'
@@ -14190,17 +14190,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // le protezioni rilegge quella.
         function updPackages() { pkOverview(); }
 
-        async function updLockOne(nome, blocca) {
-            const r = await updApi('packages_lock', { lock: blocca, package: nome });
+        async function updLockOne(entryName, doLock) {
+            const r = await updApi('packages_lock', { lock: doLock, package: entryName });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             updPackages();
         }
 
-        async function updLockAll(blocca) {
-            if (!blocca && !confirm(t('up.confirmUnlockAll'))) return;
+        async function updLockAll(doLock) {
+            if (!doLock && !confirm(t('up.confirmUnlockAll'))) return;
             const el = document.getElementById('upd-packages');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(blocca ? t('up.locking') : t('up.unlocking'));
-            const r = await updApi('packages_lock', { lock: blocca, package: '' });
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(doLock ? t('up.locking') : t('up.unlocking'));
+            const r = await updApi('packages_lock', { lock: doLock, package: '' });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             updPackages();
         }
@@ -14209,13 +14209,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         /* La firma del piano letto nella scheda: si manda al via, e il server esegue quello
            o niente. Senza, l'aggiornamento dei non protetti era l'unico che partiva alla
            cieca. Vuota finche' la scheda non e' stata letta: il pulsante lo dice. */
-        let updFirmaNonProtetti = '';
+        let updUnprotectedSignature = '';
         async function updStatus() {
             const el = document.getElementById('upd-status');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.simulating')) + '';
             const r = await updApi('updates_status');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            updFirmaNonProtetti = r.signature || '';
+            updUnprotectedSignature = r.signature || '';
             let h = '';
 
             if (r.rebootPending) {
@@ -14231,7 +14231,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     // con VuXML, sa se l'aggiornamento basta o no. Il blocco e' un'informazione a
                     // parte, non un verdict: il pulsante aggiorna anche un pacchetto bloccato.
                     const vc0 = v.fix;
-                    const aggiornabile = vc0 && (vc0.verdict === 'si-risolve-aggiornando' || vc0.verdict === 'aggiornamento-non-basta');
+                    const updatable = vc0 && (vc0.verdict === 'si-risolve-aggiornando' || vc0.verdict === 'aggiornamento-non-basta');
                     h += '<li class="mb-2"><div class="d-flex flex-wrap align-items-center gap-1"><code>' + updEsc(v.name) + '</code>'
                        + (v.role ? ' <span class="text-muted">(' + updEsc(v.role) + ')</span>' : '')
                        + (vc0 && vc0.verdict
@@ -14242,7 +14242,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     : ' &mdash; ' + t('up.lockedNoUpdate.html'))
                                 : ' &mdash; ' + escHtml(v.fixedByUpgrade ? t('up.fixedByUpgrade') : t('up.noUpdateInCatalog'))))
                        + (v.locked && vc0 && vc0.verdict ? ' <span class="badge bg-secondary"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.locked')) + '</span>' : '')
-                       + (aggiornabile ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
+                       + (updatable ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
                             + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: vc0.catalog || '' })) + '</button>' : '')
                        + '</div>';
                     if ((v.cve || []).length) {
@@ -14303,7 +14303,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
             /* Il piano esatto con la sua firma, come nelle altre due schede. L'uscita grezza
                di pkg resta sotto, ripiegata: e' il dettaglio, non la decisione. */
-            if (r.plan) h += updPianoHtml(r.plan, r.signature);
+            if (r.plan) h += updPlanHtml(r.plan, r.signature);
             h += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('up.fullSim')) + '</summary>'
                + '<pre class="upd-log mt-2">' + updEsc(r.dryRun) + '</pre></details>';
             if (r.audit) {
@@ -14316,12 +14316,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function updApply() {
             /* Senza la firma non si parte: vuol dire che la scheda non e' stata letta, cioe'
                che nessuno ha visto il piano che si sta per eseguire. */
-            if (!updFirmaNonProtetti) { alert(t('up.readFirst')); return; }
+            if (!updUnprotectedSignature) { alert(t('up.readFirst')); return; }
             if (!confirm(t('up.confirmApply'))) return;
-            if (!updConferma('', t('up.wUpgrade'))) return;
+            if (!updConfirm('', t('up.wUpgrade'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updFirmaNonProtetti });
+            const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updUnprotectedSignature });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -14360,8 +14360,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-warning py-2 small"><strong>' + escHtml(tn('up.staysLocked', r.waitCount)) + '</strong> '
                    + escHtml(t('up.staysLockedNote')) + '</div>';
             }
-            h += updPianoHtml(r.plan, r.signature);
-            updFirmaManutenzione = r.signature || '';
+            h += updPlanHtml(r.plan, r.signature);
+            updMaintenanceSignature = r.signature || '';
             if (r.plan && r.plan.runnable) {
                 h += '<button class="btn btn-sm btn-danger" onclick="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
             } else {
@@ -14371,10 +14371,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updMaintRun() {
-            if (!updConferma(t('up.confirmMaint'), t('up.wMaint'))) return;
+            if (!updConfirm(t('up.confirmMaint'), t('up.wMaint'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('maintenance_run', { confirm: 'MANUTENZIONE', signature: updFirmaManutenzione });
+            const r = await updApi('maintenance_run', { confirm: 'MANUTENZIONE', signature: updMaintenanceSignature });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.maintRunning')) + '</span>';
             pre.style.display = 'block';
