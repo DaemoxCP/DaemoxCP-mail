@@ -1856,9 +1856,38 @@ public final class UpdateManager {
 
         public void avanza(int s, int t) { this.step = s; this.total = t; }
 
+        /** Scrive la fine, se il lavoro non l'ha gia' scritta da se': vedi withEndMarked. */
+        void markFinished() { if (fine == 0) fine = System.currentTimeMillis(); }
+
+        /**
+         * Lo stato come lo deve vedere chi aspetta il lavoro.
+         *
+         * Un lavoro scrive "completed" o "error" quando ha un esito, ma spesso ha ancora da
+         * fare: la manutenzione completa scrive "completed" appena pkg upgrade esce con 0, e
+         * DOPO confronta con il piano e con l'inventario, riprotegge i pacchetti, controlla
+         * protezioni e servizi — e ognuno di questi passi puo' cambiare l'esito in "error".
+         * La pagina smette di chiedere al primo esito che vede: un lavoro andato male poteva
+         * comparire come riuscito, e le righe della verifica finale non arrivavano a schermo.
+         * Misurato sulla VM il 23/10/2026: una sonda fermata al primo "completed" ha trovato 14
+         * pacchetti su 39 ancora da riproteggere.
+         *
+         * Quindi un esito e' visibile solo quando la fine e' scritta, cioe' quando il lavoro ha
+         * finito davvero. Fino ad allora il lavoro e' "running", come e'.
+         *
+         * L'ordine delle due letture conta: prima la fine, poi lo stato. Sono campi volatile e
+         * il lavoro scrive lo stato PRIMA della fine, quindi chi vede la fine vede anche lo stato
+         * che c'era a quel punto. Nell'ordine opposto si potrebbe leggere lo stato di prima del
+         * finally e la fine di dopo, e mostrare come definitivo un "completed" gia' superato.
+         */
+        String visibleStatus() {
+            long f = fine;
+            String s = status;
+            return f == 0 && ("completed".equals(s) || "error".equals(s)) ? "running" : s;
+        }
+
         public synchronized JSONObject toJson() {
             return new JSONObject()
-                    .put("id", id).put("type", tipo).put("status", status)
+                    .put("id", id).put("type", tipo).put("status", visibleStatus())
                     .put("step", step).put("total", total)
                     .put("percent", total > 0 ? (step * 100 / total) : 0)
                     .put("errorMessage", errorMessage)
@@ -2005,7 +2034,7 @@ public final class UpdateManager {
         String id = "mtasts-" + System.currentTimeMillis();
         Job j = new Job(id, "mtasts");
         JOBS.put(id, j);
-        Thread t = lavoroInLingua(() -> {
+        Thread t = lavoroInLingua(j, () -> {
             j.status = "running";
             try {
                 org.json.JSONObject esito = org.mail_panel.system.MtaStsSetup.esegui(j);
@@ -2042,7 +2071,7 @@ public final class UpdateManager {
         String id = "dominio-" + domainId + "-" + System.currentTimeMillis();
         Job j = new Job(id, "configura_dominio");
         JOBS.put(id, j);
-        Thread t = lavoroInLingua(() -> {
+        Thread t = lavoroInLingua(j, () -> {
             j.status = "running";
             try {
                 org.json.JSONObject esito =
@@ -2072,7 +2101,7 @@ public final class UpdateManager {
         String id = "dovecot-cfg-" + System.currentTimeMillis();
         Job j = new Job(id, "dovecot_config");
         JOBS.put(id, j);
-        Thread t = lavoroInLingua(() -> runRigenerazioneDovecot(j), "dovecot-config");
+        Thread t = lavoroInLingua(j, () -> runRigenerazioneDovecot(j), "dovecot-config");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -2715,11 +2744,32 @@ public final class UpdateManager {
         return new Thread(I18n.withCurrent(lavoro), nome);
     }
 
+    /** Il thread di un Job: come sopra, e con la fine scritta comunque (withEndMarked). */
+    private static Thread lavoroInLingua(Job j, Runnable lavoro, String nome) {
+        return lavoroInLingua(withEndMarked(j, lavoro), nome);
+    }
+
+    /**
+     * Il lavoro di un Job, con la fine scritta comunque quando il thread esce.
+     *
+     * Un esito diventa visibile solo con la fine scritta (Job.visibleStatus): un lavoro che
+     * desse un esito e uscisse senza scrivere la fine — per un ritorno dimenticato, o per
+     * un'eccezione fuori dal suo try — resterebbe "running" per sempre agli occhi della
+     * pagina. Ogni lavoro scrive gia' la propria fine come ultima cosa; questo e' il
+     * pavimento, e non sposta la fine di chi l'ha scritta.
+     */
+    static Runnable withEndMarked(Job j, Runnable lavoro) {
+        return () -> {
+            try { lavoro.run(); }
+            finally { j.markFinished(); }
+        };
+    }
+
     private static JSONObject avviaSulTurno(String id, Job j, String description, String nomeThread, Runnable lavoro) {
         String rifiuto = PackageQueue.prendi(id, description);
         if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto);
         JOBS.put(id, j);
-        PackageQueue.avvia(id, nomeThread, lavoro);
+        PackageQueue.avvia(id, nomeThread, withEndMarked(j, lavoro));
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
     }
 
@@ -6483,7 +6533,7 @@ public final class UpdateManager {
         String id = "rspamd-cache-" + System.currentTimeMillis();
         Job j = new Job(id, "rspamd_cache");
         JOBS.put(id, j);
-        Thread t = lavoroInLingua(() -> {
+        Thread t = lavoroInLingua(j, () -> {
             j.status = "running";
             try {
                 final String DIR = "/var/db/rspamd";
@@ -7896,7 +7946,7 @@ public final class UpdateManager {
         String id = "osf-" + System.currentTimeMillis();
         Job j = new Job(id, "os-fetch");
         JOBS.put(id, j);
-        Thread t = lavoroInLingua(() -> {
+        Thread t = lavoroInLingua(j, () -> {
             j.status = "running";
             try {
                 j.avanza(1, 1);
@@ -8847,7 +8897,7 @@ public final class UpdateManager {
         Job j = new Job(id, "sistema");
         JOBS.put(id, j);
         final String b = bersaglio;
-        Thread t = lavoroInLingua(() -> runPreparazioneSistema(j, b), "sistema-prep");
+        Thread t = lavoroInLingua(j, () -> runPreparazioneSistema(j, b), "sistema-prep");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -9145,7 +9195,7 @@ public final class UpdateManager {
         JOBS.put(id, j);
         final String b = bersaglio == null || bersaglio.isEmpty()
                 ? leggiStatoSalto().optString("bersaglio", "") : bersaglio;
-        Thread t = lavoroInLingua(() -> runProseguiSalto(j, b), "salto-release");
+        Thread t = lavoroInLingua(j, () -> runProseguiSalto(j, b), "salto-release");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -10146,13 +10196,16 @@ public final class UpdateManager {
         boolean statoScritto = false;
         Set<String> protettiPrima = new TreeSet<>();
         Map<String, Boolean> serviziPrima = new LinkedHashMap<>();
+        // La fine la scrive SOLO il finally, come sua ultima riga. Anche i rifiuti a partire qui
+        // sotto escono passando dal finally, che scrive ancora la riprotezione e la verifica:
+        // con la fine scritta prima del return, il loro esito diventava visibile (vedi
+        // Job.visibleStatus) mentre il lavoro stava ancora scrivendo.
         try {
             if (Files.exists(Paths.get(MAINTENANCE_STATE))) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runMaintenanceJob.1", java.util.Map.of("sTATO_MANUTENZIONE", String.valueOf(MAINTENANCE_STATE)));
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.2", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.3"));
-                job.fine = System.currentTimeMillis();
                 return;
             }
 
@@ -10185,7 +10238,6 @@ public final class UpdateManager {
                 job.errorMessage = I18n.tr("server.um.runMaintenanceJob.6");
                 job.scrivi(I18n.tr("server.um.runAggiornamentoGuidato.3", java.util.Map.of("firmaApprovata", String.valueOf(firmaApprovata), "firmaOra", String.valueOf(piano.optString("signature")))));
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.7"));
-                job.fine = System.currentTimeMillis();
                 return;
             }
             if (!piano.optBoolean("runnable")) {
@@ -10193,7 +10245,6 @@ public final class UpdateManager {
                 job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errori", String.valueOf(String.join(" | ", jsonArrayToList(piano.getJSONArray("erroriPkg"))))))
                         + (piano.getJSONArray("changes").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
-                job.fine = System.currentTimeMillis();
                 return;
             }
             // La stessa regola della scheda di un pacchetto: il pannello non esegue piani
@@ -10205,7 +10256,6 @@ public final class UpdateManager {
                 job.errorMessage = distruttivo;
                 job.scrivi(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(distruttivo))));
                 job.scrivi(I18n.tr("server.um.x.destructiveByHand"));
-                job.fine = System.currentTimeMillis();
                 return;
             }
             daRibloccare.addAll(jsonArrayToList(piano.getJSONArray("unlockedPackages")));
