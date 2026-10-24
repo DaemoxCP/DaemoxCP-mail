@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class PackageQueueTest {
 
-    private static int falliti = 0;
+    private static int failed = 0;
 
     public static void main(String[] args) throws Exception {
         // L'elenco in una cartella di prova, non in /var/db.
@@ -28,91 +28,91 @@ public class PackageQueueTest {
         PackageQueue.list = f;
 
         // --- Il turno ---
-        vero("libero all'inizio", PackageQueue.chi() == null);
-        vero("il primo lo prende", PackageQueue.prendi("a", "manutenzione") == null);
-        String no = PackageQueue.prendi("b", "aggiornamento di kafka");
-        vero("il secondo no, e il messaggio dice chi lo tiene", no != null && no.contains("(manutenzione"));
-        vero("nemmeno per le protezioni, mentre un lavoro gira",
-            PackageQueue.prendiPerLeProtezioni("c", "protezione dei pacchetti") != null);
-        PackageQueue.rilascia("b");
-        vero("chi non lo tiene non puo' liberarlo", PackageQueue.chi() != null);
-        PackageQueue.rilascia("a");
-        vero("chi lo tiene lo libera", PackageQueue.chi() == null);
+        real("libero all'inizio", PackageQueue.chi() == null);
+        real("il primo lo prende", PackageQueue.take("a", "manutenzione") == null);
+        String no = PackageQueue.take("b", "aggiornamento di kafka");
+        real("il secondo no, e il messaggio dice chi lo tiene", no != null && no.contains("(manutenzione"));
+        real("nemmeno per le protezioni, mentre un lavoro gira",
+            PackageQueue.takeForLocks("c", "protezione dei pacchetti") != null);
+        PackageQueue.release("b");
+        real("chi non lo tiene non puo' liberarlo", PackageQueue.chi() != null);
+        PackageQueue.release("a");
+        real("chi lo tiene lo libera", PackageQueue.chi() == null);
 
         // Molti nello stesso istante: uno solo lo prende.
         int n = 64;
-        CountDownLatch via = new CountDownLatch(1), finiti = new CountDownLatch(n);
-        AtomicInteger presi = new AtomicInteger();
+        CountDownLatch via = new CountDownLatch(1), finished = new CountDownLatch(n);
+        AtomicInteger taken = new AtomicInteger();
         for (int i = 0; i < n; i++) {
             final String id = "t" + i;
             Thread.ofPlatform().start(() -> {
                 try {
                     via.await();
-                    if (PackageQueue.prendi(id, "lavoro " + id) == null) presi.incrementAndGet();
+                    if (PackageQueue.take(id, "lavoro " + id) == null) taken.incrementAndGet();
                 } catch (InterruptedException ignored) {
-                } finally { finiti.countDown(); }
+                } finally { finished.countDown(); }
             });
         }
         via.countDown();
-        finiti.await(10, TimeUnit.SECONDS);
-        vero(n + " insieme: uno solo prende il turno", presi.get() == 1);
-        String tiene = PackageQueue.chi();
-        PackageQueue.rilascia(tiene.substring("lavoro ".length(), tiene.indexOf(',')));
-        vero("e poi lo libera", PackageQueue.chi() == null);
+        finished.await(10, TimeUnit.SECONDS);
+        real(n + " insieme: uno solo prende il turno", taken.get() == 1);
+        String keeps = PackageQueue.chi();
+        PackageQueue.release(keeps.substring("lavoro ".length(), keeps.indexOf(',')));
+        real("e poi lo libera", PackageQueue.chi() == null);
 
         // avvia: il turno si libera quando il lavoro finisce, anche se fallisce.
-        CountDownLatch dentro = new CountDownLatch(1), esci = new CountDownLatch(1);
-        vero("lavoro lungo: prende il turno", PackageQueue.prendi("lungo", "lavoro lungo") == null);
-        PackageQueue.avvia("lungo", "prova-lungo", () -> {
-            dentro.countDown();
-            try { esci.await(); } catch (InterruptedException ignored) { }
+        CountDownLatch inside = new CountDownLatch(1), leave = new CountDownLatch(1);
+        real("lavoro lungo: prende il turno", PackageQueue.take("lungo", "lavoro lungo") == null);
+        PackageQueue.start("lungo", "prova-lungo", () -> {
+            inside.countDown();
+            try { leave.await(); } catch (InterruptedException ignored) { }
         });
-        dentro.await(5, TimeUnit.SECONDS);
-        vero("mentre gira, il turno resta suo", PackageQueue.prendi("altro", "altro") != null);
-        esci.countDown();
-        vero("finito il lavoro, il turno si libera", attendiLibero());
+        inside.await(5, TimeUnit.SECONDS);
+        real("mentre gira, il turno resta suo", PackageQueue.take("altro", "altro") != null);
+        leave.countDown();
+        real("finito il lavoro, il turno si libera", waitUntilFree());
 
         Thread.setDefaultUncaughtExceptionHandler((t, x) -> { });   // l'eccezione voluta non sporca l'uscita
-        vero("lavoro che fallisce: prende il turno", PackageQueue.prendi("rotto", "lavoro rotto") == null);
-        PackageQueue.avvia("rotto", "prova-rotto", () -> { throw new IllegalStateException("prova"); });
-        vero("anche se fallisce, il turno si libera", attendiLibero());
+        real("lavoro che fallisce: prende il turno", PackageQueue.take("rotto", "lavoro rotto") == null);
+        PackageQueue.start("rotto", "prova-rotto", () -> { throw new IllegalStateException("prova"); });
+        real("anche se fallisce, il turno si libera", waitUntilFree());
 
         // --- L'elenco su disco ---
-        vero("elenco nuovo: scritto", PackageQueue.scriviStato(List.of("kafka", "librdkafka")) == null);
-        vero("elenco nuovo: contenuto giusto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
-        String e = PackageQueue.scriviStato(f, List.of("nginx"));
-        vero("elenco gia' presente: rifiutato", e != null && e.contains("esiste già"));
-        vero("elenco gia' presente: NON sovrascritto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
-        Path senzaCartella = d.resolve("non-esiste").resolve("mail-panel-maintenance-locks");
-        e = PackageQueue.scriviStato(senzaCartella, List.of("nginx"));
-        vero("cartella che non c'e': rifiutato, e dice perche'", e != null && e.startsWith("non riesco a scrivere"));
-        vero("cartella che non c'e': nessun file lasciato", !Files.exists(senzaCartella));
+        real("elenco nuovo: scritto", PackageQueue.writeState(List.of("kafka", "librdkafka")) == null);
+        real("elenco nuovo: contenuto giusto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
+        String e = PackageQueue.writeState(f, List.of("nginx"));
+        real("elenco gia' presente: rifiutato", e != null && e.contains("esiste già"));
+        real("elenco gia' presente: NON sovrascritto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
+        Path withoutFolder = d.resolve("non-esiste").resolve("mail-panel-maintenance-locks");
+        e = PackageQueue.writeState(withoutFolder, List.of("nginx"));
+        real("cartella che non c'e': rifiutato, e dice perche'", e != null && e.startsWith("non riesco a scrivere"));
+        real("cartella che non c'e': nessun file lasciato", !Files.exists(withoutFolder));
 
         // Con l'elenco di un lavoro non chiuso su disco, quei pacchetti potrebbero essere ancora
         // unlockedPackages: nessun lavoro che installa o aggiorna parte. Rimettere le protezioni si',
         // perche' e' proprio il rimedio.
-        String e2 = PackageQueue.prendi("upd", "aggiornamento dei pacchetti non protetti");
-        vero("elenco aperto: un aggiornamento non parte", e2 != null && e2.contains("non si è chiuso"));
-        vero("elenco aperto: e il turno non resta preso", PackageQueue.chi() == null);
-        vero("elenco aperto: le protezioni si possono rimettere",
-            PackageQueue.prendiPerLeProtezioni("lock", "protezione dei pacchetti") == null);
-        PackageQueue.rilascia("lock");
-        PackageQueue.cancellaStato();
-        vero("elenco chiuso: l'aggiornamento parte", PackageQueue.prendi("upd", "aggiornamento") == null);
-        PackageQueue.rilascia("upd");
+        String e2 = PackageQueue.take("upd", "aggiornamento dei pacchetti non protetti");
+        real("elenco aperto: un aggiornamento non parte", e2 != null && e2.contains("non si è chiuso"));
+        real("elenco aperto: e il turno non resta preso", PackageQueue.chi() == null);
+        real("elenco aperto: le protezioni si possono rimettere",
+            PackageQueue.takeForLocks("lock", "protezione dei pacchetti") == null);
+        PackageQueue.release("lock");
+        PackageQueue.deleteState();
+        real("elenco chiuso: l'aggiornamento parte", PackageQueue.take("upd", "aggiornamento") == null);
+        PackageQueue.release("upd");
 
         Files.delete(d);
-        System.out.println(falliti == 0 ? "\nTUTTO OK" : "\n" + falliti + " PROVE FALLITE");
-        if (falliti > 0) System.exit(1);
+        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        if (failed > 0) System.exit(1);
     }
 
-    private static boolean attendiLibero() throws InterruptedException {
+    private static boolean waitUntilFree() throws InterruptedException {
         for (int i = 0; i < 100 && PackageQueue.chi() != null; i++) Thread.sleep(50);
         return PackageQueue.chi() == null;
     }
 
-    private static void vero(String nome, boolean ok) {
-        System.out.println((ok ? "  ok   " : "  NO   ") + nome);
-        if (!ok) falliti++;
+    private static void real(String name, boolean ok) {
+        System.out.println((ok ? "  ok   " : "  NO   ") + name);
+        if (!ok) failed++;
     }
 }

@@ -27,16 +27,16 @@ public class MailPanelContent {
      * Il contenuto e' fissato al momento della compilazione, quindi nessun percorso arriva
      * mai dalla rete: qui non c'e' niente da filtrare, a differenza della rotta /fa e /vendor.
      */
-    private static String risorsa(String percorso) {
-        try (java.io.InputStream in = MailPanelContent.class.getResourceAsStream("/" + percorso)) {
+    private static String resource(String path) {
+        try (java.io.InputStream in = MailPanelContent.class.getResourceAsStream("/" + path)) {
             if (in == null) {
-                System.err.println("[Contenuto] risorsa mancante nel jar: " + percorso);
-                return "<!-- risorsa mancante: " + percorso + " -->";
+                System.err.println("[Contenuto] risorsa mancante nel jar: " + path);
+                return "<!-- risorsa mancante: " + path + " -->";
             }
             return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception e) {
-            System.err.println("[Contenuto] non riesco a leggere " + percorso + ": " + e.getMessage());
-            return "<!-- risorsa illeggibile: " + percorso + " -->";
+            System.err.println("[Contenuto] non riesco a leggere " + path + ": " + e.getMessage());
+            return "<!-- risorsa illeggibile: " + path + " -->";
         }
     }
 
@@ -1003,13 +1003,13 @@ public class MailPanelContent {
                 <table class="table table-hover tabella-schede" aria-label="{{t:home.servicesTable}}">
                     <thead class="table-light"><tr><th scope="col">{{t:home.colService}}</th><th scope="col">{{t:home.colVersion}}</th><th scope="col">{{t:home.colState}}</th><th scope="col">{{t:home.colActions}}</th></tr></thead>
                     <tbody>
-""" + rigaServizio("postfix", "postfix", "fa-paper-plane", "Postfix (SMTP)", "Postfix")
-    + rigaServizio("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP/POP3)", "Dovecot")
-    + rigaServizio("mysql", "mysql-server", "fa-database", "MySQL (Database)", "MySQL")
-    + rigaServizio("rspamd", "rspamd", "fa-shield-alt", "Rspamd (Anti-Spam)", "Rspamd")
-    + rigaServizio("redis", "redis", "fa-memory", "Redis ({{t:home.redisRole}})", "Redis")
-    + rigaServizio("clamav", "clamav", "fa-bug", "ClamAV (Antivirus)", "ClamAV")
-    + rigaServizio("roundcube", "roundcube", "fa-envelope-open-text", "Roundcube (Webmail)", "{{t:home.theWebmail}}") + """
+""" + serviceLine("postfix", "postfix", "fa-paper-plane", "Postfix (SMTP)", "Postfix")
+    + serviceLine("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP/POP3)", "Dovecot")
+    + serviceLine("mysql", "mysql-server", "fa-database", "MySQL (Database)", "MySQL")
+    + serviceLine("rspamd", "rspamd", "fa-shield-alt", "Rspamd (Anti-Spam)", "Rspamd")
+    + serviceLine("redis", "redis", "fa-memory", "Redis ({{t:home.redisRole}})", "Redis")
+    + serviceLine("clamav", "clamav", "fa-bug", "ClamAV (Antivirus)", "ClamAV")
+    + serviceLine("roundcube", "roundcube", "fa-envelope-open-text", "Roundcube (Webmail)", "{{t:home.theWebmail}}") + """
                     </tbody>
                 </table>
             </div>
@@ -1021,7 +1021,7 @@ public class MailPanelContent {
                     <tbody id="altroSoftware"><tr><td colspan="3" class="text-muted small">{{t:home.readingVersions}}</td></tr></tbody>
                 </table>
             </div>
-""" + risorsa("pages/home-status-card.html") + """
+""" + resource("pages/home-status-card.html") + """
         </div>
     </div>
 """ + getFooterSection() + getScriptStart() + """
@@ -1303,7 +1303,7 @@ public class MailPanelContent {
         }
 
         checkStatus();
-""" + getVersioniJs() + risorsa("pages/home-status.js") + getScriptEnd();
+""" + getVersionsJs() + resource("pages/home-status.js") + getScriptEnd();
     }
 
     /**
@@ -1311,7 +1311,7 @@ public class MailPanelContent {
      * stato (checkStatus) e i tre comandi, con il loro nome per chi usa un lettore di schermo.
      * Una definizione sola per tutte le righe.
      */
-    private static String rigaServizio(String chiave, String service, String icona, String nome, String chi) {
+    private static String serviceLine(String key, String service, String icon, String name, String chi) {
         return """
                         <tr>
                             <td data-label="{{t:home.colService}}" class="text-nowrap"><i class="fas %s me-2" aria-hidden="true"></i>%s</td>
@@ -1323,7 +1323,7 @@ public class MailPanelContent {
                                 <button type="button" class="btn btn-danger action-btn" onclick="serviceAction('%s','stop')" aria-label="{{t:home.stop}} %s" title="{{t:home.stop}}"><i class="fas fa-stop" aria-hidden="true"></i></button>
                             </td>
                         </tr>
-""".formatted(icona, nome, chiave, chiave, service, chi, service, chi, service, chi);
+""".formatted(icon, name, key, key, service, chi, service, chi, service, chi);
     }
 
     /**
@@ -1331,7 +1331,7 @@ public class MailPanelContent {
      * e la tabella "Altro software". Tutto con textContent: le versioni arrivano da programmi e
      * file del server, e non devono poter diventare HTML.
      */
-    private static String getVersioniJs() {
+    private static String getVersionsJs() {
         return """
         // ===== Versioni del software (SoftwareVersions sul server) =====
         function verCella(cella, v) {
@@ -1877,7 +1877,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN));
+""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN));
     }
 
     /**
@@ -1886,9 +1886,9 @@ public class MailPanelContent {
      *
      * Lo stesso componente per "Aggiungi Casella" e "Modifica Casella". Prima la seconda aveva gli
      * strumenti e la prima no: la password di una casella nuova si digitava alla cieca, senza poterla
-     * generare ne' copiare per chi l'avrebbe usata. Il codice del componente e' getCampoPasswordJs().
+     * generare ne' copiare per chi l'avrebbe usata. Il codice del componente e' getPasswordFieldJs().
      */
-    private static String campoPassword(String id, String segnaposto) {
+    private static String passwordField(String id, String placeholder) {
         return """
                         <div class="input-group has-validation">
                             <input type="password" class="form-control font-monospace campo-password" id="%1$s" placeholder="%2$s" maxlength="128"
@@ -1898,23 +1898,23 @@ public class MailPanelContent {
                             <button class="btn btn-outline-secondary" type="button" id="%1$sCopia" onclick="pwCopia('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                             <div class="invalid-feedback" id="%1$sErr" role="alert"></div>
                         </div>
-""".formatted(id, segnaposto);
+""".formatted(id, placeholder);
     }
 
     /**
-     * Il codice del campo password (campoPassword). La regola dei caratteri arriva da SecurityUtils
+     * Il codice del campo password (passwordField). La regola dei caratteri arriva da SecurityUtils
      * quando si genera la pagina: e' la stessa che applica il server, che resta l'unico a decidere.
      */
-    private static String getCampoPasswordJs() {
+    private static String getPasswordFieldJs() {
         // Righe normali, non text block: un text block comincia sempre a capo, e la regex si spezzerebbe.
-        String regola = "        const PW_CARATTERE = /^" + org.mail_panel.webserver.SecurityUtils.PASSWORD_CARATTERI + "$/;\n"
-                + "        const PW_MIN = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN
+        String rule = "        const PW_CARATTERE = /^" + org.mail_panel.webserver.SecurityUtils.PASSWORD_CHARACTERS + "$/;\n"
+                + "        const PW_MIN = " + org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN
                 + ", PW_MAX = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX + ";\n"
-                + "        const PW_SIMBOLI = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SIMBOLI
+                + "        const PW_SIMBOLI = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SYMBOLS
                         .replace("\\", "\\\\").replace("'", "\\'") + "';\n";
         return """
         // ===== Campo password (componente condiviso, vedi campoPassword) =====
-""" + regola + """
+""" + rule + """
 
         function pwMostra(id, mostra) {
             const input = document.getElementById(id);
@@ -2006,7 +2006,7 @@ public class MailPanelContent {
     }
 
     /** Finestra "Trasforma in casella" della pagina Alias (AddressTransform sul server). */
-    private static String getAliasACasellaModal() {
+    private static String getAliasToMailboxModal() {
         return """
     <div class="modal fade" id="aCasellaModal" tabindex="-1" aria-labelledby="aCasellaTitolo" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -2041,7 +2041,7 @@ public class MailPanelContent {
                         </fieldset>
                         <div class="mb-3">
                             <label class="form-label" for="acPass">{{t:ac.pass}}</label>
-""" + campoPassword("acPass", "") + """
+""" + passwordField("acPass", "") + """
                             <small class="d-block text-muted mt-1">{{t:ac.passHint}}</small>
                         </div>
                         <div class="row g-2">
@@ -2069,7 +2069,7 @@ public class MailPanelContent {
     }
 
     /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua fingerprint. */
-    private static String getAliasACasellaJs() {
+    private static String getAliasToMailboxJs() {
         return """
         // ===== Trasforma in casella (decide il server: AddressTransform) =====
         let acDati = null;
@@ -2189,7 +2189,7 @@ public class MailPanelContent {
     }
 
     /** Finestra "Trasforma in alias" della pagina Caselle (AddressTransform sul server). */
-    private static String getCasellaAAliasModal() {
+    private static String getMailboxToAliasModal() {
         return """
     <div class="modal fade" id="aAliasModal" tabindex="-1" aria-labelledby="aAliasTitolo" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -2231,7 +2231,7 @@ public class MailPanelContent {
     }
 
     /** Lo script di "Trasforma in alias": anteprima di cosa si perde e cosa resta, conferma scritta. */
-    private static String getCasellaAAliasJs() {
+    private static String getMailboxToAliasJs() {
         return """
         // ===== Trasforma in alias (decide il server: AddressTransform) =====
         let aaDati = null;
@@ -2340,8 +2340,8 @@ public class MailPanelContent {
     }
 
     /**
-     * Il codice del Generatore Password (getPasswordGeneratorModal): con campoPassword e
-     * getCampoPasswordJs e' il componente condiviso delle password delle caselle, in "Aggiungi
+     * Il codice del Generatore Password (getPasswordGeneratorModal): con passwordField e
+     * getPasswordFieldJs e' il componente condiviso delle password delle caselle, in "Aggiungi
      * casella", "Modifica casella" e "Trasforma in casella" (pagina Alias).
      */
     private static String getPasswordGeneratorJs() {
@@ -2574,7 +2574,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN));
+""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN));
     }
 
     /**
@@ -2852,7 +2852,7 @@ public class MailPanelContent {
                     </tbody>
                 </table>
             </div>
-""" + risorsa("pages/apple-profile-card.html") + """
+""" + resource("pages/apple-profile-card.html") + """
         </div>
     </div>
 
@@ -2873,7 +2873,7 @@ public class MailPanelContent {
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="mbPass">Password</label>
-""" + campoPassword("mbPass", "") + """
+""" + passwordField("mbPass", "") + """
                             <small class="d-block text-muted mt-1">{{t:mbx.passHint}}</small>
                         </div>
                         <div class="mb-3">
@@ -2927,7 +2927,7 @@ public class MailPanelContent {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editMbPass">{{t:mbx.newPass}} <small class="text-muted">{{t:mbx.newPassHint}}</small></label>
-""" + campoPassword("editMbPass", "{{t:mbx.newPassPh}}") + """
+""" + passwordField("editMbPass", "{{t:mbx.newPassPh}}") + """
                         <small class="text-muted">{{t:mbx.vaultHint}}</small>
 
                         <!-- Riquadro per password archiviata: rivelabile con click -->
@@ -2993,7 +2993,7 @@ public class MailPanelContent {
         </div>
     </div>
 
-""" + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + getCasellaAAliasModal() + """
+""" + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + getMailboxToAliasModal() + """
     <!-- Mail Client Config Modal -->
 """ + getMailConfigModal() + """
 
@@ -3316,13 +3316,13 @@ public class MailPanelContent {
             });
         }
 
-""" + getCampoPasswordJs() + """
+""" + getPasswordFieldJs() + """
         // Una casella nuova parte con una password gia' proposta, in chiaro (vedi pwProponi).
         document.getElementById('addMailboxModal').addEventListener('show.bs.modal', function () {
             if (!document.getElementById('mbPass').value) pwProponi('mbPass');
         });
 
-""" + getPasswordGeneratorJs() + getCasellaAAliasJs() + """
+""" + getPasswordGeneratorJs() + getMailboxToAliasJs() + """
         function revealMailboxStoredPassword() {
             const id = parseInt(document.getElementById('editMbId').value);
             if (!id) return;
@@ -3838,7 +3838,7 @@ public class MailPanelContent {
             });
         }
 
-""" + risorsa("pages/apple-profile.js") + """
+""" + resource("pages/apple-profile.js") + """
         loadDomains();
         loadMailboxes();
         paCarica();
@@ -3925,7 +3925,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""" + getAliasACasellaModal() + getPasswordGeneratorModal() + getFooterSection() + """
+""" + getAliasToMailboxModal() + getPasswordGeneratorModal() + getFooterSection() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
 
@@ -4070,7 +4070,7 @@ public class MailPanelContent {
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
         }
 
-""" + getCampoPasswordJs() + getPasswordGeneratorJs() + getAliasACasellaJs() + """
+""" + getPasswordFieldJs() + getPasswordGeneratorJs() + getAliasToMailboxJs() + """
         loadAliasDomains();
         loadAliases();
 """ + """
@@ -6198,7 +6198,7 @@ public class MailPanelContent {
                     </div>
                 </div>
 
-""" + risorsa("pages/autodns-card.html") + risorsa("pages/autoconfig-card.html") + risorsa("pages/mtasts-card.html") + """
+""" + resource("pages/autodns-card.html") + resource("pages/autoconfig-card.html") + resource("pages/mtasts-card.html") + """
             </div>
 
             <!-- DNS Records -->
@@ -6264,7 +6264,7 @@ public class MailPanelContent {
                 </div>
             </div>
 
-""" + risorsa("pages/dkim-summary-card.html") + """
+""" + resource("pages/dkim-summary-card.html") + """
             <!-- DKIM Section -->
             <div class="card mt-4">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
@@ -6497,7 +6497,7 @@ public class MailPanelContent {
             loadDnsRecords();
         });
 
-""" + getDnsJsTzDiag() + risorsa("pages/dns.js") + getDnsJsPart3() + getDnsJsPart2() + risorsa("pages/autodns.js") + risorsa("pages/autoconfig.js") + risorsa("pages/mtasts.js") + """
+""" + getDnsJsTzDiag() + resource("pages/dns.js") + getDnsJsPart3() + getDnsJsPart2() + resource("pages/autodns.js") + resource("pages/autoconfig.js") + resource("pages/mtasts.js") + """
     </script>
 </body>
 </html>
@@ -7853,7 +7853,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <p class="text-muted">{{t:set.intro}}</p>
 
             <div class="card mb-4 mb-4 border-success">
-""" + risorsa("pages/report-card.html") + """
+""" + resource("pages/report-card.html") + """
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:set.reportIntro.html}}</p>
                     <div id="rep-body" aria-live="polite"><span class="text-muted">{{t:set.reportPress}}</span></div>
@@ -8078,7 +8078,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + getWebAuthnScript() + getSettingsAuthJs() + """
 """ + getSettingsHostnameJs() + """
         // Load on page load
-""" + risorsa("pages/report.js") + """
+""" + resource("pages/report.js") + """
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
         repCarica();
@@ -9106,7 +9106,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         </div>
                     </div>
 
-""" + risorsa("pages/pf-comparison-card.html") + """
+""" + resource("pages/pf-comparison-card.html") + """
 
                     <!-- Permaban list (via pf, independent from Fail2ban) -->
                     <div class="card">
@@ -9411,10 +9411,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
 """ + getJailConfigurationJs() + """
-""" + risorsa("pages/security-jail.js") + risorsa("pages/pf-comparison.js") + """
+""" + resource("pages/security-jail.js") + resource("pages/pf-comparison.js") + """
 """;
         String jsPart2 = """
-""" + risorsa("pages/security-health.js") + """
+""" + resource("pages/security-health.js") + """
 """ + """
     </script>
 </body>
@@ -9706,7 +9706,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
      * Le aree del pannello nella tabella dei ruoli: la chiave del nome, il permesso per vedere e
      * quello per cambiare ("" se nell'area non c'e' niente da cambiare).
      */
-    private static final String[][] AREE_RUOLI = {
+    private static final String[][] ROLE_AREAS = {
         {"adm.area.home", "home.view", ""},
         {"adm.area.mailboxes", "mail.view", "mailboxes.manage"},
         {"adm.area.domains", "mail.view", "domains.manage"},
@@ -9733,7 +9733,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             head.append("<th scope=\"col\" class=\"text-center\"><span class=\"badge role-badge ").append(role)
                 .append("\">{{t:").append(roleKey(role)).append("}}</span></th>");
         StringBuilder rows = new StringBuilder();
-        for (String[] area : AREE_RUOLI) {
+        for (String[] area : ROLE_AREAS) {
             rows.append("<tr><th scope=\"row\">{{t:").append(area[0]).append("}}</th>");
             for (String role : org.mail_panel.security.AuthStore.ROLES) {
                 java.util.Set<String> p = org.mail_panel.security.AuthStore.permissionsOf(role);
@@ -11921,7 +11921,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-""" + risorsa("pages/branch-card.html") + """
+""" + resource("pages/branch-card.html") + """
             <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i><strong>{{t:up.release}}</strong>
@@ -12054,7 +12054,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div id="upd-ams"><span class="text-muted">{{t:up.phState}}</span></div>
                 </div>
             </div>
-""" + risorsa("pages/cf-ranges-card.html") + """
+""" + resource("pages/cf-ranges-card.html") + """
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -12207,11 +12207,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
-        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPacchetti() + risorsa("pages/branch.js");
+        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
-    private static String getUpdatesScriptPacchetti() {
+    private static String getUpdatesScriptPackages() {
         return """
         // ================= il quadro dei pacchetti =================
         // Una tabella sola: versione installata e del catalogo, vulnerabilita' con il verdict
@@ -12514,7 +12514,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.bWait')) + '</span>';
         }
 
-""" + risorsa("pages/port465.js") + risorsa("pages/standards-watch.js") + risorsa("pages/web-diagnostics.js") + risorsa("pages/web443.js") + risorsa("pages/enable-mtasts.js") + risorsa("pages/cf-ranges.js") + """
+""" + resource("pages/port465.js") + resource("pages/standards-watch.js") + resource("pages/web-diagnostics.js") + resource("pages/web443.js") + resource("pages/enable-mtasts.js") + resource("pages/cf-ranges.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');

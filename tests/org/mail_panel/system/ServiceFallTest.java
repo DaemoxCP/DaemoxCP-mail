@@ -81,7 +81,7 @@ public class ServiceFallTest {
              !UpdateManager.fallenServices(j6, all, new LinkedHashMap<>(all)));
 
         // --- Nessuno stato di partenza: non si inventa un guasto ---
-        // Succede se statoServizi() non ha trovato nessuno script rc.d. Senza un "prima" non
+        // Succede se servicesState() non ha trovato nessuno script rc.d. Senza un "prima" non
         // si puo' dire che qualcosa e' caduto, e dire di si' sarebbe un allarme inventato.
         UpdateManager.Job j7 = new UpdateManager.Job("prova7", "prova");
         check("senza stato di partenza non si dichiara nessun guasto",

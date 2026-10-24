@@ -51,7 +51,7 @@ public final class Fail2banAutoSetup {
             // 4. Log rotation
             writeNewsyslogIfMissing();
             // 5. Permaban setup (file + pf anchor)
-            ensurePermabanSetup();
+            ensurePermanentBanSetup();
             // 6. Reload Fail2ban se abbiamo cambiato qualcosa
             if (filterChanged || jailChanged) {
                 reloadFail2ban();
@@ -73,7 +73,7 @@ public final class Fail2banAutoSetup {
      *  2. Aggiunge a /etc/pf.conf (se esiste): table <permaban> persist + block rule
      *  3. Ricarica pf e popola la tabella runtime dal file
      */
-    private static void ensurePermabanSetup() {
+    private static void ensurePermanentBanSetup() {
         try {
             // 1. File
             Path dir = Paths.get(Fail2banManager.PERMABAN_DIR);
@@ -126,7 +126,7 @@ public final class Fail2banAutoSetup {
                     Files.writeString(tmp, newContent);
                     // TODO: migrate to Shell.run when touched
                     ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", tmp.toString());
-                    org.mail_panel.util.Shell.applicaPath(testPb);
+                    org.mail_panel.util.Shell.applyPath(testPb);
                     testPb.redirectErrorStream(true);
                     Process tp = testPb.start();
                     String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -145,7 +145,7 @@ public final class Fail2banAutoSetup {
                         try {
                             // TODO: migrate to Shell.run when touched
                             ProcessBuilder loadPb = new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf");
-                            org.mail_panel.util.Shell.applicaPath(loadPb);
+                            org.mail_panel.util.Shell.applyPath(loadPb);
                             loadPb.redirectErrorStream(true);
                             Process lp = loadPb.start();
                             lp.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -160,7 +160,7 @@ public final class Fail2banAutoSetup {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", Fail2banManager.PERMABAN_TABLE,
                     "-T", "replace", "-f", Fail2banManager.PERMABAN_FILE);
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -282,7 +282,7 @@ public final class Fail2banAutoSetup {
     private static String runSaying(String... command) {
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
             Process p = pb.start();
@@ -494,7 +494,7 @@ public final class Fail2banAutoSetup {
             }
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(FAIL2BAN_CLIENT, "reload");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             boolean done = p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);

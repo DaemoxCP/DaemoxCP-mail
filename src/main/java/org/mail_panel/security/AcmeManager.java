@@ -222,7 +222,7 @@ public class AcmeManager {
 
             // Build acme.sh command
             StringBuilder cmd = new StringBuilder();
-            // Vedi la nota in emettiConNomi: la CA si dichiara a ogni comando.
+            // Vedi la nota in emitWithNames: la CA si dichiara a ogni comando.
             cmd.append(ACME_CMD).append(" --issue --server letsencrypt");
 
             // Add all domains
@@ -288,19 +288,19 @@ public class AcmeManager {
      * Con "openssl pkey -pubout" il confronto vale per entrambi i tipi.
      */
     /** Il certificato che i servizi stanno usando contiene quel nome fra i suoi SAN. */
-    private boolean certificatoInstallatoCopre(String nome) {
-        for (String n : nomiDelCertificatoInstallato())
-            if (n.equalsIgnoreCase(nome)) return true;
+    private boolean installedCertificateCovers(String name) {
+        for (String n : installedCertificateNames())
+            if (n.equalsIgnoreCase(name)) return true;
         return false;
     }
 
-    private static boolean carattereDiNome(char c) {
+    private static boolean nameCharacter(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
             || (c >= '0' && c <= '9') || c == '.' || c == '-';
     }
 
     /** Solo lettere, cifre, punti e trattini: quello che un nome DNS puo' contenere. */
-    static boolean nomeAmmesso(String n) {
+    static boolean allowedName(String n) {
         if (n == null || n.isBlank() || n.length() > 253) return false;
         for (int i = 0; i < n.length(); i++) {
             char c = n.charAt(i);
@@ -311,9 +311,9 @@ public class AcmeManager {
         return n.indexOf('.') > 0 && !n.startsWith("-") && !n.startsWith(".") && !n.endsWith(".");
     }
 
-    public static java.util.List<String> nomiDaSubjectAltName(String uscitaOpenssl) {
-        java.util.List<String> nomi = new java.util.ArrayList<>();
-        if (uscitaOpenssl == null) return nomi;
+    public static java.util.List<String> namesFromSubjectAltName(String opensslOutput) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        if (opensslOutput == null) return names;
         // Dividere il testo per virgole non funziona: con "openssl -text" l'ULTIMO nome non
         // e' seguito da una virgola, quindi il suo pezzo si allunga fino alla virgola
         // successiva — molto piu' avanti, dentro un'altra estensione — e il nome sparisce.
@@ -321,19 +321,19 @@ public class AcmeManager {
         // cerco ogni "DNS:", leggo i caratteri ammessi che seguono e pretendo che finiscano
         // su virgola o fine riga. Cosi' i due formati danno lo stesso risultato, e nessun
         // carattere diverso da quelli di un nome DNS puo' finire nella riga di comando.
-        final int fine = uscitaOpenssl.length();
+        final int end = opensslOutput.length();
         int i = 0;
-        while ((i = uscitaOpenssl.indexOf("DNS:", i)) >= 0) {
+        while ((i = opensslOutput.indexOf("DNS:", i)) >= 0) {
             i += 4;
             int j = i;
-            while (j < fine && carattereDiNome(uscitaOpenssl.charAt(j))) j++;
-            char dopo = j < fine ? uscitaOpenssl.charAt(j) : '\n';
-            boolean chiuso = (dopo == ',' || dopo == '\n' || dopo == '\r');
-            String nome = uscitaOpenssl.substring(i, j);
-            if (chiuso && nomeAmmesso(nome) && !nomi.contains(nome)) nomi.add(nome);
+            while (j < end && nameCharacter(opensslOutput.charAt(j))) j++;
+            char after = j < end ? opensslOutput.charAt(j) : '\n';
+            boolean closed = (after == ',' || after == '\n' || after == '\r');
+            String name = opensslOutput.substring(i, j);
+            if (closed && allowedName(name) && !names.contains(name)) names.add(name);
             i = j;
         }
-        return nomi;
+        return names;
     }
 
     /**
@@ -342,25 +342,25 @@ public class AcmeManager {
      * quindi rinnovare senza rileggerli farebbe sparire i mta-sts.* e autoconfig.* —
      * con i record MTA-STS gia' pubblicati, la posta verrebbe rifiutata.
      */
-    public java.util.List<String> nomiDelCertificatoInstallato() {
+    public java.util.List<String> installedCertificateNames() {
         try {
             String out = executeCommand("openssl x509 -in " + FULLCHAIN_FILE
                     + " -noout -ext subjectAltName 2>/dev/null");
             if (out == null || out.isBlank())
                 out = executeCommand("openssl x509 -in " + CERT_FILE
                         + " -noout -ext subjectAltName 2>/dev/null");
-            return nomiDaSubjectAltName(out);
+            return namesFromSubjectAltName(out);
         } catch (Exception e) {
             return new java.util.ArrayList<>();
         }
     }
 
-    private boolean coppiaCoerente() {
+    private boolean consistentPair() {
         try {
             String daCert = executeCommand("openssl x509 -in " + CERT_FILE + " -noout -pubkey 2>/dev/null");
-            String daChiave = executeCommand("openssl pkey -in " + KEY_FILE + " -pubout 2>/dev/null");
-            if (daCert == null || daChiave == null) return false;
-            String a = daCert.replaceAll("\\s+", ""), b = daChiave.replaceAll("\\s+", "");
+            String fromKey = executeCommand("openssl pkey -in " + KEY_FILE + " -pubout 2>/dev/null");
+            if (daCert == null || fromKey == null) return false;
+            String a = daCert.replaceAll("\\s+", ""), b = fromKey.replaceAll("\\s+", "");
             return !a.isEmpty() && a.equals(b);
         } catch (Exception e) {
             // Non essere riusciti a verificare non e' una promozione: si torna indietro.
@@ -379,23 +379,23 @@ public class AcmeManager {
      * vecchio quando acme.sh ha lavorato altrove: era esattamente il caso in cui
      * HOME mancava e la cartella diventava "/.acme.sh".
      */
-    static Path cartellaDichiarata(String uscitaAcme) {
-        if (uscitaAcme == null) return null;
-        for (String riga : uscitaAcme.split("\n")) {
-            int i = riga.indexOf("Your cert is in:");
+    static Path declaredFolder(String acmeOutput) {
+        if (acmeOutput == null) return null;
+        for (String line : acmeOutput.split("\n")) {
+            int i = line.indexOf("Your cert is in:");
             if (i < 0) continue;
-            String percorso = riga.substring(i + "Your cert is in:".length()).trim();
-            if (percorso.isEmpty()) continue;
+            String path = line.substring(i + "Your cert is in:".length()).trim();
+            if (path.isEmpty()) continue;
             // acme.sh puo' stampare "//.acme.sh/..." quando HOME e' vuoto: normalizzo
-            while (percorso.contains("//")) percorso = percorso.replace("//", "/");
-            Path f = Paths.get(percorso);
+            while (path.contains("//")) path = path.replace("//", "/");
+            Path f = Paths.get(path);
             Path dir = f.getParent();
             if (dir != null && Files.isDirectory(dir)) return dir;
         }
         return null;
     }
 
-    public DeployResult deployCertificate(String mailHostname, String uscitaAcme) {
+    public DeployResult deployCertificate(String mailHostname, String acmeOutput) {
         // SECURITY: validate hostname before Paths.get and shell usage
         if (!InputValidator.isValidHostname(mailHostname)) {
             return new DeployResult(false, I18n.tr("server.acme.badHostname"), null);
@@ -405,32 +405,32 @@ public class AcmeManager {
             Files.createDirectories(Paths.get(SSL_DIR));
 
             // La cartella che acme.sh ha DICHIARATO batte qualunque ricostruzione nostra.
-            Path sorgente = cartellaDichiarata(uscitaAcme);
-            if (sorgente != null && !Files.exists(sorgente.resolve(mailHostname + ".cer"))) sorgente = null;
+            Path source = declaredFolder(acmeOutput);
+            if (source != null && !Files.exists(source.resolve(mailHostname + ".cer"))) source = null;
 
-            if (sorgente == null) {
+            if (source == null) {
                 // Source paths (acme.sh storage) - check both regular and ECC directories
                 Path eccDir = Paths.get(ACME_HOME, mailHostname + "_ecc");
                 Path regularDir = Paths.get(ACME_HOME, mailHostname);
 
                 // Prefer ECC certificates if available (acme.sh default)
                 if (Files.exists(eccDir) && Files.exists(eccDir.resolve(mailHostname + ".cer"))) {
-                    sorgente = eccDir;
+                    source = eccDir;
                 } else if (Files.exists(regularDir) && Files.exists(regularDir.resolve(mailHostname + ".cer"))) {
-                    sorgente = regularDir;
+                    source = regularDir;
                 } else {
                     return new DeployResult(false, I18n.tr("server.acme.filesNotFound", java.util.Map.of("d", String.valueOf(ACME_HOME))), null);
                 }
             }
 
-            Path acmeCert = sorgente.resolve(mailHostname + ".cer");
-            Path acmeKey = sorgente.resolve(mailHostname + ".key");
-            Path acmeFullchain = sorgente.resolve("fullchain.cer");
-            Path acmeCa = sorgente.resolve("ca.cer");
+            Path acmeCert = source.resolve(mailHostname + ".cer");
+            Path acmeKey = source.resolve(mailHostname + ".key");
+            Path acmeFullchain = source.resolve("fullchain.cer");
+            Path acmeCa = source.resolve("ca.cer");
 
             // Check source files exist
             if (!Files.exists(acmeCert) || !Files.exists(acmeKey)) {
-                return new DeployResult(false, I18n.tr("server.acme.filesNotFound", java.util.Map.of("d", String.valueOf(sorgente))), null);
+                return new DeployResult(false, I18n.tr("server.acme.filesNotFound", java.util.Map.of("d", String.valueOf(source))), null);
             }
 
             // COPIA DI SICUREZZA prima di sovrascrivere.
@@ -439,16 +439,16 @@ public class AcmeManager {
             // se il nuovo fosse difettoso, il vecchio — che funzionava — non esisterebbe piu',
             // e i tre servizi verrebbero ricaricati con un certificato rotto. Un'operazione
             // irreversibile su qualcosa che funziona non si fa senza una via di ritorno.
-            java.util.Map<String, String> salvati = new java.util.HashMap<>();
+            java.util.Map<String, String> saved = new java.util.HashMap<>();
             try {
-                Path dirCopia = Paths.get("/var/db/mailpanel/ssl-previous");
-                Files.createDirectories(dirCopia);
+                Path copyDir = Paths.get("/var/db/mailpanel/ssl-previous");
+                Files.createDirectories(copyDir);
                 for (String f : new String[] { CERT_FILE, KEY_FILE, FULLCHAIN_FILE, CA_FILE }) {
                     Path orig = Paths.get(f);
                     if (!Files.exists(orig)) continue;
-                    Path dest = dirCopia.resolve(orig.getFileName().toString());
+                    Path dest = copyDir.resolve(orig.getFileName().toString());
                     Files.copy(orig, dest, StandardCopyOption.REPLACE_EXISTING);
-                    salvati.put(f, dest.toString());
+                    saved.put(f, dest.toString());
                 }
             } catch (Exception e) {
                 return new DeployResult(false, I18n.tr("server.acme.noBackup", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
@@ -470,8 +470,8 @@ public class AcmeManager {
             // ricavata dalla chiave privata. Se non coincidono, i servizi ripartono con una
             // coppia incoerente e ogni connessione TLS fallisce: la posta si ferma del tutto.
             // Meglio accorgersene qui, con la copia ancora a portata di mano.
-            if (!coppiaCoerente()) {
-                for (java.util.Map.Entry<String, String> e : salvati.entrySet()) {
+            if (!consistentPair()) {
+                for (java.util.Map.Entry<String, String> e : saved.entrySet()) {
                     try {
                         Files.copy(Paths.get(e.getValue()), Paths.get(e.getKey()),
                                 StandardCopyOption.REPLACE_EXISTING);
@@ -646,7 +646,7 @@ public class AcmeManager {
      * I domini che stanno su un altro account non si possono includere qui, e chi chiama
      * deve escluderli prima invece di far fallire l'intera emissione per colpa di uno.
      */
-    public CertificateResult emettiConNomi(String mailHostname, java.util.List<String> nomiExtra) {
+    public CertificateResult emitWithNames(String mailHostname, java.util.List<String> extraNames) {
         MailDatabase.CloudflareAccount cf = cloudflareAccountForHostname(mailHostname);
         if (cf == null)
             return new CertificateResult(false,
@@ -662,13 +662,13 @@ public class AcmeManager {
         // messaggio che non c'entra niente con il certificato. Un default impostato altrove
         // e' una dipendenza nascosta: meglio dirlo ogni volta.
         StringBuilder cmd = new StringBuilder(ACME_CMD + " --issue --server letsencrypt --dns dns_cf -d " + mailHostname);
-        java.util.LinkedHashSet<String> visti = new java.util.LinkedHashSet<>();
-        visti.add(mailHostname.toLowerCase(java.util.Locale.ROOT));
-        if (nomiExtra != null) for (String n : nomiExtra) {
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+        seen.add(mailHostname.toLowerCase(java.util.Locale.ROOT));
+        if (extraNames != null) for (String n : extraNames) {
             if (n == null) continue;
             String x = n.trim().toLowerCase(java.util.Locale.ROOT);
             // Ogni nome finisce in una riga di comando: si controlla, non si spera.
-            if (x.isEmpty() || !InputValidator.isValidHostname(x) || !visti.add(x)) continue;
+            if (x.isEmpty() || !InputValidator.isValidHostname(x) || !seen.add(x)) continue;
             cmd.append(" -d ").append(x);
         }
         cmd.append(" --force 2>&1");
@@ -681,12 +681,12 @@ public class AcmeManager {
             // vuol dire che acme.sh ha lasciato il certificato com'era. Contarlo come riuscito
             // faceva installare quello vecchio e dichiarare "emesso con 11 nomi" una cosa che
             // di nomi ne aveva gli stessi di prima.
-            boolean emesso = output.contains("Cert success") || output.contains("Cert renewed");
-            if (!emesso) {
-                String perche = output.contains("Skipping. Next renewal time")
+            boolean issued = output.contains("Cert success") || output.contains("Cert renewed");
+            if (!issued) {
+                String why = output.contains("Skipping. Next renewal time")
                         ? I18n.tr("server.acme.skipped")
                         : I18n.tr("server.acme.issueFailedShort");
-                return new CertificateResult(false, perche, output);
+                return new CertificateResult(false, why, output);
             }
 
             DeployResult dep = deployCertificate(mailHostname, output);
@@ -697,14 +697,14 @@ public class AcmeManager {
             // Che acme.sh non abbia protestato non basta — puo' aver scritto in una cartella
             // diversa da quella da cui il deploy copia, e l'esito sarebbe "riuscito" con il
             // vecchio certificato ancora al suo posto.
-            java.util.List<String> mancanti = new java.util.ArrayList<>();
-            for (String n : visti) if (!certificatoInstallatoCopre(n)) mancanti.add(n);
-            if (!mancanti.isEmpty())
+            java.util.List<String> missing = new java.util.ArrayList<>();
+            for (String n : seen) if (!installedCertificateCovers(n)) missing.add(n);
+            if (!missing.isEmpty())
                 return new CertificateResult(false,
-                        I18n.tr("server.acme.namesMissing", java.util.Map.of("n", String.valueOf(mancanti.size()), "elenco", String.valueOf(String.join(", ", mancanti)))),
+                        I18n.tr("server.acme.namesMissing", java.util.Map.of("n", String.valueOf(missing.size()), "elenco", String.valueOf(String.join(", ", missing)))),
                         output + "\n" + (dep.output != null ? dep.output : ""));
 
-            return new CertificateResult(true, I18n.tr("server.acme.issuedWithNames", java.util.Map.of("n", String.valueOf(visti.size()))),
+            return new CertificateResult(true, I18n.tr("server.acme.issuedWithNames", java.util.Map.of("n", String.valueOf(seen.size()))),
                     output + "\n" + (dep.output != null ? dep.output : ""));
         } catch (Exception e) {
             return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
@@ -721,7 +721,7 @@ public class AcmeManager {
     }
 
     /** L'account usato per il certificato dell'hostname. */
-    public MailDatabase.CloudflareAccount accountDelCertificato(String mailHostname) {
+    public MailDatabase.CloudflareAccount certificateAccount(String mailHostname) {
         return cloudflareAccountForHostname(mailHostname);
     }
 
@@ -737,11 +737,11 @@ public class AcmeManager {
             // senza che nessuno abbia toccato niente. Quindi rileggo i nomi da quello in uso.
             StringBuilder cmd = new StringBuilder(
                     ACME_CMD + " --issue --server letsencrypt --dns dns_cf -d " + mailHostname);
-            java.util.List<String> tenere = new java.util.ArrayList<>();
-            for (String n : nomiDelCertificatoInstallato())
-                if (!n.equalsIgnoreCase(mailHostname)) tenere.add(n);
-            java.util.Collections.sort(tenere);
-            for (String n : tenere) cmd.append(" -d ").append(n);
+            java.util.List<String> keep = new java.util.ArrayList<>();
+            for (String n : installedCertificateNames())
+                if (!n.equalsIgnoreCase(mailHostname)) keep.add(n);
+            java.util.Collections.sort(keep);
+            for (String n : keep) cmd.append(" -d ").append(n);
             cmd.append(" --force 2>&1");
             String output = sanitize(executeCommand(cmd.toString(), env), cf.apiToken);
 
@@ -1353,7 +1353,7 @@ public class AcmeManager {
     private String executeCommand(String command, Map<String, String> extraEnv) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", command);
-        org.mail_panel.util.Shell.applicaPath(pb);
+        org.mail_panel.util.Shell.applyPath(pb);
         // rc.d non passa HOME. Senza, acme.sh calcola "$HOME/.acme.sh" = "/.acme.sh".
         pb.environment().putIfAbsent("HOME", "/root");
         pb.redirectErrorStream(true);

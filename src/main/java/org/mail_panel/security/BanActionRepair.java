@@ -40,146 +40,146 @@ import java.util.List;
 public final class BanActionRepair {
 
     private static final String JAIL_LOCAL = "/usr/local/etc/fail2ban/jail.local";
-    private static final String JAIL_PUBBLICO = "/usr/local/etc/fail2ban/jail.d/mailpanel-pubblico.conf";
+    private static final String PUBLIC_JAIL = "/usr/local/etc/fail2ban/jail.d/mailpanel-pubblico.conf";
     private static final String CLIENT = "/usr/local/bin/fail2ban-client";
 
     private BanActionRepair() { }
 
     /** Le jail il cui comando di ban non e' runnable su questo sistema. Legge e basta. */
-    public static JSONObject diagnosi() {
+    public static JSONObject diagnosis() {
         JSONObject r = new JSONObject();
-        JSONArray rotte = new JSONArray();
-        JSONArray nonGiudicate = new JSONArray();
-        int esaminate = 0;
-        for (String jail : jailAttive()) {
-            String cmd = comandoBan(jail);
+        JSONArray broken = new JSONArray();
+        JSONArray notJudged = new JSONArray();
+        int reviewed = 0;
+        for (String jail : activeJails()) {
+            String cmd = banCommand(jail);
             if (cmd == null || cmd.isEmpty()) {
                 // Senza l'uscita cruda questa riga e' un vicolo cieco: dice che non si sa, e non
                 // lascia a chi legge nessun modo di sapere. Con l'uscita, il passo successivo lo
                 // puo' fare chiunque guardi la pagina.
-                nonGiudicate.put(new JSONObject().put("jail", jail)
+                notJudged.put(new JSONObject().put("jail", jail)
                     .put("perche", I18n.tr("server.banfix.noCommand"))
-                    .put("output", uscitaAzioni(jail))
-                    .put("log", erroriLogPer(jail))
-                    .put("sezioni", sezioniCheDefiniscono(jail))
-                    .put("dump", configurazioneLetta(jail)));
+                    .put("output", actionsOutput(jail))
+                    .put("log", logErrorsFor(jail))
+                    .put("sezioni", sectionsDefining(jail))
+                    .put("dump", readConfiguration(jail)));
                 continue;
             }
-            String runnable = primoEseguibile(cmd);
+            String runnable = firstRunnable(cmd);
             if (runnable == null) {
                 // Salto deliberato: la riga non nomina chiaramente un programma. Va DETTO, non
                 // taciuto — una jail saltata in silenzio fa diventare verde un controllo che
                 // semplicemente non l'ha guardata, che e' il difetto che qui si sta cercando.
-                nonGiudicate.put(new JSONObject().put("jail", jail)
+                notJudged.put(new JSONObject().put("jail", jail)
                     .put("perche", I18n.tr("server.banfix.noProgram"))
                     .put("comando", cmd));
                 continue;
             }
-            esaminate++;
-            if (esiste(runnable)) continue;
-            rotte.put(new JSONObject()
+            reviewed++;
+            if (exists(runnable)) continue;
+            broken.put(new JSONObject()
                 .put("jail", jail).put("comando", cmd).put("runnable", runnable));
         }
-        return r.put("success", true).put("rotte", rotte)
-                .put("esaminate", esaminate)
-                .put("non_giudicate", nonGiudicate)
-                .put("riparabili", rotte.length() > 0);
+        return r.put("success", true).put("rotte", broken)
+                .put("esaminate", reviewed)
+                .put("non_giudicate", notJudged)
+                .put("riparabili", broken.length() > 0);
     }
 
     /** Scrive l'azione pf dove manca, ricarica, e verifica chiedendo di nuovo a fail2ban. */
-    public static JSONObject ripara() {
+    public static JSONObject repair() {
         JSONObject r = new JSONObject();
-        JSONArray passi = new JSONArray();
-        List<Path> copie = new ArrayList<>();
+        JSONArray steps = new JSONArray();
+        List<Path> copies = new ArrayList<>();
         try {
-            boolean toccato = false;
-            boolean daGuardareAMano = false;
+            boolean touched = false;
+            boolean toReviewByHand = false;
 
             // 1. mailpanel-pubblico: il file e' del pannello, si riscrive intero.
-            Path pub = Paths.get(JAIL_PUBBLICO);
+            Path pub = Paths.get(PUBLIC_JAIL);
             if (Files.exists(pub)) {
-                String prima = Files.readString(pub, StandardCharsets.UTF_8);
-                String dopo = org.mail_panel.system.WebProtection.jail();
+                String before = Files.readString(pub, StandardCharsets.UTF_8);
+                String after = org.mail_panel.system.WebProtection.jail();
                 // Riscrivere il file intero e' lecito solo se e' il file che scrive il pannello.
                 // Se qualcuno lo ha sostituito con il proprio, sovrascriverlo cancellerebbe il
                 // suo lavoro senza avvisare — e questo e' un rimedio, non un ripristino.
-                if (!prima.contains("Scritto dal pannello")) {
-                    passi.put(passo("mailpanel-pubblico", false,
-                        I18n.tr("server.banfix.notOurFile", java.util.Map.of("file", String.valueOf(JAIL_PUBBLICO)))));
-                    daGuardareAMano = true;
-                } else if (!prima.equals(dopo)) {
-                    copie.add(copia(pub));
-                    Files.writeString(pub, dopo, StandardCharsets.UTF_8);
-                    toccato = true;
-                    passi.put(passo("mailpanel-pubblico", true,
-                        I18n.tr("server.banfix.rewritten", java.util.Map.of("file", String.valueOf(JAIL_PUBBLICO), "line", String.valueOf(rigaAzioneDi(dopo))))));
+                if (!before.contains("Scritto dal pannello")) {
+                    steps.put(step("mailpanel-pubblico", false,
+                        I18n.tr("server.banfix.notOurFile", java.util.Map.of("file", String.valueOf(PUBLIC_JAIL)))));
+                    toReviewByHand = true;
+                } else if (!before.equals(after)) {
+                    copies.add(copy(pub));
+                    Files.writeString(pub, after, StandardCharsets.UTF_8);
+                    touched = true;
+                    steps.put(step("mailpanel-pubblico", true,
+                        I18n.tr("server.banfix.rewritten", java.util.Map.of("file", String.valueOf(PUBLIC_JAIL), "line", String.valueOf(actionLineOf(after))))));
                 } else {
-                    passi.put(passo("mailpanel-pubblico", true, I18n.tr("server.banfix.alreadyOk")));
+                    steps.put(step("mailpanel-pubblico", true, I18n.tr("server.banfix.alreadyOk")));
                 }
             } else {
-                passi.put(passo("mailpanel-pubblico", true,
+                steps.put(step("mailpanel-pubblico", true,
                     I18n.tr("server.banfix.notInstalled")));
             }
 
             // 2. mail-panel-auth: sezione dentro jail.local, si cambia solo la riga dell'azione.
             Path loc = Paths.get(JAIL_LOCAL);
             if (Files.exists(loc)) {
-                String prima = Files.readString(loc, StandardCharsets.UTF_8);
-                Esito e = conAzionePf(prima, "mail-panel-auth");
-                switch (e.tipo) {
-                    case ASSENTE -> passi.put(passo("mail-panel-auth", true,
+                String before = Files.readString(loc, StandardCharsets.UTF_8);
+                Outcome e = withPfAction(before, "mail-panel-auth");
+                switch (e.type) {
+                    case ASSENTE -> steps.put(step("mail-panel-auth", true,
                         I18n.tr("server.banfix.noSection")));
-                    case GIA_A_POSTO -> passi.put(passo("mail-panel-auth", true,
+                    case GIA_A_POSTO -> steps.put(step("mail-panel-auth", true,
                         I18n.tr("server.banfix.alreadyOk")));
                     case DA_GUARDARE -> {
-                        passi.put(passo("mail-panel-auth", false, e.reason));
-                        daGuardareAMano = true;
+                        steps.put(step("mail-panel-auth", false, e.reason));
+                        toReviewByHand = true;
                     }
                     case MODIFICATO -> {
-                        copie.add(copia(loc));
-                        Files.writeString(loc, e.contenuto, StandardCharsets.UTF_8);
-                        toccato = true;
-                        passi.put(passo("mail-panel-auth", true,
-                            I18n.tr("server.banfix.lineUpdated", java.util.Map.of("file", String.valueOf(JAIL_LOCAL), "line", String.valueOf(rigaAzioneDi(e.contenuto))))));
+                        copies.add(copy(loc));
+                        Files.writeString(loc, e.content, StandardCharsets.UTF_8);
+                        touched = true;
+                        steps.put(step("mail-panel-auth", true,
+                            I18n.tr("server.banfix.lineUpdated", java.util.Map.of("file", String.valueOf(JAIL_LOCAL), "line", String.valueOf(actionLineOf(e.content))))));
                     }
                 }
             } else {
-                passi.put(passo("mail-panel-auth", true, I18n.tr("server.banfix.noJailLocal")));
+                steps.put(step("mail-panel-auth", true, I18n.tr("server.banfix.noJailLocal")));
             }
 
-            if (!toccato && !daGuardareAMano) {
+            if (!touched && !toReviewByHand) {
                 // I file possono essere gia' corretti mentre il processo in esecuzione ha ancora
                 // in memoria la configurazione di prima: sono due cose diverse, e fermarsi qui
                 // direbbe "non serviva" guardando solo il disco. Se il runtime non riporta
                 // l'azione di qualche jail, il lavoro non e' finito — si ricarica e si riguarda.
                 java.util.List<String> mute = new ArrayList<>();
                 for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
-                    String c = comandoBan(jail);
+                    String c = banCommand(jail);
                     if (c == null || c.isEmpty()) mute.add(jail);
                 }
                 if (mute.isEmpty())
-                    return r.put("success", true).put("passi", passi)
+                    return r.put("success", true).put("passi", steps)
                             .put("message", I18n.tr("server.banfix.nothingNeeded"));
 
-                passi.put(passo("configurazione", true,
+                steps.put(step("configurazione", true,
                     I18n.tr("server.banfix.diskVsRuntime", java.util.Map.of("list", String.valueOf(String.join(", ", mute))))));
-                toccato = true;
+                touched = true;
             }
-            if (!toccato)
-                return r.put("success", false).put("passi", passi)
+            if (!touched)
+                return r.put("success", false).put("passi", steps)
                         .put("message", I18n.tr("server.banfix.untouched"));
 
             // 3. Ricarica.
             Shell.Result rel = Shell.run(Duration.ofSeconds(30), CLIENT, "reload");
             if (!rel.success()) {
-                ripristina(copie);
+                restore(copies);
                 Shell.run(Duration.ofSeconds(30), CLIENT, "reload");
-                passi.put(passo("reload", false,
+                steps.put(step("reload", false,
                     I18n.tr("server.banfix.rejected", java.util.Map.of("out", String.valueOf(rel.output().trim())))));
-                return r.put("success", false).put("passi", passi)
+                return r.put("success", false).put("passi", steps)
                         .put("message", I18n.tr("server.banfix.cancelled"));
             }
-            passi.put(passo("reload", true,
+            steps.put(step("reload", true,
                 I18n.tr("server.banfix.accepted")));
 
             // Il reload semplice puo' non bastare. fail2ban-client(1): "reload ... reloads the
@@ -189,55 +189,55 @@ public final class BanActionRepair {
             // "--unban", che il manuale indica come l'opzione che invece toglierebbe i ban.
             java.util.List<String> ancoraMute = new ArrayList<>();
             for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
-                String c = comandoBan(jail);
+                String c = banCommand(jail);
                 if (c == null || c.isEmpty()) ancoraMute.add(jail);
             }
             if (!ancoraMute.isEmpty()) {
                 Shell.Result rs = Shell.run(Duration.ofSeconds(60), CLIENT, "reload", "--restart");
-                passi.put(passo("reload --restart", rs.success(),
+                steps.put(step("reload --restart", rs.success(),
                     I18n.tr("server.banfix.restarted", java.util.Map.of("list", String.valueOf(String.join(", ", ancoraMute)), "out", String.valueOf(rs.output() == null || rs.output().isBlank() ? I18n.tr("server.banfix.none") : rs.output().trim())))));
             }
 
             // 4. La verifica che conta: cosa esegue ADESSO, chiesto a fail2ban.
-            JSONArray verifica = new JSONArray();
-            boolean tutteOk = true;
+            JSONArray verification = new JSONArray();
+            boolean allOk = true;
             for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
-                String cmd = comandoBan(jail);
+                String cmd = banCommand(jail);
                 boolean ok = cmd != null && cmd.contains("pfctl");
                 if (cmd == null || cmd.isEmpty()) {
                     // Distinguere "non c'e'" da "c'e' e non parla": la prima non e' un guasto,
                     // la seconda si', e confonderle assolverebbe proprio il caso che stiamo
                     // inseguendo. Lo si decide chiedendo se la jail esiste, non presumendolo.
                     Shell.Result st = Shell.run(Duration.ofSeconds(10), CLIENT, "status", jail);
-                    boolean esisteJail = st.success() && !st.output().contains("does not exist");
-                    if (!esisteJail) {
-                        verifica.put(new JSONObject().put("jail", jail).put("ok", true)
+                    boolean jailExists = st.success() && !st.output().contains("does not exist");
+                    if (!jailExists) {
+                        verification.put(new JSONObject().put("jail", jail).put("ok", true)
                             .put("nota", I18n.tr("server.banfix.notActive")));
                         continue;
                     }
-                    tutteOk = false;
-                    verifica.put(new JSONObject().put("jail", jail).put("ok", false)
-                        .put("nota", I18n.tr("server.banfix.noActionAfter", java.util.Map.of("out", String.valueOf(uscitaAzioni(jail)))))
-                        .put("log", erroriLogPer(jail))
-                        .put("sezioni", sezioniCheDefiniscono(jail))
-                        .put("dump", configurazioneLetta(jail)));
+                    allOk = false;
+                    verification.put(new JSONObject().put("jail", jail).put("ok", false)
+                        .put("nota", I18n.tr("server.banfix.noActionAfter", java.util.Map.of("out", String.valueOf(actionsOutput(jail)))))
+                        .put("log", logErrorsFor(jail))
+                        .put("sezioni", sectionsDefining(jail))
+                        .put("dump", readConfiguration(jail)));
                     continue;
                 }
-                if (!ok) tutteOk = false;
-                verifica.put(new JSONObject().put("jail", jail).put("ok", ok)
+                if (!ok) allOk = false;
+                verification.put(new JSONObject().put("jail", jail).put("ok", ok)
                     .put("comando", cmd));
             }
-            passi.put(passo("verifica", tutteOk,
-                tutteOk ? I18n.tr("server.banfix.allBan")
+            steps.put(step("verifica", allOk,
+                allOk ? I18n.tr("server.banfix.allBan")
                         : I18n.tr("server.banfix.stillNotBan")));
 
-            return r.put("success", tutteOk).put("passi", passi).put("verifica", verifica)
-                    .put("message", tutteOk
+            return r.put("success", allOk).put("passi", steps).put("verifica", verification)
+                    .put("message", allOk
                         ? I18n.tr("server.banfix.verified")
                         : I18n.tr("server.banfix.notConfirmed"));
         } catch (Exception e) {
-            try { ripristina(copie); Shell.run(Duration.ofSeconds(30), CLIENT, "reload"); } catch (Exception ignora) { }
-            return r.put("success", false).put("passi", passi)
+            try { restore(copies); Shell.run(Duration.ofSeconds(30), CLIENT, "reload"); } catch (Exception ignore) { }
+            return r.put("success", false).put("passi", steps)
                     .put("message", I18n.tr("server.banfix.errorRestored", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
@@ -255,32 +255,32 @@ public final class BanActionRepair {
      * ricomporla: si dichiara che va guardata a mano, e non si tocca niente. Meglio non riparare
      * che riparare a meta' un file che decide chi entra.
      */
-    static Esito conAzionePf(String contenuto, String jail) {
-        String[] righe = contenuto.split("\n", -1);
-        int inizio = -1;
-        for (int i = 0; i < righe.length; i++)
-            if (righe[i].trim().equals("[" + jail + "]")) { inizio = i; break; }
-        if (inizio < 0) return Esito.assente();
+    static Outcome withPfAction(String content, String jail) {
+        String[] lines = content.split("\n", -1);
+        int start = -1;
+        for (int i = 0; i < lines.length; i++)
+            if (lines[i].trim().equals("[" + jail + "]")) { start = i; break; }
+        if (start < 0) return Outcome.absent();
 
-        int fine = righe.length;
-        for (int i = inizio + 1; i < righe.length; i++) {
-            String t = righe[i].trim();
-            if (t.startsWith("[") && t.endsWith("]")) { fine = i; break; }
+        int end = lines.length;
+        for (int i = start + 1; i < lines.length; i++) {
+            String t = lines[i].trim();
+            if (t.startsWith("[") && t.endsWith("]")) { end = i; break; }
         }
 
         // Prima si guarda, poi si scrive: si cerca la riga dell'azione e si giudica se sia
         // toccabile, senza aver ancora modificato niente.
-        int rigaAzione = -1;
-        for (int i = inizio + 1; i < fine; i++) {
-            String t = righe[i].trim();
+        int actionLine = -1;
+        for (int i = start + 1; i < end; i++) {
+            String t = lines[i].trim();
             if (t.isEmpty() || t.startsWith("#") || !t.contains("=")) continue;
-            String chiave = t.substring(0, t.indexOf('=')).trim().toLowerCase();
-            if (chiave.equals("action") || chiave.equals("banaction")) { rigaAzione = i; break; }
+            String key = t.substring(0, t.indexOf('=')).trim().toLowerCase();
+            if (key.equals("action") || key.equals("banaction")) { actionLine = i; break; }
         }
 
-        if (rigaAzione >= 0) {
-            String t = righe[rigaAzione].trim();
-            String valore = t.substring(t.indexOf('=') + 1).trim();
+        if (actionLine >= 0) {
+            String t = lines[actionLine].trim();
+            String value = t.substring(t.indexOf('=') + 1).trim();
             // "Comincia con pf" non basta per dire che va bene, e nemmeno "non contiene
             // segnaposto". Va riconosciuta la forma INTERA che si sa funzionare qui:
             // pf[name=..., port="..."]. Lo dico dopo averlo sbagliato due volte con lo stesso
@@ -289,46 +289,46 @@ public final class BanActionRepair {
             // sempre, mentre fail2ban rispondeva "No actions for jail ...", cioe' quella jail
             // non bannava niente. Una porta dichiarata e' la condizione che distingue le
             // quattro jail con tabella E regola da quelle senza.
-            boolean pf = valore.equals("pf") || valore.startsWith("pf[") || valore.startsWith("pf ");
-            boolean formaBuona = pf && !valore.contains("<")
-                              && valore.contains("port=") && valore.contains("name=");
-            if (formaBuona) return Esito.giaAPosto();
-            int seg = rigaAzione + 1;
-            if (seg < fine && !righe[seg].trim().isEmpty()
-                && (righe[seg].startsWith(" ") || righe[seg].startsWith("\t")))
-                return Esito.daGuardare(I18n.tr("server.banfix.multiline", java.util.Map.of("jail", String.valueOf(jail), "file", String.valueOf(JAIL_LOCAL), "line", String.valueOf(rigaAzione + 1))));
+            boolean pf = value.equals("pf") || value.startsWith("pf[") || value.startsWith("pf ");
+            boolean goodForm = pf && !value.contains("<")
+                              && value.contains("port=") && value.contains("name=");
+            if (goodForm) return Outcome.alreadyInPlace();
+            int seg = actionLine + 1;
+            if (seg < end && !lines[seg].trim().isEmpty()
+                && (lines[seg].startsWith(" ") || lines[seg].startsWith("\t")))
+                return Outcome.toReview(I18n.tr("server.banfix.multiline", java.util.Map.of("jail", String.valueOf(jail), "file", String.valueOf(JAIL_LOCAL), "line", String.valueOf(actionLine + 1))));
         }
 
         // allports, non la porta: l'azione pf costruisce "... to any port $port" e senza porta
         // pf rifiuta la regola, lasciando la tabella senza nessuno che la legga.
-        String azione = "action   = pf[name=" + jail + ", port=\"0:65535\"]";
-        java.util.List<String> out = new ArrayList<>(java.util.Arrays.asList(righe));
-        if (rigaAzione >= 0) {
-            out.set(rigaAzione, azione);
+        String action = "action   = pf[name=" + jail + ", port=\"0:65535\"]";
+        java.util.List<String> out = new ArrayList<>(java.util.Arrays.asList(lines));
+        if (actionLine >= 0) {
+            out.set(actionLine, action);
         } else {
             // Dopo l'ultima riga di configurazione della sezione, cosi' la si legge dove
             // ci si aspetta di trovarla e non in fondo a righe vuote.
-            int dopo = inizio;
-            for (int i = inizio + 1; i < fine; i++) {
-                String t = righe[i].trim();
-                if (!t.isEmpty() && !t.startsWith("#")) dopo = i;
+            int after = start;
+            for (int i = start + 1; i < end; i++) {
+                String t = lines[i].trim();
+                if (!t.isEmpty() && !t.startsWith("#")) after = i;
             }
-            out.add(dopo + 1, azione);
+            out.add(after + 1, action);
         }
-        return Esito.modificato(String.join("\n", out));
+        return Outcome.modified(String.join("\n", out));
     }
 
     /** Cosa e' successo alla sezione, senza doverne rileggere il testo per capirlo. */
-    static final class Esito {
-        enum Tipo { ASSENTE, GIA_A_POSTO, MODIFICATO, DA_GUARDARE }
-        final Tipo tipo;
-        final String contenuto;
+    static final class Outcome {
+        enum Kind { ASSENTE, GIA_A_POSTO, MODIFICATO, DA_GUARDARE }
+        final Kind type;
+        final String content;
         final String reason;
-        private Esito(Tipo t, String c, String m) { tipo = t; contenuto = c; reason = m; }
-        static Esito assente()            { return new Esito(Tipo.ASSENTE, null, null); }
-        static Esito giaAPosto()          { return new Esito(Tipo.GIA_A_POSTO, null, null); }
-        static Esito modificato(String c) { return new Esito(Tipo.MODIFICATO, c, null); }
-        static Esito daGuardare(String m) { return new Esito(Tipo.DA_GUARDARE, null, m); }
+        private Outcome(Kind t, String c, String m) { type = t; content = c; reason = m; }
+        static Outcome absent()            { return new Outcome(Kind.ASSENTE, null, null); }
+        static Outcome alreadyInPlace()          { return new Outcome(Kind.GIA_A_POSTO, null, null); }
+        static Outcome modified(String c) { return new Outcome(Kind.MODIFICATO, c, null); }
+        static Outcome toReview(String m) { return new Outcome(Kind.DA_GUARDARE, null, m); }
     }
 
     /**
@@ -340,30 +340,30 @@ public final class BanActionRepair {
      * nome di un programma: se la riga comincia con un costrutto di shell, una variabile o una
      * parola con metacaratteri, non si conclude niente.
      */
-    static String primoEseguibile(String comando) {
-        if (comando == null) return null;
-        for (String riga : comando.split("\n")) {
-            String t = riga.trim();
+    static String firstRunnable(String command) {
+        if (command == null) return null;
+        for (String line : command.split("\n")) {
+            String t = line.trim();
             if (t.isEmpty() || t.startsWith("#")) continue;
-            String primo = t.split("\\s+")[0];
+            String first = t.split("\\s+")[0];
             // fail2ban lascia i segnaposto fra parentesi angolari: <iptables> nomina comunque
             // il comando, e va giudicato per quello che nomina.
-            primo = primo.replace("<", "").replace(">", "");
-            if (primo.isEmpty()) continue;
-            if (COSTRUTTI_SHELL.contains(primo)) return null;
-            if (!primo.matches("[A-Za-z0-9._/+-]+")) return null;
-            return primo;
+            first = first.replace("<", "").replace(">", "");
+            if (first.isEmpty()) continue;
+            if (SHELL_CONSTRUCTS.contains(first)) return null;
+            if (!first.matches("[A-Za-z0-9._/+-]+")) return null;
+            return first;
         }
         return null;
     }
 
     /** Parole che aprono un costrutto di shell: non sono programmi da cercare su disco. */
-    private static final java.util.Set<String> COSTRUTTI_SHELL = java.util.Set.of(
+    private static final java.util.Set<String> SHELL_CONSTRUCTS = java.util.Set.of(
         "if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done",
         "case", "esac", "test", "[", "[[", "echo", "true", "false", ":", "exec",
         "eval", "export", "set", "unset", "local", "return", "exit", "printf", "cd");
 
-    private static boolean esiste(String runnable) {
+    private static boolean exists(String runnable) {
         if (runnable.startsWith("/")) return Files.isExecutable(Paths.get(runnable));
         for (String dir : new String[] { "/sbin", "/bin", "/usr/sbin", "/usr/bin",
                                          "/usr/local/sbin", "/usr/local/bin" })
@@ -371,7 +371,7 @@ public final class BanActionRepair {
         return false;
     }
 
-    private static List<String> jailAttive() {
+    private static List<String> activeJails() {
         List<String> out = new ArrayList<>();
         Shell.Result r = Shell.run(Duration.ofSeconds(10), CLIENT, "status");
         if (!r.success()) return out;
@@ -384,8 +384,8 @@ public final class BanActionRepair {
     }
 
     /** La riga dell'azione dentro un testo di configurazione: si mostra cio' che si e' scritto. */
-    private static String rigaAzioneDi(String contenuto) {
-        for (String r : contenuto.split("\n")) {
+    private static String actionLineOf(String content) {
+        for (String r : content.split("\n")) {
             String t = r.trim();
             if (t.startsWith("action") && t.contains("=")) return t;
         }
@@ -399,11 +399,11 @@ public final class BanActionRepair {
      * nel proprio log al momento del caricamento. Mostrarlo e' l'unico modo perche' chi guarda
      * la pagina — e chi legge il suo racconto — possa sapere la causa invece di ipotizzarla.
      */
-    static String erroriLogPer(String jail) {
+    static String logErrorsFor(String jail) {
         try {
             Path log = Paths.get("/var/log/fail2ban.log");
             if (!Files.exists(log)) return I18n.tr("server.banfix.noLog");
-            java.util.List<String> tutte = Files.readAllLines(log, StandardCharsets.UTF_8);
+            java.util.List<String> all = Files.readAllLines(log, StandardCharsets.UTF_8);
             StringBuilder out = new StringBuilder();
 
             // 1. Le ultime righe che nominano questa jail, di qualunque livello. Il livello non
@@ -411,8 +411,8 @@ public final class BanActionRepair {
             //    ("already banned") che, venendo dal modulo delle azioni, ha dimostrato che la
             //    jail le azioni ce le ha — l'opposto di quello che sospettavo.
             java.util.List<String> sue = new ArrayList<>();
-            for (int i = tutte.size() - 1; i >= 0 && sue.size() < 8; i--)
-                if (tutte.get(i).contains(jail)) sue.add(0, tutte.get(i));
+            for (int i = all.size() - 1; i >= 0 && sue.size() < 8; i--)
+                if (all.get(i).contains(jail)) sue.add(0, all.get(i));
             out.append("— ").append(I18n.tr("server.banfix.lastLines", java.util.Map.of("jail", String.valueOf(jail)))).append(":\n")
                .append(sue.isEmpty() ? I18n.tr("server.banfix.none") : String.join("\n", sue));
 
@@ -426,25 +426,25 @@ public final class BanActionRepair {
             //
             // Quindi qui non si filtra: si prende la finestra e la si mostra intera. Un riquadro
             // che mostra troppo si legge; uno che mostra la cosa sbagliata fa perdere giornate.
-            int fine = -1;
-            for (int i = tutte.size() - 1; i >= 0; i--)
-                if (tutte.get(i).contains("Reload finished")) { fine = i; break; }
-            if (fine < 0)
-                for (int i = tutte.size() - 1; i >= 0; i--)
-                    if (tutte.get(i).contains("Reload jail")) { fine = i; break; }
+            int end = -1;
+            for (int i = all.size() - 1; i >= 0; i--)
+                if (all.get(i).contains("Reload finished")) { end = i; break; }
+            if (end < 0)
+                for (int i = all.size() - 1; i >= 0; i--)
+                    if (all.get(i).contains("Reload jail")) { end = i; break; }
 
             out.append("\n\n— ").append(I18n.tr("server.banfix.lastReload"));
-            if (fine < 0) {
+            if (end < 0) {
                 out.append(": ").append(I18n.tr("server.banfix.noReload"));
             } else {
-                int inizio = Math.max(0, fine - 80);
+                int start = Math.max(0, end - 80);
                 // Si risale fino all'inizio vero del reload, se lo si trova nella finestra.
-                for (int i = fine; i >= inizio; i--)
-                    if (tutte.get(i).contains("Reload jail") || tutte.get(i).contains("Stopping all jails")
-                        || tutte.get(i).contains("Reloading")) { inizio = i; break; }
-                int ultimo = Math.min(tutte.size() - 1, fine + 20);
-                out.append(" (").append(I18n.tr("server.banfix.linesRange", java.util.Map.of("a", String.valueOf(inizio + 1), "b", String.valueOf(ultimo + 1)))).append("):\n");
-                for (int i = inizio; i <= ultimo; i++) out.append(tutte.get(i)).append("\n");
+                for (int i = end; i >= start; i--)
+                    if (all.get(i).contains("Reload jail") || all.get(i).contains("Stopping all jails")
+                        || all.get(i).contains("Reloading")) { start = i; break; }
+                int last = Math.min(all.size() - 1, end + 20);
+                out.append(" (").append(I18n.tr("server.banfix.linesRange", java.util.Map.of("a", String.valueOf(start + 1), "b", String.valueOf(last + 1)))).append("):\n");
+                for (int i = start; i <= last; i++) out.append(all.get(i)).append("\n");
             }
             return out.toString();
         } catch (Exception e) {
@@ -461,7 +461,7 @@ public final class BanActionRepair {
      * spiegherebbe da sola perche' l'azione appena scritta non ha nessun effetto. Finche' non si
      * guarda, resta un'ipotesi fra le tante.
      */
-    static String sezioniCheDefiniscono(String jail) {
+    static String sectionsDefining(String jail) {
         StringBuilder out = new StringBuilder();
         try {
             java.util.List<Path> file = new ArrayList<>();
@@ -473,15 +473,15 @@ public final class BanActionRepair {
 
             for (Path f : file) {
                 if (!Files.isRegularFile(f)) continue;
-                java.util.List<String> righe = Files.readAllLines(f, StandardCharsets.UTF_8);
-                for (int i = 0; i < righe.size(); i++) {
-                    if (!righe.get(i).trim().equals("[" + jail + "]")) continue;
+                java.util.List<String> lines = Files.readAllLines(f, StandardCharsets.UTF_8);
+                for (int i = 0; i < lines.size(); i++) {
+                    if (!lines.get(i).trim().equals("[" + jail + "]")) continue;
                     out.append(out.length() > 0 ? "\n\n" : "")
                        .append(f).append(" (").append(I18n.tr("server.banfix.lineN", java.util.Map.of("n", String.valueOf(i + 1)))).append("):\n");
-                    for (int j = i; j < righe.size(); j++) {
-                        String t = righe.get(j).trim();
+                    for (int j = i; j < lines.size(); j++) {
+                        String t = lines.get(j).trim();
                         if (j > i && t.startsWith("[") && t.endsWith("]")) break;
-                        out.append("  ").append(righe.get(j)).append("\n");
+                        out.append("  ").append(lines.get(j)).append("\n");
                     }
                 }
             }
@@ -504,36 +504,36 @@ public final class BanActionRepair {
      *
      * Legge e basta.
      */
-    static String configurazioneLetta(String jail) {
+    static String readConfiguration(String jail) {
         Shell.Result r = Shell.run(Duration.ofSeconds(20), CLIENT, "--dp");
         if (!r.success() || r.output() == null || r.output().isBlank())
             r = Shell.run(Duration.ofSeconds(20), CLIENT, "-d");
         if (!r.success() || r.output() == null || r.output().isBlank())
             return I18n.tr("server.banfix.noDump");
         java.util.List<String> sue = new ArrayList<>();
-        for (String riga : r.output().split("\n"))
-            if (riga.contains("'" + jail + "'") || riga.contains("\"" + jail + "\"")) sue.add(riga);
+        for (String line : r.output().split("\n"))
+            if (line.contains("'" + jail + "'") || line.contains("\"" + jail + "\"")) sue.add(line);
         return sue.isEmpty()
             ? "(" + I18n.tr("server.banfix.dumpNoLine", java.util.Map.of("jail", String.valueOf(jail))) + ")"
             : String.join("\n", sue);
     }
 
     /** Cosa risponde fail2ban quando gli si chiedono le azioni di una jail, testuale. */
-    private static String uscitaAzioni(String jail) {
+    private static String actionsOutput(String jail) {
         Shell.Result a = Shell.run(Duration.ofSeconds(10), CLIENT, "get", jail, "actions");
         String u = a.output() == null ? "" : a.output().trim();
         return u.isEmpty() ? I18n.tr("server.banfix.noAnswer") : u;
     }
 
-    private static String comandoBan(String jail) {
+    private static String banCommand(String jail) {
         Shell.Result a = Shell.run(Duration.ofSeconds(10), CLIENT, "get", jail, "actions");
         if (!a.success()) return null;
-        String coda = a.output().contains(":")
+        String queue = a.output().contains(":")
             ? a.output().substring(a.output().lastIndexOf(':') + 1) : a.output();
-        for (String az : coda.split(",")) {
-            String nome = az.trim();
-            if (nome.isEmpty() || !nome.matches("[A-Za-z0-9._-]+")) continue;
-            Shell.Result c = Shell.run(Duration.ofSeconds(10), CLIENT, "get", jail, "action", nome, "actionban");
+        for (String az : queue.split(",")) {
+            String name = az.trim();
+            if (name.isEmpty() || !name.matches("[A-Za-z0-9._-]+")) continue;
+            Shell.Result c = Shell.run(Duration.ofSeconds(10), CLIENT, "get", jail, "action", name, "actionban");
             if (c.success() && !c.output().trim().isEmpty()) return c.output().trim();
         }
         return null;
@@ -550,29 +550,29 @@ public final class BanActionRepair {
      * accanto al file vero come se fossero configurazioni attive — ambiguita' che in un file che
      * decide chi entra non ci deve essere.
      */
-    private static Path copia(Path f) throws Exception {
+    private static Path copy(Path f) throws Exception {
         Path dir = Paths.get(BACKUP_FOLDER);
         Files.createDirectories(dir);
         Path c = dir.resolve(f.getFileName().toString() + ".prima-di-pf-"
             + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")));
         Files.copy(f, c);
-        copie.put(c, f);
+        copies.put(c, f);
         return c;
     }
 
     /** Dove ripristinare ciascuna copia: il nome del file non basta piu' a dirlo. */
-    private static final java.util.Map<Path, Path> copie = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<Path, Path> copies = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private static void ripristina(List<Path> fatte) {
-        for (Path c : fatte) {
+    private static void restore(List<Path> done) {
+        for (Path c : done) {
             try {
-                Path orig = BanActionRepair.copie.get(c);
+                Path orig = BanActionRepair.copies.get(c);
                 if (orig != null) Files.copy(c, orig, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            } catch (Exception ignora) { }
+            } catch (Exception ignore) { }
         }
     }
 
-    private static JSONObject passo(String nome, boolean ok, String testo) {
-        return new JSONObject().put("passo", nome).put("ok", ok).put("testo", testo);
+    private static JSONObject step(String name, boolean ok, String text) {
+        return new JSONObject().put("passo", name).put("ok", ok).put("testo", text);
     }
 }

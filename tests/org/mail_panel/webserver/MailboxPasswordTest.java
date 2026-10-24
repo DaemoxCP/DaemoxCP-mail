@@ -47,7 +47,7 @@ import java.util.concurrent.Executors;
  *    go away, the panel block is written once, and the file is not readable by other users.
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.MailboxPasswordTest
  */
 public class MailboxPasswordTest {

@@ -213,12 +213,12 @@ public class DkimManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("chown", "rspamd:rspamd", keyFile.toString());
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.start().waitFor();
 
             // TODO: migrate to Shell.run when touched
             pb = new ProcessBuilder("chmod", "600", keyFile.toString());
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.start().waitFor();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -263,7 +263,7 @@ public class DkimManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", "rspamd", "reload");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.start().waitFor();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -305,7 +305,7 @@ public class DkimManager {
             for (String resolver : resolvers) {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", r.dnsRecordName);
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 Process proc = pb.start();
                 StringBuilder out = new StringBuilder();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
@@ -371,25 +371,25 @@ public class DkimManager {
      * la scheda di un dominio solo. Una seconda implementazione della stessa verifica
      * divergerebbe, e le due risposte finirebbero per contraddirsi.
      */
-    public org.json.JSONObject riepilogoTuttiIDomini() {
+    public org.json.JSONObject allDomainsSummary() {
         org.json.JSONObject r = new org.json.JSONObject().put("success", true);
-        org.json.JSONArray righe = new org.json.JSONArray();
-        int senzaChiave = 0, nonVerificabili = 0, senzaRotazione = 0;
+        org.json.JSONArray lines = new org.json.JSONArray();
+        int withoutKey = 0, unverifiable = 0, withoutRotation = 0;
         try {
             for (MailDatabase.Domain d : database.getDomains()) {
                 org.json.JSONObject j = new org.json.JSONObject().put("dominio", d.domain);
                 try {
                     DkimInfo info = getDkimInfo(d.id);
-                    boolean haChiave = info != null && info.configured;
-                    j.put("haChiave", haChiave);
+                    boolean hasKey = info != null && info.configured;
+                    j.put("haChiave", hasKey);
                     j.put("selettore", info == null || info.selector == null ? "" : info.selector);
-                    if (!haChiave) {
-                        senzaChiave++;
+                    if (!hasKey) {
+                        withoutKey++;
                         // Niente chiave vuol dire niente signature: e' il caso piu' grave e non
                         // deve nascondersi in mezzo a righe che parlano di rotazioni.
                         j.put("stato", "assente");
                         j.put("nota", I18n.tr("server.dkimm.noPanelKey"));
-                        righe.put(j);
+                        lines.put(j);
                         continue;
                     }
 
@@ -399,7 +399,7 @@ public class DkimManager {
                     j.put("corrisponde", v != null && v.match);
                     j.put("messaggio", v == null ? "" : (v.message == null ? "" : v.message));
                     if (v == null || !v.success) {
-                        nonVerificabili++;
+                        unverifiable++;
                         j.put("stato", "incerto");
                     } else if (!v.match) {
                         j.put("stato", "non_corrisponde");
@@ -413,13 +413,13 @@ public class DkimManager {
                         j.put("intervalloGiorni", sc.intervalDays);
                         if (sc.lastRotationAt != null) {
                             j.put("ultimaRotazione", sc.lastRotationAt.toString());
-                            long giorni = (System.currentTimeMillis() - sc.lastRotationAt.getTime())
+                            long days = (System.currentTimeMillis() - sc.lastRotationAt.getTime())
                                         / 86400000L;
-                            j.put("giorniDallUltima", giorni);
+                            j.put("giorniDallUltima", days);
                         }
                         if (sc.nextRotationAt != null)
                             j.put("prossimaRotazione", sc.nextRotationAt.toString());
-                        if (sc.intervalDays <= 0) senzaRotazione++;
+                        if (sc.intervalDays <= 0) withoutRotation++;
                     }
 
                     RotationInfo ri = getRotationInfo(d.id);
@@ -429,18 +429,18 @@ public class DkimManager {
                                 ri.previousSelector == null ? "" : ri.previousSelector);
                     }
                 } catch (Exception e) {
-                    nonVerificabili++;
+                    unverifiable++;
                     j.put("stato", "incerto").put("messaggio", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
                 }
-                righe.put(j);
+                lines.put(j);
             }
         } catch (Exception e) {
             return new org.json.JSONObject().put("success", false)
                     .put("error", I18n.tr("server.dkimm.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
-        r.put("domini", righe);
-        r.put("senzaChiave", senzaChiave).put("nonVerificabili", nonVerificabili)
-         .put("senzaRotazione", senzaRotazione);
+        r.put("domini", lines);
+        r.put("senzaChiave", withoutKey).put("nonVerificabili", unverifiable)
+         .put("senzaRotazione", withoutRotation);
         return r;
     }
 
@@ -820,7 +820,7 @@ public class DkimManager {
             for (String resolver : resolvers) {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", recordName);
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 pb.redirectErrorStream(false);
                 Process proc = pb.start();
                 StringBuilder out = new StringBuilder();
@@ -1164,7 +1164,7 @@ public class DkimManager {
 
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "TXT", recordName);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process process = pb.start();
 

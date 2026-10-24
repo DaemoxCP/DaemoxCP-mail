@@ -41,13 +41,13 @@ final class TestSessions {
      * <p>Quindi qui lo schema c'e' per forza, e se la voce non si rilegge si grida subito
      * invece di misurare un'altra cosa.
      */
-    static void auditLogTo(MailDatabase db, java.nio.file.Path registro) throws Exception {
+    static void auditLogTo(MailDatabase db, java.nio.file.Path log) throws Exception {
         prepare(db);
-        db.setSetting("audit_log_file_path", registro.toString());
-        String letto = db.getSetting("audit_log_file_path", null);
-        if (!registro.toString().equals(letto))
+        db.setSetting("audit_log_file_path", log.toString());
+        String read = db.getSetting("audit_log_file_path", null);
+        if (!log.toString().equals(read))
             throw new IllegalStateException("il pannello non scriverebbe il registro in "
-                    + registro + " ma in " + letto + ": la voce audit_log_file_path non si e'"
+                    + log + " ma in " + read + ": la voce audit_log_file_path non si e'"
                     + " salvata (schema non ancora creato?), e la prova misurerebbe il file"
                     + " sbagliato");
     }

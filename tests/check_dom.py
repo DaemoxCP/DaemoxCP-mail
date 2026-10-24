@@ -11,7 +11,7 @@ Verifica sull'unione:
   - ogni id/selettore cercato dalle PROVE e' creato dall'applicazione
 
 Tre cose che vanno sapute, o la rete urla a vuoto:
-  - campoPassword("X") genera id X, XErr, XMostra, XCopia via %1$s
+  - passwordField("X") genera id X, XErr, XMostra, XCopia via %1$s
   - gli id costruiti ('ver-' + k) danno un PREFISSO, non un id
   - nelle prove, un selettore con .count() === 0 asserisce che NON c'e'
 """
@@ -66,8 +66,8 @@ orfane = [c for c in chiamate if not dichiarata(c)]
 # ---- id creati dall'applicazione ----
 creati  = set(re.findall(r'id\s*=\s*\\{0,2}["\']([A-Za-z0-9_$-]+)', A))
 creati |= set(re.findall(r"\.id\s*=\s*\\{0,2}['\"]([A-Za-z0-9_$-]+)", A))
-# campoPassword("X") -> X, XErr, XMostra, XCopia
-for m in re.finditer(r'campoPassword\(\s*"([A-Za-z0-9_-]+)"', A):
+# passwordField("X") -> X, XErr, XMostra, XCopia
+for m in re.finditer(r'passwordField\(\s*"([A-Za-z0-9_-]+)"', A):
     b = m.group(1); creati |= {b, b+"Err", b+"Mostra", b+"Copia"}
 # prefissi costruiti: 'ver-' + k, 'pk-det-' + i
 prefissi = set(re.findall(r"""['"]([A-Za-z0-9_-]*-)['"]\s*\+""", A))

@@ -143,7 +143,7 @@ public class InstallScriptDriftTest {
 
     private static void messages() {
         System.out.println("A. Il filtro dei messaggi sull'uscita vera dell'aggiornamento di postfix-mysql");
-        List<String> m = UpdateManager.messaggiCheChiedonoAzione(POSTFIX_UPGRADE_OUTPUT);
+        List<String> m = UpdateManager.messagesAskingForAction(POSTFIX_UPGRADE_OUTPUT);
         System.out.println("     messaggi trovati: " + m.size());
         check("l'avviso COMPATIBILITY, fuori da ogni blocco «Message from», viene ripescato",
                 any(m, "COMPATIBILITY: editing /usr/local/etc/postfix/main.cf") && any(m, "inet_protocols=ipv4"));
@@ -162,11 +162,11 @@ public class InstallScriptDriftTest {
         // Quello che il filtro sapeva gia' fare non si deve perdere.
         String rspamd = "[1/1] Upgrading rspamd from 3.12 to 4.1...\n[1/1] Extracting rspamd-4.1: .... done\n"
                 + "=====\nMessage from rspamd-4.1:\n\n--\nThe statistics format changed.\nIt is recommended to remove\nthe old cache files:\n  rm /var/db/rspamd/*.hs*\n";
-        List<String> r = UpdateManager.messaggiCheChiedonoAzione(rspamd);
+        List<String> r = UpdateManager.messagesAskingForAction(rspamd);
         check("un blocco «Message from» che chiede un'azione resta ripescato, intero",
                 r.size() == 1 && r.get(0).contains("It is recommended") && r.get(0).contains("rm /var/db/rspamd"));
         check("un'uscita senza niente da fare non da' messaggi",
-                UpdateManager.messaggiCheChiedonoAzione("[1/1] Upgrading nginx from 1.30.5_2,3 to 1.30.6,3...\n"
+                UpdateManager.messagesAskingForAction("[1/1] Upgrading nginx from 1.30.5_2,3 to 1.30.6,3...\n"
                         + "[1/1] Extracting nginx-1.30.6,3: .......... done\n"
                         + "You may need to manually remove /usr/local/etc/nginx/nginx.conf if it is no longer needed.\n").isEmpty());
     }

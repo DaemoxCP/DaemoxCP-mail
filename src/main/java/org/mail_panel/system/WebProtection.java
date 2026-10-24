@@ -49,12 +49,12 @@ import java.nio.file.Path;
  */
 public class WebProtection {
 
-    private static final String PREFISSO_NGINX = "/usr/local/etc/nginx";
+    private static final String NGINX_PREFIX = "/usr/local/etc/nginx";
     private static final String FILE_NAME = "mailpanel-pubblico.conf";
-    private static final String COPIA = "/var/db/mailpanel/mailpanel-public.conf-previous";
-    public static final String DIR_PUBBLICA = "/var/db/mailpanel/public";
-    public static final String FILE_POLITICA = DIR_PUBBLICA + "/mta-sts.txt";
-    public static final String LOG_ACCESSI = "/var/log/nginx/mailpanel-pubblico-access.log";
+    private static final String COPY = "/var/db/mailpanel/mailpanel-public.conf-previous";
+    public static final String PUBLIC_DIR = "/var/db/mailpanel/public";
+    public static final String POLICY_FILE = PUBLIC_DIR + "/mta-sts.txt";
+    public static final String ACCESS_LOG = "/var/log/nginx/mailpanel-pubblico-access.log";
 
     private WebProtection() {}
 
@@ -72,9 +72,9 @@ public class WebProtection {
      *
      * I percorsi relativi si risolvono rispetto al prefisso di nginx, come fa nginx stesso.
      */
-    public static java.util.List<String> cartelleIncluse(String dump) {
-        java.util.LinkedHashSet<String> fuori = new java.util.LinkedHashSet<>();
-        if (dump == null) return new java.util.ArrayList<>(fuori);
+    public static java.util.List<String> includedFolders(String dump) {
+        java.util.LinkedHashSet<String> outside = new java.util.LinkedHashSet<>();
+        if (dump == null) return new java.util.ArrayList<>(outside);
         for (String r : dump.split("\n")) {
             String t = r.trim();
             if (t.startsWith("#") || !t.startsWith("include ")) continue;
@@ -84,15 +84,15 @@ public class WebProtection {
             if (stella < 0) continue;
             int barra = v.lastIndexOf('/', stella);
             if (barra <= 0) continue;
-            String cartella = v.substring(0, barra);
-            if (!cartella.startsWith("/")) cartella = PREFISSO_NGINX + "/" + cartella;
-            fuori.add(cartella);
+            String folder = v.substring(0, barra);
+            if (!folder.startsWith("/")) folder = NGINX_PREFIX + "/" + folder;
+            outside.add(folder);
         }
-        return new java.util.ArrayList<>(fuori);
+        return new java.util.ArrayList<>(outside);
     }
 
     /** La cartella in cui scrivere: la prima inclusa che esiste ed e' scrivibile. */
-    public static String cartellaScelta(java.util.List<String> incluse) {
+    public static String chosenFolder(java.util.List<String> incluse) {
         for (String c : incluse) {
             try {
                 Path p = Path.of(c);
@@ -103,7 +103,7 @@ public class WebProtection {
         return incluse.isEmpty() ? null : incluse.get(0);
     }
 
-    public static String configurazione(String cert, String chiave) {
+    public static String configuration(String cert, String key) {
         return """
             # Superficie pubblica del pannello di posta sulla porta 443.
             # Scritto dal pannello: non modificare a mano, verrebbe sovrascritto.
@@ -162,29 +162,29 @@ public class WebProtection {
                 # Tutto il resto non esiste.
                 location / { return 404; }
             }
-            """.formatted(cert, chiave, LOG_ACCESSI, FILE_POLITICA);
+            """.formatted(cert, key, ACCESS_LOG, POLICY_FILE);
     }
 
     /* ===================================================================
      * Lo stato reale
      * =================================================================== */
 
-    public static JSONObject stato() {
+    public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
-        JSONObject incPrima = includeAttivo();
-        String cartella = incPrima.optString("cartella", "");
-        String file = cartella.isEmpty() ? "" : cartella + "/" + FILE_NAME;
-        r.put("file", file).put("filePolitica", FILE_POLITICA);
+        JSONObject incBefore = activeInclude();
+        String folder = incBefore.optString("cartella", "");
+        String file = folder.isEmpty() ? "" : folder + "/" + FILE_NAME;
+        r.put("file", file).put("filePolitica", POLICY_FILE);
         try {
             r.put("installato", !file.isEmpty() && Files.exists(Path.of(file)));
-            r.put("politicaScritta", Files.exists(Path.of(FILE_POLITICA)));
-            if (Files.exists(Path.of(FILE_POLITICA)))
-                r.put("politica", Files.readString(Path.of(FILE_POLITICA)));
+            r.put("politicaScritta", Files.exists(Path.of(POLICY_FILE)));
+            if (Files.exists(Path.of(POLICY_FILE)))
+                r.put("politica", Files.readString(Path.of(POLICY_FILE)));
         } catch (Exception e) {
             r.put("installato", false);
         }
-        r.put("include", incPrima);
-        r.put("pronto", r.optBoolean("installato", false) && incPrima.optBoolean("ok", false));
+        r.put("include", incBefore);
+        r.put("pronto", r.optBoolean("installato", false) && incBefore.optBoolean("ok", false));
         return r;
     }
 
@@ -195,86 +195,86 @@ public class WebProtection {
      * pannello direbbe "installato" mentre la 443 resta chiusa. Si guarda la configurazione
      * completa, non il file principale: l'include potrebbe stare in un file incluso a sua volta.
      */
-    public static JSONObject includeAttivo() {
+    public static JSONObject activeInclude() {
         JSONObject r = new JSONObject();
-        Ris dump = esegui("nginx", "-T");
-        if (dump.codice != 0)
+        RunResult dump = run("nginx", "-T");
+        if (dump.code != 0)
             return r.put("ok", false)
                     .put("reason", I18n.tr("server.pubweb.dumpFailed", java.util.Map.of("out", String.valueOf(dump.output.trim()))));
 
-        java.util.List<String> incluse = cartelleIncluse(dump.output);
+        java.util.List<String> incluse = includedFolders(dump.output);
         r.put("cartelle", new org.json.JSONArray(incluse));
-        String scelta = cartellaScelta(incluse);
-        if (scelta == null)
+        String choice = chosenFolder(incluse);
+        if (choice == null)
             return r.put("ok", false)
                     .put("reason", I18n.tr("server.pubweb.noInclude"));
-        r.put("cartella", scelta);
+        r.put("cartella", choice);
         return r.put("ok", true)
-                .put("reason", I18n.tr("server.pubweb.includes", java.util.Map.of("dir", String.valueOf(scelta))));
+                .put("reason", I18n.tr("server.pubweb.includes", java.util.Map.of("dir", String.valueOf(choice))));
     }
 
     /* ===================================================================
      * L'installazione
      * =================================================================== */
 
-    public static JSONObject installa(String cert, String chiave) {
+    public static JSONObject install(String cert, String key) {
         JSONObject r = new JSONObject();
         try {
-            JSONObject inc = includeAttivo();
-            if (!inc.optBoolean("ok", false))
-                return r.put("success", false).put("error", inc.optString("reason"));
-            String cartella = inc.getString("cartella");
-            final String FILE = cartella + "/" + FILE_NAME;
-            r.put("file", FILE).put("cartella", cartella);
+            JSONObject inclusion = activeInclude();
+            if (!inclusion.optBoolean("ok", false))
+                return r.put("success", false).put("error", inclusion.optString("reason"));
+            String folder = inclusion.getString("cartella");
+            final String FILE = folder + "/" + FILE_NAME;
+            r.put("file", FILE).put("cartella", folder);
 
             if (cert == null || cert.isBlank()) cert = "/usr/local/etc/ssl/mail/fullchain.pem";
-            if (chiave == null || chiave.isBlank()) chiave = "/usr/local/etc/ssl/mail/privkey.pem";
-            if (!Files.isReadable(Path.of(cert)) || !Files.isReadable(Path.of(chiave)))
+            if (key == null || key.isBlank()) key = "/usr/local/etc/ssl/mail/privkey.pem";
+            if (!Files.isReadable(Path.of(cert)) || !Files.isReadable(Path.of(key)))
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.pubweb.noCert", java.util.Map.of("cert", String.valueOf(cert), "key", String.valueOf(chiave))));
+                        .put("error", I18n.tr("server.pubweb.noCert", java.util.Map.of("cert", String.valueOf(cert), "key", String.valueOf(key))));
             r.put("certificato", cert);
 
             // 1. La politica, prima della configurazione: se nginx partisse puntando a un file
             //    che non c'e', servirebbe un 404 sul percorso che deve funzionare.
-            JSONObject pol = scriviPolitica();
+            JSONObject pol = writePolicy();
             r.put("politica", pol);
             if (!pol.optBoolean("success", false))
                 return r.put("success", false).put("error", pol.optString("error"));
 
             // 2. Copia di sicurezza di un'eventuale versione precedente.
             Path f = Path.of(FILE);
-            String prima = Files.exists(f) ? Files.readString(f) : null;
-            if (prima != null) {
-                Files.createDirectories(Path.of(COPIA).getParent());
-                Files.writeString(Path.of(COPIA), prima);
-                r.put("copia", COPIA);
+            String before = Files.exists(f) ? Files.readString(f) : null;
+            if (before != null) {
+                Files.createDirectories(Path.of(COPY).getParent());
+                Files.writeString(Path.of(COPY), before);
+                r.put("copia", COPY);
             }
 
-            Files.createDirectories(Path.of(cartella));
-            Files.writeString(f, configurazione(cert, chiave));
+            Files.createDirectories(Path.of(folder));
+            Files.writeString(f, configuration(cert, key));
 
             // 3. La validazione decide.
-            Ris prova = esegui("nginx", "-t");
-            if (prova.codice != 0) {
-                if (prima != null) Files.writeString(f, prima); else Files.deleteIfExists(f);
+            RunResult test = run("nginx", "-t");
+            if (test.code != 0) {
+                if (before != null) Files.writeString(f, before); else Files.deleteIfExists(f);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.pubweb.nginxRejectedRemoved", java.util.Map.of("out", String.valueOf(prova.output.trim()))));
+                        .put("error", I18n.tr("server.pubweb.nginxRejectedRemoved", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
-            Ris ric = esegui("service", "nginx", "reload");
-            if (ric.codice != 0) {
-                if (prima != null) Files.writeString(f, prima); else Files.deleteIfExists(f);
-                esegui("service", "nginx", "reload");
+            RunResult ric = run("service", "nginx", "reload");
+            if (ric.code != 0) {
+                if (before != null) Files.writeString(f, before); else Files.deleteIfExists(f);
+                run("service", "nginx", "reload");
                 return r.put("success", false).put("ripristinato", true)
                         .put("error", I18n.tr("server.pubweb.reloadFailedRemoved", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
             }
 
             // 4. Non basta che i comandi non abbiano protestato: si prova la porta.
-            JSONObject prova443 = provaLocale();
-            r.put("prova", prova443);
-            if (!prova443.optBoolean("ok", false))
+            JSONObject test443 = localTest();
+            r.put("prova", test443);
+            if (!test443.optBoolean("ok", false))
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.pubweb.443wrong", java.util.Map.of("err", String.valueOf(prova443.optString("errore")), "file", String.valueOf(FILE))));
+                        .put("error", I18n.tr("server.pubweb.443wrong", java.util.Map.of("err", String.valueOf(test443.optString("errore")), "file", String.valueOf(FILE))));
 
             return r.put("success", true)
                     .put("nota", I18n.tr("server.pubweb.installed"));
@@ -285,21 +285,21 @@ public class WebProtection {
     }
 
     /** Scrive la politica MTA-STS su disco. E' uguale per tutti i domini: dichiara lo stesso MX. */
-    public static JSONObject scriviPolitica() {
+    public static JSONObject writePolicy() {
         JSONObject r = new JSONObject();
-        String host = MtaSts.hostDiPosta();
+        String host = MtaSts.mailHost();
         if (host == null || host.isBlank())
             return r.put("success", false)
                     .put("error", I18n.tr("server.pubweb.noHostname"));
-        String modo = MtaSts.modoCorrente();
-        String testo = MtaSts.politica(host, modo, MtaSts.maxAgeConsigliato(modo));
+        String mode = MtaSts.currentMode();
+        String text = MtaSts.policy(host, mode, MtaSts.recommendedMaxAge(mode));
         try {
-            Files.createDirectories(Path.of(DIR_PUBBLICA));
-            Files.writeString(Path.of(FILE_POLITICA), testo);
-            return r.put("success", true).put("modo", modo).put("testo", testo)
-                    .put("id", MtaSts.id(testo));
+            Files.createDirectories(Path.of(PUBLIC_DIR));
+            Files.writeString(Path.of(POLICY_FILE), text);
+            return r.put("success", true).put("modo", mode).put("testo", text)
+                    .put("id", MtaSts.id(text));
         } catch (Exception e) {
-            return r.put("success", false).put("error", I18n.tr("server.pubweb.cannotWrite", java.util.Map.of("file", String.valueOf(FILE_POLITICA), "err", String.valueOf(e.getMessage()))));
+            return r.put("success", false).put("error", I18n.tr("server.pubweb.cannotWrite", java.util.Map.of("file", String.valueOf(POLICY_FILE), "err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -307,14 +307,14 @@ public class WebProtection {
      * Aggiungere la riga di include
      * =================================================================== */
 
-    public static final String PROPOSED_FOLDER = PREFISSO_NGINX + "/conf.d";
-    private static final String COPIA_PRINCIPALE = "/var/db/mailpanel/nginx.conf-before-include";
+    public static final String PROPOSED_FOLDER = NGINX_PREFIX + "/conf.d";
+    private static final String MAIN_COPY = "/var/db/mailpanel/nginx.conf-before-include";
 
     /**
      * Il file principale, ricavato da "nginx -T": la prima riga "# configuration file X:"
      * indica il file da cui nginx e' partito. Non si tira a indovinare il percorso.
      */
-    public static String filePrincipale(String dump) {
+    public static String mainFile(String dump) {
         if (dump == null) return null;
         for (String r : dump.split("\n")) {
             String t = r.trim();
@@ -336,25 +336,25 @@ public class WebProtection {
      * Restituisce null se il blocco http non si trova o se l'include c'e' gia': meglio non
      * fare niente che scrivere una riga in un punto a caso di una configurazione che funziona.
      */
-    public static String conInclude(String principale, String cartella) {
-        if (principale == null || cartella == null) return null;
-        if (principale.contains(cartella + "/*.conf")) return null;
+    public static String conInclude(String main, String folder) {
+        if (main == null || folder == null) return null;
+        if (main.contains(folder + "/*.conf")) return null;
 
-        String[] righe = principale.split("\n", -1);
-        for (int i = 0; i < righe.length; i++) {
-            String t = righe[i].trim();
+        String[] lines = main.split("\n", -1);
+        for (int i = 0; i < lines.length; i++) {
+            String t = lines[i].trim();
             if (t.startsWith("#")) continue;
-            boolean apreHttp = t.equals("http {") || t.equals("http{")
+            boolean opensHttp = t.equals("http {") || t.equals("http{")
                     || t.matches("^http\\s*\\{.*");
-            if (!apreHttp) continue;
+            if (!opensHttp) continue;
             StringBuilder sb = new StringBuilder();
-            for (int j = 0; j <= i; j++) sb.append(righe[j]).append("\n");
+            for (int j = 0; j <= i; j++) sb.append(lines[j]).append("\n");
             sb.append("\n    # Aggiunto dal pannello di posta: senza questa riga i file di\n");
             sb.append("    # configurazione aggiuntivi non verrebbero letti da nginx.\n");
-            sb.append("    include ").append(cartella).append("/*.conf;\n");
-            for (int j = i + 1; j < righe.length; j++) {
-                sb.append(righe[j]);
-                if (j < righe.length - 1) sb.append("\n");
+            sb.append("    include ").append(folder).append("/*.conf;\n");
+            for (int j = i + 1; j < lines.length; j++) {
+                sb.append(lines[j]);
+                if (j < lines.length - 1) sb.append("\n");
             }
             return sb.toString();
         }
@@ -362,58 +362,58 @@ public class WebProtection {
     }
 
     /** Aggiunge la riga di include al file principale, con tutte le reti di sicurezza. */
-    public static JSONObject aggiungiInclude() {
+    public static JSONObject addInclude() {
         JSONObject r = new JSONObject();
         try {
-            Ris dump = esegui("nginx", "-T");
-            if (dump.codice != 0)
+            RunResult dump = run("nginx", "-T");
+            if (dump.code != 0)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.confUnreadable", java.util.Map.of("out", String.valueOf(dump.output.trim()))));
 
-            String principale = filePrincipale(dump.output);
-            if (principale == null || !Files.isReadable(Path.of(principale)))
+            String main = mainFile(dump.output);
+            if (main == null || !Files.isReadable(Path.of(main)))
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.noMainFile"));
-            r.put("file", principale).put("cartella", PROPOSED_FOLDER);
+            r.put("file", main).put("cartella", PROPOSED_FOLDER);
 
-            String prima = Files.readString(Path.of(principale));
-            String dopo = conInclude(prima, PROPOSED_FOLDER);
-            if (dopo == null)
+            String before = Files.readString(Path.of(main));
+            String after = conInclude(before, PROPOSED_FOLDER);
+            if (after == null)
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.pubweb.noHttpBlock", java.util.Map.of("file", String.valueOf(principale))));
+                        .put("error", I18n.tr("server.pubweb.noHttpBlock", java.util.Map.of("file", String.valueOf(main))));
 
             Files.createDirectories(Path.of(PROPOSED_FOLDER));
-            Files.createDirectories(Path.of(COPIA_PRINCIPALE).getParent());
-            Files.writeString(Path.of(COPIA_PRINCIPALE), prima);
-            r.put("copia", COPIA_PRINCIPALE);
+            Files.createDirectories(Path.of(MAIN_COPY).getParent());
+            Files.writeString(Path.of(MAIN_COPY), before);
+            r.put("copia", MAIN_COPY);
 
-            Files.writeString(Path.of(principale), dopo);
+            Files.writeString(Path.of(main), after);
 
-            Ris prova = esegui("nginx", "-t");
-            if (prova.codice != 0) {
-                Files.writeString(Path.of(principale), prima);
+            RunResult test = run("nginx", "-t");
+            if (test.code != 0) {
+                Files.writeString(Path.of(main), before);
                 return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.pubweb.nginxRejectedRestored", java.util.Map.of("out", String.valueOf(prova.output.trim()))));
+                        .put("error", I18n.tr("server.pubweb.nginxRejectedRestored", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
-            Ris ric = esegui("service", "nginx", "reload");
-            if (ric.codice != 0) {
-                Files.writeString(Path.of(principale), prima);
-                esegui("service", "nginx", "reload");
+            RunResult ric = run("service", "nginx", "reload");
+            if (ric.code != 0) {
+                Files.writeString(Path.of(main), before);
+                run("service", "nginx", "reload");
                 return r.put("success", false).put("ripristinato", true)
                         .put("error", I18n.tr("server.pubweb.reloadFailedRestored", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
             }
 
             // Si rilegge da nginx, non dal file: conta cosa nginx include davvero.
-            Ris dopoDump = esegui("nginx", "-T");
-            boolean visto = dopoDump.codice == 0
-                    && cartelleIncluse(dopoDump.output).contains(PROPOSED_FOLDER);
+            RunResult afterDump = run("nginx", "-T");
+            boolean visto = afterDump.code == 0
+                    && includedFolders(afterDump.output).contains(PROPOSED_FOLDER);
             if (!visto)
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.pubweb.includeNotSeen", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(principale))));
+                        .put("error", I18n.tr("server.pubweb.includeNotSeen", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(main))));
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.pubweb.includeAdded", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(principale), "copy", String.valueOf(COPIA_PRINCIPALE))));
+                    .put("nota", I18n.tr("server.pubweb.includeAdded", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(main), "copy", String.valueOf(MAIN_COPY))));
         } catch (Exception e) {
             return r.put("success", false).put("error", I18n.tr("server.pubweb.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
@@ -423,7 +423,7 @@ public class WebProtection {
      * La jail fail2ban
      * =================================================================== */
 
-    private static final String FILTRO = "/usr/local/etc/fail2ban/filter.d/mailpanel-pubblico.conf";
+    private static final String FILTER = "/usr/local/etc/fail2ban/filter.d/mailpanel-pubblico.conf";
     private static final String JAIL   = "/usr/local/etc/fail2ban/jail.d/mailpanel-pubblico.conf";
 
     /**
@@ -437,7 +437,7 @@ public class WebProtection {
      * Guardare un log dedicato invece di quello generale evita di bannare per errore chi usa
      * la webmail: sono due file diversi, e le due cose non si confondono.
      */
-    public static String filtro() {
+    public static String filter() {
         return """
             # Scritto dal pannello di posta. Guarda il solo log della superficie pubblica 443.
             [Definition]
@@ -482,34 +482,34 @@ public class WebProtection {
             # cio' che la documentazione lascia intendere e cio' che il server fa vedere, vince
             # il server.
             action   = pf[name=mailpanel-pubblico, port="http,https"]
-            """.formatted(LOG_ACCESSI);
+            """.formatted(ACCESS_LOG);
     }
 
     /** Installa filtro e jail, e verifica che fail2ban la veda davvero attiva. */
-    public static JSONObject installaJail() {
+    public static JSONObject installJail() {
         JSONObject r = new JSONObject();
         try {
-            Ris presente = esegui("sh", "-c", "command -v fail2ban-client");
-            if (presente.codice != 0)
+            RunResult present = run("sh", "-c", "command -v fail2ban-client");
+            if (present.code != 0)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.noF2b"));
 
-            Files.createDirectories(Path.of(FILTRO).getParent());
+            Files.createDirectories(Path.of(FILTER).getParent());
             Files.createDirectories(Path.of(JAIL).getParent());
-            Files.writeString(Path.of(FILTRO), filtro());
+            Files.writeString(Path.of(FILTER), filter());
             Files.writeString(Path.of(JAIL), jail());
 
-            Ris rel = esegui("fail2ban-client", "reload");
-            if (rel.codice != 0) {
+            RunResult rel = run("fail2ban-client", "reload");
+            if (rel.code != 0) {
                 Files.deleteIfExists(Path.of(JAIL));
-                esegui("fail2ban-client", "reload");
+                run("fail2ban-client", "reload");
                 return r.put("success", false).put("ripristinato", true)
                         .put("error", I18n.tr("server.pubweb.f2bRejected", java.util.Map.of("out", String.valueOf(rel.output.trim()))));
             }
 
             // Non basta che il reload sia andato: si chiede a fail2ban se la vede.
-            Ris st = esegui("fail2ban-client", "status", "mailpanel-pubblico");
-            if (st.codice != 0)
+            RunResult st = run("fail2ban-client", "status", "mailpanel-pubblico");
+            if (st.code != 0)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.jailNotActive", java.util.Map.of("out", String.valueOf(st.output.trim()))));
 
@@ -521,32 +521,32 @@ public class WebProtection {
     }
 
     /** Chiede i due percorsi a 127.0.0.1 sulla 443, per vedere se nginx risponde davvero. */
-    private static JSONObject provaLocale() {
+    private static JSONObject localTest() {
         JSONObject r = new JSONObject();
-        Ris a = esegui("sh", "-c",
+        RunResult a = run("sh", "-c",
                 "fetch -q -o - --no-verify-peer --no-verify-hostname -T 5 "
               + "https://127.0.0.1/.well-known/mta-sts.txt 2>/dev/null "
               + "|| curl -sk --max-time 5 https://127.0.0.1/.well-known/mta-sts.txt");
-        boolean politica = a.output != null && a.output.contains("version: STSv1");
-        r.put("politica", politica);
-        if (!politica)
+        boolean policy = a.output != null && a.output.contains("version: STSv1");
+        r.put("politica", policy);
+        if (!policy)
             return r.put("ok", false)
                     .put("errore", I18n.tr("server.pubweb.policyNotBack", java.util.Map.of("out", String.valueOf(a.output == null ? "" : a.output.trim()))));
         return r.put("ok", true);
     }
 
-    private record Ris(int codice, String output) {}
+    private record RunResult(int code, String output) {}
 
-    private static Ris esegui(String... cmd) {
+    private static RunResult run(String... cmd) {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            return new Ris(p.waitFor(), out);
+            return new RunResult(p.waitFor(), out);
         } catch (Exception e) {
-            return new Ris(-1, String.valueOf(e.getMessage()));
+            return new RunResult(-1, String.valueOf(e.getMessage()));
         }
     }
 }

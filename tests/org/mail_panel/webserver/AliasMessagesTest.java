@@ -15,87 +15,87 @@ import java.util.List;
  */
 public class AliasMessagesTest {
 
-    static int falliti = 0;
-    static void esigi(String cosa, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + cosa);
-        if (!ok) falliti++;
+    static int failed = 0;
+    static void require(String what, boolean ok) {
+        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        if (!ok) failed++;
     }
 
-    static MailDatabase.Alias alias(String sorgente, String destinazione, boolean attivo) {
+    static MailDatabase.Alias alias(String source, String destination, boolean active) {
         MailDatabase.Alias a = new MailDatabase.Alias();
-        a.source = sorgente;
-        a.destination = destinazione;
-        a.active = attivo;
+        a.source = source;
+        a.destination = destination;
+        a.active = active;
         return a;
     }
 
-    static List<MailDatabase.Alias> tabella(MailDatabase.Alias... righe) {
-        return new ArrayList<>(List.of(righe));
+    static List<MailDatabase.Alias> tabella(MailDatabase.Alias... lines) {
+        return new ArrayList<>(List.of(lines));
     }
 
-    static String nota(String indirizzo, boolean mailbox, List<MailDatabase.Alias> righe) {
-        return SSLMailServer.dopoGliAlias(indirizzo, mailbox, righe);
+    static String note(String address, boolean mailbox, List<MailDatabase.Alias> lines) {
+        return SSLMailServer.afterAliases(address, mailbox, lines);
     }
 
     /** La logica di prima (creazione soltanto): una riga casella -> casella bastava, attiva o no. */
-    static boolean vecchiaAvvisava(String sorgente, boolean mailbox, List<MailDatabase.Alias> righe) {
-        boolean copiaInCasella = false;
-        for (MailDatabase.Alias a : righe)
-            if (a.source.equals(sorgente) && a.destination.equals(sorgente)) copiaInCasella = true;
-        return mailbox && !copiaInCasella;
+    static boolean oldWarned(String source, boolean mailbox, List<MailDatabase.Alias> lines) {
+        boolean copyInMailbox = false;
+        for (MailDatabase.Alias a : lines)
+            if (a.source.equals(source) && a.destination.equals(source)) copyInMailbox = true;
+        return mailbox && !copyInMailbox;
     }
 
     public static void main(String[] x) {
-        String io = "info@domain-a.test", fuori = "report@domain-b.test", altro = "owner@domain-b.test";
+        String io = "info@domain-a.test", outside = "report@domain-b.test", other = "owner@domain-b.test";
 
         System.out.println("\n== una casella ==");
-        esigi("senza alias riceve: niente da dire", nota(io, true, tabella()) == null);
-        esigi("con solo \"se stessa -> se stessa\" riceve: niente da dire",
-                nota(io, true, tabella(alias(io, io, true))) == null);
-        esigi("inoltrata ma con la copia attiva: niente da dire",
-                nota(io, true, tabella(alias(io, fuori, true), alias(io, io, true))) == null);
-        esigi("con l'inoltro disattivato riceve di nuovo: niente da dire",
-                nota(io, true, tabella(alias(io, fuori, false))) == null);
+        require("senza alias riceve: niente da dire", note(io, true, tabella()) == null);
+        require("con solo \"se stessa -> se stessa\" riceve: niente da dire",
+                note(io, true, tabella(alias(io, io, true))) == null);
+        require("inoltrata ma con la copia attiva: niente da dire",
+                note(io, true, tabella(alias(io, outside, true), alias(io, io, true))) == null);
+        require("con l'inoltro disattivato riceve di nuovo: niente da dire",
+                note(io, true, tabella(alias(io, outside, false))) == null);
 
-        String n = nota(io, true, tabella(alias(io, fuori, true)));
-        esigi("inoltrata senza copia: lo dice", n != null && n.contains("va solo a " + fuori));
-        esigi("  e dice di AGGIUNGERE la copia, che non c'e'", n != null && n.contains("aggiungi l'alias " + io + " -> " + io));
+        String n = note(io, true, tabella(alias(io, outside, true)));
+        require("inoltrata senza copia: lo dice", n != null && n.contains("va solo a " + outside));
+        require("  e dice di AGGIUNGERE la copia, che non c'e'", n != null && n.contains("aggiungi l'alias " + io + " -> " + io));
 
-        n = nota(io, true, tabella(alias(io, fuori, true), alias(io, altro, true)));
-        esigi("con due destinazioni le nomina tutte e due", n != null && n.contains("va solo a " + fuori + ", " + altro));
+        n = note(io, true, tabella(alias(io, outside, true), alias(io, other, true)));
+        require("con due destinazioni le nomina tutte e due", n != null && n.contains("va solo a " + outside + ", " + other));
 
-        n = nota(io, true, tabella(alias(io, fuori, true), alias(io, io, false)));
-        esigi("copia DISATTIVATA: la casella non riceve, e lo dice", n != null && n.contains("va solo a " + fuori));
-        esigi("  e dice di RIATTIVARLA: aggiungerla darebbe \"Alias gia' esistente\"",
+        n = note(io, true, tabella(alias(io, outside, true), alias(io, io, false)));
+        require("copia DISATTIVATA: la casella non riceve, e lo dice", n != null && n.contains("va solo a " + outside));
+        require("  e dice di RIATTIVARLA: aggiungerla darebbe \"Alias gia' esistente\"",
                 n != null && n.contains("riattiva l'alias " + io + " -> " + io));
 
-        esigi("gli alias di un altro indirizzo dello stesso dominio non contano",
-                nota(io, true, tabella(alias("sales@domain-a.test", fuori, true))) == null);
+        require("gli alias di un altro indirizzo dello stesso dominio non contano",
+                note(io, true, tabella(alias("sales@domain-a.test", outside, true))) == null);
 
         System.out.println("\n== un indirizzo che non e' una casella ==");
         String solo = "dmarc@domain-a.test";
-        esigi("con un alias attivo esiste: niente da dire", nota(solo, false, tabella(alias(solo, fuori, true))) == null);
-        n = nota(solo, false, tabella(alias(solo, fuori, false)));
-        esigi("con l'unico alias disattivato la posta viene rifiutata, e lo dice", n != null && n.contains("viene rifiutata"));
-        esigi("dopo aver eliminato l'ultimo alias, idem", nota(solo, false, tabella()) != null);
-        esigi("un altro alias ancora attivo lo tiene in vita",
-                nota(solo, false, tabella(alias(solo, fuori, false), alias(solo, altro, true))) == null);
-        esigi("un catch-all ATTIVO del dominio raccoglie la sua posta: niente rifiuto",
-                nota(solo, false, tabella(alias(solo, fuori, false), alias("@domain-a.test", altro, true))) == null);
-        esigi("un catch-all disattivato non raccoglie niente",
-                nota(solo, false, tabella(alias("@domain-a.test", altro, false))) != null);
-        esigi("il confronto e' esatto: xdmarc@... non tiene in vita dmarc@...",
-                nota(solo, false, tabella(alias("x" + solo, fuori, true))) != null);
-        esigi("una sorgente senza @ (riga vecchia) non fa saltare niente",
-                nota("postmaster", false, tabella(alias("postmaster", fuori, true))) == null);
+        require("con un alias attivo esiste: niente da dire", note(solo, false, tabella(alias(solo, outside, true))) == null);
+        n = note(solo, false, tabella(alias(solo, outside, false)));
+        require("con l'unico alias disattivato la posta viene rifiutata, e lo dice", n != null && n.contains("viene rifiutata"));
+        require("dopo aver eliminato l'ultimo alias, idem", note(solo, false, tabella()) != null);
+        require("un altro alias ancora attivo lo tiene in vita",
+                note(solo, false, tabella(alias(solo, outside, false), alias(solo, other, true))) == null);
+        require("un catch-all ATTIVO del dominio raccoglie la sua posta: niente rifiuto",
+                note(solo, false, tabella(alias(solo, outside, false), alias("@domain-a.test", other, true))) == null);
+        require("un catch-all disattivato non raccoglie niente",
+                note(solo, false, tabella(alias("@domain-a.test", other, false))) != null);
+        require("il confronto e' esatto: xdmarc@... non tiene in vita dmarc@...",
+                note(solo, false, tabella(alias("x" + solo, outside, true))) != null);
+        require("una sorgente senza @ (riga vecchia) non fa saltare niente",
+                note("postmaster", false, tabella(alias("postmaster", outside, true))) == null);
 
         System.out.println("\n== e la logica di prima taceva proprio qui ==");
-        List<MailDatabase.Alias> copiaSpenta = tabella(alias(io, fuori, true), alias(io, io, false));
-        esigi("la vecchia logica NON avvisava con la copia disattivata (se un giorno avvisa, questa prova non distingue piu')",
-                !vecchiaAvvisava(io, true, copiaSpenta));
-        esigi("la nuova si'", nota(io, true, copiaSpenta) != null);
+        List<MailDatabase.Alias> copyOff = tabella(alias(io, outside, true), alias(io, io, false));
+        require("la vecchia logica NON avvisava con la copia disattivata (se un giorno avvisa, questa prova non distingue piu')",
+                !oldWarned(io, true, copyOff));
+        require("la nuova si'", note(io, true, copyOff) != null);
 
-        System.out.println("\n" + (falliti == 0 ? "TUTTO VERDE" : falliti + " CONTROLLI FALLITI"));
-        if (falliti > 0) System.exit(1);
+        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        if (failed > 0) System.exit(1);
     }
 }

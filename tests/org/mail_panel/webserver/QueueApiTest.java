@@ -38,7 +38,7 @@ import java.util.concurrent.Executors;
  * in the request language.
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.QueueApiTest
  */
 public class QueueApiTest {

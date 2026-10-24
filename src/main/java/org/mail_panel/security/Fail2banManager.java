@@ -155,8 +155,8 @@ public class Fail2banManager {
             // "non protegge niente", mentre con l'azione predefinita il ban vale per
             // l'indirizzo e non per una porta sola. Si scrive che non e' dichiarata.
             try {
-                String azioni = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " actions");
-                String coda = azioni.contains(":") ? azioni.substring(azioni.lastIndexOf(':') + 1) : azioni;
+                String actions = executeCommand(FAIL2BAN_CLIENT + " get " + jailName + " actions");
+                String queue = actions.contains(":") ? actions.substring(actions.lastIndexOf(':') + 1) : actions;
 
                 // La porta si legge dalla configurazione, non la si chiede a fail2ban.
                 //
@@ -168,26 +168,26 @@ public class Fail2banManager {
                 // sorvegliato dalla jail recidive. Un pannello che per mostrare un dato sporca
                 // il log che un'altra sua parte deve leggere sta creando il problema che poi
                 // dovrebbe diagnosticare.
-                String porta = portaDaConfigurazione(jailName);
-                jail.porte = porta;
-                jail.portaDichiarata = !porta.isEmpty();
+                String port = portFromConfiguration(jailName);
+                jail.ports = port;
+                jail.declaredPort = !port.isEmpty();
 
                 // Il comando di ban nomina la porta? E' l'unica cosa che dice se quell'elenco
                 // conti qualcosa. Si guarda il comando vero, non il nome dell'azione.
-                for (String az : coda.split(",")) {
+                for (String az : queue.split(",")) {
                     String a = az.trim();
                     if (a.isEmpty() || !isValidJailName(a)) continue;
                     String cmd = executeCommand(FAIL2BAN_CLIENT + " get " + jailName
                             + " action " + a + " actionban").trim();
                     if (cmd.isEmpty() || cmd.toLowerCase().contains("error")) continue;
-                    if (jail.comandoBan.isEmpty()) jail.comandoBan = cmd;
+                    if (jail.banCommand.isEmpty()) jail.banCommand = cmd;
                     if (cmd.contains("<port>") || cmd.contains("$port") || cmd.contains("port=")) {
-                        jail.banUsaLaPorta = true;
-                        jail.comandoBan = cmd;
+                        jail.banUsesPort = true;
+                        jail.banCommand = cmd;
                     }
                 }
-            } catch (Exception ignora) {
-                jail.portaDichiarata = false;
+            } catch (Exception ignore) {
+                jail.declaredPort = false;
             }
 
             // Parse currently banned
@@ -538,24 +538,24 @@ public class Fail2banManager {
             // Quindi si misura la cosa che conta — ogni jail ha in pf una regola che legge la sua
             // tabella? — e solo se manca si sale di un gradino. Senza "--unban", che il manuale
             // indica come l'opzione che invece toglierebbe i ban attivi.
-            String esitoRiavvio = "";
+            String restartOutcome = "";
             try {
-                int senzaRegola = confrontaBanConPf().totaleSenzaRegola();
-                if (senzaRegola > 0) {
+                int withoutRule = compareBansWithPf().totalWithoutRule();
+                if (withoutRule > 0) {
                     org.mail_panel.util.Shell.Result rs = org.mail_panel.util.Shell.run(
                         java.time.Duration.ofSeconds(60), FAIL2BAN_CLIENT, "reload", "--restart");
-                    int dopo = confrontaBanConPf().totaleSenzaRegola();
-                    esitoRiavvio = " " + I18n.tr("server.f2bm.reloadRecreated", java.util.Map.of("n", String.valueOf(senzaRegola))) + " "
-                        + (dopo == 0 ? I18n.tr("server.f2bm.eachHasRule")
-                                     : I18n.tr("server.f2bm.someWithout", java.util.Map.of("n", String.valueOf(dopo))))
+                    int after = compareBansWithPf().totalWithoutRule();
+                    restartOutcome = " " + I18n.tr("server.f2bm.reloadRecreated", java.util.Map.of("n", String.valueOf(withoutRule))) + " "
+                        + (after == 0 ? I18n.tr("server.f2bm.eachHasRule")
+                                     : I18n.tr("server.f2bm.someWithout", java.util.Map.of("n", String.valueOf(after))))
                         + (rs.success() ? "" : " " + I18n.tr("server.f2bm.cmdReported", java.util.Map.of("o", String.valueOf(rs.output().trim()))));
                 }
             } catch (Exception e) {
-                esitoRiavvio = " " + I18n.tr("server.f2bm.cannotVerifyPf", java.util.Map.of("m", String.valueOf(e.getMessage())));
+                restartOutcome = " " + I18n.tr("server.f2bm.cannotVerifyPf", java.util.Map.of("m", String.valueOf(e.getMessage())));
             }
 
             result.success = true;
-            result.message = "Mail jails installed successfully." + esitoRiavvio;
+            result.message = "Mail jails installed successfully." + restartOutcome;
             result.configPath = mailJailsPath.toString();
 
         } catch (Exception e) {
@@ -628,18 +628,18 @@ public class Fail2banManager {
         String base = detectRoundcubeInstallPath();
         if (base == null) return null;
         String dir = base + "/logs";
-        Path conEstensione = Paths.get(dir, "userlogins" + estensioneLogRoundcube(base));
-        Path senzaEstensione = Paths.get(dir, "userlogins");
+        Path withExtension = Paths.get(dir, "userlogins" + roundcubeLogExtension(base));
+        Path withoutExtension = Paths.get(dir, "userlogins");
         try {
-            if (Files.exists(conEstensione) && Files.size(conEstensione) > 0) return conEstensione.toString();
-            if (Files.exists(senzaEstensione) && Files.size(senzaEstensione) > 0) return senzaEstensione.toString();
-        } catch (Exception ignora) { }
+            if (Files.exists(withExtension) && Files.size(withExtension) > 0) return withExtension.toString();
+            if (Files.exists(withoutExtension) && Files.size(withoutExtension) > 0) return withoutExtension.toString();
+        } catch (Exception ignore) { }
         // Nessuno dei due e' scritto: si usa il nome che Roundcube userebbe.
-        return conEstensione.toString();
+        return withExtension.toString();
     }
 
     /** L'estensione dei log di Roundcube: "log_file_ext" se impostata, altrimenti ".log". */
-    public String estensioneLogRoundcube(String installPath) {
+    public String roundcubeLogExtension(String installPath) {
         try {
             Path cfg = Paths.get(installPath + "/config/config.inc.php");
             if (Files.exists(cfg)) {
@@ -648,7 +648,7 @@ public class Fail2banManager {
                         "\\$config\\[['\"]log_file_ext['\"]\\]\\s*=\\s*['\"]([^'\"]*)['\"]").matcher(t);
                 if (m.find()) return m.group(1);
             }
-        } catch (Exception ignora) { }
+        } catch (Exception ignore) { }
         return ".log";
     }
 
@@ -682,7 +682,7 @@ public class Fail2banManager {
 
             if (additions.length() > 0) {
                 // Backup
-                Path bak = copiaDiSicurezza(configPath);
+                Path bak = backupCopy(configPath);
                 Files.copy(configPath, bak);
                 Files.writeString(configPath,
                     config + (config.endsWith("\n") ? "" : "\n")
@@ -1071,7 +1071,7 @@ public class Fail2banManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder(FAIL2BAN_CLIENT, "reload");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
@@ -1132,7 +1132,7 @@ public class Fail2banManager {
 
                 // Backup prima di scrivere
                 java.nio.file.Files.copy(path,
-                    copiaDiSicurezza(path));
+                    backupCopy(path));
 
                 String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
                 java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
@@ -1276,7 +1276,7 @@ public class Fail2banManager {
             }
             // Backup
             java.nio.file.Files.copy(path,
-                copiaDiSicurezza(path));
+                backupCopy(path));
             String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
             java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
@@ -1310,7 +1310,7 @@ public class Fail2banManager {
                     : indent + "ignoreip = " + newVal));
             // Backup
             java.nio.file.Files.copy(path,
-                copiaDiSicurezza(path));
+                backupCopy(path));
             String newContent = content.substring(0, sectionStart) + updated + content.substring(sectionEnd);
             java.nio.file.Files.writeString(path, newContent, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
@@ -1565,61 +1565,61 @@ public class Fail2banManager {
      * Legge e basta. La regex NON passa da una shell: si costruisce la riga di comando come
      * lista di argomenti, altrimenti i suoi metacaratteri verrebbero interpretati due volte.
      */
-    public FiltroCheck verificaFiltro(String jailName) {
-        FiltroCheck c = new FiltroCheck();
+    public FilterCheck verifyFilter(String jailName) {
+        FilterCheck c = new FilterCheck();
         c.jail = jailName;
         try {
-            if (!isValidJailName(jailName)) { c.messaggio = I18n.tr("server.f2bm.badJailLower"); return c; }
+            if (!isValidJailName(jailName)) { c.message = I18n.tr("server.f2bm.badJailLower"); return c; }
 
             java.util.List<String> logs = logPathDi(jailName);
-            if (logs.isEmpty()) { c.messaggio = I18n.tr("server.f2bm.noLog"); return c; }
+            if (logs.isEmpty()) { c.message = I18n.tr("server.f2bm.noLog"); return c; }
             String log = logs.get(0);
             c.log = log;
 
             java.io.File f = new java.io.File(log);
-            if (!f.canRead()) { c.messaggio = I18n.tr("server.f2bm.logUnreadable", java.util.Map.of("l", String.valueOf(log))); return c; }
-            c.righeLog = contaRighe(f);
-            if (c.righeLog == 0) {
+            if (!f.canRead()) { c.message = I18n.tr("server.f2bm.logUnreadable", java.util.Map.of("l", String.valueOf(log))); return c; }
+            c.logLines2 = countLines(f);
+            if (c.logLines2 == 0) {
                 // Un log vuoto ha una terza spiegazione, ed e' la piu' insidiosa: il file
                 // giusto e' un altro, a un'estensione di distanza. Prima di dire "non lo so"
                 // si guarda accanto — e' un controllo che costa una lettura di cartella e
                 // trasforma un dubbio in una diagnosi.
-                String vicino = vicinoScritto(new java.io.File(log));
-                if (vicino != null) {
-                    c.messaggio = I18n.tr("server.f2bm.logEmptyNeighbor", java.util.Map.of("v", String.valueOf(vicino)));
+                String near = nearWritten(new java.io.File(log));
+                if (near != null) {
+                    c.message = I18n.tr("server.f2bm.logEmptyNeighbor", java.util.Map.of("v", String.valueOf(near)));
                     return c;
                 }
-                c.messaggio = I18n.tr("server.f2bm.logEmpty");
+                c.message = I18n.tr("server.f2bm.logEmpty");
                 return c;
             }
 
             // Il secondo argomento di fail2ban-regex puo' essere il NOME di un filtro. Si prova
             // con quello della jail, che e' la convenzione; se non esiste si ripiega sulla
             // failregex vera, chiesta a fail2ban.
-            String output = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, jailName));
+            String output = runArgv(java.util.List.of(FAIL2BAN_REGEX, log, jailName));
             if (output == null || !output.contains("Lines:")) {
-                String fr = primaFailregex(jailName);
+                String fr = firstFailregex(jailName);
                 if (fr == null) {
-                    c.messaggio = I18n.tr("server.f2bm.noFilter");
+                    c.message = I18n.tr("server.f2bm.noFilter");
                     return c;
                 }
-                output = eseguiArgv(java.util.List.of(FAIL2BAN_REGEX, log, fr));
+                output = runArgv(java.util.List.of(FAIL2BAN_REGEX, log, fr));
             }
             if (output == null || !output.contains("Lines:")) {
-                c.messaggio = I18n.tr("server.f2bm.regexUnreadable");
+                c.message = I18n.tr("server.f2bm.regexUnreadable");
                 return c;
             }
             c.output = output.length() > 3000 ? output.substring(output.length() - 3000) : output;
 
             java.util.regex.Matcher m = Pattern.compile("(\\d+)\\s+matched").matcher(output);
-            c.agganci = m.find() ? Integer.parseInt(m.group(1)) : 0;
-            c.verificato = true;
-            c.messaggio = c.agganci > 0
-                ? I18n.tr("server.f2bm.filterMatches", java.util.Map.of("n", String.valueOf(c.agganci)))
-                : I18n.tr("server.f2bm.filterNoMatch", java.util.Map.of("n", String.valueOf(c.righeLog)));
+            c.hooks = m.find() ? Integer.parseInt(m.group(1)) : 0;
+            c.verified = true;
+            c.message = c.hooks > 0
+                ? I18n.tr("server.f2bm.filterMatches", java.util.Map.of("n", String.valueOf(c.hooks)))
+                : I18n.tr("server.f2bm.filterNoMatch", java.util.Map.of("n", String.valueOf(c.logLines2)));
             return c;
         } catch (Exception e) {
-            c.messaggio = I18n.tr("server.f2bm.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            c.message = I18n.tr("server.f2bm.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())));
             return c;
         }
     }
@@ -1634,10 +1634,10 @@ public class Fail2banManager {
      * mostrava accanto a quello vero. In un file che decide chi entra, "oggi non viene letto"
      * non e' una garanzia sufficiente.
      */
-    private Path copiaDiSicurezza(Path originale) throws Exception {
+    private Path backupCopy(Path original) throws Exception {
         Path dir = Paths.get("/var/db/mail-panel/fail2ban-backups");
         Files.createDirectories(dir);
-        return dir.resolve(originale.getFileName().toString() + ".bak."
+        return dir.resolve(original.getFileName().toString() + ".bak."
             + java.time.LocalDateTime.now().format(
                 java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")));
     }
@@ -1651,7 +1651,7 @@ public class Fail2banManager {
      * di recidive, e quel vuoto non e' un dettaglio estetico ma la ragione per cui la sua regola
      * pf non si carica.
      */
-    private String portaDaConfigurazione(String jailName) {
+    private String portFromConfiguration(String jailName) {
         try {
             java.util.List<Path> file = new ArrayList<>();
             file.add(Paths.get("/usr/local/etc/fail2ban/jail.local"));
@@ -1662,27 +1662,27 @@ public class Fail2banManager {
                                 || f.getFileName().toString().endsWith(".local"))
                       .sorted().forEach(file::add);
                 }
-            String daAzione = "", daSezione = "";
+            String fromAction = "", fromSection = "";
             for (Path f : file) {
                 if (!Files.isRegularFile(f)) continue;
-                boolean dentro = false;
-                for (String riga : Files.readAllLines(f, java.nio.charset.StandardCharsets.UTF_8)) {
-                    String t = riga.trim();
-                    if (t.startsWith("[") && t.endsWith("]")) { dentro = t.equals("[" + jailName + "]"); continue; }
-                    if (!dentro || t.startsWith("#") || !t.contains("=")) continue;
-                    String chiave = t.substring(0, t.indexOf('=')).trim().toLowerCase();
-                    String valore = t.substring(t.indexOf('=') + 1).trim();
-                    if (chiave.equals("action") || chiave.equals("banaction")) {
+                boolean inside = false;
+                for (String line : Files.readAllLines(f, java.nio.charset.StandardCharsets.UTF_8)) {
+                    String t = line.trim();
+                    if (t.startsWith("[") && t.endsWith("]")) { inside = t.equals("[" + jailName + "]"); continue; }
+                    if (!inside || t.startsWith("#") || !t.contains("=")) continue;
+                    String key = t.substring(0, t.indexOf('=')).trim().toLowerCase();
+                    String value = t.substring(t.indexOf('=') + 1).trim();
+                    if (key.equals("action") || key.equals("banaction")) {
                         java.util.regex.Matcher m =
-                            Pattern.compile("port\\s*=\\s*\"?([^\",\\]]+)").matcher(valore);
-                        if (m.find()) daAzione = m.group(1).trim();
-                    } else if (chiave.equals("port")) {
-                        daSezione = valore;
+                            Pattern.compile("port\\s*=\\s*\"?([^\",\\]]+)").matcher(value);
+                        if (m.find()) fromAction = m.group(1).trim();
+                    } else if (key.equals("port")) {
+                        fromSection = value;
                     }
                 }
             }
-            return !daAzione.isEmpty() ? daAzione : daSezione;
-        } catch (Exception ignora) {
+            return !fromAction.isEmpty() ? fromAction : fromSection;
+        } catch (Exception ignore) {
             return "";
         }
     }
@@ -1703,14 +1703,14 @@ public class Fail2banManager {
      */
     private java.util.List<String> logPathDi(String jailName) {
         java.util.List<String> out = new ArrayList<>();
-        for (String comando : new String[] {
+        for (String command : new String[] {
                 FAIL2BAN_CLIENT + " get " + jailName + " logpath",
                 FAIL2BAN_CLIENT + " status " + jailName }) {
             try {
-                for (String v : percorsiIn(executeCommand(comando)))
+                for (String v : pathsIn(executeCommand(command)))
                     if (!out.contains(v)) out.add(v);
                 if (!out.isEmpty()) return out;
-            } catch (Exception ignora) { }
+            } catch (Exception ignore) { }
         }
         return out;
     }
@@ -1723,7 +1723,7 @@ public class Fail2banManager {
      * ("`-", "|-"), "status <jail>" li mette dopo "File list:" — e una lettura che funziona
      * su una sola delle due e' esattamente il difetto che si sta correggendo.
      */
-    static java.util.List<String> percorsiIn(String output) {
+    static java.util.List<String> pathsIn(String output) {
         java.util.List<String> out = new ArrayList<>();
         if (output == null) return out;
         java.util.regex.Matcher m = Pattern.compile("(/[^\\s,]+)").matcher(output);
@@ -1744,22 +1744,22 @@ public class Fail2banManager {
      * ha attaccato", ma "stiamo guardando il file sbagliato di un'estensione". E' successo con
      * roundcube-auth: la jail sorvegliava "userlogins" mentre Roundcube scrive "userlogins.log".
      */
-    private String vicinoScritto(java.io.File sorvegliato) {
+    private String nearWritten(java.io.File watched) {
         try {
-            java.io.File dir = sorvegliato.getParentFile();
+            java.io.File dir = watched.getParentFile();
             if (dir == null || !dir.isDirectory()) return null;
-            String nome = sorvegliato.getName();
-            String radice = nome.contains(".") ? nome.substring(0, nome.indexOf('.')) : nome;
+            String name = watched.getName();
+            String root = name.contains(".") ? name.substring(0, name.indexOf('.')) : name;
             java.io.File[] tutti = dir.listFiles();
             if (tutti == null) return null;
             for (java.io.File f : tutti) {
-                if (f.equals(sorvegliato) || !f.isFile()) continue;
+                if (f.equals(watched) || !f.isFile()) continue;
                 String n = f.getName();
-                if (!n.equals(radice) && !n.startsWith(radice + ".")) continue;
+                if (!n.equals(root) && !n.startsWith(root + ".")) continue;
                 if (f.length() <= 0) continue;
                 return "\"" + n + "\" (" + f.length() + " byte)";
             }
-        } catch (Exception ignora) { }
+        } catch (Exception ignore) { }
         return null;
     }
 
@@ -1769,7 +1769,7 @@ public class Fail2banManager {
      * La stessa riga "Jail list:" veniva letta gia' in due punti con due espressioni diverse.
      * Una lettura sola, qui, cosi' chi controlla e chi mostra guardano lo stesso elenco.
      */
-    public java.util.List<String> nomiJailAttive() {
+    public java.util.List<String> activeJailNames() {
         java.util.List<String> out = new ArrayList<>();
         try {
             java.util.regex.Matcher m =
@@ -1777,7 +1777,7 @@ public class Fail2banManager {
             if (m.find())
                 for (String n : m.group(1).split(","))
                     if (!n.trim().isEmpty()) out.add(n.trim());
-        } catch (Exception ignora) { }
+        } catch (Exception ignore) { }
         return out;
     }
 
@@ -1802,33 +1802,33 @@ public class Fail2banManager {
      * Costa una lettura di cartella per jail: nessun processo, nessun fail2ban-regex. Puo'
      * quindi stare nel controllo di salute che parte all'apertura della pagina.
      */
-    public EsameLog esaminaLogSorvegliati(java.util.Collection<String> jails) {
-        EsameLog e = new EsameLog();
+    public LogReview reviewWatchedLogs(java.util.Collection<String> jails) {
+        LogReview e = new LogReview();
         for (String jail : jails) {
             if (!isValidJailName(jail)) { e.saltate.add(jail); continue; }
             java.util.List<String> logs = logPathDi(jail);
-            if (logs.isEmpty()) { e.senzaLog.add(jail); continue; }
-            e.esaminate.add(jail);
+            if (logs.isEmpty()) { e.withoutLog.add(jail); continue; }
+            e.reviewed.add(jail);
             for (String log : logs) {
                 java.io.File f = new java.io.File(log);
                 if (!f.exists()) {
-                    e.issues.add(new LogSbagliato(jail, log, null,
+                    e.issues.add(new WrongLog(jail, log, null,
                         I18n.tr("server.f2bm.watchesMissing", java.util.Map.of("l", String.valueOf(log)))));
                     continue;
                 }
                 if (f.length() > 0) continue;
-                String vicino = vicinoScritto(f);
-                if (vicino != null)
-                    e.issues.add(new LogSbagliato(jail, log, vicino,
-                        I18n.tr("server.f2bm.watchesWrong", java.util.Map.of("l", String.valueOf(log), "v", String.valueOf(vicino)))));
+                String near = nearWritten(f);
+                if (near != null)
+                    e.issues.add(new WrongLog(jail, log, near,
+                        I18n.tr("server.f2bm.watchesWrong", java.util.Map.of("l", String.valueOf(log), "v", String.valueOf(near)))));
             }
         }
         return e;
     }
 
     /** Tutte le jail caricate adesso, non solo quelle di posta. */
-    public EsameLog esaminaLogSorvegliati() {
-        return esaminaLogSorvegliati(nomiJailAttive());
+    public LogReview reviewWatchedLogs() {
+        return reviewWatchedLogs(activeJailNames());
     }
 
     /**
@@ -1840,21 +1840,21 @@ public class Fail2banManager {
      * non guardare piu'. Chi legge questo esito deve poter distinguere i due casi, e per farlo
      * deve poter contare.
      */
-    public static class EsameLog {
+    public static class LogReview {
         /** Jail per cui abbiamo ottenuto almeno un percorso e lo abbiamo guardato. */
-        public final java.util.List<String> esaminate = new ArrayList<>();
+        public final java.util.List<String> reviewed = new ArrayList<>();
         /** Jail che non hanno un file di log da sorvegliare, o che non ce lo hanno detto. */
-        public final java.util.List<String> senzaLog = new ArrayList<>();
+        public final java.util.List<String> withoutLog = new ArrayList<>();
         /** Nomi che non passano la validazione: non ci si costruisce un comando sopra. */
         public final java.util.List<String> saltate = new ArrayList<>();
-        public final java.util.List<LogSbagliato> issues = new ArrayList<>();
+        public final java.util.List<WrongLog> issues = new ArrayList<>();
     }
 
     /** Una jail e il log che non puo' dirle niente. */
-    public static class LogSbagliato {
-        public final String jail, log, vicino, reason;
-        LogSbagliato(String jail, String log, String vicino, String reason) {
-            this.jail = jail; this.log = log; this.vicino = vicino; this.reason = reason;
+    public static class WrongLog {
+        public final String jail, log, near, reason;
+        WrongLog(String jail, String log, String near, String reason) {
+            this.jail = jail; this.log = log; this.near = near; this.reason = reason;
         }
     }
 
@@ -1880,18 +1880,18 @@ public class Fail2banManager {
      *
      * Legge e basta: nessun pfctl che modifichi qualcosa.
      */
-    public ConfrontoPf confrontaBanConPf() {
-        ConfrontoPf c = new ConfrontoPf();
-        for (String jail : nomiJailAttive()) {
+    public PfComparison compareBansWithPf() {
+        PfComparison c = new PfComparison();
+        for (String jail : activeJailNames()) {
             if (!isValidJailName(jail)) continue;
             JailPf j = new JailPf();
             j.jail = jail;
-            j.credutiBannati.addAll(ipBannatiSecondoFail2ban(jail));
+            j.believedBanned.addAll(ipsBannedByFail2ban(jail));
 
-            comandiBanDi(jail, j);
-            PfBersaglio b = null;
-            for (String cmd : j.comandiBan) {
-                b = bersaglioDaComando(cmd);
+            banCommandsOf(jail, j);
+            PfTarget b = null;
+            for (String cmd : j.banCommands) {
+                b = targetFromCommand(cmd);
                 if (b != null) break;
             }
             if (b == null) {
@@ -1899,20 +1899,20 @@ public class Fail2banManager {
                 // capire: cosa risponde fail2ban, cosa ha scritto nel log dopo l'ultimo reload,
                 // e quali file definiscono questa jail. Le tre cose insieme rispondono a "cosa
                 // vede fail2ban", che non e' la stessa domanda di "cosa ho scritto io".
-                j.logFail2ban = BanActionRepair.erroriLogPer(jail);
-                j.sezioni = BanActionRepair.sezioniCheDefiniscono(jail);
-                j.dump = BanActionRepair.configurazioneLetta(jail);
+                j.logFail2ban = BanActionRepair.logErrorsFor(jail);
+                j.sections = BanActionRepair.sectionsDefining(jail);
+                j.dump = BanActionRepair.readConfiguration(jail);
                 // Non si conclude "non banna via pf": non e' stato measured. Si dice cosa
                 // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
                 // quel comando su questo sistema non fa niente.
-                j.nota = j.nonRaggiungibile
+                j.note = j.unreachable
                     ? I18n.tr("server.f2bm.restarting")
-                    : j.comandiBan.isEmpty()
+                    : j.banCommands.isEmpty()
                     ? I18n.tr("server.f2bm.noBanCmd")
-                      + (j.azioniViste.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsRead", java.util.Map.of("elenco", String.valueOf(String.join(", ", j.azioniViste)))))
-                      + (j.azioniScartate.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsDropped", java.util.Map.of("elenco", String.valueOf(String.join(", ", j.azioniScartate)))))
-                      + " " + I18n.tr("server.f2bm.actionsAnswer", java.util.Map.of("o", String.valueOf(j.uscitaAzioni)))
-                    : I18n.tr("server.f2bm.noPfTable", java.util.Map.of("cmd", String.valueOf(String.join(" ; ", j.comandiBan))));
+                      + (j.seenActions.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsRead", java.util.Map.of("elenco", String.valueOf(String.join(", ", j.seenActions)))))
+                      + (j.discardedActions.isEmpty() ? "" : " " + I18n.tr("server.f2bm.actionsDropped", java.util.Map.of("elenco", String.valueOf(String.join(", ", j.discardedActions)))))
+                      + " " + I18n.tr("server.f2bm.actionsAnswer", java.util.Map.of("o", String.valueOf(j.actionsOutput)))
+                    : I18n.tr("server.f2bm.noPfTable", java.util.Map.of("cmd", String.valueOf(String.join(" ; ", j.banCommands))));
                 c.jails.add(j);
                 continue;
             }
@@ -1920,42 +1920,42 @@ public class Fail2banManager {
 
             // Si prova dove la tabella puo' stare, e si tiene il posto dove ha risposto. Cosi'
             // "non esiste" lo si dice solo dopo aver guardato in tutti i posti sensati.
-            java.util.List<String> candidati = new ArrayList<>();
-            if (b.ancora != null) candidati.add(b.ancora);
-            if (b.ancoraProbabile != null && !b.ancoraProbabile.equals(b.ancora)) candidati.add(b.ancoraProbabile);
-            candidati.add(null);
+            java.util.List<String> candidates = new ArrayList<>();
+            if (b.ancora != null) candidates.add(b.ancora);
+            if (b.stillLikely != null && !b.stillLikely.equals(b.ancora)) candidates.add(b.stillLikely);
+            candidates.add(null);
 
-            LetturaTabella t = null;
-            String ancoraUsata = null;
-            for (String cand : candidati) {
-                LetturaTabella prova = indirizziInTabellaPf(cand, b.tabella);
-                if (prova.letta && !prova.mancante) { t = prova; ancoraUsata = cand; break; }
-                if (t == null) { t = prova; ancoraUsata = cand; }   // il primo esito, se nessuno trova
+            TableReading t = null;
+            String stillUsed = null;
+            for (String cand : candidates) {
+                TableReading test = addressesInPfTable(cand, b.tabella);
+                if (test.read && !test.missing) { t = test; stillUsed = cand; break; }
+                if (t == null) { t = test; stillUsed = cand; }   // il primo esito, se nessuno trova
             }
-            j.ancora = ancoraUsata == null ? I18n.tr("server.f2bm.mainRuleset") : ancoraUsata;
-            if (!t.letta) {
-                j.nota = I18n.tr("server.f2bm.tableUnreadable", java.util.Map.of("t", String.valueOf(b.tabella))) + (t.errore.isEmpty() ? "" : " (" + t.errore + ")");
+            j.ancora = stillUsed == null ? I18n.tr("server.f2bm.mainRuleset") : stillUsed;
+            if (!t.read) {
+                j.note = I18n.tr("server.f2bm.tableUnreadable", java.util.Map.of("t", String.valueOf(b.tabella))) + (t.error.isEmpty() ? "" : " (" + t.error + ")");
                 c.jails.add(j);
                 continue;
             }
-            j.letta = true;
-            j.tabellaMancante = t.mancante;
+            j.read = true;
+            j.missingTable = t.missing;
             // Una tabella piena non blocca niente da sola: serve la regola che la legge. E' la
             // verifica che fail2ban stesso fa ("pfctl -sr | grep -q <tabella>"), ed e' l'unico
             // modo per accorgersi che actionstart abbia creato la tabella e poi fallito sulla
             // regola — che e' esattamente cio' che succede quando la porta e' vuota.
-            String regole = regoleDi(ancoraUsata, c);
-            if (regole == null) {
+            String rules = rulesOf(stillUsed, c);
+            if (rules == null) {
                 // pfctl non ha risposto. Dire "nessuna regola" sarebbe una conclusione tratta
                 // dal non aver letto, e accuserebbe di guasto cinque jail sane.
-                j.regolaVerificata = false;
+                j.ruleVerified = false;
             } else {
-                j.regolaVerificata = true;
-                j.regolaPresente = regole.contains(b.tabella);
+                j.ruleVerified = true;
+                j.rulePresent = rules.contains(b.tabella);
             }
-            j.nelFirewall.addAll(t.indirizzi);
-            for (String ip : j.credutiBannati) if (!j.nelFirewall.contains(ip)) j.soloInFail2ban.add(ip);
-            for (String ip : j.nelFirewall) if (!j.credutiBannati.contains(ip)) j.soloInPf.add(ip);
+            j.inFirewall.addAll(t.addresses);
+            for (String ip : j.believedBanned) if (!j.inFirewall.contains(ip)) j.soloInFail2ban.add(ip);
+            for (String ip : j.inFirewall) if (!j.believedBanned.contains(ip)) j.soloInPf.add(ip);
             c.jails.add(j);
         }
         return c;
@@ -1966,11 +1966,11 @@ public class Fail2banManager {
      * confronto: sono identiche per tutte le jail che condividono l'ancora, e rileggerle a ogni
      * jail vorrebbe dire eseguire pfctl sette volte per avere sette volte lo stesso testo.
      */
-    private String regoleDi(String ancora, ConfrontoPf memoria) {
-        String chiave = ancora == null ? "" : ancora;
-        String gia = memoria.regole.get(chiave);
-        if (gia != null) return gia;
-        String testo = null;   // null = non letto. Diverso da "letto e non contiene niente".
+    private String rulesOf(String ancora, PfComparison memoria) {
+        String key = ancora == null ? "" : ancora;
+        String already = memoria.rules.get(key);
+        if (already != null) return already;
+        String text = null;   // null = non letto. Diverso da "letto e non contiene niente".
         try {
             java.util.List<String> argv = new ArrayList<>();
             argv.add("/sbin/pfctl");
@@ -1978,22 +1978,22 @@ public class Fail2banManager {
             argv.add("-sr");
             org.mail_panel.util.Shell.Result r = org.mail_panel.util.Shell.run(
                 java.time.Duration.ofSeconds(20), argv.toArray(new String[0]));
-            if (r.success() && r.output() != null) testo = r.output();
-        } catch (Exception ignora) { }
-        if (testo != null) memoria.regole.put(chiave, testo);
-        return testo;
+            if (r.success() && r.output() != null) text = r.output();
+        } catch (Exception ignore) { }
+        if (text != null) memoria.rules.put(key, text);
+        return text;
     }
 
     /** Gli indirizzi che Fail2ban elenca come bannati adesso per quella jail. */
-    private java.util.List<String> ipBannatiSecondoFail2ban(String jail) {
+    private java.util.List<String> ipsBannedByFail2ban(String jail) {
         java.util.List<String> out = new ArrayList<>();
         try {
             java.util.regex.Matcher m = Pattern.compile("Banned IP list:\\s*(.*)")
                 .matcher(executeCommand(FAIL2BAN_CLIENT + " status " + jail));
             if (m.find())
                 for (String ip : m.group(1).trim().split("\\s+"))
-                    if (!ip.trim().isEmpty()) out.add(normalizzaIndirizzo(ip));
-        } catch (Exception ignora) { }
+                    if (!ip.trim().isEmpty()) out.add(normalizeAddress(ip));
+        } catch (Exception ignore) { }
         return out;
     }
 
@@ -2004,44 +2004,44 @@ public class Fail2banManager {
      * tabella, la risposta giusta non e' "questa jail non usa pf" — che sarebbe una conclusione
      * tratta dal non aver trovato — ma mostrare cosa esegue, e lasciare che si veda.
      */
-    private void comandiBanDi(String jail, JailPf j) {
+    private void banCommandsOf(String jail, JailPf j) {
         try {
-            String azioni = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " actions");
+            String actions = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " actions");
             // Si conserva l'uscita cruda. Quando non se ne ricava niente, "non sono riuscito" e'
             // un vicolo cieco: chi legge la scheda non puo' fare un passo avanti, e chi la
             // scrive finisce a indovinare. Mostrare cosa ha risposto fail2ban trasforma un
             // fallimento muto in un indizio, e costa niente perche' l'uscita l'abbiamo gia'.
-            j.uscitaAzioni = azioni == null ? "" : azioni.trim();
-            if (azioni == null) return;
+            j.actionsOutput = actions == null ? "" : actions.trim();
+            if (actions == null) return;
             // Durante un "reload --restart" il server non risponde per qualche istante. E' una
             // condizione del pannello, non un difetto della jail: attribuirgliela farebbe
             // comparire un guasto inventato proprio mentre si sta riparando qualcos'altro.
-            if (j.uscitaAzioni.contains("Unable to contact server")
-                || j.uscitaAzioni.contains("Connection refused")) {
-                j.nonRaggiungibile = true;
+            if (j.actionsOutput.contains("Unable to contact server")
+                || j.actionsOutput.contains("Connection refused")) {
+                j.unreachable = true;
                 return;
             }
-            String coda = azioni.contains(":") ? azioni.substring(azioni.lastIndexOf(':') + 1) : azioni;
-            for (String az : coda.split("[,\\n]")) {
+            String queue = actions.contains(":") ? actions.substring(actions.lastIndexOf(':') + 1) : actions;
+            for (String az : queue.split("[,\\n]")) {
                 String a = az.trim().replaceAll("^[`|'-]+", "").trim();
                 if (a.isEmpty()) continue;
-                if (!isValidJailName(a)) { j.azioniScartate.add(a); continue; }
-                j.azioniViste.add(a);
+                if (!isValidJailName(a)) { j.discardedActions.add(a); continue; }
+                j.seenActions.add(a);
                 String cmd = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " action " + a + " actionban");
                 if (cmd == null) continue;
                 cmd = cmd.trim();
                 if (cmd.isEmpty()) continue;
-                if (cmd.toLowerCase().contains("error")) { j.azioniScartate.add(a + " (" + cmd + ")"); continue; }
-                j.comandiBan.add(cmd.replace("\n", " "));
+                if (cmd.toLowerCase().contains("error")) { j.discardedActions.add(a + " (" + cmd + ")"); continue; }
+                j.banCommands.add(cmd.replace("\n", " "));
             }
         } catch (Exception e) {
-            j.uscitaAzioni = I18n.tr("server.f2bm.actionsError", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            j.actionsOutput = I18n.tr("server.f2bm.actionsError", java.util.Map.of("m", String.valueOf(e.getMessage())));
         }
     }
 
     /** Il contenuto di una tabella pf. Una tabella assente non e' un errore: e' una risposta. */
-    private LetturaTabella indirizziInTabellaPf(String ancora, String tabella) {
-        LetturaTabella t = new LetturaTabella();
+    private TableReading addressesInPfTable(String ancora, String tabella) {
+        TableReading t = new TableReading();
         try {
             java.util.List<String> argv = new ArrayList<>();
             argv.add("/sbin/pfctl");
@@ -2055,21 +2055,21 @@ public class Fail2banManager {
                 // Tabella inesistente: e' precisamente il guasto che questo controllo cerca,
                 // non un fallimento della misura. Si prosegue con l'insieme vuoto.
                 if (out.toLowerCase().contains("does not exist") || out.toLowerCase().contains("no such")) {
-                    t.letta = true;
-                    t.mancante = true;
+                    t.read = true;
+                    t.missing = true;
                     return t;
                 }
-                t.errore = out.trim();
+                t.error = out.trim();
                 return t;
             }
-            for (String riga : out.split("\n")) {
-                String v = riga.trim();
+            for (String line : out.split("\n")) {
+                String v = line.trim();
                 if (v.isEmpty() || !v.matches("^[0-9a-fA-F:].*")) continue;
-                t.indirizzi.add(normalizzaIndirizzo(v));
+                t.addresses.add(normalizeAddress(v));
             }
-            t.letta = true;
+            t.read = true;
         } catch (Exception e) {
-            t.errore = e.getMessage() == null ? I18n.tr("server.f2bm.readError") : e.getMessage();
+            t.error = e.getMessage() == null ? I18n.tr("server.f2bm.readError") : e.getMessage();
         }
         return t;
     }
@@ -2082,7 +2082,7 @@ public class Fail2banManager {
      * uno solo dei due: il controllo avrebbe segnalato un guasto ovunque, e un controllo che
      * grida sempre non viene piu' letto.
      */
-    static String normalizzaIndirizzo(String v) {
+    static String normalizeAddress(String v) {
         String s = v.trim();
         int sp = s.indexOf(' ');
         if (sp > 0) s = s.substring(0, sp);
@@ -2096,11 +2096,11 @@ public class Fail2banManager {
      * provata: e' l'unico punto del confronto dove un'espressione sbagliata non si vedrebbe —
      * darebbe "questa jail non usa pf" e il confronto sparirebbe in silenzio invece di fallire.
      */
-    static PfBersaglio bersaglioDaComando(String cmd) {
+    static PfTarget targetFromCommand(String cmd) {
         if (cmd == null || !cmd.contains("pfctl")) return null;
         java.util.regex.Matcher mt = Pattern.compile("-t\\s+(\\S+)").matcher(cmd);
         if (!mt.find()) return null;
-        PfBersaglio b = new PfBersaglio();
+        PfTarget b = new PfTarget();
         b.tabella = mt.group(1);
 
         java.util.regex.Matcher ma = Pattern.compile("-a\\s+(\\S+)").matcher(cmd);
@@ -2117,28 +2117,28 @@ public class Fail2banManager {
         // l'ancora "f2b/<name>", quindi condividono <name>. Non e' una convenzione indovinata,
         // e' la lettura delle due righe che la compongono. Resta comunque un candidato da
         // provare, non una certezza: chi legge prova e guarda se la tabella risponde.
-        int trattino = b.tabella.indexOf('-');
-        if (trattino > 0 && trattino < b.tabella.length() - 1)
-            b.ancoraProbabile = "f2b/" + b.tabella.substring(trattino + 1);
+        int dash = b.tabella.indexOf('-');
+        if (dash > 0 && dash < b.tabella.length() - 1)
+            b.stillLikely = "f2b/" + b.tabella.substring(dash + 1);
         return b;
     }
 
-    static class PfBersaglio {
+    static class PfTarget {
         String ancora;          // scritta nel comando: certa
-        String ancoraProbabile; // ricavata dalle definizioni dell'azione: da provare
+        String stillLikely; // ricavata dalle definizioni dell'azione: da provare
         String tabella;
     }
 
-    private static class LetturaTabella {
-        boolean letta, mancante;
-        String errore = "";
-        final java.util.List<String> indirizzi = new ArrayList<>();
+    private static class TableReading {
+        boolean read, missing;
+        String error = "";
+        final java.util.List<String> addresses = new ArrayList<>();
     }
 
     /** Il confronto, jail per jail. */
-    public static class ConfrontoPf {
+    public static class PfComparison {
         public final java.util.List<JailPf> jails = new ArrayList<>();
-        final java.util.Map<String, String> regole = new java.util.HashMap<>();
+        final java.util.Map<String, String> rules = new java.util.HashMap<>();
         /**
          * Indirizzi che Fail2ban crede bannati e che pf non blocca: passano.
          *
@@ -2146,20 +2146,20 @@ public class Fail2banManager {
          * essere nella tabella e' una condizione necessaria, non sufficiente, e contarli come
          * lockedPackages sarebbe lo stesso errore di leggere "Currently banned" come una prova.
          */
-        public int totaleNonApplicati() {
+        public int totalNotApplied() {
             int n = 0;
             for (JailPf j : jails) {
-                if (!j.letta) continue;
-                n += (!j.regolaVerificata || j.regolaPresente)
-                        ? j.soloInFail2ban.size() : j.credutiBannati.size();
+                if (!j.read) continue;
+                n += (!j.ruleVerified || j.rulePresent)
+                        ? j.soloInFail2ban.size() : j.believedBanned.size();
             }
             return n;
         }
 
         /** Jail la cui tabella non e' letta da nessuna regola pf: bannano nel vuoto. */
-        public int totaleSenzaRegola() {
+        public int totalWithoutRule() {
             int n = 0;
-            for (JailPf j : jails) if (j.letta && j.regolaVerificata && !j.regolaPresente) n++;
+            for (JailPf j : jails) if (j.read && j.ruleVerified && !j.rulePresent) n++;
             return n;
         }
         /**
@@ -2171,53 +2171,53 @@ public class Fail2banManager {
          * il riepilogo diceva "Coerenti". Un verde che nasce da cio' che non si e' guardato e'
          * il difetto che questa scheda esiste per scoprire, e ce l'aveva dentro.
          */
-        public int totaleNonMisurate() {
+        public int totalUnmeasured() {
             int n = 0;
-            for (JailPf j : jails) if (!j.letta) n++;
+            for (JailPf j : jails) if (!j.read) n++;
             return n;
         }
 
         /** Ban dichiarati da Fail2ban per jail che non siamo riusciti a verificare. */
-        public int banNonVerificati() {
+        public int unverifiedBans() {
             int n = 0;
-            for (JailPf j : jails) if (!j.letta) n += j.credutiBannati.size();
+            for (JailPf j : jails) if (!j.read) n += j.believedBanned.size();
             return n;
         }
     }
 
     public static class JailPf {
-        public String jail = "", ancora = "", tabella = "", nota = "";
-        public boolean letta, tabellaMancante;
+        public String jail = "", ancora = "", tabella = "", note = "";
+        public boolean read, missingTable;
         /** Esiste una regola pf che legge questa tabella? Senza, la tabella non blocca nulla. */
-        public boolean regolaPresente;
-        /** Il ruleset e' stato letto davvero. Senza questo, regolaPresente non vuol dire niente. */
-        public boolean regolaVerificata;
-        public final java.util.List<String> credutiBannati = new ArrayList<>();
-        public final java.util.List<String> nelFirewall = new ArrayList<>();
+        public boolean rulePresent;
+        /** Il ruleset e' stato letto davvero. Senza questo, rulePresent non vuol dire niente. */
+        public boolean ruleVerified;
+        public final java.util.List<String> believedBanned = new ArrayList<>();
+        public final java.util.List<String> inFirewall = new ArrayList<>();
         public final java.util.List<String> soloInFail2ban = new ArrayList<>();
         public final java.util.List<String> soloInPf = new ArrayList<>();
         /** Cosa esegue davvero per bannare. Si mostra quando non si e' potuto verificare. */
-        public final java.util.List<String> comandiBan = new ArrayList<>();
+        public final java.util.List<String> banCommands = new ArrayList<>();
         /** L'uscita cruda di "get <jail> actions": l'indizio quando non se ne ricava niente. */
-        public String uscitaAzioni = "";
-        public final java.util.List<String> azioniViste = new ArrayList<>();
-        public final java.util.List<String> azioniScartate = new ArrayList<>();
+        public String actionsOutput = "";
+        public final java.util.List<String> seenActions = new ArrayList<>();
+        public final java.util.List<String> discardedActions = new ArrayList<>();
         /** Le righe di fail2ban.log e le sezioni che definiscono la jail: l'evidenza da leggere. */
-        public String logFail2ban = "", sezioni = "", dump = "";
+        public String logFail2ban = "", sections = "", dump = "";
         /** Fail2ban non ha risposto: si sta riavviando. Non e' un guasto di questa jail. */
-        public boolean nonRaggiungibile;
+        public boolean unreachable;
     }
 
-    public static class FiltroCheck {
-        public String jail = "", log = "", messaggio = "", output = "";
-        public boolean verificato;
-        public int agganci;
-        public long righeLog;
+    public static class FilterCheck {
+        public String jail = "", log = "", message = "", output = "";
+        public boolean verified;
+        public int hooks;
+        public long logLines2;
     }
 
     private static final String FAIL2BAN_REGEX = "/usr/local/bin/fail2ban-regex";
 
-    private long contaRighe(java.io.File f) {
+    private long countLines(java.io.File f) {
         try (BufferedReader r = new BufferedReader(new java.io.FileReader(f))) {
             long n = 0;
             while (r.readLine() != null) { n++; if (n > 200000) break; }
@@ -2225,7 +2225,7 @@ public class Fail2banManager {
         } catch (Exception e) { return 0; }
     }
 
-    private String primaFailregex(String jail) {
+    private String firstFailregex(String jail) {
         try {
             String out = executeCommand(FAIL2BAN_CLIENT + " get " + jail + " failregex");
             java.util.regex.Matcher m = Pattern.compile("'(.+?)'", Pattern.DOTALL).matcher(out);
@@ -2234,10 +2234,10 @@ public class Fail2banManager {
     }
 
     /** Esegue senza shell: gli argomenti restano argomenti, i metacaratteri non si interpretano. */
-    private String eseguiArgv(java.util.List<String> argv) {
+    private String runArgv(java.util.List<String> argv) {
         try {
             ProcessBuilder pb = new ProcessBuilder(argv);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             StringBuilder sb = new StringBuilder();
@@ -2253,7 +2253,7 @@ public class Fail2banManager {
     private String executeCommand(String command) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
-        org.mail_panel.util.Shell.applicaPath(pb);
+        org.mail_panel.util.Shell.applyPath(pb);
         pb.redirectErrorStream(true);
         Process process = pb.start();
 
@@ -2461,9 +2461,9 @@ public class Fail2banManager {
         public List<String> bannedIps = new ArrayList<>();
         public String logFile;
         /** Le porte che la jail protegge, come le dichiara fail2ban. Vuoto = non dichiarata. */
-        public String porte = "";
+        public String ports = "";
         /** false quando fail2ban non ha saputo dirle: "non dichiarata" non e' "nessuna". */
-        public boolean portaDichiarata;
+        public boolean declaredPort;
         /**
          * Il comando di ban usa davvero la porta, oppure blocca l'indirizzo e basta?
          *
@@ -2473,8 +2473,8 @@ public class Fail2banManager {
          * fa alcun danno: e' decorativa. Se invece le nomina, una lista sbagliata e' un buco,
          * perche' l'attaccante viene bloccato su porte che non sta usando.
          */
-        public boolean banUsaLaPorta;
-        public String comandoBan = "";
+        public boolean banUsesPort;
+        public String banCommand = "";
         public String error;
     }
 
@@ -2542,11 +2542,11 @@ public class Fail2banManager {
      * - Aggiunge runtime alla tabella pf
      * Ritorna true se l'IP è stato effettivamente aggiunto (false se già presente).
      */
-    public synchronized boolean addPermaban(String ip) throws Exception {
+    public synchronized boolean addPermanentBan(String ip) throws Exception {
         if (!isValidIp(ip)) throw new IllegalArgumentException("Invalid IP: " + ip);
 
-        ensurePermabanFile();
-        java.util.Set<String> current = readPermabanFile();
+        ensurePermanentBanFile();
+        java.util.Set<String> current = readPermanentBanFile();
         if (current.contains(ip)) return false; // già presente, no-op
         current.add(ip);
         writePermabanFile(current);
@@ -2555,7 +2555,7 @@ public class Fail2banManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "add", ip);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -2569,10 +2569,10 @@ public class Fail2banManager {
      * Rimuove un IP dalla lista permaban.
      * Ritorna true se rimosso, false se non era presente.
      */
-    public synchronized boolean removePermaban(String ip) throws Exception {
+    public synchronized boolean removePermanentBan(String ip) throws Exception {
         if (!isValidIp(ip)) throw new IllegalArgumentException("Invalid IP: " + ip);
 
-        java.util.Set<String> current = readPermabanFile();
+        java.util.Set<String> current = readPermanentBanFile();
         if (!current.contains(ip)) return false;
         current.remove(ip);
         writePermabanFile(current);
@@ -2580,7 +2580,7 @@ public class Fail2banManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "delete", ip);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -2590,21 +2590,21 @@ public class Fail2banManager {
     }
 
     /** Ritorna la lista corrente di IP permabanned. */
-    public synchronized java.util.List<String> listPermabans() {
+    public synchronized java.util.List<String> listPermanentBans() {
         try {
-            return new java.util.ArrayList<>(readPermabanFile());
+            return new java.util.ArrayList<>(readPermanentBanFile());
         } catch (Exception e) {
             return new java.util.ArrayList<>();
         }
     }
 
     /** Ritorna gli IP attualmente caricati nella tabella pf <permaban> (runtime). */
-    public java.util.Set<String> listPermabanRuntime() {
+    public java.util.Set<String> listPermanentBanRuntime() {
         java.util.Set<String> result = new java.util.HashSet<>();
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "show");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -2621,12 +2621,12 @@ public class Fail2banManager {
      * Ricarica la tabella pf dal file (es. dopo restart pannello).
      * Equivale a: pfctl -t permaban -T replace -f <file>
      */
-    public boolean reloadPermabanFromFile() {
+    public boolean reloadPermanentBanFromFile() {
         try {
-            ensurePermabanFile();
+            ensurePermanentBanFile();
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/pfctl", "-t", PERMABAN_TABLE, "-T", "replace", "-f", PERMABAN_FILE);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -2636,7 +2636,7 @@ public class Fail2banManager {
         }
     }
 
-    private void ensurePermabanFile() throws java.io.IOException {
+    private void ensurePermanentBanFile() throws java.io.IOException {
         Path dir = Paths.get(PERMABAN_DIR);
         if (!Files.isDirectory(dir)) Files.createDirectories(dir);
         Path file = Paths.get(PERMABAN_FILE);
@@ -2644,7 +2644,7 @@ public class Fail2banManager {
     }
 
     /** Legge il file ignorando righe vuote, commenti (#) e IP non validi. */
-    private java.util.Set<String> readPermabanFile() throws java.io.IOException {
+    private java.util.Set<String> readPermanentBanFile() throws java.io.IOException {
         java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
         Path file = Paths.get(PERMABAN_FILE);
         if (!Files.exists(file)) return set;
@@ -2657,7 +2657,7 @@ public class Fail2banManager {
     }
 
     private void writePermabanFile(java.util.Set<String> ips) throws java.io.IOException {
-        ensurePermabanFile();
+        ensurePermanentBanFile();
         StringBuilder content = new StringBuilder();
         content.append("# Permaban list — gestito dal mail panel\n");
         content.append("# IP qui dentro vengono caricati nella tabella pf <permaban>\n");

@@ -25,7 +25,7 @@ import java.util.Map;
  *
  * Uso (dalla cartella del pannello, come root, su una macchina senza altro):
  *   java -cp "tests:freebsd-mail-panel-1.0.jar" \
- *        org.mail_panel.system.InstallFromScratch mail.prova.local webmail.prova.local 8443
+ *        org.mail_panel.system.InstallFromScratch mail.test.local webmail.test.local 8443
  */
 public class InstallFromScratch {
 

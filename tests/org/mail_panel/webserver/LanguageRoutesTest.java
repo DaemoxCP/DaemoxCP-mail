@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  * frame around the pages, and /api/language before and after logging in, always with a CSRF token.
  *
  * Usage (with the test MySQL of README.md, tables already created by AddressConversionTest):
- *   java -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.LanguageRoutesTest
  */
 public class LanguageRoutesTest {
