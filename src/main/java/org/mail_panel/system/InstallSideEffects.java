@@ -639,9 +639,9 @@ final class InstallSideEffects {
             // Un lavoro che si e' fermato prima di pkg upgrade non ha cambiato niente: non c'e'
             // un prima da confrontare, e un «non ho potuto controllare» sarebbe falso.
             if (!taken) return;
-            job.scrivi("  " + I18n.tr("server.drift.configHeader"));
+            job.write("  " + I18n.tr("server.drift.configHeader"));
             if (configBefore == null) {
-                job.scrivi("    ?   " + I18n.tr("server.drift.configUnknown"));
+                job.write("    ?   " + I18n.tr("server.drift.configUnknown"));
                 return;
             }
             JSONArray changes;
@@ -649,7 +649,7 @@ final class InstallSideEffects {
                 changes = configChanges(configBefore, configSnapshot(), changedPackages(plan, outsidePlan));
             } catch (RuntimeException e) {
                 LOGGER.warning("configuration comparison failed: " + e);
-                job.scrivi("    ?   " + I18n.tr("server.drift.configUnknown"));
+                job.write("    ?   " + I18n.tr("server.drift.configUnknown"));
                 return;
             }
             int packageFiles = 0, derivedFiles = 0;
@@ -660,35 +660,35 @@ final class InstallSideEffects {
                 if ("package".equals(kind)) { packageFiles++; continue; }
                 if ("derived".equals(kind)) { derivedFiles++; continue; }
                 String mark = c.getBoolean("alarm") ? "NO  " : "--  ";
-                job.scrivi("    " + mark + c.getString("path") + ": "
+                job.write("    " + mark + c.getString("path") + ": "
                         + I18n.tr("server.drift.happened." + c.getString("happened"))
                         + ", " + I18n.tr("server.drift.kind." + kind));
                 if (c.has("permissionsFrom"))
-                    job.scrivi("          " + I18n.tr("server.drift.permissions",
+                    job.write("          " + I18n.tr("server.drift.permissions",
                             Map.of("from", c.getString("permissionsFrom"), "to", c.getString("permissionsTo"))));
                 writeLines(job, c, "removedLines", "removedCount", "- ");
                 writeLines(job, c, "addedLines", "addedCount", "+ ");
                 if (c.has("hidden"))
-                    job.scrivi("          " + I18n.tr("server.drift.hidden." + c.getString("hidden")));
+                    job.write("          " + I18n.tr("server.drift.hidden." + c.getString("hidden")));
                 if (c.getBoolean("alarm")) alarmed.add(c.getString("path"));
             }
             if (alarmed.isEmpty() && changes.length() == packageFiles + derivedFiles) {
-                job.scrivi("    ok  " + I18n.tr("server.drift.configClean", Map.of("n", String.valueOf(packageFiles))));
+                job.write("    ok  " + I18n.tr("server.drift.configClean", Map.of("n", String.valueOf(packageFiles))));
                 if (derivedFiles > 0)
-                    job.scrivi("    " + I18n.tr("server.drift.derivedFiles", Map.of("n", String.valueOf(derivedFiles))));
+                    job.write("    " + I18n.tr("server.drift.derivedFiles", Map.of("n", String.valueOf(derivedFiles))));
                 return;
             }
             if (packageFiles > 0)
-                job.scrivi("    " + I18n.tr("server.drift.packageFiles", Map.of("n", String.valueOf(packageFiles))));
+                job.write("    " + I18n.tr("server.drift.packageFiles", Map.of("n", String.valueOf(packageFiles))));
             if (derivedFiles > 0)
-                job.scrivi("    " + I18n.tr("server.drift.derivedFiles", Map.of("n", String.valueOf(derivedFiles))));
+                job.write("    " + I18n.tr("server.drift.derivedFiles", Map.of("n", String.valueOf(derivedFiles))));
             if (alarmed.isEmpty()) return;
             changedByScript = true;
             writeSaved(job, saveBefore(configBefore, alarmed, BEFORE_UPDATE_DIR.resolve(
                     java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
                             .withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.now()))));
             pruneBefore(BEFORE_UPDATE_DIR, BEFORE_UPDATE_KEPT);
-            job.scrivi("  " + I18n.tr(restartFollows ? "server.drift.configNoteHeld" : "server.drift.configNoteLater"));
+            job.write("  " + I18n.tr(restartFollows ? "server.drift.configNoteHeld" : "server.drift.configNoteLater"));
             problems.add(I18n.tr("server.drift.configProblem", Map.of("files", String.join(", ", alarmed))));
             // Fuori dal log del lavoro, che vive in memoria: una configurazione cambiata che
             // nessuno ha approvato deve restare scritta. Solo i percorsi, nessun contenuto (r19).
@@ -702,9 +702,9 @@ final class InstallSideEffects {
          */
         void checkListening(UpdateManager.Job job) {
             if (!taken) return;
-            job.scrivi("  " + I18n.tr("server.drift.listenHeader"));
+            job.write("  " + I18n.tr("server.drift.listenHeader"));
             if (listeningBefore == null) {
-                job.scrivi("    ?   " + I18n.tr("server.drift.listenUnknown"));
+                job.write("    ?   " + I18n.tr("server.drift.listenUnknown"));
                 return;
             }
             Map<String, String> now = listening();
@@ -715,7 +715,7 @@ final class InstallSideEffects {
                 now = listening();
             }
             if (now == null) {
-                job.scrivi("    ?   " + I18n.tr("server.drift.listenUnknown"));
+                job.write("    ?   " + I18n.tr("server.drift.listenUnknown"));
                 return;
             }
             JSONObject cmp = compareListening(listeningBefore, now);
@@ -724,16 +724,16 @@ final class InstallSideEffects {
             for (int i = 0; i < lost.length(); i++) {
                 JSONObject l = lost.getJSONObject(i);
                 lostNames.add(l.getString("address"));
-                job.scrivi("    NO  " + l.getString("address") + " (" + l.getString("command") + "): "
+                job.write("    NO  " + l.getString("address") + " (" + l.getString("command") + "): "
                         + I18n.tr("server.drift.lost"));
             }
             for (int i = 0; i < gained.length(); i++) {
                 JSONObject g = gained.getJSONObject(i);
-                job.scrivi("    +   " + g.getString("address") + " (" + g.getString("command") + "): "
+                job.write("    +   " + g.getString("address") + " (" + g.getString("command") + "): "
                         + I18n.tr("server.drift.gained"));
             }
             if (lost.isEmpty()) {
-                job.scrivi("    ok  " + I18n.tr("server.drift.listenSame", Map.of("n", String.valueOf(listeningBefore.size()))));
+                job.write("    ok  " + I18n.tr("server.drift.listenSame", Map.of("n", String.valueOf(listeningBefore.size()))));
                 return;
             }
             problems.add(I18n.tr("server.drift.listenProblem", Map.of("list", String.join(", ", lostNames))));
@@ -755,16 +755,16 @@ final class InstallSideEffects {
             String dir = null;
             for (Map.Entry<String, String> e : saved.entrySet()) {
                 String v = e.getValue();
-                if (v.equals("created")) job.scrivi("    " + I18n.tr("server.drift.savedCreated", Map.of("path", e.getKey())));
-                else if (v.equals("tooLarge")) job.scrivi("    " + I18n.tr("server.drift.savedTooLarge", Map.of("path", e.getKey())));
-                else if (v.startsWith("error: ")) job.scrivi("    " + I18n.tr("server.drift.savedError",
+                if (v.equals("created")) job.write("    " + I18n.tr("server.drift.savedCreated", Map.of("path", e.getKey())));
+                else if (v.equals("tooLarge")) job.write("    " + I18n.tr("server.drift.savedTooLarge", Map.of("path", e.getKey())));
+                else if (v.startsWith("error: ")) job.write("    " + I18n.tr("server.drift.savedError",
                         Map.of("path", e.getKey(), "error", v.substring(7))));
                 else {
                     if (dir == null) {
                         dir = v.substring(0, v.length() - e.getKey().length());
-                        job.scrivi("  " + I18n.tr("server.drift.savedHeader", Map.of("dir", dir)));
+                        job.write("  " + I18n.tr("server.drift.savedHeader", Map.of("dir", dir)));
                     }
-                    job.scrivi("      cp -p " + v + " " + e.getKey());
+                    job.write("      cp -p " + v + " " + e.getKey());
                 }
             }
         }
@@ -772,9 +772,9 @@ final class InstallSideEffects {
         private static void writeLines(UpdateManager.Job job, JSONObject c, String key, String countKey, String sign) {
             JSONArray lines = c.optJSONArray(key);
             if (lines == null) return;
-            for (int i = 0; i < lines.length(); i++) job.scrivi("          " + sign + lines.getString(i));
+            for (int i = 0; i < lines.length(); i++) job.write("          " + sign + lines.getString(i));
             int more = c.optInt(countKey) - lines.length();
-            if (more > 0) job.scrivi("          " + I18n.tr("server.drift.moreLines", Map.of("n", String.valueOf(more))));
+            if (more > 0) job.write("          " + I18n.tr("server.drift.moreLines", Map.of("n", String.valueOf(more))));
         }
     }
 

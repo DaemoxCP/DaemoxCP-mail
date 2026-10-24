@@ -400,7 +400,7 @@ public class MtaStsSetup {
     public static JSONObject esegui(UpdateManager.Job job, String soloDominio) {
         JSONObject r = new JSONObject();
         JSONArray fatti = new JSONArray();
-        if (job != null) job.scrivi("=== " + I18n.tr("server.sts.jobTitle") + " ==="
+        if (job != null) job.write("=== " + I18n.tr("server.sts.jobTitle") + " ==="
                 + (soloDominio == null ? "" : " " + I18n.tr("server.sts.onlyDomain", java.util.Map.of("d", String.valueOf(soloDominio)))));
 
         // Un nome che non corrisponde a nessun dominio non deve produrre una sequenza che
@@ -422,7 +422,7 @@ public class MtaStsSetup {
         if (inc == null || !inc.optBoolean("ok", false)) {
             JSONObject e = WebProtection.aggiungiInclude();
             fatti.put(esito("include", I18n.tr("server.sts.includeTitle"), e));
-            if (job != null) job.scrivi("[1/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.includeOk") : I18n.tr("server.sts.includeFail")));
+            if (job != null) job.write("[1/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.includeOk") : I18n.tr("server.sts.includeFail")));
             if (!e.optBoolean("success", false)) return fermati(r, fatti,
                     I18n.tr("server.sts.noIncludeStop"));
         } else fatti.put(gia("include", I18n.tr("server.sts.includeTitle")));
@@ -431,7 +431,7 @@ public class MtaStsSetup {
         if (!WebProtection.stato().optBoolean("installato", false)) {
             JSONObject e = WebProtection.installa("", "");
             fatti.put(esito("config443", I18n.tr("server.sts.config443Title"), e));
-            if (job != null) job.scrivi("[2/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.c443Ok") : I18n.tr("server.sts.c443Fail")));
+            if (job != null) job.write("[2/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.c443Ok") : I18n.tr("server.sts.c443Fail")));
             if (!e.optBoolean("success", false)) return fermati(r, fatti,
                     I18n.tr("server.sts.no443Stop"));
         } else fatti.put(gia("config443", I18n.tr("server.sts.config443Title")));
@@ -478,7 +478,7 @@ public class MtaStsSetup {
         }
         fatti.put(new JSONObject().put("chiave", "cname").put("titolo", "CNAME mta-sts")
                 .put("dettaglio", cname));
-        if (job != null) { job.avanza(4, 8); job.scrivi("[4/8] " + I18n.tr("server.sts.cnameExamined", java.util.Map.of("n", String.valueOf(cname.length())))); }
+        if (job != null) { job.advance(4, 8); job.write("[4/8] " + I18n.tr("server.sts.cnameExamined", java.util.Map.of("n", String.valueOf(cname.length())))); }
 
         // 4-bis. I nomi mta-sts devono puntare dritti al server.
         // Ogni dominio riporta COSA HO VISTO. Prima questo passo diceva "era gia' a posto"
@@ -539,7 +539,7 @@ public class MtaStsSetup {
         fatti.put(new JSONObject().put("chiave", "proxy")
                 .put("titolo", I18n.tr("server.sts.stepProxy"))
                 .put("dettaglio", proxy));
-        if (job != null) job.scrivi("[5/8] " + I18n.tr("server.sts.proxySummary", java.util.Map.of("d", String.valueOf(dritti), "s", String.valueOf(sistemati), "c", String.valueOf(ciechi))));
+        if (job != null) job.write("[5/8] " + I18n.tr("server.sts.proxySummary", java.util.Map.of("d", String.valueOf(dritti), "s", String.valueOf(sistemati), "c", String.valueOf(ciechi))));
 
         // 5. il certificato
         //
@@ -559,7 +559,7 @@ public class MtaStsSetup {
             // ci sono gia': Let's Encrypt concede 5 emissioni a settimana per lo stesso
             // insieme di nomi, e un pulsante che riemette a ogni pressione consuma quel
             // margine lasciando senza rinnovo proprio quando servirebbe.
-            if (job != null) { job.avanza(6, 8); job.scrivi("[6/8] " + I18n.tr("server.sts.issuingCert", java.util.Map.of("n", String.valueOf(nomi.size()), "m", String.valueOf(scoperti.size())))); }
+            if (job != null) { job.advance(6, 8); job.write("[6/8] " + I18n.tr("server.sts.issuingCert", java.util.Map.of("n", String.valueOf(nomi.size()), "m", String.valueOf(scoperti.size())))); }
             AcmeManager.CertificateResult cr = acme.emettiConNomi(host, nomi);
             // "Emissione fallita" da solo non serve a nessuno: la ragione vera sta nell'uscita
             // di acme.sh — un dominio che il token non copre, un limite di Let's Encrypt, una
@@ -576,9 +576,9 @@ public class MtaStsSetup {
             riga.put("output", dettaglio);
             fatti.put(riga);
             if (job != null) {
-                job.scrivi("--- " + I18n.tr("server.sts.acmeOutput") + " ---");
-                for (String r2 : dettaglio.split("\n")) job.scrivi("  " + r2);
-                job.scrivi("--- " + I18n.tr("server.sts.outputEnd") + " ---");
+                job.write("--- " + I18n.tr("server.sts.acmeOutput") + " ---");
+                for (String r2 : dettaglio.split("\n")) job.write("  " + r2);
+                job.write("--- " + I18n.tr("server.sts.outputEnd") + " ---");
             }
             if (!cr.success) return fermati(r, fatti,
                     I18n.tr("server.sts.noCertStop"));
@@ -598,13 +598,13 @@ public class MtaStsSetup {
         // prima di dormire, e si smette appena rispondono: un'attesa che non finisce mai
         // quando l'esito e' gia' buono e' un difetto tanto quanto non aspettare.
         if (!appenaCambiati.isEmpty()) {
-            if (job != null) job.scrivi("[7/8] " + I18n.tr("server.sts.waitingDns", java.util.Map.of("n", String.valueOf(appenaCambiati.size()), "min", String.valueOf((MAX_WAIT_MS / 60000)))));
+            if (job != null) job.write("[7/8] " + I18n.tr("server.sts.waitingDns", java.util.Map.of("n", String.valueOf(appenaCambiati.size()), "min", String.valueOf((MAX_WAIT_MS / 60000)))));
             List<String> restano = attendiPropagazione(
                     new ArrayList<>(appenaCambiati),
                     dom -> MtaSts.provaPubblica(dom).optBoolean("ok", false),
                     OROLOGIO_VERO, MAX_WAIT_MS, WAIT_INTERVAL_MS,
-                    riga -> { if (job != null) job.scrivi(riga); });
-            if (job != null) job.scrivi(restano.isEmpty()
+                    riga -> { if (job != null) job.write(riga); });
+            if (job != null) job.write(restano.isEmpty()
                     ? "    " + I18n.tr("server.sts.allAnswer")
                     : "    " + I18n.tr("server.sts.stillNot", java.util.Map.of("elenco", String.valueOf(String.join(", ", restano)))));
         }
@@ -629,7 +629,7 @@ public class MtaStsSetup {
         } catch (Exception e) {
             finali.put(nota("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
-        if (job != null) { job.avanza(8, 8); job.scrivi("[7-8/8] " + I18n.tr("server.sts.finalExamined", java.util.Map.of("n", String.valueOf(finali.length())))); }
+        if (job != null) { job.advance(8, 8); job.write("[7-8/8] " + I18n.tr("server.sts.finalExamined", java.util.Map.of("n", String.valueOf(finali.length())))); }
         fatti.put(new JSONObject().put("chiave", "txt").put("titolo", I18n.tr("server.sts.finalTitle"))
                 .put("dettaglio", finali));
 

@@ -22,77 +22,77 @@ import java.util.Map;
  */
 public class ServiceFallTest {
 
-    private static int falliti = 0;
+    private static int failures = 0;
 
     public static void main(String[] args) {
 
         // --- Il caso misurato sulla VM: 13 servizi, due fermi da prima ---
-        Map<String, Boolean> prima = vm(), adesso = vm();
+        Map<String, Boolean> before = vmServices(), now = vmServices();
         UpdateManager.Job j = new UpdateManager.Job("prova", "prova");
-        boolean caduto = UpdateManager.serviziCaduti(j, prima, adesso);
+        boolean fallen = UpdateManager.fallenServices(j, before, now);
         String log = j.toJson().optString("consoleLog", "");
-        vero("la macchina della misura: nessun servizio e' caduto", !caduto);
-        vero("  local_unbound compare comunque nel quadro", log.contains("local_unbound"));
-        vero("  e ntpd anche", log.contains("ntpd"));
-        vero("  nessun allarme nel log", !log.toUpperCase().contains("ALLARME")
+        check("la macchina della misura: nessun servizio e' caduto", !fallen);
+        check("  local_unbound compare comunque nel quadro", log.contains("local_unbound"));
+        check("  e ntpd anche", log.contains("ntpd"));
+        check("  nessun allarme nel log", !log.toUpperCase().contains("ALLARME")
                                       && !log.toUpperCase().contains("ALARM"));
 
         // --- Un guasto vero si vede ancora: era attivo, adesso no ---
-        Map<String, Boolean> dopoGuasto = vm();
-        dopoGuasto.put("dovecot", false);
+        Map<String, Boolean> afterFault = vmServices();
+        afterFault.put("dovecot", false);
         UpdateManager.Job j2 = new UpdateManager.Job("prova2", "prova");
-        vero("un servizio che era attivo e adesso no: caduto",
-             UpdateManager.serviziCaduti(j2, prima, dopoGuasto));
+        check("un servizio che era attivo e adesso no: caduto",
+             UpdateManager.fallenServices(j2, before, afterFault));
         String log2 = j2.toJson().optString("consoleLog", "");
-        vero("  e il log lo nomina", log2.contains("dovecot"));
-        vero("  con un allarme", log2.toUpperCase().contains("ALLARME") || log2.toUpperCase().contains("ALARM"));
+        check("  e il log lo nomina", log2.contains("dovecot"));
+        check("  con un allarme", log2.toUpperCase().contains("ALLARME") || log2.toUpperCase().contains("ALARM"));
 
         // --- Un servizio che l'aggiornamento ha ACCESO non e' un guasto ---
-        Map<String, Boolean> acceso = vm();
-        acceso.put("ntpd", true);
+        Map<String, Boolean> turnedOn = vmServices();
+        turnedOn.put("ntpd", true);
         UpdateManager.Job j3 = new UpdateManager.Job("prova3", "prova");
-        vero("un servizio che prima era fermo e adesso e' attivo: nessun guasto",
-             !UpdateManager.serviziCaduti(j3, prima, acceso));
-        vero("  e non si dice che non era attivo nemmeno prima, perche' adesso lo e'",
+        check("un servizio che prima era fermo e adesso e' attivo: nessun guasto",
+             !UpdateManager.fallenServices(j3, before, turnedOn));
+        check("  e non si dice che non era attivo nemmeno prima, perche' adesso lo e'",
              !j3.toJson().optString("consoleLog", "").contains("ntpd: attivo (")
              && !j3.toJson().optString("consoleLog", "").contains("ntpd: running ("));
 
         // --- Un servizio SPARITO (il pacchetto se n'e' andato) mentre era attivo ---
-        Map<String, Boolean> sparito = vm();
-        sparito.remove("rspamd");
+        Map<String, Boolean> vanished = vmServices();
+        vanished.remove("rspamd");
         UpdateManager.Job j4 = new UpdateManager.Job("prova4", "prova");
-        vero("un servizio attivo che non esiste piu': caduto",
-             UpdateManager.serviziCaduti(j4, prima, sparito));
-        vero("  e il log lo nomina", j4.toJson().optString("consoleLog", "").contains("rspamd"));
+        check("un servizio attivo che non esiste piu': caduto",
+             UpdateManager.fallenServices(j4, before, vanished));
+        check("  e il log lo nomina", j4.toJson().optString("consoleLog", "").contains("rspamd"));
 
         // --- Un servizio comparso adesso si vede nel quadro ---
-        Map<String, Boolean> comparso = vm();
-        comparso.put("opendkim", true);
+        Map<String, Boolean> appeared = vmServices();
+        appeared.put("opendkim", true);
         UpdateManager.Job j5 = new UpdateManager.Job("prova5", "prova");
-        vero("un servizio comparso con l'aggiornamento non e' un guasto",
-             !UpdateManager.serviziCaduti(j5, prima, comparso));
-        vero("  ma compare nel quadro", j5.toJson().optString("consoleLog", "").contains("opendkim"));
+        check("un servizio comparso con l'aggiornamento non e' un guasto",
+             !UpdateManager.fallenServices(j5, before, appeared));
+        check("  ma compare nel quadro", j5.toJson().optString("consoleLog", "").contains("opendkim"));
 
         // --- Tutto attivo prima e dopo ---
-        Map<String, Boolean> tutti = new LinkedHashMap<>();
-        tutti.put("postfix", true); tutti.put("dovecot", true);
+        Map<String, Boolean> all = new LinkedHashMap<>();
+        all.put("postfix", true); all.put("dovecot", true);
         UpdateManager.Job j6 = new UpdateManager.Job("prova6", "prova");
-        vero("tutto attivo prima e dopo: nessun guasto",
-             !UpdateManager.serviziCaduti(j6, tutti, new LinkedHashMap<>(tutti)));
+        check("tutto attivo prima e dopo: nessun guasto",
+             !UpdateManager.fallenServices(j6, all, new LinkedHashMap<>(all)));
 
         // --- Nessuno stato di partenza: non si inventa un guasto ---
         // Succede se statoServizi() non ha trovato nessuno script rc.d. Senza un "prima" non
         // si puo' dire che qualcosa e' caduto, e dire di si' sarebbe un allarme inventato.
         UpdateManager.Job j7 = new UpdateManager.Job("prova7", "prova");
-        vero("senza stato di partenza non si dichiara nessun guasto",
-             !UpdateManager.serviziCaduti(j7, new LinkedHashMap<>(), vm()));
+        check("senza stato di partenza non si dichiara nessun guasto",
+             !UpdateManager.fallenServices(j7, new LinkedHashMap<>(), vmServices()));
 
-        System.out.println(falliti == 0 ? "\nTUTTO OK" : "\n" + falliti + " PROVE FALLITE");
-        if (falliti > 0) System.exit(1);
+        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        if (failures > 0) System.exit(1);
     }
 
     /** I servizi della VM come li ha visti la misura del 23/10/2026. */
-    private static Map<String, Boolean> vm() {
+    private static Map<String, Boolean> vmServices() {
         Map<String, Boolean> m = new LinkedHashMap<>();
         for (String s : new String[]{"postfix", "dovecot", "rspamd", "redis", "clamav_clamd",
                                      "clamav_freshclam", "mysql-server", "nginx", "php_fpm",
@@ -102,8 +102,8 @@ public class ServiceFallTest {
         return m;
     }
 
-    private static void vero(String nome, boolean ok) {
-        System.out.println((ok ? "  ok   " : "  NO   ") + nome);
-        if (!ok) falliti++;
+    private static void check(String name, boolean ok) {
+        System.out.println((ok ? "  ok   " : "  NO   ") + name);
+        if (!ok) failures++;
     }
 }
