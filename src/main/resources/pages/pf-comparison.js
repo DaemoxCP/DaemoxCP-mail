@@ -52,8 +52,8 @@
                 jails.forEach(j => {
                     const f2b = (j.believed_banned || []).length;
                     const inPf = (j.in_firewall || []).length;
-                    const missingOnes = j.solo_in_fail2ban || [];
-                    const leftovers = j.solo_in_pf || [];
+                    const missingOnes = j.only_in_fail2ban || [];
+                    const leftovers = j.only_in_pf || [];
                     let outcome;
                     if (!j.read) {
                         // Non verificata con ban attivi: rosso. Non verificata e ferma: grigio.

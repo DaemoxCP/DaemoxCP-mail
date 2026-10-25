@@ -85,8 +85,9 @@ for f in sorted(files):
         if m.group(1).lstrip("\\") != m.group(3).lstrip("\\"): return m.group(0)
         counts["chiavi nel codice"] += 1
         return m.group(1) + keys[m.group(2)] + m.group(3)
-    t2 = QK.sub(r_q, t)
-    t2 = TK.sub(lambda m: (counts.update(["chiavi {{t:}}"]) or "{{t:" + keys[m.group(1)] + "}}"), t2)
+    # con una mappa di chiavi vuota l'alternativa e' vuota e prenderebbe la stringa vuota
+    t2 = QK.sub(r_q, t) if keys else t
+    t2 = t2 if not keys else TK.sub(lambda m: (counts.update(["chiavi {{t:}}"]) or "{{t:" + keys[m.group(1)] + "}}"), t2)
     if f.endswith((".js", ".html")) or f.endswith(".java"):
         t2 = js_placeholders(t2, "pagine" if not f.endswith(".java") else "nel java")
     if t2 != t:

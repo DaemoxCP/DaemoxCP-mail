@@ -788,15 +788,15 @@ public final class PackagePlan {
      * il catalogo offre, e gli ranges di VuXML di ogni problema.
      *
      * Verdetti, dal migliore al peggiore:
-     *  - "si-risolve-aggiornando": il catalogo ha una versione piu' recente che VuXML non
+     *  - "fixed-by-upgrade": il catalogo ha una versione piu' recente che VuXML non
      *    considera vulnerabile per nessuno dei problemi;
-     *  - "aggiornamento-non-basta": il catalogo ha una versione piu' recente, ma per almeno un
+     *  - "upgrade-not-enough": il catalogo ha una versione piu' recente, ma per almeno un
      *    problema e' ancora vulnerabile;
-     *  - "fix-fuori-dal-ramo": il catalogo non va oltre, ma VuXML indica da quale
+     *  - "fix-outside-branch": il catalogo non va oltre, ma VuXML indica da quale
      *    versione il problema e' corretto — esiste, non e' ancora nel tuo ramo;
-     *  - "fix-non-indicata": vulnerabile fino a una versione compresa, senza dire la prima
+     *  - "fix-not-stated": vulnerabile fino a una versione compresa, senza dire la prima
      *    corretta;
-     *  - "nessuna-fix": VuXML non mette un limite superiore, cioe' nessuna versione
+     *  - "no-fix": VuXML non mette un limite superiore, cioe' nessuna versione
      *    pubblicata e' corretta;
      *  - "non-so": un intervallo non si lascia leggere o il confronto non ha risposto.
      */
@@ -832,15 +832,15 @@ public final class PackagePlan {
                     }
                     if (exact) {
                         onlyThis = true;
-                        d.put("type", "solo-questa-versione");
+                        d.put("type", "this-version-only");
                     } else if (upperBound == null) {
                         withoutLimit = true;
-                        d.put("type", "senza-limite");
+                        d.put("type", "no-upper-bound");
                     } else if (upperBound.op().equals("<")) {
-                        d.put("type", "corretta-da").put("firstFixed", upperBound.version());
+                        d.put("type", "fixed-in").put("firstFixed", upperBound.version());
                         if (firstFixed == null || c.compare(upperBound.version(), firstFixed) > 0) firstFixed = upperBound.version();
                     } else {
-                        d.put("type", "vulnerabile-fino-a").put("upTo", upperBound.version());
+                        d.put("type", "vulnerable-up-to").put("upTo", upperBound.version());
                         upTo = upperBound.version();
                     }
                 }
@@ -858,23 +858,23 @@ public final class PackagePlan {
                 verdict = "non-so";
                 explain = I18n.tr("server.plan.v.unknownRange");
             } else if (newerCatalog && stillOpenInCatalog.isEmpty()) {
-                verdict = "si-risolve-aggiornando";
+                verdict = "fixed-by-upgrade";
                 explain = I18n.tr("server.plan.v.fixedByUpgrade", java.util.Map.of("v", String.valueOf(catalog)));
             } else if (newerCatalog) {
-                verdict = "aggiornamento-non-basta";
+                verdict = "upgrade-not-enough";
                 explain = I18n.tr("server.plan.v.upgradeNotEnough", java.util.Map.of("v", String.valueOf(catalog), "list", String.valueOf(String.join("; ", stillOpenInCatalog))))
                         + (firstFixed != null ? " " + I18n.tr("server.plan.v.fixedFrom", java.util.Map.of("v", String.valueOf(firstFixed))) : "");
             } else if (withoutLimit) {
-                verdict = "nessuna-fix";
+                verdict = "no-fix";
                 explain = I18n.tr("server.plan.v.noFix");
             } else if (upTo != null && firstFixed == null) {
-                verdict = "fix-non-indicata";
+                verdict = "fix-not-stated";
                 explain = I18n.tr("server.plan.v.fixNotStated", java.util.Map.of("upTo", String.valueOf(upTo), "cat", String.valueOf(emptyIf(catalog, installed))));
             } else if (onlyThis && firstFixed == null) {
-                verdict = "fix-fuori-dal-ramo";
+                verdict = "fix-outside-branch";
                 explain = I18n.tr("server.plan.v.onlyThis", java.util.Map.of("v", String.valueOf(installed)));
             } else if (firstFixed != null) {
-                verdict = "fix-fuori-dal-ramo";
+                verdict = "fix-outside-branch";
                 explain = I18n.tr("server.plan.v.fixOutsideBranch", java.util.Map.of("fixed", String.valueOf(firstFixed), "cat", String.valueOf(emptyIf(catalog, installed))));
             } else {
                 verdict = "non-so";

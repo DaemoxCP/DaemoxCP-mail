@@ -1376,7 +1376,7 @@ public class MailPanelContent {
             const btn = document.getElementById('versioniRileggi');
             btn.disabled = true;
             stateValue.textContent = t('home.readingVersions');
-            fetch('/api/versioni' + (freshRead ? '?fresco=1' : '')).then(r => r.json()).then(d => {
+            fetch('/api/versions' + (freshRead ? '?fresh=1' : '')).then(r => r.json()).then(d => {
                 btn.disabled = false;
                 if (!d.success) {
                     stateValue.textContent = t('ver.readFailed', { error: d.error || t('common.unknownError') });
@@ -2095,7 +2095,7 @@ public class MailPanelContent {
             document.getElementById('acNome').value = '';
             document.getElementById('acQuota').value = '1024';
             bootstrap.Modal.getOrCreateInstance(document.getElementById('aCasellaModal')).show();
-            fetch('/api/aliases?trasforma=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
+            fetch('/api/aliases?transform=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
                 acShow('acCaricamento', false);
                 if (!d.success || !d.possible) {
                     document.getElementById('acNo').textContent = d.reason || d.error || t('conv.notPossible');
@@ -2162,7 +2162,7 @@ public class MailPanelContent {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'trasforma_in_casella', source: acInfo.address, password: pass.value,
+                    action: 'transform_to_mailbox', source: acInfo.address, password: pass.value,
                     name: document.getElementById('acNome').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
                     keep_forwards: document.getElementById('acTieni').checked, old_mail: mail,
                     fingerprint: acInfo.fingerprint, csrf_token: csrfToken
@@ -2264,7 +2264,7 @@ public class MailPanelContent {
             aaShow('aaSi', false);
             document.getElementById('aaVia').disabled = true;
             bootstrap.Modal.getOrCreateInstance(document.getElementById('aAliasModal')).show();
-            fetch('/api/mailboxes?trasforma=' + id).then(r => r.json()).then(d => {
+            fetch('/api/mailboxes?transform=' + id).then(r => r.json()).then(d => {
                 aaShow('aaCaricamento', false);
                 if (!d.success || !d.possible) {
                     document.getElementById('aaNo').textContent = d.reason || d.error || t('conv.notPossible');
@@ -2318,7 +2318,7 @@ public class MailPanelContent {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'trasforma_in_alias', id: aaInfo.id, destinations: dest,
+                    action: 'transform_to_alias', id: aaInfo.id, destinations: dest,
                     confirmation: document.getElementById('aaConferma').value.trim(), fingerprint: aaInfo.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
@@ -12220,11 +12220,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         /* Il verdict sulla vulnerabilita', in una parola e un colore. */
         function pkVulnBadge(v) {
             if (!v) return '<span class="text-muted small">' + escHtml(t('pkgs.noVuln')) + '</span>';
-            const m = { 'si-risolve-aggiornando': ['bg-warning text-dark', 'pkgs.v.fixable'],
-                        'aggiornamento-non-basta': ['bg-danger', 'pkgs.v.notEnough'],
-                        'fix-fuori-dal-ramo': ['bg-danger', 'pkgs.v.outOfBranch'],
-                        'fix-non-indicata': ['bg-danger', 'pkgs.v.noFix'],
-                        'nessuna-fix': ['bg-danger', 'pkgs.v.noFix'] }[v.verdict] || ['bg-secondary', 'pkgs.v.unknown'];
+            const m = { 'fixed-by-upgrade': ['bg-warning text-dark', 'pkgs.v.fixable'],
+                        'upgrade-not-enough': ['bg-danger', 'pkgs.v.notEnough'],
+                        'fix-outside-branch': ['bg-danger', 'pkgs.v.outOfBranch'],
+                        'fix-not-stated': ['bg-danger', 'pkgs.v.noFix'],
+                        'no-fix': ['bg-danger', 'pkgs.v.noFix'] }[v.verdict] || ['bg-secondary', 'pkgs.v.unknown'];
             return '<span class="badge ' + m[0] + '"><i class="fas fa-bug me-1" aria-hidden="true"></i>' + escHtml(t(m[1])) + '</span>';
         }
 
@@ -12480,27 +12480,27 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // e il testo da leggere si sceglie qui, nella lingua della pagina.
         function updVerdict(v) {
             return ({
-                "IL LIVELLO E' INDIETRO": t('up.vLevelBehind'),
-                'ALLINEATO': t('up.vAligned'),
-                'LOG NON LEGGIBILE': t('up.vLogUnreadable'),
-                'CI SONO ANALISI INTERROTTE': t('up.vScansInterrupted'),
-                'NESSUNA ANALISI INTERROTTA': t('up.vNoScanInterrupted'),
-                "NESSUNA TRACCIA, MA IL LOG E' CORTO": t('up.vNoTraceShortLog'),
-                "C'E' UN COSTRUTTO NON PIU' VALIDO": t('up.vInvalidConstruct'),
-                'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE': t('up.vBehaviorDiffs'),
-                'NIENTE DA SEGNALARE': t('up.vNothingToReport'),
-                'CI SONO RIFERIMENTI CHE SI ROMPEREBBERO': t('up.vRefsWouldBreak'),
-                'NESSUN RIFERIMENTO CHE SI ROMPA': t('up.vNoRefBreaks'),
-                'NON DETERMINABILE': t('up.vUndetermined'),
-                "NON NE USA I COMANDI, MA E' UNA LIBRERIA": t('up.vLibraryOnly'),
-                'IL PANNELLO NON LO USA': t('up.vPanelDoesNotUse'),
-                'LI NOMINA, MA NON SONO I SUOI': t('up.vNamesNotTheirs'),
-                "LO USA, E NON C'E' RICAMBIO": t('up.vUsesNoSpare'),
-                'LO USA': t('up.vUses'),
-                'IN USO ADESSO': t('up.vInUseNow'),
-                'RICHIESTO': t('up.vRequired'),
-                "IL COMANDO E' SUO": t('up.vCommandIsIts'),
-                'NESSUNO LO USA': t('up.vNobodyUses')
+                "LEVEL_BEHIND": t('up.vLevelBehind'),
+                'ALIGNED': t('up.vAligned'),
+                'LOG_UNREADABLE': t('up.vLogUnreadable'),
+                'SCANS_INTERRUPTED': t('up.vScansInterrupted'),
+                'NO_SCAN_INTERRUPTED': t('up.vNoScanInterrupted'),
+                "NO_TRACE_SHORT_LOG": t('up.vNoTraceShortLog'),
+                "INVALID_CONSTRUCT": t('up.vInvalidConstruct'),
+                'BEHAVIOR_DIFFS': t('up.vBehaviorDiffs'),
+                'NOTHING_TO_REPORT': t('up.vNothingToReport'),
+                'REFS_WOULD_BREAK': t('up.vRefsWouldBreak'),
+                'NO_REF_BREAKS': t('up.vNoRefBreaks'),
+                'UNDETERMINED': t('up.vUndetermined'),
+                "LIBRARY_ONLY": t('up.vLibraryOnly'),
+                'PANEL_DOES_NOT_USE': t('up.vPanelDoesNotUse'),
+                'NAMES_NOT_THEIRS': t('up.vNamesNotTheirs'),
+                "USES_NO_SPARE": t('up.vUsesNoSpare'),
+                'USES': t('up.vUses'),
+                'IN_USE_NOW': t('up.vInUseNow'),
+                'REQUIRED': t('up.vRequired'),
+                "COMMAND_IS_ITS": t('up.vCommandIsIts'),
+                'NOBODY_USES': t('up.vNobodyUses')
             })[v] || v;
         }
 
@@ -12578,7 +12578,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else {
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.pfLine', { pkg: pf.package, version: pf.version, repo: pf.repoVersion || '?', level: pf.level || '?' }))
                    + ' ' + escHtml(pf.explicitLevel ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
-                   + '<div class="alert alert-' + (pf.verdict === 'ALLINEATO' ? 'success' : 'warning')
+                   + '<div class="alert alert-' + (pf.verdict === 'ALIGNED' ? 'success' : 'warning')
                    + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(pf.verdict)) + '</strong> &mdash; '
                    + updEsc(pf.explanation) + '</div>';
                 const cb = pf.changes || [];
@@ -12636,8 +12636,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!rs.present) {
                 h += '<div class="small text-muted">' + updEsc(rs.note || t('up.notInstalled')) + '</div>';
             } else {
-                const cls = rs.verdict === 'NIENTE DA SEGNALARE' ? 'success'
-                          : (rs.verdict === 'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE' ? 'info' : 'danger');
+                const cls = rs.verdict === 'NOTHING_TO_REPORT' ? 'success'
+                          : (rs.verdict === 'BEHAVIOR_DIFFS' ? 'info' : 'danger');
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.filesRead })) + '</div>'
                    + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(rs.verdict))
                    + '</strong> &mdash; ' + updEsc(rs.explanation) + '</div>';
@@ -12727,7 +12727,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
+            const r = await updApi('dovecot_config_regen', { confirm: 'REGENERATE' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.regenRunning')) + '</span>';
             pre.style.display = 'block';
@@ -12786,7 +12786,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function rebGo() {
             if (!updConfirm('', t('up.wReboot'))) return;
             const el = document.getElementById('os-body');
-            const r = await updApi('reboot_now', { confirm: 'RIAVVIA IL SERVER', minutes: 1 });
+            const r = await updApi('reboot_now', { confirm: 'REBOOT THE SERVER', minutes: 1 });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.rebootNotScheduled')) + '</strong><br>'
                     + updEsc(r.error) + (r.output ? '<br><code>' + updEsc(r.output) + '</code>' : '') + '</div>';
@@ -12872,7 +12872,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
             const el = document.getElementById('os-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingAutostart')) + '';
-            const r = await updApi('rc_remove', { confirm: 'RIMUOVI RC' });
+            const r = await updApi('rc_remove', { confirm: 'REMOVE RC' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mb-0">'
                 + updEsc(r.note || r.error) + '</div>'
                 + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">'
@@ -12882,7 +12882,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function rcGo() {
             if (!updConfirm('', t('up.wInstallRc'))) return;
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
-            const r = await updApi('rc_install', { confirm: 'INSTALLA RC' });
+            const r = await updApi('rc_install', { confirm: 'INSTALL RC' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pre.style.display = 'block';
             pre.textContent = 'service mailpanel rcvar:\\n' + (r.rcvar || '');
@@ -12930,7 +12930,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const pre = document.getElementById('os-log');
             pre.style.display = 'block';
             pre.textContent = t('up.fetchRunning');
-            const r = await updApi('os_fetch', { confirm: 'CERCA AGGIORNAMENTI' });
+            const r = await updApi('os_fetch', { confirm: 'FETCH UPDATES' });
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
             // Segue il lavoro con il polling: su un sistema indietro di mesi il download dura
             // minuti, e una richiesta HTTP tenuta aperta cosi' a lungo la chiude il browser.
@@ -12992,7 +12992,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function jumpGo() {
             if (!updConfirm('', t('up.wContinue'))) return;
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
-            const r = await updApi('jump_continue', { confirm: 'PROSEGUI', target: upTarget() });
+            const r = await updApi('jump_continue', { confirm: 'CONTINUE', target: upTarget() });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -13061,7 +13061,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function upPrep() {
             if (!updConfirm('', t('up.wPrepare'))) return;
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
-            const r = await updApi('os_upgrade_prepare', { confirm: 'PREPARA AGGIORNAMENTO', target: upTarget() });
+            const r = await updApi('os_upgrade_prepare', { confirm: 'PREPARE UPGRADE', target: upTarget() });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.preparingKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -13170,8 +13170,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         return """
         // L'esito arriva come codice del server; qui il nome nella lingua della pagina.
         function updOutcome(v) {
-            return ({ consistent: t('up.eConsistent'), DIVERGE: t('up.eDiverges'), MISTO: t('up.eMixed'), absent: t('up.eMissing'),
-                      'port installato accanto al sistema base': t('up.ePortBeside') })[v] || v;
+            return ({ consistent: t('up.eConsistent'), DIVERGES: t('up.eDiverges'), MIXED: t('up.eMixed'), absent: t('up.eMissing'),
+                      'port-beside-base': t('up.ePortBeside') })[v] || v;
         }
 
         async function defCheck() {
@@ -13192,7 +13192,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + '<th scope="col">' + escHtml(t('up.colComponent')) + '</th><th scope="col">' + escHtml(t('up.colFbsdDefault')) + '</th><th scope="col">' + escHtml(t('up.colInstalled')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
             (r.lines || []).forEach(x => {
                 const cls = x.outcome === 'consistent' ? 'upd-badge-ok'
-                          : (x.outcome === 'DIVERGE' ? 'upd-badge-stop' : 'upd-badge-warn');
+                          : (x.outcome === 'DIVERGES' ? 'upd-badge-stop' : 'upd-badge-warn');
                 const outside = x.outsideDefault
                     ? '<br><span class="small text-danger">' + escHtml(t('up.outsideDefault')) + ' <code>'
                       + updEsc(x.outsideDefault) + '</code></span>' : '';
@@ -13233,9 +13233,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                          + escHtml(t('up.lookingProcs')) + '</div>';
             const r = await updApi('ssl_usage');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.verdict === 'NESSUNO LO USA' ? 'success'
-                      : (r.verdict === 'IN USO ADESSO' || r.verdict === 'RICHIESTO') ? 'danger' : 'warning';
-            // "IL COMANDO E' SUO" e "NON DETERMINABILE" restano gialli: non sono un divieto,
+            const cls = r.verdict === 'NOBODY_USES' ? 'success'
+                      : (r.verdict === 'IN_USE_NOW' || r.verdict === 'REQUIRED') ? 'danger' : 'warning';
+            // "COMMAND_IS_ITS" e "UNDETERMINED" restano gialli: non sono un divieto,
             // ma nemmeno un via libera.
             let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
                   + '<strong>' + updEsc(updVerdict(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
@@ -13256,7 +13256,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                        + '<td class="small">' + updEsc(b.version) + '</td>'
                        + '<td class="small">' + updEsc(b.pkgName || t('up.baseSystem')) + '</td>'
                        + '<td>' + (wins
-                          ? '<span class="badge ' + (b.delPort ? 'upd-badge-warn' : 'upd-badge-ok') + '">'
+                          ? '<span class="badge ' + (b.fromPort ? 'upd-badge-warn' : 'upd-badge-ok') + '">'
                             + escHtml(t('up.winsPath')) + '</span>'
                           : '<span class="badge upd-badge-info">' + escHtml(t('up.presentNotChosen')) + '</span>') + '</td></tr>';
                 });
@@ -13355,9 +13355,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingRspamdLog')) + '';
             const r = await updApi('rspamd_timeout');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.verdict === 'NESSUNA ANALISI INTERROTTA' ? 'success'
-                      : (r.verdict === 'CI SONO ANALISI INTERROTTE' ? 'danger'
-                      : (r.verdict === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
+            const cls = r.verdict === 'NO_SCAN_INTERRUPTED' ? 'success'
+                      : (r.verdict === 'SCANS_INTERRUPTED' ? 'danger'
+                      : (r.verdict === "NO_TRACE_SHORT_LOG" ? 'info' : 'secondary'));
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
             if (r.warns) {
@@ -13401,7 +13401,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm(t('up.confirmLevel', { level: levelValue, note: noticeText }), t('up.wRaise'))) return;
             const el = document.getElementById('pf-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.raising')) + '';
-            const r = await updApi('postfix_level', { confirm: 'ALZA', level: levelValue });
+            const r = await updApi('postfix_level', { confirm: 'RAISE', level: levelValue });
             let h = '<div class="alert alert-' + (r.success ? (r.warningVia === false ? 'warning' : 'success') : 'danger')
                   + ' py-2 small mb-1">' + updEsc(r.error || r.note || t('shu.unknownResult')) + '</div>';
             if (r.before !== undefined) {
@@ -13479,15 +13479,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + '</tr></thead><tbody>';
             (r.tools || []).forEach(x => {
                 const b = x.state === 'reachable' ? 'upd-badge-ok'
-                        : (x.state === 'non installato' ? 'upd-badge-warn' : 'upd-badge-stop');
+                        : (x.state === 'not-installed' ? 'upd-badge-warn' : 'upd-badge-stop');
                 h += '<tr class="upd-cell"><td><code>' + updEsc(x.command) + '</code></td>'
                    + '<td class="small text-muted">' + updEsc(x.purpose) + '</td>'
                    + '<td class="small"><code>' + updEsc(x.resolved || '-') + '</code>'
                    + (!x.resolved && x.onDisk
                       ? '<br><span class="small text-danger">' + escHtml(t('up.existsIn', { dir: x.expectedIn })) + '</span>' : '')
                    + '</td>'
-                   + '<td><span class="badge ' + b + '">' + escHtml(({ reachable: t('up.sReachable'), 'non installato': t('up.notInstalled'),
-                                                                        "C'E' MA IL PATH NON LO RAGGIUNGE": t('up.sUnreachable') })[x.state] || x.state) + '</span></td></tr>';
+                   + '<td><span class="badge ' + b + '">' + escHtml(({ reachable: t('up.sReachable'), 'not-installed': t('up.notInstalled'),
+                                                                        "NOT_IN_PATH": t('up.sUnreachable') })[x.state] || x.state) + '</span></td></tr>';
             });
             h += '</tbody></table></div>';
             el.innerHTML = h;
@@ -13533,11 +13533,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // Il riquadro che spiega l'esito, riusato sia qui sia dentro la scheda di openssl.
         function rmBox(r) {
-            const cls = r.verdict === 'IL PANNELLO NON LO USA' ? 'success'
-                      : r.verdict === "LO USA, E NON C'E' RICAMBIO" ? 'danger'
-                      : r.verdict === 'LO USA' ? 'warning'
-                      : r.verdict === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info'
-                      : r.verdict === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
+            const cls = r.verdict === 'PANEL_DOES_NOT_USE' ? 'success'
+                      : r.verdict === "USES_NO_SPARE" ? 'danger'
+                      : r.verdict === 'USES' ? 'warning'
+                      : r.verdict === "LIBRARY_ONLY" ? 'info'
+                      : r.verdict === 'NAMES_NOT_THEIRS' ? 'success' : 'secondary';
             let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdict(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
             const lb = r.providesLibraries || [];
@@ -13567,8 +13567,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             // Il pulsante compare SOLO dove la misura dice che si puo': non si offre un'azione
             // che il controllo appena fatto rifiuterebbe.
-            if (r.pkgName && (r.verdict === 'IL PANNELLO NON LO USA'
-                             || r.verdict === 'LI NOMINA, MA NON SONO I SUOI')) {
+            if (r.pkgName && (r.verdict === 'PANEL_DOES_NOT_USE'
+                             || r.verdict === 'NAMES_NOT_THEIRS')) {
                 // L'analisi approfondita viene PRIMA del pulsante che toglie, ed e' l'unica che
                 // guarda gli script su disco: quelli girano dopo, e il jar non li contiene.
                 h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rmDeep(this.dataset.pkg)">'
@@ -13689,7 +13689,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm('', t('up.wRelink'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
-            const r = await updApi('relink', { confirm: 'RICOLLEGA' });
+            const r = await updApi('relink', { confirm: 'RELINK' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.relinking')) + '</span>';
             pre.style.display = 'block';
@@ -13778,9 +13778,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
 
             const steps = r.steps || [];
-            let h = '<div class="mb-2 small">' + (r.daFare === 0
+            let h = '<div class="mb-2 small">' + (r.toDo === 0
                 ? '<span class="text-success"><i class="fas fa-circle-check me-1" aria-hidden="true"></i><strong>' + escHtml(t('up.nothingToDo')) + '</strong></span>'
-                : '<strong>' + escHtml(tn('up.stepsToDo', r.daFare)) + '</strong> ' + escHtml(t('up.onlyFirst')))
+                : '<strong>' + escHtml(tn('up.stepsToDo', r.toDo)) + '</strong> ' + escHtml(t('up.onlyFirst')))
                 + '</div>';
 
             // I passi si presentano nell'ordine di esecuzione, ma con identita' stabili:
@@ -13835,10 +13835,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 return;
             } else if (actionItem.type === 'rspamd_clean_cache') {
                 if (!updConfirm('', t('up.wDeleteCache'))) return;
-                r = await updApi('rspamd_clean_cache', { confirm: 'ELIMINA CACHE' });
+                r = await updApi('rspamd_clean_cache', { confirm: 'DELETE CACHE' });
             } else if (actionItem.type === 'dovecot_config_regen') {
                 if (!updConfirm('', t('up.wRegen'))) return;
-                r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
+                r = await updApi('dovecot_config_regen', { confirm: 'REGENERATE' });
             } else {
                 alert(t('up.noAutoAction'));
                 return;
@@ -13935,7 +13935,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm('', t('up.wCleanPython'))) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removing')) + '';
-            const r = await updApi('python_leftovers_clean', { confirm: 'PULISCI PYTHON' });
+            const r = await updApi('python_leftovers_clean', { confirm: 'CLEAN PYTHON' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pre.style.display = 'block';
             pre.textContent = t('up.removedList', { list: (r.removed || []).join(', ') || t('fw.none') })
@@ -13966,7 +13966,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function pyRun() {
             if (!updConfirm('', t('up.wMovePython'))) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
-            const r = await updApi('python_move', { confirm: 'SPOSTA PYTHON' });
+            const r = await updApi('python_move', { confirm: 'MOVE PYTHON' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -13996,7 +13996,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function jvRun() {
             if (!updConfirm(t('up.javaStops'), t('up.wUpgradeJava'))) return;
             const el = document.getElementById('jv-pre');
-            const r = await updApi('java_update', { confirm: 'AGGIORNA JAVA' });
+            const r = await updApi('java_update', { confirm: 'UPGRADE JAVA' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<div class="alert alert-warning mb-0"><strong>' + escHtml(t('up.started')) + '</strong> ' + escHtml(t('up.panelStopping')) + ' '
                 + updEsc(r.note || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';
@@ -14036,7 +14036,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const pre = document.getElementById('rc-log');
             const el = document.getElementById('rc-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.inProgress')) + '';
-            const r = await updApi('roundcube_nginx_fix', { confirm: 'RIPARA NGINX' });
+            const r = await updApi('roundcube_nginx_fix', { confirm: 'FIX NGINX' });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>';
                 return;
@@ -14088,7 +14088,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm('', t('up.wUpgradeRc'))) return;
             const el = document.getElementById('rc-pre');
             const pre = document.getElementById('rc-log');
-            const r = await updApi('roundcube_update', { confirm: 'AGGIORNA ROUNDCUBE' });
+            const r = await updApi('roundcube_update', { confirm: 'UPGRADE ROUNDCUBE' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -14135,7 +14135,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // un'altra parte della pagina, e chi guardava sotto il messaggio di errore non
             // trovava niente. Un log che esiste ma non e' dove lo cerchi e' un log perduto.
             const pre = document.getElementById('my84-log');
-            const r = await updApi('mysql84_migrate', { confirm: 'MIGRA A 8.4' });
+            const r = await updApi('mysql84_migrate', { confirm: 'MIGRATE TO 8.4' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.migrating')) + '</span>';
             pre.style.display = 'block';
@@ -14231,7 +14231,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     // con VuXML, sa se l'aggiornamento basta o no. Il blocco e' un'informazione a
                     // parte, non un verdict: il pulsante aggiorna anche un pacchetto bloccato.
                     const vc0 = v.fix;
-                    const updatable = vc0 && (vc0.verdict === 'si-risolve-aggiornando' || vc0.verdict === 'aggiornamento-non-basta');
+                    const updatable = vc0 && (vc0.verdict === 'fixed-by-upgrade' || vc0.verdict === 'upgrade-not-enough');
                     h += '<li class="mb-2"><div class="d-flex flex-wrap align-items-center gap-1"><code>' + updEsc(v.name) + '</code>'
                        + (v.role ? ' <span class="text-muted">(' + updEsc(v.role) + ')</span>' : '')
                        + (vc0 && vc0.verdict
@@ -14374,7 +14374,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm(t('up.confirmMaint'), t('up.wMaint'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('maintenance_run', { confirm: 'MANUTENZIONE', signature: updMaintenanceSignature });
+            const r = await updApi('maintenance_run', { confirm: 'MAINTENANCE', signature: updMaintenanceSignature });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.maintRunning')) + '</span>';
             pre.style.display = 'block';

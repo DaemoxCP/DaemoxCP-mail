@@ -213,34 +213,34 @@ public class PackagePlanTest {
 
         // IL CASO VERO: installata 1.30.4,3, catalogo fermo alla stessa, VuXML "< 1.30.5,3".
         JSONObject v = PackagePlan.assessFix("1.30.4,3", "1.30.4,3", nginxProblems, CMP);
-        real("nginx: la fix esiste ma non nel ramo", "fix-fuori-dal-ramo".equals(v.getString("verdict")));
+        real("nginx: la fix esiste ma non nel ramo", "fix-outside-branch".equals(v.getString("verdict")));
         real("nginx: dalla 1.30.5,3", "1.30.5,3".equals(v.getString("firstFixed")));
         real("nginx: il testo dice che il lock non c'entra", v.getString("explanation").contains("la protezione non c'entra"));
 
         v = PackagePlan.assessFix("1.30.4,3", "1.30.5,3", nginxProblems, CMP);
-        real("nginx con la 1.30.5,3 nel catalogo: si risolve aggiornando", "si-risolve-aggiornando".equals(v.getString("verdict")));
+        real("nginx con la 1.30.5,3 nel catalogo: si risolve aggiornando", "fixed-by-upgrade".equals(v.getString("verdict")));
 
         JSONArray curl = va.getJSONObject("curl").getJSONArray("issues");
         v = PackagePlan.assessFix("8.15.0", "8.16.0", curl, CMP);
-        real("curl: la 8.16.0 chiude uno solo dei due", "aggiornamento-non-basta".equals(v.getString("verdict"))
+        real("curl: la 8.16.0 chiude uno solo dei due", "upgrade-not-enough".equals(v.getString("verdict"))
             && "8.17.0".equals(v.getString("firstFixed")) && v.getString("explanation").contains("curl -- due"));
         v = PackagePlan.assessFix("8.15.0", "8.17.0", curl, CMP);
-        real("curl: la 8.17.0 li chiude tutti e due", "si-risolve-aggiornando".equals(v.getString("verdict")));
+        real("curl: la 8.17.0 li chiude tutti e due", "fixed-by-upgrade".equals(v.getString("verdict")));
         v = PackagePlan.assessFix("8.15.0", "", curl, CMP);
         real("curl: catalogo senza il pacchetto, fix dalla 8.17.0",
-            "fix-fuori-dal-ramo".equals(v.getString("verdict")) && "8.17.0".equals(v.getString("firstFixed")));
+            "fix-outside-branch".equals(v.getString("verdict")) && "8.17.0".equals(v.getString("firstFixed")));
 
         v = PackagePlan.assessFix("2.1", "2.1", issues(">= 0"), CMP);
-        real("senza limite superiore: nessuna fix", "nessuna-fix".equals(v.getString("verdict")));
+        real("senza limite superiore: nessuna fix", "no-fix".equals(v.getString("verdict")));
         v = PackagePlan.assessFix("2.1", "2.1", issues("<= 2.1"), CMP);
-        real("'<=': fix non indicata", "fix-non-indicata".equals(v.getString("verdict")));
+        real("'<=': fix non indicata", "fix-not-stated".equals(v.getString("verdict")));
         v = PackagePlan.assessFix("2.1", "2.1", issues("= 2.1"), CMP);
-        real("'=': solo quella versione, ma il catalogo non ne ha un'altra", "fix-fuori-dal-ramo".equals(v.getString("verdict")));
+        real("'=': solo quella versione, ma il catalogo non ne ha un'altra", "fix-outside-branch".equals(v.getString("verdict")));
         // Piu' ranges: conta quello in cui cade la versione installata, non il primo.
         v = PackagePlan.assessFix("1.27.5", "1.27.5", issues("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
         real("due rami di versioni: la fix del ramo giusto", "1.28.1".equals(v.getString("firstFixed")));
         v = PackagePlan.assessFix("1.27.5", "1.28.0", issues("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
-        real("due rami di versioni: la 1.28.0 non basta", "aggiornamento-non-basta".equals(v.getString("verdict")));
+        real("due rami di versioni: la 1.28.0 non basta", "upgrade-not-enough".equals(v.getString("verdict")));
         v = PackagePlan.assessFix("3.0", "3.0", issues("< 2.0"), CMP);
         real("versione fuori da ogni intervallo: non so, non invento", "non-so".equals(v.getString("verdict")));
         PackagePlan.VersionComparator broken = (x, y) -> { throw new IllegalStateException("pkg non risponde"); };

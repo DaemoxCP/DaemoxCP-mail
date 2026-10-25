@@ -133,7 +133,7 @@
             if (!repConfirm(t('rep.confirmSend', { address: a }), t('rep.wordSend'))) return;
             const el = document.getElementById('rep-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.sending')) + '';
-            const r = await repApi('send', { confirm: 'INVIA', recipient: a });
+            const r = await repApi('send', { confirm: 'SEND', recipient: a });
             // Giallo quando Postfix l'ha preso ma non e' ancora arrivato, o non si sa: non e'
             // un errore, ma nemmeno la conferma che il verde prometterebbe.
             const cls = !r.success ? 'danger' : (r.warning ? 'warning' : 'success');

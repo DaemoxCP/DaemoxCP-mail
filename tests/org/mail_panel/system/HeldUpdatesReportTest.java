@@ -107,7 +107,7 @@ public class HeldUpdatesReportTest {
                     check("e allora la riga 'con aggiornamento' non puo' essere zero",
                          report.optInt("packagesWithUpdate", 0) >= heldBackElsewhere.length());
                     boolean said = false;
-                    JSONArray toDo = report.optJSONArray("daFare");
+                    JSONArray toDo = report.optJSONArray("toDo");
                     for (int i = 0; toDo != null && i < toDo.length(); i++)
                         if (toDo.getJSONObject(i).optString("what").contains("pkg upgrade")) said = true;
                     check("fra le cose da fare c'e' scritto che pkg upgrade li salta", said);

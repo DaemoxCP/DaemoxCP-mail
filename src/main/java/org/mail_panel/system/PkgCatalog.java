@@ -144,7 +144,7 @@ public final class PkgCatalog {
             if (oldest == null || seconds / 3600 > oldest.getLong("hours")) oldest = o;
         }
 
-        return new JSONObject().put("repository", list).put("missing", missing).put("daPkg", fromPkg)
+        return new JSONObject().put("repository", list).put("missing", missing).put("fromPkg", fromPkg)
                 .put("dated", oldest != null)
                 .put("hours", oldest == null ? -1 : oldest.getLong("hours"))
                 .put("days", oldest == null ? -1 : oldest.getLong("days"))
@@ -184,7 +184,7 @@ public final class PkgCatalog {
                          ? I18n.tr("server.catalog.missing.one", java.util.Map.of("list", String.valueOf(n.get(0))))
                          : I18n.tr("server.catalog.missing.other", java.util.Map.of("list", String.valueOf(String.join(", ", n)))));
             }
-        } else if (c.optBoolean("daPkg") && (el == null || el.length() == 0)) {
+        } else if (c.optBoolean("fromPkg") && (el == null || el.length() == 0)) {
             t.append(I18n.tr("server.catalog.noRepo"));
         } else {
             List<String> searched = new ArrayList<>();

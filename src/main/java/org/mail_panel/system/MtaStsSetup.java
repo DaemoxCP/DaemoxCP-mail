@@ -170,10 +170,10 @@ public class MtaStsSetup {
             if ("da fare".equals(p.state)) toDo++;
             else if ("uncertain".equals(p.state)) uncertain++;
         }
-        r.put("steps", a).put("daFare", toDo).put("uncertain", uncertain);
+        r.put("steps", a).put("toDo", toDo).put("uncertain", uncertain);
         // "completo" accende la spunta verde e fa sparire il pulsante, quindi non puo' bastare
         // che non ci sia niente DA FARE: serve anche che non sia rimasto niente da VERIFICARE.
-        // Con la sola condizione daFare==0, un passo "incerto" — cioe' uno che il pannello non
+        // Con la sola condizione toDo==0, un passo "incerto" — cioe' uno che il pannello non
         // ha potuto controllare — sarebbe bastato da solo a dichiarare "attivo su tutti i domini".
         boolean complete = toDo == 0 && uncertain == 0;
         r.put("complete", complete);

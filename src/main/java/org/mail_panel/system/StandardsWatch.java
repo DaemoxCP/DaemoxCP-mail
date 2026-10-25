@@ -313,7 +313,7 @@ public class StandardsWatch {
 
             String changes = changeList(text);
             if (changes != null) {
-                r.put("type", "elenco").put("text", changes)
+                r.put("type", "list").put("text", changes)
                  .put("note", I18n.tr("server.watch.changeList"));
                 // Incrocio con cio' che il pannello usa davvero.
                 List<String> touches = linesTouching(changes, identifiersOf(reference));

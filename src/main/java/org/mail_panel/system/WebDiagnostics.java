@@ -157,8 +157,8 @@ public class WebDiagnostics {
                         .put("encrypted", b.encrypted)
                         .put("servePhp", b.servePhp)
                         .put("serveFile", b.serveFile)
-                        .put("soloRedirect", b.onlyRedirect)
-                        .put("su80", on80).put("su443", on443)
+                        .put("onlyRedirect", b.onlyRedirect)
+                        .put("on80", on80).put("on443", on443)
                         .put("inPlain", dangerous));
             }
             boolean four43 = false;
@@ -240,7 +240,7 @@ public class WebDiagnostics {
                     }
                 }
                 watch.put(new JSONObject().put("jail", name)
-                        .put("log", lp.output.trim()).put("suNginx", onNginx)
+                        .put("log", lp.output.trim()).put("onNginx", onNginx)
                         .put("actions", actions)
                         .put("ports", String.join(", ", ports))
                         // "Non dichiarata" non e' "nessuna": con l'azione predefinita di pf il
@@ -292,7 +292,7 @@ public class WebDiagnostics {
                 JSONArray sv = r.optJSONArray("jailWatch");
                 for (int i = 0; sv != null && i < sv.length(); i++) {
                     JSONObject j = sv.optJSONObject(i);
-                    if (j == null || !j.optBoolean("suNginx", false)) continue;
+                    if (j == null || !j.optBoolean("onNginx", false)) continue;
                     if (which.length() > 0) which.append(", ");
                     which.append(j.optString("jail", "?"));
                 }

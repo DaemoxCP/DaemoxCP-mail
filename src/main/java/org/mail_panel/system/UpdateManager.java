@@ -669,7 +669,7 @@ public final class UpdateManager {
             JSONObject v = vuln.optJSONObject(n);
             if (v != null) {
                 vulnerable++;
-                if ("si-risolve-aggiornando".equals(v.optString("verdict"))) resolvable++;
+                if ("fixed-by-upgrade".equals(v.optString("verdict"))) resolvable++;
                 row.put("vuln", v);
             }
             rows.put(row);
@@ -1566,7 +1566,7 @@ public final class UpdateManager {
 
         boolean back = to > from;
         r.put("back", back);
-        r.put("verdict", back ? "IL LIVELLO E' INDIETRO" : "ALLINEATO");
+        r.put("verdict", back ? "LEVEL_BEHIND" : "ALIGNED");
         r.put("explanation", back
                 ? I18n.tr("server.um.postfixCompatibility.4", java.util.Map.of("configured", String.valueOf(set), "recommended", String.valueOf(recommended)))
                 : (set.isBlank()
@@ -1691,10 +1691,10 @@ public final class UpdateManager {
                 : I18n.tr("server.um.rspamdTimeoutDiagnostics.2");
         r.put("wideSample", wideSample);
         int interruptions = r.optInt("interruptions", occ);
-        r.put("verdict", !logC ? "LOG NON LEGGIBILE"
-                : (interruptions > 0 ? "CI SONO ANALISI INTERROTTE"
-                                    : (wideSample ? "NESSUNA ANALISI INTERROTTA"
-                                                     : "NESSUNA TRACCIA, MA IL LOG E' CORTO")));
+        r.put("verdict", !logC ? "LOG_UNREADABLE"
+                : (interruptions > 0 ? "SCANS_INTERRUPTED"
+                                    : (wideSample ? "NO_SCAN_INTERRUPTED"
+                                                     : "NO_TRACE_SHORT_LOG")));
         String decomposition = occ == 0 ? ""
                 : " " + I18n.tr("server.um.x.rsSplit", java.util.Map.of("occurrences", String.valueOf(occ), "warnings", String.valueOf(r.optInt("warningRepeats", 0)), "interruptions", String.valueOf(interruptions)));
         r.put("explanation", !logC
@@ -1899,9 +1899,9 @@ public final class UpdateManager {
             if (nYours > 0 && "broken".equals(q.getString("type"))) broken++;
         }
         r.put("yours", yoursTotal).put("packageOnly", packageOnly);
-        r.put("verdict", broken > 0 ? "C'E' UN COSTRUTTO NON PIU' VALIDO"
-                : (yoursTotal > 0 ? "DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE"
-                               : "NIENTE DA SEGNALARE"));
+        r.put("verdict", broken > 0 ? "INVALID_CONSTRUCT"
+                : (yoursTotal > 0 ? "BEHAVIOR_DIFFS"
+                               : "NOTHING_TO_REPORT"));
         r.put("explanation", broken > 0
                 ? I18n.tr("server.um.rspamdCompatibility.7", java.util.Map.of("broken", String.valueOf(broken)))
                 : (yoursTotal > 0
@@ -2165,7 +2165,7 @@ public final class UpdateManager {
      */
     public static JSONObject startDomainSetup(int domainId) {
         String id = "dominio-" + domainId + "-" + System.currentTimeMillis();
-        Job j = new Job(id, "configura_dominio");
+        Job j = new Job(id, "configure_domain");
         JOBS.put(id, j);
         Thread t = localizedThread(j, () -> {
             j.status = "running";
@@ -2187,7 +2187,7 @@ public final class UpdateManager {
             } finally {
                 j.finishedAt = System.currentTimeMillis();
             }
-        }, "configura-dominio");
+        }, "configure-domain");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -2685,11 +2685,11 @@ public final class UpdateManager {
         }
         r.put("dependents", dependents).put("libraryConflict", conflict);
         if (conflict) {
-            addCheck(checks, "libreria", I18n.tr("server.um.mysql84Preflight.8"), "block",
+            addCheck(checks, "library", I18n.tr("server.um.mysql84Preflight.8"), "block",
                     I18n.tr("server.um.mysql84Preflight.9", java.util.Map.of("cliPkg", String.valueOf(cliPkg))));
             block = true;
         } else {
-            addCheck(checks, "libreria", I18n.tr("server.um.mysql84Preflight.8"),
+            addCheck(checks, "library", I18n.tr("server.um.mysql84Preflight.8"),
                     dependents.length() == 0 ? "ok" : "review",
                     dependents.length() == 0
                         ? I18n.tr("server.um.mysql84Preflight.10", java.util.Map.of("cliPkg", String.valueOf(cliPkg)))
@@ -2760,11 +2760,11 @@ public final class UpdateManager {
         long needed = (long) (dirKb * 1.15) + 512L * 1024L;
         r.put("dataDir", dataDir).put("dataDirMb", dirKb / 1024).put("freeMb", freeKb / 1024);
         if (dirKb <= 0 || freeKb < needed) {
-            addCheck(checks, "spazio", I18n.tr("server.um.mysql84Preflight.22"), "block",
+            addCheck(checks, "space", I18n.tr("server.um.mysql84Preflight.22"), "block",
                     I18n.tr("server.um.mysql84Preflight.23", java.util.Map.of("p", String.valueOf((needed / 1024)), "p2", String.valueOf((freeKb / 1024)))));
             block = true;
         } else {
-            addCheck(checks, "spazio", I18n.tr("server.um.mysql84Preflight.22"), "ok",
+            addCheck(checks, "space", I18n.tr("server.um.mysql84Preflight.22"), "ok",
                     I18n.tr("server.um.x.dataDirSpace", java.util.Map.of("dir", String.valueOf(dataDir), "mb", String.valueOf((dirKb / 1024)), "free", String.valueOf((freeKb / 1024)))));
         }
 
@@ -2776,12 +2776,12 @@ public final class UpdateManager {
             mailboxes = number(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
         }
         r.put("schemaCount", schemes).put("tableCount", tables).put("mailboxCount", mailboxes);
-        addCheck(checks, "inventario", I18n.tr("server.um.mysql84Preflight.24"), schemes > 0 ? "ok" : "review",
+        addCheck(checks, "inventory", I18n.tr("server.um.mysql84Preflight.24"), schemes > 0 ? "ok" : "review",
                 schemes > 0 ? I18n.tr("server.um.mysql84Preflight.25", java.util.Map.of("schemas", String.valueOf(schemes), "tables", String.valueOf(tables), "mailboxes", String.valueOf(mailboxes)))
                            : I18n.tr("server.um.mysql84Preflight.26"));
 
         // --- 9. Cosa si ferma, e per quanto ---
-        addCheck(checks, "servizi", I18n.tr("server.um.x.servicesInvolved"), "review",
+        addCheck(checks, "services", I18n.tr("server.um.x.servicesInvolved"), "review",
                 I18n.tr("server.um.mysql84Preflight.27"));
 
         r.put("success", true).put("checks", checks)
@@ -3359,7 +3359,7 @@ public final class UpdateManager {
         if (!test.optBoolean("ok")) {
             String inherited = inheritedOptions();
             String gtid = gtidState();
-            addCheck(checks, "copia", I18n.tr("server.um.roundcubePreflight.10"), "block",
+            addCheck(checks, "copy", I18n.tr("server.um.roundcubePreflight.10"), "block",
                     I18n.tr("server.um.x.rcCopyFails", java.util.Map.of("db", String.valueOf(dbName), "error", String.valueOf(test.optString("error"))))
                     + (inherited.isEmpty() ? ""
                        : "  ||  " + I18n.tr("server.um.x.rcDumpOpts", java.util.Map.of("o", String.valueOf(inherited))))
@@ -3367,13 +3367,13 @@ public final class UpdateManager {
                        : I18n.tr("server.um.x.serverState", java.util.Map.of("s", String.valueOf(gtid)))));
             block = true;
         } else if ("server.um.dumpMode.root".equals(test.optString("mode"))) {
-            addCheck(checks, "copia", I18n.tr("server.um.roundcubePreflight.10"), "wait",
+            addCheck(checks, "copy", I18n.tr("server.um.roundcubePreflight.10"), "wait",
                     I18n.tr("server.um.x.rcCopyRoot", java.util.Map.of("db", String.valueOf(dbName), "history", String.valueOf(test.optString("history")), "gtid", String.valueOf(gtidState()))));
         } else if (!"server.um.dumpMode.full".equals(test.optString("mode"))) {
-            addCheck(checks, "copia", I18n.tr("server.um.roundcubePreflight.10"), "wait",
+            addCheck(checks, "copy", I18n.tr("server.um.roundcubePreflight.10"), "wait",
                     I18n.tr("server.um.x.rcCopyReduced", java.util.Map.of("db", String.valueOf(dbName), "mode", String.valueOf(I18n.tr(test.getString("mode"))), "history", String.valueOf(test.optString("history")))));
         } else {
-            addCheck(checks, "copia", I18n.tr("server.um.roundcubePreflight.10"), "ok",
+            addCheck(checks, "copy", I18n.tr("server.um.roundcubePreflight.10"), "ok",
                     I18n.tr("server.um.roundcubePreflight.11", java.util.Map.of("dbName", String.valueOf(dbName))));
         }
 
@@ -3821,7 +3821,7 @@ public final class UpdateManager {
         boolean good = out.startsWith("200") && out.contains("text/css");
         return r.put("ok", good).put("url", url).put("answer", out)
                 .put("headers", head)
-                .put("daPhp", head.toLowerCase().contains("x-powered-by: php"));
+                .put("fromPhp", head.toLowerCase().contains("x-powered-by: php"));
     }
 
     /**
@@ -4058,7 +4058,7 @@ public final class UpdateManager {
                             + css.optString("answer", css.optString("error"))
                             + (css.optBoolean("ok") ? "   " + I18n.tr("server.um.x.correct")
                                : I18n.tr("server.um.roundcubeDiagnostics.11"))
-                            + "\n\n" + I18n.tr("server.um.x.whoAnswered") + " " + (css.optBoolean("daPhp")
+                            + "\n\n" + I18n.tr("server.um.x.whoAnswered") + " " + (css.optBoolean("fromPhp")
                                 ? I18n.tr("server.um.roundcubeDiagnostics.12")
                                 : I18n.tr("server.um.roundcubeDiagnostics.13"))
                             + "\n\n" + css.optString("headers", "")));
@@ -4546,11 +4546,11 @@ public final class UpdateManager {
             long large = number(sh("pkg query %sb " + pkg + " 2>/dev/null", 30)) / 1024 / 1024;
             r.put("spaceMb", free).put("jdkMb", large);
             if (large > 0 && free < large * 2) {
-                addCheck(checks, "spazio", I18n.tr("server.um.javaPreflight.10"), "block",
+                addCheck(checks, "space", I18n.tr("server.um.javaPreflight.10"), "block",
                         I18n.tr("server.um.javaPreflight.11", java.util.Map.of("p", String.valueOf((large * 2)), "free", String.valueOf(free))));
                 lock = true;
             } else {
-                addCheck(checks, "spazio", I18n.tr("server.um.javaPreflight.10"), "ok",
+                addCheck(checks, "space", I18n.tr("server.um.javaPreflight.10"), "ok",
                         I18n.tr("server.um.javaPreflight.12", java.util.Map.of("size", String.valueOf(large), "jdkDir", String.valueOf(JDK_DIR), "free", String.valueOf(free))));
             }
 
@@ -4931,11 +4931,11 @@ public final class UpdateManager {
                 if (!external.isEmpty()) withDependents.add(v + " <- " + String.join(", ", external));
             }
             if (!withDependents.isEmpty()) {
-                addCheck(checks, "dip", I18n.tr("server.um.pythonPreflight.7"), "block",
+                addCheck(checks, "dependents", I18n.tr("server.um.pythonPreflight.7"), "block",
                         I18n.tr("server.um.x.rmPullsOthers", java.util.Map.of("list", String.valueOf(String.join(" ; ", withDependents)))));
                 lock = true;
             } else {
-                addCheck(checks, "dip", I18n.tr("server.um.pythonPreflight.7"), "ok",
+                addCheck(checks, "dependents", I18n.tr("server.um.pythonPreflight.7"), "ok",
                         I18n.tr("server.um.pythonPreflight.8"));
             }
 
@@ -5702,7 +5702,7 @@ public final class UpdateManager {
         int toDo = 0;
         for (int i = 0; i < steps.length(); i++) if ("todo".equals(steps.getJSONObject(i).getString("state"))) toDo++;
         return new JSONObject().put("success", true).put("steps", steps)
-                .put("daFare", toDo).put("total", steps.length())
+                .put("toDo", toDo).put("total", steps.length())
                 .put("withoutRemedy", withoutRemedy);
     }
 
@@ -6103,11 +6103,11 @@ public final class UpdateManager {
 
         String version = sh("pkg query %v " + name + " 2>/dev/null", 20);
         if (version.isEmpty()) {
-            addCheck(checks, "installato", I18n.tr("server.um.packagePreflight.1"), "block",
+            addCheck(checks, "installed", I18n.tr("server.um.packagePreflight.1"), "block",
                     I18n.tr("server.um.packagePreflight.2", java.util.Map.of("name", String.valueOf(name))));
             block = true;
         } else {
-            addCheck(checks, "installato", I18n.tr("server.um.packagePreflight.1"), "ok", name + " " + version);
+            addCheck(checks, "installed", I18n.tr("server.um.packagePreflight.1"), "ok", name + " " + version);
         }
         r.put("name", name).put("current", version).put("role", roleOf(name) == null ? "" : roleOf(name));
 
@@ -6117,11 +6117,11 @@ public final class UpdateManager {
                 && significantJump(name, version, available);
         r.put("majorJump", major);
         if (available.isEmpty() || available.equals(version)) {
-            addCheck(checks, "aggiornamento", I18n.tr("server.um.packagePreflight.3"), "block",
+            addCheck(checks, "update", I18n.tr("server.um.packagePreflight.3"), "block",
                     I18n.tr("server.um.packagePreflight.4"));
             block = true;
         } else {
-            addCheck(checks, "aggiornamento", I18n.tr("server.um.packagePreflight.3"), "ok",
+            addCheck(checks, "update", I18n.tr("server.um.packagePreflight.3"), "ok",
                     version + " -> " + available + (major ? I18n.tr("server.um.packagePreflight.5") : I18n.tr("server.um.packagePreflight.6")));
         }
 
@@ -6129,10 +6129,10 @@ public final class UpdateManager {
         if (warning != null) {
             r.put("advisory", warning);
             if ("wait".equals(warning.getString("level"))) {
-                addCheck(checks, "avvertenza", I18n.tr("server.um.packagePreflight.7"), "block", warning.getString("text"));
+                addCheck(checks, "warning", I18n.tr("server.um.packagePreflight.7"), "block", warning.getString("text"));
                 block = true;
             } else {
-                addCheck(checks, "avvertenza", I18n.tr("server.um.packagePreflight.7"), warning.getString("level"), warning.getString("text"));
+                addCheck(checks, "warning", I18n.tr("server.um.packagePreflight.7"), warning.getString("level"), warning.getString("text"));
             }
         }
 
@@ -6153,8 +6153,8 @@ public final class UpdateManager {
                         who.append(member);
                     }
                 }
-                addCheck(checks, "mysqlfamiglia", I18n.tr("server.um.packagePreflight.8"), "block",
-                        I18n.tr("server.um.x.mysqlFamilyBlock", java.util.Map.of("chi", String.valueOf(who.length() > 0 ? who.toString() : name), "required", String.valueOf(required), "installedValue", String.valueOf(mysqlInstalled), "version", String.valueOf(required.replace("-client", "")))));
+                addCheck(checks, "mysqlfamily", I18n.tr("server.um.packagePreflight.8"), "block",
+                        I18n.tr("server.um.x.mysqlFamilyBlock", java.util.Map.of("who", String.valueOf(who.length() > 0 ? who.toString() : name), "required", String.valueOf(required), "installedValue", String.valueOf(mysqlInstalled), "version", String.valueOf(required.replace("-client", "")))));
                 block = true;
                 r.put("mysqlFamilyConflict", required);
             }
@@ -6168,10 +6168,10 @@ public final class UpdateManager {
          .put("references", report.getJSONArray("references")).put("vulnChecked", report.optBoolean("done"));
         int problems = report.optInt("problems");
         if (!report.optBoolean("done"))
-            addCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), "review",
+            addCheck(checks, "vulnerabilities", I18n.tr("server.um.x.knownVulns"), "review",
                     report.optString("error"));
         else
-            addCheck(checks, "vulnerabilita", I18n.tr("server.um.x.knownVulns"), problems > 0 ? "review" : "ok",
+            addCheck(checks, "vulnerabilities", I18n.tr("server.um.x.knownVulns"), problems > 0 ? "review" : "ok",
                     problems > 0 ? I18n.tr("server.um.x.openCves", java.util.Map.of("n", String.valueOf(problems), "d", String.valueOf(report.getString("description"))))
                                  : I18n.tr("server.um.packagePreflight.9"));
 
@@ -6202,7 +6202,7 @@ public final class UpdateManager {
             }
         }
         r.put("reverseDeps", foundDeps);
-        addCheck(checks, "servizi", I18n.tr("server.um.packagePreflight.10"), "review",
+        addCheck(checks, "services", I18n.tr("server.um.packagePreflight.10"), "review",
                 services.length() == 0
                     ? (foundDeps.length() == 0
                        ? I18n.tr("server.um.x.noSvcZero")
@@ -6210,14 +6210,14 @@ public final class UpdateManager {
                     : I18n.tr("server.um.packagePreflight.11", java.util.Map.of("length", String.valueOf(services.length()))));
 
         if (Files.exists(Paths.get(MAINTENANCE_STATE))) {
-            addCheck(checks, "stato", I18n.tr("server.um.packagePreflight.12"), "block",
+            addCheck(checks, "state", I18n.tr("server.um.packagePreflight.12"), "block",
                     I18n.tr("server.um.packagePreflight.13", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
             block = true;
         }
 
         r.put("family", new JSONArray(family));
         if (family.size() > 1) {
-            addCheck(checks, "famiglia", I18n.tr("server.um.packagePreflight.14"), "review",
+            addCheck(checks, "family", I18n.tr("server.um.packagePreflight.14"), "review",
                     I18n.tr("server.um.x.familyTogether", java.util.Map.of("n", String.valueOf(family.size()), "reason", String.valueOf(familyReason(name)), "list", String.valueOf(String.join(", ", family)))));
         }
 
@@ -6234,7 +6234,7 @@ public final class UpdateManager {
         JSONObject plan = PackagePlan.planFor(family, lockedNames(lockList),
                 UpdateManager::reasonNotToUnlock, UpdateManager::installedFamilyTwin);
         if (!plan.optBoolean("success") || !plan.optBoolean("measured")) {
-            addCheck(checks, "piano", I18n.tr("server.um.packagePreflight.15"), "block",
+            addCheck(checks, "plan", I18n.tr("server.um.packagePreflight.15"), "block",
                     I18n.tr("server.um.x.noPlan", java.util.Map.of("e", String.valueOf(plan.optString("error", "?")))));
             block = true;
         } else {
@@ -6255,43 +6255,43 @@ public final class UpdateManager {
             JSONArray blockerList = plan.getJSONArray("blockers");
             for (int i = 0; i < blockerList.length(); i++) {
                 JSONObject x = blockerList.getJSONObject(i);
-                addCheck(checks, "piano-impedimento", I18n.tr("server.um.packagePreflight.16"), "block",
+                addCheck(checks, "plan-blocker", I18n.tr("server.um.packagePreflight.16"), "block",
                         I18n.tr("server.um.x.blockedBy", java.util.Map.of("name", String.valueOf(x.getString("name")), "reason", String.valueOf(x.getString("reason")))));
                 block = true;
             }
             JSONArray err = plan.getJSONArray("pkgErrors");
             if (err.length() > 0 || plan.optBoolean("hasConflicts")) {
-                addCheck(checks, "piano-errori", I18n.tr("server.um.packagePreflight.17"), "block",
+                addCheck(checks, "plan-errors", I18n.tr("server.um.packagePreflight.17"), "block",
                         String.join(" | ", jsonArrayToList(err)) + (plan.optBoolean("hasConflicts") ? " " + I18n.tr("server.um.x.pkgConflicts") : ""));
                 block = true;
             }
             if (!removed.isEmpty()) {
-                addCheck(checks, "piano-rimozioni", I18n.tr("server.um.packagePreflight.18"), "block",
+                addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "block",
                         I18n.tr("server.um.x.planRemoves", java.util.Map.of("list", String.valueOf(String.join(", ", removed)))));
                 block = true;
             }
             if (!downgrades.isEmpty()) {
-                addCheck(checks, "piano-retrocede", I18n.tr("server.um.packagePreflight.19"), "block",
+                addCheck(checks, "plan-downgrades", I18n.tr("server.um.packagePreflight.19"), "block",
                         I18n.tr("server.um.x.planDowngrades", java.util.Map.of("list", String.valueOf(String.join(", ", downgrades)))));
                 block = true;
             }
             if (jsonArrayToList(plan.getJSONArray("unchangedPackages")).contains(name)) {
-                addCheck(checks, "piano-fermo", I18n.tr("server.um.packagePreflight.20"), "block",
+                addCheck(checks, "plan-stopped", I18n.tr("server.um.packagePreflight.20"), "block",
                         I18n.tr("server.um.packagePreflight.21", java.util.Map.of("name", String.valueOf(name))));
                 block = true;
             }
             if (!stillVulnerable.isEmpty()) {
-                addCheck(checks, "piano-vulnerabili", I18n.tr("server.um.packagePreflight.22"), "review",
+                addCheck(checks, "plan-vulnerable", I18n.tr("server.um.packagePreflight.22"), "review",
                         I18n.tr("server.um.x.stillVulnerable", java.util.Map.of("list", String.valueOf(String.join(", ", stillVulnerable)))));
             }
             java.util.List<String> extra = new ArrayList<>(jsonArrayToList(plan.getJSONArray("unlockedPackages")));
             extra.removeAll(family);
             if (!extra.isEmpty()) {
-                addCheck(checks, "piano-dipendenze", I18n.tr("server.um.packagePreflight.23"), "review",
+                addCheck(checks, "plan-dependencies", I18n.tr("server.um.packagePreflight.23"), "review",
                         I18n.tr("server.um.x.depsProtected", java.util.Map.of("list", String.valueOf(String.join(", ", extra)))));
             }
             if (!block) {
-                addCheck(checks, "piano", I18n.tr("server.um.packagePreflight.15"), "ok",
+                addCheck(checks, "plan", I18n.tr("server.um.packagePreflight.15"), "ok",
                         (changes.length() == 1
                          ? I18n.tr("server.um.x.pkgChanges.one", java.util.Map.of("lines", String.valueOf(String.join("; ", lines))))
                          : I18n.tr("server.um.x.pkgChanges.other", java.util.Map.of("n", String.valueOf(changes.length()), "lines", String.valueOf(String.join("; ", lines))))));
@@ -6314,7 +6314,7 @@ public final class UpdateManager {
                 }
             }
             if (!forDependencies.isEmpty()) {
-                addCheck(checks, "piano-servizi", I18n.tr("server.um.packagePreflight.24"), "review",
+                addCheck(checks, "plan-services", I18n.tr("server.um.packagePreflight.24"), "review",
                         I18n.tr("server.um.x.depsServices", java.util.Map.of("list", String.valueOf(String.join(", ", forDependencies)))));
             }
         }
@@ -6322,7 +6322,7 @@ public final class UpdateManager {
 
         java.util.List<String> toUnlock = jsonArrayToList(plan.optJSONArray("unlockedPackages") == null
                 ? new JSONArray() : plan.getJSONArray("unlockedPackages"));
-        addCheck(checks, "protezione", I18n.tr("server.um.packagePreflight.25"), "ok",
+        addCheck(checks, "protection", I18n.tr("server.um.packagePreflight.25"), "ok",
                 toUnlock.isEmpty()
                     ? I18n.tr("server.um.packagePreflight.26")
                     : I18n.tr("server.um.x.willUnlock", java.util.Map.of("list", String.valueOf(String.join(", ", toUnlock)))));
@@ -6333,7 +6333,7 @@ public final class UpdateManager {
         JSONArray family2 = plan.optJSONArray("familyUnlocked");
         for (int i = 0; family2 != null && i < family2.length(); i++) {
             JSONObject f = family2.getJSONObject(i);
-            addCheck(checks, "famigliasbloccata", I18n.tr("server.um.x.familyUnlockedLabel"), "review",
+            addCheck(checks, "unlockedfamily", I18n.tr("server.um.x.familyUnlockedLabel"), "review",
                     I18n.tr("server.um.x.familyUnlockedWhy", java.util.Map.of(
                             "twin", String.valueOf(f.optString("installed")),
                             "version", String.valueOf(f.optString("version")),
@@ -7140,7 +7140,7 @@ public final class UpdateManager {
         // l'analisi che nomina cio' che deve ispezionare, non un uso che si romperebbe.
         boolean blocking = totalBreak > 0 || blockingJars > 0 || declareSoname.length() > 0;
         r.put("blocking", blocking);
-        r.put("verdict", blocking ? "CI SONO RIFERIMENTI CHE SI ROMPEREBBERO" : "NESSUN RIFERIMENTO CHE SI ROMPA");
+        r.put("verdict", blocking ? "REFS_WOULD_BREAK" : "NO_REF_BREAKS");
         int auto = inJar.length() - blockingJars;
         r.put("explanation", blocking
                 ? I18n.tr("server.um.deepAnalysis.5", java.util.Map.of("pkg", String.valueOf(pkgName)))
@@ -7207,7 +7207,7 @@ public final class UpdateManager {
         JSONObject use = panelUsage(name);
         r.put("use", use);
         String v = use.optString("verdict", "");
-        if (!v.equals("IL PANNELLO NON LO USA") && !v.equals("LI NOMINA, MA NON SONO I SUOI")
+        if (!v.equals("PANEL_DOES_NOT_USE") && !v.equals("NAMES_NOT_THEIRS")
                 && !v.startsWith("NON NE USA I COMANDI"))
             return new JSONObject().put("success", false).put("use", use)
                     .put("error", I18n.tr("server.um.x.rmJarSays", java.util.Map.of("v", String.valueOf(v))) + " "
@@ -7313,8 +7313,8 @@ public final class UpdateManager {
             boolean onDisk = ok("test -x " + expected, 15);
             String state;
             if (!resolved.isEmpty()) state = "reachable";
-            else if (onDisk) { state = "C'E' MA IL PATH NON LO RAGGIUNGE"; unreachable++; }
-            else { state = "non installato"; absent++; }
+            else if (onDisk) { state = "NOT_IN_PATH"; unreachable++; }
+            else { state = "not-installed"; absent++; }
             a.put(new JSONObject().put("command", t[0]).put("expectedIn", t[1]).put("purpose", t[2])
                     .put("resolved", resolved).put("onDisk", onDisk).put("state", state));
         }
@@ -7375,7 +7375,7 @@ public final class UpdateManager {
      * versioni che col tempo divergono. La classe del rapporto compone il testo, questa
      * raccoglie i fatti.
      *
-     * La chiave "daFare" e' la ragione d'essere del rapporto: un elenco di cose da fare,
+     * La chiave "toDo" e' la ragione d'essere del rapporto: un elenco di cose da fare,
      * ordinate per urgenza, gia' scritte in italiano. Se e' vuoto, non c'e' niente da fare —
      * e anche quello va detto, altrimenti un'email che arriva ogni settimana diventa rumore
      * che si smette di leggere.
@@ -7628,7 +7628,7 @@ public final class UpdateManager {
         r.put("environments", be);
 
         r.put("branch", branchRepositories());
-        r.put("daFare", sortByUrgency(toDo));
+        r.put("toDo", sortByUrgency(toDo));
         return r;
     }
 
@@ -7789,11 +7789,11 @@ public final class UpdateManager {
 
         String verdict, explanation;
         if (!readSucceeded) {
-            verdict = "NON DETERMINABILE";
+            verdict = "UNDETERMINED";
             explanation = I18n.tr("server.um.x.jarUnreadable", java.util.Map.of("jar", String.valueOf(jar == null || jar.isBlank() ? I18n.tr("server.um.x.jarUnknown") : jar)));
         } else if (used.length() == 0) {
-            verdict = libraries.length() > 0 ? "NON NE USA I COMANDI, MA E' UNA LIBRERIA"
-                                             : "IL PANNELLO NON LO USA";
+            verdict = libraries.length() > 0 ? "LIBRARY_ONLY"
+                                             : "PANEL_DOES_NOT_USE";
             explanation = I18n.tr("server.um.x.jarNoUse", java.util.Map.of("byte", String.valueOf(bytesRead), "n", String.valueOf(runnables.size()), "pkg", String.valueOf(pkgName)))
                     + (libraries.length() > 0
                        ? " " + I18n.tr("server.um.x.jarLibs", java.util.Map.of("n", String.valueOf(libraries.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(libraries)))))
@@ -7811,14 +7811,14 @@ public final class UpdateManager {
             }
             if (reallyItsOwn == 0) {
                 // Li nomina, ma non e' questo pacchetto a fornire i binari che girano.
-                verdict = "LI NOMINA, MA NON SONO I SUOI";
+                verdict = "NAMES_NOT_THEIRS";
                 explanation = used.length() == 1
                         ? I18n.tr("server.um.x.namesOther.one", java.util.Map.of("pkg", String.valueOf(pkgName)))
                         : I18n.tr("server.um.x.namesOther.other", java.util.Map.of("n", String.valueOf(used.length()), "pkg", String.valueOf(pkgName)));
                 return r.put("verdict", verdict).put("explanation", explanation)
                         .put("why", I18n.tr("server.um.panelUsage.10"));
             }
-            verdict = withoutReplacement > 0 ? "LO USA, E NON C'E' RICAMBIO" : "LO USA";
+            verdict = withoutReplacement > 0 ? "USES_NO_SPARE" : "USES";
             explanation = (used.length() == 1
                     ? I18n.tr("server.um.x.usesCmds.one")
                     : I18n.tr("server.um.x.usesCmds.other", java.util.Map.of("n", String.valueOf(used.length()))))
@@ -7935,7 +7935,7 @@ public final class UpdateManager {
             binaries.put(new JSONObject().put("path", path)
                     .put("version", sh(path + " version 2>&1 | head -1", 20))
                     .put("pkgName", sh("pkg which -q " + path + " 2>/dev/null", 20))
-                    .put("delPort", path.startsWith("/usr/local/")));
+                    .put("fromPort", path.startsWith("/usr/local/")));
         }
         String winner = sh("command -v openssl 2>/dev/null", 15).trim();
         boolean portCommand = winner.startsWith("/usr/local/");
@@ -7954,24 +7954,24 @@ public final class UpdateManager {
         // --- il verdict, nell'ordine in cui le prove pesano ---
         String verdict, explanation;
         if (useThePort.length() > 0) {
-            verdict = "IN USO ADESSO";
+            verdict = "IN_USE_NOW";
             explanation = useThePort.length() == 1
                     ? I18n.tr("server.um.x.portLibOpen.one")
                     : I18n.tr("server.um.x.portLibOpen.other", java.util.Map.of("n", String.valueOf(useThePort.length())));
         } else if (declare.length() > 0) {
-            verdict = "RICHIESTO";
+            verdict = "REQUIRED";
             explanation = I18n.tr("server.um.x.declaredBy", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(declare)))));
         } else if (portCommand) {
-            verdict = "IL COMANDO E' SUO";
+            verdict = "COMMAND_IS_ITS";
             explanation = I18n.tr("server.um.x.cmdIsPort", java.util.Map.of("winner", String.valueOf(winner))) + " "
                     + (baseHasCommand
                        ? I18n.tr("server.um.x.baseHasCmd")
                        : I18n.tr("server.um.x.baseNoCmd"));
         } else if (!reliableMeasure) {
-            verdict = "NON DETERMINABILE";
+            verdict = "UNDETERMINED";
             explanation = I18n.tr("server.um.opensslUsage.7");
         } else {
-            verdict = "NESSUNO LO USA";
+            verdict = "NOBODY_USES";
             explanation = I18n.tr("server.um.opensslUsage.9", java.util.Map.of("withLibssl", String.valueOf(withLibssl)));
         }
         r.put("verdict", verdict).put("explanation", explanation);
@@ -9008,16 +9008,16 @@ public final class UpdateManager {
             r.put("current", userland).put("uname", uname).put("arch", os.optString("arch"));
 
             if (!userland.contains("-RELEASE")) {
-                addCheck(checks, "tipo", I18n.tr("server.um.systemUpgradePreflight.2"), "block",
+                addCheck(checks, "kind", I18n.tr("server.um.systemUpgradePreflight.2"), "block",
                         I18n.tr("server.um.systemUpgradePreflight.3", java.util.Map.of("userland", String.valueOf(userland))));
                 return r.put("success", true).put("checks", checks).put("blocked", true).put("canProceed", false);
             }
-            addCheck(checks, "attuale", I18n.tr("server.um.x.currentVersion"), "ok",
+            addCheck(checks, "current", I18n.tr("server.um.x.currentVersion"), "ok",
                     I18n.tr("server.um.x.userlandKernel", java.util.Map.of("u", String.valueOf(userland), "k", String.valueOf(uname)))
                     + (os.optBoolean("restartNeeded")
                        ? I18n.tr("server.um.systemUpgradePreflight.4") : ""));
             if (os.optBoolean("restartNeeded")) {
-                addCheck(checks, "riavvioPendente", I18n.tr("server.um.systemUpgradePreflight.5"), "block",
+                addCheck(checks, "restartPending", I18n.tr("server.um.systemUpgradePreflight.5"), "block",
                         I18n.tr("server.um.systemUpgradePreflight.6"));
                 lock = true;
             }
@@ -9031,7 +9031,7 @@ public final class UpdateManager {
             String direction = updateDirection(os.optString("series"), targetVersion);
             r.put("direction", direction);
             if ("backward".equals(direction) || "same".equals(direction)) {
-                addCheck(checks, "direzione", I18n.tr("server.um.systemUpgradePreflight.7"), "block",
+                addCheck(checks, "direction", I18n.tr("server.um.systemUpgradePreflight.7"), "block",
                         "same".equals(direction)
                         ? I18n.tr("server.um.systemUpgradePreflight.8", java.util.Map.of("target", String.valueOf(targetVersion)))
                         : I18n.tr("server.um.x.targetOlder", java.util.Map.of("target", String.valueOf(targetVersion), "series", String.valueOf(os.optString("series")))));
@@ -9044,8 +9044,8 @@ public final class UpdateManager {
             if (!minor) lock = true;
             addCheck(checks, "abi", I18n.tr("server.um.systemUpgradePreflight.9"), minor ? "ok" : "block",
                     minor
-                    ? I18n.tr("server.um.systemUpgradePreflight.10", java.util.Map.of("abi", String.valueOf(abiName), "majorNow", String.valueOf(majorExpected), "magNew", String.valueOf(majorNew)))
-                    : I18n.tr("server.um.systemUpgradePreflight.11", java.util.Map.of("majorNow", String.valueOf(majorExpected), "magNew", String.valueOf(majorNew))));
+                    ? I18n.tr("server.um.systemUpgradePreflight.10", java.util.Map.of("abi", String.valueOf(abiName), "majorNow", String.valueOf(majorExpected), "majorNew", String.valueOf(majorNew)))
+                    : I18n.tr("server.um.systemUpgradePreflight.11", java.util.Map.of("majorNow", String.valueOf(majorExpected), "majorNew", String.valueOf(majorNew))));
 
             // Fine supporto della versione di arrivo: passare a qualcosa che scade fra poco
             // non risolve niente.
@@ -9082,7 +9082,7 @@ public final class UpdateManager {
             // occupano comunque.
             long freeMb = number(sh("df -m / | tail -1 | awk '{print $4}'", 30));
             r.put("freeMb", freeMb);
-            addCheck(checks, "spazio", I18n.tr("server.um.x.spaceRoot"), freeMb > 5000 ? "ok" : "block",
+            addCheck(checks, "space", I18n.tr("server.um.x.spaceRoot"), freeMb > 5000 ? "ok" : "block",
                     I18n.tr("server.um.x.mbFreeRoot", java.util.Map.of("n", String.valueOf(freeMb))) + " " + (freeMb > 5000
                         ? I18n.tr("server.um.systemUpgradePreflight.17")
                         : I18n.tr("server.um.systemUpgradePreflight.18")));
@@ -9099,7 +9099,7 @@ public final class UpdateManager {
                     || "true".equalsIgnoreCase(enabledBy) || "1".equals(enabledBy);
             boolean tested = ok("test -f /var/run/mailpanel.pid", 10);
             r.put("rcPanel", rc).put("rcEnabled", enabled).put("rcTested", tested);
-            addCheck(checks, "pannello", I18n.tr("server.um.systemUpgradePreflight.19"),
+            addCheck(checks, "panel", I18n.tr("server.um.systemUpgradePreflight.19"),
                     (rc && enabled && tested) ? "ok" : "wait",
                     !rc
                     ? I18n.tr("server.um.systemUpgradePreflight.20")
@@ -9119,7 +9119,7 @@ public final class UpdateManager {
                 services.put(new JSONObject().put("name", svc).put("active", ok("service " + svc + " status", 20)));
             }
             r.put("services", services);
-            addCheck(checks, "servizi", I18n.tr("server.um.systemUpgradePreflight.24"), "ok",
+            addCheck(checks, "services", I18n.tr("server.um.systemUpgradePreflight.24"), "ok",
                     I18n.tr("server.um.systemUpgradePreflight.25", java.util.Map.of("length", String.valueOf(services.length()))));
 
             // Patch di sicurezza arretrate: l'Handbook dice di applicarle PRIMA di aggiornare.
@@ -9139,10 +9139,10 @@ public final class UpdateManager {
         if (target == null || !target.matches("[0-9]{1,2}\\.[0-9]{1,2}"))
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.systemUpgradePreflight.1"));
         String id = "sys-" + System.currentTimeMillis();
-        Job j = new Job(id, "sistema");
+        Job j = new Job(id, "system");
         JOBS.put(id, j);
         final String b = target;
-        Thread t = localizedThread(j, () -> runSystemPreparation(j, b), "sistema-prep");
+        Thread t = localizedThread(j, () -> runSystemPreparation(j, b), "system-prep");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -9467,12 +9467,12 @@ public final class UpdateManager {
     }
 
     public static JSONObject startResumeVersionJump(String target) {
-        String id = "salto-" + System.currentTimeMillis();
+        String id = "jump-" + System.currentTimeMillis();
         Job j = new Job(id, "jump");
         JOBS.put(id, j);
         final String b = target == null || target.isEmpty()
                 ? readJumpState().optString("target", "") : target;
-        Thread t = localizedThread(j, () -> runJumpContinuation(j, b), "salto-release");
+        Thread t = localizedThread(j, () -> runJumpContinuation(j, b), "jump-release");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -9730,10 +9730,10 @@ public final class UpdateManager {
             addCheck(checks, "ver", I18n.tr("server.um.x.version"), "ok",
                     I18n.tr("server.um.x.versionBeforeNow", java.util.Map.of("before", String.valueOf(before), "k", String.valueOf(os.optString("installedKernel")), "l", String.valueOf(os.optString("userland")))));
             if (os.optBoolean("restartNeeded")) {
-                addCheck(checks, "riavvio", I18n.tr("server.um.x.restartTitle"), "wait",
+                addCheck(checks, "restart", I18n.tr("server.um.x.restartTitle"), "wait",
                         I18n.tr("server.um.x.restartMissing", java.util.Map.of("k", String.valueOf(os.optString("installedKernel")), "u", String.valueOf(os.optString("uname")))));
             } else {
-                addCheck(checks, "riavvio", I18n.tr("server.um.x.restartTitle"), "ok",
+                addCheck(checks, "restart", I18n.tr("server.um.x.restartTitle"), "ok",
                         I18n.tr("server.um.verifyAfterUpdate.2"));
             }
 
@@ -9748,7 +9748,7 @@ public final class UpdateManager {
                 if (!ok("test -f /usr/local/etc/rc.d/" + c[0] + " -o -f /etc/rc.d/" + c[0], 10)) { absent.add(c[0]); continue; }
                 if (!ok("service " + c[0] + " status", 20)) off.add(c[0]);
             }
-            addCheck(checks, "servizi", I18n.tr("server.um.verifyAfterUpdate.3"),
+            addCheck(checks, "services", I18n.tr("server.um.verifyAfterUpdate.3"),
                     (off.isEmpty() && absent.isEmpty()) ? "ok" : "block",
                     (off.isEmpty() && absent.isEmpty())
                     ? I18n.tr("server.um.verifyAfterUpdate.4", java.util.Map.of("checked", String.valueOf(checked)))
@@ -9971,7 +9971,7 @@ public final class UpdateManager {
         if (!PkgBranch.BRANCHES.contains(target)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.branchPreview.1"));
         if (fingerprint == null || !fingerprint.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false).put("error", I18n.tr("server.um.startBranchChange.1"));
-        String id = "ramo-" + System.currentTimeMillis();
+        String id = "branch-" + System.currentTimeMillis();
         Job j = new Job(id, "pkg_branch");
         return startOnTurn(id, j, I18n.tr("server.um.startBranchChange.2", java.util.Map.of("destination", String.valueOf(target))), "pkg-branch", () -> {
             j.status = "running";
@@ -10002,7 +10002,7 @@ public final class UpdateManager {
                 outcome = "absent";
             } else if ("base".equals(d[1])) {
                 // Il predefinito e' il sistema base: il port installato e' l'anomalia.
-                outcome = "port installato accanto al sistema base";
+                outcome = "port-beside-base";
             } else {
                 // Si confrontano TUTTI i valori installati, uno per uno. Cercare se il
                 // predefinito compare "da qualche parte" nella stringa era sbagliato: con
@@ -10018,8 +10018,8 @@ public final class UpdateManager {
                     else nonconforming.add(tok);
                 }
                 if (nonconforming.isEmpty() && conforming > 0) outcome = "consistent";
-                else if (conforming == 0) outcome = "DIVERGE";
-                else { outcome = "MISTO"; outside = String.join(", ", nonconforming); }
+                else if (conforming == 0) outcome = "DIVERGES";
+                else { outcome = "MIXED"; outside = String.join(", ", nonconforming); }
             }
             JSONObject line = new JSONObject().put("component", d[0]).put("defaultValue", d[1])
                     .put("installed", installed).put("outcome", outcome).put("why", I18n.tr(d[3]));
@@ -10081,7 +10081,7 @@ public final class UpdateManager {
                 String dependents = sh("pkg query %rn " + foreign + " 2>/dev/null", 30).trim();
                 if (!dependents.isEmpty()) {
                     j.status = "error";
-                    j.errorMessage = I18n.tr("server.um.x.someoneDepends", java.util.Map.of("pkg", String.valueOf(foreign), "dip", String.valueOf(dependents.replace("\n", " "))));
+                    j.errorMessage = I18n.tr("server.um.x.someoneDepends", java.util.Map.of("pkg", String.valueOf(foreign), "dependents", String.valueOf(dependents.replace("\n", " "))));
                     j.write("    " + j.errorMessage);
                     return;
                 }

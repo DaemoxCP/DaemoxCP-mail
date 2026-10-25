@@ -226,17 +226,17 @@ public final class PeriodicReport {
             JSONObject data = UpdateManager.reportData(false);
             JSONObject cert = certificateWarning();
             if (cert != null) {
-                JSONArray df = data.optJSONArray("daFare");
+                JSONArray df = data.optJSONArray("toDo");
                 if (df == null) df = new JSONArray();
                 df.put(cert);
-                data.put("daFare", df);
+                data.put("toDo", df);
             }
             String host = Shell.runShell(java.time.Duration.ofSeconds(10), "hostname").outputTrim();
             String sender = setting("report_from", "no-reply@" + panelDomain());
             String dest = setting("report_to", I18n.tr("server.rp.noRecipient"));
             return new JSONObject().put("success", true)
                     .put("text", compose(data, host, sender, dest))
-                    .put("thingsToDo", data.optJSONArray("daFare") == null ? 0 : data.getJSONArray("daFare").length());
+                    .put("thingsToDo", data.optJSONArray("toDo") == null ? 0 : data.getJSONArray("toDo").length());
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", I18n.tr("server.rp.composeFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
@@ -488,7 +488,7 @@ public final class PeriodicReport {
         catch (Exception e) { return r.put("success", false).put("error", I18n.tr("server.rp.collectFailed", java.util.Map.of("m", String.valueOf(e.getMessage())))); }
         // Il certificato lo conosce solo questa classe: si aggiunge qui alle cose da fare,
         // e si riordina, altrimenti "scade fra 3 giorni" finirebbe in fondo all'elenco.
-        JSONArray df = data.optJSONArray("daFare");
+        JSONArray df = data.optJSONArray("toDo");
         if (df == null) df = new JSONArray();
 
         JSONObject certWarning = certificateWarning();
@@ -504,10 +504,10 @@ public final class PeriodicReport {
         l.sort(java.util.Comparator.comparingInt(x -> x.optInt("urgency", 9)));
         JSONArray sorted = new JSONArray();
         for (JSONObject x : l) sorted.put(x);
-        data.put("daFare", sorted);
+        data.put("toDo", sorted);
 
         String host = Shell.runShell(java.time.Duration.ofSeconds(10), "hostname").outputTrim();
-        int howMany = data.optJSONArray("daFare") == null ? 0 : data.getJSONArray("daFare").length();
+        int howMany = data.optJSONArray("toDo") == null ? 0 : data.getJSONArray("toDo").length();
         String subject = "[" + (host.isEmpty() ? I18n.tr("server.rp.mailServer") : host) + "] "
                 + (howMany == 0 ? I18n.tr("server.rp.allGood")
                    : howMany == 1 ? I18n.tr("server.rp.todo.one")
@@ -1001,7 +1001,7 @@ public final class PeriodicReport {
     static String compose(JSONObject d, String host, String sender, String recipient) {
         StringBuilder t = new StringBuilder();
         JSONObject os = d.optJSONObject("system");
-        JSONArray toDo = d.optJSONArray("daFare");
+        JSONArray toDo = d.optJSONArray("toDo");
 
         t.append(I18n.tr("server.rp.c.title")).append("\n")
          .append(line("=", 60)).append("\n")
