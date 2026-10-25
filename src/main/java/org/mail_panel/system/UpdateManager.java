@@ -7878,7 +7878,7 @@ public final class UpdateManager {
             if (t.matches("lib(ssl|crypto)\\.so(\\.[0-9]+)*")) sonPort.add(t);
         }
         java.util.LinkedHashSet<String> sonBase = new java.util.LinkedHashSet<>();
-        for (String s : sh("ls /usr/lib/libssl.os.* /usr/lib/libcrypto.os.* 2>/dev/null", 20).split("\n")) {
+        for (String s : sh("ls /usr/lib/libssl.so.* /usr/lib/libcrypto.so.* 2>/dev/null", 20).split("\n")) {
             String t = s.trim();
             int sl = t.lastIndexOf('/');
             if (sl >= 0 && sl + 1 < t.length()) sonBase.add(t.substring(sl + 1));
@@ -7911,7 +7911,7 @@ public final class UpdateManager {
         int withLibssl = 0;
         if (hasProcstat) {
             String scan = sh("for p in $(ps -axo pid=); do "
-                    + "m=$(procstat -v $p 2>/dev/null | awk '/lib(ssl|crypto)\\.os/ {print $NF}' | sort -u | tr '\\n' ' '); "
+                    + "m=$(procstat -v $p 2>/dev/null | awk '/lib(ssl|crypto)\\.so/ {print $NF}' | sort -u | tr '\\n' ' '); "
                     + "[ -n \"$m\" ] && printf '%s\\t%s\\t%s\\n' \"$p\" \"$(ps -o comm= -p $p 2>/dev/null)\" \"$m\"; "
                     + "done", 240);
             processes = analyzeMappings(scan);
@@ -8018,8 +8018,8 @@ public final class UpdateManager {
         r.put("dependents", dip);
 
         // Chi fornisce la libreria contesa, e da quale pacchetto proviene il file sul disco.
-        r.put("provideLib", sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.os.24 2>/dev/null", 20));
-        r.put("fileLib", sh("ls -l /usr/local/lib/mysql/libmysqlclient.os.24 2>/dev/null", 20));
+        r.put("provideLib", sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20));
+        r.put("fileLib", sh("ls -l /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20));
         // File che i due pacchetti si contendono: quanti ne ha persi la 8.4.
         r.put("hasConflicts", sh("pkg check -s mysql84-client 2>&1 | head -20", 180));
         return r.put("success", true);
@@ -10086,7 +10086,7 @@ public final class UpdateManager {
                     return;
                 }
                 j.write(I18n.tr("server.um.startForeignClientCleanup.5", java.util.Map.of("foreign", String.valueOf(foreign))));
-                String libBefore = sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.os.24 2>/dev/null", 20).trim();
+                String libBefore = sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20).trim();
                 j.write("    " + I18n.tr("server.um.x.libOwner", java.util.Map.of("p", String.valueOf(libBefore.isEmpty() ? I18n.tr("server.um.x.nobodyP") : libBefore))));
 
                 j.advance(2, 5);
@@ -10126,7 +10126,7 @@ public final class UpdateManager {
                 j.advance(5, 5);
                 j.write("");
                 j.write(I18n.tr("server.um.startForeignClientCleanup.9"));
-                String libAfter = sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.os.24 2>/dev/null", 20).trim();
+                String libAfter = sh("pkg which -q /usr/local/lib/mysql/libmysqlclient.so.24 2>/dev/null", 20).trim();
                 j.write("    " + I18n.tr("server.um.x.libOwner", java.util.Map.of("p", String.valueOf(libAfter.isEmpty() ? I18n.tr("server.um.x.nobodyMissing") : libAfter))));
                 JSONArray broken = packagesWithMissingLibraries().getJSONArray("packages");
                 j.write(I18n.tr("server.um.startForeignClientCleanup.10", java.util.Map.of("length", String.valueOf(broken.length()))));
