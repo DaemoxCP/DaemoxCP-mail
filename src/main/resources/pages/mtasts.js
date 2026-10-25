@@ -35,8 +35,8 @@
                 ['none',    'none — ' + t('sts.none')]
             ];
             let h = '<div class="d-flex gap-2 align-items-end flex-wrap mb-3">'
-                  + '<div><label class="form-label small mb-1" for="stsModo">' + escHtml(t('sts.mode')) + '</label>'
-                  + '<select class="form-select form-select-sm" id="stsModo" style="min-width:min(26rem,100%)">'
+                  + '<div><label class="form-label small mb-1" for="stsMode">' + escHtml(t('sts.mode')) + '</label>'
+                  + '<select class="form-select form-select-sm" id="stsMode" style="min-width:min(26rem,100%)">'
                   + modes.map(m => '<option value="' + m[0] + '"' + (m[0] === r.mode ? ' selected' : '') + '>'
                                 + stsEsc(m[1]) + '</option>').join('')
                   + '</select></div>'
@@ -79,7 +79,7 @@
         }
 
         async function stsChangeMode() {
-            const sel = document.getElementById('stsModo');
+            const sel = document.getElementById('stsMode');
             if (!sel) return;
             const modeValue = sel.value;
             const el = document.getElementById('stsOutcome');

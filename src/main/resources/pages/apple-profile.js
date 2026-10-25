@@ -33,8 +33,8 @@
 
             el.innerHTML =
                   '<div class="d-flex gap-2 align-items-end flex-wrap mb-2">'
-                + '<div><label class="form-label small mb-1" for="paCasella">' + paEsc(t('pa.mailbox')) + '</label>'
-                + '<select class="form-select form-select-sm" id="paCasella" style="min-width:18rem">'
+                + '<div><label class="form-label small mb-1" for="paMailbox">' + paEsc(t('pa.mailbox')) + '</label>'
+                + '<select class="form-select form-select-sm" id="paMailbox" style="min-width:18rem">'
                 + mailboxes.map(c => '<option value="' + paEsc(c) + '">' + paEsc(c) + '</option>').join('')
                 + '</select></div>'
                 + '<button class="btn btn-sm btn-mail" onclick="paDownload()">'
@@ -49,13 +49,13 @@
         }
 
         function paDownload() {
-            const sel = document.getElementById('paCasella');
+            const sel = document.getElementById('paMailbox');
             if (!sel || !sel.value) return;
             window.location = '/apple-profile?email=' + encodeURIComponent(sel.value);
         }
 
         async function paPreview() {
-            const sel = document.getElementById('paCasella');
+            const sel = document.getElementById('paMailbox');
             const el = document.getElementById('paOutcome');
             if (!sel || !sel.value) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + paEsc(t('pa.generating'));

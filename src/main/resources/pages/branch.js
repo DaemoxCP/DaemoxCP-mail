@@ -33,7 +33,7 @@
             box.appendChild(head);
             box.appendChild(branchEl('p', 'small mb-2', r.explanation));
 
-            const tab = branchEl('table', 'table table-sm align-middle mb-2 tabella-schede');
+            const tab = branchEl('table', 'table table-sm align-middle mb-2 table-cards');
             tab.setAttribute('aria-label', t('up.pkgRepos'));
             const th = tab.createTHead().insertRow();
             const COL = [t('up.colRepo'), t('up.colWhatFor'), t('up.colBranch'), t('up.colEnabled'), t('up.colAddress')];
@@ -52,7 +52,7 @@
                     td.setAttribute('data-label', labelText);
                     tr.appendChild(td);
                 });
-                const urlCell = branchEl('td', 'testo-lungo');
+                const urlCell = branchEl('td', 'text-long');
                 urlCell.setAttribute('data-label', COL[4]);
                 urlCell.appendChild(branchEl('code', 'small', x.url));
                 tr.appendChild(urlCell);
@@ -98,7 +98,7 @@
             card.appendChild(branchEl('h6', 'mb-2', t('up.switchFromTo', { from: r.from, to: destination })));
             const changes = branchEl('ul', 'small mb-2');
             (r.changes || []).forEach(c => {
-                const li = branchEl('li', 'testo-lungo');
+                const li = branchEl('li', 'text-long');
                 li.appendChild(branchEl('strong', '', c.name + ': '));
                 li.append(...tNodes('up.becomes', { from: branchEl('code', '', c.from), to: branchEl('code', '', c.to) }));
                 changes.appendChild(li);
