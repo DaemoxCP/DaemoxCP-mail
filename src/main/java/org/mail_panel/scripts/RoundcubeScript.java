@@ -98,16 +98,16 @@ PHPFPMCONF
 
             # Configure PHP for Roundcube
             cat > /usr/local/etc/php/ext-30-roundcube.ini << 'PHPINI'
-extension=pdo_mysql.os
-extension=mbstring.os
-extension=iconv.os
-extension=dom.os
-extension=json.os
-extension=openssl.os
-extension=session.os
-extension=xml.os
-extension=zip.os
-extension=intl.os
+extension=pdo_mysql.so
+extension=mbstring.so
+extension=iconv.so
+extension=dom.so
+extension=json.so
+extension=openssl.so
+extension=session.so
+extension=xml.so
+extension=zip.so
+extension=intl.so
 PHPINI
 
             # Create Roundcube database
