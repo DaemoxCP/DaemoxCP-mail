@@ -68,6 +68,10 @@ public class AppleProfile {
         String profileId = "org.mail-panel." + email.toLowerCase(Locale.ROOT);
         String profileUuid = deterministic("profilo:" + email.toLowerCase(Locale.ROOT));
         String mailUuid = deterministic("posta:" + email.toLowerCase(Locale.ROOT));
+        // "posta" nell'identificatore e nel seme dell'UUID resta in italiano apposta: iOS e macOS
+        // riconoscono un profilo dal suo PayloadIdentifier e dal suo UUID, e un profilo con un
+        // identificatore nuovo si installerebbe ACCANTO a quello vecchio invece di sostituirlo.
+        // E' un nome che vive gia' sui dispositivi di chi l'ha installato, non un nome del codice.
 
         return """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -86,7 +90,7 @@ public class AppleProfile {
                 <dict>
                   <key>PayloadType</key>        <string>com.apple.mail.managed</string>
                   <key>PayloadVersion</key>     <integer>1</integer>
-                  <key>PayloadIdentifier</key>  <string>%s.mail</string>
+                  <key>PayloadIdentifier</key>  <string>%s.posta</string>
                   <key>PayloadUUID</key>        <string>%s</string>
                   <key>PayloadDisplayName</key> <string>Account %s</string>
 
