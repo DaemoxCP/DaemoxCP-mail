@@ -49,13 +49,14 @@ public class LogManager {
         this.tailProcesses = new ConcurrentHashMap<>();
 
         // Register log files
-        registerLogFile("maillog", MAILLOG, "Postfix/Sistema", LogType.SMTP);
-        registerLogFile("dovecot", DOVECOT_LOG, "Dovecot IMAP/POP3", LogType.IMAP);
-        registerLogFile("dovecot-info", DOVECOT_INFO_LOG, "Dovecot Info", LogType.IMAP);
-        registerLogFile("rspamd", RSPAMD_LOG, "Rspamd Anti-Spam", LogType.ANTISPAM);
-        registerLogFile("clamav", CLAMAV_LOG, "ClamAV Antivirus", LogType.ANTIVIRUS);
+        registerLogFile("maillog", MAILLOG, "server.log.maillog", LogType.SMTP);
+        registerLogFile("dovecot", DOVECOT_LOG, "server.log.dovecot", LogType.IMAP);
+        registerLogFile("dovecot-info", DOVECOT_INFO_LOG, "server.log.dovecot-info", LogType.IMAP);
+        registerLogFile("rspamd", RSPAMD_LOG, "server.log.rspamd", LogType.ANTISPAM);
+        registerLogFile("clamav", CLAMAV_LOG, "server.log.clamav", LogType.ANTIVIRUS);
     }
 
+    /** description e' una chiave di lingua (server.log.<id>): si traduce quando esce verso la pagina. */
     private void registerLogFile(String id, String path, String description, LogType type) {
         LogFile logFile = new LogFile();
         logFile.id = id;

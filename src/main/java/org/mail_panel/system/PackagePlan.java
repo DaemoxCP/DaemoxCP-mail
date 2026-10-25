@@ -391,7 +391,7 @@ public final class PackagePlan {
 
     /**
      * Il piano della manutenzione completa: tutto cio' che pkg aggiornerebbe, con 'daSbloccare'
-     * unlockedPackages. Qui un pacchetto protetto che pkg nomina e che non si puo' sbloccare non e' un
+     * sbloccati. Qui un pacchetto protetto che pkg nomina e che non si puo' sbloccare non e' un
      * impedimento: e' uno di quelli trattenuti apposta, pkg lo salta e aggiorna il resto. Resta
      * nel piano, con il suo motivo, perche' chi legge sappia cosa NON verra' aggiornato.
      */

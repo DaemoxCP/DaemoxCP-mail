@@ -4604,7 +4604,7 @@ public class SSLMailServer {
                         JSONObject logJson = new JSONObject();
                         logJson.put("id", logFile.id);
                         logJson.put("path", logFile.path);
-                        logJson.put("description", logFile.description);
+                        logJson.put("description", org.mail_panel.i18n.I18n.tr(logFile.description));
                         logJson.put("type", logFile.type.toString());
                         logJson.put("exists", logFile.exists);
                         logsArray.put(logJson);
@@ -11843,7 +11843,7 @@ http {
      * "X-Forwarded-For: 1.2.3.4" se la vede accodare dal proxy, che aggiunge il proprio
      * mittente in coda. Il primo valore e' quindi il piu' facile da falsificare, non il piu'
      * attendibile — e usandolo per il limite dei tentativi bastava cambiarlo a ogni prova per
-     * non essere mai lockedPackages.
+     * non essere mai bloccati.
      *
      * Si scorre da destra saltando gli indirizzi che sono a loro volta proxy fidati (una
      * catena vera ne ha piu' d'uno) e ci si ferma al primo che non lo e': quello l'ha scritto

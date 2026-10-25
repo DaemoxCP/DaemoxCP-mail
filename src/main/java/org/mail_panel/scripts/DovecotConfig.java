@@ -1,5 +1,7 @@
 package org.mail_panel.scripts;
 
+import org.mail_panel.i18n.I18n;
+
 import org.mail_panel.Main;
 
 import java.sql.ResultSet;
@@ -618,39 +620,26 @@ public final class DovecotConfig {
      */
     public static String[][] checks24() {
         return new String[][]{
-            {"confirmed", "dovecot_config_version / dovecot_storage_version", "obbligatorie; la prima dev'essere in cima a dovecot.conf"},
-            {"confirmed", "mail_driver + mail_path", "sostituiscono mail_location"},
-            {"confirmed", "%{user}, %{user | username}, %{user | domain}", "sostituiscono %u, %n, %d"},
-            {"confirmed", "auth_allow_cleartext", "sostituisce disable_plaintext_auth, e il valore si inverte"},
-            {"confirmed", "ssl_server_cert_file / ssl_server_key_file", "sostituiscono ssl_cert / ssl_key, senza il prefisso <"},
-            {"confirmed", "ssl_server_prefer_ciphers", "sostituisce ssl_prefer_server_ciphers"},
-            {"confirmed", "passdb sql { query = ... }", "il blocco vuole un nome; password_query si chiama query"},
-            {"confirmed", "userdb static { fields { ... } }", "esempio ufficiale identico"},
-            {"confirmed", "passdb passwd-file { passwd_file_path = ... }", "args si chiama passwd_file_path"},
-            {"confirmed", "sql_driver + blocco mysql <host> { ... }", "dovecot-sql.conf non esiste piu'"},
-            {"confirmed", "mail_plugins { sieve = yes }", "non piu' un elenco su una riga: e' un boollist"},
-            {"confirmed", "default_password_scheme dentro passdb", "non piu' al livello globale"},
-            {"confirmed", "blocchi sieve_script al posto di sieve_dir e sieve_global_dir",
-             "sieve_dir, sieve_global_dir e sieve_global_path sono nell'elenco ufficiale delle rimosse"},
-            {"confirmed", "protocols va scritto esplicitamente",
-             "nella 2.4 il valore predefinito e' vuoto: senza quella riga non si abilita nessun protocollo"},
-            {"confirmed", "auth_master_user_separator = *",
-             "NON e' rimossa: l'esempio ufficiale della 2.4 la mostra. Il pannello ne dipende, perche' "
-             + "l'accesso unico a Roundcube fa login come email*masteruser"},
-            {"confirmed", "first_valid_uid / first_valid_gid / mail_privileged_group / ssl_cipher_list",
-             "non compaiono fra le impostazioni rimosse: si tengono come nella 2.3"},
-            {"unconfirmed", "sieve_script { type = ... }",
-             "la descrizione elenca 'type' fra le chiavi, l'esempio ufficiale non lo scrive. Qui c'e': se doveconf lo rifiuta, va tolto"},
-            {"unconfirmed", "mail_uid / mail_gid",
-             "non citate fra le modifiche, quindi tenute. Se la 2.4 le avesse tolte, doveconf lo direbbe: "
-             + "uid e gid arrivano comunque anche da userdb static, quindi togliendole non cambia niente"},
-            {"unconfirmed", "ssl = required, ssl_min_protocol, sendmail_path, !include",
-             "non citate fra le modifiche, quindi presumibilmente invariate"},
-            {"criterion", "si tiene cio' che la 2.3 aveva, salvo changes documentati",
-             "i due errori possibili non pesano uguale: un'impostazione che la 2.4 non conosce piu' fa "
-             + "fallire doveconf, quindi si scopre subito e la configurazione precedente torna al suo "
-             + "posto; un'impostazione giusta ma non scritta non fa fallire niente e cambia il "
-             + "comportamento in silenzio. Fra i due si sceglie l'errore rumoroso"},
+            {"confirmed", "dovecot_config_version / dovecot_storage_version", I18n.tr("server.dv24.1.note")},
+            {"confirmed", "mail_driver + mail_path", I18n.tr("server.dv24.2.note")},
+            {"confirmed", "%{user}, %{user | username}, %{user | domain}", I18n.tr("server.dv24.3.note")},
+            {"confirmed", "auth_allow_cleartext", I18n.tr("server.dv24.4.note")},
+            {"confirmed", "ssl_server_cert_file / ssl_server_key_file", I18n.tr("server.dv24.5.note")},
+            {"confirmed", "ssl_server_prefer_ciphers", I18n.tr("server.dv24.6.note")},
+            {"confirmed", "passdb sql { query = ... }", I18n.tr("server.dv24.7.note")},
+            {"confirmed", "userdb static { fields { ... } }", I18n.tr("server.dv24.8.note")},
+            {"confirmed", "passdb passwd-file { passwd_file_path = ... }", I18n.tr("server.dv24.9.note")},
+            {"confirmed", I18n.tr("server.dv24.10.setting"), I18n.tr("server.dv24.10.note")},
+            {"confirmed", "mail_plugins { sieve = yes }", I18n.tr("server.dv24.11.note")},
+            {"confirmed", I18n.tr("server.dv24.12.setting"), I18n.tr("server.dv24.12.note")},
+            {"confirmed", I18n.tr("server.dv24.13.setting"), I18n.tr("server.dv24.13.note")},
+            {"confirmed", I18n.tr("server.dv24.14.setting"), I18n.tr("server.dv24.14.note")},
+            {"confirmed", "auth_master_user_separator = *", I18n.tr("server.dv24.15.note")},
+            {"confirmed", "first_valid_uid / first_valid_gid / mail_privileged_group / ssl_cipher_list", I18n.tr("server.dv24.16.note")},
+            {"unconfirmed", "sieve_script { type = ... }", I18n.tr("server.dv24.17.note")},
+            {"unconfirmed", "mail_uid / mail_gid", I18n.tr("server.dv24.18.note")},
+            {"unconfirmed", "ssl = required, ssl_min_protocol, sendmail_path, !include", I18n.tr("server.dv24.19.note")},
+            {"criterion", I18n.tr("server.dv24.20.setting"), I18n.tr("server.dv24.20.note")},
         };
     }
 

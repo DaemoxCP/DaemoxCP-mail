@@ -89,7 +89,7 @@ public class PackageQueueTest {
         real("cartella che non c'e': nessun file lasciato", !Files.exists(withoutFolder));
 
         // Con l'elenco di un lavoro non chiuso su disco, quei pacchetti potrebbero essere ancora
-        // unlockedPackages: nessun lavoro che installa o aggiorna parte. Rimettere le protezioni si',
+        // sbloccati: nessun lavoro che installa o aggiorna parte. Rimettere le protezioni si',
         // perche' e' proprio il rimedio.
         String e2 = PackageQueue.take("upd", "aggiornamento dei pacchetti non protetti");
         real("elenco aperto: un aggiornamento non parte", e2 != null && e2.contains("non si è chiuso"));

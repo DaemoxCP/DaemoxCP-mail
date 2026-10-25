@@ -2878,7 +2878,7 @@ public class MailPanelContent {
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="mbName">{{t:mbx.fullName}}</label>
-                            <input type="text" class="form-control" id="mbName" placeholder="Mario Rossi">
+                            <input type="text" class="form-control" id="mbName" placeholder="{{t:mb.namePh}}">
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="mbQuota">Quota</label>
@@ -2923,7 +2923,7 @@ public class MailPanelContent {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editMbName">{{t:mbx.fullName}}</label>
-                        <input type="text" class="form-control" id="editMbName" placeholder="Mario Rossi">
+                        <input type="text" class="form-control" id="editMbName" placeholder="{{t:mb.namePh}}">
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editMbPass">{{t:mbx.newPass}} <small class="text-muted">{{t:mbx.newPassHint}}</small></label>
@@ -4657,7 +4657,7 @@ public class MailPanelContent {
                 // account, leggere "trovati 1 record DKIM totali nell'account Pietro" porta a
                 // concludere che gli altri quattro non hanno DKIM — mentre ce l'hanno. Un
                 // conteggio giusto sotto un'etichetta che promette un perimetro piu' largo di
-                // quello measured e' un numero falso.
+                // quello misurato e' un numero falso.
                 let html = '<div class="alert ' + (removableCount > 0 ? 'alert-warning' : 'alert-success') + ' py-2 mb-2"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>'
                     + escHtml(t('dns.orphSummary', { zone: data.domain || '?', total: records.length, active: activeCount, grace: graceProtCount, removable: removableCount, account: data.cloudflare_account_label || '?' }))
                     + ' <span class="text-muted">' + escHtml(t('dns.orphOneZone')) + '</span></div>';
@@ -10167,7 +10167,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- La sezione "Mittenti lockedPackages" e' stata TOLTA.
+            <!-- La sezione "Mittenti bloccati" e' stata TOLTA.
                  Non esisteva nessun meccanismo di blocco: ne' una tabella nel database, ne'
                  una regola in Postfix. Era una tabella che scriveva "Nessun blocco attivo"
                  qualunque cosa succedesse, con un pulsante "Sblocca" che rispondeva "azione
