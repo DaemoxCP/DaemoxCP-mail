@@ -60,7 +60,7 @@ public class DomainSetup {
             steps.put(dkim(d));
 
             // 2. SPF.
-            steps.put(reduce("SPF", auto.crea(domainId, "spf", "")));
+            steps.put(reduce("SPF", auto.create(domainId, "spf", "")));
 
             // 3. La cassetta dei rapporti, con la destinazione copiata da un altro dominio.
             String target = existingReportDestination();
@@ -74,7 +74,7 @@ public class DomainSetup {
                 steps.put(reduce(I18n.tr("server.cfgdom.reportBox"), auto.createReportAlias(domainId, target)));
 
             // 4. DMARC, sempre in osservazione: si stringe dopo aver letto i rapporti.
-            steps.put(reduce("DMARC (p=none)", auto.crea(domainId, "dmarc", "none")));
+            steps.put(reduce("DMARC (p=none)", auto.create(domainId, "dmarc", "none")));
 
             // 5. I record che aiutano i client.
             for (String[] o : new String[][] {

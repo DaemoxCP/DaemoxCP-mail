@@ -357,10 +357,10 @@ public class AcmeManager {
 
     private boolean consistentPair() {
         try {
-            String daCert = executeCommand("openssl x509 -in " + CERT_FILE + " -noout -pubkey 2>/dev/null");
+            String fromCert = executeCommand("openssl x509 -in " + CERT_FILE + " -noout -pubkey 2>/dev/null");
             String fromKey = executeCommand("openssl pkey -in " + KEY_FILE + " -pubout 2>/dev/null");
-            if (daCert == null || fromKey == null) return false;
-            String a = daCert.replaceAll("\\s+", ""), b = fromKey.replaceAll("\\s+", "");
+            if (fromCert == null || fromKey == null) return false;
+            String a = fromCert.replaceAll("\\s+", ""), b = fromKey.replaceAll("\\s+", "");
             return !a.isEmpty() && a.equals(b);
         } catch (Exception e) {
             // Non essere riusciti a verificare non e' una promozione: si torna indietro.
@@ -712,7 +712,7 @@ public class AcmeManager {
     }
 
     /** L'account Cloudflare collegato a un dominio, per sapere se condivide quello del certificato. */
-    public MailDatabase.CloudflareAccount accountDi(int domainId) {
+    public MailDatabase.CloudflareAccount accountOf(int domainId) {
         try {
             return database.getCloudflareAccountForDomain(domainId);
         } catch (Exception e) {

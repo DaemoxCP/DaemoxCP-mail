@@ -179,8 +179,8 @@ public final class AddressTransform {
                 Path p = it.next();
                 Path parentFolder = p.getParent();
                 if (parentFolder == null || parentFolder.getFileName() == null) continue;
-                String padre = parentFolder.getFileName().toString();
-                if (!padre.equals("cur") && !padre.equals("new")) continue;
+                String parentName = parentFolder.getFileName().toString();
+                if (!parentName.equals("cur") && !parentName.equals("new")) continue;
                 try {
                     BasicFileAttributes a = Files.readAttributes(p, BasicFileAttributes.class);
                     if (!a.isRegularFile()) continue;

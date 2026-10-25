@@ -74,8 +74,8 @@ public final class PackageQueue {
     private static String take(String id, String description, boolean notWithOpenList) {
         Turn fresh = new Turn(id, description, System.currentTimeMillis());
         while (!IN_PROGRESS.compareAndSet(null, fresh)) {
-            String chi = chi();
-            if (chi != null) return busy(chi);
+            String holder = holder();
+            if (holder != null) return busy(holder);
             // Rilasciato fra i due passi: si riprova.
         }
         if (notWithOpenList && statePresent()) {
@@ -92,7 +92,7 @@ public final class PackageQueue {
     }
 
     /** Chi tiene il turno adesso ("manutenzione, in corso da 3 minuti"), o null se e' libero. */
-    public static String chi() {
+    public static String holder() {
         Turn t = IN_PROGRESS.get();
         if (t == null) return null;
         long min = (System.currentTimeMillis() - t.start()) / 60000;
@@ -106,14 +106,14 @@ public final class PackageQueue {
      * versioni che stanno cambiando: null se si puo' calcolare, altrimenti il motivo.
      */
     public static String planNotNow() {
-        String chi = chi();
-        return chi == null ? null
-             : I18n.tr("server.turn.busyPlan", java.util.Map.of("who", String.valueOf(chi)));
+        String holder = holder();
+        return holder == null ? null
+             : I18n.tr("server.turn.busyPlan", java.util.Map.of("who", String.valueOf(holder)));
     }
 
     /** Il messaggio per chi trova il turno preso. */
-    static String busy(String chi) {
-        return I18n.tr("server.turn.busy", java.util.Map.of("who", String.valueOf(chi)));
+    static String busy(String holder) {
+        return I18n.tr("server.turn.busy", java.util.Map.of("who", String.valueOf(holder)));
     }
 
     /**

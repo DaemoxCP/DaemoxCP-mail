@@ -124,8 +124,8 @@ public class AppleProfile {
      * Un UUID sempre uguale per lo stesso indirizzo. Se fosse casuale, ogni download
      * genererebbe un profilo "nuovo" e Mail accumulerebbe account doppioni.
      */
-    private static String deterministic(String seme) {
-        return UUID.nameUUIDFromBytes(seme.getBytes(StandardCharsets.UTF_8))
+    private static String deterministic(String seed) {
+        return UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8))
                 .toString().toUpperCase(Locale.ROOT);
     }
 

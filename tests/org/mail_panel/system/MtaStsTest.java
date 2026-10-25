@@ -83,7 +83,7 @@ public class MtaStsTest {
                 e("domain-d.test", MtaStsSetup.NameState.ABSENT, "nella zona non c'e'", true, true, false)));
         require("il dominio finisce fra gli assenti", rip.absent.size() == 1);
         require("e ANCHE fra quelli che passano dal proxy (era il falso verde)", rip.proxied.size() == 1);
-        require("il piano sa che il proxy viene da un jolly", rip.proxyDaJolly);
+        require("il piano sa che il proxy viene da un jolly", rip.proxyFromWildcard);
         require("la riga del proxy nomina il jolly", rip.proxied.get(0).contains("*.domain-d.test"));
 
         System.out.println("\n== ripartisci(): record insieme SBAGLIATO e PROXATO ==");
@@ -95,7 +95,7 @@ public class MtaStsTest {
                   true, true, true)));
         require("compare fra gli storti", rip.crooked.size() == 1);
         require("compare ANCHE fra i proxati", rip.proxied.size() == 1);
-        require("il proxy non viene da un jolly", !rip.proxyDaJolly);
+        require("il proxy non viene da un jolly", !rip.proxyFromWildcard);
 
         System.out.println("\n== ripartisci(): record giusto ma proxato ==");
         rip = MtaStsSetup.split(List.of(

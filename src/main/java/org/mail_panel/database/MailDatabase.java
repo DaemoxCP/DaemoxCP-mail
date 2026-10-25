@@ -233,7 +233,7 @@ public class MailDatabase {
                 try {
                     List<String> t = panelTables(c);
                     present = t.isEmpty() ? "none" : String.join(", ", t);
-                } catch (SQLException perse) {
+                } catch (SQLException lost) {
                     present = "unknown, MySQL does not answer";
                 }
                 throw new SQLException("Reset failed: " + e.getMessage()

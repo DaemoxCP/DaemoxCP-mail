@@ -71,8 +71,8 @@ public class VersionsApiTest {
      * header parser received no bytes", una volta su venti. Non e' quello che si sta provando.
      */
     static HttpResponse<String> askSeparately(String method, String path, String body, boolean withSession) throws Exception {
-        try (HttpClient solo = HttpClient.newBuilder().sslContext(http.sslContext()).build()) {
-            return ask(solo, method, path, body, withSession);
+        try (HttpClient onlyOne = HttpClient.newBuilder().sslContext(http.sslContext()).build()) {
+            return ask(onlyOne, method, path, body, withSession);
         }
     }
 

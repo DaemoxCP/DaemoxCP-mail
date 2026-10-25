@@ -880,14 +880,14 @@ public class Main {
                     System.out.println();
                     System.out.println(ANSI_YELLOW + "Port " + port + " is already in use: "
                             + "the panel is most likely ALREADY RUNNING." + ANSI_RESET);
-                    String chi = "";
+                    String who = "";
                     try {
-                        chi = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(20),
+                        who = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(20),
                                 "sockstat -46l -p " + port + " 2>/dev/null | grep -v '^USER'").outputTrim();
                     } catch (Exception ignored) { }
-                    if (!chi.isEmpty()) {
+                    if (!who.isEmpty()) {
                         System.out.println("Who is using it:");
-                        System.out.println(chi);
+                        System.out.println(who);
                         System.out.println();
                         System.out.println("To stop it:  kill <PID>    (the PID is the third column)");
                     }
@@ -1019,9 +1019,9 @@ public class Main {
                 return false;
             }
             String error = null;
-            java.util.List<String> cancellate = java.util.List.of();
+            java.util.List<String> deleted = java.util.List.of();
             try {
-                cancellate = mailDatabase.dropAllTables();
+                deleted = mailDatabase.dropAllTables();
             } catch (java.sql.SQLException e) {
                 error = e.getMessage();
             }
@@ -1036,7 +1036,7 @@ public class Main {
                 return false;
             }
             System.out.println("Tables dropped: "
-                    + (cancellate.isEmpty() ? "none, the database was already empty" : String.join(", ", cancellate)));
+                    + (deleted.isEmpty() ? "none, the database was already empty" : String.join(", ", deleted)));
             System.out.println(ANSI_GREEN + "Database reset completed!" + ANSI_RESET);
             return true;
         } catch (Exception e) {

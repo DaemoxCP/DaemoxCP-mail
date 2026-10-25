@@ -93,7 +93,7 @@ public class MtaStsRecordTest {
             List<String> c = new ArrayList<>();
             for (TxtRecordInfo t : zone.values())
                 if (t.name.equals(NAME_PATTERN)) c.add(DnsRules.cloudflareContent(t.content));
-            return DnsRules.soloMtaSts(c);
+            return DnsRules.onlyMtaSts(c);
         }
 
         long otherTxt() {
@@ -245,7 +245,7 @@ public class MtaStsRecordTest {
         if (failed > 0) System.exit(1);
     }
 
-    /** Il ciclo di AutoDns.creaTxtMtaSts com'era prima, ridotto all'esito. */
+    /** Il ciclo di AutoDns.createTxtMtaSts com'era prima, ridotto all'esito. */
     static String howItWroteBefore(FakeCloudflare cf) {
         for (CloudflareManager.TxtRecordInfo t : cf.listTxtRecordsContaining("token", "zona", null)) {
             if (!t.name.equals(NAME_PATTERN)) continue;

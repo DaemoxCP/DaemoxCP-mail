@@ -28,16 +28,16 @@ public class PackageQueueTest {
         PackageQueue.list = f;
 
         // --- Il turno ---
-        real("libero all'inizio", PackageQueue.chi() == null);
+        real("libero all'inizio", PackageQueue.holder() == null);
         real("il primo lo prende", PackageQueue.take("a", "manutenzione") == null);
         String no = PackageQueue.take("b", "aggiornamento di kafka");
         real("il secondo no, e il messaggio dice chi lo tiene", no != null && no.contains("(manutenzione"));
         real("nemmeno per le protezioni, mentre un lavoro gira",
             PackageQueue.takeForLocks("c", "protezione dei pacchetti") != null);
         PackageQueue.release("b");
-        real("chi non lo tiene non puo' liberarlo", PackageQueue.chi() != null);
+        real("chi non lo tiene non puo' liberarlo", PackageQueue.holder() != null);
         PackageQueue.release("a");
-        real("chi lo tiene lo libera", PackageQueue.chi() == null);
+        real("chi lo tiene lo libera", PackageQueue.holder() == null);
 
         // Molti nello stesso istante: uno solo lo prende.
         int n = 64;
@@ -56,9 +56,9 @@ public class PackageQueueTest {
         via.countDown();
         finished.await(10, TimeUnit.SECONDS);
         real(n + " insieme: uno solo prende il turno", taken.get() == 1);
-        String keeps = PackageQueue.chi();
+        String keeps = PackageQueue.holder();
         PackageQueue.release(keeps.substring("lavoro ".length(), keeps.indexOf(',')));
-        real("e poi lo libera", PackageQueue.chi() == null);
+        real("e poi lo libera", PackageQueue.holder() == null);
 
         // avvia: il turno si libera quando il lavoro finisce, anche se fallisce.
         CountDownLatch inside = new CountDownLatch(1), leave = new CountDownLatch(1);
@@ -93,7 +93,7 @@ public class PackageQueueTest {
         // perche' e' proprio il rimedio.
         String e2 = PackageQueue.take("upd", "aggiornamento dei pacchetti non protetti");
         real("elenco aperto: un aggiornamento non parte", e2 != null && e2.contains("non si è chiuso"));
-        real("elenco aperto: e il turno non resta preso", PackageQueue.chi() == null);
+        real("elenco aperto: e il turno non resta preso", PackageQueue.holder() == null);
         real("elenco aperto: le protezioni si possono rimettere",
             PackageQueue.takeForLocks("lock", "protezione dei pacchetti") == null);
         PackageQueue.release("lock");
@@ -107,8 +107,8 @@ public class PackageQueueTest {
     }
 
     private static boolean waitUntilFree() throws InterruptedException {
-        for (int i = 0; i < 100 && PackageQueue.chi() != null; i++) Thread.sleep(50);
-        return PackageQueue.chi() == null;
+        for (int i = 0; i < 100 && PackageQueue.holder() != null; i++) Thread.sleep(50);
+        return PackageQueue.holder() == null;
     }
 
     private static void real(String name, boolean ok) {

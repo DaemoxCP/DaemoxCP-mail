@@ -73,19 +73,19 @@ public class AliasMessagesTest {
                 note(io, true, table(alias("sales@domain-a.test", outside, true))) == null);
 
         System.out.println("\n== un indirizzo che non e' una casella ==");
-        String solo = "dmarc@domain-a.test";
-        require("con un alias attivo esiste: niente da dire", note(solo, false, table(alias(solo, outside, true))) == null);
-        n = note(solo, false, table(alias(solo, outside, false)));
+        String onlyOne = "dmarc@domain-a.test";
+        require("con un alias attivo esiste: niente da dire", note(onlyOne, false, table(alias(onlyOne, outside, true))) == null);
+        n = note(onlyOne, false, table(alias(onlyOne, outside, false)));
         require("con l'unico alias disattivato la posta viene rifiutata, e lo dice", n != null && n.contains("viene rifiutata"));
-        require("dopo aver eliminato l'ultimo alias, idem", note(solo, false, table()) != null);
+        require("dopo aver eliminato l'ultimo alias, idem", note(onlyOne, false, table()) != null);
         require("un altro alias ancora attivo lo tiene in vita",
-                note(solo, false, table(alias(solo, outside, false), alias(solo, other, true))) == null);
+                note(onlyOne, false, table(alias(onlyOne, outside, false), alias(onlyOne, other, true))) == null);
         require("un catch-all ATTIVO del dominio raccoglie la sua posta: niente rifiuto",
-                note(solo, false, table(alias(solo, outside, false), alias("@domain-a.test", other, true))) == null);
+                note(onlyOne, false, table(alias(onlyOne, outside, false), alias("@domain-a.test", other, true))) == null);
         require("un catch-all disattivato non raccoglie niente",
-                note(solo, false, table(alias("@domain-a.test", other, false))) != null);
+                note(onlyOne, false, table(alias("@domain-a.test", other, false))) != null);
         require("il confronto e' esatto: xdmarc@... non tiene in vita dmarc@...",
-                note(solo, false, table(alias("x" + solo, outside, true))) != null);
+                note(onlyOne, false, table(alias("x" + onlyOne, outside, true))) != null);
         require("una sorgente senza @ (riga vecchia) non fa saltare niente",
                 note("postmaster", false, table(alias("postmaster", outside, true))) == null);
 

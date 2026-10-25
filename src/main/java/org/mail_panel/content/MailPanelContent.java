@@ -1311,7 +1311,7 @@ public class MailPanelContent {
      * stato (checkStatus) e i tre comandi, con il loro nome per chi usa un lettore di schermo.
      * Una definizione sola per tutte le righe.
      */
-    private static String serviceLine(String key, String service, String icon, String name, String chi) {
+    private static String serviceLine(String key, String service, String icon, String name, String who) {
         return """
                         <tr>
                             <td data-label="{{t:home.colService}}" class="text-nowrap"><i class="fas %s me-2" aria-hidden="true"></i>%s</td>
@@ -1323,7 +1323,7 @@ public class MailPanelContent {
                                 <button type="button" class="btn btn-danger action-btn" onclick="serviceAction('%s','stop')" aria-label="{{t:home.stop}} %s" title="{{t:home.stop}}"><i class="fas fa-stop" aria-hidden="true"></i></button>
                             </td>
                         </tr>
-""".formatted(icon, name, key, key, service, chi, service, chi, service, chi);
+""".formatted(icon, name, key, key, service, who, service, who, service, who);
     }
 
     /**

@@ -313,7 +313,7 @@ public class InstallScriptDriftTest {
         // La fine e' il turno libero, non lo stato: la manutenzione dice «completed» prima dei
         // suoi controlli finali (reperto 43), e chi si fermasse li' guarderebbe un lavoro a meta'.
         long deadline = System.currentTimeMillis() + 600_000;
-        while (PackageQueue.chi() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
+        while (PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
         JSONObject job = UpdateManager.jobStatus(id).getJSONObject("job");
         // -De2e.dump=<cartella>: il JSON del lavoro com'e', quello che la pagina riceve da
         // job_status. Serve a far vedere a un browser l'esito vero, non uno scritto a mano.

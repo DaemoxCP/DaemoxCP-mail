@@ -187,15 +187,15 @@ public final class BanActionRepair {
             // completely restarting of affected jails". Se dopo il reload l'azione non risulta,
             // la configurazione e' giusta ma non e' stata applicata: si ricrea la jail. Senza
             // "--unban", che il manuale indica come l'opzione che invece toglierebbe i ban.
-            java.util.List<String> ancoraMute = new ArrayList<>();
+            java.util.List<String> stillMute = new ArrayList<>();
             for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
                 String c = banCommand(jail);
-                if (c == null || c.isEmpty()) ancoraMute.add(jail);
+                if (c == null || c.isEmpty()) stillMute.add(jail);
             }
-            if (!ancoraMute.isEmpty()) {
+            if (!stillMute.isEmpty()) {
                 Shell.Result rs = Shell.run(Duration.ofSeconds(60), CLIENT, "reload", "--restart");
                 steps.put(step("reload --restart", rs.success(),
-                    I18n.tr("server.banfix.restarted", java.util.Map.of("list", String.valueOf(String.join(", ", ancoraMute)), "out", String.valueOf(rs.output() == null || rs.output().isBlank() ? I18n.tr("server.banfix.none") : rs.output().trim())))));
+                    I18n.tr("server.banfix.restarted", java.util.Map.of("list", String.valueOf(String.join(", ", stillMute)), "out", String.valueOf(rs.output() == null || rs.output().isBlank() ? I18n.tr("server.banfix.none") : rs.output().trim())))));
             }
 
             // 4. La verifica che conta: cosa esegue ADESSO, chiesto a fail2ban.
@@ -410,11 +410,11 @@ public final class BanActionRepair {
             //    si filtra: la riga piu' informativa finora e' stata una WARNING di routine
             //    ("already banned") che, venendo dal modulo delle azioni, ha dimostrato che la
             //    jail le azioni ce le ha — l'opposto di quello che sospettavo.
-            java.util.List<String> sue = new ArrayList<>();
-            for (int i = all.size() - 1; i >= 0 && sue.size() < 8; i--)
-                if (all.get(i).contains(jail)) sue.add(0, all.get(i));
+            java.util.List<String> theirs = new ArrayList<>();
+            for (int i = all.size() - 1; i >= 0 && theirs.size() < 8; i--)
+                if (all.get(i).contains(jail)) theirs.add(0, all.get(i));
             out.append("— ").append(I18n.tr("server.banfix.lastLines", java.util.Map.of("jail", String.valueOf(jail)))).append(":\n")
-               .append(sue.isEmpty() ? I18n.tr("server.banfix.none") : String.join("\n", sue));
+               .append(theirs.isEmpty() ? I18n.tr("server.banfix.none") : String.join("\n", theirs));
 
             // 2. TUTTA la finestra dell'ultimo reload, senza filtri di nessun tipo.
             //
@@ -510,12 +510,12 @@ public final class BanActionRepair {
             r = Shell.run(Duration.ofSeconds(20), CLIENT, "-d");
         if (!r.success() || r.output() == null || r.output().isBlank())
             return I18n.tr("server.banfix.noDump");
-        java.util.List<String> sue = new ArrayList<>();
+        java.util.List<String> theirs = new ArrayList<>();
         for (String line : r.output().split("\n"))
-            if (line.contains("'" + jail + "'") || line.contains("\"" + jail + "\"")) sue.add(line);
-        return sue.isEmpty()
+            if (line.contains("'" + jail + "'") || line.contains("\"" + jail + "\"")) theirs.add(line);
+        return theirs.isEmpty()
             ? "(" + I18n.tr("server.banfix.dumpNoLine", java.util.Map.of("jail", String.valueOf(jail))) + ")"
-            : String.join("\n", sue);
+            : String.join("\n", theirs);
     }
 
     /** Cosa risponde fail2ban quando gli si chiedono le azioni di una jail, testuale. */

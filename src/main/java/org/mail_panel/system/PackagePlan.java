@@ -75,7 +75,7 @@ public final class PackagePlan {
 
     private static final String VULNERABLE = " (vulnerable!)";
 
-    private static final Pattern DA_A = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
+    private static final Pattern FROM_TO = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
     private static final Pattern REPO_VERSION_NAME = Pattern.compile("^(\\S+): (\\S+)(?: \\[([^\\]]+)\\])?$");
     private static final Pattern REINSTALL = Pattern.compile("^(\\S+)-([^\\s-]+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
     private static final Pattern REMOVES = Pattern.compile("^(\\S+): (\\S+)(?: \\((.*)\\))?$");
@@ -169,7 +169,7 @@ public final class PackagePlan {
         Matcher m;
         switch (section) {
             case "upgrade", "downgrade" -> {
-                m = DA_A.matcher(s);
+                m = FROM_TO.matcher(s);
                 if (!m.find()) return false;
                 changes.put(entry(section, m.group(1), m.group(2), m.group(3), "", m.group(4), vulnerable));
             }
@@ -457,11 +457,11 @@ public final class PackagePlan {
             boolean already = false;
             for (int i = 0; i < changes.length(); i++) if ("pkg".equals(changes.getJSONObject(i).optString("name"))) already = true;
             if (!already) {
-                JSONArray conPkg = new JSONArray().put(entry("upgrade", "pkg", before.getString("from"), before.getString("to"),
+                JSONArray withPkg = new JSONArray().put(entry("upgrade", "pkg", before.getString("from"), before.getString("to"),
                         I18n.tr("server.plan.pkgFirst"), "", false));
-                for (int i = 0; i < changes.length(); i++) conPkg.put(changes.get(i));
-                plan.put("changes", conPkg);
-                changes = conPkg;
+                for (int i = 0; i < changes.length(); i++) withPkg.put(changes.get(i));
+                plan.put("changes", withPkg);
+                changes = withPkg;
             }
         }
 
@@ -824,24 +824,24 @@ public final class PackagePlan {
                     unreadable = true;
                     d.put("type", "non-so");
                 } else {
-                    Bound sup = null;
+                    Bound upperBound = null;
                     boolean exact = false;
                     for (Bound e : its) {
-                        if (e.op().equals("<") || e.op().equals("<=")) sup = e;
+                        if (e.op().equals("<") || e.op().equals("<=")) upperBound = e;
                         if (e.op().equals("=")) exact = true;
                     }
                     if (exact) {
                         onlyThis = true;
                         d.put("type", "solo-questa-versione");
-                    } else if (sup == null) {
+                    } else if (upperBound == null) {
                         withoutLimit = true;
                         d.put("type", "senza-limite");
-                    } else if (sup.op().equals("<")) {
-                        d.put("type", "corretta-da").put("firstFixed", sup.version());
-                        if (firstFixed == null || c.compare(sup.version(), firstFixed) > 0) firstFixed = sup.version();
+                    } else if (upperBound.op().equals("<")) {
+                        d.put("type", "corretta-da").put("firstFixed", upperBound.version());
+                        if (firstFixed == null || c.compare(upperBound.version(), firstFixed) > 0) firstFixed = upperBound.version();
                     } else {
-                        d.put("type", "vulnerabile-fino-a").put("upTo", sup.version());
-                        upTo = sup.version();
+                        d.put("type", "vulnerabile-fino-a").put("upTo", upperBound.version());
+                        upTo = upperBound.version();
                     }
                 }
                 if (newerCatalog && insideAny(catalog, ranges, c)) {

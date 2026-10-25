@@ -70,7 +70,7 @@ public class AddressConversionTest {
         final Set<String> mailboxes;
         final Map<String, List<String>> alias = new HashMap<>();
         FakeNetwork(Set<String> domains, Set<String> mailboxes) { this.domains = domains; this.mailboxes = mailboxes; }
-        FakeNetwork con(String from, String to) { alias.computeIfAbsent(from, k -> new ArrayList<>()).add(to); return this; }
+        FakeNetwork route(String from, String to) { alias.computeIfAbsent(from, k -> new ArrayList<>()).add(to); return this; }
         @Override public boolean panelDomain(String d) { return domains.contains(d); }
         @Override public boolean receives(String a) { return mailboxes.contains(a); }
         @Override public List<String> activeDestinations(String s) { return alias.getOrDefault(s, List.of()); }
@@ -105,24 +105,24 @@ public class AddressConversionTest {
 
     static void rules() {
         System.out.println("\n== Alias -> casella: quando si puo' ==");
-        List<MailDatabase.Alias> una = List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true));
+        List<MailDatabase.Alias> oneAlias = List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true));
         real("una raccolta (@domain-d.test) no: non ha un nome prima della @",
-                AddressTransform.noMailboxReason(state("@domain-d.test", true, null, una, List.of())).contains("raccolta"));
+                AddressTransform.noMailboxReason(state("@domain-d.test", true, null, oneAlias, List.of())).contains("raccolta"));
         real("\"..@domain-d.test\" no: come percorso uscirebbe da /var/vmail",
-                AddressTransform.noMailboxReason(state("..@domain-d.test", true, null, una, List.of())) != null);
+                AddressTransform.noMailboxReason(state("..@domain-d.test", true, null, oneAlias, List.of())) != null);
         real("un dominio che non e' del pannello no",
-                AddressTransform.noMailboxReason(state("dmarc@altro.it", false, null, una, List.of())).contains("non è fra i domini"));
+                AddressTransform.noMailboxReason(state("dmarc@altro.it", false, null, oneAlias, List.of())).contains("non è fra i domini"));
         real("un indirizzo che e' gia' una casella no",
-                AddressTransform.noMailboxReason(state("dmarc@domain-d.test", true, mailbox(5, "dmarc@domain-d.test"), una, List.of())).contains("già una casella"));
+                AddressTransform.noMailboxReason(state("dmarc@domain-d.test", true, mailbox(5, "dmarc@domain-d.test"), oneAlias, List.of())).contains("già una casella"));
         real("un indirizzo senza alias no",
                 AddressTransform.noMailboxReason(state("dmarc@domain-d.test", true, null, List.of(), List.of())).contains("non ha alias"));
         AddressTransform.AddressState ok = state("dmarc@domain-d.test", true, null,
                 List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "vecchio@x.it", false)),
                 List.of(alias(3, "postmaster@domain-d.test", "dmarc@domain-d.test", true)));
         real("dmarc@domain-d.test -> owner@example.net: si puo'", AddressTransform.noMailboxReason(ok) == null);
-        JSONObject ant = AddressTransform.previewToMailbox(ok, ZoneId.of("Europe/Rome"));
-        real("l'anteprima elenca le destinazioni (anche quella disattiva) e chi arriva qui", ant.getBoolean("possible")
-                && ant.getJSONArray("destinations").length() == 2 && ant.getJSONArray("towardsHere").getJSONObject(0).getString("source").equals("postmaster@domain-d.test"));
+        JSONObject preview = AddressTransform.previewToMailbox(ok, ZoneId.of("Europe/Rome"));
+        real("l'anteprima elenca le destinazioni (anche quella disattiva) e chi arriva qui", preview.getBoolean("possible")
+                && preview.getJSONArray("destinations").length() == 2 && preview.getJSONArray("towardsHere").getJSONObject(0).getString("source").equals("postmaster@domain-d.test"));
         String before = AddressTransform.fingerprint(ok);
         AddressTransform.AddressState changed = state("dmarc@domain-d.test", true, null,
                 List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "vecchio@x.it", true)),
@@ -152,7 +152,7 @@ public class AddressConversionTest {
         System.out.println("\n== Casella -> alias: le destinazioni ==");
         AddressTransform.AddressState s = state("info@domain-d.test", true, mailbox(7, "info@domain-d.test"), List.of(), List.of());
         FakeNetwork r = new FakeNetwork(Set.of("domain-d.test", "domain-c.test"), Set.of("owner@domain-d.test", "info@domain-d.test"));
-        r.con("vendite@domain-d.test", "owner@domain-d.test");
+        r.route("vendite@domain-d.test", "owner@domain-d.test");
         real("nessuna destinazione: no", error(s, new JSONArray(), r).contains("almeno una"));
         real("l'indirizzo stesso: no", error(s, new JSONArray().put("info@domain-d.test"), r).contains("stesso"));
         real("un indirizzo non valido: no", error(s, new JSONArray().put("non un indirizzo"), r).contains("non è un indirizzo valido"));
@@ -160,21 +160,21 @@ public class AddressConversionTest {
                 error(s, new JSONArray().put("nessuno@domain-d.test"), r).contains("verrebbe rifiutata"));
         real("una tua casella: si'", error(s, new JSONArray().put("owner@domain-d.test"), r) == null);
         real("un tuo alias attivo: si'", error(s, new JSONArray().put("vendite@domain-d.test"), r) == null);
-        r.con("@domain-c.test", "owner@domain-d.test");
+        r.route("@domain-c.test", "owner@domain-d.test");
         real("un indirizzo qualsiasi di un dominio con raccolta: si'", error(s, new JSONArray().put("chiunque@domain-c.test"), r) == null);
         real("un indirizzo esterno: si'", error(s, new JSONArray().put("owner@example.net"), r) == null);
         JSONArray many = new JSONArray();
         for (int k = 0; k < 21; k++) many.put("persona" + k + "@esterno.it");
         real("piu' di 20: no", error(s, many, r).contains("Al massimo"));
-        r.con("giro@domain-d.test", "info@domain-d.test");
+        r.route("giro@domain-d.test", "info@domain-d.test");
         String g = error(s, new JSONArray().put("giro@domain-d.test"), r);
         real("un alias che riporta all'indirizzo: no, con la strada: " + g, g != null && g.contains("giro@domain-d.test -> info@domain-d.test"));
-        r.con("a@domain-d.test", "b@domain-d.test").con("b@domain-d.test", "info@domain-d.test");
+        r.route("a@domain-d.test", "b@domain-d.test").route("b@domain-d.test", "info@domain-d.test");
         real("anche a due passi", error(s, new JSONArray().put("a@domain-d.test"), r).contains("a@domain-d.test -> b@domain-d.test -> info@domain-d.test"));
-        AddressTransform.AddressState conAlias = state("info@domain-d.test", true, mailbox(7, "info@domain-d.test"),
+        AddressTransform.AddressState withAlias = state("info@domain-d.test", true, mailbox(7, "info@domain-d.test"),
                 List.of(alias(9, "info@domain-d.test", "giro@domain-d.test", true)), List.of());
         real("e anche se il giro passa da un alias che l'indirizzo ha gia'",
-                error(conAlias, new JSONArray().put("owner@example.net"), r).contains("giro@domain-d.test"));
+                error(withAlias, new JSONArray().put("owner@example.net"), r).contains("giro@domain-d.test"));
         try {
             List<String> d = AddressTransform.destinations(s, new JSONArray().put(" Owner@Domain-d.test ").put("owner@domain-d.test"), r);
             real("spazi e maiuscole tolti, doppioni una volta sola: " + d, d.equals(List.of("owner@domain-d.test")));

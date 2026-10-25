@@ -194,7 +194,7 @@ public class MtaSts {
      * segnale con cui i mittenti si accorgono che la politica e' cambiata, e uno fermo li
      * lascia sulla copia vecchia finche' non scade.
      */
-    public static String recordTxtCorrente() {
+    public static String currentTxtRecord() {
         try {
             String mode = currentMode();
             return recordTxt(policy(mailHost(), mode, recommendedMaxAge(mode))).trim();

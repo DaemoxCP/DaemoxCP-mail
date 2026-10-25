@@ -107,18 +107,18 @@ public class AutoDns {
             o.put("proposed", proposed);
         }
 
-        List<CloudflareManager.TxtRecordInfo> tutti = txtAtName(token, zoneId, name);
+        List<CloudflareManager.TxtRecordInfo> allItems = txtAtName(token, zoneId, name);
         List<String> contents = new ArrayList<>();
-        for (CloudflareManager.TxtRecordInfo t : tutti) contents.add(DnsRules.cloudflareContent(t.content));
+        for (CloudflareManager.TxtRecordInfo t : allItems) contents.add(DnsRules.cloudflareContent(t.content));
 
-        List<String> pertinent = spf ? DnsRules.soloSpf(contents) : DnsRules.soloDmarc(contents);
+        List<String> pertinent = spf ? DnsRules.onlySpf(contents) : DnsRules.onlyDmarc(contents);
         o.put("howMany", pertinent.size())
          .put("exists", !pertinent.isEmpty())
-         .put("otherTxt", tutti.size() - pertinent.size());
+         .put("otherTxt", allItems.size() - pertinent.size());
 
         if (!pertinent.isEmpty()) {
             o.put("content", String.join("  ||  ", pertinent));
-            for (CloudflareManager.TxtRecordInfo t : tutti)
+            for (CloudflareManager.TxtRecordInfo t : allItems)
                 if (pertinent.contains(DnsRules.cloudflareContent(t.content))) { o.put("recordId", t.id); break; }
         }
 
@@ -130,10 +130,10 @@ public class AutoDns {
 
         if (!pertinent.isEmpty()) {
             if (spf) {
-                DnsRules.SpfOutcome e = DnsRules.analyzeSpf(contents, ipDelServer());
+                DnsRules.SpfOutcome e = DnsRules.analyzeSpf(contents, serverIp());
                 for (String x : e.warnings) warnings.put(x);
                 if (e.valid && !e.explicitAuthorization && !e.viaMx && !e.viaA && e.include == 0)
-                    warnings.put(I18n.tr("server.adns.spfNotAuth", java.util.Map.of("ip", String.valueOf(ipDelServer()))));
+                    warnings.put(I18n.tr("server.adns.spfNotAuth", java.util.Map.of("ip", String.valueOf(serverIp()))));
             } else {
                 DnsRules.DmarcOutcome e = DnsRules.analyzeDmarc(contents, d.domain);
                 if (e.valid) o.put("currentPolicy", e.policy == null ? "none" : e.policy);
@@ -150,7 +150,7 @@ public class AutoDns {
      * Scrittura
      * =================================================================== */
 
-    public JSONObject crea(int domainId, String which, String policy) {
+    public JSONObject create(int domainId, String which, String policy) {
         JSONObject r = new JSONObject().put("which", which);
         boolean spf = "spf".equals(which);
         if (!spf && !"dmarc".equals(which)) return error(I18n.tr("server.adns.unknownRecord", java.util.Map.of("q", String.valueOf(which))));
@@ -180,10 +180,10 @@ public class AutoDns {
                         .put("error", I18n.tr("server.adns.noIpWrite"));
             r.put("value", value);
 
-            List<CloudflareManager.TxtRecordInfo> tutti = txtAtName(acct.apiToken, zl.zoneId, name);
+            List<CloudflareManager.TxtRecordInfo> allItems = txtAtName(acct.apiToken, zl.zoneId, name);
             List<String> contents = new ArrayList<>();
-            for (CloudflareManager.TxtRecordInfo t : tutti) contents.add(DnsRules.cloudflareContent(t.content));
-            List<String> pertinent = spf ? DnsRules.soloSpf(contents) : DnsRules.soloDmarc(contents);
+            for (CloudflareManager.TxtRecordInfo t : allItems) contents.add(DnsRules.cloudflareContent(t.content));
+            List<String> pertinent = spf ? DnsRules.onlySpf(contents) : DnsRules.onlyDmarc(contents);
 
             // Il controllo che vale piu' di tutti gli altri, ora fatto sul contenuto.
             if (!pertinent.isEmpty())
@@ -195,12 +195,12 @@ public class AutoDns {
                                 + (pertinent.size() > 1
                                    ? (spf ? I18n.tr("server.adns.tooManySpf")
                                           : I18n.tr("server.adns.tooManyDmarc"))
-                                   : (spf ? I18n.tr("server.adns.spfOthers", java.util.Map.of("ip", String.valueOf(ipDelServer())))
+                                   : (spf ? I18n.tr("server.adns.spfOthers", java.util.Map.of("ip", String.valueOf(serverIp())))
                                           : I18n.tr("server.adns.dmarcOld"))));
 
             // I TXT non pertinenti non sono un ostacolo: un record di verifica di un servizio
             // terzo sull'apice non ha nulla a che vedere con l'SPF, e non deve impedirlo.
-            int others = tutti.size() - pertinent.size();
+            int others = allItems.size() - pertinent.size();
             if (others > 0) r.put("otherTxt", others);
 
             // DMARC senza una casella che riceva i rapporti e' una richiesta che rimbalza.
@@ -327,7 +327,7 @@ public class AutoDns {
      * prima che la politica esista significa mandarli contro un errore, e nel frattempo
      * mostrare a chi guarda il pannello una spunta verde su una protezione che non c'e'.
      */
-    public JSONObject creaTxtMtaSts(int domainId) {
+    public JSONObject createTxtMtaSts(int domainId) {
         JSONObject r = new JSONObject();
         try {
             MailDatabase.Domain d = findDomain(domainId);
@@ -649,10 +649,10 @@ public class AutoDns {
 
     /** Tutti i record della zona che stanno esattamente su quel nome, di qualunque tipo. */
     private java.util.List<CloudflareManager.DnsRecordInfo> atName(
-            java.util.List<CloudflareManager.DnsRecordInfo> tutti, String name) {
+            java.util.List<CloudflareManager.DnsRecordInfo> allItems, String name) {
         java.util.List<CloudflareManager.DnsRecordInfo> outside = new ArrayList<>();
         String searched = name.toLowerCase(java.util.Locale.ROOT).replaceAll("\\.$", "");
-        for (CloudflareManager.DnsRecordInfo t : tutti) {
+        for (CloudflareManager.DnsRecordInfo t : allItems) {
             String n = t.name == null ? "" : t.name.toLowerCase(java.util.Locale.ROOT).replaceAll("\\.$", "");
             if (n.equals(searched)) outside.add(t);
         }
@@ -661,7 +661,7 @@ public class AutoDns {
 
     private JSONArray optionalState(String token, String zoneId, MailDatabase.Domain d) {
         JSONArray out = new JSONArray();
-        java.util.List<CloudflareManager.DnsRecordInfo> tutti = cloudflare.listRecords(token, zoneId);
+        java.util.List<CloudflareManager.DnsRecordInfo> allItems = cloudflare.listRecords(token, zoneId);
         String target = mailHost(d.domain);
         for (String[] o : OPTIONAL_ITEMS) {
             String fullName = o[2] + "." + d.domain;
@@ -673,7 +673,7 @@ public class AutoDns {
                             ? "0 1 " + o[3] + " " + target
                             : target);
 
-            java.util.List<CloudflareManager.DnsRecordInfo> here = atName(tutti, fullName);
+            java.util.List<CloudflareManager.DnsRecordInfo> here = atName(allItems, fullName);
             java.util.List<CloudflareManager.DnsRecordInfo> sameKind = new ArrayList<>();
             java.util.List<CloudflareManager.DnsRecordInfo> otherKind = new ArrayList<>();
             for (CloudflareManager.DnsRecordInfo t : here)
@@ -815,7 +815,7 @@ public class AutoDns {
         if (!"SRV".equalsIgnoreCase(t.type) || t.srvPort == null || t.srvDestination == null)
             return t.content == null ? "" : t.content;
         return (t.srvPriority == null ? 0 : t.srvPriority) + " "
-             + (t.srvPeso == null ? 1 : t.srvPeso) + " "
+             + (t.srvWeight == null ? 1 : t.srvWeight) + " "
              + t.srvPort + " " + t.srvDestination;
     }
 
@@ -866,7 +866,7 @@ public class AutoDns {
      * La conclusione giusta non era aggiornare quella frase: era togliere l'eccezione. La
      * regola che proteggeva — il TXT non si pubblica finche' la politica non risponde — vive
      * adesso dove deve, dentro la sequenza, che quella condizione la MISURA invece di
-     * dichiararla una volta per tutte. Vedi creaTxtMtaSts() qui sopra e MtaStsSetup.
+     * dichiararla una volta per tutte. Vedi createTxtMtaSts() qui sopra e MtaStsSetup.
      */
 
     /* ===================================================================
@@ -875,7 +875,7 @@ public class AutoDns {
 
     /** null quando l'IP non si conosce: meglio nessun record che uno invalido. */
     private String spfValue() {
-        String ip = ipDelServer();
+        String ip = serverIp();
         if (ip == null || ip.isBlank()) return null;
         return "v=spf1 ip4:" + ip + " mx -all";
     }
@@ -889,7 +889,7 @@ public class AutoDns {
      * altro: due modi di ricavare lo stesso numero sono due numeri che un giorno divergono,
      * e un SPF scritto con quello sbagliato blocca la posta in uscita.
      */
-    private String ipDelServer() {
+    private String serverIp() {
         try {
             String ip = new DnsRecordsGenerator(database).detectServerIp();
             return ip == null ? "" : ip.trim();

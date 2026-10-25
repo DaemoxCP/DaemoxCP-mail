@@ -65,7 +65,7 @@ public final class PkgCatalog {
      * Restituisce null se non riconosce nessun repository: "non so" non e' "nessuno".
      */
     static List<String> enabledOnes(String output) {
-        List<String> tutti = new ArrayList<>(), enabledOnes = new ArrayList<>();
+        List<String> allItems = new ArrayList<>(), enabledOnes = new ArrayList<>();
         String name = null;
         boolean inside = false;
         Pattern opens = Pattern.compile("^\\s+(\\S+):\\s*\\{");
@@ -74,13 +74,13 @@ public final class PkgCatalog {
             if (line.startsWith("Repositories:")) { inside = true; continue; }
             if (!inside) continue;
             Matcher m = opens.matcher(line);
-            if (m.find()) { name = m.group(1); tutti.add(name); continue; }
+            if (m.find()) { name = m.group(1); allItems.add(name); continue; }
             if (name == null) continue;
             Matcher e = enabled.matcher(line);
             if (e.find() && "yes".equalsIgnoreCase(e.group(1))) enabledOnes.add(name);
             if (line.trim().startsWith("}")) name = null;
         }
-        return tutti.isEmpty() ? null : enabledOnes;
+        return allItems.isEmpty() ? null : enabledOnes;
     }
 
     /**
@@ -94,8 +94,8 @@ public final class PkgCatalog {
      */
     static JSONObject data(String dir, List<String> enabledOnes, long now) {
         List<String> names = new ArrayList<>();
-        boolean daPkg = enabledOnes != null;
-        if (daPkg) {
+        boolean fromPkg = enabledOnes != null;
+        if (fromPkg) {
             names.addAll(enabledOnes);
         } else {
             try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(dir, "repos"))) {
@@ -144,7 +144,7 @@ public final class PkgCatalog {
             if (oldest == null || seconds / 3600 > oldest.getLong("hours")) oldest = o;
         }
 
-        return new JSONObject().put("repository", list).put("missing", missing).put("daPkg", daPkg)
+        return new JSONObject().put("repository", list).put("missing", missing).put("daPkg", fromPkg)
                 .put("dated", oldest != null)
                 .put("hours", oldest == null ? -1 : oldest.getLong("hours"))
                 .put("days", oldest == null ? -1 : oldest.getLong("days"))

@@ -14,11 +14,11 @@ public class SrvRecordTest {
         if (!ok) failed++;
     }
 
-    static CloudflareManager.DnsRecordInfo srv(String content, Integer priority, Integer peso,
+    static CloudflareManager.DnsRecordInfo srv(String content, Integer priority, Integer weight,
                                                Integer port, String dest) {
         CloudflareManager.DnsRecordInfo t = new CloudflareManager.DnsRecordInfo();
         t.type = "SRV"; t.name = "_imaps._tcp.domain-a.test"; t.content = content;
-        t.srvPriority = priority; t.srvPeso = peso; t.srvPort = port; t.srvDestination = dest;
+        t.srvPriority = priority; t.srvWeight = weight; t.srvPort = port; t.srvDestination = dest;
         return t;
     }
 

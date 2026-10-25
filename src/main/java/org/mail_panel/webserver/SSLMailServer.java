@@ -1095,8 +1095,8 @@ public class SSLMailServer {
      * invece di scoprirlo dopo con /api/theme (era il lampo bianco).
      */
     private String withTheme(HttpExchange exchange, String html) {
-        String tema = savedTheme(exchange);
-        return html.replace("{{THEME}}", tema).replace("{{COLOR_SCHEME}}", "auto".equals(tema) ? "light dark" : tema);
+        String theme = savedTheme(exchange);
+        return html.replace("{{THEME}}", theme).replace("{{COLOR_SCHEME}}", "auto".equals(theme) ? "light dark" : theme);
     }
 
     // ============== LINGUA ==============
@@ -2289,17 +2289,17 @@ public class SSLMailServer {
             sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
             return;
         }
-        String fresco = queryParameter(exchange.getRequestURI().getRawQuery(), "fresco");
-        if (fresco != null && !fresco.equals("1")) {
+        String fresh = queryParameter(exchange.getRequestURI().getRawQuery(), "fresco");
+        if (fresh != null && !fresh.equals("1")) {
             sendJsonError(exchange, 400, I18n.tr("server.badParameter"));
             return;
         }
         JSONObject r;
         try {
             synchronized (VERSIONS_LOCK) {
-                long eta = System.currentTimeMillis() - readVersionsMs;
+                long age = System.currentTimeMillis() - readVersionsMs;
                 long actions = ACTION_VERSIONS.get();
-                if (readVersions == null || actions != readActionVersions || eta > 30_000 || (fresco != null && eta > 3_000)) {
+                if (readVersions == null || actions != readActionVersions || age > 30_000 || (fresh != null && age > 3_000)) {
                     readVersions = org.mail_panel.system.SoftwareVersions.read(org.mail_panel.system.SoftwareVersions.real(
                             () -> Main.mysqlAvailable && Main.mailDatabase != null ? Main.mailDatabase.serverVersion() : null));
                     // Il ramo accanto alle versioni: quali versioni arrivano dipende da li'.
@@ -5318,8 +5318,8 @@ public class SSLMailServer {
                                 .put("note", j.note)
                                 .put("believed_banned", new JSONArray(j.believedBanned))
                                 .put("in_firewall", new JSONArray(j.inFirewall))
-                                .put("solo_in_fail2ban", new JSONArray(j.soloInFail2ban))
-                                .put("solo_in_pf", new JSONArray(j.soloInPf))
+                                .put("solo_in_fail2ban", new JSONArray(j.onlyInFail2ban))
+                                .put("solo_in_pf", new JSONArray(j.onlyInPf))
                                 .put("ban_commands", new JSONArray(j.banCommands))
                                 .put("actions_output", j.actionsOutput)
                                 .put("log", j.logFail2ban)
@@ -8586,8 +8586,8 @@ public class SSLMailServer {
                             d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noRule", Map.of("table", String.valueOf(j.table))));
                             continue;
                         }
-                        if (!j.soloInFail2ban.isEmpty())
-                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notInFirewall", Map.of("ips", String.join(", ", j.soloInFail2ban))));
+                        if (!j.onlyInFail2ban.isEmpty())
+                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notInFirewall", Map.of("ips", String.join(", ", j.onlyInFail2ban))));
                     }
                 }
                 appliedBansDetail = d.toString();
@@ -9607,7 +9607,7 @@ public class SSLMailServer {
                 String which = req.optString("which", "");
                 // Il predefinito e' "none", non "quarantine": RFC 9989 §5.1.5. Un valore
                 // predefinito che blocca posta e' una trappola per chi preme senza scegliere.
-                response = auto.crea(domainId, which, req.optString("policy", "none"));
+                response = auto.create(domainId, which, req.optString("policy", "none"));
                 logAudit("AUTODNS_CREATE", ip, which + " on domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
@@ -9627,7 +9627,7 @@ public class SSLMailServer {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = auto.creaTxtMtaSts(domainId);
+                response = auto.createTxtMtaSts(domainId);
                 // I record MTA-STS in piu' che la scrittura toglie sono cancellazioni nel DNS:
                 // restano scritte anche qui, non solo nella risposta.
                 JSONArray removed = response.optJSONArray("removed");
@@ -10647,8 +10647,8 @@ public class SSLMailServer {
     /** La preferenza di tema dell'admin di questa sessione, da scrivere nella pagina: auto, light o dark, mai altro. */
     private String savedTheme(HttpExchange exchange) {
         try {
-            String tema = Main.mailDatabase != null ? Main.mailDatabase.getAdminTheme(getSessionUsername(exchange)) : null;
-            return "light".equals(tema) || "dark".equals(tema) ? tema : "auto";
+            String theme = Main.mailDatabase != null ? Main.mailDatabase.getAdminTheme(getSessionUsername(exchange)) : null;
+            return "light".equals(theme) || "dark".equals(theme) ? theme : "auto";
         } catch (Exception e) {
             return "auto";
         }
@@ -11821,8 +11821,8 @@ http {
                 return trimmed;
             }
         }
-        String daXff = ipDaForwardedFor(exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
-        if (daXff != null) return daXff;
+        String fromXff = ipFromForwardedFor(exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
+        if (fromXff != null) return fromXff;
         String realIp = exchange.getRequestHeaders().getFirst("X-Real-IP");
         if (realIp != null && !realIp.isEmpty()) {
             String trimmed = realIp.trim();
@@ -11854,7 +11854,7 @@ http {
      * HttpExchange vero, e una logica che nessun test raggiunge e' una logica che nessuno
      * controlla.
      */
-    static String ipDaForwardedFor(String header) {
+    static String ipFromForwardedFor(String header) {
         if (header == null || header.isEmpty()) return null;
         String[] pieces = header.split(",");
         for (int i = pieces.length - 1; i >= 0; i--) {
