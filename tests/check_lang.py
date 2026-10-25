@@ -33,15 +33,15 @@ import re
 import sys
 import os
 
-radice = sys.argv[1] if len(sys.argv) > 1 else "."
-IT = os.path.join(radice, "src/main/resources/lang/it.json")
-EN = os.path.join(radice, "src/main/resources/lang/en.json")
+root = sys.argv[1] if len(sys.argv) > 1 else "."
+IT = os.path.join(root, "src/main/resources/lang/it.json")
+EN = os.path.join(root, "src/main/resources/lang/en.json")
 
 # camelCase legittimi, misurati il 23/10/2026. Ognuno ha un motivo:
 #  - nomi di prodotto scritti come li scrive chi li fa
 #  - segnaposto scritti a mano nei testi, dove NN sta per un numero di versione
 #  - direttive di configurazione di fail2ban, citate perche' l'utente le ritrova nel file
-CAMEL_AMMESSI = {
+ALLOWED_CAMEL = {
     "iPhone", "iPad", "macOS", "iOS",
     "phpNN", "mysqlNN", "py3NN",
     "maxRetry", "findTime", "banTime",
@@ -50,7 +50,7 @@ CAMEL_AMMESSI = {
 
 # Nomi del codice che in un testo italiano non ci vanno mai. Accanto, la parola che
 # il testo deve usare: serve a chi corregge, e dice che non e' un divieto astratto.
-INGLESI_VIETATI_IN_ITALIANO = {
+ENGLISH_BANNED_IN_ITALIAN = {
     "runnable": "eseguibile",
     "measured": "misurato",
     "lockedPackages": "bloccati",
@@ -59,69 +59,69 @@ INGLESI_VIETATI_IN_ITALIANO = {
 }
 
 CAMEL = re.compile(r"\b[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*\b")
-SEGNAPOSTO = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
-def testo_senza_segnaposto(v):
+def text_without_placeholders(v):
     """Il testo come lo legge una persona: i {segnaposto} non sono testo."""
-    return SEGNAPOSTO.sub(" ", v)
+    return PLACEHOLDER.sub(" ", v)
 
 
-def carica(path):
+def load(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
-it, en = carica(IT), carica(EN)
-guasti = []
+it, en = load(IT), load(EN)
+failures = []
 
 # --- 1. le stesse chiavi ---
-solo_it, solo_en = sorted(set(it) - set(en)), sorted(set(en) - set(it))
+only_it, only_en = sorted(set(it) - set(en)), sorted(set(en) - set(it))
 print(f"  chiavi: it {len(it)}, en {len(en)}")
-for k in solo_it[:10]:
-    guasti.append(f"chiave solo in it.json: {k}")
-for k in solo_en[:10]:
-    guasti.append(f"chiave solo in en.json: {k}")
+for k in only_it[:10]:
+    failures.append(f"chiave solo in it.json: {k}")
+for k in only_en[:10]:
+    failures.append(f"chiave solo in en.json: {k}")
 
 # --- 2. i segnaposto combaciano ---
-diversi = 0
+different = 0
 for k in sorted(set(it) & set(en)):
     a, b = it[k], en[k]
     if not isinstance(a, str) or not isinstance(b, str):
         continue
-    pa, pb = set(SEGNAPOSTO.findall(a)), set(SEGNAPOSTO.findall(b))
+    pa, pb = set(PLACEHOLDER.findall(a)), set(PLACEHOLDER.findall(b))
     if pa != pb:
-        diversi += 1
-        guasti.append(f"segnaposto diversi su {k}: solo it {sorted(pa - pb)}, solo en {sorted(pb - pa)}")
-print(f"  chiavi con segnaposto diversi fra le due lingue: {diversi}")
+        different += 1
+        failures.append(f"segnaposto diversi su {k}: solo it {sorted(pa - pb)}, solo en {sorted(pb - pa)}")
+print(f"  chiavi con segnaposto diversi fra le due lingue: {different}")
 
 # --- 3. camelCase nei testi ---
 camel = {}
-for nome, d in (("it", it), ("en", en)):
+for label, d in (("it", it), ("en", en)):
     for k, v in d.items():
         if not isinstance(v, str):
             continue
-        for tok in CAMEL.findall(testo_senza_segnaposto(v)):
-            if tok in CAMEL_AMMESSI:
+        for tok in CAMEL.findall(text_without_placeholders(v)):
+            if tok in ALLOWED_CAMEL:
                 continue
-            camel.setdefault((nome, tok), []).append(k)
+            camel.setdefault((label, tok), []).append(k)
 print(f"  token camelCase non ammessi nei testi: {len(camel)}")
-for (nome, tok), chiavi in sorted(camel.items()):
-    guasti.append(f"camelCase in {nome}.json: {tok} ({len(chiavi)} chiavi, es. {chiavi[0]})")
+for (label, tok), key_list in sorted(camel.items()):
+    failures.append(f"camelCase in {label}.json: {tok} ({len(key_list)} chiavi, es. {key_list[0]})")
 
 # --- 4. parole inglesi del codice nei testi italiani ---
-inglesi = {}
+english = {}
 for k, v in it.items():
     if not isinstance(v, str):
         continue
-    testo = testo_senza_segnaposto(v)
-    for parola, invece in INGLESI_VIETATI_IN_ITALIANO.items():
-        if re.search(r"\b" + re.escape(parola) + r"\b", testo):
-            inglesi.setdefault(parola, []).append(k)
-print(f"  parole inglesi del codice nei testi italiani: {len(inglesi)}")
-for parola, chiavi in sorted(inglesi.items()):
-    guasti.append(f'in it.json c\'e\' "{parola}" (si dice "{INGLESI_VIETATI_IN_ITALIANO[parola]}"): '
-                  f"{len(chiavi)} chiavi, es. {chiavi[0]}")
+    source_text = text_without_placeholders(v)
+    for word, instead in ENGLISH_BANNED_IN_ITALIAN.items():
+        if re.search(r"\b" + re.escape(word) + r"\b", source_text):
+            english.setdefault(word, []).append(k)
+print(f"  parole inglesi del codice nei testi italiani: {len(english)}")
+for word, key_list in sorted(english.items()):
+    failures.append(f'in it.json c\'e\' "{word}" (si dice "{ENGLISH_BANNED_IN_ITALIAN[word]}"): '
+                  f"{len(key_list)} chiavi, es. {key_list[0]}")
 
 # --- 5. e nemmeno le prove da browser devono ASPETTARSI il testo rotto ---
 #
@@ -134,18 +134,18 @@ for parola, chiavi in sorted(inglesi.items()):
 # sono chiavi JSON del server simulato — cioe' i nomi veri del contratto, che li' ci vanno.
 # Guardando tutto il file, la rete li segnalava: due falsi positivi, visti e tolti.
 import glob
-LETTERALE = re.compile(r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\"""" + '"' + r"""|`(?:[^`\\]|\\.)*`""")
-prove = {}
-for f in sorted(glob.glob(os.path.join(radice, "tests/*.js"))):
-    contenuto = open(f, encoding="utf-8", errors="replace").read()
-    stringhe = " ".join(LETTERALE.findall(contenuto))
-    for parola in INGLESI_VIETATI_IN_ITALIANO:
-        if re.search(r"\b" + re.escape(parola) + r"\b", stringhe):
-            prove.setdefault(parola, []).append(os.path.basename(f))
-print(f"  parole del codice attese dalle prove da browser: {len(prove)}")
-for parola, files in sorted(prove.items()):
-    guasti.append(f'una prova si aspetta "{parola}" nel testo (si dice '
-                  f'"{INGLESI_VIETATI_IN_ITALIANO[parola]}"): {", ".join(files)}')
+LITERAL = re.compile(r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\"""" + '"' + r"""|`(?:[^`\\]|\\.)*`""")
+test_sources = {}
+for f in sorted(glob.glob(os.path.join(root, "tests/*.js"))):
+    content = open(f, encoding="utf-8", errors="replace").read()
+    strings = " ".join(LITERAL.findall(content))
+    for word in ENGLISH_BANNED_IN_ITALIAN:
+        if re.search(r"\b" + re.escape(word) + r"\b", strings):
+            test_sources.setdefault(word, []).append(os.path.basename(f))
+print(f"  parole del codice attese dalle prove da browser: {len(test_sources)}")
+for word, files in sorted(test_sources.items()):
+    failures.append(f'una prova si aspetta "{word}" nel testo (si dice '
+                  f'"{ENGLISH_BANNED_IN_ITALIAN[word]}"): {", ".join(files)}')
 
 # --- 6. i segnaposto che il TESTO chiede devono essere quelli che il CODICE passa ---
 #
@@ -161,27 +161,27 @@ for parola, files in sorted(prove.items()):
 # guasti, e ogni segnaposto segnalato qui non e' passato da nessuna parte.
 import glob
 
-siti = {}
-for f in glob.glob(os.path.join(radice, "src/main/java/**/*.java"), recursive=True):
+sites = {}
+for f in glob.glob(os.path.join(root, "src/main/java/**/*.java"), recursive=True):
     t = open(f, encoding="utf-8", errors="replace").read()
     for m in re.finditer(r'I18n\.tr\(\s*"([A-Za-z0-9_.]+)"\s*,', t):
-        coda = t[m.end():m.end() + 1500]
-        fine = coda.find(");")
-        if fine > 0:
-            coda = coda[:fine]
-        siti.setdefault(m.group(1), set()).update(re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"\s*,', coda))
+        tail = t[m.end():m.end() + 1500]
+        stop = tail.find(");")
+        if stop > 0:
+            tail = tail[:stop]
+        sites.setdefault(m.group(1), set()).update(re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"\s*,', tail))
 
-senza = 0
-for chiave, passati in sorted(siti.items()):
-    if chiave not in it:
+without = 0
+for key, passed in sorted(sites.items()):
+    if key not in it:
         continue
-    attesi = set(SEGNAPOSTO.findall(it[chiave])) | set(SEGNAPOSTO.findall(en.get(chiave, "")))
-    mancanti = sorted(attesi - passati)
-    if mancanti:
-        senza += 1
-        guasti.append(f'il testo di {chiave} chiede {mancanti} e il codice non li passa '
-                      f"(passa {sorted(passati)[:6]}): l'utente leggerebbe la graffa")
-print(f"  testi che chiedono un segnaposto che il codice non passa: {senza}")
+    expected = set(PLACEHOLDER.findall(it[key])) | set(PLACEHOLDER.findall(en.get(key, "")))
+    missing = sorted(expected - passed)
+    if missing:
+        without += 1
+        failures.append(f'il testo di {key} chiede {missing} e il codice non li passa '
+                      f"(passa {sorted(passed)[:6]}): l'utente leggerebbe la graffa")
+print(f"  testi che chiedono un segnaposto che il codice non passa: {without}")
 
 # --- 7. e lo stesso nel JavaScript: t('chiave', { nome: ... }) ---
 #
@@ -189,31 +189,31 @@ print(f"  testi che chiedono un segnaposto che il codice non passa: {senza}")
 # rinomina delle chiavi JSON fatta a testo li cambierebbe come se fossero chiavi della risposta:
 # t('ad.reportsToFwd', { address: ... }) con il testo che chiede {indirizzo}. Si guardano le
 # chiavi di primo livello dell'oggetto, e devono stare fra i segnaposto del testo (tn ha anche n).
-CHIAMATA_JS = re.compile(r"""\b(t|tn|tNodes)\(\s*\\?['"]([A-Za-z0-9_.\-]+)\\?['"]\s*,\s*(?:[^,{}()'"]+,\s*)?\{""")
-sorgenti_js = glob.glob(os.path.join(radice, "src/main/resources/pages/*.js")) + \
-              glob.glob(os.path.join(radice, "src/main/java/**/*.java"), recursive=True)
-chiamate_js, js_diversi = 0, 0
-for f in sorgenti_js:
-    testo = open(f, encoding="utf-8", errors="replace").read()
-    for m in CHIAMATA_JS.finditer(testo):
-        funzione, chiave = m.group(1), m.group(2)
-        i, prof = m.end() - 1, 0
-        while i < len(testo):
-            if testo[i] == "{": prof += 1
-            elif testo[i] == "}":
-                prof -= 1
-                if prof == 0: break
+JS_CALL = re.compile(r"""\b(t|tn|tNodes)\(\s*\\?['"]([A-Za-z0-9_.\-]+)\\?['"]\s*,\s*(?:[^,{}()'"]+,\s*)?\{""")
+js_sources = glob.glob(os.path.join(root, "src/main/resources/pages/*.js")) + \
+              glob.glob(os.path.join(root, "src/main/java/**/*.java"), recursive=True)
+js_calls, js_different = 0, 0
+for f in js_sources:
+    source_text = open(f, encoding="utf-8", errors="replace").read()
+    for m in JS_CALL.finditer(source_text):
+        function, key = m.group(1), m.group(2)
+        i, depth = m.end() - 1, 0
+        while i < len(source_text):
+            if source_text[i] == "{": depth += 1
+            elif source_text[i] == "}":
+                depth -= 1
+                if depth == 0: break
             i += 1
-        piatto = re.sub(r"\([^()]*\)|\[[^\[\]]*\]|\{[^{}]*\}", "", testo[m.end():i])
-        passati = set(re.findall(r"(?:^|,)\s*([A-Za-z_$][\w$]*)\s*(?::|(?=,|$))", piatto))
-        chiamate_js += 1
-        if chiave not in it or not isinstance(it[chiave], str):
+        flat = re.sub(r"\([^()]*\)|\[[^\[\]]*\]|\{[^{}]*\}", "", source_text[m.end():i])
+        passed = set(re.findall(r"(?:^|,)\s*([A-Za-z_$][\w$]*)\s*(?::|(?=,|$))", flat))
+        js_calls += 1
+        if key not in it or not isinstance(it[key], str):
             continue
-        chiesti = set(SEGNAPOSTO.findall(it[chiave])) | ({"n"} if funzione == "tn" else set())
-        for nome in sorted(passati - chiesti):
-            js_diversi += 1
-            guasti.append(f"{os.path.basename(f)}: {funzione}('{chiave}') passa {{{nome}}}, il testo chiede {sorted(chiesti)}")
-print(f"  chiamate del JavaScript con segnaposto: {chiamate_js}, con nomi che il testo non chiede: {js_diversi}")
+        requested = set(PLACEHOLDER.findall(it[key])) | ({"n"} if function == "tn" else set())
+        for label in sorted(passed - requested):
+            js_different += 1
+            failures.append(f"{os.path.basename(f)}: {function}('{key}') passa {{{label}}}, il testo chiede {sorted(requested)}")
+print(f"  chiamate del JavaScript con segnaposto: {js_calls}, con nomi che il testo non chiede: {js_different}")
 
 # --- 8. ogni chiave che il codice usa esiste ---
 #
@@ -223,32 +223,32 @@ print(f"  chiamate del JavaScript con segnaposto: {chiamate_js}, con nomi che il
 # chiave.one e chiave.other). Quelle costruite con un prefisso + valore non si possono
 # controllare qui, e si contano. Nel Java le righe di commento non contano: un commento puo'
 # citare {{t:chiave}} come esempio.
-USI = [
+USES = [
     re.compile(r"""\bI18n\.tr(?:In)?\(\s*(?:[^,()"]+,\s*)?"([A-Za-z][\w.\-]*)\""""),
     re.compile(r"""\b(?:t|tn|tNodes)\(\s*\\?['"]([A-Za-z][\w.\-]*)\\?['"]"""),
     re.compile(r"""\{\{t:([A-Za-z][\w.\-]*)\}\}"""),
     re.compile(r"""data-i18n(?:-[a-z]+)?=\\?["']([A-Za-z][\w.\-]*)\\?["']"""),
 ]
-COSTRUITE = [
+BUILT = [
     re.compile(r"""\bI18n\.tr(?:In)?\(\s*(?:[^,()"]+,\s*)?"([A-Za-z][\w.\-]*\.)"\s*\+"""),
     re.compile(r"""\b(?:t|tn|tNodes)\(\s*\\?['"]([A-Za-z][\w.\-]*\.)\\?['"]\s*\+"""),
 ]
-usate, costruite = {}, set()
-for f in glob.glob(os.path.join(radice, "src/main/java/**/*.java"), recursive=True) + \
-         glob.glob(os.path.join(radice, "src/main/resources/pages/*")):
-    testo = open(f, encoding="utf-8", errors="replace").read()
+used, built = {}, set()
+for f in glob.glob(os.path.join(root, "src/main/java/**/*.java"), recursive=True) + \
+         glob.glob(os.path.join(root, "src/main/resources/pages/*")):
+    source_text = open(f, encoding="utf-8", errors="replace").read()
     if f.endswith(".java"):
-        testo = "\n".join(r for r in testo.split("\n") if not r.lstrip().startswith(("*", "//", "/*")))
-    for rx in USI:
-        for k in rx.findall(testo): usate.setdefault(k, os.path.basename(f))
-    for rx in COSTRUITE:
-        costruite |= set(rx.findall(testo))
-assenti = sorted(k for k in usate if k not in it and not (k + ".one" in it and k + ".other" in it)
-                 and not k.endswith(".") and not any(k.startswith(p) for p in costruite))
-print(f"  chiavi usate dal codice: {len(usate)}, che i file di lingua non hanno: {len(assenti)}"
-      f"   (costruite con un prefisso, non controllabili: {len(costruite)})")
-for k in assenti[:20]:
-    guasti.append(f"il codice usa la chiave {k}, che non c'e' nei file di lingua ({usate[k]})")
+        source_text = "\n".join(r for r in source_text.split("\n") if not r.lstrip().startswith(("*", "//", "/*")))
+    for rx in USES:
+        for k in rx.findall(source_text): used.setdefault(k, os.path.basename(f))
+    for rx in BUILT:
+        built |= set(rx.findall(source_text))
+absent = sorted(k for k in used if k not in it and not (k + ".one" in it and k + ".other" in it)
+                 and not k.endswith(".") and not any(k.startswith(p) for p in built))
+print(f"  chiavi usate dal codice: {len(used)}, che i file di lingua non hanno: {len(absent)}"
+      f"   (costruite con un prefisso, non controllabili: {len(built)})")
+for k in absent[:20]:
+    failures.append(f"il codice usa la chiave {k}, che non c'e' nei file di lingua ({used[k]})")
 # --- 9. le tabelle codice -> testo leggono codici che qualcuno produce ---
 #
 # La pagina traduce un codice del server con una tabella: ({ consistent: t('up.eConsistent'),
@@ -303,8 +303,8 @@ def java_without_comments(src):
         else:
             out.append(src[i]); i += 1
     return "".join(out)
-code_files = glob.glob(os.path.join(radice, "src/main/java/**/*.java"), recursive=True) + \
-             glob.glob(os.path.join(radice, "src/main/resources/pages/*"))
+code_files = glob.glob(os.path.join(root, "src/main/java/**/*.java"), recursive=True) + \
+             glob.glob(os.path.join(root, "src/main/resources/pages/*"))
 tables, produced, enum_names = [], set(), set()
 for f in code_files:
     text = open(f, encoding="utf-8", errors="replace").read()
@@ -326,12 +326,12 @@ orphans = [(f, line, k) for f, line, keys in tables for k in keys if not is_prod
 print(f"  tabelle codice -> testo: {len(tables)}, con {sum(len(k) for _, _, k in tables)} codici;"
       f" codici che nessuno produce: {len(orphans)}")
 for f, line, k in orphans[:20]:
-    guasti.append(f"la tabella in {f}:{line} traduce il codice \"{k}\", che il codice non produce da nessuna parte")
+    failures.append(f"la tabella in {f}:{line} traduce il codice \"{k}\", che il codice non produce da nessuna parte")
 
-if guasti:
+if failures:
     print()
-    for g in guasti:
+    for g in failures:
         print(f"    NO  {g}")
-    print(f"\n{len(guasti)} GUASTI")
+    print(f"\n{len(failures)} GUASTI")
     sys.exit(1)
 print("\nTUTTO OK")
