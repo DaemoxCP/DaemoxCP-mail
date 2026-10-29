@@ -47,6 +47,13 @@ public final class LocalResolverScript {
         if [ ! -f /var/unbound/unbound.conf ] || grep -qs "forward-zone" /var/unbound/forward.conf; then
             service local_unbound setup
         fi
+        # Da ricorsivo, le zone inverse degli indirizzi privati si risolvono qui (NXDOMAIN, RFC 6303).
+        # local-unbound-setup scrive unblock-lan-zones: yes, pensato per chi inoltra al DNS della LAN:
+        # da ricorsivo quelle domande vanno su Internet e non tornano. Misurato sulla VM il
+        # 29/10/2026: ogni login ssh dalla LAN impiegava 30 secondi (sshd fa la ricerca inversa del
+        # client), con questo file 0. conf.d si include dopo lan-zones.conf, e il setup non lo tocca.
+        mkdir -p /var/unbound/conf.d
+        printf 'server:\\n\\tunblock-lan-zones: no\\n\\tinsecure-lan-zones: no\\n' > /var/unbound/conf.d/mail-panel.conf
         if service local_unbound status >/dev/null 2>&1; then
             service local_unbound restart
         else

@@ -93,6 +93,13 @@ public class LocalResolverTest {
                 "YES".equals(s.rc("local_unbound_enable")) && "none".equals(s.rc("local_unbound_forwarders")));
         check("resolv.conf punta a 127.0.0.1", Files.readString(s.resolv).contains("nameserver 127.0.0.1"));
         check("e lo dice", r1.out.contains("Spamhaus answers"));
+        // Senza, da ricorsivo le inverse degli indirizzi privati vanno su Internet e non tornano:
+        // ogni login ssh dalla LAN impiegava 30 secondi (misurato sulla VM).
+        Path lanZones = s.unbound.resolve("conf.d/mail-panel.conf");
+        String lanZonesText = Files.exists(lanZones) ? Files.readString(lanZones) : "";
+        check("le zone inverse private si risolvono qui (unblock-lan-zones: no in conf.d)",
+                lanZonesText.startsWith("server:\n") && lanZonesText.contains("\tunblock-lan-zones: no\n")
+                        && lanZonesText.contains("\tinsecure-lan-zones: no\n"));
         check("non lascia copie temporanee", s.leftovers() == 0);
 
         OUT.println("\n-- 2. di nuovo, uguale --");
@@ -102,6 +109,7 @@ public class LocalResolverTest {
         check("non rifa' il setup", !s.calls().contains("service local_unbound setup"));
         check("riavvia soltanto", s.calls().contains("service local_unbound restart"));
         check("resolv.conf identico", resolvAfter1.equals(Files.readString(s.resolv)));
+        check("e il file in conf.d identico, non ripetuto", lanZonesText.equals(Files.readString(lanZones)));
         check("e risponde come la prima volta", r2.out.contains("Spamhaus answers"));
 
         OUT.println("\n-- 3. un local_unbound che inoltra (il predefinito di FreeBSD) --");
