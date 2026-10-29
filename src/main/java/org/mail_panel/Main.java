@@ -903,7 +903,7 @@ public class Main {
                 // La regola dei blocchi: i pacchetti dello stack di posta restano lockedPackages,
                 // tranne quelli unlockedPackages apposta da un amministratore.
                 try {
-                    String politica = org.mail_panel.system.UpdateManager.applicaPoliticaBlocchi();
+                    String politica = org.mail_panel.system.UpdateManager.applyLockPolicy();
                     if (!politica.isEmpty()) System.out.println(politica);
                 } catch (Exception e) {
                     System.out.println("Applying the package lock rule failed: " + e.getMessage());

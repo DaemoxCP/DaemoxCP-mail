@@ -52,7 +52,7 @@ public class DomainSetup {
             MailDatabase.Domain d = trova(domainId);
             if (d == null) return r.put("success", false).put("error", I18n.tr("server.cfgdom.notFound"));
             r.put("dominio", d.domain);
-            if (job != null) job.scrivi("=== " + I18n.tr("server.cfgdom.title", java.util.Map.of("d", String.valueOf(d.domain))) + " ===");
+            if (job != null) job.write("=== " + I18n.tr("server.cfgdom.title", java.util.Map.of("d", String.valueOf(d.domain))) + " ===");
 
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
 
@@ -102,7 +102,7 @@ public class DomainSetup {
             // una catena sola e va eseguita da un posto solo. Due implementazioni della
             // stessa cosa divergono sempre, e quella che si preme di rado resta indietro
             // senza che nessuno se ne accorga.
-            if (job != null) job.scrivi("--- MTA-STS: " + I18n.tr("server.cfgdom.stsChain") + " ---");
+            if (job != null) job.write("--- MTA-STS: " + I18n.tr("server.cfgdom.stsChain") + " ---");
             JSONArray mtasts = MtaStsSetup.comeVoci(MtaStsSetup.esegui(job, d.domain));
             for (int i = 0; i < mtasts.length(); i++) passi.put(mtasts.get(i));
 

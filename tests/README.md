@@ -42,6 +42,9 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceFallTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AuditReportTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockTraceTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallSideEffectsTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallScriptDriftTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/monitoring/*.java
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.monitoring.MailQueueTest
@@ -65,6 +68,20 @@ l'annotazione `mail_panel_lock` su un pacchetto e la rimuove, e scrive la nota d
 una cartella temporanea (non in `/var/db`, come `PackageQueueTest` con il suo elenco).
 `AuditReportTest` chiede a `pkg audit` dei pacchetti installati e non cambia niente. Vanno
 bene su una macchina di prova, non su un server di posta vero.
+
+`InstallScriptDriftTest` e' la prova del reperto 42 (lo script di installazione di postfix
+che toglie IPv6 da main.cf) e ha due parti. La prima legge l'uscita vera di
+quell'aggiornamento e gira ovunque. La seconda fa girare i tre lavori veri — aggiornamento
+guidato, non protetti, manutenzione completa — su un pacchetto finto, `drift-probe`, che si
+costruisce da sola con `pkg create`: si accende solo con `-De2e.vm=yes`, da root, su FreeBSD.
+Per la durata della prova spegne i repository FreeBSD-ports e FreeBSD-ports-kmods (un file in
+`/usr/local/etc/pkg/repos`), mette in ascolto un `nc` sulla porta 47425 di 127.0.0.1 e ::1, e
+la manutenzione sblocca e riprotegge i pacchetti protetti come sempre; prima di ogni lavoro
+controlla che il piano contenga solo `drift-probe`, e alla fine controlla che pacchetti,
+protezioni e repository siano quelli di prima. Solo su una macchina di prova. Dura qualche
+minuto: un indirizzo che manca si aspetta sessanta secondi prima di dirlo perso.
+
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallScriptDriftTest
 
 `HeldUpdatesReportTest` e `AuditReportTest` hanno bisogno del database delle vulnerabilita'
 (`pkg audit -F`): senza, dicono quali prove hanno saltato e perche'.
