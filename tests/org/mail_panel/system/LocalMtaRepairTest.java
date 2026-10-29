@@ -48,6 +48,12 @@ public class LocalMtaRepairTest {
         check("pulsante «all» (consegna locale spenta): NON si attiva, la posta di sistema rimbalzerebbe",
                 act(true, null, "localhost", "", "error:no local mail delivery")
                         == LocalMtaRepair.Action.REFUSE);
+        // Il caso precedente lo rifiuterebbe anche la regola su mydestination vuoto: questo no.
+        // Senza, il controllo su local_transport non era mai messo alla prova (un jar senza quel
+        // controllo passava tutta la prova, misurato il 29/10/2026).
+        check("consegna locale spenta anche con localhost in mydestination: NON si attiva",
+                act(true, null, "localhost", "localhost", "error:no local mail delivery")
+                        == LocalMtaRepair.Action.REFUSE);
 
         OUT.println("\n== Gia' a posto, o niente da fare ==");
         check("mailer.conf gia' per Postfix: niente",
