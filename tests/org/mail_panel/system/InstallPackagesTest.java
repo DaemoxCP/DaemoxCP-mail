@@ -300,7 +300,7 @@ public class InstallPackagesTest {
 
     static void updaterLabels() throws Exception {
         System.out.println("\n== D. L'updater riconosce i pacchetti coi sapori ==");
-        Method role = UpdateManager.class.getDeclaredMethod("ruoloDi", String.class);
+        Method role = UpdateManager.class.getDeclaredMethod("roleOf", String.class);
         role.setAccessible(true);
         Object dovecot = role.invoke(null, "dovecot");
         check("dovecot-mysql ha lo stesso ruolo di dovecot (" + dovecot + ")",
