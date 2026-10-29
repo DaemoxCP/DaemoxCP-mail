@@ -2328,7 +2328,7 @@ public class SSLMailServer {
             java.util.regex.Pattern.compile("[+-](0\\d|1[0-4]):[0-5]\\d|SYSTEM|[A-Za-z][A-Za-z0-9_+-]{0,30}(/[A-Za-z0-9_+-]{1,30}){0,2}");
 
     private static JSONObject onPackageTurn(String description, java.util.function.Supplier<JSONObject> work) {
-        String id = "installa-" + System.nanoTime();
+        String id = "install-" + System.nanoTime();
         String refusal = org.mail_panel.system.PackageQueue.take(id, description);
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal).put("message", refusal);
         try { return work.get(); }
@@ -2964,7 +2964,7 @@ public class SSLMailServer {
             exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + name + "\"");
             exchange.sendResponseHeaders(200, data.length);
             try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(data); }
-            logAudit("PROFILO_APPLE", getClientIp(exchange), "downloaded for " + mailbox.email());
+            logAudit("APPLE_PROFILE", getClientIp(exchange), "downloaded for " + mailbox.email());
         } catch (Exception e) {
             try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
         } finally {
@@ -7111,7 +7111,7 @@ public class SSLMailServer {
                         break;
                     }
                     response = UpdateManager.startMtaStsActivation();
-                    logAudit("MTASTS_ATTIVA", ip, "started as job " + response.optString("jobId", ""));
+                    logAudit("MTASTS_ENABLE", ip, "started as job " + response.optString("jobId", ""));
                 }
                 case "web443_include" -> {
                     if (!"ADD".equals(req.optString("confirm", ""))) {
@@ -7155,7 +7155,7 @@ public class SSLMailServer {
                         break;
                     }
                     response = org.mail_panel.system.SubmissionPort.apply();
-                    logAudit("PORTA_465", ip, response.optBoolean("success")
+                    logAudit("PORT_465", ip, response.optBoolean("success")
                             ? "restriction applied" : "NOT applied: " + response.optString("error", "?"));
                 }
                 case "postfix_level" -> {
@@ -8078,8 +8078,8 @@ public class SSLMailServer {
                     case "repair_ban_action" -> {
                         JSONObject rr = org.mail_panel.security.BanActionRepair.repair();
                         response = rr;
-                        logAudit(rr.optBoolean("success", false) ? "FAIL2BAN_BANACTION_RIPARATA"
-                                                                 : "FAIL2BAN_BANACTION_RIPARAZIONE_FALLITA",
+                        logAudit(rr.optBoolean("success", false) ? "FAIL2BAN_BANACTION_REPAIRED"
+                                                                 : "FAIL2BAN_BANACTION_REPAIR_FAILED",
                             clientIp, rr.optString("message", ""));
                     }
                     case "start_pf" -> {
@@ -8596,7 +8596,7 @@ public class SSLMailServer {
             appliedBans = false;
             appliedBansDetail = I18n.tr("server.f2b.pf.compareFailed", Map.of("error", String.valueOf(e.getMessage())));
         }
-        checks.put(makeCheck("ban-applicati-in-pf",
+        checks.put(makeCheck("bans-applied-in-pf",
             I18n.tr("server.f2b.pf.check"),
             appliedBans,
             appliedBansDetail,
@@ -8712,7 +8712,7 @@ public class SSLMailServer {
             orderOk = false;
             detailOrder = I18n.tr("server.pf.order.blocked", Map.of("n", f2bLine + 1, "count", beforeF2b.size(), "rules", String.join(" | ", beforeF2b)));
         }
-        checks.put(makeCheck("pf-ordine-anchor",
+        checks.put(makeCheck("pf-anchor-order",
             I18n.tr("server.pf.order.check"),
             orderOk,
             detailOrder,
@@ -9616,7 +9616,7 @@ public class SSLMailServer {
                 response = auto.changePolicy(domainId, req.optString("policy", ""),
                         "CHANGE".equals(req.optString("confirm", "")));
                 if ("CHANGE".equals(req.optString("confirm", "")))
-                    logAudit("AUTODNS_POLITICA", ip, "domain " + domainId + " -> p="
+                    logAudit("AUTODNS_POLICY", ip, "domain " + domainId + " -> p="
                             + req.optString("policy", "") + (response.optBoolean("success")
                             ? " - done" : " - NOT done: " + response.optString("error", "?")));
             }
@@ -9644,7 +9644,7 @@ public class SSLMailServer {
                 }
                 String q = req.optString("which", "");
                 response = auto.createOptional(domainId, q);
-                logAudit("AUTODNS_OPZIONALE", ip, q + " on domain " + domainId
+                logAudit("AUTODNS_OPTIONAL", ip, q + " on domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
@@ -9657,7 +9657,7 @@ public class SSLMailServer {
                     break;
                 }
                 response = UpdateManager.startDomainSetup(domainId);
-                logAudit("DOMINIO_CONFIGURA", ip, "domain " + domainId
+                logAudit("DOMAIN_CONFIGURE", ip, "domain " + domainId
                         + " - started as job " + response.optString("jobId", ""));
             }
             case "mailboxes" -> response = auto.availableMailboxes();
@@ -9667,7 +9667,7 @@ public class SSLMailServer {
                     break;
                 }
                 response = auto.createReportMailbox(domainId);
-                logAudit("AUTODNS_CASELLA", ip, "mailbox dmarc@ domain " + domainId
+                logAudit("AUTODNS_MAILBOX", ip, "mailbox dmarc@ domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }

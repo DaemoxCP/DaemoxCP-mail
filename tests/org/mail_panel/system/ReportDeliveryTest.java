@@ -20,7 +20,7 @@ public class ReportDeliveryTest {
 
     private static int failed = 0;
 
-    private static final String ID = "rapporto.20260925155210.0f3a9c1d2b4e5f60718293a4b5c6d7e8@domain-b.test";
+    private static final String ID = "report.20260925155210.0f3a9c1d2b4e5f60718293a4b5c6d7e8@domain-b.test";
     private static final String A = "owner@example.com";
 
     public static void main(String[] args) throws Exception {
@@ -227,9 +227,9 @@ public class ReportDeliveryTest {
         real("rfc 5424: consegnato", "delivered".equals(PeriodicReport.outcomeInLog(rfc5424, ID, A).optString("state")));
 
         // --- Confronti letterali, non espressioni regolari ---
-        // Nel Message-ID il punto e' un punto: "rapportoX..." non e' il nostro messaggio.
+        // Nel Message-ID il punto e' un punto: "reportX..." non e' il nostro messaggio.
         List<String> almost = List.of(
-            "Sep 25 18:40:00 mail postfix/cleanup[1]: 4ABCDEF128: message-id=<" + ID.replace("rapporto.", "rapportoX") + ">",
+            "Sep 25 18:40:00 mail postfix/cleanup[1]: 4ABCDEF128: message-id=<" + ID.replace("report.", "reportX") + ">",
             "Sep 25 18:40:01 mail postfix/smtp[2]: 4ABCDEF128: to=<owner@example.com>, relay=x[1.2.3.4]:25, delay=1, delays=0/0/0/1, dsn=2.0.0, status=sent (250 ok)");
         real("un Message-ID quasi uguale non e' il nostro", PeriodicReport.outcomeInLog(almost, ID, A).optString("state").isEmpty());
         // Un numero di coda che finisce come il nostro non e' il nostro.
@@ -242,7 +242,7 @@ public class ReportDeliveryTest {
         // --- Il Message-ID che il pannello genera ---
         String id1 = PeriodicReport.newMessageId("noreply-mailserver@domain-b.test");
         String id2 = PeriodicReport.newMessageId("noreply-mailserver@domain-b.test");
-        real("Message-ID: forma", id1.matches("rapporto\\.\\d{14}\\.[0-9a-f]{32}@domain-b\\.test"));
+        real("Message-ID: forma", id1.matches("report\\.\\d{14}\\.[0-9a-f]{32}@domain-b\\.test"));
         real("Message-ID: due invii, due identificativi", !id1.equals(id2));
 
         // --- Quale sendmail ---

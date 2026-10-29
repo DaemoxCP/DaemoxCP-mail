@@ -161,7 +161,7 @@ public final class BanActionRepair {
                     return r.put("success", true).put("steps", steps)
                             .put("message", I18n.tr("server.banfix.nothingNeeded"));
 
-                steps.put(step("configurazione", true,
+                steps.put(step("configuration", true,
                     I18n.tr("server.banfix.diskVsRuntime", java.util.Map.of("list", String.valueOf(String.join(", ", mute))))));
                 touched = true;
             }

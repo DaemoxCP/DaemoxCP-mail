@@ -6259,5 +6259,11 @@
   "server.dnsx.ptr.why.4": "Deve anche corrispondere al record A (mail.tuodominio.xx → IP → PTR → mail.tuodominio.xx)",
   "server.dnsx.sts.optional": "Questo record è OPZIONALE e avanzato",
   "server.dnsx.sts.zone": "Se vuoi configurarlo, fallo su Cloudflare nel dominio: {zone}",
-  "server.dnsx.sts.note.html": "MTA-STS forza i server mittenti a usare TLS. Richiede anche:<br>- Un record CNAME <code>mta-sts</code> che punta a un web server<br>- Un file <code>https://mta-sts.{domain}/.well-known/mta-sts.txt</code>"
+  "server.dnsx.sts.note.html": "MTA-STS forza i server mittenti a usare TLS. Richiede anche:<br>- Un record CNAME <code>mta-sts</code> che punta a un web server<br>- Un file <code>https://mta-sts.{domain}/.well-known/mta-sts.txt</code>",
+  "server.um.x.absentInRepo": "(assente)",
+  "server.um.x.turnMaintenance": "manutenzione",
+  "up.asks.restart": "UN RIAVVIO, poi di essere richiamato",
+  "up.asks.finished": "niente, non c'è altro da installare",
+  "up.asks.again": "di essere eseguito ancora",
+  "up.asks.rebuild": "di essere eseguito ancora E DI RICOSTRUIRE I PACCHETTI"
 }

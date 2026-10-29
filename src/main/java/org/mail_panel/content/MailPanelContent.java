@@ -12972,7 +12972,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 (r.steps || []).forEach(p => {
                     h += '<tr class="upd-cell"><td>' + updEsc(p.round) + '</td><td>'
                        + (p.code === 0 ? 'ok' : escHtml(t('up.code', { code: p.code }))) + '</td><td>'
-                       + updEsc(p.asks) + '</td><td><code>' + updEsc(p.userland) + '</code></td></tr>';
+                       + escHtml(({ restart: t('up.asks.restart'), finished: t('up.asks.finished'), again: t('up.asks.again'), rebuild: t('up.asks.rebuild') })[p.asks] || p.asks || '') + '</td><td><code>' + updEsc(p.userland) + '</code></td></tr>';
                 });
                 h += '</tbody></table></div>';
             }

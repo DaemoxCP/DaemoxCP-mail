@@ -51,7 +51,7 @@ public final class PeriodicReport {
 
     public PeriodicReport() {
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "Rapporto-Periodico");
+            Thread t = new Thread(r, "periodic-report");
             t.setDaemon(true);
             return t;
         });
@@ -681,7 +681,7 @@ public final class PeriodicReport {
     static String newMessageId(String sender) {
         byte[] randomBytes = new byte[16];
         new java.security.SecureRandom().nextBytes(randomBytes);
-        return "rapporto." + LocalDateTime.now(java.time.ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+        return "report." + LocalDateTime.now(java.time.ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
                 + "." + java.util.HexFormat.of().formatHex(randomBytes)
                 + "@" + sender.substring(sender.indexOf('@') + 1);
     }
