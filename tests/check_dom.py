@@ -105,6 +105,16 @@ for f, s in test_sources:
             else: from_tests.setdefault(i, set()).add(os.path.basename(f))
 dead = {i: v for i, v in from_tests.items() if not resolved(i)}
 
+# ---- le ancore dei collegamenti ----
+# Un collegamento a una scheda porta il suo id dopo il cancelletto: href="/updates#branch",
+# a.href = '/updates#branch', data-bs-target="#hetznerGuide". Se l'id cambia e l'ancora no, il
+# collegamento apre la pagina e non porta piu' alla scheda, senza errori. Misurato il 29/10/2026:
+# la Home mandava a /updates#ramo da quando la scheda si chiama branch.
+ANCHOR = re.compile(r"""(?:href|data-bs-target)\s*=\s*\\{0,2}["'][^"'#\s]*#([A-Za-z][A-Za-z0-9_-]*)\\{0,2}["']"""
+                    r"""|\.href\s*=\s*\\{0,2}['"][^'"#\s]*#([A-Za-z][A-Za-z0-9_-]*)\\{0,2}['"]""")
+anchors = sorted(set(m.group(1) or m.group(2) for m in ANCHOR.finditer(A)))
+broken_anchors = [i for i in anchors if not resolved(i)]
+
 # Zero file non e' "zero problemi": e' "non ho guardato niente". Si dice e si esce male,
 # altrimenti una radice sbagliata passa per una rete verde.
 if not app or not test_sources:
@@ -117,9 +127,11 @@ print(f"  funzioni chiamate da on*: {len(calls)}   senza dichiarazione: {len(orp
 for o in orphans[:10]: print(f"    orfana: {o}")
 print(f"  id cercati dall'applicazione: {len(sought)}   mai creati: {len(missing)}")
 for m in missing[:10]: print(f"    mai creato: {m}")
+print(f"  ancore dei collegamenti: {len(anchors)}   verso id mai creati: {len(broken_anchors)}")
+for i in broken_anchors[:10]: print(f"    ancora morta: #{i}")
 print(f"  id/selettori cercati dalle PROVE: {len(from_tests)}   mai creati: {len(dead)}")
 for i in sorted(dead): print(f"    MORTO NELLE PROVE: {i:<22} {', '.join(sorted(dead[i]))}")
 if not quiet:
     print(f"  (prefissi costruiti noti: {len(prefixes)}; schemi di format: {len(patterns)}; "
           f"jolly scartati: {wildcard}; selettori asseriti ASSENTI, esclusi: {len(negatives)})")
-sys.exit(1 if (orphans or missing or dead) else 0)
+sys.exit(1 if (orphans or missing or dead or broken_anchors) else 0)
