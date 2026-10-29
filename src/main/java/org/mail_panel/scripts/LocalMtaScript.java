@@ -27,11 +27,11 @@ package org.mail_panel.scripts;
  * Si puo' ripetere: il secondo giro trova mailer.conf gia' giusto e non lo tocca, e sysrc
  * scrive ogni voce una volta sola.
  */
-final class LocalMtaScript {
+public final class LocalMtaScript {
 
     private LocalMtaScript() {}
 
-    static final String SHELL = """
+    public static final String SHELL = """
         # --- Postfix come MTA locale (LocalMtaScript.java) ---
         # mailer.conf si installa solo se il sendmail di Postfix c'e' davvero: un mailer.conf
         # che punta a un programma assente farebbe fallire ogni invio locale, peggio di dma.

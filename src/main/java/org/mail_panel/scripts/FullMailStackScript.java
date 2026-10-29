@@ -359,6 +359,15 @@ inet_protocols = all
 # con il nome vero del server. Il perche' misurato e' in FullMailServerScript.
 myorigin = localhost
 mydestination = localhost
+# In uscita root@localhost diventa root@<nome del server>: vedi FullMailServerScript.
+smtp_generic_maps = inline:{ @localhost=@$myhostname }
+
+# Solo questa macchina spedisce senza autenticarsi. Senza compatibility_level Postfix usa il
+# livello 0, dove mynetworks_style = subnet: tutta la rete del server diventava fidata, cioe'
+# un relay aperto (misurato con postconf -c: mynetworks = 192.168.64.0/24 ...). Gli stessi
+# valori dell'installazione completa.
+compatibility_level = 3.6
+mynetworks = 127.0.0.0/8 [::1]/128
 
 # Virtual mailbox settings
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
@@ -539,6 +548,15 @@ EOF
 backend = "redis";
 autolearn = true;
 EOF
+
+            """
+            // Il risolutore ricorsivo locale, prima che rspamd parta: senza, le liste di Spamhaus
+            // non rispondono. Lo stesso pezzo e' in FullMailServerScript e RspamdScript.
+            + LocalResolverScript.SHELL + """
+
+            # dig: il pannello lo usa per i controlli DNS e il sistema base non ce l'ha
+            # (vedi FullMailServerScript).
+            pkg install -y dns/bind-tools
 
             sysrc rspamd_enable="YES"
 

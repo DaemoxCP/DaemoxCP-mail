@@ -68,12 +68,13 @@ ROUNDCUBE_SSL_CHAIN="${10}"
 #   MYSQL_ROOT_PASSWORD   quella di root, generata dal pannello e tenuta nel file dei segreti
 # Chi lancia questo script a mano deve esportarle.
 
-# Colors
-RED='\\033[0;31m'
-GREEN='\\033[0;32m'
-YELLOW='\\033[1;33m'
-CYAN='\\033[0;36m'
-NC='\\033[0m'
+# Colors. Con printf, non fra apici: l'echo di /bin/sh su FreeBSD non interpreta \\033, e il log
+# dell'installazione mostrava "\\033[1;33m[PHASE 6/10]" scritto a lettere (33 righe, misurato).
+RED=$(printf '\\033[0;31m')
+GREEN=$(printf '\\033[0;32m')
+YELLOW=$(printf '\\033[1;33m')
+CYAN=$(printf '\\033[0;36m')
+NC=$(printf '\\033[0m')
 
 echo ""
 echo "${CYAN}=============================================================================${NC}"
@@ -187,6 +188,13 @@ pkg install -y rspamd redis clamav
 # ("py312-fail2ban" oggi) e cambia da sola.
 pkg install -y security/py-fail2ban
 sysrc fail2ban_enable="YES"
+
+# dig. Il pannello lo chiama in sei file -- i record DNS, DKIM, le liste nere, MTA-STS,
+# autoconfig, i controlli di Unbound -- e il sistema base non ce l'ha (solo drill e host):
+# misurato il 29/10/2026 su una macchina appena installata, "which dig" non trovava niente.
+# E il codice tratta l'errore come una risposta vuota (digRecord in SSLMailServer restituisce
+# ""), cioe' come un record che non c'e': letto nel codice, non misurato dalla pagina.
+pkg install -y dns/bind-tools
 
 # SSL: NON si installa il port security/openssl.
 # Il predefinito dei port FreeBSD e' ssl=base, cioe' i pacchetti binari sono costruiti contro
@@ -646,6 +654,11 @@ sysrc sendmail_msp_queue_enable="NO"
 # pannello, tutta la posta di quel dominio verrebbe consegnata agli utenti di sistema invece
 # che alle caselle. Con localhost, da fuori, non cambia niente: root@localhost resta 504 per
 # reject_non_fqdn_recipient.
+# Il prezzo di localhost, chiuso con smtp_generic_maps: la posta di sistema che esce dalla
+# macchina (root inoltrato dal pannello a un indirizzo esterno, un MAILTO di cron) avrebbe
+# avuto il mittente root@localhost, che i server altrui rifiutano. Nel client SMTP, e solo
+# li', @localhost diventa @$myhostname: la consegna locale resta com'e', e il nome si legge a
+# ogni uso, quindi segue quello che il pannello riscrive in myhostname.
 
 # main.cf
 cat > /usr/local/etc/postfix/main.cf << POSTFIX_MAIN
@@ -658,6 +671,8 @@ mydomain = $MAIL_HOSTNAME
 # Indirizzi senza dominio (root, postmaster) consegnati qui: vedi lo script di installazione
 myorigin = localhost
 mydestination = localhost
+# In uscita root@localhost diventa root@<nome del server>: vedi lo script di installazione
+smtp_generic_maps = inline:{ @localhost=@\\$myhostname }
 mynetworks = 127.0.0.0/8 [::1]/128
 
 # Virtual mailbox settings
@@ -872,6 +887,11 @@ echo "${GREEN}  Dovecot configured${NC}"
 # =============================================================================
 echo ""
 echo "${YELLOW}[PHASE 8/10] Configuring Rspamd, ClamAV, Redis...${NC}"
+
+"""
+            // Il risolutore ricorsivo locale, prima che rspamd parta (fase 10): senza, le liste
+            // di Spamhaus non rispondono. Lo stesso pezzo e' in RspamdScript e FullMailStackScript.
+            + LocalResolverScript.SHELL + """
 
 # Redis
 sysrc redis_enable="YES"
@@ -1255,6 +1275,14 @@ if grep -Eq '^sendmail[[:space:]]+/usr/local/sbin/sendmail([[:space:]]|$)' /usr/
     echo "  ${GREEN}[OK]${NC} sendmail(8) hands over to Postfix"
 else
     echo "  ${RED}[FAIL]${NC} sendmail(8) does NOT hand over to Postfix (dma)"
+    SERVICES_OK=false
+fi
+
+# Il risolutore locale per rspamd (LocalResolverScript.java): che risponda, e da ricorsivo.
+if drill @127.0.0.1 2.0.0.127.zen.spamhaus.org A 2>/dev/null | grep -Eq "IN[[:space:]]+A[[:space:]]+127[.]0[.]0[.][0-9]+"; then
+    echo "  ${GREEN}[OK]${NC} Local DNS resolver answers, Spamhaus included"
+else
+    echo "  ${RED}[FAIL]${NC} Local DNS resolver does NOT answer for Spamhaus (DNS blocklists will not work)"
     SERVICES_OK=false
 fi
 

@@ -47,7 +47,7 @@ public class LocalMtaTest {
     }
 
     public static void main(String[] args) throws Exception {
-        for (String command : List.of("postconf", "sysrc")) {
+        for (String command : List.of("postconf", "postmap", "sysrc")) {
             if (!onPath(command)) {
                 check(command + " c'e' (questa prova va lanciata sulla VM, non sul Mac)", false);
                 OUT.println("\n" + failed + " CONTROLLI FALLITI");
@@ -85,12 +85,49 @@ public class LocalMtaTest {
             check("la consegna locale non e' spenta (con local_transport = error: la posta di "
                     + "sistema rimbalzerebbe)", !localTransport.startsWith("error"));
             String restrictions = postconf(dir, "smtpd_recipient_restrictions");
-            if (!restrictions.isEmpty())
-                check("con le restrizioni scritte, root@localhost resta fuori da Internet "
-                        + "(reject_non_fqdn_recipient)", restrictions.contains("reject_non_fqdn_recipient"));
+            check("root@localhost resta fuori da Internet (reject_non_fqdn_recipient fra le "
+                    + "restrizioni)", restrictions.contains("reject_non_fqdn_recipient"));
+
+            // La posta di sistema che esce dalla macchina: root@localhost i server altrui lo
+            // rifiutano. Non si guarda il testo della mappa: la si fa leggere a postmap, con il
+            // valore che Postfix ottiene espandendo $myhostname.
+            String hostname = postconf(dir, "-x", "myhostname");
+            String genericMaps = postconf(dir, "-x", "smtp_generic_maps");
+            // postmap -q cerca la chiave esatta: la regola "@dominio vale per ogni utente" la applica
+            // Postfix quando riscrive, e quell'effetto si misura sulla VM con un SMTP finto.
+            String rewritten = genericMaps.isEmpty() ? "" : postmap(genericMaps, "@localhost");
+            OUT.println("  smtp_generic_maps = " + genericMaps + " | @localhost -> " + rewritten);
+            check("in uscita @localhost diventa @" + hostname + " (smtp_generic_maps, letta da postmap)",
+                    !hostname.isEmpty() && ("@" + hostname).equals(rewritten));
+            check("e solo in uscita: myorigin resta localhost, la consegna locale non cambia",
+                    "localhost".equals(myorigin));
+
+            // Il relay: solo questa macchina spedisce senza autenticarsi.
+            String compatibility = postconf(dir, "compatibility_level");
+            String mynetworks = postconf(dir, "-x", "mynetworks");
+            String relay = postconf(dir, "-x", "smtpd_relay_restrictions");
+            OUT.println("  compatibility_level = " + compatibility + " | mynetworks = " + mynetworks);
+            check("compatibility_level scritto (al livello 0 mynetworks_style e' subnet: tutta la rete "
+                    + "del server diventa fidata)", !compatibility.isEmpty() && !"0".equals(compatibility));
+            check("mynetworks e' solo questa macchina", "127.0.0.0/8 [::1]/128".equals(mynetworks));
+            check("le restrizioni sul relay ci sono, e respingono le destinazioni non nostre",
+                    relay.contains("unauth_destination"));
         }
         check("l'installazione completa verifica anche mailer.conf alla fine",
                 scripts.get("FullMailServerScript").contains("sendmail(8) does NOT hand over to Postfix"));
+
+        // I colori dell'installazione completa: si fanno eseguire a sh le loro definizioni e si
+        // guarda il byte che ne esce. Con le stringhe fra apici l'echo di /bin/sh stampava
+        // "\033[1;33m" scritto a lettere.
+        String colors = between(scripts.get("FullMailServerScript"), "\nRED=", "\nNC=");
+        String ncLine = colors == null ? "" : scripts.get("FullMailServerScript")
+                .substring(scripts.get("FullMailServerScript").indexOf("\nNC=") + 1).split("\n", 2)[0];
+        Path colorFile = home.resolve("colors.sh");
+        Files.writeString(colorFile, "RED=" + colors + "\n" + ncLine + "\necho \"${GREEN}x${NC}\"\n");
+        Run colorRun = sh(colorFile);
+        check("i colori dell'installazione escono come sequenze vere (ESC), non come \\033 scritto",
+                colors != null && colorRun.out.startsWith("\u001b[0;32mx\u001b[0m")
+                        && !colorRun.out.contains("\\033"));
 
         OUT.println("\n== Il pezzo eseguito in una cartella finta ==");
         Path fake = home.resolve("system");
@@ -234,14 +271,34 @@ public class LocalMtaTest {
      * sullo standard error, e mescolati al valore lo rendevano irriconoscibile (era successo con
      * "warning: open .../master.cf", che writeMainCf adesso evita).
      */
-    static String postconf(Path dir, String parameter) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder("postconf", "-c", dir.toString(), "-h", parameter);
+    static String postconf(Path dir, String... args) throws Exception {
+        List<String> cmd = new java.util.ArrayList<>(List.of("postconf", "-c", dir.toString(), "-h"));
+        cmd.addAll(List.of(args));
+        ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
         pb.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
         Process p = pb.start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         p.waitFor();
         return out;
+    }
+
+    /** Una chiave cercata in una tabella di Postfix, come la cerca postmap -q. */
+    static String postmap(String table, String key) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder("postmap", "-q", key, table);
+        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+        pb.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
+        Process p = pb.start();
+        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        p.waitFor();
+        return out;
+    }
+
+    static String between(String text, String start, String end) {
+        int a = text.indexOf(start);
+        if (a < 0) return null;
+        int b = text.indexOf(end, a + start.length());
+        return b < 0 ? null : text.substring(a + start.length(), b);
     }
 
     static String sysrc(Path file, String variable) throws Exception {

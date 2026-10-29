@@ -111,8 +111,23 @@ mydomain = localhost
 # Il perche' misurato e' in FullMailServerScript, accanto allo stesso myorigin.
 myorigin = localhost
 mydestination = localhost
+# Quando la posta di sistema esce dalla macchina (root inoltrato a un indirizzo esterno, un
+# MAILTO di cron) root@localhost diventa root@<nome del server>: localhost i server altrui lo
+# rifiutano. Solo nel client SMTP, quindi la consegna locale non cambia; $myhostname si legge
+# a ogni uso, e segue il nome che il pannello scrive.
+smtp_generic_maps = inline:{ @localhost=@$myhostname }
 inet_interfaces = all
 inet_protocols = all
+
+# Solo questa macchina spedisce senza autenticarsi. Senza compatibility_level Postfix usa il
+# livello 0, dove mynetworks_style = subnet: tutta la rete del server diventava fidata, cioe'
+# un relay aperto a chiunque le stia accanto (misurato con postconf -c sulla VM:
+# mynetworks = 192.168.64.0/24 ... e a quel livello nessuna restrizione sul relay). Gli stessi
+# valori dell'installazione completa.
+compatibility_level = 3.6
+mynetworks = 127.0.0.0/8 [::1]/128
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, reject_non_fqdn_recipient
 
 # Virtual mailbox settings (will be configured by panel)
 virtual_mailbox_base = /var/vmail
