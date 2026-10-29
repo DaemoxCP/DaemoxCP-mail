@@ -6265,5 +6265,6 @@
   "up.asks.restart": "UN RIAVVIO, poi di essere richiamato",
   "up.asks.finished": "niente, non c'è altro da installare",
   "up.asks.again": "di essere eseguito ancora",
-  "up.asks.rebuild": "di essere eseguito ancora E DI RICOSTRUIRE I PACCHETTI"
+  "up.asks.rebuild": "di essere eseguito ancora E DI RICOSTRUIRE I PACCHETTI",
+  "server.branch.howToReturn": "Per tornare indietro: da questa stessa scheda scegli di nuovo {from}, oppure cancella {file} e il ramo torna quello di serie."
 }

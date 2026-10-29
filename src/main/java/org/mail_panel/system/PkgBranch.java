@@ -291,9 +291,19 @@ public final class PkgBranch {
             warnings.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(FOLDER), "list", String.valueOf(String.join(", ", strings(after))))));
         return r.put("possible", true).put("changes", changes).put("warnings", warnings).put("file", FILE.toString())
                 .put("content", content(repos, target, s.now()))
-                .put("howToReturn", st.optBoolean("panelOwnedFile")
-                        ? I18n.tr("server.branch.removeInstead", java.util.Map.of("r", String.valueOf(target)))
-                        : "");
+                .put("howToReturn", howToReturn(st.getString("branch"), target, st.optBoolean("panelOwnedFile")));
+    }
+
+    /**
+     * Come si torna indietro, detto prima di cambiare. Prima era vuoto proprio al primo cambio
+     * (il file non era ancora del pannello), mentre i commenti del file scritto lo spiegavano:
+     * l'informazione c'era e non arrivava a chi doveva decidere.
+     */
+    static String howToReturn(String from, String target, boolean panelOwnedFile) {
+        String back = I18n.tr("server.branch.howToReturn", java.util.Map.of("from", from, "file", FILE.toString()));
+        return panelOwnedFile
+                ? back + " " + I18n.tr("server.branch.removeInstead", java.util.Map.of("r", String.valueOf(target)))
+                : back;
     }
 
     private static List<String> strings(JSONArray a) {
