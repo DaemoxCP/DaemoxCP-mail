@@ -28,8 +28,9 @@ import java.util.regex.Pattern;
  *  - che il loro main.cf, letto da postconf e non guardato come testo, dia myorigin = localhost e
  *    un mydestination che non contiene il nome del server;
  *  - il pezzo eseguito davvero, in una cartella finta al posto di /usr/local/etc/mail,
- *    /etc/periodic.conf e /var/spool/dma: senza Postfix non scrive niente, con Postfix scrive,
- *    ripetuto non tocca niente, un mailer.conf diverso lo mette da parte, la coda di dma la dice.
+ *    /etc/periodic.conf, /var/spool/dma e del newaliases di Postfix: senza Postfix non scrive
+ *    niente, con Postfix scrive e costruisce il database degli alias, ripetuto non tocca
+ *    mailer.conf, un mailer.conf diverso lo mette da parte, la coda di dma la dice.
  *
  * Si lancia sulla VM, dove postconf e sysrc ci sono:
  *   javac -cp &lt;dir&gt;/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/scripts/LocalMtaTest.java
@@ -99,9 +100,15 @@ public class LocalMtaTest {
         Path sendmail = fake.resolve("sbin/sendmail");
         Path periodic = fake.resolve("periodic.conf");
         Path dmaSpool = fake.resolve("spool-dma");
+        // Il newaliases finto conta le chiamate: quello vero scriverebbe /etc/aliases.db.
+        Path newaliases = fake.resolve("bin/newaliases");
+        Path newaliasesCalls = fake.resolve("newaliases-calls");
         Files.createDirectories(dmaSpool);
         Files.createDirectories(shared.getParent());
         Files.createDirectories(sendmail.getParent());
+        Files.createDirectories(newaliases.getParent());
+        Files.writeString(newaliases, "#!/bin/sh\necho called >> '" + newaliasesCalls + "'\n");
+        newaliases.toFile().setExecutable(true);
 
         // Si sostituiscono i percorsi veri, e si controlla che la sostituzione sia AVVENUTA:
         // un percorso rimasto vero vorrebbe dire scrivere sul sistema della VM.
@@ -110,6 +117,7 @@ public class LocalMtaTest {
         replacements.put("/usr/local/share/postfix/mailer.conf.postfix", shared);
         replacements.put("/usr/local/etc/mail", mailDir);
         replacements.put("/usr/local/sbin/sendmail", sendmail);
+        replacements.put("/usr/local/bin/newaliases", newaliases);
         replacements.put("/etc/periodic.conf", periodic);
         replacements.put("/var/spool/dma", dmaSpool);
         for (Map.Entry<String, Path> r : replacements.entrySet()) {
@@ -125,6 +133,7 @@ public class LocalMtaTest {
         Run r1 = sh(pieceFile);
         check("dice che sendmail passa ancora a dma", r1.out.contains("ERROR") && r1.out.contains("dma"));
         check("e non scrive mailer.conf", !Files.exists(mailerConf));
+        check("e non chiama newaliases", newaliasesCallCount(newaliasesCalls) == 0);
 
         OUT.println("\n-- 2. c'e' il file di Postfix ma non il suo sendmail --");
         Path real = Path.of("/usr/local/share/postfix/mailer.conf.postfix");
@@ -135,6 +144,7 @@ public class LocalMtaTest {
         Run r2 = sh(pieceFile);
         check("non scrive mailer.conf: punterebbe a un programma che non c'e'",
                 !Files.exists(mailerConf) && r2.out.contains("ERROR"));
+        check("e non chiama newaliases", newaliasesCallCount(newaliasesCalls) == 0);
 
         OUT.println("\n-- 3. Postfix c'e', e nella coda di dma e' rimasto un messaggio --");
         Files.writeString(sendmail, "#!/bin/sh\nexit 0\n");
@@ -146,6 +156,8 @@ public class LocalMtaTest {
         check("scrive mailer.conf, identico a quello del pacchetto",
                 Files.isRegularFile(mailerConf) && Files.readString(mailerConf).equals(postfixMailer));
         check("e lo dice", r3.out.contains("hands over to Postfix"));
+        check("costruisce il database degli alias, una volta (senza, la consegna locale resta in "
+                + "coda con \"alias database unavailable\")", newaliasesCallCount(newaliasesCalls) == 1);
         for (String v : List.of("daily_clean_hoststat_enable", "daily_status_mail_rejects_enable",
                 "daily_status_include_submit_mailq", "daily_submit_queuerun"))
             check("periodic.conf: " + v + " = NO", "NO".equals(sysrc(periodic, v)));
@@ -240,6 +252,14 @@ public class LocalMtaTest {
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         p.waitFor();
         return out;
+    }
+
+    /** Quante volte il newaliases finto e' stato chiamato: una riga per chiamata. */
+    static long newaliasesCallCount(Path calls) throws Exception {
+        if (!Files.exists(calls)) return 0;
+        try (var lines = Files.lines(calls)) {
+            return lines.filter(l -> l.equals("called")).count();
+        }
     }
 
     static List<Path> backups(Path mailDir) throws Exception {

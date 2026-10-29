@@ -47,6 +47,12 @@ final class LocalMtaScript {
                 install -m 0644 "$POSTFIX_MAILER_CONF" "$LOCAL_MAILER_CONF"
             fi
             echo "  sendmail(8) hands over to Postfix ($LOCAL_MAILER_CONF)"
+            # Il database degli alias. dma non ne aveva bisogno, legge /etc/mail/aliases cosi'
+            # com'e'; Postfix si', e su una macchina appena installata non c'e': ogni consegna
+            # locale restava in coda con "alias database unavailable" finche' il pannello, al
+            # primo avvio, non lo costruiva da se'. Misurato sulla VM pulita il 29/10/2026. Lo
+            # costruisce il newaliases di Postfix, nel formato che dice alias_database.
+            /usr/local/bin/newaliases || echo "  WARNING: newaliases failed: local mail stays queued until the alias database exists"
         else
             echo "  ERROR: Postfix's sendmail not found: sendmail(8) still hands over to dma"
         fi
