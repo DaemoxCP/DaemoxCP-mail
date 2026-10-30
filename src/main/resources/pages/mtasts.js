@@ -1,9 +1,9 @@
         // ---------- MTA-STS ----------
-        async function stsApi(azione, extra) {
-            const corpo = Object.assign({ action: azione, domain_id: parseInt(currentDomainId) }, extra || {});
+        async function stsApi(actionItem, extra) {
+            const bodyText = Object.assign({ action: actionItem, domain_id: parseInt(currentDomainId) }, extra || {});
             const r = await fetch('/api/autodns', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(corpo)
+                body: JSON.stringify(bodyText)
             });
             return await r.json();
         }
@@ -14,12 +14,12 @@
             return d.innerHTML;
         }
 
-        function stsSpunta(v) {
+        function stsTick(v) {
             return v ? '<i class="fas fa-check-circle text-success" title="' + escHtml(t('dns.yes')) + '"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
                      : '<i class="fas fa-times-circle text-danger" title="' + escHtml(t('acf.no')) + '"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>';
         }
 
-        async function stsCarica() {
+        async function stsLoad() {
             const el = document.getElementById('stsBody');
             if (!el) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sts.asking'));
@@ -29,7 +29,7 @@
                 return;
             }
 
-            const modi = [
+            const modes = [
                 ['testing', 'testing — ' + t('sts.testing')],
                 ['enforce', 'enforce — ' + t('sts.enforce')],
                 ['none',    'none — ' + t('sts.none')]
@@ -37,10 +37,10 @@
             let h = '<div class="d-flex gap-2 align-items-end flex-wrap mb-3">'
                   + '<div><label class="form-label small mb-1" for="stsModo">' + escHtml(t('sts.mode')) + '</label>'
                   + '<select class="form-select form-select-sm" id="stsModo" style="min-width:min(26rem,100%)">'
-                  + modi.map(m => '<option value="' + m[0] + '"' + (m[0] === r.mode ? ' selected' : '') + '>'
+                  + modes.map(m => '<option value="' + m[0] + '"' + (m[0] === r.mode ? ' selected' : '') + '>'
                                 + stsEsc(m[1]) + '</option>').join('')
                   + '</select></div>'
-                  + '<button class="btn btn-sm btn-outline-warning" onclick="stsCambiaModo()">'
+                  + '<button class="btn btn-sm btn-outline-warning" onclick="stsChangeMode()">'
                   + '<i class="fas fa-pen me-1" aria-hidden="true"></i>' + escHtml(t('sts.changeMode')) + '</button></div>';
 
             h += '<div class="small text-muted mb-1">' + escHtml(t('sts.served')) + '</div>'
@@ -54,11 +54,11 @@
                 const p = d.policyReachable || {};
                 h += '<tr class="upd-cell"><td><code class="small">' + stsEsc(d.webName) + '</code>'
                    + '<div class="small text-muted">' + escHtml(t('sts.txtOn', { name: d.txtName })) + '</div></td>'
-                   + '<td class="small">' + stsSpunta(p.ok)
+                   + '<td class="small">' + stsTick(p.ok)
                    + (p.ok ? ' ' + escHtml(t('sts.answersOk'))
                            : '<div class="text-muted">' + stsEsc(p.error || '') + '</div>') + '</td>'
                    + '<td class="text-end">' + (p.ok
-                       ? '<button class="btn btn-sm btn-outline-success" onclick="stsPubblica()">'
+                       ? '<button class="btn btn-sm btn-outline-success" onclick="stsPublish()">'
                          + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('sts.publish')) + '</button>'
                        : '<span class="small text-muted">' + escHtml(t('sts.mustAnswerFirst')) + '</span>') + '</td></tr>';
             });
@@ -78,24 +78,24 @@
             el.innerHTML = h;
         }
 
-        async function stsCambiaModo() {
+        async function stsChangeMode() {
             const sel = document.getElementById('stsModo');
             if (!sel) return;
-            const modo = sel.value;
+            const modeValue = sel.value;
             const el = document.getElementById('stsOutcome');
-            if (modo === 'enforce' && !adConferma(t('sts.confirmEnforce'), 'ENFORCE')) return;
-            const r = await stsApi('mtasts_mode', { mode: modo });
+            if (modeValue === 'enforce' && !adConfirm(t('sts.confirmEnforce'), 'ENFORCE')) return;
+            const r = await stsApi('mtasts_mode', { mode: modeValue });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + stsEsc(r.note || r.error) + '</div>';
-            if (r.success) setTimeout(stsCarica, 900);
+            if (r.success) setTimeout(stsLoad, 900);
         }
 
-        async function stsPubblica() {
+        async function stsPublish() {
             const el = document.getElementById('stsOutcome');
-            if (!adConferma(t('sts.confirmPublish'), t('ad.wordCreate'))) return;
+            if (!adConfirm(t('sts.confirmPublish'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sts.publishing'));
             const r = await stsApi('mtasts_txt', { confirm: 'CREATE' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + stsEsc(r.note || r.error) + '</div>';
-            if (r.success) setTimeout(stsCarica, 1200);
+            if (r.success) setTimeout(stsLoad, 1200);
         }

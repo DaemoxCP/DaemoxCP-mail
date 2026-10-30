@@ -4,19 +4,19 @@
         // cloudflare.com. Sta in una funzione sua perche' serve in ENTRAMBI i rami — quando il
         // confronto riesce e quando fallisce. Anzi: quando fallisce serve di piu', perche' e'
         // l'unico momento in cui non si puo' sapere altro.
-        function cfElenchi(r) {
-            const uno = (titolo, voci) => !voci || !voci.length ? ''
-                : '<div class="small fw-bold mt-2 mb-1">' + escHtml(titolo) + ' (' + voci.length + ')</div>'
+        function cfLists(r) {
+            const one = (titleText, entries) => !entries || !entries.length ? ''
+                : '<div class="small fw-bold mt-2 mb-1">' + escHtml(titleText) + ' (' + entries.length + ')</div>'
                   + '<div class="small" style="line-height:1.9">'
-                  + voci.map(c => '<code class="me-2">' + updEsc(c) + '</code>').join('') + '</div>';
-            return uno('Cloudflare IPv4', r.listV4)
-                 + uno('Cloudflare IPv6', r.listV6)
-                 + uno(t('cfi.local'), r.localList)
+                  + entries.map(c => '<code class="me-2">' + updEsc(c) + '</code>').join('') + '</div>';
+            return one('Cloudflare IPv4', r.listV4)
+                 + one('Cloudflare IPv6', r.listV6)
+                 + one(t('cfi.local'), r.localList)
                  + '<div class="small text-muted mt-2">' + escHtml(t('cfi.compiledOn', { date: r.updatedOn || '?' })) + ' '
                  + t('cfi.bitwise.html') + '</div>';
         }
 
-        async function cfIntervalli() {
+        async function cfIntervals() {
             const el = document.getElementById('cf-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('cfi.downloading')) + '';
             const r = await updApi('cf_intervals');
@@ -24,11 +24,11 @@
                 // "Non ho potuto controllare" non e' "va bene", e non deve sembrarlo.
                 el.innerHTML = '<div class="alert alert-secondary py-2 small mb-2">'
                              + '<i class="fas fa-question-circle me-1" aria-hidden="true"></i>' + updEsc(r.error || t('cfi.failed'))
-                             + '</div>' + cfElenchi(r);
+                             + '</div>' + cfLists(r);
                 return;
             }
-            const mancanti = r.missing || [], inPiu = r.extra || [];
-            const cls = mancanti.length ? 'danger' : (inPiu.length ? 'warning' : 'success');
+            const missingOnes = r.missing || [], extraOnes = r.extra || [];
+            const cls = missingOnes.length ? 'danger' : (extraOnes.length ? 'warning' : 'success');
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">'
                   + '<i class="fas fa-' + (cls === 'success' ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
                   + updEsc(r.note) + '</div>';
@@ -41,16 +41,16 @@
                + '<div class="small text-muted">' + escHtml(t('cfi.alignedOn', { date: r.updatedOn })) + '</div></td></tr>'
                + '</tbody></table></div>';
 
-            if (mancanti.length) {
+            if (missingOnes.length) {
                 h += '<div class="small fw-bold mb-1 text-danger">' + t('cfi.missing.html') + '</div><ul class="small mb-2">';
-                mancanti.forEach(c => { h += '<li><code>' + updEsc(c) + '</code></li>'; });
+                missingOnes.forEach(c => { h += '<li><code>' + updEsc(c) + '</code></li>'; });
                 h += '</ul>';
             }
-            if (inPiu.length) {
+            if (extraOnes.length) {
                 h += '<div class="small fw-bold mb-1">' + escHtml(t('cfi.extra')) + '</div><ul class="small mb-2">';
-                inPiu.forEach(c => { h += '<li><code>' + updEsc(c) + '</code></li>'; });
+                extraOnes.forEach(c => { h += '<li><code>' + updEsc(c) + '</code></li>'; });
                 h += '</ul>';
             }
-            h += cfElenchi(r);
+            h += cfLists(r);
             el.innerHTML = h;
         }

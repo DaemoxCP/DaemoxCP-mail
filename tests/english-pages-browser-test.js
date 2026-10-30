@@ -192,7 +192,7 @@ const VISITS = [
         await page.waitForSelector('#verificationResults:not(.d-none) table');
         await page.click('.card-header[onclick="toggleTzDiag()"]');
         await page.waitForSelector('#tzDiagTable table');
-        await page.evaluate(() => { autoDnsCarica(); acCarica(); stsCarica(); });
+        await page.evaluate(() => { autoDnsLoad(); acLoad(); stsLoad(); });
         await page.waitForTimeout(800);
     } },
     { path: '/ssl', prepare: async page => {
@@ -247,14 +247,14 @@ const VISITS = [
     { path: '/settings', prepare: async page => {
         await page.waitForSelector('#hostnameConsistency .alert');
         await page.waitForSelector('#rcDomainDns .badge');
-        await page.click('.card-header button[onclick="repCarica()"]');
+        await page.click('.card-header button[onclick="repLoad()"]');
         await page.waitForSelector('#repFreq');
     } },
     { path: '/install' },
     { path: '/setup' },
     { path: '/updates', prepare: async page => {
         await page.waitForSelector('#branch-body table');
-        for (const [fn, sel] of [['osStato', '#os-body table'], ['planLoad', '#plan-body .border'], ['pkOverview', '#pk-body table'],
+        for (const [fn, sel] of [['osState', '#os-body table'], ['planLoad', '#plan-body .border'], ['pkOverview', '#pk-body table'],
                                  ['updStatus', '#upd-status .alert-danger'], ['defCheck', '#def-body table'], ['envCheck', '#env-body table']]) {
             await page.evaluate(f => window[f](), fn);
             await page.waitForSelector(sel);

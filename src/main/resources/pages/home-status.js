@@ -28,7 +28,7 @@
         // piu', perche' dentro il server web vivono lo scheduler della rotazione DKIM, il
         // rinnovo dei certificati e il rapporto periodico: se il pannello non riparte, quelli
         // si fermano dove sono e nessuno lo segnala.
-        async function homeStato() {
+        async function homeState() {
             const el = document.getElementById('home-avvio');
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + homeEsc(t('hs.reading')) + '</span>';
             const r = await homeApi('rc_state');
@@ -55,7 +55,7 @@
 
         // Questa NO: fa due scaricamenti da cloudflare.com e caricare la Home non deve
         // dipendere da una rete esterna. Si preme quando serve.
-        async function homeFiducia() {
+        async function homeTrust() {
             const el = document.getElementById('home-fiducia');
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + homeEsc(t('hs.comparingCf')) + '</span>';
@@ -66,8 +66,8 @@
                              + homeEsc((r && r.error) || t('hs.checkFailed')) + '</div>';
                 return;
             }
-            const mancanti = r.missing || [], inPiu = r.extra || [];
-            const cls = mancanti.length ? 'danger' : (inPiu.length ? 'warning' : 'success');
+            const missingOnes = r.missing || [], extraOnes = r.extra || [];
+            const cls = missingOnes.length ? 'danger' : (extraOnes.length ? 'warning' : 'success');
             el.innerHTML = '<div class="alert alert-' + cls + ' py-2 small mb-0">'
                 + '<i class="fas fa-' + (cls === 'success' ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
                 + homeEsc(r.note) + ' <a href="/updates" class="alert-link">' + homeEsc(t('hs.seeList')) + '</a></div>';
@@ -75,9 +75,9 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('home-avvio')) {
-                homeStato();
+                homeState();
                 const f = document.getElementById('home-fiducia');
-                if (f) f.innerHTML = '<button class="btn btn-sm btn-outline-secondary" onclick="homeFiducia()">'
+                if (f) f.innerHTML = '<button class="btn btn-sm btn-outline-secondary" onclick="homeTrust()">'
                     + '<i class="fas fa-user-shield me-1" aria-hidden="true"></i>' + homeEsc(t('hs.checkCf')) + '</button>'
                     + '<div class="small text-muted mt-1">' + homeEsc(t('hs.checkCfHint')) + '</div>';
             }
@@ -90,25 +90,25 @@
         // E il caso che conta e' quello in cui la serie NON e' in tabella: succede quando il
         // sistema e' piu' nuovo della fotografia, cioe' proprio quando andrebbe riletta. Prima
         // in quel caso non compariva niente, e un silenzio si legge come "nulla da segnalare".
-        function supportoRiga(so) {
-            const letta = so.supportSourceRead ? ' <span class="text-muted">'
+        function supportLine(so) {
+            const read = so.supportSourceRead ? ' <span class="text-muted">'
                         + homeEsc(t('hs.tableCopied', { date: so.supportSourceRead })) + '</span>' : '';
             if (so.knownSeries === false || !so.endOfSupport) {
                 if (!so.series) return '';
                 return '<div class="small text-warning"><i class="fas fa-circle-question me-1" aria-hidden="true"></i>'
-                     + t('hs.unknownSeries.html', { series: homeEsc(so.series) }) + letta + '</div>';
+                     + t('hs.unknownSeries.html', { series: homeEsc(so.series) }) + read + '</div>';
             }
             // Se la data e' passata o vicina, dirlo: una data sola non si legge da sola.
             let state = '';
             const p = String(so.endOfSupport).split('/');
             if (p.length === 3) {
                 const q = new Date(+p[2], +p[1] - 1, +p[0]);
-                const giorni = Math.round((q - Date.now()) / 86400000);
-                if (giorni < 0) state = ' <span class="badge bg-danger">' + homeEsc(t('hs.supportEnded')) + '</span>';
-                else if (giorni < 90) state = ' <span class="badge bg-warning text-dark">' + homeEsc(tn('hs.inDays', giorni)) + '</span>';
+                const dayCount = Math.round((q - Date.now()) / 86400000);
+                if (dayCount < 0) state = ' <span class="badge bg-danger">' + homeEsc(t('hs.supportEnded')) + '</span>';
+                else if (dayCount < 90) state = ' <span class="badge bg-warning text-dark">' + homeEsc(tn('hs.inDays', dayCount)) + '</span>';
             }
             return '<div class="small text-muted">' + homeEsc(t('hs.endOfSupport', { series: so.series }))
-                 + ' <strong>' + homeEsc(so.endOfSupport) + '</strong>' + state + letta + '</div>';
+                 + ' <strong>' + homeEsc(so.endOfSupport) + '</strong>' + state + read + '</div>';
         }
 
         // ---------- versioni, riavvio, aggiornamenti ----------
@@ -119,7 +119,7 @@
         // Il prezzo e' che i numeri possono essere vecchi, e si dice: accanto al conteggio
         // c'e' l'eta' del catalogo. Un numero preciso ricavato da dati di tre settimane fa
         // sembra una misura e non lo e'.
-        async function homeSistema() {
+        async function homeSystem() {
             const el = document.getElementById('home-sistema');
             if (!el) return;
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
@@ -135,16 +135,16 @@
             const so = r.os || {};
             // L'eta' del dato accanto al dato: un conteggio senza la sua data sembra una
             // misura di adesso anche quando viene da tre settimane fa.
-            const eta = (g, cosa) => (g === undefined || g === null || g < 0) ? ''
-                : (g === 0 ? ' <span class="text-muted">' + homeEsc(t('hs.ageToday', { what: cosa })) + '</span>'
+            const ageText = (g, whatItem) => (g === undefined || g === null || g < 0) ? ''
+                : (g === 0 ? ' <span class="text-muted">' + homeEsc(t('hs.ageToday', { what: whatItem })) + '</span>'
                            : ' <span class="' + (g > 14 ? 'text-warning' : 'text-muted') + '">'
-                             + homeEsc(tn('hs.ageDays', g, { what: cosa })) + '</span>');
+                             + homeEsc(tn('hs.ageDays', g, { what: whatItem })) + '</span>');
 
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>';
             h += '<tr><td style="width:15rem"><strong>FreeBSD</strong></td><td><code>'
                + homeEsc(so.userland || '?') + '</code>'
                + (so.arch ? ' <span class="text-muted small">' + homeEsc(so.arch) + '</span>' : '')
-               + supportoRiga(so)
+               + supportLine(so)
                + '</td></tr>';
 
             // Kernel installato e in esecuzione sono due cose diverse: se differiscono manca
@@ -170,10 +170,10 @@
             const n = r.toUpdate || 0;
             // Le altre tre categorie NON sono aggiornamenti, e vanno separate: contarle insieme
             // dava un numero che nessun'altra schermata confermava.
-            const altre = [];
-            if (r.newerThanCatalog) altre.push(t('hs.newerThanCatalog.html', { n: homeEsc(r.newerThanCatalog) }));
-            if (r.outsideCatalog) altre.push(t('hs.notInCatalog.html', { n: homeEsc(r.outsideCatalog) }));
-            if (r.notComparable) altre.push(t('hs.notComparable.html', { n: homeEsc(r.notComparable) }));
+            const others = [];
+            if (r.newerThanCatalog) others.push(t('hs.newerThanCatalog.html', { n: homeEsc(r.newerThanCatalog) }));
+            if (r.outsideCatalog) others.push(t('hs.notInCatalog.html', { n: homeEsc(r.outsideCatalog) }));
+            if (r.notComparable) others.push(t('hs.notComparable.html', { n: homeEsc(r.notComparable) }));
             h += '<tr><td><strong>' + homeEsc(t('hs.toUpdate')) + '</strong></td><td>'
                + (n === 0 ? '<span class="badge bg-success">' + homeEsc(t('hs.none')) + '</span>'
                           : '<span class="badge bg-warning text-dark">' + n + '</span>')
@@ -188,8 +188,8 @@
                                        + homeEsc(r.catalogNote).replace(/"/g, '&quot;')
                                        + '">' + homeEsc(t('hs.catalogNoDate')) + '</span>' : ''))
                + '<div class="small text-muted">' + t('hs.toUpdateHint.html') + ' <a href="/updates">' + homeEsc(t('nav.updates')) + '</a></div>'
-               + (altre.length
-                   ? '<div class="small text-muted mt-1">' + t('hs.otherDiff.html') + ' ' + altre.join('; ') + '.</div>'
+               + (others.length
+                   ? '<div class="small text-muted mt-1">' + t('hs.otherDiff.html') + ' ' + others.join('; ') + '.</div>'
                    : '')
                + '</td></tr>';
 
@@ -197,7 +197,7 @@
             h += '<tr><td><strong>' + homeEsc(t('hs.vulnerable')) + '</strong></td><td>'
                + (v === 0 ? '<span class="badge bg-success">' + homeEsc(t('hs.none')) + '</span>'
                           : '<span class="badge bg-danger">' + v + '</span>')
-               + eta(r.vulnDbDays, t('hs.database'))
+               + ageText(r.vulnDbDays, t('hs.database'))
                + '<div class="small text-muted">' + t('hs.vulnHint.html') + '</div>'
                + '</td></tr>';
 
@@ -210,4 +210,4 @@
             el.innerHTML = h;
         }
 
-        document.addEventListener('DOMContentLoaded', () => { homeSistema(); });
+        document.addEventListener('DOMContentLoaded', () => { homeSystem(); });

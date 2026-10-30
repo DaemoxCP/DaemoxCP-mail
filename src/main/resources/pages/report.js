@@ -2,20 +2,20 @@
         // Sta nelle IMPOSTAZIONI perche' destinatario, mittente e frequenza sono scelte, non
         // diagnosi. Il contenuto del rapporto lo raccoglie la pagina Aggiornamenti, ma
         // deciderlo e' un'altra cosa dal leggerlo.
-        async function repApi(azione, extra) {
-            const corpo = Object.assign({ action: azione }, extra || {});
+        async function repApi(actionItem, extra) {
+            const bodyText = Object.assign({ action: actionItem }, extra || {});
             const r = await fetch('/api/report', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(corpo)
+                body: JSON.stringify(bodyText)
             });
             return await r.json();
         }
 
         // Conferma scritta: la parola si mostra nella lingua della pagina, al server va il suo codice.
-        function repConferma(testo, parola) {
-            const typed = prompt(testo + '\n\n' + t('ad.typeToConfirm', { word: parola }));
-            return typed !== null && typed.trim().toUpperCase() === parola.toUpperCase();
+        function repConfirm(textValue, keyword) {
+            const typed = prompt(textValue + '\n\n' + t('ad.typeToConfirm', { word: keyword }));
+            return typed !== null && typed.trim().toUpperCase() === keyword.toUpperCase();
         }
 
         function repEsc(v) {
@@ -28,24 +28,24 @@
         // le offre. Un campo di testo permetterebbe di scriverci un dominio di un sito, che e'
         // l'errore gia' fatto una volta. Se sul dominio del pannello non c'e' nessuna casella,
         // l'elenco lo dice invece di restare vuoto e misterioso.
-        function mittenteScelta(s, id) {
-            const scelte = (id && id.availableMailboxes) || [];
+        function chosenSender(s, id) {
+            const choices = (id && id.availableMailboxes) || [];
             const dom = (id && id.panelDomain) || '';
             if (!id || !id.panelDomainManaged) {
                 return '<div class="form-control form-control-sm bg-transparent border-warning small" id="repFrom-none">'
                      + escHtml(dom ? t('rep.domainNotManagedNamed', { domain: dom }) : t('rep.domainNotManaged')) + '</div>';
             }
-            if (!scelte.length) {
+            if (!choices.length) {
                 return '<div class="form-control form-control-sm bg-transparent border-warning small" id="repFrom-none">'
                      + escHtml(t('rep.noMailbox', { domain: dom })) + '</div>';
             }
             return '<select class="form-select form-select-sm" id="repFrom">'
-                 + scelte.map(x => '<option value="' + repEsc(x) + '"'
+                 + choices.map(x => '<option value="' + repEsc(x) + '"'
                      + (s.sender === x ? ' selected' : '') + '>' + repEsc(x) + '</option>').join('')
                  + '</select>';
         }
 
-        async function repCarica() {
+        async function repLoad() {
             const el = document.getElementById('rep-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.reading')) + '';
             const [s, id] = await Promise.all([repApi('status'), repApi('identity')]);
@@ -62,7 +62,7 @@
                 // Il pulsante per creare compare SOLO se l'indirizzo e' libero davvero:
                 // ne' casella ne' alias. Prima guardava solo le caselle.
                 if (id.creatable && !id.exists && id.sender) {
-                    h += '<button class="btn btn-sm btn-outline-success mb-2" data-address="' + escHtml(id.sender) + '" onclick="repCreaIdentita(this.dataset.address)">'
+                    h += '<button class="btn btn-sm btn-outline-success mb-2" data-address="' + escHtml(id.sender) + '" onclick="repCreateIdentity(this.dataset.address)">'
                        + '<i class="fas fa-user-plus me-1" aria-hidden="true"></i>' + escHtml(t('rep.createMailbox', { address: id.sender })) + '</button>';
                 }
                 const dm = id.managedDomains || [];
@@ -76,7 +76,7 @@
                + '<hr><h6 class="mb-2">' + escHtml(t('rep.whenWho')) + '</h6>'
                + '<div class="row g-2 align-items-end">'
                + '<div class="col-md-4"><label class="form-label small mb-1" for="repFrom">' + escHtml(t('rep.from')) + '</label>'
-               + mittenteScelta(s, id) + '</div>'
+               + chosenSender(s, id) + '</div>'
                + '<div class="col-md-4"><label class="form-label small mb-1" for="repTo">' + escHtml(t('rep.to')) + '</label>'
                + '<input type="email" class="form-control form-control-sm" id="repTo" maxlength="254" placeholder="' + escHtml(t('rep.toPlaceholder')) + '" value="'
                + escHtml(s.recipient || '') + '"></div>'
@@ -93,8 +93,8 @@
                + (s.active ? ' checked' : '') + '><label class="form-check-label small" for="repOn">'
                + escHtml(t('rep.auto')) + '</label></div>'
                + '<div class="mt-2">'
-               + '<button class="btn btn-sm btn-success me-1" onclick="repSalva()"><i class="fas fa-floppy-disk me-1" aria-hidden="true"></i>' + escHtml(t('common.save')) + '</button>'
-               + '<button class="btn btn-sm btn-outline-primary" onclick="repProva()"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i>' + escHtml(t('rep.sendTest')) + '</button>'
+               + '<button class="btn btn-sm btn-success me-1" onclick="repSave()"><i class="fas fa-floppy-disk me-1" aria-hidden="true"></i>' + escHtml(t('common.save')) + '</button>'
+               + '<button class="btn btn-sm btn-outline-primary" onclick="repTest()"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i>' + escHtml(t('rep.sendTest')) + '</button>'
                + '</div>'
                + '<div id="rep-outcome" class="mt-2"></div>'
                + '<div class="small text-muted mt-2">' + repEsc(s.next) + '</div>';
@@ -102,17 +102,17 @@
             el.innerHTML = h;
         }
 
-        async function repCreaIdentita(indirizzo) {
-            if (!repConferma(t('rep.confirmCreate', { address: indirizzo }), t('ad.wordCreate'))) return;
+        async function repCreateIdentity(address) {
+            if (!repConfirm(t('rep.confirmCreate', { address: address }), t('ad.wordCreate'))) return;
             const el = document.getElementById('rep-outcome-identity');
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
-            const r = await repApi('identity_create', { confirm: 'CREATE', address: indirizzo });
+            const r = await repApi('identity_create', { confirm: 'CREATE', address: address });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small">'
                          + repEsc(r.note || r.error) + '</div>';
-            if (r.success) repCarica();
+            if (r.success) repLoad();
         }
 
-        async function repSalva() {
+        async function repSave() {
             const el = document.getElementById('rep-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
             const r = await repApi('save', {
@@ -124,13 +124,13 @@
             });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + repEsc(r.note || r.error) + '</div>';
-            if (r.success) setTimeout(repCarica, 900);
+            if (r.success) setTimeout(repLoad, 900);
         }
 
-        async function repProva() {
+        async function repTest() {
             const a = document.getElementById('repTo').value.trim();
             if (!a) { alert(t('rep.needTo')); return; }
-            if (!repConferma(t('rep.confirmSend', { address: a }), t('rep.wordSend'))) return;
+            if (!repConfirm(t('rep.confirmSend', { address: a }), t('rep.wordSend'))) return;
             const el = document.getElementById('rep-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.sending')) + '';
             const r = await repApi('send', { confirm: 'INVIA', recipient: a });
@@ -144,14 +144,14 @@
             el.innerHTML = h;
         }
 
-        async function repAnteprima() {
+        async function repPreview() {
             const el = document.getElementById('rep-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.composing')) + '';
             const r = await repApi('preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + repEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<div class="alert alert-info py-2 small">' + escHtml(t('rep.previewNote')) + '</div>'
                          + '<pre class="upd-log">' + repEsc(r.text) + '</pre>'
-                         + '<button class="btn btn-sm btn-outline-secondary" onclick="repCarica()">'
+                         + '<button class="btn btn-sm btn-outline-secondary" onclick="repLoad()">'
                          + '<i class="fas fa-arrow-left me-1" aria-hidden="true"></i>' + escHtml(t('rep.back')) + '</button>';
         }
 

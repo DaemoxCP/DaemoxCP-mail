@@ -2,7 +2,7 @@
         // Il RFC Editor pubblica lo stato di ogni documento in forma leggibile da un
         // programma (rfcNNNN.json, 1,3 KB): "obsoleted_by" e "updated_by". Quello che il
         // 01/09/2026 abbiamo scoperto per caso su DMARC, da qui si vede da solo.
-        async function sorvCarica() {
+        async function watchLoad() {
             const el = document.getElementById('upd-sorv');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sv.querying')) + '';
             // Una alla volta, per lo stesso motivo: il lucchetto di updApi fa fallire la
@@ -23,26 +23,26 @@
                    + '<th scope="col" style="width:6rem">' + escHtml(t('sv.colSpec')) + '</th><th scope="col">' + escHtml(t('sv.colGoverns')) + '</th><th scope="col">' + escHtml(t('set.colState')) + '</th></tr></thead><tbody>';
                 (r.standard || []).forEach(s => {
                     const g = s.severity;
-                    const icona = !s.read ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i>'
+                    const iconName = !s.read ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i>'
                                 : g === 2 ? '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i>'
                                 : g === 1 ? '<i class="fas fa-triangle-exclamation text-warning" aria-hidden="true"></i>'
                                           : '<i class="fas fa-check-circle text-success" aria-hidden="true"></i>';
                     // Per ogni documento nuovo c'e' un bottone che ne estrae l'elenco dei
                     // cambiamenti scritto dagli autori: e' li' che sta la risposta a "cosa e'
                     // cambiato", e non serve leggere duecento pagine per trovarla.
-                    const nuovi = (s.replacedBy || []).concat(s.updatedBy || []);
-                    let bottoni = '';
-                    nuovi.forEach(x => {
-                        bottoni += '<button class="btn btn-sm btn-outline-secondary me-1 mt-1" '
-                                 + 'data-rfc="' + escHtml(x) + '" data-ref="' + escHtml(s.rfc) + '" onclick="sorvCambi(this.dataset.rfc, this.dataset.ref)">'
+                    const newOnes = (s.replacedBy || []).concat(s.updatedBy || []);
+                    let buttons = '';
+                    newOnes.forEach(x => {
+                        buttons += '<button class="btn btn-sm btn-outline-secondary me-1 mt-1" '
+                                 + 'data-rfc="' + escHtml(x) + '" data-ref="' + escHtml(s.rfc) + '" onclick="watchChanges(this.dataset.rfc, this.dataset.ref)">'
                                  + '<i class="fas fa-list-check me-1" aria-hidden="true"></i>' + escHtml(t('sv.whatChanges', { rfc: x }))
                                  + '</button>';
                     });
                     h += '<tr class="upd-cell"><td><code class="small">RFC ' + updEsc(s.rfc) + '</code></td>'
                        + '<td class="small">' + updEsc(s.governs) + '</td>'
-                       + '<td class="small">' + icona + ' '
+                       + '<td class="small">' + iconName + ' '
                        + updEsc(s.read ? s.comment : (s.problem || t('up.notRead')))
-                       + bottoni + '</td></tr>';
+                       + buttons + '</td></tr>';
                 });
                 h += '</tbody></table></div>'
                    + '<div class="small text-muted mb-3">' + t('sv.sourceNote.html', { source: updEsc(r.source) }) + '</div>';
@@ -65,7 +65,7 @@
                            + '<td class="small text-muted">&mdash;</td></tr>';
                         return;
                     }
-                    const icona = i.urgency === 2 ? '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i>'
+                    const iconName = i.urgency === 2 ? '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i>'
                                 : i.urgency === 1 ? '<i class="fas fa-triangle-exclamation text-warning" aria-hidden="true"></i>'
                                 : i.urgency === 3 ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i>'
                                                   : '<i class="fas fa-check-circle text-success" aria-hidden="true"></i>';
@@ -73,7 +73,7 @@
                        + '<code class="small">' + updEsc(i.path) + '</code></td>'
                        + '<td class="small"><code>' + updEsc(i.version) + '</code>'
                        + (i.lts ? ' <span class="badge bg-secondary">LTS</span>' : '') + '</td>'
-                       + '<td class="small">' + icona + ' ' + updEsc(i.comment)
+                       + '<td class="small">' + iconName + ' ' + updEsc(i.comment)
                        + '<div class="text-muted">' + updEsc(i.whatItMeans) + '</div></td></tr>';
                 });
                 h += '</tbody></table></div>';
@@ -89,10 +89,10 @@
         // Scarica il documento nuovo ed estrae cio' che dice di se stesso. Il testo e'
         // copiato alla lettera: un riassunto di un elenco di cambiamenti e' il modo migliore
         // per perdere proprio la riga che contava.
-        async function sorvCambi(rfc, riferimento) {
+        async function watchChanges(rfc, reference) {
             const el = document.getElementById('sorv-changes');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sv.downloadingRfc', { rfc: rfc }));
-            const r = await updApi('watch_changes', { rfc: rfc, reference: riferimento || rfc });
+            const r = await updApi('watch_changes', { rfc: rfc, reference: reference || rfc });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
                 return;
@@ -104,19 +104,19 @@
             // Prima le righe che nominano qualcosa che il pannello usa davvero: sono quelle
             // da cui cominciare. L'elenco intero resta sotto, perche' l'incrocio non e' un
             // filtro completo e presentarlo come tale farebbe saltare la riga che conta.
-            const tocca = r.concernsYou || [];
+            const touches = r.concernsYou || [];
             if (r.crossNote)
-                h += '<div class="alert alert-' + (tocca.length ? 'warning' : 'secondary')
+                h += '<div class="alert alert-' + (touches.length ? 'warning' : 'secondary')
                    + ' py-2 small mb-2"><i class="fas fa-crosshairs me-1" aria-hidden="true"></i>'
                    + updEsc(r.crossNote) + '</div>';
-            if (tocca.length) {
+            if (touches.length) {
                 h += '<div class="table-responsive mb-2"><table class="table table-sm mb-0"><tbody>';
-                tocca.forEach(voce => {
-                    const i = voce.indexOf('  ->  ');
-                    const chiavi = i < 0 ? '' : voce.substring(0, i);
-                    const line = i < 0 ? voce : voce.substring(i + 6);
+                touches.forEach(entryItem => {
+                    const i = entryItem.indexOf('  ->  ');
+                    const keys = i < 0 ? '' : entryItem.substring(0, i);
+                    const line = i < 0 ? entryItem : entryItem.substring(i + 6);
                     h += '<tr class="upd-cell"><td style="width:12rem" class="small"><code>'
-                       + updEsc(chiavi) + '</code></td><td class="small">' + updEsc(line) + '</td></tr>';
+                       + updEsc(keys) + '</code></td><td class="small">' + updEsc(line) + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
             }

@@ -495,15 +495,15 @@
 
         // Distingue "nessuno ha attaccato" da "la jail non vede niente": a schermo sono lo
         // stesso zero, ma vogliono dire il contrario. Legge e basta.
-        async function checkJailFilter(nome) {
-            const box = document.getElementById('filtro-' + nome);
+        async function checkJailFilter(entryName) {
+            const box = document.getElementById('filtro-' + entryName);
             if (!box) return;
             box.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.regexRunning')) + '</span>';
             try {
                 const res = await fetch('/api/fail2ban', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'verify_filter', jail: nome,
+                    body: JSON.stringify({ action: 'verify_filter', jail: entryName,
                         csrf_token: document.getElementById('csrf_token').value })
                 });
                 const r = await res.json();
