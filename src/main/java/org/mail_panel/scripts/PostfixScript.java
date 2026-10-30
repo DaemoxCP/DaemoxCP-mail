@@ -63,13 +63,18 @@ public class PostfixScript {
             echo "[1/6] Installing Postfix..."
             pkg install -y postfix-mysql
 
-            # Disable sendmail completely
-            echo "[2/6] Disabling sendmail..."
+            # Disable sendmail completely, and make Postfix the local MTA instead of dma
+            echo "[2/6] Disabling sendmail, Postfix becomes the local MTA..."
             sysrc sendmail_enable="NO"
             sysrc sendmail_submit_enable="NO"
             sysrc sendmail_outbound_enable="NO"
             sysrc sendmail_msp_queue_enable="NO"
             service sendmail stop 2>/dev/null || true
+
+            """
+            // Postfix come MTA locale: senza, la posta di sistema esce da dma. Lo stesso pezzo
+            // e' in FullMailServerScript e FullMailStackScript.
+            + LocalMtaScript.SHELL + """
 
             # Create mail directories
             echo "[3/6] Creating mail directories..."
@@ -99,9 +104,30 @@ public class PostfixScript {
 # Basic settings
 myhostname = localhost
 mydomain = localhost
-myorigin = $mydomain
+# Indirizzi senza dominio (root, postmaster: cron, periodic) consegnati qui, e solo localhost
+# e' locale. Esplicito perche' il pannello riscrive myhostname e mydomain con il nome vero
+# del server: con $mydomain la posta di sistema finirebbe a quel nome e rimbalzerebbe, con
+# il mydestination predefinito quel nome diventerebbe locale e raggiungibile da Internet.
+# Il perche' misurato e' in FullMailServerScript, accanto allo stesso myorigin.
+myorigin = localhost
+mydestination = localhost
+# Quando la posta di sistema esce dalla macchina (root inoltrato a un indirizzo esterno, un
+# MAILTO di cron) root@localhost diventa root@<nome del server>: localhost i server altrui lo
+# rifiutano. Solo nel client SMTP, quindi la consegna locale non cambia; $myhostname si legge
+# a ogni uso, e segue il nome che il pannello scrive.
+smtp_generic_maps = inline:{ @localhost=@$myhostname }
 inet_interfaces = all
 inet_protocols = all
+
+# Solo questa macchina spedisce senza autenticarsi. Senza compatibility_level Postfix usa il
+# livello 0, dove mynetworks_style = subnet: tutta la rete del server diventava fidata, cioe'
+# un relay aperto a chiunque le stia accanto (misurato con postconf -c sulla VM:
+# mynetworks = 192.168.64.0/24 ... e a quel livello nessuna restrizione sul relay). Gli stessi
+# valori dell'installazione completa.
+compatibility_level = 3.6
+mynetworks = 127.0.0.0/8 [::1]/128
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, reject_non_fqdn_recipient
 
 # Virtual mailbox settings (will be configured by panel)
 virtual_mailbox_base = /var/vmail

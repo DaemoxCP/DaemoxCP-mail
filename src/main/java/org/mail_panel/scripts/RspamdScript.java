@@ -161,6 +161,10 @@ MILTERCONF
 
             # Enable and start
             echo "[5/5] Enabling service..."
+            """
+            // Il risolutore ricorsivo locale, prima che rspamd parta: senza, le liste di Spamhaus
+            // non rispondono. Lo stesso pezzo e' in FullMailServerScript e FullMailStackScript.
+            + LocalResolverScript.SHELL + """
             sysrc rspamd_enable="YES"
             service rspamd start
 
