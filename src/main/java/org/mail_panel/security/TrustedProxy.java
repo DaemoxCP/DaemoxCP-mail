@@ -77,14 +77,14 @@ public final class TrustedProxy {
      * La lista non e' cambiata da dicembre — e' stata verificata, che e' un'altra cosa e vale
      * la pena distinguerla: "scritta allora" non dice se sia ancora giusta.
      */
-    public static final String AGGIORNATA_IL = "2026-09-02";
+    public static final String UPDATED_ON = "2026-09-02";
 
     /** Gli ranges compilati dentro il pannello: quelli da cui si accettano le
      *  intestazioni di inoltro. Si espongono per poterli MOSTRARE, non solo confrontare:
      *  una lista che decide di chi fidarsi e che nessuno puo' leggere e' una regola segreta. */
     public static List<String> cloudflareV4() { return List.copyOf(CLOUDFLARE_V4); }
     public static List<String> cloudflareV6() { return List.copyOf(CLOUDFLARE_V6); }
-    public static List<String> intervalliLocali() { return List.copyOf(PRIVATE_RANGES); }
+    public static List<String> localIntervals() { return List.copyOf(PRIVATE_RANGES); }
 
     /**
      * Ritorna true se l'IP appartiene a un range Cloudflare o privato/loopback.

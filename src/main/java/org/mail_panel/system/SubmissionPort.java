@@ -30,12 +30,12 @@ import java.util.List;
  */
 public class SubmissionPort {
 
-    public static final String RESTRIZIONE = "smtpd_client_restrictions=permit_sasl_authenticated,reject";
+    public static final String RESTRICTION = "smtpd_client_restrictions=permit_sasl_authenticated,reject";
     private static final String MASTER = "/usr/local/etc/postfix/master.cf";
-    private static final String COPIA = "/var/db/mailpanel/master.cf-before-465";
+    private static final String COPY = "/var/db/mailpanel/master.cf-before-465";
 
     /** I nomi con cui la porta 465 puo' comparire in master.cf. */
-    private static final List<String> NOMI = List.of("smtps", "submissions");
+    private static final List<String> NAMES = List.of("smtps", "submissions");
 
     private SubmissionPort() {}
 
@@ -43,14 +43,14 @@ public class SubmissionPort {
      * La parte che si puo' provare senza server
      * =================================================================== */
 
-    public enum Esito { AGGIUNTA, GIA_PRESENTE, VOCE_ASSENTE }
+    public enum Outcome { AGGIUNTA, GIA_PRESENTE, VOCE_ASSENTE }
 
-    public static class Modifica {
-        public Esito esito;
-        public String contenuto;   // il file nuovo, solo quando esito == AGGIUNTA
-        public String voce;        // il nome trovato: smtps oppure submissions
-        public int riga;           // dove comincia la voce, per poterlo dire
-        public String gia;         // la restrizione gia' presente, quando c'e'
+    public static class Change {
+        public Outcome outcome;
+        public String content;   // il file nuovo, solo quando esito == AGGIUNTA
+        public String entry;        // il nome trovato: smtps oppure submissions
+        public int line;           // dove comincia la voce, per poterlo dire
+        public String already;         // la restrizione gia' presente, quando c'e'
     }
 
     /**
@@ -61,49 +61,49 @@ public class SubmissionPort {
      * comincia con '#' e' commentata. Cercare la parola "smtps" nel testo prenderebbe anche
      * "-o syslog_name=postfix/smtps", che e' un'opzione, non una voce.
      */
-    public static Modifica aggiungiRestrizione(String masterCf) {
-        Modifica m = new Modifica();
-        if (masterCf == null) { m.esito = Esito.VOCE_ASSENTE; return m; }
+    public static Change addRestriction(String masterCf) {
+        Change m = new Change();
+        if (masterCf == null) { m.outcome = Outcome.VOCE_ASSENTE; return m; }
 
-        String[] righe = masterCf.split("\n", -1);
-        int inizio = -1;
-        for (int i = 0; i < righe.length; i++) {
-            String r = righe[i];
+        String[] lines = masterCf.split("\n", -1);
+        int start = -1;
+        for (int i = 0; i < lines.length; i++) {
+            String r = lines[i];
             if (r.isEmpty() || Character.isWhitespace(r.charAt(0))) continue;  // opzione
             if (r.startsWith("#")) continue;                                   // commentata
-            String primo = r.trim().split("\\s+")[0];
-            if (NOMI.contains(primo)) { inizio = i; m.voce = primo; break; }
+            String first = r.trim().split("\\s+")[0];
+            if (NAMES.contains(first)) { start = i; m.entry = first; break; }
         }
-        if (inizio < 0) { m.esito = Esito.VOCE_ASSENTE; return m; }
-        m.riga = inizio + 1;
+        if (start < 0) { m.outcome = Outcome.VOCE_ASSENTE; return m; }
+        m.line = start + 1;
 
         // Le opzioni della voce: le righe indentate che seguono, fino alla prossima voce.
-        int fine = inizio + 1;
-        while (fine < righe.length && !righe[fine].isEmpty()
-                && Character.isWhitespace(righe[fine].charAt(0))) fine++;
+        int end = start + 1;
+        while (end < lines.length && !lines[end].isEmpty()
+                && Character.isWhitespace(lines[end].charAt(0))) end++;
 
         // Si accettano ENTRAMBE le forme. Dei due script di installazione del pannello, uno
         // scrive "smtpd_recipient_restrictions=permit_sasl_authenticated,reject" su questa
         // voce e l'altro non scrive niente: cercare solo la forma "client" avrebbe fatto
         // aggiungere una riga ridondante a un server gia' a posto, e avrebbe fatto dire al
         // pannello che la porta era aperta quando non lo era.
-        for (int i = inizio; i < fine; i++) {
-            String compatta = righe[i].replace(" ", "");
-            if (compatta.contains("smtpd_client_restrictions=")
-                    || compatta.contains("smtpd_recipient_restrictions=")) {
-                m.esito = Esito.GIA_PRESENTE;
-                m.gia = righe[i].trim();
+        for (int i = start; i < end; i++) {
+            String compact = lines[i].replace(" ", "");
+            if (compact.contains("smtpd_client_restrictions=")
+                    || compact.contains("smtpd_recipient_restrictions=")) {
+                m.outcome = Outcome.GIA_PRESENTE;
+                m.already = lines[i].trim();
                 return m;
             }
         }
 
-        List<String> fuori = new ArrayList<>();
-        for (int i = 0; i < fine; i++) fuori.add(righe[i]);
-        fuori.add("  -o " + RESTRIZIONE);
-        for (int i = fine; i < righe.length; i++) fuori.add(righe[i]);
+        List<String> outside = new ArrayList<>();
+        for (int i = 0; i < end; i++) outside.add(lines[i]);
+        outside.add("  -o " + RESTRICTION);
+        for (int i = end; i < lines.length; i++) outside.add(lines[i]);
 
-        m.esito = Esito.AGGIUNTA;
-        m.contenuto = String.join("\n", fuori);
+        m.outcome = Outcome.AGGIUNTA;
+        m.content = String.join("\n", outside);
         return m;
     }
 
@@ -112,31 +112,31 @@ public class SubmissionPort {
      * =================================================================== */
 
     /** Legge lo stato senza cambiare niente. */
-    public static JSONObject stato() {
+    public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         try {
             Path p = Path.of(MASTER);
             if (!Files.isReadable(p))
                 return new JSONObject().put("success", false)
                         .put("error", I18n.tr("server.subm.cannotRead", java.util.Map.of("file", String.valueOf(MASTER))));
-            Modifica m = aggiungiRestrizione(Files.readString(p));
-            r.put("voce", m.voce == null ? JSONObject.NULL : m.voce)
-             .put("riga", m.riga)
-             .put("stato", m.esito.name())
-             .put("restrizione", RESTRIZIONE);
+            Change m = addRestriction(Files.readString(p));
+            r.put("voce", m.entry == null ? JSONObject.NULL : m.entry)
+             .put("riga", m.line)
+             .put("stato", m.outcome.name())
+             .put("restrizione", RESTRICTION);
 
             // La verifica che non si da' per scontata: se le restrizioni venissero valutate
             // PRIMA dell'autenticazione, la riga rifiuterebbe anche gli utenti legittimi.
-            Ris d = esegui("postconf", "-h", "smtpd_delay_reject");
-            String valore = d.output.trim();
-            r.put("delayReject", valore).put("delayRejectLetto", d.codice == 0);
-            r.put("sicuro", d.codice == 0 && valore.equalsIgnoreCase("yes"));
+            RunResult d = run("postconf", "-h", "smtpd_delay_reject");
+            String value = d.output.trim();
+            r.put("delayReject", value).put("delayRejectLetto", d.code == 0);
+            r.put("sicuro", d.code == 0 && value.equalsIgnoreCase("yes"));
 
-            switch (m.esito) {
-                case GIA_PRESENTE -> r.put("nota", I18n.tr("server.subm.already", java.util.Map.of("svc", String.valueOf(m.voce), "line", String.valueOf(m.gia))))
-                        .put("gia", m.gia);
+            switch (m.outcome) {
+                case GIA_PRESENTE -> r.put("nota", I18n.tr("server.subm.already", java.util.Map.of("svc", String.valueOf(m.entry), "line", String.valueOf(m.already))))
+                        .put("gia", m.already);
                 case VOCE_ASSENTE -> r.put("nota", I18n.tr("server.subm.noEntry"));
-                case AGGIUNTA -> r.put("nota", I18n.tr("server.subm.acceptsUnauth", java.util.Map.of("svc", String.valueOf(m.voce), "line", String.valueOf(m.riga))));
+                case AGGIUNTA -> r.put("nota", I18n.tr("server.subm.acceptsUnauth", java.util.Map.of("svc", String.valueOf(m.entry), "line", String.valueOf(m.line))));
             }
             return r;
         } catch (Exception e) {
@@ -148,17 +148,17 @@ public class SubmissionPort {
      * Applica la modifica. Copia di sicurezza, scrittura, postfix check, reload, e se
      * qualcosa non torna si rimette il file di prima e si ricarica di nuovo.
      */
-    public static JSONObject applica() {
+    public static JSONObject apply() {
         JSONObject r = new JSONObject();
         try {
-            JSONObject st = stato();
+            JSONObject st = state();
             if (!st.optBoolean("success", false))
                 return r.put("success", false).put("error", st.optString("error", I18n.tr("server.subm.stateUnreadable")));
 
-            String stato = st.optString("stato", "");
-            if ("GIA_PRESENTE".equals(stato))
+            String state = st.optString("stato", "");
+            if ("GIA_PRESENTE".equals(state))
                 return r.put("success", true).put("giaFatto", true).put("nota", st.optString("nota"));
-            if ("VOCE_ASSENTE".equals(stato))
+            if ("VOCE_ASSENTE".equals(state))
                 return r.put("success", false).put("error", st.optString("nota"));
 
             // Il controllo che vale piu' di tutti: senza delay_reject a "yes" la riga
@@ -170,61 +170,61 @@ public class SubmissionPort {
                                 : I18n.tr("server.subm.delayRejectUnread", java.util.Map.of("v", String.valueOf(st.optString("delayReject", "?")))));
 
             Path p = Path.of(MASTER);
-            String prima = Files.readString(p);
-            Modifica m = aggiungiRestrizione(prima);
-            if (m.esito != Esito.AGGIUNTA)
-                return r.put("success", false).put("error", I18n.tr("server.subm.changed", java.util.Map.of("state", String.valueOf(m.esito.name()))));
+            String before = Files.readString(p);
+            Change m = addRestriction(before);
+            if (m.outcome != Outcome.AGGIUNTA)
+                return r.put("success", false).put("error", I18n.tr("server.subm.changed", java.util.Map.of("state", String.valueOf(m.outcome.name()))));
 
-            Path copia = Path.of(COPIA);
-            Files.createDirectories(copia.getParent());
-            Files.writeString(copia, prima);
-            r.put("copia", copia.toString()).put("voce", m.voce).put("riga", m.riga);
+            Path copy = Path.of(COPY);
+            Files.createDirectories(copy.getParent());
+            Files.writeString(copy, before);
+            r.put("copia", copy.toString()).put("voce", m.entry).put("riga", m.line);
 
-            Files.writeString(p, m.contenuto);
+            Files.writeString(p, m.content);
 
-            Ris check = esegui("postfix", "check");
-            if (check.codice != 0) {
-                Files.writeString(p, prima);
+            RunResult check = run("postfix", "check");
+            if (check.code != 0) {
+                Files.writeString(p, before);
                 return r.put("success", false).put("ripristinato", true)
                         .put("error", I18n.tr("server.subm.checkFailed", java.util.Map.of("out", String.valueOf(check.output.trim()))));
             }
 
-            Ris reload = esegui("postfix", "reload");
-            if (reload.codice != 0) {
-                Files.writeString(p, prima);
-                esegui("postfix", "reload");
+            RunResult reload = run("postfix", "reload");
+            if (reload.code != 0) {
+                Files.writeString(p, before);
+                run("postfix", "reload");
                 return r.put("success", false).put("ripristinato", true)
                         .put("error", I18n.tr("server.subm.reloadFailed", java.util.Map.of("out", String.valueOf(reload.output.trim()))));
             }
 
             // Non basta che i comandi non abbiano protestato: si rilegge e si guarda.
-            Modifica dopo = aggiungiRestrizione(Files.readString(p));
-            if (dopo.esito != Esito.GIA_PRESENTE)
+            Change after = addRestriction(Files.readString(p));
+            if (after.outcome != Outcome.GIA_PRESENTE)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.subm.notPresent", java.util.Map.of("file", String.valueOf(MASTER))));
 
-            Ris m465 = esegui("postconf", "-M", m.voce + "/inet");
+            RunResult m465 = run("postconf", "-M", m.entry + "/inet");
             r.put("vocePostfix", m465.output.trim());
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.subm.done", java.util.Map.of("svc", String.valueOf(m.voce), "copy", String.valueOf(copia))));
+                    .put("nota", I18n.tr("server.subm.done", java.util.Map.of("svc", String.valueOf(m.entry), "copy", String.valueOf(copy))));
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", I18n.tr("server.subm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
-    private record Ris(int codice, String output) {}
+    private record RunResult(int code, String output) {}
 
-    private static Ris esegui(String... cmd) {
+    private static RunResult run(String... cmd) {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            return new Ris(p.waitFor(), out);
+            return new RunResult(p.waitFor(), out);
         } catch (Exception e) {
-            return new Ris(-1, String.valueOf(e.getMessage()));
+            return new RunResult(-1, String.valueOf(e.getMessage()));
         }
     }
 }

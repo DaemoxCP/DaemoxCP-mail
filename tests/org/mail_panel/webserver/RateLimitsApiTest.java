@@ -36,7 +36,7 @@ import java.util.concurrent.Executors;
  * did not know: no mailbox limit could be created or deleted); everything in the audit log.
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RateLimitsApiTest
  */
 public class RateLimitsApiTest {

@@ -18,15 +18,15 @@ public class RestartServicesTest {
     private static int failures = 0;
 
     public static void main(String[] args) {
-        List<String> clamav = UpdateManager.serviziDaRiavviare("clamav");
+        List<String> clamav = UpdateManager.servicesToRestart("clamav");
         check("clamav: si riavvia clamd " + clamav, clamav.contains("clamav_clamd"));
         check("clamav: e anche freshclam", clamav.contains("clamav_freshclam"));
         check("clamav: una volta ciascuno", clamav.stream().distinct().count() == clamav.size());
-        check("nginx: solo nginx " + UpdateManager.serviziDaRiavviare("nginx"),
-                UpdateManager.serviziDaRiavviare("nginx").contains("nginx")
-                && !UpdateManager.serviziDaRiavviare("nginx").contains("clamav_freshclam"));
+        check("nginx: solo nginx " + UpdateManager.servicesToRestart("nginx"),
+                UpdateManager.servicesToRestart("nginx").contains("nginx")
+                && !UpdateManager.servicesToRestart("nginx").contains("clamav_freshclam"));
         check("un pacchetto che non fa girare niente: nessun servizio diretto",
-                !UpdateManager.serviziDaRiavviare("xorgproto").contains("clamav_clamd"));
+                !UpdateManager.servicesToRestart("xorgproto").contains("clamav_clamd"));
         System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
         if (failures > 0) System.exit(1);
     }

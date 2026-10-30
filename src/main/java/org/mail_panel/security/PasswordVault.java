@@ -210,15 +210,15 @@ public class PasswordVault {
     // < > / ~ e l'apice inverso: una password generata con "Tutti i caratteri" il pannello stesso
     // la rifiutava in creazione ("Password non valida") o la scartava in modifica, in media sette
     // volte su dieci. tests/.../PasswordGeneratorTest lo verifica per ogni tipo e combinazione.
-    private static final String MINUSCOLE = "abcdefghijklmnopqrstuvwxyz";
-    private static final String MAIUSCOLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    private static final String CIFRE = "0123456789";
-    private static final String SIMBOLI = org.mail_panel.webserver.SecurityUtils.PASSWORD_SIMBOLI;
+    private static final String LOWERCASE = "abcdefghijklmnopqrstuvwxyz";
+    private static final String UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private static final String DIGITS = "0123456789";
+    private static final String SYMBOLS = org.mail_panel.webserver.SecurityUtils.PASSWORD_SYMBOLS;
     // "easy_to_read": niente caratteri che si confondono (0/O, 1/l/I), simboli comodi per shell/JSON/CSV.
-    private static final String MINUSCOLE_CHIARE = "abcdefghijkmnpqrstuvwxyz";    // no l, o
-    private static final String MAIUSCOLE_CHIARE = "ABCDEFGHJKLMNPQRSTUVWXYZ";    // no I, O
-    private static final String CIFRE_CHIARE = "23456789";                        // no 0, 1
-    private static final String SIMBOLI_CHIARI = "!@#%^*()_-+=[]{}:;,.?";
+    private static final String CLEAR_LOWERCASE = "abcdefghijkmnpqrstuvwxyz";    // no l, o
+    private static final String CLEAR_UPPERCASE = "ABCDEFGHJKLMNPQRSTUVWXYZ";    // no I, O
+    private static final String CLEAR_DIGITS = "23456789";                        // no 0, 1
+    private static final String CLEAR_SYMBOLS = "!@#%^*()_-+=[]{}:;,.?";
 
     /**
      * Gli insiemi di caratteri attivi per un tipo e delle scelte, nell'ordine in cui il generatore
@@ -228,44 +228,44 @@ public class PasswordVault {
      * @param type "easy_to_say" (solo lettere: cifre e simboli ignorati), "easy_to_read"
      *             (niente caratteri ambigui) o "all_chars"; qualsiasi altro valore vale "easy_to_read"
      */
-    static java.util.List<String> insiemi(String type, boolean includeLower, boolean includeUpper,
+    static java.util.List<String> sets(String type, boolean includeLower, boolean includeUpper,
                                           boolean includeDigits, boolean includeSymbols) {
         if (type == null) type = "easy_to_read";
         String lower, upper, digits, symbols;
         switch (type) {
             case "easy_to_say" -> {
-                lower = MINUSCOLE; upper = MAIUSCOLE; digits = ""; symbols = "";
+                lower = LOWERCASE; upper = UPPERCASE; digits = ""; symbols = "";
                 includeDigits = false;
                 includeSymbols = false;
             }
-            case "all_chars" -> { lower = MINUSCOLE; upper = MAIUSCOLE; digits = CIFRE; symbols = SIMBOLI; }
-            default -> { lower = MINUSCOLE_CHIARE; upper = MAIUSCOLE_CHIARE; digits = CIFRE_CHIARE; symbols = SIMBOLI_CHIARI; }
+            case "all_chars" -> { lower = LOWERCASE; upper = UPPERCASE; digits = DIGITS; symbols = SYMBOLS; }
+            default -> { lower = CLEAR_LOWERCASE; upper = CLEAR_UPPERCASE; digits = CLEAR_DIGITS; symbols = CLEAR_SYMBOLS; }
         }
         // Nessuna categoria scelta: ripiego ragionevole, tutte quelle che il tipo ammette.
         if (!includeLower && !includeUpper && !includeDigits && !includeSymbols) {
             includeLower = includeUpper = true;
             if (!"easy_to_say".equals(type)) { includeDigits = includeSymbols = true; }
         }
-        java.util.List<String> attivi = new java.util.ArrayList<>();
-        if (includeLower)   attivi.add(lower);
-        if (includeUpper)   attivi.add(upper);
-        if (includeDigits)  attivi.add(digits);
-        if (includeSymbols) attivi.add(symbols);
-        return attivi;
+        java.util.List<String> active = new java.util.ArrayList<>();
+        if (includeLower)   active.add(lower);
+        if (includeUpper)   active.add(upper);
+        if (includeDigits)  active.add(digits);
+        if (includeSymbols) active.add(symbols);
+        return active;
     }
 
     /** Quanti caratteri diversi puo' contenere una password con queste scelte (per la stima dell'entropia). */
-    public static int dimensionePool(String type, boolean includeLower, boolean includeUpper,
+    public static int poolSize(String type, boolean includeLower, boolean includeUpper,
                                      boolean includeDigits, boolean includeSymbols) {
         int n = 0;
-        for (String s : insiemi(type, includeLower, includeUpper, includeDigits, includeSymbols)) n += s.length();
+        for (String s : sets(type, includeLower, includeUpper, includeDigits, includeSymbols)) n += s.length();
         return n;
     }
 
     /**
      * Generatore password configurabile.
      *
-     * @param length      lunghezza desiderata, riportata dentro SecurityUtils.PASSWORD_CASELLA_MIN..128: il
+     * @param length      lunghezza desiderata, riportata dentro SecurityUtils.MAILBOX_PASSWORD_MIN..128: il
      *                    generatore serve alle caselle, e una password piu' corta il pannello non la accetterebbe
      * @param type        "easy_to_say"  → solo lettere (lowercase+uppercase), no numeri/simboli — facile da dettare a voce
      *                    "easy_to_read" → caratteri "safe" (no ambigui 0/O/1/l/I, no simboli problematici)
@@ -278,12 +278,12 @@ public class PasswordVault {
      */
     public String generatePassword(int length, String type, boolean includeLower, boolean includeUpper,
                                     boolean includeDigits, boolean includeSymbols) {
-        if (length < org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN)
-            length = org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN;
+        if (length < org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN)
+            length = org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN;
         if (length > org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX) length = org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX;
 
-        // Insiemi attivi (almeno uno, garantito da insiemi()) e pool completo
-        java.util.List<String> activeSets = insiemi(type, includeLower, includeUpper, includeDigits, includeSymbols);
+        // Insiemi attivi (almeno uno, garantito da sets()) e pool completo
+        java.util.List<String> activeSets = sets(type, includeLower, includeUpper, includeDigits, includeSymbols);
         String allPool = String.join("", activeSets);
 
         char[] chars = new char[length];

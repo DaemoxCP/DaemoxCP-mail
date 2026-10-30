@@ -15,61 +15,61 @@ import java.time.format.DateTimeFormatter;
 public class ReportScheduleTest {
 
     private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    private static final LocalDateTime ADESSO = LocalDateTime.of(2026, 9, 3, 18, 0);
-    private static int falliti = 0;
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 3, 18, 0);
+    private static int failed = 0;
 
-    private static String oreFa(int ore) { return ADESSO.minusHours(ore).format(ISO); }
+    private static String hoursAgo(int hours) { return NOW.minusHours(hours).format(ISO); }
 
     public static void main(String[] args) {
         // --- Il caso che si e' rotto in produzione ---
         // Settimanale, ultimo invio RIUSCITO otto giorni fa, ultimo tentativo fallito un minuto
         // fa. Senza la fix qui si riprovava, e si sarebbe riprovato al tick dopo, e al
         // tick dopo ancora, indefinitamente.
-        vero("dopo un fallimento non riprova subito",
-            !PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), oreFa(0), "fallito: auth", ADESSO));
-        vero("non riprova nemmeno dopo 5 ore",
-            !PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), oreFa(5), "fallito: auth", ADESSO));
+        real("dopo un fallimento non riprova subito",
+            !PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(0), "fallito: auth", NOW));
+        real("non riprova nemmeno dopo 5 ore",
+            !PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(5), "fallito: auth", NOW));
         // Ma non deve nemmeno smettere per sempre: dopo la pausa si riprova.
-        vero("dopo 6 ore riprova",
-            PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), oreFa(6), "fallito: auth", ADESSO));
-        vero("dopo 7 ore riprova",
-            PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), oreFa(7), "fallito: auth", ADESSO));
+        real("dopo 6 ore riprova",
+            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(6), "fallito: auth", NOW));
+        real("dopo 7 ore riprova",
+            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(7), "fallito: auth", NOW));
 
         // --- La pausa NON deve rallentare il caso normale ---
-        vero("ultimo esito riuscito: parte come prima",
-            PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), oreFa(0), "riuscito", ADESSO));
-        vero("mai inviato: parte",
-            PeriodicReport.eIlMomento("settimanale", "8", "", "", "", ADESSO));
-        vero("settimanale, 3 giorni fa: NON parte",
-            !PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 3), "", "", ADESSO));
-        vero("giornaliero, 21 ore fa: parte",
-            PeriodicReport.eIlMomento("giornaliero", "8", oreFa(21), "", "", ADESSO));
-        vero("mensile, 10 giorni fa: NON parte",
-            !PeriodicReport.eIlMomento("mensile", "8", oreFa(24 * 10), "", "", ADESSO));
-        vero("prima dell'ora impostata: NON parte",
-            !PeriodicReport.eIlMomento("settimanale", "20", oreFa(24 * 8), "", "", ADESSO));
+        real("ultimo esito riuscito: parte come prima",
+            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(0), "riuscito", NOW));
+        real("mai inviato: parte",
+            PeriodicReport.isTheMoment("settimanale", "8", "", "", "", NOW));
+        real("settimanale, 3 giorni fa: NON parte",
+            !PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 3), "", "", NOW));
+        real("giornaliero, 21 ore fa: parte",
+            PeriodicReport.isTheMoment("giornaliero", "8", hoursAgo(21), "", "", NOW));
+        real("mensile, 10 giorni fa: NON parte",
+            !PeriodicReport.isTheMoment("mensile", "8", hoursAgo(24 * 10), "", "", NOW));
+        real("prima dell'ora impostata: NON parte",
+            !PeriodicReport.isTheMoment("settimanale", "20", hoursAgo(24 * 8), "", "", NOW));
 
         // --- Un dato illeggibile non deve bloccare per sempre ---
         // La pausa esiste per non martellare un server altrui, non per zittire il rapporto:
         // se la data del tentativo non si sa leggere, si procede invece di restare fermi.
-        vero("data del tentativo illeggibile: non blocca",
-            PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), "boh", "fallito: auth", ADESSO));
-        vero("tentativo mai registrato: non blocca",
-            PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), "", "fallito: auth", ADESSO));
-        vero("esito assente: non blocca",
-            PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), oreFa(0), "", ADESSO));
+        real("data del tentativo illeggibile: non blocca",
+            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), "boh", "fallito: auth", NOW));
+        real("tentativo mai registrato: non blocca",
+            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), "", "fallito: auth", NOW));
+        real("esito assente: non blocca",
+            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), hoursAgo(0), "", NOW));
 
         // --- Orologio andato indietro ---
-        vero("tentativo nel futuro: non blocca",
-            PeriodicReport.eIlMomento("settimanale", "8", oreFa(24 * 8), ADESSO.plusHours(3).format(ISO),
-                "fallito: auth", ADESSO));
+        real("tentativo nel futuro: non blocca",
+            PeriodicReport.isTheMoment("settimanale", "8", hoursAgo(24 * 8), NOW.plusHours(3).format(ISO),
+                "fallito: auth", NOW));
 
-        System.out.println(falliti == 0 ? "\nTUTTO OK" : "\n" + falliti + " PROVE FALLITE");
-        if (falliti > 0) System.exit(1);
+        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        if (failed > 0) System.exit(1);
     }
 
-    private static void vero(String nome, boolean ok) {
-        System.out.println((ok ? "  ok   " : "  NO   ") + nome);
-        if (!ok) falliti++;
+    private static void real(String name, boolean ok) {
+        System.out.println((ok ? "  ok   " : "  NO   ") + name);
+        if (!ok) failed++;
     }
 }

@@ -767,7 +767,7 @@ $config['mailpanel_sso_token_expiry'] = %d;
     private String executeCommand(String command) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
-        org.mail_panel.util.Shell.applicaPath(pb);
+        org.mail_panel.util.Shell.applyPath(pb);
         pb.redirectErrorStream(true);
         Process process = pb.start();
 

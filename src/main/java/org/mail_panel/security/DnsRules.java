@@ -49,24 +49,24 @@ public final class DnsRules {
      *    spazio rompe le chiavi DKIM lunghe e non se ne accorge, perche' il record continua
      *    a "sembrare" giusto.
      */
-    public static List<String> recordTxt(String uscitaDig) {
-        List<String> fuori = new ArrayList<>();
-        if (uscitaDig == null) return fuori;
-        for (String riga : uscitaDig.split("\n")) {
-            String t = riga.trim();
+    public static List<String> recordTxt(String digOutput) {
+        List<String> outside = new ArrayList<>();
+        if (digOutput == null) return outside;
+        for (String line : digOutput.split("\n")) {
+            String t = line.trim();
             if (t.isEmpty()) continue;
-            StringBuilder unito = new StringBuilder();
-            boolean dentro = false, viste = false;
+            StringBuilder joined = new StringBuilder();
+            boolean inside = false, seen = false;
             for (int i = 0; i < t.length(); i++) {
                 char c = t.charAt(i);
-                if (c == '\\' && dentro && i + 1 < t.length()) { unito.append(t.charAt(++i)); continue; }
-                if (c == '"') { dentro = !dentro; viste = true; continue; }
-                if (dentro) unito.append(c);
+                if (c == '\\' && inside && i + 1 < t.length()) { joined.append(t.charAt(++i)); continue; }
+                if (c == '"') { inside = !inside; seen = true; continue; }
+                if (inside) joined.append(c);
             }
-            String r = viste ? unito.toString() : t;
-            if (!r.isEmpty()) fuori.add(r);
+            String r = seen ? joined.toString() : t;
+            if (!r.isEmpty()) outside.add(r);
         }
-        return fuori;
+        return outside;
     }
 
     /**
@@ -82,8 +82,8 @@ public final class DnsRules {
      * Si riusa recordTxt, che gia' sa unire le stringhe multiple e togliere le virgolette:
      * due funzioni che fanno la stessa cosa sono due funzioni che un giorno divergono.
      */
-    public static String contenutoCloudflare(String grezzo) {
-        List<String> l = recordTxt(grezzo);
+    public static String cloudflareContent(String raw) {
+        List<String> l = recordTxt(raw);
         return l.isEmpty() ? "" : l.get(0);
     }
 
@@ -102,40 +102,40 @@ public final class DnsRules {
      * distrazione, e' la differenza fra le due specifiche.
      */
     public static List<String> soloSpf(List<String> record) {
-        List<String> fuori = new ArrayList<>();
-        if (record == null) return fuori;
+        List<String> outside = new ArrayList<>();
+        if (record == null) return outside;
         for (String r : record) {
             if (r == null) continue;
             String s = r.trim();
             String b = s.toLowerCase(Locale.ROOT);
-            if (b.equals("v=spf1") || b.startsWith("v=spf1 ")) fuori.add(s);
+            if (b.equals("v=spf1") || b.startsWith("v=spf1 ")) outside.add(s);
         }
-        return fuori;
+        return outside;
     }
 
     /** I termini di un record SPF, saltata la versione. */
     public static List<String> termini(String spf) {
-        List<String> fuori = new ArrayList<>();
-        if (spf == null) return fuori;
-        boolean primo = true;
+        List<String> outside = new ArrayList<>();
+        if (spf == null) return outside;
+        boolean first = true;
         for (String t : spf.trim().split("\\s+")) {
             if (t.isEmpty()) continue;
-            if (primo) { primo = false; continue; } // "v=spf1"
-            fuori.add(t);
+            if (first) { first = false; continue; } // "v=spf1"
+            outside.add(t);
         }
-        return fuori;
+        return outside;
     }
 
     /** Toglie il qualificatore iniziale (+ - ~ ?), che non fa parte del nome. */
-    public static String senzaQualificatore(String termine) {
+    public static String withoutQualifier(String termine) {
         if (termine == null || termine.isEmpty()) return "";
         char q = termine.charAt(0);
         return (q == '+' || q == '-' || q == '~' || q == '?') ? termine.substring(1) : termine;
     }
 
     /** Il nome del meccanismo o modificatore: la parte prima di ':', '=' o '/'. */
-    public static String nomeMeccanismo(String termine) {
-        String t = senzaQualificatore(termine);
+    public static String mechanismName(String termine) {
+        String t = withoutQualifier(termine);
         for (int i = 0; i < t.length(); i++) {
             char c = t.charAt(i);
             if (c == ':' || c == '=' || c == '/') return t.substring(0, i).toLowerCase(Locale.ROOT);
@@ -144,8 +144,8 @@ public final class DnsRules {
     }
 
     /** Il valore dopo ':' o '=', vuoto se il termine non ne ha. */
-    public static String valoreMeccanismo(String termine) {
-        String t = senzaQualificatore(termine);
+    public static String mechanismValue(String termine) {
+        String t = withoutQualifier(termine);
         for (int i = 0; i < t.length(); i++) {
             char c = t.charAt(i);
             if (c == ':' || c == '=') return t.substring(i + 1);
@@ -154,9 +154,9 @@ public final class DnsRules {
     }
 
     /** I termini che costano una ricerca DNS, §4.6.4. */
-    private static boolean costaUnaRicerca(String nome) {
-        return nome.equals("include") || nome.equals("a") || nome.equals("mx")
-            || nome.equals("ptr") || nome.equals("exists") || nome.equals("redirect");
+    private static boolean costsALookup(String name) {
+        return name.equals("include") || name.equals("a") || name.equals("mx")
+            || name.equals("ptr") || name.equals("exists") || name.equals("redirect");
     }
 
     /**
@@ -168,38 +168,38 @@ public final class DnsRules {
      * per totale direbbe "6 su 10, tutto bene" davanti a un record che in realta' e' gia'
      * oltre il limite: una verifica che rassicura sul falso e' peggio di nessuna verifica.
      */
-    public static int ricercheDnsDirette(String spf) {
+    public static int directDnsLookups(String spf) {
         int n = 0;
-        for (String t : termini(spf)) if (costaUnaRicerca(nomeMeccanismo(t))) n++;
+        for (String t : termini(spf)) if (costsALookup(mechanismName(t))) n++;
         return n;
     }
 
     /** Quanti termini portano dentro altre ricerche non conoscibili da qui. */
-    public static int quantiInclude(String spf) {
+    public static int includeCount(String spf) {
         int n = 0;
         for (String t : termini(spf)) {
-            String nome = nomeMeccanismo(t);
-            if (nome.equals("include") || nome.equals("redirect")) n++;
+            String name = mechanismName(t);
+            if (name.equals("include") || name.equals("redirect")) n++;
         }
         return n;
     }
 
     /** Il meccanismo c'e' come termine vero, non come pezzo di un'altra parola. */
-    public static boolean haMeccanismo(String spf, String nome) {
-        for (String t : termini(spf)) if (nomeMeccanismo(t).equals(nome)) return true;
+    public static boolean hasMechanism(String spf, String name) {
+        for (String t : termini(spf)) if (mechanismName(t).equals(name)) return true;
         return false;
     }
 
     /** Come si chiude il record: "-all", "~all", "?all", "+all" o null se non si chiude. */
-    public static String chiusura(String spf) {
-        String trovata = null;
+    public static String closing(String spf) {
+        String found = null;
         for (String t : termini(spf)) {
-            if (nomeMeccanismo(t).equals("all")) {
+            if (mechanismName(t).equals("all")) {
                 char q = t.isEmpty() ? '+' : t.charAt(0);
-                trovata = (q == '-' || q == '~' || q == '?' || q == '+') ? (q + "all") : "+all";
+                found = (q == '-' || q == '~' || q == '?' || q == '+') ? (q + "all") : "+all";
             }
         }
-        return trovata;
+        return found;
     }
 
     /**
@@ -207,19 +207,19 @@ public final class DnsRules {
      * Senza questo, "ip4:203.0.113.0/24" risulterebbe non contenere 203.0.113.7 e il
      * pannello direbbe "SPF non autorizza il server" davanti a un SPF perfettamente giusto.
      */
-    public static boolean ip4Copre(String spec, String ip) {
+    public static boolean ip4Covers(String spec, String ip) {
         if (spec == null || ip == null) return false;
-        String rete = spec, bit = "32";
+        String network = spec, bit = "32";
         int s = spec.indexOf('/');
-        if (s >= 0) { rete = spec.substring(0, s); bit = spec.substring(s + 1); }
-        long r = aNumero(rete), a = aNumero(ip);
+        if (s >= 0) { network = spec.substring(0, s); bit = spec.substring(s + 1); }
+        long r = aNumero(network), a = aNumero(ip);
         if (r < 0 || a < 0) return false;
         int p;
         try { p = Integer.parseInt(bit.trim()); } catch (Exception e) { return false; }
         if (p < 0 || p > 32) return false;
         if (p == 0) return true;
-        long maschera = (0xFFFFFFFFL << (32 - p)) & 0xFFFFFFFFL;
-        return (r & maschera) == (a & maschera);
+        long mask = (0xFFFFFFFFL << (32 - p)) & 0xFFFFFFFFL;
+        return (r & mask) == (a & mask);
     }
 
     private static long aNumero(String ip) {
@@ -238,62 +238,62 @@ public final class DnsRules {
     }
 
     /** L'SPF autorizza quell'IP con un ip4 esplicito (prefissi compresi). */
-    public static boolean autorizzaIp4(String spf, String ip) {
+    public static boolean authorizeIp4(String spf, String ip) {
         if (ip == null || ip.isBlank()) return false;
         for (String t : termini(spf)) {
-            if (!nomeMeccanismo(t).equals("ip4")) continue;
-            if (ip4Copre(valoreMeccanismo(t), ip)) return true;
+            if (!mechanismName(t).equals("ip4")) continue;
+            if (ip4Covers(mechanismValue(t), ip)) return true;
         }
         return false;
     }
 
-    public static class EsitoSpf {
-        public int quanti;
-        public boolean valido;
+    public static class SpfOutcome {
+        public int howMany;
+        public boolean valid;
         public String record;
-        public String problema;
-        public boolean autorizzaEsplicito, viaMx, viaA;
-        public int ricercheDirette, include;
-        public String chiusura;
+        public String problem;
+        public boolean explicitAuthorization, viaMx, viaA;
+        public int directLookups, include;
+        public String closing;
         public final List<String> warnings = new ArrayList<>();
     }
 
-    public static EsitoSpf analizzaSpf(List<String> recordTxt, String ipServer) {
-        EsitoSpf e = new EsitoSpf();
+    public static SpfOutcome analyzeSpf(List<String> recordTxt, String ipServer) {
+        SpfOutcome e = new SpfOutcome();
         List<String> spf = soloSpf(recordTxt);
-        e.quanti = spf.size();
+        e.howMany = spf.size();
 
-        if (e.quanti == 0) {
-            e.valido = false;
-            e.problema = I18n.tr("server.dnsrules.spfNone");
+        if (e.howMany == 0) {
+            e.valid = false;
+            e.problem = I18n.tr("server.dnsrules.spfNone");
             return e;
         }
-        if (e.quanti > 1) {
-            e.valido = false;
-            e.problema = I18n.tr("server.dnsrules.spfMany", java.util.Map.of("n", String.valueOf(e.quanti)));
+        if (e.howMany > 1) {
+            e.valid = false;
+            e.problem = I18n.tr("server.dnsrules.spfMany", java.util.Map.of("n", String.valueOf(e.howMany)));
             e.record = String.join("  ||  ", spf);
             return e;
         }
 
-        e.valido = true;
+        e.valid = true;
         e.record = spf.get(0);
-        e.autorizzaEsplicito = autorizzaIp4(e.record, ipServer);
-        e.viaMx = haMeccanismo(e.record, "mx");
-        e.viaA = haMeccanismo(e.record, "a");
-        e.ricercheDirette = ricercheDnsDirette(e.record);
-        e.include = quantiInclude(e.record);
-        e.chiusura = chiusura(e.record);
+        e.explicitAuthorization = authorizeIp4(e.record, ipServer);
+        e.viaMx = hasMechanism(e.record, "mx");
+        e.viaA = hasMechanism(e.record, "a");
+        e.directLookups = directDnsLookups(e.record);
+        e.include = includeCount(e.record);
+        e.closing = closing(e.record);
 
-        if (e.ricercheDirette > 10)
-            e.warnings.add(I18n.tr("server.dnsrules.spfLookups", java.util.Map.of("n", String.valueOf(e.ricercheDirette))));
+        if (e.directLookups > 10)
+            e.warnings.add(I18n.tr("server.dnsrules.spfLookups", java.util.Map.of("n", String.valueOf(e.directLookups))));
         else if (e.include > 0)
             e.warnings.add(e.include == 1
-                       ? I18n.tr("server.dnsrules.spfDirect.one", java.util.Map.of("n", String.valueOf(e.ricercheDirette)))
-                       : I18n.tr("server.dnsrules.spfDirect.other", java.util.Map.of("n", String.valueOf(e.ricercheDirette), "inc", String.valueOf(e.include))));
+                       ? I18n.tr("server.dnsrules.spfDirect.one", java.util.Map.of("n", String.valueOf(e.directLookups)))
+                       : I18n.tr("server.dnsrules.spfDirect.other", java.util.Map.of("n", String.valueOf(e.directLookups), "inc", String.valueOf(e.include))));
 
-        if (e.chiusura == null)
+        if (e.closing == null)
             e.warnings.add(I18n.tr("server.dnsrules.spfNoAll"));
-        else if (e.chiusura.equals("+all"))
+        else if (e.closing.equals("+all"))
             e.warnings.add(I18n.tr("server.dnsrules.spfPlusAll"));
 
         return e;
@@ -323,10 +323,10 @@ public final class DnsRules {
     }
 
     public static List<String> soloMtaSts(List<String> record) {
-        List<String> fuori = new ArrayList<>();
-        if (record == null) return fuori;
-        for (String r : record) if (eMtaSts(r)) fuori.add(r.trim());
-        return fuori;
+        List<String> outside = new ArrayList<>();
+        if (record == null) return outside;
+        for (String r : record) if (eMtaSts(r)) outside.add(r.trim());
+        return outside;
     }
 
     /* ===================================================================
@@ -341,7 +341,7 @@ public final class DnsRules {
      * errore che sull'SPF faceva passare per buono un record che non autorizzava il server.
      * Il punto finale del nome assoluto e le maiuscole non contano.
      */
-    public static boolean stessoNome(String a, String b) {
+    public static boolean sameName(String a, String b) {
         if (a == null || b == null) return false;
         String x = a.trim().toLowerCase(Locale.ROOT).replaceAll("\\.$", "");
         String y = b.trim().toLowerCase(Locale.ROOT).replaceAll("\\.$", "");
@@ -350,21 +350,21 @@ public final class DnsRules {
 
     /** I quattro campi di un record SRV: priorita', peso, porta, destinazione. */
     public static class Srv {
-        public int priorita, peso, porta;
-        public String destinazione;
+        public int priority, peso, port;
+        public String destination;
     }
 
     /** Legge "0 1 993 mail.esempio.it." Restituisce null se la riga non ha quella forma. */
-    public static Srv analizzaSrv(String riga) {
-        if (riga == null) return null;
-        String[] p = riga.trim().split("\\s+");
+    public static Srv analyzeSrv(String line) {
+        if (line == null) return null;
+        String[] p = line.trim().split("\\s+");
         if (p.length < 4) return null;
         try {
             Srv s = new Srv();
-            s.priorita = Integer.parseInt(p[0]);
+            s.priority = Integer.parseInt(p[0]);
             s.peso = Integer.parseInt(p[1]);
-            s.porta = Integer.parseInt(p[2]);
-            s.destinazione = p[3].trim();
+            s.port = Integer.parseInt(p[2]);
+            s.destination = p[3].trim();
             return s;
         } catch (Exception e) {
             return null;
@@ -376,10 +376,10 @@ public final class DnsRules {
      * =================================================================== */
 
     /** Tag tolti da RFC 9989: se sono ancora nel record, non fanno piu' nulla. */
-    public static final String[] TAG_RIMOSSI = { "pct", "ri", "rf" };
+    public static final String[] REMOVED_TAGS = { "pct", "ri", "rf" };
 
     /** I tag che RFC 9989 definisce. Whitelist, non lista di cose vietate. */
-    public static final String[] TAG_NOTI = {
+    public static final String[] KNOWN_TAGS = {
         "v", "p", "sp", "np", "adkim", "aspf", "rua", "ruf", "fo", "psd", "t"
     };
 
@@ -392,18 +392,18 @@ public final class DnsRules {
         if (r == null) return false;
         String s = r.trim();
         int pv = s.indexOf(';');
-        String primo = (pv < 0 ? s : s.substring(0, pv)).trim();
-        int eq = primo.indexOf('=');
+        String first = (pv < 0 ? s : s.substring(0, pv)).trim();
+        int eq = first.indexOf('=');
         if (eq < 0) return false;
-        return primo.substring(0, eq).trim().equalsIgnoreCase("v")
-            && primo.substring(eq + 1).trim().equals("DMARC1");
+        return first.substring(0, eq).trim().equalsIgnoreCase("v")
+            && first.substring(eq + 1).trim().equals("DMARC1");
     }
 
     public static List<String> soloDmarc(List<String> record) {
-        List<String> fuori = new ArrayList<>();
-        if (record == null) return fuori;
-        for (String r : record) if (eDmarc(r)) fuori.add(r.trim());
-        return fuori;
+        List<String> outside = new ArrayList<>();
+        if (record == null) return outside;
+        for (String r : record) if (eDmarc(r)) outside.add(r.trim());
+        return outside;
     }
 
     /**
@@ -421,18 +421,18 @@ public final class DnsRules {
      * valore predefinito, quindi pretenderlo escluderebbe record validi.
      */
     public static List<String> soloDkim(List<String> record) {
-        List<String> fuori = new ArrayList<>();
-        if (record == null) return fuori;
+        List<String> outside = new ArrayList<>();
+        if (record == null) return outside;
         for (String r : record) {
             if (r == null || r.isBlank()) continue;
             LinkedHashMap<String, String> t = tagDmarc(r);
-            if (t.containsKey("p")) fuori.add(r.trim());
+            if (t.containsKey("p")) outside.add(r.trim());
         }
-        return fuori;
+        return outside;
     }
 
     /** La chiave pubblica dichiarata nel record, senza spazi: alcuni server DNS ne inseriscono. */
-    public static String chiaveDkim(String record) {
+    public static String dkimKey(String record) {
         String p = tagDmarc(record).get("p");
         return p == null ? null : p.replaceAll("\\s+", "");
     }
@@ -441,8 +441,8 @@ public final class DnsRules {
     public static LinkedHashMap<String, String> tagDmarc(String r) {
         LinkedHashMap<String, String> m = new LinkedHashMap<>();
         if (r == null) return m;
-        for (String pezzo : r.split(";")) {
-            String p = pezzo.trim();
+        for (String piece : r.split(";")) {
+            String p = piece.trim();
             if (p.isEmpty()) continue;
             int eq = p.indexOf('=');
             if (eq <= 0) continue;
@@ -452,25 +452,25 @@ public final class DnsRules {
     }
 
     /** Gli indirizzi mailto: dichiarati in un tag rua o ruf, senza il limite di dimensione. */
-    public static List<String> indirizziRapporti(String valoreTag) {
-        List<String> fuori = new ArrayList<>();
-        if (valoreTag == null) return fuori;
-        for (String u : valoreTag.split(",")) {
+    public static List<String> reportAddresses(String tagValue) {
+        List<String> outside = new ArrayList<>();
+        if (tagValue == null) return outside;
+        for (String u : tagValue.split(",")) {
             String s = u.trim();
             if (s.toLowerCase(Locale.ROOT).startsWith("mailto:")) s = s.substring(7);
             int b = s.indexOf('!');            // "!10m": limite di dimensione, non fa parte dell'indirizzo
             if (b >= 0) s = s.substring(0, b);
             s = s.trim();
-            if (!s.isEmpty()) fuori.add(s);
+            if (!s.isEmpty()) outside.add(s);
         }
-        return fuori;
+        return outside;
     }
 
     /** La parte dopo la chiocciola. */
-    public static String hostDi(String indirizzo) {
-        if (indirizzo == null) return "";
-        int a = indirizzo.lastIndexOf('@');
-        return a < 0 ? "" : indirizzo.substring(a + 1).trim().toLowerCase(Locale.ROOT);
+    public static String hostDi(String address) {
+        if (address == null) return "";
+        int a = address.lastIndexOf('@');
+        return a < 0 ? "" : address.substring(a + 1).trim().toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -479,9 +479,9 @@ public final class DnsRules {
      * "_report._dmarc", e davanti ancora il dominio che ha pubblicato la politica.
      * Esempio della specifica: blue.example.com._report._dmarc.red.example.net
      */
-    public static String nomeAutorizzazioneRapporti(String dominioPolitica, String hostDestinazione) {
-        return dominioPolitica.toLowerCase(Locale.ROOT) + "._report._dmarc."
-             + hostDestinazione.toLowerCase(Locale.ROOT);
+    public static String reportAuthorizationName(String policyDomain, String destinationHost) {
+        return policyDomain.toLowerCase(Locale.ROOT) + "._report._dmarc."
+             + destinationHost.toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -493,10 +493,10 @@ public final class DnsRules {
      * La prudenza e' voluta: dire "non serve" quando invece serve significa lasciare che i
      * rapporti non arrivino mai, senza che nessun controllo lo segnali.
      */
-    public static boolean serveAutorizzazione(String dominioPolitica, String hostDestinazione) {
-        if (dominioPolitica == null || hostDestinazione == null) return true;
-        String a = dominioPolitica.trim().toLowerCase(Locale.ROOT).replaceAll("\\.$", "");
-        String b = hostDestinazione.trim().toLowerCase(Locale.ROOT).replaceAll("\\.$", "");
+    public static boolean needsAuthorization(String policyDomain, String destinationHost) {
+        if (policyDomain == null || destinationHost == null) return true;
+        String a = policyDomain.trim().toLowerCase(Locale.ROOT).replaceAll("\\.$", "");
+        String b = destinationHost.trim().toLowerCase(Locale.ROOT).replaceAll("\\.$", "");
         if (a.isEmpty() || b.isEmpty()) return true;
         if (a.equals(b)) return false;
         return !(a.endsWith("." + b) || b.endsWith("." + a));
@@ -516,89 +516,89 @@ public final class DnsRules {
      * Restituisce null se il record non e' un DMARC valido: meglio non fare niente che
      * produrre una stringa a caso.
      */
-    public static String cambiaPolitica(String record, String nuova) {
-        if (record == null || nuova == null) return null;
-        String n = nuova.trim().toLowerCase(Locale.ROOT);
+    public static String changePolicy(String record, String fresh) {
+        if (record == null || fresh == null) return null;
+        String n = fresh.trim().toLowerCase(Locale.ROOT);
         if (!List.of("none", "quarantine", "reject").contains(n)) return null;
         if (!eDmarc(record)) return null;
 
-        String[] pezzi = record.split(";", -1);
-        for (int i = 0; i < pezzi.length; i++) {
-            String pezzo = pezzi[i];
-            int eq = pezzo.indexOf('=');
+        String[] pieces = record.split(";", -1);
+        for (int i = 0; i < pieces.length; i++) {
+            String piece = pieces[i];
+            int eq = piece.indexOf('=');
             if (eq < 0) continue;
-            if (!pezzo.substring(0, eq).trim().equalsIgnoreCase("p")) continue;
+            if (!piece.substring(0, eq).trim().equalsIgnoreCase("p")) continue;
             // Si conserva lo spazio che precede il tag, se c'era.
-            String prima = pezzo.substring(0, eq + 1);
-            pezzi[i] = prima + n;
-            return String.join(";", pezzi);
+            String before = piece.substring(0, eq + 1);
+            pieces[i] = before + n;
+            return String.join(";", pieces);
         }
 
         // Nessun tag "p": lo si aggiunge dopo la versione, imitando la spaziatura del record.
         // Si imita la spaziatura del record se ce n'e' una da imitare; quando non c'e'
         // nulla da cui dedurla si sceglie la forma leggibile, che e' quella che il pannello
         // usa quando scrive un record da zero.
-        String separatore = !record.contains(";") ? "; " : (record.contains("; ") ? "; " : ";");
-        int fineV = record.indexOf(';');
-        if (fineV < 0) return record.trim() + separatore + "p=" + n;
-        String resto = record.substring(fineV + 1);
-        return record.substring(0, fineV) + separatore + "p=" + n
-             + (resto.trim().isEmpty() ? "" : ";" + resto);
+        String separator = !record.contains(";") ? "; " : (record.contains("; ") ? "; " : ";");
+        int endV = record.indexOf(';');
+        if (endV < 0) return record.trim() + separator + "p=" + n;
+        String rest = record.substring(endV + 1);
+        return record.substring(0, endV) + separator + "p=" + n
+             + (rest.trim().isEmpty() ? "" : ";" + rest);
     }
 
-    public static class EsitoDmarc {
-        public int quanti;
-        public boolean valido;
+    public static class DmarcOutcome {
+        public int howMany;
+        public boolean valid;
         public String record;
-        public String problema;
-        public String politica, politicaSottodomini, politicaInesistenti, prova;
+        public String problem;
+        public String policy, subdomainPolicy, nonexistentPolicy, test;
         public LinkedHashMap<String, String> tag = new LinkedHashMap<>();
         public final List<String> rua = new ArrayList<>();
-        public final List<String> daAutorizzare = new ArrayList<>();
+        public final List<String> toAuthorize = new ArrayList<>();
         public final List<String> warnings = new ArrayList<>();
     }
 
-    public static EsitoDmarc analizzaDmarc(List<String> recordTxt, String dominio) {
-        EsitoDmarc e = new EsitoDmarc();
+    public static DmarcOutcome analyzeDmarc(List<String> recordTxt, String domain) {
+        DmarcOutcome e = new DmarcOutcome();
         List<String> dm = soloDmarc(recordTxt);
-        e.quanti = dm.size();
+        e.howMany = dm.size();
 
-        if (e.quanti == 0) {
-            e.valido = false;
-            e.problema = I18n.tr("server.dnsrules.dmarcNone");
+        if (e.howMany == 0) {
+            e.valid = false;
+            e.problem = I18n.tr("server.dnsrules.dmarcNone");
             return e;
         }
-        if (e.quanti > 1) {
-            e.valido = false;
-            e.problema = I18n.tr("server.dnsrules.dmarcMany", java.util.Map.of("n", String.valueOf(e.quanti)));
+        if (e.howMany > 1) {
+            e.valid = false;
+            e.problem = I18n.tr("server.dnsrules.dmarcMany", java.util.Map.of("n", String.valueOf(e.howMany)));
             e.record = String.join("  ||  ", dm);
             return e;
         }
 
-        e.valido = true;
+        e.valid = true;
         e.record = dm.get(0);
         e.tag = tagDmarc(e.record);
-        e.politica = e.tag.get("p");
-        e.politicaSottodomini = e.tag.get("sp");
-        e.politicaInesistenti = e.tag.get("np");
-        e.prova = e.tag.get("t");
+        e.policy = e.tag.get("p");
+        e.subdomainPolicy = e.tag.get("sp");
+        e.nonexistentPolicy = e.tag.get("np");
+        e.test = e.tag.get("t");
 
-        if (e.politica == null)
+        if (e.policy == null)
             e.warnings.add(I18n.tr("server.dnsrules.dmarcNoP"));
-        else if (!java.util.List.of("none", "quarantine", "reject").contains(e.politica.toLowerCase(Locale.ROOT)))
-            e.warnings.add(I18n.tr("server.dnsrules.dmarcBadP", java.util.Map.of("p", String.valueOf(e.politica))));
+        else if (!java.util.List.of("none", "quarantine", "reject").contains(e.policy.toLowerCase(Locale.ROOT)))
+            e.warnings.add(I18n.tr("server.dnsrules.dmarcBadP", java.util.Map.of("p", String.valueOf(e.policy))));
 
-        for (String morto : TAG_RIMOSSI)
-            if (e.tag.containsKey(morto))
-                e.warnings.add(I18n.tr("server.dnsrules.dmarcRemovedTag", java.util.Map.of("tag", String.valueOf(morto + "=" + e.tag.get(morto))))
-                           + ("pct".equals(morto) ? " " + I18n.tr("server.dnsrules.dmarcPct") : ""));
+        for (String dead : REMOVED_TAGS)
+            if (e.tag.containsKey(dead))
+                e.warnings.add(I18n.tr("server.dnsrules.dmarcRemovedTag", java.util.Map.of("tag", String.valueOf(dead + "=" + e.tag.get(dead))))
+                           + ("pct".equals(dead) ? " " + I18n.tr("server.dnsrules.dmarcPct") : ""));
 
         for (String tag : e.tag.keySet()) {
-            boolean noto = false;
-            for (String n : TAG_NOTI) if (n.equals(tag)) { noto = true; break; }
-            boolean rimosso = false;
-            for (String n : TAG_RIMOSSI) if (n.equals(tag)) { rimosso = true; break; }
-            if (!noto && !rimosso)
+            boolean known = false;
+            for (String n : KNOWN_TAGS) if (n.equals(tag)) { known = true; break; }
+            boolean removed = false;
+            for (String n : REMOVED_TAGS) if (n.equals(tag)) { removed = true; break; }
+            if (!known && !removed)
                 e.warnings.add(I18n.tr("server.dnsrules.dmarcUnknownTag", java.util.Map.of("tag", String.valueOf(tag))));
         }
 
@@ -606,18 +606,18 @@ public final class DnsRules {
         if (rua == null || rua.isBlank()) {
             e.warnings.add(I18n.tr("server.dnsrules.dmarcNoRua"));
         } else {
-            for (String ind : indirizziRapporti(rua)) {
+            for (String ind : reportAddresses(rua)) {
                 e.rua.add(ind);
                 String host = hostDi(ind);
                 if (host.isEmpty()) {
                     e.warnings.add(I18n.tr("server.dnsrules.ruaNoDomain", java.util.Map.of("addr", String.valueOf(ind))));
-                } else if (serveAutorizzazione(dominio, host)) {
-                    e.daAutorizzare.add(nomeAutorizzazioneRapporti(dominio, host));
+                } else if (needsAuthorization(domain, host)) {
+                    e.toAuthorize.add(reportAuthorizationName(domain, host));
                 }
             }
         }
 
-        if (e.prova != null && e.prova.equalsIgnoreCase("y"))
+        if (e.test != null && e.test.equalsIgnoreCase("y"))
             e.warnings.add(I18n.tr("server.dnsrules.dmarcTest"));
 
         return e;

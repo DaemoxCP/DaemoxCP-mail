@@ -157,7 +157,7 @@ public class LockTraceTest {
 
     /** Un pacchetto installato qualunque, su cui provare l'annotazione. */
     private static String firstInstalled() {
-        for (String n : PackagePlan.installati().keySet()) return n;
+        for (String n : PackagePlan.installed().keySet()) return n;
         return null;
     }
 

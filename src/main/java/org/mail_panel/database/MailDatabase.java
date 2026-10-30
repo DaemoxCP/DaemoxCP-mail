@@ -78,7 +78,7 @@ public class MailDatabase {
      */
     public boolean connect() {
         try {
-            connection = DriverManager.getConnection(urlDatabase(), username, password);
+            connection = DriverManager.getConnection(databaseUrl(), username, password);
             connected = true;
             return true;
         } catch (SQLException e) {
@@ -88,7 +88,7 @@ public class MailDatabase {
         }
     }
 
-    private String urlDatabase() {
+    private String databaseUrl() {
         return String.format(
             "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&createDatabaseIfNotExist=true&autoReconnect=true",
             host, port, database
@@ -100,8 +100,8 @@ public class MailDatabase {
      * connessione condivisa la usano anche i lavori in background (rapporto, DKIM, MTA-STS), e con
      * l'autocommit spento i loro comandi finirebbero dentro la transazione di un altro.
      */
-    private Connection connessionePropria() throws SQLException {
-        return DriverManager.getConnection(urlDatabase(), username, password);
+    private Connection ownConnection() throws SQLException {
+        return DriverManager.getConnection(databaseUrl(), username, password);
     }
 
     /**
@@ -199,7 +199,7 @@ public class MailDatabase {
      * vecchie (virtual_*): le cancella il reset, e nessun'altra del database. Prima le tabelle che
      * puntano ad altre con una chiave esterna, poi quelle a cui si punta.
      */
-    static final List<String> TABELLE_DEL_PANNELLO = List.of(
+    static final List<String> PANEL_TABLES = List.of(
         "admin_passkeys", "rspamd_training", "panel_sessions",                // -> panel_admin
         "login_code_email", "login_code_console", "stepup_code", "email_change_code",
         "roundcube_tokens", "auto_responders", "sieve_filters", "forwarding_rules",
@@ -223,42 +223,42 @@ public class MailDatabase {
      */
     public List<String> dropAllTables() throws SQLException {
         if (!connected) throw new SQLException("Not connected to MySQL: the reset did not start.");
-        try (Connection c = connessionePropria()) {
-            List<String> prima = tabelleDelPannello(c);
+        try (Connection c = ownConnection()) {
+            List<String> before = panelTables(c);
             try (Statement st = c.createStatement()) {
                 // Nomi fissi, scritti qui sopra, non input: un DROP non prende parametri.
-                st.executeUpdate("DROP TABLE IF EXISTS " + String.join(", ", TABELLE_DEL_PANNELLO));
+                st.executeUpdate("DROP TABLE IF EXISTS " + String.join(", ", PANEL_TABLES));
             } catch (SQLException e) {
-                String presenti;
+                String present;
                 try {
-                    List<String> t = tabelleDelPannello(c);
-                    presenti = t.isEmpty() ? "none" : String.join(", ", t);
+                    List<String> t = panelTables(c);
+                    present = t.isEmpty() ? "none" : String.join(", ", t);
                 } catch (SQLException perse) {
-                    presenti = "unknown, MySQL does not answer";
+                    present = "unknown, MySQL does not answer";
                 }
                 throw new SQLException("Reset failed: " + e.getMessage()
-                        + " Panel tables still present: " + presenti + ".", e);
+                        + " Panel tables still present: " + present + ".", e);
             }
-            List<String> restano = tabelleDelPannello(c);
-            if (!restano.isEmpty()) {
-                throw new SQLException("Reset not complete: these tables remain: " + String.join(", ", restano) + ".");
+            List<String> remain = panelTables(c);
+            if (!remain.isEmpty()) {
+                throw new SQLException("Reset not complete: these tables remain: " + String.join(", ", remain) + ".");
             }
-            return prima;
+            return before;
         }
     }
 
     /** Le tabelle del pannello che ci sono adesso nel database della connessione. */
-    private static List<String> tabelleDelPannello(Connection c) throws SQLException {
-        List<String> trovate = new ArrayList<>();
+    private static List<String> panelTables(Connection c) throws SQLException {
+        List<String> found = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name");
              ResultSet r = ps.executeQuery()) {
             while (r.next()) {
-                String nome = r.getString(1);
-                if (TABELLE_DEL_PANNELLO.contains(nome)) trovate.add(nome);
+                String name = r.getString(1);
+                if (PANEL_TABLES.contains(name)) found.add(name);
             }
         }
-        return trovate;
+        return found;
     }
 
     /**
@@ -626,7 +626,7 @@ public class MailDatabase {
      *  - le date dell'accesso in DATETIME.
      */
     public void ensurePasswordlessSchema() throws SQLException {
-        try (Connection c = connessionePropria(); Statement st = c.createStatement()) {
+        try (Connection c = ownConnection(); Statement st = c.createStatement()) {
             st.execute("SET time_zone = '+00:00'");
             for (String t : AUTH_TABLES) st.execute(t);
             for (String col : List.of("password_hash", "totp_secret", "totp_enabled", "backup_codes")) {
@@ -1623,11 +1623,11 @@ public class MailDatabase {
     }
 
     public int addMailbox(int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
-        return inserisciCasella(getConnection(), domainId, email, password, name, quotaMb, receiveEnabled);
+        return insertMailbox(getConnection(), domainId, email, password, name, quotaMb, receiveEnabled);
     }
 
     /** L'INSERT di una casella sulla connessione data: da sola, o dentro una transazione. */
-    private int inserisciCasella(Connection c, int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
+    private int insertMailbox(Connection c, int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
         // Hash password with bcrypt (compatible with Dovecot)
         String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
         // La copia cifrata che il pannello mostra quando serve: senza, la casella non si crea
@@ -1990,7 +1990,7 @@ public class MailDatabase {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", "service postfix reload 2>/dev/null || true");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor();
@@ -2124,14 +2124,14 @@ public class MailDatabase {
      *                     arrivare una copia anche nella casella
      * @return l'id della casella nuova
      */
-    public int trasformaAliasInCasella(int domainId, String email, String password, String name, int quotaMb,
-                                       boolean tieniInoltri) throws SQLException {
-        try (Connection c = connessionePropria()) {
+    public int transformAliasToMailbox(int domainId, String email, String password, String name, int quotaMb,
+                                       boolean keepForwards) throws SQLException {
+        try (Connection c = ownConnection()) {
             c.setAutoCommit(false);
             try {
-                int id = inserisciCasella(c, domainId, email, password, name, quotaMb, true);
+                int id = insertMailbox(c, domainId, email, password, name, quotaMb, true);
                 if (id <= 0) throw new SQLException("the mailbox was not created");
-                if (tieniInoltri) {
+                if (keepForwards) {
                     try (PreparedStatement p = c.prepareStatement(
                             "INSERT INTO aliases (domain_id, source, destination, active) VALUES (?, ?, ?, 1) "
                           + "ON DUPLICATE KEY UPDATE active = 1")) {
@@ -2162,24 +2162,24 @@ public class MailDatabase {
      * a un indirizzo che non esiste. Gli altri alias con questa sorgente restano. La posta gia'
      * arrivata non e' nel database: resta sul disco.
      */
-    public void trasformaCasellaInAlias(int mailboxId, int domainId, String email, List<String> destinazioni) throws SQLException {
-        String indirizzo = email.toLowerCase();
-        try (Connection c = connessionePropria()) {
+    public void transformMailboxToAlias(int mailboxId, int domainId, String email, List<String> destinations) throws SQLException {
+        String address = email.toLowerCase();
+        try (Connection c = ownConnection()) {
             c.setAutoCommit(false);
             try {
                 try (PreparedStatement p = c.prepareStatement(
                         "INSERT INTO aliases (domain_id, source, destination, active) VALUES (?, ?, ?, 1) "
                       + "ON DUPLICATE KEY UPDATE active = 1")) {
-                    for (String d : destinazioni) {
+                    for (String d : destinations) {
                         p.setInt(1, domainId);
-                        p.setString(2, indirizzo);
+                        p.setString(2, address);
                         p.setString(3, d.toLowerCase());
                         p.executeUpdate();
                     }
                 }
                 try (PreparedStatement p = c.prepareStatement("DELETE FROM aliases WHERE source = ? AND destination = ?")) {
-                    p.setString(1, indirizzo);
-                    p.setString(2, indirizzo);
+                    p.setString(1, address);
+                    p.setString(2, address);
                     p.executeUpdate();
                 }
                 try (PreparedStatement p = c.prepareStatement("DELETE FROM rate_limits WHERE target_type = 'mailbox' AND target_id = ?")) {
@@ -2188,7 +2188,7 @@ public class MailDatabase {
                 }
                 try (PreparedStatement p = c.prepareStatement("DELETE FROM mailboxes WHERE id = ? AND email = ?")) {
                     p.setInt(1, mailboxId);
-                    p.setString(2, indirizzo);
+                    p.setString(2, address);
                     if (p.executeUpdate() != 1) throw new SQLException("the mailbox no longer exists");
                 }
                 c.commit();
@@ -2205,7 +2205,7 @@ public class MailDatabase {
                 "SELECT a.*, d.domain as domain_name FROM aliases a JOIN domains d ON a.domain_id = d.id "
               + "WHERE a.source = ? ORDER BY a.destination")) {
             stmt.setString(1, source.toLowerCase());
-            return aliasConDominio(stmt);
+            return aliasWithDomain(stmt);
         }
     }
 
@@ -2215,11 +2215,11 @@ public class MailDatabase {
                 "SELECT a.*, d.domain as domain_name FROM aliases a JOIN domains d ON a.domain_id = d.id "
               + "WHERE a.destination = ? ORDER BY a.source")) {
             stmt.setString(1, destination.toLowerCase());
-            return aliasConDominio(stmt);
+            return aliasWithDomain(stmt);
         }
     }
 
-    private List<Alias> aliasConDominio(PreparedStatement stmt) throws SQLException {
+    private List<Alias> aliasWithDomain(PreparedStatement stmt) throws SQLException {
         List<Alias> aliases = new ArrayList<>();
         try (ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
@@ -2402,7 +2402,7 @@ public class MailDatabase {
     }
 
     /** La versione del server MySQL a cui il pannello e' collegato adesso (SELECT VERSION()), o null. */
-    public String versioneServer() {
+    public String serverVersion() {
         try (PreparedStatement stmt = getConnection().prepareStatement("SELECT VERSION()");
              ResultSet rs = stmt.executeQuery()) {
             return rs.next() ? rs.getString(1) : null;
@@ -2850,7 +2850,7 @@ public class MailDatabase {
             ON DUPLICATE KEY UPDATE max_per_hour = VALUES(max_per_hour), max_per_day = VALUES(max_per_day),
                                     max_recipients = VALUES(max_recipients), enabled = VALUES(enabled)
             """;
-        try (Connection c = connessionePropria()) {
+        try (Connection c = ownConnection()) {
             c.setAutoCommit(false);
             try {
                 try (PreparedStatement stmt = c.prepareStatement(sql)) {

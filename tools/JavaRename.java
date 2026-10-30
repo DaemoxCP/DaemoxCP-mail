@@ -65,6 +65,11 @@ import java.util.stream.Stream;
  *              tutti i membri con quel nome in quella classe (gli overload insieme)
  *          local:src/main/java/org/mail_panel/system/UpdateManager.java:2750:lavoro work
  *              il parametro o la variabile dichiarata su quella riga
+ *          type:org.mail_panel.system.PackageQueue$Turno Turn
+ *              un tipo annidato, con i suoi costruttori (i tipi in un giro a parte)
+ *        Le costanti di enum non si scelgono: il loro nome e' un valore che esce dal codice.
+ *        Un componente di record si sceglie come un campo (member:), e porta con se' il suo
+ *        accessore implicito.
  */
 public class JavaRename {
 
@@ -78,6 +83,8 @@ public class JavaRename {
         final List<Occurrence> occurrences = new ArrayList<>();
         final List<Declaration> declarations = new ArrayList<>();
         final Map<String, String> sources = new HashMap<>();
+        /** Per ogni metodo del progetto, i metodi di cui fa l'override (per chiave). */
+        final Map<String, Set<String>> overrides = new HashMap<>();
     }
 
     public static void main(String[] args) throws Exception {
@@ -145,6 +152,28 @@ public class JavaRename {
             String file = root.relativize(Path.of(cu.getSourceFile().toUri())).toString();
             new ReferenceScanner(t, cu, file, a.sources.get(file), keys, a).scan(cu, null);
         }
+        // Gli override. La risoluzione dei riferimenti non li vede: un metodo rinominato come uno
+        // della superclasse lo sostituisce a runtime senza che nessun riferimento cambi bersaglio.
+        javax.lang.model.util.Types types = task.getTypes();
+        for (Map.Entry<Element, String> en : keys.entrySet()) {
+            if (!(en.getKey() instanceof ExecutableElement me) || me.getKind() != javax.lang.model.element.ElementKind.METHOD) continue;
+            if (!(me.getEnclosingElement() instanceof TypeElement owner)) continue;
+            Set<String> over = new TreeSet<>();
+            java.util.ArrayDeque<javax.lang.model.type.TypeMirror> todo = new java.util.ArrayDeque<>(types.directSupertypes(owner.asType()));
+            Set<String> seen = new java.util.HashSet<>();
+            while (!todo.isEmpty()) {
+                javax.lang.model.type.TypeMirror sup = todo.pop();
+                Element se = types.asElement(sup);
+                if (!(se instanceof TypeElement ste) || !seen.add(ste.getQualifiedName().toString())) continue;
+                for (Element m2 : ste.getEnclosedElements()) {
+                    if (m2 instanceof ExecutableElement x && m2.getKind() == javax.lang.model.element.ElementKind.METHOD
+                            && x.getSimpleName().equals(me.getSimpleName()) && elements.overrides(me, x, owner))
+                        over.add(keys.getOrDefault(m2, externalKey(m2)));
+                }
+                todo.addAll(types.directSupertypes(sup));
+            }
+            a.overrides.put(en.getValue(), over);
+        }
         return a;
     }
 
@@ -182,15 +211,34 @@ public class JavaRename {
         void record(Tree tree, String name, int pos, String kind) {
             Element e = trees.getElement(getCurrentPath());
             if (e == null || pos < 0) return;
+            kind = refine(e, kind);
             if (!text.startsWith(name, pos)) throw new IllegalStateException(
                     "posizione sbagliata per " + name + " in " + file + ":" + lines.getLineNumber(Math.max(pos, 0)));
             String key = "src:" + file + "@" + pos;
             keys.put(e, key);
-            String owner = e.getEnclosingElement() instanceof TypeElement te
+            // Per un tipo il "proprietario" e' il tipo stesso: lo si sceglie per nome binario.
+            // Per un costruttore e' la sua classe: si rinomina insieme a lei.
+            Element ownerEl = kind.equals("type") ? e : e.getEnclosingElement();
+            String owner = ownerEl instanceof TypeElement te
                     ? elements.getBinaryName(te).toString()
-                    : String.valueOf(e.getEnclosingElement());
+                    : String.valueOf(ownerEl);
             a.declarations.add(new Declaration(file, pos, (int) lines.getLineNumber(pos), name, kind, owner));
             a.occurrences.add(new Occurrence(file, pos, name, true, key));
+        }
+
+        /** Che cosa e' davvero la dichiarazione: decide cosa si puo' scegliere, e come. */
+        String refine(Element e, String kind) {
+            switch (e.getKind()) {
+                case CLASS, INTERFACE, ENUM, RECORD, ANNOTATION_TYPE: return "type";
+                case CONSTRUCTOR: return "ctor";
+                case ENUM_CONSTANT: return "enumconst";
+                case FIELD:
+                    if (e.getEnclosingElement().getKind() == javax.lang.model.element.ElementKind.RECORD
+                            && !e.getModifiers().contains(javax.lang.model.element.Modifier.STATIC)) return "component";
+                    return "field";
+                case METHOD: return "method";
+                default: return kind;
+            }
         }
 
         @Override public Void visitClass(ClassTree node, Void v) {
@@ -209,6 +257,14 @@ public class JavaRename {
                 int from = node.getReturnType() != null ? (int) sp.getEndPosition(cu, node.getReturnType()) : -1;
                 if (from < 0) from = (int) sp.getStartPosition(cu, node);
                 record(node, name, findName(text, from, name), "method");
+            } else if (sp.getStartPosition(cu, node) >= 0 && getCurrentPath().getParentPath().getLeaf() instanceof ClassTree ct
+                       && !ct.getSimpleName().toString().isEmpty()) {
+                // Un costruttore scritto nel sorgente (quelli impliciti non hanno testo).
+                String cn = ct.getSimpleName().toString();
+                int from = (int) sp.getEndPosition(cu, node.getModifiers());
+                if (from < 0) from = (int) sp.getStartPosition(cu, node);
+                int pos = findName(text, from, cn);
+                if (pos >= 0 && pos < sp.getEndPosition(cu, node)) record(node, cn, pos, "ctor");
             }
             return super.visitMethod(node, v);
         }
@@ -296,6 +352,12 @@ public class JavaRename {
         // Selettore -> chiavi delle dichiarazioni che sceglie. Ogni selettore deve sceglierne
         // almeno una: un selettore che non trova niente e' un errore di battitura, non un no-op.
         Map<String, String> targetToNew = new HashMap<>();
+        // Chiavi di dichiarazioni senza testo (l'accessore implicito di un record) che cambiano
+        // nome: nel controllo, la chiave attesa e' quella col nome nuovo.
+        Map<String, String> externalRenames = new HashMap<>();
+        // Tipi rinominati, per nome canonico: compaiono dentro le chiavi esterne (un accessore
+        // implicito, values() di un enum) e vanno riscritti anche li'.
+        Map<String, String> typeRenames = new LinkedHashMap<>();
         int problems = 0;
         for (Map.Entry<String, String> m : map.entrySet()) {
             List<Declaration> chosen = new ArrayList<>();
@@ -303,8 +365,25 @@ public class JavaRename {
             for (Declaration d : before.declarations) {
                 if (sel.startsWith("member:")) {
                     String[] cm = sel.substring("member:".length()).split("#");
+                    // Le costanti di enum no: il loro nome e' un valore (name(), valueOf()) che
+                    // finisce nel JSON o su disco, e si cambia con chi lo legge.
                     if (cm.length == 2 && d.owner().equals(cm[0]) && d.name().equals(cm[1])
-                            && !d.kind().equals("class")) chosen.add(d);
+                            && (d.kind().equals("method") || d.kind().equals("field") || d.kind().equals("component"))) {
+                        chosen.add(d);
+                        if (d.kind().equals("component")) {
+                            String canon = cm[0].replace('$', '.');
+                            externalRenames.put("ext:METHOD:" + canon + "." + cm[1] + "[]",
+                                                "ext:METHOD:" + canon + "." + m.getValue() + "[]");
+                        }
+                    }
+                } else if (sel.startsWith("type:")) {
+                    String bin = sel.substring("type:".length());
+                    if (d.owner().equals(bin) && d.kind().equals("type")) {
+                        chosen.add(d);
+                        String canon = bin.replace('$', '.');
+                        typeRenames.put(canon, canon.substring(0, canon.lastIndexOf('.') + 1) + m.getValue());
+                    }
+                    if (d.owner().equals(bin) && d.kind().equals("ctor")) chosen.add(d);
                 } else if (sel.startsWith("local:")) {
                     String rest = sel.substring("local:".length());
                     int c2 = rest.lastIndexOf(':'), c1 = rest.lastIndexOf(':', c2 - 1);
@@ -315,6 +394,12 @@ public class JavaRename {
             }
             if (chosen.isEmpty()) { System.out.println("NESSUNA DICHIARAZIONE per " + sel); problems++; }
             for (Declaration d : chosen) targetToNew.put("src:" + d.file() + "@" + d.pos(), m.getValue());
+        }
+        for (Map.Entry<String, String> x : externalRenames.entrySet())
+            targetToNew.put(x.getKey(), x.getValue().substring(x.getValue().lastIndexOf('.') + 1, x.getValue().length() - 2));
+        if (!typeRenames.isEmpty() && (!externalRenames.isEmpty() || map.keySet().stream().anyMatch(k -> !k.startsWith("type:")))) {
+            System.out.println("i tipi si rinominano in un giro a parte, prima dei membri");
+            return 1;
         }
         if (problems > 0) return 1;
 
@@ -346,11 +431,26 @@ public class JavaRename {
             int np = shift(byFile.get(o.file()), o.pos());
             Occurrence n = afterAt.get(o.file() + "@" + np);
             String expectedName = targetToNew.getOrDefault(o.target(), o.name());
-            String expectedTarget = shiftKey(byFile, o.target());
+            String expectedTarget = externalRenames.containsKey(o.target())
+                    ? externalRenames.get(o.target()) : renameTypesIn(shiftKey(byFile, o.target()), typeRenames);
             if (n == null || !n.name().equals(expectedName) || !n.target().equals(expectedTarget)) {
                 if (bad++ < 30) System.out.println("NON TORNA: " + o.file() + "@" + o.pos() + " " + o.name()
                         + " -> " + (n == null ? "sparita" : n.name() + " punta a " + n.target()) + ", attesa " + expectedTarget);
             }
+        }
+        // Gli override devono essere gli stessi: ne' persi ne' guadagnati.
+        for (Map.Entry<String, Set<String>> ov : before.overrides.entrySet()) {
+            String nk = shiftKey(byFile, ov.getKey());
+            Set<String> expected = new TreeSet<>();
+            for (String k : ov.getValue()) expected.add(renameTypesIn(shiftKey(byFile, k), typeRenames));
+            Set<String> got = after.overrides.getOrDefault(nk, Set.of());
+            if (!got.equals(expected)) {
+                if (bad++ < 30) System.out.println("OVERRIDE CAMBIATO: " + nk + " prima " + expected + ", dopo " + got);
+            }
+        }
+        if (after.overrides.size() != before.overrides.size()) {
+            System.out.println("NON TORNA: metodi " + before.overrides.size() + " prima, " + after.overrides.size() + " dopo");
+            bad++;
         }
         if (after.occurrences.size() != before.occurrences.size()) {
             System.out.println("NON TORNA: occorrenze " + before.occurrences.size() + " prima, " + after.occurrences.size() + " dopo");
@@ -368,6 +468,15 @@ public class JavaRename {
         int delta = 0;
         for (Edit e : edits.headMap(pos, false).values()) delta += e.newName().length() - e.oldName().length();
         return pos + delta;
+    }
+
+    /** Una chiave esterna che nomina un tipo rinominato, scritta col nome nuovo. */
+    static String renameTypesIn(String key, Map<String, String> typeRenames) {
+        if (!key.startsWith("ext:")) return key;
+        for (Map.Entry<String, String> r : typeRenames.entrySet())
+            key = key.replaceAll(java.util.regex.Pattern.quote(r.getKey()) + "(?![A-Za-z0-9_$])",
+                                 java.util.regex.Matcher.quoteReplacement(r.getValue()));
+        return key;
     }
 
     static String shiftKey(Map<String, TreeMap<Integer, Edit>> byFile, String key) {

@@ -27,7 +27,7 @@ import java.util.Optional;
  * leave none of them, and the passkeys registered before must keep working.
  *
  * Usage (with the test MySQL of README.md; it empties the panel tables of that database):
- *   java -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.LoginSecurityTest
  */
 public class LoginSecurityTest {
@@ -122,7 +122,7 @@ public class LoginSecurityTest {
         try (PreparedStatement p = db().prepareStatement(
                 "INSERT INTO admin_passkeys (admin_id, credential_id, public_key_cose, name) VALUES (1, ?, ?, 'Old phone')")) {
             p.setBytes(1, oldKey.credentialId);
-            p.setBytes(2, oldKey.coseKey());
+            p.setBytes(2, oldKey.thingsKey());
             p.executeUpdate();
         }
         db.createSchema();

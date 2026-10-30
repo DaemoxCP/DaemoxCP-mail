@@ -92,7 +92,7 @@ public class DnsRecordsGenerator {
         records.records.add(generateDmarcRecord(domain));
 
         // 6. I record con cui i client trovano da soli le impostazioni
-        records.records.addAll(generateRecordScopertaClient(domain, mailServerHostname));
+        records.records.addAll(generateClientDiscoveryRecord(domain, mailServerHostname));
 
         // 7. PTR Record (informational)
         records.records.add(generatePtrRecord(serverIp, mailServerHostname));
@@ -116,7 +116,7 @@ public class DnsRecordsGenerator {
         record.dnsZone = domain;
         record.description = I18n.tr("server.dnsg.descMx", java.util.Map.of("d", String.valueOf(domain)));
         record.checkType = "MX";
-        record.valoreCompleto = DEFAULT_MX_PRIORITY + " " + mailServer;
+        record.fullValue = DEFAULT_MX_PRIORITY + " " + mailServer;
         record.required = true;
         record.copyValue = mailServer;
         record.explanation = """
@@ -288,7 +288,7 @@ public class DnsRecordsGenerator {
      * due SRV di RFC 6186. Il CNAME "autodiscover" non c'e' piu': serviva solo a Outlook, e
      * un metodo che si chiama ancora come cio' che non fa piu' e' un tranello per chi legge.
      */
-    private List<DnsRecord> generateRecordScopertaClient(String domain, String mailServer) {
+    private List<DnsRecord> generateClientDiscoveryRecord(String domain, String mailServer) {
         List<DnsRecord> records = new ArrayList<>();
 
         // Thunderbird autoconfig
@@ -327,7 +327,7 @@ public class DnsRecordsGenerator {
         srvImap.description = I18n.tr("server.dnsg.descSrvImap", java.util.Map.of("d", String.valueOf(domain)));
         srvImap.checkType = "SRV (_imaps)";
         // Un SRV non e' scrivibile senza priorita', peso e porta: qui c'e' il record intero.
-        srvImap.valoreCompleto = "0 1 993 " + mailServer;
+        srvImap.fullValue = "0 1 993 " + mailServer;
         srvImap.required = false;
         srvImap.explanation = """
             <div class="alert alert-primary mb-2">
@@ -354,7 +354,7 @@ public class DnsRecordsGenerator {
         srvSmtp.dnsZone = domain;
         srvSmtp.description = I18n.tr("server.dnsg.descSrvSmtp", java.util.Map.of("d", String.valueOf(domain)));
         srvSmtp.checkType = "SRV (_submission)";
-        srvSmtp.valoreCompleto = "0 1 587 " + mailServer;
+        srvSmtp.fullValue = "0 1 587 " + mailServer;
         srvSmtp.required = false;
         srvSmtp.explanation = """
             <div class="alert alert-primary mb-2">
@@ -657,25 +657,25 @@ public class DnsRecordsGenerator {
             // esatto sul nome di destinazione, non per contenimento: un MX verso
             // "xmail.esempio.it" contiene "mail.esempio.it" e passava per giusto, mentre la
             // posta sarebbe finita a un server che non e' questo.
-            java.util.List<String> altrove = new java.util.ArrayList<>();
-            boolean nostro = false;
-            for (String riga : mxCheck.currentValue.split("\n")) {
-                String t = riga.trim();
+            java.util.List<String> elsewhere = new java.util.ArrayList<>();
+            boolean ours = false;
+            for (String line : mxCheck.currentValue.split("\n")) {
+                String t = line.trim();
                 if (t.isEmpty()) continue;
-                String[] campi = t.split("\\s+");
-                String bersaglio = campi.length >= 2 ? campi[1] : campi[0];
-                if (DnsRules.stessoNome(bersaglio, mailHostname)) nostro = true;
-                else altrove.add(bersaglio);
+                String[] fields = t.split("\\s+");
+                String target = fields.length >= 2 ? fields[1] : fields[0];
+                if (DnsRules.sameName(target, mailHostname)) ours = true;
+                else elsewhere.add(target);
             }
-            if (nostro) {
+            if (ours) {
                 mxCheck.passed = true;
                 mxCheck.message = I18n.tr("server.dnsg.mxOk", java.util.Map.of("h", String.valueOf(mailHostname)))
-                        + (altrove.isEmpty() ? "" : ". " + I18n.tr("server.dnsg.mxOthers", java.util.Map.of("elenco", String.valueOf(String.join(", ", altrove)))));
+                        + (elsewhere.isEmpty() ? "" : ". " + I18n.tr("server.dnsg.mxOthers", java.util.Map.of("elenco", String.valueOf(String.join(", ", elsewhere)))));
             } else {
                 mxCheck.passed = false;
-                mxCheck.message = altrove.isEmpty()
+                mxCheck.message = elsewhere.isEmpty()
                         ? I18n.tr("server.dnsg.mxNone", java.util.Map.of("h", String.valueOf(mailHostname)))
-                        : I18n.tr("server.dnsg.mxElsewhere", java.util.Map.of("h", String.valueOf(mailHostname), "elenco", String.valueOf(String.join(", ", altrove))));
+                        : I18n.tr("server.dnsg.mxElsewhere", java.util.Map.of("h", String.valueOf(mailHostname), "elenco", String.valueOf(String.join(", ", elsewhere))));
             }
         }
         result.checks.add(mxCheck);
@@ -693,14 +693,14 @@ public class DnsRecordsGenerator {
         spfCheck.recordName = domain;
         spfCheck.expectedValue = expectedSpf;
         if (spfCheck.currentValue != null) {
-            DnsRules.EsitoSpf e = DnsRules.analizzaSpf(DnsRules.recordTxt(spfCheck.currentValue), serverIp);
+            DnsRules.SpfOutcome e = DnsRules.analyzeSpf(DnsRules.recordTxt(spfCheck.currentValue), serverIp);
             if (e.record != null) spfCheck.currentValue = e.record;
-            if (!e.valido) {
+            if (!e.valid) {
                 spfCheck.passed = false;
-                spfCheck.message = e.problema;
+                spfCheck.message = e.problem;
             } else {
                 spfCheck.passed = true;
-                if (e.autorizzaEsplicito) {
+                if (e.explicitAuthorization) {
                     spfCheck.message = I18n.tr("server.dnsg.spfOkIp", java.util.Map.of("ip", String.valueOf(serverIp)));
                 } else if (e.viaMx) {
                     spfCheck.message = I18n.tr("server.dnsg.spfOkMx");
@@ -735,48 +735,48 @@ public class DnsRecordsGenerator {
         }
 
         String selector = (dbDomain != null && dbDomain.dkimSelector != null) ? dbDomain.dkimSelector : "mail";
-        String attesa = (dbDomain == null || dbDomain.dkimPublicKey == null)
+        String wait = (dbDomain == null || dbDomain.dkimPublicKey == null)
                 ? null : dbDomain.dkimPublicKey.replaceAll("\\s+", "");
 
         DnsCheck dkimCheck = verifyRecord(selector + "._domainkey." + domain, "TXT");
         dkimCheck.recordType = "DKIM";
         dkimCheck.recordName = selector + "._domainkey." + domain;
-        if (attesa != null)
+        if (wait != null)
             // substring(0, 20) senza rete di sicurezza: con una chiave corrotta piu' corta di
             // venti caratteri sollevava un'eccezione che usciva da tutto il metodo e faceva
             // sparire l'INTERA pagina di verifica, non solo questa riga.
             dkimCheck.expectedValue = "v=DKIM1; k=rsa; p="
-                    + attesa.substring(0, Math.min(20, attesa.length())) + "...";
+                    + wait.substring(0, Math.min(20, wait.length())) + "...";
 
         if (dkimCheck.currentValue != null) {
             // Le chiavi da 2048 bit superano i 255 caratteri, quindi in DNS stanno in piu'
             // stringhe che vanno unite senza spazi (RFC 7208 §3.3). Confrontare l'uscita
             // grezza di dig significherebbe confrontare anche le virgolette in mezzo.
             java.util.List<String> txt = DnsRules.recordTxt(dkimCheck.currentValue);
-            java.util.List<String> chiavi = DnsRules.soloDkim(txt);
+            java.util.List<String> keys = DnsRules.soloDkim(txt);
 
-            if (chiavi.isEmpty()) {
+            if (keys.isEmpty()) {
                 dkimCheck.passed = false;
                 dkimCheck.message = I18n.tr("server.dnsg.dkimNotKey");
-            } else if (chiavi.size() > 1) {
+            } else if (keys.size() > 1) {
                 dkimCheck.passed = false;
-                dkimCheck.message = I18n.tr("server.dnsg.dkimMany", java.util.Map.of("n", String.valueOf(chiavi.size())));
+                dkimCheck.message = I18n.tr("server.dnsg.dkimMany", java.util.Map.of("n", String.valueOf(keys.size())));
             } else {
-                dkimCheck.currentValue = chiavi.get(0);
-                String pubblicata = DnsRules.chiaveDkim(chiavi.get(0));
+                dkimCheck.currentValue = keys.get(0);
+                String published = DnsRules.dkimKey(keys.get(0));
                 dkimCheck.passed = true;
-                if (pubblicata == null || pubblicata.isEmpty()) {
+                if (published == null || published.isEmpty()) {
                     dkimCheck.passed = false;
                     dkimCheck.message = I18n.tr("server.dnsg.dkimRevoked");
-                } else if (attesa == null) {
+                } else if (wait == null) {
                     dkimCheck.message = I18n.tr("server.dnsg.dkimPublished");
-                } else if (pubblicata.equals(attesa)) {
+                } else if (published.equals(wait)) {
                     // Confronto INTERO, non i primi 50 caratteri: una chiave giusta all'inizio
                     // e corrotta in fondo passava il vecchio controllo e non firmava niente.
                     dkimCheck.message = I18n.tr("server.dnsg.dkimOk");
                 } else {
                     dkimCheck.passed = false;
-                    dkimCheck.message = I18n.tr("server.dnsg.dkimMismatch", java.util.Map.of("p", String.valueOf(pubblicata.length()), "a", String.valueOf(attesa.length())));
+                    dkimCheck.message = I18n.tr("server.dnsg.dkimMismatch", java.util.Map.of("p", String.valueOf(published.length()), "a", String.valueOf(wait.length())));
                 }
             }
         } else if (dkimCheck.message != null && dkimCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
@@ -794,15 +794,15 @@ public class DnsRecordsGenerator {
         dmarcCheck.recordName = "_dmarc." + domain;
         dmarcCheck.expectedValue = "v=DMARC1; p=none; rua=mailto:dmarc@" + domain;
         if (dmarcCheck.currentValue != null) {
-            DnsRules.EsitoDmarc e = DnsRules.analizzaDmarc(
+            DnsRules.DmarcOutcome e = DnsRules.analyzeDmarc(
                     DnsRules.recordTxt(dmarcCheck.currentValue), domain);
             if (e.record != null) dmarcCheck.currentValue = e.record;
-            if (!e.valido) {
+            if (!e.valid) {
                 dmarcCheck.passed = false;
-                dmarcCheck.message = e.problema;
+                dmarcCheck.message = e.problem;
             } else {
                 dmarcCheck.passed = true;
-                String p = e.politica == null ? "none" : e.politica.toLowerCase();
+                String p = e.policy == null ? "none" : e.policy.toLowerCase();
                 if (p.equals("none"))
                     dmarcCheck.message = I18n.tr("server.dnsg.dmarcNone");
                 else if (p.equals("quarantine"))
@@ -814,20 +814,20 @@ public class DnsRecordsGenerator {
 
                 // RFC 9990 §4: se il rua punta fuori dominio serve l'autorizzazione, altrimenti
                 // i rapporti non partono e nessuno se ne accorge. Qui non si indovina: si guarda.
-                for (String nomeAut : e.daAutorizzare) {
-                    DnsCheck aut = verifyRecord(nomeAut, "TXT");
-                    boolean concessa = aut.currentValue != null
-                            && !DnsRules.soloDmarc(DnsRules.recordTxt(aut.currentValue)).isEmpty();
-                    if (!concessa) {
+                for (String authName : e.toAuthorize) {
+                    DnsCheck authorization = verifyRecord(authName, "TXT");
+                    boolean granted = authorization.currentValue != null
+                            && !DnsRules.soloDmarc(DnsRules.recordTxt(authorization.currentValue)).isEmpty();
+                    if (!granted) {
                         // Si SEGNALA senza bocciare. Per sapere se l'autorizzazione serve davvero
                         // occorre confrontare i domini ORGANIZZATIVI, che RFC 9989 §4.10 ricava con
                         // il "tree walk": due sottodomini fratelli (a.esempio.it e b.esempio.it)
                         // appartengono allo stesso dominio organizzativo e non richiedono nulla.
                         // Senza quel calcolo, bocciare significherebbe dichiarare rotto un DMARC
                         // che funziona, e spingere a "sistemare" cio' che va gia' bene.
-                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaCheck", java.util.Map.of("nome", String.valueOf(nomeAut)));
+                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaCheck", java.util.Map.of("nome", String.valueOf(authName)));
                     } else {
-                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaAuthOk", java.util.Map.of("nome", String.valueOf(nomeAut)));
+                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaAuthOk", java.util.Map.of("nome", String.valueOf(authName)));
                     }
                 }
             }
@@ -846,7 +846,7 @@ public class DnsRecordsGenerator {
         autoconfigCheck.expectedValue = mailHostname + ".";
         if (autoconfigCheck.currentValue != null) {
             String puntaA = autoconfigCheck.currentValue.trim().split("\\s+")[0];
-            if (DnsRules.stessoNome(puntaA, mailHostname)) {
+            if (DnsRules.sameName(puntaA, mailHostname)) {
                 autoconfigCheck.passed = true;
                 autoconfigCheck.message = "OK: autoconfig → " + mailHostname;
             } else {
@@ -855,7 +855,7 @@ public class DnsRecordsGenerator {
             }
         } else if (autoconfigCheck.message != null && autoconfigCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
             autoconfigCheck.passed = false;
-            autoconfigCheck.informativo = true;
+            autoconfigCheck.informational = true;
             autoconfigCheck.message = I18n.tr("server.dnsg.autoconfigOff", java.util.Map.of("d", String.valueOf(domain)));
         } else {
             // NON si sovrascrive un errore preciso ("dig non raggiungibile") con "non
@@ -875,9 +875,9 @@ public class DnsRecordsGenerator {
 
         // 9. Check MTA-STS (optional but recommended)
         // Note: MTA-STS ID is just a version timestamp, doesn't need to match exactly
-        DnsCheck mtaStsCheck = controlloMtaSts(domain,
-                org.mail_panel.system.MtaStsSetup.leggiTxt(domain),
-                org.mail_panel.system.MtaSts::provaPubblica);
+        DnsCheck mtaStsCheck = mtaStsCheck(domain,
+                org.mail_panel.system.MtaStsSetup.readTxt(domain),
+                org.mail_panel.system.MtaSts::publicTest);
         mtaStsCheck.expectedValue = org.mail_panel.system.MtaSts.recordTxtCorrente();
         result.checks.add(mtaStsCheck);
         // Don't fail overall for optional records
@@ -887,13 +887,13 @@ public class DnsRecordsGenerator {
         DnsCheck srvImapCheck = verifyRecord("_imaps._tcp." + domain, "SRV");
         srvImapCheck.recordType = "SRV (_imaps)";
         srvImapCheck.expectedValue = "0 1 993 " + mailHostname + ".";
-        controllaSrv(srvImapCheck, mailHostname, 993, I18n.tr("server.dnsg.incoming"));
+        checkSrv(srvImapCheck, mailHostname, 993, I18n.tr("server.dnsg.incoming"));
         result.checks.add(srvImapCheck);
 
         DnsCheck srvSmtpCheck = verifyRecord("_submission._tcp." + domain, "SRV");
         srvSmtpCheck.recordType = "SRV (_submission)";
         srvSmtpCheck.expectedValue = "0 1 587 " + mailHostname + ".";
-        controllaSrv(srvSmtpCheck, mailHostname, 587, I18n.tr("server.dnsg.outgoing"));
+        checkSrv(srvSmtpCheck, mailHostname, 587, I18n.tr("server.dnsg.outgoing"));
         result.checks.add(srvSmtpCheck);
 
         // Il punteggio conta i record indispensabili: A, MX, SPF, DKIM, DMARC.
@@ -905,13 +905,13 @@ public class DnsRecordsGenerator {
         // di se' se conta, e la posizione non c'entra piu' nulla.
         for (DnsCheck c : result.checks) {
             String t = c.recordType == null ? "" : c.recordType;
-            c.indispensabile = t.equals("A") || t.equals("MX") || t.equals("SPF")
+            c.indispensable = t.equals("A") || t.equals("MX") || t.equals("SPF")
                             || t.equals("DKIM") || t.equals("DMARC");
         }
-        int indispensabili = 0, superati = 0;
+        int indispensable = 0, passed = 0;
         for (DnsCheck c : result.checks)
-            if (c.indispensabile) { indispensabili++; if (c.passed) superati++; }
-        result.score = indispensabili == 0 ? 0 : (superati * 100) / indispensabili;
+            if (c.indispensable) { indispensable++; if (c.passed) passed++; }
+        result.score = indispensable == 0 ? 0 : (passed * 100) / indispensable;
 
         return result;
     }
@@ -952,7 +952,7 @@ public class DnsRecordsGenerator {
             // 1. Reverse lookup: dig -x <IP>
             // TODO: migrate to Shell.run when touched
             ProcessBuilder revPb = new ProcessBuilder("dig", "+short", "-x", serverIp);
-            org.mail_panel.util.Shell.applicaPath(revPb);
+            org.mail_panel.util.Shell.applyPath(revPb);
             revPb.redirectErrorStream(true);
             Process revP = revPb.start();
             String revOut;
@@ -988,7 +988,7 @@ public class DnsRecordsGenerator {
             // 3. FCrDNS — risolvi il PTR e verifica che torni allo stesso IP
             // TODO: migrate to Shell.run when touched
             ProcessBuilder fwdPb = new ProcessBuilder("dig", "+short", "A", ptr);
-            org.mail_panel.util.Shell.applicaPath(fwdPb);
+            org.mail_panel.util.Shell.applyPath(fwdPb);
             fwdPb.redirectErrorStream(true);
             Process fwdP = fwdPb.start();
             String fwdOut;
@@ -1032,74 +1032,74 @@ public class DnsRecordsGenerator {
      * CONTIENE "mail.esempio.it") passava per giusto, e la porta non veniva guardata affatto
      * — mentre la porta e' l'unica ragione per cui quel record esiste.
      */
-    private void controllaSrv(DnsCheck check, String mailHostname, int portaAttesa, String aCosaServe) {
+    private void checkSrv(DnsCheck check, String mailHostname, int expectedPort, String purpose) {
         if (check.currentValue == null) {
             check.passed = false;
             if (check.message != null && check.message.startsWith(I18n.tr("server.dnsg.notFound")))
                 check.message = I18n.tr("server.dnsg.optionalOff");
             return;
         }
-        DnsRules.Srv s = DnsRules.analizzaSrv(check.currentValue.trim().split("\n")[0]);
+        DnsRules.Srv s = DnsRules.analyzeSrv(check.currentValue.trim().split("\n")[0]);
         if (s == null) {
             check.passed = false;
             check.message = I18n.tr("server.dnsg.notSrv", java.util.Map.of("v", String.valueOf(check.currentValue.trim())));
             return;
         }
-        boolean host = DnsRules.stessoNome(s.destinazione, mailHostname);
-        boolean porta = s.porta == portaAttesa;
-        if (host && porta) {
+        boolean host = DnsRules.sameName(s.destination, mailHostname);
+        boolean port = s.port == expectedPort;
+        if (host && port) {
             check.passed = true;
-            check.message = I18n.tr("server.dnsg.srvOk", java.util.Map.of("cosa", String.valueOf(aCosaServe), "h", String.valueOf(mailHostname), "porta", String.valueOf(portaAttesa)));
+            check.message = I18n.tr("server.dnsg.srvOk", java.util.Map.of("cosa", String.valueOf(purpose), "h", String.valueOf(mailHostname), "porta", String.valueOf(expectedPort)));
             return;
         }
         check.passed = false;
-        if (!host && !porta)
-            check.message = I18n.tr("server.dnsg.srvBoth", java.util.Map.of("dest", String.valueOf(s.destinazione), "porta", String.valueOf(s.porta), "h", String.valueOf(mailHostname), "attesa", String.valueOf(portaAttesa)));
+        if (!host && !port)
+            check.message = I18n.tr("server.dnsg.srvBoth", java.util.Map.of("dest", String.valueOf(s.destination), "porta", String.valueOf(s.port), "h", String.valueOf(mailHostname), "attesa", String.valueOf(expectedPort)));
         else if (!host)
-            check.message = I18n.tr("server.dnsg.srvHost", java.util.Map.of("dest", String.valueOf(s.destinazione), "h", String.valueOf(mailHostname)));
+            check.message = I18n.tr("server.dnsg.srvHost", java.util.Map.of("dest", String.valueOf(s.destination), "h", String.valueOf(mailHostname)));
         else
-            check.message = I18n.tr("server.dnsg.srvPort", java.util.Map.of("porta", String.valueOf(s.porta), "attesa", String.valueOf(portaAttesa)));
+            check.message = I18n.tr("server.dnsg.srvPort", java.util.Map.of("porta", String.valueOf(s.port), "attesa", String.valueOf(expectedPort)));
     }
 
     /**
      * La riga MTA-STS della pagina DNS, da cio' che dice il DNS del record e da come risponde
      * la politica.
      *
-     * Il record si legge con la stessa funzione del piano MTA-STS (MtaStsSetup.leggiTxt).
+     * Il record si legge con la stessa funzione del piano MTA-STS (MtaStsSetup.readTxt).
      * Prima qui bastava che "v=STSv1" comparisse nell'uscita di "dig +short": due record, che
      * per i mittenti valgono zero (RFC 8461 §3.1), davano "Attivo", e un SERVFAIL dava "Non
      * attivo". Sta da sola perche' le prove la verifichino senza DNS e senza la politica vera.
      */
-    static DnsCheck controlloMtaSts(String domain, org.mail_panel.system.MtaStsSetup.LetturaTxt txtSts,
-                                    java.util.function.Function<String, org.json.JSONObject> provaPubblica) {
+    static DnsCheck mtaStsCheck(String domain, org.mail_panel.system.MtaStsSetup.TxtReading txtSts,
+                                    java.util.function.Function<String, org.json.JSONObject> publicTest) {
         DnsCheck mtaStsCheck = new DnsCheck();
         mtaStsCheck.recordName = "_mta-sts." + domain;
         mtaStsCheck.recordType = "MTA-STS";
-        if (!txtSts.valori.isEmpty()) mtaStsCheck.currentValue = String.join("  ||  ", txtSts.valori);
-        if (txtSts.esito == org.mail_panel.system.MtaStsSetup.EsitoTxt.PRESENTE) {
+        if (!txtSts.values.isEmpty()) mtaStsCheck.currentValue = String.join("  ||  ", txtSts.values);
+        if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.PRESENTE) {
             // Il record c'e': ora si va a CHIEDERE la politica. Guardare solo il TXT diceva
             // "fatto" su domini che dichiarano pubblicamente una protezione e poi non la
             // servono. E' una promessa non mantenuta, e il pannello la mostrava come esito
             // positivo — misurare il cartello invece della cosa.
-            org.json.JSONObject prova = provaPubblica.apply(domain);
-            if (prova.optBoolean("ok", false)) {
+            org.json.JSONObject test = publicTest.apply(domain);
+            if (test.optBoolean("ok", false)) {
                 mtaStsCheck.passed = true;
                 mtaStsCheck.message = I18n.tr("server.dnsg.stsActive");
             } else {
                 mtaStsCheck.passed = false;
-                mtaStsCheck.message = I18n.tr("server.dnsg.stsNotServed", java.util.Map.of("d", String.valueOf(domain), "e", String.valueOf(prova.optString("errore", I18n.tr("server.dnsg.unreachable")))));
+                mtaStsCheck.message = I18n.tr("server.dnsg.stsNotServed", java.util.Map.of("d", String.valueOf(domain), "e", String.valueOf(test.optString("errore", I18n.tr("server.dnsg.unreachable")))));
             }
-        } else if (txtSts.esito == org.mail_panel.system.MtaStsSetup.EsitoTxt.TROPPI) {
+        } else if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.TROPPI) {
             mtaStsCheck.passed = false;
-            mtaStsCheck.message = I18n.tr("server.dnsg.stsMany", java.util.Map.of("n", String.valueOf(txtSts.valori.size()), "d", String.valueOf(domain)));
-        } else if (txtSts.esito == org.mail_panel.system.MtaStsSetup.EsitoTxt.NON_CHIESTO) {
+            mtaStsCheck.message = I18n.tr("server.dnsg.stsMany", java.util.Map.of("n", String.valueOf(txtSts.values.size()), "d", String.valueOf(domain)));
+        } else if (txtSts.outcome == org.mail_panel.system.MtaStsSetup.TxtOutcome.NON_CHIESTO) {
             // NON si scrive "non attivo" su una domanda rimasta senza risposta: sono due guasti
             // diversi e mandano a cercare in posti opposti (come per autoconfig, in verifyAllRecords).
             mtaStsCheck.passed = false;
             mtaStsCheck.message = "Non so se il record c'e': " + txtSts.reason + ".";
         } else {
             mtaStsCheck.passed = false;
-            mtaStsCheck.informativo = true;
+            mtaStsCheck.informational = true;
             mtaStsCheck.message = I18n.tr("server.dnsg.stsOff", java.util.Map.of("d", String.valueOf(domain)));
         }
         return mtaStsCheck;
@@ -1113,7 +1113,7 @@ public class DnsRecordsGenerator {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", type, name);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
@@ -1261,7 +1261,7 @@ public class DnsRecordsGenerator {
          * avrebbe scritto un MX senza priorita' e un SRV senza porta. Un valore incompleto
          * presentato come completo e' peggio di nessun valore.
          */
-        public String valoreCompleto;
+        public String fullValue;
     }
 
     public static class DnsVerificationResult {
@@ -1279,12 +1279,12 @@ public class DnsRecordsGenerator {
         public String currentValue;
         public String expectedValue;
         /** Conta nel punteggio. Gli opzionali no: la posta funziona anche senza. */
-        public boolean indispensabile;
+        public boolean indispensable;
         /**
          * Informativo: non e' un esito, e' una constatazione. Si disegna in grigio, non in
          * rosso. Una croce rossa su una cosa che si e' deciso di non fare e' rumore, e il
          * rumore insegna a ignorare tutte le altre righe.
          */
-        public boolean informativo;
+        public boolean informational;
     }
 }

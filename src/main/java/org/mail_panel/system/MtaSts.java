@@ -51,15 +51,15 @@ public class MtaSts {
      * L'ABNF ammette sia LF sia CRLF come terminatore di riga (sts-policy-term = LF / CRLF):
      * si usa LF, che e' quello che il resto del pannello scrive.
      */
-    public static String politica(String mailHost, String modo, int maxAge) {
+    public static String policy(String mailHost, String mode, int maxAge) {
         return "version: STSv1\n"
-             + "mode: " + modo + "\n"
+             + "mode: " + mode + "\n"
              + "mx: " + mailHost + "\n"
              + "max_age: " + maxAge + "\n";
     }
 
     /** I modi previsti dalla specifica. */
-    public static boolean modoValido(String m) {
+    public static boolean validMode(String m) {
         return m != null && List.of("testing", "enforce", "none").contains(m.trim().toLowerCase(Locale.ROOT));
     }
 
@@ -70,8 +70,8 @@ public class MtaSts {
      * che in una settimana. In "enforce" si sta alti, perche' una politica che scade e non
      * viene riscaricata fa perdere la protezione proprio quando serve.
      */
-    public static int maxAgeConsigliato(String modo) {
-        return "enforce".equalsIgnoreCase(modo) ? 604800 : 86400;
+    public static int recommendedMaxAge(String mode) {
+        return "enforce".equalsIgnoreCase(mode) ? 604800 : 86400;
     }
 
     /**
@@ -82,10 +82,10 @@ public class MtaSts {
      * politica di continuo a tutti i mittenti del mondo; uno che non cambia mai impedirebbe
      * loro di accorgersi di una modifica.
      */
-    public static String id(String politica) {
+    public static String id(String policy) {
         try {
             byte[] h = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(politica.getBytes(StandardCharsets.UTF_8));
+                    .digest(policy.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < 10; i++) sb.append(String.format("%02x", h[i]));
             return sb.toString();
@@ -95,23 +95,23 @@ public class MtaSts {
     }
 
     /** Il contenuto del record TXT su _mta-sts.<dominio>. §3.1 */
-    public static String recordTxt(String politica) {
-        return "v=STSv1; id=" + id(politica);
+    public static String recordTxt(String policy) {
+        return "v=STSv1; id=" + id(policy);
     }
 
     /** Il dominio e' ospitato da questo pannello? Whitelist, come per autoconfig. */
-    public static String dominioGestito(String richiesto) {
-        if (richiesto == null) return null;
-        String r = richiesto.trim().toLowerCase(Locale.ROOT);
+    public static String managedDomain(String required) {
+        if (required == null) return null;
+        String r = required.trim().toLowerCase(Locale.ROOT);
         if (r.startsWith("mta-sts.")) r = r.substring("mta-sts.".length());
         int p = r.indexOf(':');
         if (p > 0) r = r.substring(0, p);
         if (r.isEmpty()) return null;
         // Stessa ragione dell'autoconfig: rotta pubblica, nessuna query per richiesta.
-        return DomainCache.gestito(r);
+        return DomainCache.managed(r);
     }
 
-    public static String hostDiPosta() {
+    public static String mailHost() {
         try {
             return Main.mailDatabase.getSetting("mail_hostname", "");
         } catch (Exception e) {
@@ -120,25 +120,25 @@ public class MtaSts {
     }
 
     /** Il modo scelto, conservato fra i settaggi. Si parte da "testing". */
-    public static String modoCorrente() {
+    public static String currentMode() {
         try {
             String m = Main.mailDatabase.getSetting("mta_sts_mode", "testing");
-            return modoValido(m) ? m.toLowerCase(Locale.ROOT) : "testing";
+            return validMode(m) ? m.toLowerCase(Locale.ROOT) : "testing";
         } catch (Exception e) {
             return "testing";
         }
     }
 
-    public static JSONObject impostaModo(String modo) {
-        if (!modoValido(modo))
+    public static JSONObject setMode(String mode) {
+        if (!validMode(mode))
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.mtasts.badMode"));
         try {
-            Main.mailDatabase.setSetting("mta_sts_mode", modo.toLowerCase(Locale.ROOT));
-            return new JSONObject().put("success", true).put("modo", modo.toLowerCase(Locale.ROOT))
-                    .put("nota", "enforce".equalsIgnoreCase(modo)
+            Main.mailDatabase.setSetting("mta_sts_mode", mode.toLowerCase(Locale.ROOT));
+            return new JSONObject().put("success", true).put("modo", mode.toLowerCase(Locale.ROOT))
+                    .put("nota", "enforce".equalsIgnoreCase(mode)
                         ? I18n.tr("server.mtasts.modeEnforce")
-                        : "none".equalsIgnoreCase(modo)
+                        : "none".equalsIgnoreCase(mode)
                         ? I18n.tr("server.mtasts.modeNone")
                         : I18n.tr("server.mtasts.modeTesting"));
         } catch (Exception e) {
@@ -150,29 +150,29 @@ public class MtaSts {
      * Lo stato reale, dominio per dominio
      * =================================================================== */
 
-    public static JSONObject stato() {
+    public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
-        String host = hostDiPosta();
-        String modo = modoCorrente();
-        r.put("hostDiPosta", host).put("modo", modo).put("percorso", PATH);
+        String host = mailHost();
+        String mode = currentMode();
+        r.put("hostDiPosta", host).put("modo", mode).put("percorso", PATH);
         if (host == null || host.isBlank())
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.mtasts.noHostname"));
 
-        String pol = politica(host, modo, maxAgeConsigliato(modo));
+        String pol = policy(host, mode, recommendedMaxAge(mode));
         r.put("politica", pol).put("id", id(pol)).put("recordTxt", recordTxt(pol));
 
-        JSONArray domini = new JSONArray();
+        JSONArray domains = new JSONArray();
         try {
             for (var d : Main.mailDatabase.getDomains()) {
                 JSONObject j = new JSONObject().put("dominio", d.domain)
                         .put("nomeWeb", "mta-sts." + d.domain)
                         .put("nomeTxt", "_mta-sts." + d.domain);
-                j.put("politicaRaggiungibile", provaPolitica("mta-sts." + d.domain, host, modo));
-                domini.put(j);
+                j.put("politicaRaggiungibile", testPolicy("mta-sts." + d.domain, host, mode));
+                domains.put(j);
             }
         } catch (Exception ignore) {}
-        r.put("domini", domini);
+        r.put("domini", domains);
         return r;
     }
 
@@ -183,7 +183,7 @@ public class MtaSts {
      * succedere, questo dice cosa succede. Gli esiti restano distinti perche' "il certificato
      * non copre quel nome" e "il file non c'e'" hanno due rimedi opposti.
      */
-    /** Come provaPolitica, ma per un dominio qualsiasi: la usa la verifica DNS. */
+    /** Come testPolicy, ma per un dominio qualsiasi: la usa la verifica DNS. */
     /**
      * Il record TXT che corrisponde alla politica servita ADESSO.
      *
@@ -196,8 +196,8 @@ public class MtaSts {
      */
     public static String recordTxtCorrente() {
         try {
-            String modo = modoCorrente();
-            return recordTxt(politica(hostDiPosta(), modo, maxAgeConsigliato(modo))).trim();
+            String mode = currentMode();
+            return recordTxt(policy(mailHost(), mode, recommendedMaxAge(mode))).trim();
         } catch (Exception e) {
             // Meglio niente che un valore inventato: una stringa vuota non fa passare per
             // giusto nessun record, e non suggerisce a nessuno di pubblicare una sciocchezza.
@@ -205,8 +205,8 @@ public class MtaSts {
         }
     }
 
-    public static JSONObject provaPubblica(String dominio) {
-        return provaPolitica("mta-sts." + dominio, hostDiPosta(), modoCorrente());
+    public static JSONObject publicTest(String domain) {
+        return testPolicy("mta-sts." + domain, mailHost(), currentMode());
     }
 
     /**
@@ -215,23 +215,23 @@ public class MtaSts {
      * dritta al server — cioe' il nome ha ancora la nuvola arancione.
      * Significati dalla documentazione Cloudflare (Troubleshooting Cloudflare 5xx errors).
      */
-    static String spiegaCodice(int codice) {
-        String cosa;
-        switch (codice) {
-            case 520: cosa = I18n.tr("server.mtasts.cf520"); break;
-            case 521: cosa = I18n.tr("server.mtasts.cf521"); break;
-            case 522: cosa = I18n.tr("server.mtasts.cf522"); break;
-            case 523: cosa = I18n.tr("server.mtasts.cf523"); break;
-            case 525: cosa = I18n.tr("server.mtasts.cf525"); break;
-            case 526: cosa = I18n.tr("server.mtasts.cf526"); break;
+    static String explainCode(int code) {
+        String what;
+        switch (code) {
+            case 520: what = I18n.tr("server.mtasts.cf520"); break;
+            case 521: what = I18n.tr("server.mtasts.cf521"); break;
+            case 522: what = I18n.tr("server.mtasts.cf522"); break;
+            case 523: what = I18n.tr("server.mtasts.cf523"); break;
+            case 525: what = I18n.tr("server.mtasts.cf525"); break;
+            case 526: what = I18n.tr("server.mtasts.cf526"); break;
             default: return "";
         }
-        return " " + I18n.tr("server.mtasts.cfCode", java.util.Map.of("c", String.valueOf(codice), "what", String.valueOf(cosa)));
+        return " " + I18n.tr("server.mtasts.cfCode", java.util.Map.of("c", String.valueOf(code), "what", String.valueOf(what)));
     }
 
-    private static JSONObject provaPolitica(String nomeWeb, String mailHost, String modo) {
+    private static JSONObject testPolicy(String webName, String mailHost, String mode) {
         JSONObject r = new JSONObject();
-        String url = "https://" + nomeWeb + PATH;
+        String url = "https://" + webName + PATH;
         r.put("url", url);
         try {
             var http = java.net.http.HttpClient.newBuilder()
@@ -242,15 +242,15 @@ public class MtaSts {
                     .timeout(java.time.Duration.ofSeconds(8)).GET().build();
             var resp = http.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
             r.put("codice", resp.statusCode());
-            String corpo = resp.body() == null ? "" : resp.body();
+            String body = resp.body() == null ? "" : resp.body();
             boolean ok = resp.statusCode() == 200
-                    && corpo.contains("version: STSv1")
-                    && corpo.contains("mx: " + mailHost);
+                    && body.contains("version: STSv1")
+                    && body.contains("mx: " + mailHost);
             r.put("ok", ok);
             if (!ok) {
                 if (resp.statusCode() != 200)
-                    r.put("errore", I18n.tr("server.mtasts.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))) + spiegaCodice(resp.statusCode()));
-                else if (!corpo.contains("version: STSv1"))
+                    r.put("errore", I18n.tr("server.mtasts.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))) + explainCode(resp.statusCode()));
+                else if (!body.contains("version: STSv1"))
                     r.put("errore", I18n.tr("server.mtasts.notPolicy"));
                 else
                     r.put("errore", I18n.tr("server.mtasts.noMx", java.util.Map.of("host", String.valueOf(mailHost))));
@@ -258,10 +258,10 @@ public class MtaSts {
             return r;
         } catch (javax.net.ssl.SSLException e) {
             return r.put("ok", false).put("tls", true)
-                    .put("errore", I18n.tr("server.mtasts.certInvalid", java.util.Map.of("name", String.valueOf(nomeWeb))));
+                    .put("errore", I18n.tr("server.mtasts.certInvalid", java.util.Map.of("name", String.valueOf(webName))));
         } catch (java.net.UnknownHostException e) {
             return r.put("ok", false).put("dns", true)
-                    .put("errore", I18n.tr("server.mtasts.noCname", java.util.Map.of("name", String.valueOf(nomeWeb))));
+                    .put("errore", I18n.tr("server.mtasts.noCname", java.util.Map.of("name", String.valueOf(webName))));
         } catch (Exception e) {
             return r.put("ok", false)
                     .put("errore", I18n.tr("server.mtasts.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
@@ -274,20 +274,20 @@ public class MtaSts {
      * Solo se la politica risponde gia'. E' la regola che tiene onesto tutto il meccanismo:
      * il TXT e' una promessa pubblica, e non si fa una promessa prima di poterla mantenere.
      */
-    public static JSONObject pubblicabile(String dominio) {
-        String host = hostDiPosta();
-        String modo = modoCorrente();
-        JSONObject prova = provaPolitica("mta-sts." + dominio, host, modo);
-        JSONObject r = new JSONObject().put("dominio", dominio).put("prova", prova);
-        if (prova.optBoolean("ok", false))
+    public static JSONObject publishable(String domain) {
+        String host = mailHost();
+        String mode = currentMode();
+        JSONObject test = testPolicy("mta-sts." + domain, host, mode);
+        JSONObject r = new JSONObject().put("dominio", domain).put("prova", test);
+        if (test.optBoolean("ok", false))
             return r.put("pubblicabile", true)
-                    .put("valore", recordTxt(politica(host, modo, maxAgeConsigliato(modo))));
+                    .put("valore", recordTxt(policy(host, mode, recommendedMaxAge(mode))));
         return r.put("pubblicabile", false)
-                .put("reason", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + dominio + PATH), "err", String.valueOf(prova.optString("errore", I18n.tr("server.mtasts.unknownReason"))))));
+                .put("reason", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + domain + PATH), "err", String.valueOf(test.optString("errore", I18n.tr("server.mtasts.unknownReason"))))));
     }
 
     /** I domini gestiti, per l'interfaccia. */
-    public static List<String> domini() {
+    public static List<String> domains() {
         List<String> l = new ArrayList<>();
         try { for (var d : Main.mailDatabase.getDomains()) l.add(d.domain); } catch (Exception ignore) {}
         return l;

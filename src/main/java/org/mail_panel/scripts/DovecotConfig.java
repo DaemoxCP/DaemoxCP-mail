@@ -57,11 +57,11 @@ public final class DovecotConfig {
         } catch (Exception ignored) {
             // Config non leggibile: restano i predefiniti, che sono quelli giusti.
         }
-        return new DovecotConfig(sanifica(db, "mailserver"), sanifica(user, "mailpanel"));
+        return new DovecotConfig(sanitize(db, "mailserver"), sanitize(user, "mailpanel"));
     }
 
     /** Un identificatore MySQL finisce dentro un file di configurazione e un comando: va ristretto. */
-    private static String sanifica(String v, String fallback) {
+    private static String sanitize(String v, String fallback) {
         return (v != null && v.matches("[A-Za-z0-9_]{1,64}")) ? v : fallback;
     }
 
@@ -421,7 +421,7 @@ public final class DovecotConfig {
 
     /** Un file di configurazione: percorso relativo a /usr/local/etc/dovecot, contenuto,
      *  e se il contenuto contiene variabili di shell da espandere (la password del database). */
-    public record FileConf(String percorso, String contenuto, boolean espandi) {}
+    public record FileConf(String path, String content, boolean expand) {}
 
     public static java.util.List<FileConf> file24() {
         java.util.List<FileConf> f = new java.util.ArrayList<>();
@@ -616,7 +616,7 @@ public final class DovecotConfig {
      * confermare sul campo. Dichiararlo e' il punto: un template dato per buono e mai provato
      * e' esattamente cio' che ha prodotto i sei errori trovati oggi.
      */
-    public static String[][] verifiche24() {
+    public static String[][] checks24() {
         return new String[][]{
             {"confermato", "dovecot_config_version / dovecot_storage_version", "obbligatorie; la prima dev'essere in cima a dovecot.conf"},
             {"confermato", "mail_driver + mail_path", "sostituiscono mail_location"},
@@ -663,12 +663,12 @@ public final class DovecotConfig {
             echo "[CONFIG] la configurazione precedente torna al suo posto senza riavvii."
             """);
         for (FileConf f : file24()) {
-            String delim = "DOVECOT_" + f.percorso().replaceAll("[^A-Za-z0-9]", "_").toUpperCase();
+            String delim = "DOVECOT_" + f.path().replaceAll("[^A-Za-z0-9]", "_").toUpperCase();
             // Heredoc quotato quando NON ci sono variabili da espandere: cosi' un $ nel
             // contenuto (le %{...} non ne hanno, ma le query potrebbero) resta letterale.
-            sb.append("\ncat > \"$DOVECOT_ETC/").append(f.percorso()).append("\" <<")
-              .append(f.espandi() ? delim : "'" + delim + "'").append("\n");
-            sb.append(f.contenuto());
+            sb.append("\ncat > \"$DOVECOT_ETC/").append(f.path()).append("\" <<")
+              .append(f.expand() ? delim : "'" + delim + "'").append("\n");
+            sb.append(f.content());
             sb.append(delim).append("\n");
         }
         sb.append("""

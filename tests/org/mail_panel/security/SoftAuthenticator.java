@@ -57,7 +57,7 @@ public final class SoftAuthenticator {
         return out;
     }
 
-    byte[] coseKey() {
+    byte[] thingsKey() {
         ECPublicKey pub = (ECPublicKey) keys.getPublic();
         CBORObject m = CBORObject.NewMap();
         m.Add(1, 2);      // kty: EC2
@@ -87,7 +87,7 @@ public final class SoftAuthenticator {
         acd.write(new byte[16]);                                       // AAGUID
         acd.write(ByteBuffer.allocate(2).putShort((short) credentialId.length).array());
         acd.write(credentialId);
-        acd.write(coseKey());
+        acd.write(thingsKey());
         int flags = 0x01 | (userVerified ? 0x04 : 0) | 0x40;         // UP, UV, AT
         CBORObject ao = CBORObject.NewMap();
         ao.Add("fmt", "none");
