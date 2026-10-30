@@ -9,11 +9,11 @@ ROOT = sys.argv[1]
 def words_of(s): return set(w.lower() for w in re.findall(r"[A-Za-zÀ-ÿ']+", s) for w in w.split("'") if w)
 it = json.load(open(f"{ROOT}/src/main/resources/lang/it.json", encoding="utf-8"))
 en = json.load(open(f"{ROOT}/src/main/resources/lang/en.json", encoding="utf-8"))
-ITA = set().union(*(words_of(v) for v in it.values() if isinstance(v, str)))
-ENG = set().union(*(words_of(v) for v in en.values() if isinstance(v, str)))
+IT_WORDS = set().union(*(words_of(v) for v in it.values() if isinstance(v, str)))
+EN_WORDS = set().union(*(words_of(v) for v in en.values() if isinstance(v, str)))
 for f in glob.glob(f"{ROOT}/src/main/java/**/*.java", recursive=True) + glob.glob(f"{ROOT}/src/main/resources/pages/*") + glob.glob(f"{ROOT}/tests/**/*.java", recursive=True) + glob.glob(f"{ROOT}/tests/*.js") + glob.glob(f"{ROOT}/tests/*.py"):
     t = open(f, encoding="utf-8", errors="replace").read()
-    for c in re.findall(r"(?m)//[^\n]*|/\*[\s\S]*?\*/|^\s*#[^\n]*", t): ITA |= words_of(c)
+    for c in re.findall(r"(?m)//[^\n]*|/\*[\s\S]*?\*/|^\s*#[^\n]*", t): IT_WORDS |= words_of(c)
 DICT = set(w.strip().lower() for w in open("/usr/share/dict/words", encoding="utf-8", errors="ignore"))
 TECH = set(open(os.path.join(os.path.dirname(__file__), "technical-words.txt")).read().split()) if os.path.exists(os.path.join(os.path.dirname(__file__), "technical-words.txt")) else set()
 # parole che stanno in entrambi i corpus ma qui sono italiane (o viceversa) si decidono a mano
@@ -25,7 +25,7 @@ def italian_parts(name):
     out = []
     for p in parts(name):
         if len(p) < 3 or p in TECH: continue
-        if (p in ITA and p not in ENG) or (p not in DICT and p not in ENG and p not in TECH):
+        if (p in IT_WORDS and p not in EN_WORDS) or (p not in DICT and p not in EN_WORDS and p not in TECH):
             out.append(p)
     return out
 if __name__ == "__main__":
