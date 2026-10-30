@@ -109,7 +109,8 @@ public class LocalResolverTest {
         check("non rifa' il setup", !s.calls().contains("service local_unbound setup"));
         check("riavvia soltanto", s.calls().contains("service local_unbound restart"));
         check("resolv.conf identico", resolvAfter1.equals(Files.readString(s.resolv)));
-        check("e il file in conf.d identico, non ripetuto", lanZonesText.equals(Files.readString(lanZones)));
+        check("e il file in conf.d identico, non ripetuto", Files.exists(lanZones)
+                && lanZonesText.equals(Files.readString(lanZones)));
         check("e risponde come la prima volta", r2.out.contains("Spamhaus answers"));
 
         OUT.println("\n-- 3. un local_unbound che inoltra (il predefinito di FreeBSD) --");
