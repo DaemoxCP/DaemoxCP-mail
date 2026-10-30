@@ -336,6 +336,11 @@ REDISCONF
             sysrc sendmail_msp_queue_enable="NO"
             service sendmail stop 2>/dev/null || true
 
+            """
+            // Postfix come MTA locale: senza, la posta di sistema esce da dma. Lo stesso pezzo
+            // e' in FullMailServerScript e PostfixScript.
+            + LocalMtaScript.SHELL + """
+
             mkdir -p /usr/local/etc/postfix
             mkdir -p /var/spool/postfix/private
             chown postfix:postfix /var/spool/postfix/private
@@ -345,13 +350,24 @@ REDISCONF
 # Postfix - Managed by FreeBSD Mail Panel
 myhostname = mail.localhost
 mydomain = localhost
-myorigin = $mydomain
 inet_interfaces = all
 inet_protocols = all
 
-# Disable local delivery - virtual only
-mydestination =
-local_transport = error:no local mail delivery
+# Consegna locale solo per localhost: ci arrivano gli indirizzi senza dominio (root,
+# postmaster: cron e periodic), che ora passano da Postfix e non da dma. Spenta del tutto,
+# com'era, quella posta rimbalzava. myorigin esplicito perche' il pannello riscrive mydomain
+# con il nome vero del server. Il perche' misurato e' in FullMailServerScript.
+myorigin = localhost
+mydestination = localhost
+# In uscita root@localhost diventa root@<nome del server>: vedi FullMailServerScript.
+smtp_generic_maps = inline:{ @localhost=@$myhostname }
+
+# Solo questa macchina spedisce senza autenticarsi. Senza compatibility_level Postfix usa il
+# livello 0, dove mynetworks_style = subnet: tutta la rete del server diventava fidata, cioe'
+# un relay aperto (misurato con postconf -c: mynetworks = 192.168.64.0/24 ...). Gli stessi
+# valori dell'installazione completa.
+compatibility_level = 3.6
+mynetworks = 127.0.0.0/8 [::1]/128
 
 # Virtual mailbox settings
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
@@ -376,8 +392,9 @@ smtpd_sasl_auth_enable = yes
 smtpd_sasl_security_options = noanonymous
 smtpd_sasl_local_domain = $myhostname
 
-# Restrictions
-smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
+# Restrictions. reject_non_fqdn_recipient tiene fuori da Internet root@localhost, che con la
+# consegna locale accesa per localhost reject_unauth_destination lascerebbe passare.
+smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination, reject_non_fqdn_recipient
 
 # Rspamd milter
 smtpd_milters = inet:127.0.0.1:11332
@@ -531,6 +548,15 @@ EOF
 backend = "redis";
 autolearn = true;
 EOF
+
+            """
+            // Il risolutore ricorsivo locale, prima che rspamd parta: senza, le liste di Spamhaus
+            // non rispondono. Lo stesso pezzo e' in FullMailServerScript e RspamdScript.
+            + LocalResolverScript.SHELL + """
+
+            # dig: il pannello lo usa per i controlli DNS e il sistema base non ce l'ha
+            # (vedi FullMailServerScript).
+            pkg install -y dns/bind-tools
 
             sysrc rspamd_enable="YES"
 
