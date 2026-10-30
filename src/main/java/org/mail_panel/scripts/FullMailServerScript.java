@@ -165,20 +165,32 @@ echo "${GREEN}  Cleanup complete${NC}"
 # =============================================================================
 # PHASE 2: INSTALL PACKAGES
 # =============================================================================
+# Ogni pacchetto passa da install_packages, mai da "pkg install" nudo: pkg puo' togliere
+# un pacchetto chiesto ed uscire con 0, e qui sotto lo ha fatto davvero (Dovecot).
+"""
+            + PackageInstall.shellFunction() + """
+
 echo ""
 echo "${YELLOW}[PHASE 2/10] Installing packages...${NC}"
 
 # MySQL
-pkg install -y mysql84-server mysql84-client
+install_packages mysql84-server mysql84-client
 
 # Postfix with MySQL support (postfix-mysql replaces postfix)
-pkg install -y postfix-mysql
+install_packages postfix-mysql
 
-# Dovecot with MySQL (dovecot-mysql replaces dovecot)
-pkg install -y dovecot-mysql dovecot-pigeonhole
+# Dovecot con il supporto MySQL, e il Sieve COSTRUITO PER QUEL Dovecot.
+# Il port mail/dovecot ha dei sapori che si escludono a vicenda (dovecot, dovecot-mysql,
+# dovecot-pgsql: stessi file, compresi /usr/local/bin/doveadm), e anche Pigeonhole ce li
+# ha: dovecot-pigeonhole dipende da "dovecot", dovecot-pigeonhole-mysql da dovecot-mysql.
+# Chiedere dovecot-mysql insieme a dovecot-pigeonhole e' chiedere due Dovecot: misurato il
+# 24/10/2026, pkg ha risolto il conflitto togliendo in silenzio dovecot-mysql, e il server
+# installato rispondeva «auth: Fatal: Support not compiled in for passdb driver 'sql'» a
+# ogni login IMAP e chiudeva la 587 («no SASL authentication mechanisms»).
+install_packages dovecot-mysql dovecot-pigeonhole-mysql
 
 # Anti-spam and antivirus
-pkg install -y rspamd redis clamav
+install_packages rspamd redis clamav
 
 # Fail2ban. Quindici file del pannello lo usano -- Fail2banManager, Fail2banAutoSetup,
 # BanActionRepair, WebProtection, la pagina Firewall -- e nessuno lo installava: dopo
@@ -186,7 +198,7 @@ pkg install -y rspamd redis clamav
 # pannello scrive al proprio avvio finivano in una cartella che non esiste.
 # Si nomina per ORIGINE: il nome del pacchetto porta davanti la versione di Python
 # ("py312-fail2ban" oggi) e cambia da sola.
-pkg install -y security/py-fail2ban
+install_packages security/py-fail2ban
 sysrc fail2ban_enable="YES"
 
 # dig. Il pannello lo chiama in sei file -- i record DNS, DKIM, le liste nere, MTA-STS,
@@ -194,7 +206,7 @@ sysrc fail2ban_enable="YES"
 # misurato il 29/10/2026 su una macchina appena installata, "which dig" non trovava niente.
 # E il codice tratta l'errore come una risposta vuota (digRecord in SSLMailServer restituisce
 # ""), cioe' come un record che non c'e': letto nel codice, non misurato dalla pagina.
-pkg install -y dns/bind-tools
+install_packages dns/bind-tools
 
 # SSL: NON si installa il port security/openssl.
 # Il predefinito dei port FreeBSD e' ssl=base, cioe' i pacchetti binari sono costruiti contro
@@ -207,9 +219,13 @@ pkg install -y dns/bind-tools
 # Fonte: https://openssl-library.org/policies/releasestrat/
 
 # Roundcube
-pkg install -y nginx php84 php84-extensions
-pkg install -y roundcube-php84
-pkg install -y php84-mysqli php84-mbstring php84-intl php84-xml php84-zip php84-pdo php84-pdo_mysql php84-session php84-fileinfo php84-dom php84-iconv php84-curl php84-gd 2>/dev/null || true
+install_packages nginx php84 php84-extensions
+install_packages roundcube-php84
+# Prima questa riga finiva con "2>/dev/null || true": se UN nome non fosse stato nel
+# catalogo, pkg avrebbe rifiutato l'intera riga e Roundcube sarebbe rimasto senza mysqli o
+# pdo_mysql, in silenzio. Tutti e tredici esistono (installati sulla VM FreeBSD 15.1 di
+# prova il 24/10/2026): se un giorno uno sparisce dal catalogo, l'installazione deve dirlo.
+install_packages php84-mysqli php84-mbstring php84-intl php84-xml php84-zip php84-pdo php84-pdo_mysql php84-session php84-fileinfo php84-dom php84-iconv php84-curl php84-gd
 
 # Create vmail user
 pw groupadd vmail -g 5000 2>/dev/null || true

@@ -53,6 +53,7 @@ passata.
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/scripts/*.java
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.LocalMtaTest
     sh tests/pkg-simulation-test.sh
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
 
 ## Le prove dell'area aggiornamenti
 
@@ -85,6 +86,28 @@ minuto: un indirizzo che manca si aspetta sessanta secondi prima di dirlo perso.
 
 `HeldUpdatesReportTest` e `AuditReportTest` hanno bisogno del database delle vulnerabilita'
 (`pkg audit -F`): senza, dicono quali prove hanno saltato e perche'.
+
+## L'installazione completa
+
+`InstallPackagesTest` e' la prova del reperto 52 (l'installatore metteva un Dovecot senza
+MySQL e si dichiarava riuscito). Le parti A, B e D girano ovunque: il testo dello script, le
+sue righe d'installazione vere fatte girare contro un pkg finto che toglie un pacchetto chiesto
+ed esce con 0 (lo script deve fermarsi li'), e le etichette dell'updater. La parte C chiede al
+risolutore VERO di pkg il piano di ogni riga come su una macchina appena installata: una copia
+del database di pkg con installato solo pkg, i pacchetti scaricati in una cartella temporanea
+(~180 MB, perche' i conflitti sui file pkg li vede solo dopo averli scaricati), e ogni
+pacchetto chiesto deve stare nel piano finale. Non installa niente e non tocca il database
+vero; si accende con `-De2e.vm=yes`, da root, su FreeBSD.
+
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
+
+Dopo un'installazione da zero (`InstallFromScratch`), `mail-login-probe.sh` fa un login vero:
+crea una casella di prova in `login-probe.test`, prova `doveadm auth test`, un LOGIN IMAP
+sulla 993 e un AUTH PLAIN sulla 587, mostra le righe del maillog e toglie casella e dominio.
+Il 24/10/2026, con l'installatore di prima, i servizi erano tutti attivi e falliva su tutti e
+tre gli ingressi. Da root, nella cartella del pannello:
+
+    sh tests/mail-login-probe.sh
 
 ## Con un MySQL di prova
 

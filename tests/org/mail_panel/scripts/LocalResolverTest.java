@@ -59,7 +59,8 @@ public class LocalResolverTest {
                     piece >= 0 && start > piece);
         }
         for (String name : List.of("FullMailServerScript", "FullMailStackScript"))
-            check(name + ": installa dig (dns/bind-tools)", scripts.get(name).contains("pkg install -y dns/bind-tools"));
+            check(name + ": installa dig (dns/bind-tools)", scripts.get(name).contains("pkg install -y dns/bind-tools")
+                    || scripts.get(name).contains("install_packages dns/bind-tools"));
         check("l'installazione completa verifica il risolutore alla fine",
                 scripts.get("FullMailServerScript").contains("Local DNS resolver does NOT answer for Spamhaus"));
 

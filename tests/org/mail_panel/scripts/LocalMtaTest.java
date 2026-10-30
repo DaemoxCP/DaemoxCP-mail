@@ -63,10 +63,13 @@ public class LocalMtaTest {
         for (String name : List.of("FullMailServerScript", "PostfixScript", "FullMailStackScript")) {
             String script = scripts.get(name);
             OUT.println("\n== " + name + " ==");
-            int pkg = script.indexOf("pkg install -y postfix-mysql");
+            // Il pacchetto si installa con "pkg install -y" o, nell'installazione completa, con
+            // install_packages (PackageInstall), che controlla che pkg non l'abbia tolto.
+            int pkg = Math.max(script.indexOf("pkg install -y postfix-mysql"),
+                    script.indexOf("install_packages postfix-mysql"));
             int activation = script.indexOf(LocalMtaScript.SHELL);
             check("contiene il pezzo LocalMtaScript, intero", activation >= 0);
-            check("e lo esegue dopo pkg install -y postfix-mysql", pkg >= 0 && activation > pkg);
+            check("e lo esegue dopo l'installazione di postfix-mysql", pkg >= 0 && activation > pkg);
 
             Path dir = home.resolve(name);
             Files.createDirectories(dir);

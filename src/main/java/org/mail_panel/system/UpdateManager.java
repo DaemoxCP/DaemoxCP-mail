@@ -104,7 +104,9 @@ public final class UpdateManager {
      */
     private static final String[][] ROLES = {
         {"^postfix(-.*)?$",            "SMTP (Postfix)"},
-        {"^dovecot[0-9]*$",            "IMAP/POP3 (Dovecot)"},
+        // Con i sapori del port: dovecot-mysql E' Dovecot, non un suo componente, ed e' il
+        // pacchetto che l'installazione mette. Lo stesso per dovecot24-mysql della 2.4.
+        {"^dovecot[0-9]*(-(mysql|pgsql|sqlite3|ldap|cdb))?$", "IMAP/POP3 (Dovecot)"},
         {"^dovecot[0-9]*-pigeonhole(-.*)?$", "server.um.role.sieve"},
         {"^dovecot[0-9]*-.*$",         "server.um.role.dovecotPart"},
         {"^rspamd$",                   "server.um.role.rspamd"},
