@@ -179,7 +179,7 @@ public final class PublicSurfaceRename {
         }
 
         StringBuilder d = new StringBuilder("moved");
-        for (Move m : moves) d.append(' ').append(m.from().getFileName()).append(" -> ").append(m.to().getFileName()).append(';');
+        for (Move m : moves) d.append(' ').append(m.from()).append(" -> ").append(m.to().getFileName()).append(';');
         if (f2bRunning && sv.banned(OLD_NAME) != null)
             d.append(" WARNING: fail2ban still reports the old jail ").append(OLD_NAME).append(';');
         if (!bans.isEmpty()) {

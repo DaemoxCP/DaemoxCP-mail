@@ -555,7 +555,7 @@ public final class BanActionRepair {
     private static Path copy(Path f) throws Exception {
         Path dir = Paths.get(BACKUP_FOLDER);
         Files.createDirectories(dir);
-        Path c = dir.resolve(f.getFileName().toString() + ".prima-di-pf-"
+        Path c = dir.resolve(f.getFileName().toString() + ".before-pf-"
             + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")));
         Files.copy(f, c);
         copies.put(c, f);

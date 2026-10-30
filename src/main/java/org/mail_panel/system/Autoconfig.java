@@ -253,7 +253,7 @@ public class Autoconfig {
 
     private static JSONObject testDownload(String name, String domain) {
         JSONObject r = new JSONObject();
-        String url = "https://" + name + "/mail/config-v1.1.xml?emailaddress=prova@" + domain;
+        String url = "https://" + name + "/mail/config-v1.1.xml?emailaddress=test@" + domain;
         r.put("url", url);
         try {
             java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()

@@ -120,7 +120,7 @@ async function served(route) {
     real('a cosa serve: nginx', otherOne[2][1].startsWith('Web server'));
     real('Pigeonhole non installato', otherOne[4][2] === 'non installato');
     real("l'avviso e' rosso, la nota sul riavvio gialla", await page.locator('#otherSoftware .text-risk').count() === 1
-        && await page.locator('#otherSoftware .testo-avviso').count() === 1);
+        && await page.locator('#otherSoftware .text-caution').count() === 1);
     real('ogni cella ha la sua etichetta per il telefono', await page.locator('#otherSoftware td:not([data-label])').count() === 0);
     if (photos) await page.screenshot({ path: path.join(photos, 'home-versions.png'), fullPage: true });
 

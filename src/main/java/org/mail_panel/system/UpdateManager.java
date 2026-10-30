@@ -5247,7 +5247,7 @@ public final class UpdateManager {
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
             String bk = "/var/db/mailpanel/python/" + ts;
             if (!ok("mkdir -p " + bk, 30)) throw new IllegalStateException("cannot create " + bk);
-            sh("pkg query '%n %v' > " + bk + "/pacchetti-prima.txt 2>/dev/null", 60);
+            sh("pkg query '%n %v' > " + bk + "/packages-before.txt 2>/dev/null", 60);
             for (String d : new String[]{"/usr/local/etc/fail2ban", "/usr/local/etc/letsencrypt"}) {
                 if (!ok("test -d " + d, 10)) { job.write(I18n.tr("server.um.runPythonTransition.5", java.util.Map.of("d", String.valueOf(d)))); continue; }
                 String name = d.substring(d.lastIndexOf('/') + 1);

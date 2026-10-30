@@ -145,9 +145,12 @@ public class PublicSurfaceRenameTest {
 
     public static void main(String[] args) throws Exception {
         OUT.println("\n== I nomi ==");
+        // Per riflessione: javac copia le costanti dentro questa classe, e il confronto diretto
+        // guarderebbe i nomi di quando la prova e' stata compilata, non quelli del jar.
+        String oldName = (String) PublicSurfaceRename.class.getDeclaredField("OLD_NAME").get(null);
+        String newName = (String) WebProtection.class.getDeclaredField("NAME").get(null);
         check("il nome vecchio e' quello di prima della rinomina, il nuovo e' diverso",
-                PublicSurfaceRename.OLD_NAME.equals(OLD) && WebProtection.NAME.equals(NEW)
-                        && !PublicSurfaceRename.OLD_NAME.equals(PublicSurfaceRename.NEW_NAME));
+                oldName.equals(OLD) && newName.equals(NEW));
         check("il codice di oggi non scrive piu' il nome vecchio (configurazione, filtro, jail)",
                 !WebProtection.configuration(CERT, KEY).contains(OLD) && !WebProtection.jail().contains(OLD)
                         && !WebProtection.filter().contains(OLD) && !WebProtection.ACCESS_LOG.contains(OLD));
