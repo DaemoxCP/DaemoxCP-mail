@@ -1411,7 +1411,7 @@ public class MailPanelContent {
                     // Da quale ramo arrivano i pacchetti: lo si cambia in Aggiornamenti.
                     stateValue.appendChild(document.createTextNode(' ' + t('ver.branch') + ' '));
                     const a = document.createElement('a');
-                    a.href = '/updates#ramo';
+                    a.href = '/updates#branch';
                     a.textContent = d.branch === 'mixed' ? t('ver.branchMixed') : d.branch === 'none' ? t('ver.branchNone') : d.branch;
                     stateValue.appendChild(a);
                     stateValue.appendChild(document.createTextNode('.'));
