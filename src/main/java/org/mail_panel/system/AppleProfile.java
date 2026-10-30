@@ -66,12 +66,13 @@ public class AppleProfile {
         String h = escape(mailHost);
         String org = escape(organization == null || organization.isBlank() ? mailHost : organization);
         String profileId = "org.mail-panel." + email.toLowerCase(Locale.ROOT);
-        String profileUuid = deterministic("profilo:" + email.toLowerCase(Locale.ROOT));
-        String mailUuid = deterministic("posta:" + email.toLowerCase(Locale.ROOT));
-        // "posta" nell'identificatore e nel seme dell'UUID resta in italiano apposta: iOS e macOS
-        // riconoscono un profilo dal suo PayloadIdentifier e dal suo UUID, e un profilo con un
-        // identificatore nuovo si installerebbe ACCANTO a quello vecchio invece di sostituirlo.
-        // E' un nome che vive gia' sui dispositivi di chi l'ha installato, non un nome del codice.
+        String profileUuid = deterministic("profile:" + email.toLowerCase(Locale.ROOT));
+        String mailUuid = deterministic("mail:" + email.toLowerCase(Locale.ROOT));
+        // iOS e macOS riconoscono un profilo dal suo PayloadIdentifier e dal suo UUID: questi due
+        // semi e il ".mail" dell'identificatore non vanno piu' cambiati. Fino al 30/10/2026 erano
+        // in italiano; il committente ha scelto di passarli all'inglese sapendo che un profilo
+        // scaricato prima si installa ACCANTO a quello nuovo invece di essere sostituito: la
+        // pagina dice di togliere quello vecchio (pa.after.html).
 
         return """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -90,7 +91,7 @@ public class AppleProfile {
                 <dict>
                   <key>PayloadType</key>        <string>com.apple.mail.managed</string>
                   <key>PayloadVersion</key>     <integer>1</integer>
-                  <key>PayloadIdentifier</key>  <string>%s.posta</string>
+                  <key>PayloadIdentifier</key>  <string>%s.mail</string>
                   <key>PayloadUUID</key>        <string>%s</string>
                   <key>PayloadDisplayName</key> <string>Account %s</string>
 
@@ -222,7 +223,7 @@ public class AppleProfile {
 
     /** Il nome del file proposto al browser. Solo caratteri innocui. */
     public static String fileName(String email) {
-        String base = email == null ? "posta" : email.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]", "-");
+        String base = email == null ? "mail" : email.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]", "-");
         return base + ".mobileconfig";
     }
 }

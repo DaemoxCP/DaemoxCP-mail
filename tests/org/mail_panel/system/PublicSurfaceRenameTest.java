@@ -16,10 +16,11 @@ import java.util.stream.Stream;
 /**
  * La superficie pubblica passa da "mailpanel-pubblico" a "mailpanel-public" sui server gia'
  * installati (PublicSurfaceRename.migrate), in cartelle temporanee e con un nginx e un fail2ban
- * finti. Il fail2ban finto tiene attive le jail che trova in jail.d al reload, e toglie i ban a
- * quelle che spariscono, come fa l'azione pf vera quando una jail si ferma: cosi' la prova vede
- * se i ban arrivano davvero nella jail nuova. L'effetto su nginx, fail2ban e pf veri lo misura
- * la prova sulla VM (reperti).
+ * finti. Il fail2ban finto fa come quello vero: tiene i ban in un database per nome di jail, e a
+ * ogni reload attiva le jail che trova in jail.d riprendendo dal database i ban di ciascuna. Una
+ * jail col nome nuovo ritrova i ban solo se lo stato nel database e' passato a lei. Conta anche
+ * i ban dati a mano (le righe «Ban» che la jail recidive conta): una rinomina non ne deve dare.
+ * L'effetto su nginx, fail2ban e pf veri lo misura la prova sulla VM (reperti).
  *
  * Si lancia ovunque (non chiama niente):
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PublicSurfaceRenameTest
@@ -34,7 +35,8 @@ public class PublicSurfaceRenameTest {
         if (!ok) failed++;
     }
 
-    static final String OLD = "mailpanel-pubblico";
+    /** Il nome di prima, dal file di dati: la prova non lo scrive. */
+    static final String OLD = LegacyNames.single("publicSurface");
     static final String NEW = "mailpanel-public";
     static final String CERT = "/usr/local/etc/ssl/mail/fullchain.pem";
     static final String KEY = "/usr/local/etc/ssl/mail/privkey.pem";
@@ -48,9 +50,13 @@ public class PublicSurfaceRenameTest {
         final Path jailDir;
         List<String> folders;
         boolean nginxRunning = true, f2bRunning = true;
-        boolean nginxTestFails, f2bReloadFails, f2bIgnoresNewJail;
-        int foldersCalls, nginxTests, nginxReloads, f2bReloads, bans;
+        boolean nginxTestFails, f2bReloadFails, f2bIgnoresNewJail, databaseFails;
+        int foldersCalls, nginxTests, nginxReloads, f2bReloads, manualBans, stateMoves;
+        /** Le jail attive, con i loro ban. */
         final Map<String, List<String>> jails = new LinkedHashMap<>();
+        /** Il database di fail2ban: i ban per nome di jail, e la posizione nel log. */
+        final Map<String, List<String>> database = new LinkedHashMap<>();
+        final Map<String, String> logOf = new LinkedHashMap<>();
 
         FakeServices(Path jailDir, List<String> folders) { this.jailDir = jailDir; this.folders = folders; }
 
@@ -65,14 +71,13 @@ public class PublicSurfaceRenameTest {
         @Override public Shell.Result fail2banReload() {
             f2bReloads++;
             if (f2bReloadFails && f2bReloads == 1) return ko("ERROR test fault");
-            Map<String, List<String>> before = new LinkedHashMap<>(jails);
             jails.clear();
             try (Stream<Path> s = Files.list(jailDir)) {
                 for (Path p : s.toList()) {
                     String n = p.getFileName().toString().replace(".conf", "");
                     if (f2bIgnoresNewJail && n.equals(NEW)) continue;
-                    // Una jail che resta tiene i suoi ban; una nuova parte vuota.
-                    jails.put(n, before.getOrDefault(n, new ArrayList<>()));
+                    // Ogni jail che parte riprende dal database i suoi ban, e solo i suoi.
+                    jails.put(n, database.computeIfAbsent(n, k -> new ArrayList<>()));
                 }
             } catch (Exception e) { return ko(e.toString()); }
             return ok();
@@ -81,11 +86,19 @@ public class PublicSurfaceRenameTest {
             List<String> b = jails.get(jail);
             return b == null ? null : new ArrayList<>(b);
         }
-        @Override public Shell.Result ban(String jail, List<String> ips) {
-            bans++;
-            if (!jails.containsKey(jail)) return ko("jail does not exist");
-            jails.get(jail).addAll(ips);
-            return ok();
+        @Override public boolean moveJailState(String from, String to, String fromLog, String toLog) {
+            stateMoves++;
+            if (databaseFails) return false;
+            List<String> b = database.remove(from);
+            if (b != null) database.put(to, b);
+            if (fromLog.equals(logOf.get(from))) { logOf.remove(from); logOf.put(to, toLog); }
+            return true;
+        }
+
+        /** Un ban dato a mano: nel fail2ban vero scrive una riga «Ban» che recidive conta. */
+        void manualBan(String jail, String ip) {
+            manualBans++;
+            database.computeIfAbsent(jail, k -> new ArrayList<>()).add(ip);
         }
     }
 
@@ -119,9 +132,12 @@ public class PublicSurfaceRenameTest {
                 Files.writeString(logs.resolve(OLD + "-access.log"), "1.2.3.4 - - \"GET /x\" 404\n");
                 Files.writeString(logs.resolve(OLD + "-access.log.0.bz2"), "archive\n");
             }
-            sv.fail2banReload();   // fail2ban acceso con la jail vecchia
+            if (withJail) {
+                sv.database.put(OLD, new ArrayList<>(List.of("203.0.113.7", "198.51.100.9")));
+                sv.logOf.put(OLD, logs.resolve(OLD + "-access.log").toString());
+            }
+            sv.fail2banReload();   // fail2ban acceso con la jail vecchia e i suoi due ban
             sv.f2bReloads = 0;
-            if (withJail) sv.jails.get(OLD).addAll(List.of("203.0.113.7", "198.51.100.9"));
         }
 
         PublicSurfaceRename.Report run() throws Exception {
@@ -149,8 +165,8 @@ public class PublicSurfaceRenameTest {
         // guarderebbe i nomi di quando la prova e' stata compilata, non quelli del jar.
         String oldName = (String) PublicSurfaceRename.class.getDeclaredField("OLD_NAME").get(null);
         String newName = (String) WebProtection.class.getDeclaredField("NAME").get(null);
-        check("il nome vecchio e' quello di prima della rinomina, il nuovo e' diverso",
-                oldName.equals(OLD) && newName.equals(NEW));
+        check("il nome vecchio viene dal file di dati e il nuovo e' diverso",
+                !oldName.isEmpty() && oldName.equals(OLD) && newName.equals(NEW) && !oldName.equals(newName));
         check("il codice di oggi non scrive piu' il nome vecchio (configurazione, filtro, jail)",
                 !WebProtection.configuration(CERT, KEY).contains(OLD) && !WebProtection.jail().contains(OLD)
                         && !WebProtection.filter().contains(OLD) && !WebProtection.ACCESS_LOG.contains(OLD));
@@ -158,6 +174,10 @@ public class PublicSurfaceRenameTest {
                 WebProtection.jail().contains("[" + NEW + "]") && WebProtection.jail().contains("filter   = " + NEW + "\n")
                         && WebProtection.jail().contains("logpath  = /var/log/nginx/" + NEW + "-access.log")
                         && WebProtection.jail().contains("action   = pf[name=" + NEW + ", port=\"http,https\"]"));
+        check("il file del database si legge da \"fail2ban-client get dbfile\"",
+                "/var/db/fail2ban/fail2ban.sqlite3".equals(PublicSurfaceRename.fail2banDatabase(
+                        "Current database file is:\n`- /var/db/fail2ban/fail2ban.sqlite3\n"))
+                        && PublicSurfaceRename.fail2banDatabase("Database currently disabled") == null);
         check("i tre file di main hanno il marcatore del pannello",
                 oldConf().contains(PublicSurfaceRename.MARKER) && oldFilter().contains(PublicSurfaceRename.MARKER)
                         && oldJail().contains(PublicSurfaceRename.MARKER));
@@ -191,6 +211,10 @@ public class PublicSurfaceRenameTest {
         check("i due ban della jail vecchia sono nella nuova, la vecchia non c'e' piu'",
                 s.sv.jails.containsKey(NEW) && s.sv.jails.get(NEW).equals(List.of("203.0.113.7", "198.51.100.9"))
                         && !s.sv.jails.containsKey(OLD));
+        check("  ripresi dal database, senza nessun ban dato a mano (recidive non conta niente)",
+                s.sv.stateMoves == 1 && s.sv.manualBans == 0);
+        check("  e la jail nuova riprende il log dal punto in cui era la vecchia",
+                s.logs.resolve(NEW + "-access.log").toString().equals(s.sv.logOf.get(NEW)) && !s.sv.logOf.containsKey(OLD));
 
         OUT.println("\n== Il secondo avvio ==");
         Map<String, String> after = s.snapshot();
@@ -218,7 +242,9 @@ public class PublicSurfaceRenameTest {
         check("ogni file torna com'era", before.equals(s.snapshot()));
         check("nginx ricaricato due volte (avanti e indietro), fail2ban due (il rifiuto e il ritorno)",
                 s.sv.nginxReloads == 2 && s.sv.f2bReloads == 2);
-        check("la jail vecchia e' di nuovo attiva", s.sv.jails.containsKey(OLD) && !s.sv.jails.containsKey(NEW));
+        check("la jail vecchia e' di nuovo attiva, coi suoi due ban ripresi dal database",
+                s.sv.jails.containsKey(OLD) && !s.sv.jails.containsKey(NEW) && s.sv.jails.get(OLD).size() == 2
+                        && s.sv.manualBans == 0);
 
         OUT.println("\n== fail2ban ricarica ma non vede la jail nuova: indietro ==");
         s = new Server(true, true, true);
@@ -230,9 +256,17 @@ public class PublicSurfaceRenameTest {
         check("dopo il ritorno la jail vecchia c'e' di nuovo, con i suoi due ban",
                 s.sv.jails.containsKey(OLD) && s.sv.jails.get(OLD).equals(List.of("203.0.113.7", "198.51.100.9")));
 
+        OUT.println("\n== Il database di fail2ban non si puo' aggiornare ==");
+        s = new Server(true, true, true);
+        s.sv.databaseFails = true;
+        r = s.run();
+        check("la rinomina va avanti lo stesso, e lo dice", r.outcome() == PublicSurfaceRename.Outcome.DONE
+                && r.detail().contains("not carried over") && s.sv.jails.containsKey(NEW) && !s.sv.jails.containsKey(OLD));
+        check("  senza ribannare a mano", s.sv.manualBans == 0);
+
         OUT.println("\n== Cose che non si toccano ==");
         s = new Server(true, true, true);
-        Files.writeString(s.jailD.resolve(OLD + ".conf"), "[mailpanel-pubblico]\nenabled = true\n# scritta a mano\n");
+        Files.writeString(s.jailD.resolve(OLD + ".conf"), "[" + OLD + "]\nenabled = true\n# written by hand\n");
         before = s.snapshot();
         r = s.run();
         check("una jail scritta a mano: NOT_OURS, niente spostato, nessun servizio toccato",

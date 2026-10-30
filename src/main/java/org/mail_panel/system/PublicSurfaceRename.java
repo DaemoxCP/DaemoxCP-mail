@@ -37,27 +37,32 @@ import java.util.stream.Stream;
  *   <li>un file vecchio che non ha scritto il pannello (manca «Scritto dal pannello»), il nome
  *       nuovo gia' presente accanto al vecchio, o due file vecchi in due cartelle di nginx: non
  *       tocca niente e lo scrive nel log, come PathMigration: scegliere non e' compito suo;</li>
- *   <li>altrimenti: si segna gli indirizzi bannati dalla jail vecchia, sposta il log con le sue
- *       copie ruotate, sposta i tre file cambiando il nome dentro; poi nginx -t, reload di nginx,
- *       reload di fail2ban, e chiede a fail2ban se la jail nuova c'e'. Al primo passo che fallisce
- *       rimette tutto com'era e ricarica: al prossimo avvio ci riprova. Per ultimo rimette i ban
- *       nella jail nuova.</li>
+ *   <li>altrimenti: sposta il log con le sue copie ruotate e i tre file cambiando il nome dentro;
+ *       poi nginx -t e reload di nginx; sposta lo stato della jail nel database di fail2ban; reload
+ *       di fail2ban, e chiede a fail2ban se la jail nuova c'e'. Al primo passo che fallisce
+ *       rimette tutto com'era, stato compreso, e ricarica: al prossimo avvio ci riprova.</li>
  * </ul>
  *
  * <p>Il contenuto dei file vecchi resta quello, cambiato solo nel nome: e' una rinomina, non una
  * riparazione (quella la fanno installJail e BanActionRepair). Nei file scritti dal pannello il
  * nome vecchio compare solo dove e' un nome.
  *
- * <p>I ban: fail2ban li tiene per jail, una jail con un altro nome parte vuota, e fermando la
- * vecchia l'azione pf ne svuota la tabella. Rimessi nella nuova ripartono da capo (un'ora): meglio
- * che riaprire subito la porta a chi era appena stato fermato.
+ * <p>I ban: fail2ban li tiene per jail, nel suo database, e quando una jail parte rimette quelli
+ * non ancora scaduti. Una jail con un altro nome partirebbe vuota. Quindi prima del reload si
+ * passano alla jail nuova, nel database, i ban e la posizione raggiunta nel log: la jail nuova li
+ * riprende col tempo che restava, e non rilegge da capo il log gia' letto. NON si ribannano con
+ * "banip": ogni ban scrive una riga «Ban» nel log di fail2ban, e la jail recidive le conta (tre in
+ * un giorno: una settimana su tutte le porte). Ribannare per una rinomina avrebbe potuto chiudere
+ * fuori per una settimana, posta compresa, un indirizzo che aveva gia' due ban: e' successo al Mac
+ * nella prova sulla VM del 30/10/2026. Se il database non si puo' aggiornare la rinomina va avanti
+ * lo stesso, e i ban della jail vecchia scadono entro l'ora.
  */
 public final class PublicSurfaceRename {
 
     private static final Logger LOGGER = Logger.getLogger(PublicSurfaceRename.class.getName());
 
-    /** Il nome di prima. Esiste solo per trovarlo sul disco: il codice usa WebProtection.NAME. */
-    static final String OLD_NAME = "mailpanel-pubblico";
+    /** Il nome di prima, dal file di dati: serve solo a trovarlo sul disco. */
+    static final String OLD_NAME = LegacyNames.single("publicSurface");
     static final String NEW_NAME = WebProtection.NAME;
 
     /** La riga che il pannello scrive in testa ai tre file, fin dalla prima versione. */
@@ -83,7 +88,11 @@ public final class PublicSurfaceRename {
         Shell.Result fail2banReload();
         /** Gli indirizzi bannati dalla jail, o null se fail2ban non ha quella jail. */
         List<String> banned(String jail);
-        Shell.Result ban(String jail, List<String> ips);
+        /**
+         * Nel database di fail2ban, i ban e la posizione nel log della jail {@code from} passano a
+         * {@code to} (col log {@code toLog} al posto di {@code fromLog}). Falso se non si e' potuto.
+         */
+        boolean moveJailState(String from, String to, String fromLog, String toLog);
     }
 
     public static void ensureAtBoot() {
@@ -100,6 +109,7 @@ public final class PublicSurfaceRename {
     }
 
     static Report migrate(Places at, Services sv) throws IOException {
+        if (OLD_NAME.isEmpty()) return new Report(Outcome.NOTHING, "");
         // Una passata di rinomina sul codice puo' cambiare ANCHE il nome vecchio qui dentro:
         // senza questa guardia il risultato sarebbe un "niente da fare" falso.
         if (OLD_NAME.equals(NEW_NAME))
@@ -150,6 +160,9 @@ public final class PublicSurfaceRename {
             List<String> b = sv.banned(OLD_NAME);
             if (b != null) bans.addAll(b);
         }
+        String oldLog = at.logDir().resolve(OLD_NAME + "-access.log").toString();
+        String newLog = at.logDir().resolve(NEW_NAME + "-access.log").toString();
+        boolean stateMoved = false;
         boolean nginxRunning = oldConf != null && sv.nginxRunning();
 
         Deque<Move> done = new ArrayDeque<>();
@@ -157,47 +170,57 @@ public final class PublicSurfaceRename {
             try {
                 for (Move m : moves) { m.apply(); done.push(m); }
             } catch (IOException e) {
-                return rollBack(done, bans, sv, false, false, "could not move the files: " + e.getMessage());
+                return rollBack(done, sv, false, false, "could not move the files: " + e.getMessage());
             }
 
             if (oldConf != null) {
                 Shell.Result t = sv.nginxTest();
-                if (!t.success()) return rollBack(done, bans, sv, false, false, "nginx -t refused the renamed file: " + t.outputTrim());
+                if (!t.success()) return rollBack(done, sv, false, false, "nginx -t refused the renamed file: " + t.outputTrim());
                 if (nginxRunning) {
                     Shell.Result rl = sv.nginxReload();
-                    if (!rl.success()) return rollBack(done, bans, sv, true, false, "nginx reload failed: " + rl.outputTrim());
+                    if (!rl.success()) return rollBack(done, sv, true, false, "nginx reload failed: " + rl.outputTrim());
                 }
             }
             if (f2bRunning) {
+                if (jailMoves) stateMoved = sv.moveJailState(OLD_NAME, NEW_NAME, oldLog, newLog);
                 Shell.Result rl = sv.fail2banReload();
-                if (!rl.success()) return rollBack(done, bans, sv, nginxRunning, true, "fail2ban reload failed: " + rl.outputTrim());
-                if (jailMoves && sv.banned(NEW_NAME) == null)
-                    return rollBack(done, bans, sv, nginxRunning, true, "fail2ban does not report the jail " + NEW_NAME + " after the reload");
+                if (!rl.success()) {
+                    if (stateMoved) sv.moveJailState(NEW_NAME, OLD_NAME, newLog, oldLog);
+                    return rollBack(done, sv, nginxRunning, true, "fail2ban reload failed: " + rl.outputTrim());
+                }
+                if (jailMoves && sv.banned(NEW_NAME) == null) {
+                    if (stateMoved) sv.moveJailState(NEW_NAME, OLD_NAME, newLog, oldLog);
+                    return rollBack(done, sv, nginxRunning, true, "fail2ban does not report the jail " + NEW_NAME + " after the reload");
+                }
             }
         } catch (RuntimeException e) {
-            return rollBack(done, bans, sv, nginxRunning, f2bRunning, "unexpected error: " + e);
+            if (stateMoved) sv.moveJailState(NEW_NAME, OLD_NAME, newLog, oldLog);
+            return rollBack(done, sv, nginxRunning, f2bRunning, "unexpected error: " + e);
         }
 
         StringBuilder d = new StringBuilder("moved");
         for (Move m : moves) d.append(' ').append(m.from()).append(" -> ").append(m.to().getFileName()).append(';');
         if (f2bRunning && sv.banned(OLD_NAME) != null)
             d.append(" WARNING: fail2ban still reports the old jail ").append(OLD_NAME).append(';');
-        if (!bans.isEmpty()) {
-            sv.ban(NEW_NAME, bans);
+        if (f2bRunning && jailMoves && !stateMoved)
+            d.append(" WARNING: fail2ban database not updated, ").append(bans.size())
+             .append(" bans of ").append(OLD_NAME).append(" not carried over (they expire within the hour);");
+        else if (!bans.isEmpty()) {
             List<String> now = sv.banned(NEW_NAME);
             int kept = 0;
             if (now != null) for (String ip : bans) if (now.contains(ip)) kept++;
-            d.append(' ').append(kept).append(" of ").append(bans.size()).append(" bans carried over to ").append(NEW_NAME);
+            d.append(' ').append(kept).append(" of ").append(bans.size()).append(" bans kept by ").append(NEW_NAME);
             if (kept < bans.size()) d.append(" (WARNING: some were not)");
         }
         return new Report(Outcome.DONE, d.toString());
     }
 
     /**
-     * Rimette ogni file com'era, nell'ordine inverso, e ricarica i servizi gia' ricaricati. Se
-     * fail2ban aveva gia' fermato la jail vecchia, ripartendo e' vuota: i ban si rimettono anche li'.
+     * Rimette ogni file com'era, nell'ordine inverso, e ricarica i servizi gia' ricaricati. Lo
+     * stato della jail nel database di fail2ban l'ha gia' rimesso il chiamante: ripartendo, la
+     * jail vecchia riprende i suoi ban da li'.
      */
-    private static Report rollBack(Deque<Move> done, List<String> bans, Services sv,
+    private static Report rollBack(Deque<Move> done, Services sv,
                                    boolean reloadNginx, boolean reloadF2b, String why) {
         List<String> problems = new ArrayList<>();
         while (!done.isEmpty()) {
@@ -211,7 +234,6 @@ public final class PublicSurfaceRename {
         if (reloadF2b) {
             Shell.Result r = sv.fail2banReload();
             if (!r.success()) problems.add("fail2ban reload: " + r.outputTrim());
-            else if (!bans.isEmpty()) sv.ban(OLD_NAME, bans);
         }
         return new Report(Outcome.ROLLED_BACK, why + "; everything put back"
                 + (problems.isEmpty() ? "" : " EXCEPT: " + String.join("; ", problems)));
@@ -261,6 +283,16 @@ public final class PublicSurfaceRename {
         return Files.exists(p, LinkOption.NOFOLLOW_LINKS);
     }
 
+    /** Il file del database dall'uscita di "fail2ban-client get dbfile", o null se non ne usa uno. */
+    static String fail2banDatabase(String output) {
+        if (output == null) return null;
+        for (String line : output.split("\n")) {
+            String t = line.replaceFirst("^[`|\\s-]+", "").trim();
+            if (t.startsWith("/") && !t.contains(" ")) return t;
+        }
+        return null;
+    }
+
     private static final Pattern BANNED = Pattern.compile("Banned IP list:\\s*(.*)");
 
     /** Gli indirizzi dalla riga "Banned IP list:" di fail2ban-client status. */
@@ -293,10 +325,41 @@ public final class PublicSurfaceRename {
             // Come in BanActionRepair: "non esiste" si legge anche nel testo, non solo nel codice.
             return r.success() && !r.output().contains("does not exist") ? bannedFrom(r.output()) : null;
         }
-        @Override public Shell.Result ban(String jail, List<String> ips) {
-            List<String> cmd = new ArrayList<>(List.of("fail2ban-client", "set", jail, "banip"));
-            cmd.addAll(ips);
-            return Shell.run(LONG, cmd.toArray(new String[0]));
+        @Override public boolean moveJailState(String from, String to, String fromLog, String toLog) {
+            String db = fail2banDatabase(Shell.run(SHORT, "fail2ban-client", "get", "dbfile").output());
+            if (db == null) {
+                LOGGER.warning("[PublicSurfaceRename] fail2ban has no database file: bans not carried over");
+                return false;
+            }
+            try (java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:" + db);
+                 java.sql.Statement st = c.createStatement()) {
+                // fail2ban tiene il database aperto: si aspetta il suo turno invece di fallire.
+                st.execute("PRAGMA busy_timeout = 10000");
+                c.setAutoCommit(false);
+                try {
+                    // Lo schema e' quello di fail2ban (server/database.py): jails, bips, bans, logs.
+                    exec(c, "INSERT OR IGNORE INTO jails(name, enabled) VALUES (?, 0)", to);
+                    exec(c, "UPDATE OR IGNORE bips SET jail = ? WHERE jail = ?", to, from);
+                    exec(c, "UPDATE OR IGNORE bans SET jail = ? WHERE jail = ?", to, from);
+                    exec(c, "UPDATE OR IGNORE logs SET jail = ?, path = ? WHERE jail = ? AND path = ?", to, toLog, from, fromLog);
+                    c.commit();
+                    return true;
+                } catch (java.sql.SQLException e) {
+                    c.rollback();
+                    throw e;
+                }
+            } catch (Exception e) {
+                LOGGER.warning("[PublicSurfaceRename] cannot move the state of " + from + " to " + to
+                        + " in " + db + ": " + e.getMessage());
+                return false;
+            }
+        }
+
+        private static void exec(java.sql.Connection c, String sql, String... args) throws java.sql.SQLException {
+            try (java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+                for (int i = 0; i < args.length; i++) ps.setString(i + 1, args[i]);
+                ps.executeUpdate();
+            }
         }
     }
 }

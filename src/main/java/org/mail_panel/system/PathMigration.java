@@ -20,8 +20,10 @@ import java.util.logging.Logger;
  * vecchio viene lasciato dov'e' e si registra un avviso, perche' decidere quale dei due valga
  * non e' compito di una migrazione: non deve distruggere niente.
  *
- * <p>L'ordine conta dove una cartella contiene un file da rinominare: prima la cartella, poi
- * il file dentro, altrimenti il secondo passo cercherebbe un percorso che non esiste piu'.
+ * <p>I nomi vecchi e quelli nuovi stanno nel file di dati (LegacyNames, sezioni "files" e
+ * "vmailFolders"), non qui. L'ordine e' quello del file, e conta dove una cartella contiene un
+ * file da rinominare: prima la cartella, poi il file dentro, altrimenti il secondo passo
+ * cercherebbe un percorso che non esiste piu'.
  *
  * <p>Il file del ramo dei pacchetti conserva il prefisso "zz": pkg legge
  * /usr/local/etc/pkg/repos in ordine alfabetico e per ogni campo vale l'ultimo, quindi il nome
@@ -40,27 +42,8 @@ public final class PathMigration {
     private PathMigration() {}
 
     public static void run() {
-        String db = "/var/db/mailpanel/";
-        rename(db + "pannello.log", db + "panel.log");
-        rename(db + "riavvio.log", db + "reboot.log");
-        rename(db + "pubblico", db + "public");
-        rename(db + "prova-copia.sql", db + "test-dump.sql");
-        rename(db + "ssl-precedente", db + "ssl-previous");
-        rename(db + "mailpanel-pubblico.conf-precedente", db + "mailpanel-public.conf-previous");
-        rename(db + "mailpanel.rc.prova", db + "mailpanel.rc.test");
-        rename(db + "mailpanel.rc.rimosso", db + "mailpanel.rc.removed");
-        rename(db + "master.cf-prima-della-465", db + "master.cf-before-465");
-        rename(db + "nginx-prima-di-autoconfig.conf", db + "nginx-before-autoconfig.conf");
-        rename(db + "nginx.conf-prima-di-include", db + "nginx.conf-before-include");
-
-        // Prima la cartella, poi il file che contiene.
-        rename(db + "sistema", db + "system");
-        rename(db + "system/salto.json", db + "system/version-jump.json");
-
-        rename("/var/db/mail-panel/copie-fail2ban", "/var/db/mail-panel/fail2ban-backups");
+        for (String[] p : LegacyNames.pairs("files")) rename(p[0], p[1]);
         migrateArchive(AddressTransform.vmail);
-        rename("/usr/local/etc/pkg/repos/zz-pannello-ramo.conf",
-               "/usr/local/etc/pkg/repos/zz-panel-branch.conf");
     }
 
     /**
@@ -68,7 +51,8 @@ public final class PathMigration {
      * A parte, perche' si possa provare su una cartella qualunque senza toccare le altre.
      */
     static void migrateArchive(Path vmail) {
-        rename(vmail.resolve(".archivio-pannello").toString(), vmail.resolve(".panel-archive").toString());
+        for (String[] p : LegacyNames.pairs("vmailFolders"))
+            rename(vmail.resolve(p[0]).toString(), vmail.resolve(p[1]).toString());
     }
 
     /** Sposta oldName su newName se c'e' il primo e non c'e' il secondo. Non segue i link. */
