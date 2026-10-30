@@ -37,6 +37,19 @@ public class JumpStateCompatTest {
               s.optInt("round") == 1 && s.has("code") && s.optInt("code", -1) == 0 && "reboot".equals(s.optString("asks")));
         check("  e kernel e userland restano", "15.1-RELEASE".equals(s.optString("kernel")) && s.has("userland"));
 
+        // I valori di "asks" scritti prima del 29/10/2026: la pagina li traduce coi nomi nuovi
+        JSONObject asks = UpdateManager.upgradeOldJumpState(new JSONObject("""
+                {"phase": "awaiting-restart", "steps": [
+                  {"round": 1, "code": 0, "asks": "ancora"},
+                  {"round": 2, "code": 0, "chiede": "ancora-ricostruisci"},
+                  {"round": 3, "code": 0, "asks": "restart"}]}
+                """));
+        org.json.JSONArray ss = asks.getJSONArray("steps");
+        check("\"ancora\" si legge again, \"ancora-ricostruisci\" rebuild, restart resta",
+              "again".equals(ss.getJSONObject(0).optString("asks"))
+              && "rebuild".equals(ss.getJSONObject(1).optString("asks"))
+              && "restart".equals(ss.getJSONObject(2).optString("asks")));
+
         // Un file gia' nuovo non cambia
         JSONObject fresh = new JSONObject().put("phase", "finished").put("target", "15.1-RELEASE");
         check("un file gia' nuovo resta com'e'", UpdateManager.upgradeOldJumpState(new JSONObject(fresh.toString())).similar(fresh));

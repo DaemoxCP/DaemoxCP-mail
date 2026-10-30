@@ -143,7 +143,7 @@ public class MtaStsSetup {
         List<String> uncovered = new ArrayList<>();
         for (String n : servedNames) if (!certificateCovers(n)) uncovered.add(n);
         List<String> excluded = domainsOnOtherAccount();
-        steps.add(step("certificato", I18n.tr("server.sts.stepCert"),
+        steps.add(step("certificate", I18n.tr("server.sts.stepCert"),
                 uncovered.isEmpty() ? I18n.tr("server.sts.allCovered") : I18n.tr("server.sts.uncovered", java.util.Map.of("list", String.valueOf(String.join(", ", uncovered)))),
                 uncovered.isEmpty() ? "done" : "da fare",
                 excluded.isEmpty() ? null
@@ -228,7 +228,7 @@ public class MtaStsSetup {
             }
         }
         List<Step> steps = new ArrayList<>();
-        steps.add(step("prova", I18n.tr("server.sts.stepTest"),
+        steps.add(step("test", I18n.tr("server.sts.stepTest"),
                 notAnswering.isEmpty()
                     ? I18n.tr("server.sts.answersAll")
                     : I18n.tr("server.sts.noAnswerFor", java.util.Map.of("list", String.valueOf(String.join(", ", notAnswering)))),
@@ -568,7 +568,7 @@ public class MtaStsSetup {
             if (detail.length() > 4000) detail = detail.substring(detail.length() - 4000);
             JSONObject e = new JSONObject().put("success", cr.success)
                     .put("note", cr.message).put("error", cr.message);
-            JSONObject line = outcome("certificato", I18n.tr("server.sts.certTitle"), e);
+            JSONObject line = outcome("certificate", I18n.tr("server.sts.certTitle"), e);
             line.put("names", new JSONArray(names));
             // L'uscita si mostra SEMPRE, non solo quando fallisce. Buttarla via quando il
             // comando "riesce" toglie la prova proprio nel caso peggiore: quello in cui
@@ -582,7 +582,7 @@ public class MtaStsSetup {
             }
             if (!cr.success) return stopped(r, doneOnes,
                     I18n.tr("server.sts.noCertStop"));
-        } else doneOnes.put(already("certificato", I18n.tr("server.sts.certTitle")));
+        } else doneOnes.put(already("certificate", I18n.tr("server.sts.certTitle")));
 
         // 6-bis. L'attesa della propagazione, e solo dove serve.
         //
@@ -655,7 +655,7 @@ public class MtaStsSetup {
         for (int i = 0; steps != null && i < steps.length(); i++) {
             JSONObject p = steps.optJSONObject(i);
             if (p == null) continue;
-            String title = p.optString("title", p.optString("key", "passo"));
+            String title = p.optString("title", p.optString("key", "step"));
             JSONArray detail = p.optJSONArray("detail");
             if (detail == null) {
                 entries.put(new JSONObject().put("title", title)

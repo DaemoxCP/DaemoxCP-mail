@@ -65,7 +65,7 @@ public final class AddressTransform {
     static Path vmail = Path.of("/var/vmail");
     static Path sieve = Path.of("/var/mail/sieve");
     /** La posta messa da parte: sotto /var/vmail (stesso disco, lo spostamento e' istantaneo), con un nome che nessun dominio puo' avere. */
-    static Path archive() { return vmail.resolve(".archivio-pannello"); }
+    static Path archive() { return vmail.resolve(".panel-archive"); }
 
     static final int MAX_DESTINATIONS = 20;
     /** Oltre, il conto dei messaggi si ferma e si dice "almeno". */
@@ -200,7 +200,7 @@ public final class AddressTransform {
     }
 
     /**
-     * Mette da parte posta e filtri dell'indirizzo, in /var/vmail/.archive-pannello/dominio/nome-DATA.
+     * Mette da parte posta e filtri dell'indirizzo, in /var/vmail/.panel-archive/dominio/nome-DATA.
      * Restituisce le coppie {da, a} spostate, per rimetterle a posto se il resto non riesce.
      */
     public static List<Path[]> archive(String address, long nowMs) throws IOException {
@@ -219,7 +219,7 @@ public final class AddressTransform {
             Path filters = folder(sieve, address);
             if (filters != null && Files.isDirectory(filters)) {
                 Files.createDirectories(base);
-                Path dest = free(base.resolve(name + "-" + when + "-filtri"));
+                Path dest = free(base.resolve(name + "-" + when + "-filters"));
                 // Su un altro disco ATOMIC_MOVE non si puo': allora si copia e si toglie, come fa mv.
                 try {
                     Files.move(filters, dest, StandardCopyOption.ATOMIC_MOVE);

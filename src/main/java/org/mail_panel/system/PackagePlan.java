@@ -219,7 +219,7 @@ public final class PackagePlan {
     static String signature(JSONObject plan) {
         List<String> lines = new ArrayList<>();
         JSONArray sb = plan.optJSONArray("unlockedPackages");
-        for (int i = 0; sb != null && i < sb.length(); i++) lines.add("sblocca " + sb.getString(i));
+        for (int i = 0; sb != null && i < sb.length(); i++) lines.add("unlock " + sb.getString(i));
         JSONArray c = plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
@@ -331,8 +331,8 @@ public final class PackagePlan {
                 if (kb <= 0) return failed(I18n.tr("server.plan.cannotMeasure", java.util.Map.of("db", String.valueOf(db))));
                 if (free < kb * 2)
                     return failed(I18n.tr("server.plan.noSpace", java.util.Map.of("mb", String.valueOf(kb / 1024), "free", String.valueOf(free / 1024))));
-                copy = sh("mktemp -d /var/tmp/pannello-simulazione.XXXXXX 2>/dev/null", 30);
-                if (!copy.matches("/var/tmp/pannello-simulazione\\.[A-Za-z0-9]{6,}")) {
+                copy = sh("mktemp -d /var/tmp/panel-simulation.XXXXXX 2>/dev/null", 30);
+                if (!copy.matches("/var/tmp/panel-simulation\\.[A-Za-z0-9]{6,}")) {
                     String oddFolder = copy;
                     copy = null;
                     return failed(I18n.tr("server.plan.mktempFailed", java.util.Map.of("d", String.valueOf(oddFolder))));

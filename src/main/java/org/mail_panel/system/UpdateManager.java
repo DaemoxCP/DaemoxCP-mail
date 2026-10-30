@@ -1825,13 +1825,13 @@ public final class UpdateManager {
         {"(^|[^A-Za-z0-9_])ssl[[:space:]]*=[[:space:]]*true", "server.um.levelNumber.1",
          "server.um.levelNumber.2", "broken"},
         {"include_content_urls", "include_content_urls",
-         "server.um.levelNumber.3", "comportamento"},
+         "server.um.levelNumber.3", "behavior"},
         {"token_bucket", "server.um.levelNumber.4",
-         "server.um.levelNumber.5", "comportamento"},
+         "server.um.levelNumber.5", "behavior"},
         {"senderscore_reputation", "senderscore_reputation",
-         "server.um.levelNumber.6", "comportamento"},
+         "server.um.levelNumber.6", "behavior"},
         {"MX_NXDOMAIN|MX_MISSING", "server.um.rspamd4.mxSymbols",
-         "server.um.levelNumber.7", "comportamento"},
+         "server.um.levelNumber.7", "behavior"},
     };
 
     public static JSONObject rspamdCompatibility() {
@@ -2149,7 +2149,7 @@ public final class UpdateManager {
             } finally {
                 j.finishedAt = System.currentTimeMillis();
             }
-        }, "mtasts-attiva");
+        }, "mtasts-enable");
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -2164,7 +2164,7 @@ public final class UpdateManager {
      * scadrebbe, e chi guarda resterebbe senza sapere cosa e' successo.
      */
     public static JSONObject startDomainSetup(int domainId) {
-        String id = "dominio-" + domainId + "-" + System.currentTimeMillis();
+        String id = "domain-" + domainId + "-" + System.currentTimeMillis();
         Job j = new Job(id, "configure_domain");
         JOBS.put(id, j);
         Thread t = localizedThread(j, () -> {
@@ -2963,7 +2963,7 @@ public final class UpdateManager {
             backupDir = MYSQL84_BACKUP + "/" + ts;
             if (!ok("mkdir -p " + backupDir + "/pkg", 30)) throw new IllegalStateException("cannot create " + backupDir);
             ok("cp -p /usr/local/etc/mysql/my.cnf " + backupDir + "/my.cnf", 30);
-            ok("printf '%s\\n%s\\n' " + srvPkg + " " + cliPkg + " > " + backupDir + "/pacchetti.txt", 20);
+            ok("printf '%s\\n%s\\n' " + srvPkg + " " + cliPkg + " > " + backupDir + "/packages.txt", 20);
             job.write(I18n.tr("server.um.runMigration84.11"));
             ok("pkg fetch -y -o " + backupDir + "/pkg " + srvPkg + " " + cliPkg + " >/dev/null 2>&1", 600);
             job.write("    " + I18n.tr("server.um.x.pkgsKept", java.util.Map.of("n", String.valueOf(number(sh("find " + backupDir + "/pkg -name '*.pkg' | wc -l", 30))))));
@@ -3747,7 +3747,7 @@ public final class UpdateManager {
      * non tutto l'ambiente.
      */
     public static JSONObject probePathInfo() {
-        String name = "rc-sonda-" + Long.toHexString(System.nanoTime()) + ".php";
+        String name = "rc-probe-" + Long.toHexString(System.nanoTime()) + ".php";
         String file = RC_DIR + "/public_html/" + name;
         try {
             Files.writeString(Paths.get(file),
@@ -4603,7 +4603,7 @@ public final class UpdateManager {
 
             String script = javaUpdateScript(pkg, pf.optString("home"), bk, log, pid,
                     st.getString("line"), st.getString("dir"), port);
-            String path = bk + "/aggiorna-jdk.sh";
+            String path = bk + "/upgrade-jdk.sh";
             Files.writeString(Paths.get(path), script);
             ok("chmod 700 " + path, 15);
 
@@ -4640,13 +4640,16 @@ public final class UpdateManager {
             if (last.isEmpty())
                 return new JSONObject().put("success", true).put("present", false);
             String text = sh("cat " + last + " 2>/dev/null", 30);
-            boolean finished = text.contains("=== ESITO:");
-            boolean succeeded = text.contains("=== ESITO: RIUSCITO");
+            // Il registro di uno script scritto prima del 29/10/2026 ha i marcatori in italiano.
+            boolean finished = text.contains("=== OUTCOME:") || text.contains("=== ESITO:");
+            boolean succeeded = text.contains("=== OUTCOME: SUCCEEDED") || text.contains("=== ESITO: RIUSCITO");
             // I marcatori restano fissi nel file (si rileggono qui sopra); a chi legge si mostrano
             // nella sua lingua
-            String shown = text.replace("=== ESITO: RIUSCITO", "=== " + I18n.tr("server.um.jvs.outcomeOk"))
-                    .replace("=== ESITO: ANNULLATO", "=== " + I18n.tr("server.um.jvs.outcomeCancelled"))
-                    .replace("=== ESITO: DA CONTROLLARE", "=== " + I18n.tr("server.um.jvs.outcomeCheck"));
+            String shown = text.replace("=== ESITO: RIUSCITO", "=== OUTCOME: SUCCEEDED").replace("=== ESITO: ANNULLATO", "=== OUTCOME: CANCELLED")
+                    .replace("=== ESITO: DA CONTROLLARE", "=== OUTCOME: TO CHECK")
+                    .replace("=== OUTCOME: SUCCEEDED", "=== " + I18n.tr("server.um.jvs.outcomeOk"))
+                    .replace("=== OUTCOME: CANCELLED", "=== " + I18n.tr("server.um.jvs.outcomeCancelled"))
+                    .replace("=== OUTCOME: TO CHECK", "=== " + I18n.tr("server.um.jvs.outcomeCheck"));
             return new JSONObject().put("success", true).put("present", true)
                     .put("file", last).put("text", shown).put("finished", finished)
                     .put("succeeded", succeeded);
@@ -4658,7 +4661,7 @@ public final class UpdateManager {
     private static String javaUpdateScript(String pkg, String home, String bk, String log,
                                                   long pid, String startLine, String dir, int port) {
         // Le righe che lo script stampa sono nella lingua di chi ha avviato l'aggiornamento; le
-        // righe "=== ESITO: ... ===" restano fisse, perche' javaUpdateStatus le rilegge.
+        // righe "=== OUTCOME: ... ===" restano fisse, perche' javaUpdateStatus le rilegge.
         return "#!/bin/sh\n"
           + "# Generated by the panel: it updates the JVM the panel itself runs on.\n"
           + "exec >> '" + log + "' 2>&1\n"
@@ -4672,15 +4675,15 @@ public final class UpdateManager {
           + "if pkg create -o \"$BK\" \"$PKG\"; then\n"
           + "  # pkg create makes .pkg on recent versions and .txz on older ones: the way back is not\n"
           + "  # tied to an extension, otherwise it would disappear for no reason.\n"
-          + "  VIA=$(ls -1 \"$BK\"/${PKG}-* 2>/dev/null | head -1)\n"
-          + "  if [ -n \"$VIA\" ]; then " + echo(I18n.tr("server.um.jvs.wayBack")) + "; else\n"
+          + "  WAY_BACK=$(ls -1 \"$BK\"/${PKG}-* 2>/dev/null | head -1)\n"
+          + "  if [ -n \"$WAY_BACK\" ]; then " + echo(I18n.tr("server.um.jvs.wayBack")) + "; else\n"
           + "    " + echo(I18n.tr("server.um.jvs.noFile")) + "\n"
           + "    " + echo(I18n.tr("server.um.jvs.cancelled")) + "\n"
-          + "    echo '=== ESITO: ANNULLATO ==='; exit 1; fi\n"
+          + "    echo '=== OUTCOME: CANCELLED ==='; exit 1; fi\n"
           + "else\n"
           + "  " + echo(I18n.tr("server.um.jvs.createFailed")) + "\n"
           + "  " + echo(I18n.tr("server.um.jvs.cancelled")) + "\n"
-          + "  echo '=== ESITO: ANNULLATO ==='; exit 1\n"
+          + "  echo '=== OUTCOME: CANCELLED ==='; exit 1\n"
           + "fi\n"
           + "\n"
           + echo(I18n.tr("server.um.jvs.s2")) + "\n"
@@ -4697,14 +4700,14 @@ public final class UpdateManager {
           + "\n"
           + echo(I18n.tr("server.um.jvs.s3")) + "\n"
           + "pkg unlock -y \"$PKG\"\n"
-          + "if pkg upgrade -y \"$PKG\"; then ESITO_UP=0; else ESITO_UP=1; " + echo(I18n.tr("server.um.jvs.upgradeFailed")) + "; fi\n"
+          + "if pkg upgrade -y \"$PKG\"; then UPGRADE_RC=0; else UPGRADE_RC=1; " + echo(I18n.tr("server.um.jvs.upgradeFailed")) + "; fi\n"
           + "\n"
           + echo(I18n.tr("server.um.jvs.s4")) + "\n"
           + "if \"$JAVA\" -version 2>&1; then\n"
           + "  " + echo(I18n.tr("server.um.jvs.javaOk")) + "\n"
           + "else\n"
           + "  " + echo(I18n.tr("server.um.jvs.javaKo")) + "\n"
-          + "  pkg add -f \"$VIA\" && " + echo(I18n.tr("server.um.jvs.prevBack")) + " || " + echo(I18n.tr("server.um.jvs.restoreFailed")) + "\n"
+          + "  pkg add -f \"$WAY_BACK\" && " + echo(I18n.tr("server.um.jvs.prevBack")) + " || " + echo(I18n.tr("server.um.jvs.restoreFailed")) + "\n"
           + "  \"$JAVA\" -version 2>&1 || " + echo(I18n.tr("server.um.jvs.javaStillKo")) + "\n"
           + "fi\n"
           + "\n"
@@ -4720,7 +4723,7 @@ public final class UpdateManager {
           + startLine + "\n"
           + "\n"
           + echo(I18n.tr("server.um.jvs.s6")) + "\n"
-          + "SU=1\n"
+          + "PANEL_UP=1\n"
           + (port > 0
              ? "j=0\n"
              + "while [ $j -lt 90 ]; do\n"
@@ -4728,20 +4731,20 @@ public final class UpdateManager {
              + "  # look off while it is up. The grep skips the header line. The final boundary is not\n"
              + "  # the end of the line: sockstat prints another column after the local address, so\n"
              + "  # with '$' it would never match. The boundary is a space or the end of the line.\n"
-             + "  if sockstat -46l -p " + port + " 2>/dev/null | grep -qE '[:.]" + port + "([[:space:]]|$)'; then SU=0; break; fi\n"
+             + "  if sockstat -46l -p " + port + " 2>/dev/null | grep -qE '[:.]" + port + "([[:space:]]|$)'; then PANEL_UP=0; break; fi\n"
              + "  j=$((j+1)); sleep 1\n"
              + "done\n"
-             + "[ $SU -eq 0 ] && " + echo(I18n.tr("server.um.jvs.listening", java.util.Map.of("port", String.valueOf(port))))
+             + "[ $PANEL_UP -eq 0 ] && " + echo(I18n.tr("server.um.jvs.listening", java.util.Map.of("port", String.valueOf(port))))
              + " || " + echo(I18n.tr("server.um.jvs.notListening", java.util.Map.of("port", String.valueOf(port)))) + "\n"
-             : echo(I18n.tr("server.um.jvs.noPort")) + "\nSU=0\n")
+             : echo(I18n.tr("server.um.jvs.noPort")) + "\nPANEL_UP=0\n")
           + "\n"
-          + "if [ $ESITO_UP -eq 0 ] && [ $SU -eq 0 ]; then\n"
-          + "  echo \"=== ESITO: RIUSCITO ($(date)) ===\"\n"
+          + "if [ $UPGRADE_RC -eq 0 ] && [ $PANEL_UP -eq 0 ]; then\n"
+          + "  echo \"=== OUTCOME: SUCCEEDED ($(date)) ===\"\n"
           + "  " + echo(I18n.tr("server.um.jvs.keepBack")) + "\n"
           + "  " + echo(I18n.tr("server.um.jvs.panelLog", java.util.Map.of("f", String.valueOf(PANEL_LOG)))) + "\n"
           + "else\n"
-          + "  echo \"=== ESITO: DA CONTROLLARE ($(date)) ===\"\n"
-          + "  echo \"upgrade=$ESITO_UP  panel_up=$SU  way_back=$VIA\"\n"
+          + "  echo \"=== OUTCOME: TO CHECK ($(date)) ===\"\n"
+          + "  echo \"upgrade=$UPGRADE_RC  panel_up=$PANEL_UP  way_back=$WAY_BACK\"\n"
           + "fi\n";
     }
 
@@ -7166,7 +7169,7 @@ public final class UpdateManager {
      * Aspetta il turno dei lavori sui pacchetti (vedi PackageQueue).
      */
     public static JSONObject removePackage(String name) {
-        String id = "rimuovi-" + System.nanoTime();
+        String id = "remove-" + System.nanoTime();
         String refusal = PackageQueue.take(id, I18n.tr("server.um.removePackage.1", java.util.Map.of("name", String.valueOf(name))));
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
         try { return removePackageNow(name); }
@@ -8225,7 +8228,7 @@ public final class UpdateManager {
                             j.write(I18n.tr("server.um.startSystemUpdateSearch.7", java.util.Map.of("p", String.valueOf(((System.currentTimeMillis() - start) / 1000)))));
                         }
                     } catch (InterruptedException ignored) { }
-                }, "os-fetch-battito");
+                }, "os-fetch-heartbeat");
                 heartbeat.setDaemon(true);
                 heartbeat.start();
 
@@ -9196,7 +9199,7 @@ public final class UpdateManager {
             if (entries < 50) throw new IllegalStateException("the copy of /etc has only " + entries
                     + " entries: not credible, I stop");
             job.write("    /etc -> " + bk + "/etc.tar " + I18n.tr("server.um.x.entries", java.util.Map.of("n", String.valueOf(entries))));
-            sh("pkg query '%n %v' > " + bk + "/pacchetti.txt 2>/dev/null", 120);
+            sh("pkg query '%n %v' > " + bk + "/packages.txt 2>/dev/null", 120);
             sh("freebsd-version -kru > " + bk + "/version.txt 2>/dev/null", 30);
             StringBuilder el = new StringBuilder();
             JSONArray sv = pf.optJSONArray("services");
@@ -9379,7 +9382,7 @@ public final class UpdateManager {
      *   - "Kernel updates have been installed.  Please reboot and run ... again"
      *   - "No updates are available to install."
      *   - "Installing updates... done."
-     * Nel dubbio si torna "ancora", cioe' si riesegue: rieseguire quando non serve costa un
+     * Nel dubbio si torna "again", cioe' si riesegue: rieseguire quando non serve costa un
      * comando e non fa danni, fermarsi troppo presto lascia il sistema a meta'.
      */
     static String whatFreebsdUpdateAsks(String output) {
@@ -9392,12 +9395,12 @@ public final class UpdateManager {
         // mentre la prima meta' chiedeva di ricostruire i pacchetti. Due istruzioni in una
         // frase: leggerne una sola e' peggio che non leggerne nessuna.
         if (u.contains("rebuild all installed 3rd party software")
-                || u.contains("removing old shared object files")) return "ancora-ricostruisci";
+                || u.contains("removing old shared object files")) return "rebuild";
         if (u.contains("no updates are available to install")
                 || u.contains("no updates needed")) return "finished";
         if (u.contains("run '/usr/sbin/freebsd-update install'")
-                || u.contains("run 'freebsd-update")) return "ancora";
-        return "ancora";
+                || u.contains("run 'freebsd-update")) return "again";
+        return "again";
     }
 
     private static JSONObject readJumpState() {
@@ -9411,6 +9414,8 @@ public final class UpdateManager {
     private static final String[][] OLD_JUMP_KEYS = {
         {"fase", "phase"}, {"passi", "steps"}, {"bersaglio", "target"}, {"ricostruzione", "rebuild"}};
     private static final String[][] OLD_JUMP_STEP_KEYS = {{"giro", "round"}, {"codice", "code"}, {"chiede", "asks"}};
+    /** I valori di "asks" scritti prima del 29/10/2026. */
+    private static final String[][] OLD_JUMP_ASKS = {{"ancora", "again"}, {"ancora-ricostruisci", "rebuild"}};
     /** E le fasi, che sono valori: "attende-riavvio" eccetera. */
     private static final String[][] OLD_JUMP_PHASES = {
         {"attende-riavvio", "awaiting-restart"}, {"attende-riavvio-finale", "awaiting-final-restart"},
@@ -9435,6 +9440,8 @@ public final class UpdateManager {
             if (s == null) continue;
             for (String[] k : OLD_JUMP_STEP_KEYS)
                 if (s.has(k[0]) && !s.has(k[1])) s.put(k[1], s.remove(k[0]));
+            for (String[] v : OLD_JUMP_ASKS)
+                if (v[0].equals(s.optString("asks"))) s.put("asks", v[1]);
         }
         return st;
     }
@@ -9524,10 +9531,10 @@ public final class UpdateManager {
                 job.write("    " + I18n.tr("server.um.x.fuAsks") + " " + (
                         "restart".equals(asks) ? I18n.tr("server.um.x.fuAsksRestart")
                       : "finished".equals(asks)  ? I18n.tr("server.um.x.fuAsksNothing")
-                      : "ancora-ricostruisci".equals(asks)
+                      : "rebuild".equals(asks)
                         ? I18n.tr("server.um.runJumpContinuation.5")
                       : I18n.tr("server.um.runJumpContinuation.6")));
-                if ("ancora-ricostruisci".equals(asks)) {
+                if ("rebuild".equals(asks)) {
                     rebuildRequested = true;
                     job.write("");
                     job.write(I18n.tr("server.um.runJumpContinuation.7"));
@@ -9764,7 +9771,8 @@ public final class UpdateManager {
             }
             java.util.List<String> missing = new ArrayList<>(), different = new ArrayList<>();
             int totalBefore = 0;
-            for (String line : sh("cat " + dir + "/pacchetti.txt 2>/dev/null", 60).split("\n")) {
+            // Una copia fatta prima del 29/10/2026 ha il file col nome italiano, pacchetti.txt.
+            for (String line : sh("cat " + dir + "/packages.txt 2>/dev/null || cat " + dir + "/pacchetti.txt 2>/dev/null", 60).split("\n")) {
                 String[] c = line.trim().split("\\s+");
                 if (c.length != 2) continue;
                 totalBefore++;
@@ -9866,8 +9874,8 @@ public final class UpdateManager {
             for (java.util.Map.Entry<String, String> e : inst.entrySet()) {
                 String role = roleOf(e.getKey());
                 if (role == null) continue;
-                String available = repo.getOrDefault(e.getKey(), "(assente)");
-                boolean diff = !available.equals(e.getValue()) && !"(assente)".equals(available);
+                String available = repo.getOrDefault(e.getKey(), I18n.tr("server.um.x.absentInRepo"));
+                boolean diff = !available.equals(e.getValue()) && !I18n.tr("server.um.x.absentInRepo").equals(available);
                 if (diff) different++;
                 t.append(String.format("%-28s %-22s %-22s %-9s %s%s%n",
                         e.getKey(), e.getValue(), available,
@@ -9884,9 +9892,9 @@ public final class UpdateManager {
             while (mv.find()) seen.add(mv.group(1));
             if (seen.isEmpty()) t.append("  ").append(I18n.tr("server.um.x.repNoPkg")).append('\n');
             for (String n : seen) {
-                String cur = inst.getOrDefault(n, "?"), av = repo.getOrDefault(n, "(assente)");
+                String cur = inst.getOrDefault(n, "?"), av = repo.getOrDefault(n, I18n.tr("server.um.x.absentInRepo"));
                 t.append(String.format(I18n.tr("server.um.systemReport.5"), n, cur, av,
-                        "(assente)".equals(av) ? I18n.tr("server.um.x.repoUnknownPkg")
+                        I18n.tr("server.um.x.absentInRepo").equals(av) ? I18n.tr("server.um.x.repoUnknownPkg")
                         : av.equals(cur) ? I18n.tr("server.um.x.noFixSameVersion")
                         : I18n.tr("server.um.systemReport.6", java.util.Map.of("av", String.valueOf(av)))));
             }
@@ -10293,7 +10301,7 @@ public final class UpdateManager {
                     .put("error", I18n.tr("server.um.startMaintenance.1"));
         String id = "maint-" + System.currentTimeMillis();
         Job j = new Job(id, "maintenance");
-        return startOnTurn(id, j, "manutenzione", "update-maintenance", () -> runMaintenanceJob(j, approvedSignature));
+        return startOnTurn(id, j, I18n.tr("server.um.x.turnMaintenance"), "update-maintenance", () -> runMaintenanceJob(j, approvedSignature));
     }
 
     /** @param firmaApprovata la firma del piano letto nella scheda: si esegue quello o niente. */

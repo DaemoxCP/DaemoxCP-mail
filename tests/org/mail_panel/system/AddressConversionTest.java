@@ -201,8 +201,9 @@ public class AddressConversionTest {
         real("\"..@domain-d.test\" non diventa un percorso", AddressTransform.folder(AddressTransform.vmail, "..@domain-d.test") == null
                 && AddressTransform.folder(AddressTransform.vmail, ".to@domain-d.test") == null);
         List<Path[]> moved = AddressTransform.archive("dmarc@domain-d.test", 1_790_000_000_000L);
-        real("messa da parte: posta e filtri in .archivio-pannello, con la data", moved.size() == 2 && !Files.exists(dir)
-                && moved.get(0)[1].toString().contains(".archivio-pannello/domain-d.test/dmarc-20260921T")
+        real("messa da parte: posta e filtri in .panel-archive, con la data", moved.size() == 2 && !Files.exists(dir)
+                && moved.get(0)[1].toString().contains(".panel-archive/domain-d.test/dmarc-20260921T")
+                && moved.get(1)[1].getFileName().toString().endsWith("-filters")
                 && Files.exists(moved.get(0)[1].resolve("cur/1.M1")) && Files.exists(moved.get(1)[1].resolve(".dovecot.sieve")));
         AddressTransform.restore(moved);
         real("e rimessa a posto, se il resto non riesce", Files.exists(dir.resolve("cur/1.M1")) && Files.exists(filters));
