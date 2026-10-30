@@ -144,6 +144,16 @@ public class LocalResolverTest {
         check("resolvconf.conf torna quello di prima", Files.exists(s.resolvconf)
                 && ownResolvconf.equals(Files.readString(s.resolvconf)));
 
+        OUT.println("\n-- 7. il risolutore risponde solo al terzo tentativo (cache fredda) --");
+        s.reset(original, null, "late");
+        Run r7 = s.run(pieceFile);
+        check("aspetta e lo trova: niente avviso, niente errore", r7.out.contains("Spamhaus answers")
+                && !r7.out.contains("WARNING") && !r7.out.contains("ERROR"));
+        check("e il DNS resta sul risolutore locale, non torna indietro",
+                Files.readString(s.resolv).contains("nameserver 127.0.0.1") && "YES".equals(s.rc("local_unbound_enable")));
+        check("ha davvero riprovato (almeno tre domande)",
+                s.calls().split("drill ", -1).length - 1 >= 3);
+
         OUT.println("\n== Lo script «timezone» ==");
         String timezone = new SetTimeOnSystem().getScriptContent();
         String start = "echo \"[5/5] Configuring DNS settings (Cloudflare)...\"";
@@ -227,7 +237,14 @@ public class LocalResolverTest {
             write(bin.resolve("drill"), """
                 #!/bin/sh
                 echo "drill $*" >> "$STATE/calls"
-                case "$(cat "$STATE/drill-mode")" in
+                mode=$(cat "$STATE/drill-mode")
+                # late: le prime due domande falliscono, poi risponde (la cache fredda dopo un riavvio)
+                if [ "$mode" = "late" ]; then
+                    n=$(( $(cat "$STATE/drill-count" 2>/dev/null || echo 0) + 1 ))
+                    echo "$n" > "$STATE/drill-count"
+                    if [ "$n" -lt 3 ]; then mode=dead; else mode=ok; fi
+                fi
+                case "$mode" in
                 dead) exit 1 ;;
                 ok) echo ";; ->>HEADER<<- opcode: QUERY, rcode: NOERROR, id: 1"
                     case "$*" in *spamhaus*) printf '2.0.0.127.zen.spamhaus.org.\\t60\\tIN\\tA\\t127.0.0.10\\n' ;; esac ;;
@@ -239,7 +256,7 @@ public class LocalResolverTest {
 
         /** Una macchina nuova: resolv.conf, resolvconf.conf (o nessuno), il modo del risolutore. */
         void reset(String resolvContent, String resolvconfContent, String drillMode) throws Exception {
-            for (Path p : List.of(resolvconf, rcConf, state.resolve("running"), state.resolve("calls"),
+            for (Path p : List.of(resolvconf, rcConf, state.resolve("running"), state.resolve("calls"), state.resolve("drill-count"),
                     unbound.resolve("unbound.conf"), unbound.resolve("forward.conf")))
                 Files.deleteIfExists(p);
             Files.writeString(resolv, resolvContent);

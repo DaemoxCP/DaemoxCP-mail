@@ -59,10 +59,25 @@ public final class LocalResolverScript {
         else
             service local_unbound start
         fi
-        if drill @127.0.0.1 freebsd.org A 2>/dev/null | grep -q "rcode: NOERROR"; then
+        # Appena riavviato, con la cache vuota, la prima domanda puo' fallire: misurato sulla VM il
+        # 30/10/2026, nella seconda installazione Spamhaus ha dato SERVFAIL e il pezzo ha stampato
+        # un avviso falso (alla fine dell'installazione lo stesso controllo dava OK). Quindi si
+        # riprova, fino a 10 volte a 2 secondi: un falso "non risponde" qui rimetterebbe il DNS di
+        # prima senza motivo.
+        RESOLVER_ANSWERS=no
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if drill @127.0.0.1 freebsd.org A 2>/dev/null | grep -q "rcode: NOERROR"; then RESOLVER_ANSWERS=yes; break; fi
+            sleep 2
+        done
+        if [ "$RESOLVER_ANSWERS" = "yes" ]; then
             # Risponde. Che risponda da ricorsivo lo dice Spamhaus: alla domanda di prova da' 127.0.0.x;
             # 127.255.255.x e' il rifiuto riservato ai risolutori pubblici.
-            if drill @127.0.0.1 2.0.0.127.zen.spamhaus.org A 2>/dev/null | grep -Eq "IN[[:space:]]+A[[:space:]]+127[.]0[.]0[.][0-9]+"; then
+            SPAMHAUS_ANSWERS=no
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+                if drill @127.0.0.1 2.0.0.127.zen.spamhaus.org A 2>/dev/null | grep -Eq "IN[[:space:]]+A[[:space:]]+127[.]0[.]0[.][0-9]+"; then SPAMHAUS_ANSWERS=yes; break; fi
+                sleep 2
+            done
+            if [ "$SPAMHAUS_ANSWERS" = "yes" ]; then
                 echo "  DNS: local recursive resolver on 127.0.0.1 (local_unbound), Spamhaus answers"
             else
                 echo "  WARNING: the local resolver answers, but Spamhaus does not: DNS blocklists will not work"

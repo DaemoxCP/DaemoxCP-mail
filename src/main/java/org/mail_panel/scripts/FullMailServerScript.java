@@ -1279,7 +1279,13 @@ else
 fi
 
 # Il risolutore locale per rspamd (LocalResolverScript.java): che risponda, e da ricorsivo.
-if drill @127.0.0.1 2.0.0.127.zen.spamhaus.org A 2>/dev/null | grep -Eq "IN[[:space:]]+A[[:space:]]+127[.]0[.]0[.][0-9]+"; then
+# Qualche tentativo: a cache fredda la prima domanda a Spamhaus puo' fallire (misurato).
+DNS_RESOLVER_OK=no
+for attempt in 1 2 3 4 5; do
+    if drill @127.0.0.1 2.0.0.127.zen.spamhaus.org A 2>/dev/null | grep -Eq "IN[[:space:]]+A[[:space:]]+127[.]0[.]0[.][0-9]+"; then DNS_RESOLVER_OK=yes; break; fi
+    sleep 2
+done
+if [ "$DNS_RESOLVER_OK" = "yes" ]; then
     echo "  ${GREEN}[OK]${NC} Local DNS resolver answers, Spamhaus included"
 else
     echo "  ${RED}[FAIL]${NC} Local DNS resolver does NOT answer for Spamhaus (DNS blocklists will not work)"
