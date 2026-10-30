@@ -333,7 +333,7 @@ public class InstallScriptDriftTest {
             check(label + "  e quello che ha scritto in /etc", error.contains(ETC_FILE));
             check(label + "l'esito nomina l'indirizzo perso", error.contains("[::1]:" + PORT));
             check(label + "il log mostra la riga che lo script ha aggiunto", log.contains("+ protocols = ipv4"));
-            String header = I18n.tr("server.um.runAggiornamentoGuidato.33");
+            String header = I18n.tr("server.um.runGuidedUpdate.33");
             int h = log.lastIndexOf(header);
             check(label + "e ristampa alla fine l'avviso COMPATIBILITY dello script",
                     h >= 0 && log.indexOf("COMPATIBILITY: editing", h) > h);

@@ -155,9 +155,9 @@ public final class PeriodicReport {
         String u = s.getString("lastSend");
         String every = "daily".equals(freq) ? I18n.tr("server.rp.everyDay")
                     : "monthly".equals(freq) ? I18n.tr("server.rp.everyMonth") : I18n.tr("server.rp.everyWeek");
-        return I18n.tr("server.rp.schedule", java.util.Map.of("ogni", String.valueOf(every), "ora", String.valueOf(now)))
+        return I18n.tr("server.rp.schedule", java.util.Map.of("every", String.valueOf(every), "now", String.valueOf(now)))
                 + " " + (u.isEmpty() ? I18n.tr("server.rp.neverSent")
-                               : I18n.tr("server.rp.lastSent", java.util.Map.of("quando", String.valueOf(u.replace('T', ' ')))));
+                               : I18n.tr("server.rp.lastSent", java.util.Map.of("when", String.valueOf(u.replace('T', ' ')))));
     }
 
     /**
@@ -190,7 +190,7 @@ public final class PeriodicReport {
                     if (choices.getString(i).equalsIgnoreCase(sender)) allowed = true;
             if (!allowed)
                 return r.put("success", false).put("availableMailboxes", choices == null ? new JSONArray() : choices)
-                        .put("error", I18n.tr("server.rp.senderMustExist", java.util.Map.of("dominio", String.valueOf(id.optString("panelDomain", "?")))) + " "
+                        .put("error", I18n.tr("server.rp.senderMustExist", java.util.Map.of("domain", String.valueOf(id.optString("panelDomain", "?")))) + " "
                                 + (choices == null || choices.length() == 0
                                    ? I18n.tr("server.rp.noMailboxYet")
                                    : I18n.tr("server.rp.pickOne")));
@@ -215,7 +215,7 @@ public final class PeriodicReport {
         // ha salvato le impostazioni
         impSet("report_lang", I18n.current());
         return state().put("success", true).put("note", active
-                ? I18n.tr("server.rp.savedOn", java.util.Map.of("destinatario", String.valueOf(recipient)))
+                ? I18n.tr("server.rp.savedOn", java.util.Map.of("recipient", String.valueOf(recipient)))
                 : I18n.tr("server.rp.savedOff"));
     }
 
@@ -317,7 +317,7 @@ public final class PeriodicReport {
             if (sender.isEmpty())
                 return r.put("exists", false).put("managedDomain", false).put("toChoose", true)
                         .put("note", I18n.tr("server.rp.pickSender")
-                                + (myManaged ? " " + I18n.tr("server.rp.suggestSender", java.util.Map.of("mio", String.valueOf(mine))) : ""));
+                                + (myManaged ? " " + I18n.tr("server.rp.suggestSender", java.util.Map.of("mine", String.valueOf(mine))) : ""));
 
             String domain = sender.substring(sender.indexOf('@') + 1);
             org.mail_panel.database.MailDatabase.Domain its = null;
@@ -325,7 +325,7 @@ public final class PeriodicReport {
             r.put("domain", domain).put("managedDomain", its != null);
             if (its == null)
                 return r.put("exists", false)
-                        .put("note", I18n.tr("server.rp.domainNotManaged", java.util.Map.of("dominio", String.valueOf(domain))));
+                        .put("note", I18n.tr("server.rp.domainNotManaged", java.util.Map.of("domain", String.valueOf(domain))));
 
             JSONObject already = busy(its, sender);
             r.put("busy", already == null ? JSONObject.NULL : already);
@@ -334,13 +334,13 @@ public final class PeriodicReport {
             if (already == null)
                 return r.put("exists", false).put("creatable", itsDomain)
                         .put("note", itsDomain
-                                ? I18n.tr("server.rp.addressFree", java.util.Map.of("mittente", String.valueOf(sender)))
-                                : I18n.tr("server.rp.addressFreeOther", java.util.Map.of("mittente", String.valueOf(sender), "dominio", String.valueOf(domain), "mio", String.valueOf(mine))));
+                                ? I18n.tr("server.rp.addressFree", java.util.Map.of("sender", String.valueOf(sender)))
+                                : I18n.tr("server.rp.addressFreeOther", java.util.Map.of("sender", String.valueOf(sender), "domain", String.valueOf(domain), "mine", String.valueOf(mine))));
             if ("alias".equals(already.optString("type")))
                 return r.put("exists", true).put("eAlias", true)
-                        .put("note", I18n.tr("server.rp.isAlias", java.util.Map.of("mittente", String.valueOf(sender), "verso", String.valueOf(already.optString("destination")))));
+                        .put("note", I18n.tr("server.rp.isAlias", java.util.Map.of("sender", String.valueOf(sender), "destination", String.valueOf(already.optString("destination")))));
             return r.put("exists", true).put("eAlias", false)
-                    .put("note", I18n.tr("server.rp.mailboxExists", java.util.Map.of("mittente", String.valueOf(sender)))
+                    .put("note", I18n.tr("server.rp.mailboxExists", java.util.Map.of("sender", String.valueOf(sender)))
                             + (already.optString("name").isEmpty() ? "" : " (\"" + already.optString("name") + "\")")
                             + (already.optString("created").isEmpty() ? "" : ", " + I18n.tr("server.rp.createdOn", java.util.Map.of("d", String.valueOf(already.optString("created")))))
                             + ": " + I18n.tr("server.rp.realSender"));
@@ -361,21 +361,21 @@ public final class PeriodicReport {
             for (var d : Main.mailDatabase.getDomains()) if (d.domain.equalsIgnoreCase(domain)) its = d;
             if (its == null)
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.rp.domainNotManaged2", java.util.Map.of("dominio", String.valueOf(domain))));
+                        .put("error", I18n.tr("server.rp.domainNotManaged2", java.util.Map.of("domain", String.valueOf(domain))));
             String mine = panelDomain();
             if (mine.isEmpty())
                 return r.put("success", false)
                         .put("error", I18n.tr("server.rp.noPanelDomain"));
             if (!domain.equalsIgnoreCase(mine))
                 return r.put("success", false).put("panelDomain", mine)
-                        .put("error", I18n.tr("server.rp.onlyOwnDomain", java.util.Map.of("dominio", String.valueOf(domain), "mio", String.valueOf(mine))));
+                        .put("error", I18n.tr("server.rp.onlyOwnDomain", java.util.Map.of("domain", String.valueOf(domain), "mine", String.valueOf(mine))));
 
             JSONObject already = busy(its, address);
             if (already != null) {
                 boolean alias = "alias".equals(already.optString("type"));
                 return r.put("success", !alias).put("alreadyExisted", true).put("busy", already)
                         .put(alias ? "error" : "note", alias
-                                ? I18n.tr("server.rp.aliasNoCreate", java.util.Map.of("indirizzo", String.valueOf(address), "verso", String.valueOf(already.optString("destination"))))
+                                ? I18n.tr("server.rp.aliasNoCreate", java.util.Map.of("address", String.valueOf(address), "destination", String.valueOf(already.optString("destination"))))
                                 : I18n.tr("server.rp.existedAlready"));
             }
 
@@ -663,7 +663,7 @@ public final class PeriodicReport {
             discarded.add(no);
         }
         return new JSONObject().put("success", false)
-                .put("error", I18n.tr("server.rp.noPostfixSendmail", java.util.Map.of("motivi", String.valueOf(String.join("; ", discarded)))));
+                .put("error", I18n.tr("server.rp.noPostfixSendmail", java.util.Map.of("reasons", String.valueOf(String.join("; ", discarded)))));
     }
 
     /** null se il percorso puo' essere il sendmail di Postfix, altrimenti il motivo per cui non lo e'. */
@@ -904,26 +904,26 @@ public final class PeriodicReport {
             case "delivered" -> {
                 String where = relay + (tls.isEmpty() ? "" : " " + I18n.tr("server.rp.withTls", java.util.Map.of("tls", String.valueOf(tls))));
                 return v.put("success", true).put("warning", false)
-                        .put("outcome", brief(I18n.tr("server.rp.deliveredTo", java.util.Map.of("dove", String.valueOf(where), "risposta", String.valueOf(answer)))))
-                        .put("note", I18n.tr("server.rp.deliveredNote", java.util.Map.of("dove", String.valueOf(where), "risposta", String.valueOf(answer))));
+                        .put("outcome", brief(I18n.tr("server.rp.deliveredTo", java.util.Map.of("where", String.valueOf(where), "answer", String.valueOf(answer)))))
+                        .put("note", I18n.tr("server.rp.deliveredNote", java.util.Map.of("where", String.valueOf(where), "answer", String.valueOf(answer))));
             }
             case "deferred" -> {
                 return v.put("success", true).put("warning", true)
-                        .put("outcome", brief(I18n.tr("server.rp.deferred", java.util.Map.of("risposta", String.valueOf(answer)))))
-                        .put("note", I18n.tr("server.rp.deferredNote", java.util.Map.of("coda", String.valueOf(queue), "risposta", String.valueOf(answer))));
+                        .put("outcome", brief(I18n.tr("server.rp.deferred", java.util.Map.of("answer", String.valueOf(answer)))))
+                        .put("note", I18n.tr("server.rp.deferredNote", java.util.Map.of("queue", String.valueOf(queue), "answer", String.valueOf(answer))));
             }
             case "rejected" -> {
                 return v.put("success", false).put("error", brief(relay.isEmpty() || "none".equals(relay)
-                        ? I18n.tr("server.rp.bounced", java.util.Map.of("risposta", String.valueOf(answer)))
-                        : I18n.tr("server.rp.bouncedBy", java.util.Map.of("relay", String.valueOf(relay), "risposta", String.valueOf(answer)))));
+                        ? I18n.tr("server.rp.bounced", java.util.Map.of("answer", String.valueOf(answer)))
+                        : I18n.tr("server.rp.bouncedBy", java.util.Map.of("relay", String.valueOf(relay), "answer", String.valueOf(answer)))));
             }
             case "refused" -> {
-                return v.put("success", false).put("error", brief(I18n.tr("server.rp.rejected", java.util.Map.of("risposta", String.valueOf(answer)))));
+                return v.put("success", false).put("error", brief(I18n.tr("server.rp.rejected", java.util.Map.of("answer", String.valueOf(answer)))));
             }
             case "queued" -> {
                 return v.put("success", true).put("warning", true)
-                        .put("outcome", I18n.tr("server.rp.accepted", java.util.Map.of("coda", String.valueOf(queue))))
-                        .put("note", I18n.tr("server.rp.acceptedNote", java.util.Map.of("coda", String.valueOf(queue), "s", String.valueOf(SECONDS_IN_LOG), "log", String.valueOf(org.mail_panel.monitoring.LogManager.MAILLOG))));
+                        .put("outcome", I18n.tr("server.rp.accepted", java.util.Map.of("queue", String.valueOf(queue))))
+                        .put("note", I18n.tr("server.rp.acceptedNote", java.util.Map.of("queue", String.valueOf(queue), "s", String.valueOf(SECONDS_IN_LOG), "log", String.valueOf(org.mail_panel.monitoring.LogManager.MAILLOG))));
             }
             default -> {
                 return v.put("success", true).put("warning", true)
@@ -1048,7 +1048,7 @@ public final class PeriodicReport {
 
         // --- pacchetti ---
         t.append(I18n.tr("server.rp.c.packages")).append("\n").append(line("-", 60)).append("\n")
-         .append(I18n.tr("server.rp.c.pkgCounts", java.util.Map.of("tot", String.valueOf(d.optInt("totalPackages")), "prot", String.valueOf(d.optInt("lockedPackageCount")), "agg", String.valueOf(d.optInt("packagesWithUpdate"))))).append("\n");
+         .append(I18n.tr("server.rp.c.pkgCounts", java.util.Map.of("tot", String.valueOf(d.optInt("totalPackages")), "locked", String.valueOf(d.optInt("lockedPackageCount")), "updatable", String.valueOf(d.optInt("packagesWithUpdate"))))).append("\n");
         JSONArray update = d.optJSONArray("toUpdate");
         if (update != null && update.length() > 0) {
             for (int i = 0; i < update.length(); i++) t.append("  - ").append(update.getString(i)).append("\n");
@@ -1070,7 +1070,7 @@ public final class PeriodicReport {
          // da' al file (vedi PkgCatalog), e non cambia se il server non ha niente di nuovo.
          .append(". ").append(I18n.tr("server.rp.c.catalog")).append(" ")
          .append(gc < 0 ? I18n.tr("server.rp.c.catalogUnknown")
-                        : I18n.tr("server.rp.c.published", java.util.Map.of("quanto", String.valueOf(PkgCatalog.howMuch(gc)), "data", String.valueOf(d.optString("catalogDate")))))
+                        : I18n.tr("server.rp.c.published", java.util.Map.of("howMuch", String.valueOf(PkgCatalog.howMuch(gc)), "data", String.valueOf(d.optString("catalogDate")))))
          .append(d.optBoolean("refreshedCatalog", false) ? ", " + I18n.tr("server.rp.c.checkedNow") : "")
          .append(".\n");
         // Piu' repository, uno senza catalogo, o nessuna data: la frase intera, che dice quale e perche'.

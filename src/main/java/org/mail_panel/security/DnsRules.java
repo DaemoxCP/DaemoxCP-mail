@@ -289,7 +289,7 @@ public final class DnsRules {
         else if (e.include > 0)
             e.warnings.add(e.include == 1
                        ? I18n.tr("server.dnsrules.spfDirect.one", java.util.Map.of("n", String.valueOf(e.directLookups)))
-                       : I18n.tr("server.dnsrules.spfDirect.other", java.util.Map.of("n", String.valueOf(e.directLookups), "inc", String.valueOf(e.include))));
+                       : I18n.tr("server.dnsrules.spfDirect.other", java.util.Map.of("n", String.valueOf(e.directLookups), "includes", String.valueOf(e.include))));
 
         if (e.closing == null)
             e.warnings.add(I18n.tr("server.dnsrules.spfNoAll"));

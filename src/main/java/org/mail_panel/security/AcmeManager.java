@@ -701,7 +701,7 @@ public class AcmeManager {
             for (String n : seen) if (!installedCertificateCovers(n)) missing.add(n);
             if (!missing.isEmpty())
                 return new CertificateResult(false,
-                        I18n.tr("server.acme.namesMissing", java.util.Map.of("n", String.valueOf(missing.size()), "elenco", String.valueOf(String.join(", ", missing)))),
+                        I18n.tr("server.acme.namesMissing", java.util.Map.of("n", String.valueOf(missing.size()), "list", String.valueOf(String.join(", ", missing)))),
                         output + "\n" + (dep.output != null ? dep.output : ""));
 
             return new CertificateResult(true, I18n.tr("server.acme.issuedWithNames", java.util.Map.of("n", String.valueOf(seen.size()))),
@@ -1146,7 +1146,7 @@ public class AcmeManager {
 
             if (digOutput.isEmpty() || !digOutput.contains(expectedValue)) {
                 return new CertificateResult(false,
-                    I18n.tr("server.acme.txtWrong", java.util.Map.of("atteso", String.valueOf(expectedValue), "trovato", String.valueOf(digOutput.isEmpty() ? I18n.tr("server.acme.none") : digOutput))), null);
+                    I18n.tr("server.acme.txtWrong", java.util.Map.of("expected", String.valueOf(expectedValue), "found", String.valueOf(digOutput.isEmpty() ? I18n.tr("server.acme.none") : digOutput))), null);
             }
 
             // TXT record verified, now complete the certificate issuance with --renew

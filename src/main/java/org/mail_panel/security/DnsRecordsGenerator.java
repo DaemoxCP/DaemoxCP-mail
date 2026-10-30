@@ -637,7 +637,7 @@ public class DnsRecordsGenerator {
                 aCheck.message = "OK: " + mailHostname + " → " + serverIp;
             } else {
                 aCheck.passed = false;
-                aCheck.message = I18n.tr("server.dnsg.wrongIp", java.util.Map.of("trovato", String.valueOf(foundIp), "atteso", String.valueOf(serverIp)));
+                aCheck.message = I18n.tr("server.dnsg.wrongIp", java.util.Map.of("found", String.valueOf(foundIp), "expected", String.valueOf(serverIp)));
             }
         } else if (aCheck.message == null || aCheck.message.equals(I18n.tr("server.dnsg.notFound"))) {
             // Solo se la query e' andata a buon fine e non ha trovato niente. Se invece era
@@ -670,12 +670,12 @@ public class DnsRecordsGenerator {
             if (ours) {
                 mxCheck.passed = true;
                 mxCheck.message = I18n.tr("server.dnsg.mxOk", java.util.Map.of("h", String.valueOf(mailHostname)))
-                        + (elsewhere.isEmpty() ? "" : ". " + I18n.tr("server.dnsg.mxOthers", java.util.Map.of("elenco", String.valueOf(String.join(", ", elsewhere)))));
+                        + (elsewhere.isEmpty() ? "" : ". " + I18n.tr("server.dnsg.mxOthers", java.util.Map.of("list", String.valueOf(String.join(", ", elsewhere)))));
             } else {
                 mxCheck.passed = false;
                 mxCheck.message = elsewhere.isEmpty()
                         ? I18n.tr("server.dnsg.mxNone", java.util.Map.of("h", String.valueOf(mailHostname)))
-                        : I18n.tr("server.dnsg.mxElsewhere", java.util.Map.of("h", String.valueOf(mailHostname), "elenco", String.valueOf(String.join(", ", elsewhere))));
+                        : I18n.tr("server.dnsg.mxElsewhere", java.util.Map.of("h", String.valueOf(mailHostname), "list", String.valueOf(String.join(", ", elsewhere))));
             }
         }
         result.checks.add(mxCheck);
@@ -780,7 +780,7 @@ public class DnsRecordsGenerator {
                 }
             }
         } else if (dkimCheck.message != null && dkimCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
-            dkimCheck.message = I18n.tr("server.dnsg.noDkim", java.util.Map.of("nome", String.valueOf(selector + "._domainkey." + domain)));
+            dkimCheck.message = I18n.tr("server.dnsg.noDkim", java.util.Map.of("name", String.valueOf(selector + "._domainkey." + domain)));
         }
         result.checks.add(dkimCheck);
         if (!dkimCheck.passed) result.allPassed = false;
@@ -825,9 +825,9 @@ public class DnsRecordsGenerator {
                         // appartengono allo stesso dominio organizzativo e non richiedono nulla.
                         // Senza quel calcolo, bocciare significherebbe dichiarare rotto un DMARC
                         // che funziona, e spingere a "sistemare" cio' che va gia' bene.
-                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaCheck", java.util.Map.of("nome", String.valueOf(authName)));
+                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaCheck", java.util.Map.of("name", String.valueOf(authName)));
                     } else {
-                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaAuthOk", java.util.Map.of("nome", String.valueOf(authName)));
+                        dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaAuthOk", java.util.Map.of("name", String.valueOf(authName)));
                     }
                 }
             }
@@ -1049,16 +1049,16 @@ public class DnsRecordsGenerator {
         boolean port = s.port == expectedPort;
         if (host && port) {
             check.passed = true;
-            check.message = I18n.tr("server.dnsg.srvOk", java.util.Map.of("cosa", String.valueOf(purpose), "h", String.valueOf(mailHostname), "porta", String.valueOf(expectedPort)));
+            check.message = I18n.tr("server.dnsg.srvOk", java.util.Map.of("what", String.valueOf(purpose), "h", String.valueOf(mailHostname), "port", String.valueOf(expectedPort)));
             return;
         }
         check.passed = false;
         if (!host && !port)
-            check.message = I18n.tr("server.dnsg.srvBoth", java.util.Map.of("dest", String.valueOf(s.destination), "porta", String.valueOf(s.port), "h", String.valueOf(mailHostname), "attesa", String.valueOf(expectedPort)));
+            check.message = I18n.tr("server.dnsg.srvBoth", java.util.Map.of("dest", String.valueOf(s.destination), "port", String.valueOf(s.port), "h", String.valueOf(mailHostname), "wait", String.valueOf(expectedPort)));
         else if (!host)
             check.message = I18n.tr("server.dnsg.srvHost", java.util.Map.of("dest", String.valueOf(s.destination), "h", String.valueOf(mailHostname)));
         else
-            check.message = I18n.tr("server.dnsg.srvPort", java.util.Map.of("porta", String.valueOf(s.port), "attesa", String.valueOf(expectedPort)));
+            check.message = I18n.tr("server.dnsg.srvPort", java.util.Map.of("port", String.valueOf(s.port), "wait", String.valueOf(expectedPort)));
     }
 
     /**

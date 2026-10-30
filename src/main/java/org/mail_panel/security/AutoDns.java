@@ -190,8 +190,8 @@ public class AutoDns {
                 return r.put("success", false).put("alreadyExists", true)
                         .put("content", String.join("  ||  ", pertinent))
                         .put("error", (pertinent.size() == 1
-                                   ? I18n.tr("server.adns.existsOne", java.util.Map.of("nome", String.valueOf(name), "tipo", String.valueOf(spf ? "SPF" : "DMARC")))
-                                   : I18n.tr("server.adns.existsMany", java.util.Map.of("nome", String.valueOf(name), "n", String.valueOf(pertinent.size()), "tipo", String.valueOf(spf ? "SPF" : "DMARC")))) + " "
+                                   ? I18n.tr("server.adns.existsOne", java.util.Map.of("name", String.valueOf(name), "kind", String.valueOf(spf ? "SPF" : "DMARC")))
+                                   : I18n.tr("server.adns.existsMany", java.util.Map.of("name", String.valueOf(name), "n", String.valueOf(pertinent.size()), "kind", String.valueOf(spf ? "SPF" : "DMARC")))) + " "
                                 + (pertinent.size() > 1
                                    ? (spf ? I18n.tr("server.adns.tooManySpf")
                                           : I18n.tr("server.adns.tooManyDmarc"))
@@ -267,10 +267,10 @@ public class AutoDns {
 
             if (dmarc.isEmpty())
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.adns.noDmarcToEdit", java.util.Map.of("nome", String.valueOf(name))));
+                        .put("error", I18n.tr("server.adns.noDmarcToEdit", java.util.Map.of("name", String.valueOf(name))));
             if (dmarc.size() > 1)
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.adns.manyDmarcEdit", java.util.Map.of("nome", String.valueOf(name), "n", String.valueOf(dmarc.size()))));
+                        .put("error", I18n.tr("server.adns.manyDmarcEdit", java.util.Map.of("name", String.valueOf(name), "n", String.valueOf(dmarc.size()))));
 
             String before = DnsRules.cloudflareContent(target.content);
             String after = DnsRules.changePolicy(before, n);
@@ -307,7 +307,7 @@ public class AutoDns {
                         .put("error", I18n.tr("server.adns.notChanged"));
 
             return r.put("success", true)
-                    .put("note", I18n.tr("server.adns.policySet", java.util.Map.of("p", String.valueOf(n), "nome", String.valueOf(name))) + " "
+                    .put("note", I18n.tr("server.adns.policySet", java.util.Map.of("p", String.valueOf(n), "name", String.valueOf(name))) + " "
                             + ("reject".equals(n)
                                ? I18n.tr("server.adns.rejectNow")
                                : "quarantine".equals(n)
@@ -396,8 +396,8 @@ public class AutoDns {
                 CloudflareManager.RecordOp del = cloudflare.deleteRecord(token, zoneId, t.id);
                 if (del == null || !del.success)
                     return r.put("success", false).put("removed", new JSONArray(removed))
-                            .put("error", I18n.tr("server.adns.stsManyDelFail", java.util.Map.of("nome", String.valueOf(name), "n", String.valueOf(sts.size()), "c", String.valueOf(c), "e", String.valueOf(del == null ? I18n.tr("server.adns.noAnswer") : del.error)))
-                                    + (removed.isEmpty() ? "." : ". " + I18n.tr("server.adns.removedSoFar", java.util.Map.of("elenco", String.valueOf(String.join("  ||  ", removed))))));
+                            .put("error", I18n.tr("server.adns.stsManyDelFail", java.util.Map.of("name", String.valueOf(name), "n", String.valueOf(sts.size()), "c", String.valueOf(c), "e", String.valueOf(del == null ? I18n.tr("server.adns.noAnswer") : del.error)))
+                                    + (removed.isEmpty() ? "." : ". " + I18n.tr("server.adns.removedSoFar", java.util.Map.of("list", String.valueOf(String.join("  ||  ", removed))))));
                 removed.add(c);
             }
 
@@ -411,12 +411,12 @@ public class AutoDns {
                         token, zoneId, keep.id, name, value, 3600);
                 if (up == null || !up.success)
                     return r.put("success", false).put("content", c).put("removed", new JSONArray(removed))
-                            .put("error", I18n.tr("server.adns.stsUpdateFail", java.util.Map.of("nome", String.valueOf(name), "c", String.valueOf(c), "e", String.valueOf(up == null ? I18n.tr("server.adns.noAnswer") : up.error)))
-                                    + (removed.isEmpty() ? "" : ". " + I18n.tr("server.adns.othersRemoved", java.util.Map.of("elenco", String.valueOf(String.join("  ||  ", removed))))));
+                            .put("error", I18n.tr("server.adns.stsUpdateFail", java.util.Map.of("name", String.valueOf(name), "c", String.valueOf(c), "e", String.valueOf(up == null ? I18n.tr("server.adns.noAnswer") : up.error)))
+                                    + (removed.isEmpty() ? "" : ". " + I18n.tr("server.adns.othersRemoved", java.util.Map.of("list", String.valueOf(String.join("  ||  ", removed))))));
                 before = c;
             } else if (removed.isEmpty()) {
                 return r.put("success", true).put("unchanged", true).put("content", c)
-                        .put("note", I18n.tr("server.adns.alreadyRight", java.util.Map.of("nome", String.valueOf(name))));
+                        .put("note", I18n.tr("server.adns.alreadyRight", java.util.Map.of("name", String.valueOf(name))));
             }
         }
 
@@ -434,19 +434,19 @@ public class AutoDns {
         if (remain.size() != 1 || !remain.get(0).equals(value.trim()))
             return r.put("success", false).put("reread", String.join("  ||  ", remain))
                     .put("error", (remain.isEmpty()
-                               ? I18n.tr("server.adns.stsReadNone", java.util.Map.of("nome", String.valueOf(name)))
+                               ? I18n.tr("server.adns.stsReadNone", java.util.Map.of("name", String.valueOf(name)))
                                : remain.size() == 1
-                               ? I18n.tr("server.adns.stsReadOne", java.util.Map.of("nome", String.valueOf(name), "v", String.valueOf(remain.get(0))))
-                               : I18n.tr("server.adns.stsReadMany", java.util.Map.of("nome", String.valueOf(name), "n", String.valueOf(remain.size()), "elenco", String.valueOf(String.join("  ||  ", remain)))))
+                               ? I18n.tr("server.adns.stsReadOne", java.util.Map.of("name", String.valueOf(name), "v", String.valueOf(remain.get(0))))
+                               : I18n.tr("server.adns.stsReadMany", java.util.Map.of("name", String.valueOf(name), "n", String.valueOf(remain.size()), "list", String.valueOf(String.join("  ||  ", remain)))))
                             + " " + I18n.tr("server.adns.lookBeforeRetry"));
 
         String note;
         if (!removed.isEmpty())
-            note = I18n.tr("server.adns.stsCleaned", java.util.Map.of("nome", String.valueOf(name), "n", String.valueOf(sts.size()), "elenco", String.valueOf(String.join("  ||  ", removed))));
+            note = I18n.tr("server.adns.stsCleaned", java.util.Map.of("name", String.valueOf(name), "n", String.valueOf(sts.size()), "list", String.valueOf(String.join("  ||  ", removed))));
         else if (before != null)
-            note = I18n.tr("server.adns.stsUpdated", java.util.Map.of("nome", String.valueOf(name)));
+            note = I18n.tr("server.adns.stsUpdated", java.util.Map.of("name", String.valueOf(name)));
         else
-            note = I18n.tr("server.adns.stsPublished", java.util.Map.of("nome", String.valueOf(name)));
+            note = I18n.tr("server.adns.stsPublished", java.util.Map.of("name", String.valueOf(name)));
         return r.put("success", true).put("note", note);
     }
 
@@ -500,7 +500,7 @@ public class AutoDns {
             JSONObject already = reportDelivery(d);
             if (already.optBoolean("exists", false))
                 return r.put("success", false).put("alreadyExists", true)
-                        .put("error", I18n.tr("server.adns.existsAs", java.util.Map.of("indirizzo", String.valueOf(address), "tipo", String.valueOf(already.optString("type")), "verso", String.valueOf(already.has("destination") ? " (" + I18n.tr("server.adns.toAddr", java.util.Map.of("v", String.valueOf(already.optString("destination")))) + ")" : ""))));
+                        .put("error", I18n.tr("server.adns.existsAs", java.util.Map.of("address", String.valueOf(address), "kind", String.valueOf(already.optString("type")), "destination", String.valueOf(already.has("destination") ? " (" + I18n.tr("server.adns.toAddr", java.util.Map.of("v", String.valueOf(already.optString("destination")))) + ")" : ""))));
 
             // Whitelist di caratteri ammessi: si dichiara cosa PUO' esserci, non cosa non puo'.
             if (!dest.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}$"))
@@ -548,7 +548,7 @@ public class AutoDns {
             JSONObject already = reportDelivery(d);
             if (already.optBoolean("exists", false))
                 return r.put("success", false).put("alreadyExists", true)
-                        .put("error", I18n.tr("server.adns.existsAsShort", java.util.Map.of("indirizzo", String.valueOf(address), "tipo", String.valueOf(already.optString("type")), "verso", String.valueOf(already.has("destination") ? " (" + I18n.tr("server.adns.toAddr", java.util.Map.of("v", String.valueOf(already.optString("destination")))) + ")" : ""))));
+                        .put("error", I18n.tr("server.adns.existsAsShort", java.util.Map.of("address", String.valueOf(address), "kind", String.valueOf(already.optString("type")), "destination", String.valueOf(already.has("destination") ? " (" + I18n.tr("server.adns.toAddr", java.util.Map.of("v", String.valueOf(already.optString("destination")))) + ")" : ""))));
 
             String password = randomPassword();
             int id = database.addMailbox(d.id, address, password, I18n.tr("server.adns.dmarcBoxName", java.util.Map.of("d", String.valueOf(d.domain))), 512);
@@ -703,7 +703,7 @@ public class AutoDns {
                     if (sb.length() > 0) sb.append(", ");
                     sb.append(t.type).append(" ").append(t.content);
                 }
-                j.put("conflict", I18n.tr("server.adns.typeConflict", java.util.Map.of("nome", String.valueOf(fullName), "altro", String.valueOf(sb), "tipo", String.valueOf(o[1]))));
+                j.put("conflict", I18n.tr("server.adns.typeConflict", java.util.Map.of("name", String.valueOf(fullName), "other", String.valueOf(sb), "kind", String.valueOf(o[1]))));
             }
             out.put(j);
         }
@@ -747,7 +747,7 @@ public class AutoDns {
             for (CloudflareManager.DnsRecordInfo t : here) {
                 if (!def[1].equalsIgnoreCase(t.type))
                     return r.put("success", false).put("conflict", true)
-                            .put("error", I18n.tr("server.adns.recordConflict", java.util.Map.of("nome", String.valueOf(fullName), "tipoEsistente", String.valueOf(t.type), "contenuto", String.valueOf(t.content), "tipo", String.valueOf(def[1]))));
+                            .put("error", I18n.tr("server.adns.recordConflict", java.util.Map.of("name", String.valueOf(fullName), "existingKind", String.valueOf(t.type), "content", String.valueOf(t.content), "kind", String.valueOf(def[1]))));
 
                 // "Esiste" non vuol dire "e' giusto".
                 //
@@ -763,10 +763,10 @@ public class AutoDns {
                 boolean right = coincide(t, srv, target, port);
                 if (right && !t.proxied)
                     return r.put("success", true).put("unchanged", true).put("content", t.content)
-                            .put("note", I18n.tr("server.adns.alreadyRightOn", java.util.Map.of("nome", String.valueOf(fullName))));
+                            .put("note", I18n.tr("server.adns.alreadyRightOn", java.util.Map.of("name", String.valueOf(fullName))));
 
                 java.util.List<String> whatIsWrong = new ArrayList<>();
-                if (!right) whatIsWrong.add(I18n.tr("server.adns.pointedTo", java.util.Map.of("prima", String.valueOf(t.content), "giusto", String.valueOf(srv ? "0 1 " + port + " " + target : target))));
+                if (!right) whatIsWrong.add(I18n.tr("server.adns.pointedTo", java.util.Map.of("before", String.valueOf(t.content), "right", String.valueOf(srv ? "0 1 " + port + " " + target : target))));
                 if (t.proxied) whatIsWrong.add(I18n.tr("server.adns.wentThroughCf"));
 
                 CloudflareManager.RecordOp op = srv
@@ -774,10 +774,10 @@ public class AutoDns {
                         : cloudflare.updateCname(acct.apiToken, zl.zoneId, t.id, fullName, target);
                 if (op == null || !op.success)
                     return r.put("success", false).put("content", t.content)
-                            .put("error", I18n.tr("server.adns.fixRefused", java.util.Map.of("nome", String.valueOf(fullName), "cosa", String.valueOf(String.join("; ", whatIsWrong)), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error))));
+                            .put("error", I18n.tr("server.adns.fixRefused", java.util.Map.of("name", String.valueOf(fullName), "what", String.valueOf(String.join("; ", whatIsWrong)), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error))));
                 return r.put("success", true).put("correct", true)
                         .put("before", t.content).put("after", srv ? "0 1 " + port + " " + target : target)
-                        .put("note", I18n.tr("server.adns.fixed", java.util.Map.of("nome", String.valueOf(fullName), "cosa", String.valueOf(String.join("; ", whatIsWrong)))));
+                        .put("note", I18n.tr("server.adns.fixed", java.util.Map.of("name", String.valueOf(fullName), "what", String.valueOf(String.join("; ", whatIsWrong)))));
             }
 
             CloudflareManager.RecordOp op = srv
@@ -797,7 +797,7 @@ public class AutoDns {
                         .put("error", I18n.tr("server.adns.createdNotFound"));
 
             return r.put("success", true).put("recordId", op.recordId)
-                    .put("note", I18n.tr("server.adns.createdOn", java.util.Map.of("tipo", String.valueOf(def[1]), "nome", String.valueOf(fullName), "z", String.valueOf(zl.zoneName))));
+                    .put("note", I18n.tr("server.adns.createdOn", java.util.Map.of("kind", String.valueOf(def[1]), "name", String.valueOf(fullName), "z", String.valueOf(zl.zoneName))));
         } catch (Exception e) {
             return error(I18n.tr("server.adns.createError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }

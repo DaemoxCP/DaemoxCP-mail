@@ -518,7 +518,7 @@ public final class PackagePlan {
             if (!protectedNames.contains(twin)) {
                 blockers.put(new JSONObject().put("name", newName)
                         .put("reason", I18n.tr("server.plan.familyConflict",
-                                java.util.Map.of("nuovo", String.valueOf(newName), "gemello", String.valueOf(twin)))));
+                                java.util.Map.of("newer", String.valueOf(newName), "twin", String.valueOf(twin)))));
                 continue;
             }
             String installed = sh("pkg query %v " + twin + " 2>/dev/null", 20).trim();
@@ -530,9 +530,9 @@ public final class PackagePlan {
             if (!validVersion(installed) || !installed.equals(catalog)) {
                 blockers.put(new JSONObject().put("name", twin)
                         .put("reason", I18n.tr("server.plan.familyLockedNewer",
-                                java.util.Map.of("nuovo", String.valueOf(newName), "gemello", String.valueOf(twin),
-                                        "installata", String.valueOf(installed.isEmpty() ? "?" : installed),
-                                        "catalogo", String.valueOf(catalog.isEmpty() ? "?" : catalog)))));
+                                java.util.Map.of("newer", String.valueOf(newName), "twin", String.valueOf(twin),
+                                        "installed", String.valueOf(installed.isEmpty() ? "?" : installed),
+                                        "catalog", String.valueOf(catalog.isEmpty() ? "?" : catalog)))));
                 continue;
             }
             unlock.add(twin);
