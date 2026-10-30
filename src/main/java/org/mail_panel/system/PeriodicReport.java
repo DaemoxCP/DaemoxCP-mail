@@ -638,6 +638,11 @@ public final class PeriodicReport {
      * il percorso del port. Un candidato che sia mailwrapper viene scartato, e se non resta
      * niente NON si ripiega su un altro sendmail: un errore che dice cosa manca e' meglio di
      * un invio che esce dalla porta sbagliata e si dichiara riuscito.
+     *
+     * Dal 24/10/2026 l'installatore scrive mailer.conf per Postfix (scripts/LocalMtaScript), e su
+     * un server installato da allora anche mailwrapper arriverebbe a Postfix. Questa scelta resta
+     * com'e' lo stesso: i server installati prima passano ancora a dma, e il rapporto non deve
+     * dipendere da come qualcuno ha lasciato mailer.conf.
      */
     static JSONObject postfixSendmail() {
         String declared = Shell.runShell(java.time.Duration.ofSeconds(10),
