@@ -589,7 +589,7 @@ public class MailPanelContent {
         .login-links { display: flex; justify-content: space-between; gap: 1rem; margin-top: 1rem; font-size: .9rem; }
         .login-links a, .login-link { color: #e94560; }
         .passkey-prompt { text-align: center; padding: 26px 20px 22px; }
-        /* L'fingerprint stava sospesa nel vuoto. Dentro un cerchio diventa un oggetto, e si
+        /* L'impronta stava sospesa nel vuoto. Dentro un cerchio diventa un oggetto, e si
            legge come "il dispositivo sta chiedendo" invece che come una decorazione. */
         .passkey-prompt .passkey-badge {
             width: 76px; height: 76px; margin: 0 auto 18px;
@@ -12214,10 +12214,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     private static String getUpdatesScriptPackages() {
         return """
         // ================= il quadro dei pacchetti =================
-        // Una tabella sola: versione installata e del catalogo, vulnerabilita' con il verdict
-        // sulla fix, blocco, e su ogni riga i pulsanti per agire. Si carica da sola.
+        // Una tabella sola: versione installata e del catalogo, vulnerabilita' con il verdetto
+        // sulla correzione, blocco, e su ogni riga i pulsanti per agire. Si carica da sola.
 
-        /* Il verdict sulla vulnerabilita', in una parola e un colore. */
+        /* Il verdetto sulla vulnerabilita', in una parola e un colore. */
         function pkVulnBadge(v) {
             if (!v) return '<span class="text-muted small">' + escHtml(t('pkgs.noVuln')) + '</span>';
             const m = { 'fixed-by-upgrade': ['bg-warning text-dark', 'pkgs.v.fixable'],
@@ -14225,9 +14225,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (vuln.length) {
                 h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(tn('up.vulnPkgs', vuln.length)) + '</strong><ul class="mb-0 mt-1">';
                 vuln.forEach(v => {
-                    // L'intestazione dice lo stesso verdict del dettaglio: quando c'e' il confronto
+                    // L'intestazione dice lo stesso verdetto del dettaglio: quando c'e' il confronto
                     // con VuXML, sa se l'aggiornamento basta o no. Il blocco e' un'informazione a
-                    // parte, non un verdict: il pulsante aggiorna anche un pacchetto bloccato.
+                    // parte, non un verdetto: il pulsante aggiorna anche un pacchetto bloccato.
                     const vc0 = v.fix;
                     const updatable = vc0 && (vc0.verdict === 'fixed-by-upgrade' || vc0.verdict === 'upgrade-not-enough');
                     h += '<li class="mb-2"><div class="d-flex flex-wrap align-items-center gap-1"><code>' + updEsc(v.name) + '</code>'
@@ -14251,7 +14251,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     if (v.description) {
                         h += '<br><span class="text-muted">' + updEsc(v.description) + '</span>';
                     }
-                    // La domanda vera: la fix c'e'? La dicono gli ranges di VuXML
+                    // La domanda vera: la correzione c'e'? La dicono gli intervalli di VuXML
                     // messi accanto alla versione che il catalogo offre.
                     if (v.fix) h += '<br><span>' + updEsc(v.fix.explanation || '') + '</span>';
                     (v.references || []).forEach(u => {

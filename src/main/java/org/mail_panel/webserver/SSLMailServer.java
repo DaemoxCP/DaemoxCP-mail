@@ -516,6 +516,10 @@ public class SSLMailServer {
             // commento, quindi niente reload. Dopo la rinomina, che porta i file ai nomi di adesso.
             org.mail_panel.system.PanelMarker.ensureAtBoot();
 
+            // I commenti che una rinomina fatta sul testo aveva rovinato in php.ini, nginx.conf,
+            // nella lista permaban e negli script d'installazione: anche qui solo commenti.
+            org.mail_panel.system.CommentRepair.ensureAtBoot();
+
             // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
             // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".
             // Idempotente: se è tutto OK non fa nulla.

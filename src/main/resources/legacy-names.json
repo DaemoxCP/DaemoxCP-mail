@@ -69,5 +69,33 @@
   ],
   "autoconfigMarker": [
     ["# --- autoconfig Thunderbird (pannello di posta) ---", "# --- autoconfig Thunderbird (mail panel) ---"]
+  ],
+  "damagedComments": [
+    ["# Le due password NON sono argomenti: arrivano dall'ambiente, perche' la lineItem di comando", "# Le due password NON sono argomenti: arrivano dall'ambiente, perche' la riga di comando"],
+    ["# di un processo la legge chiunque con \"ps\" per tutto il tempo whichLabel l'installazione dura.", "# di un processo la legge chiunque con \"ps\" per tutto il tempo che l'installazione dura."],
+    ["# metteva anche questa password nella lineItem di comando, where la legge chiunque con \"ps\".", "# metteva anche questa password nella riga di comando, dove la legge chiunque con \"ps\"."],
+    ["# di 3 MB non si poteva spedire (upload_max_filesize = 2M) e PHP non sapeva in whichLabel fuso", "# di 3 MB non si poteva spedire (upload_max_filesize = 2M) e PHP non sapeva in che fuso"],
+    ["# sopra in questo stesso script): il tetto real stays quello, PHP non deve essere il", "# sopra in questo stesso script): il tetto vero resta quello, PHP non deve essere il"],
+    ["# collo di bottiglia whichLabel lo nasconde. post_max_size sta sopra upload_max_filesize perche'", "# collo di bottiglia che lo nasconde. post_max_size sta sopra upload_max_filesize perche'"],
+    ["; r19: ne' la versione di PHP negli header, ne' un errore sotto gli occhi di whoText passa.", "; r19: ne' la versione di PHP negli header, ne' un errore sotto gli occhi di chi passa."],
+    ["; UTC, non il fuso di whoText amministra: quello whichLabel si memorizza e' sempre UTC, e la", "; UTC, non il fuso di chi amministra: quello che si memorizza e' sempre UTC, e la"],
+    ["; conversione la fa whoText showIt (r13). Roundcube converte da se' nel fuso dell'utente.", "; conversione la fa chi mostra (r13). Roundcube converte da se' nel fuso dell'utente."],
+    ["; Senza questa lineItem PHP non ha nessun fuso e lo dice a ogni funzione sulle date.", "; Senza questa riga PHP non ha nessun fuso e lo dice a ogni funzione sulle date."],
+    ["; NON /tmp, whichLabel e' il predefinito: li' i file di sessione di Roundcube sarebbero", "; NON /tmp, che e' il predefinito: li' i file di sessione di Roundcube sarebbero"],
+    ["# La cartella delle sessioni di Roundcube e il logLines degli errorList di PHP.", "# La cartella delle sessioni di Roundcube e il registro degli errori di PHP."],
+    ["# La rotazione, altrimenti quel logLines cresce senza fine. La cartella si crea: su una", "# La rotazione, altrimenti quel registro cresce senza fine. La cartella si crea: su una"],
+    ["# FreeBSD appena installata non c'e', ma /etc/newsyslog.conf la include already'.", "# FreeBSD appena installata non c'e', ma /etc/newsyslog.conf la include gia'."],
+    ["# Registro degli errorList di PHP (scritto dall'installazione del pannello mail)", "# Registro degli errori di PHP (scritto dall'installazione del pannello mail)"],
+    ["# Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: one script PHP", "# Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP"],
+    ["# con un percorso attaccato. Un location whichLabel chiede .php in fondo all'URI non lo prende,", "# con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,"],
+    ["# Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La lineItem", "# Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga"],
+    ["# al proprio avvio e poi fa \"fail2ban-client reload\". Le jail della mail invece stanno", "# al proprio avvio e poi fa \"fail2ban-client reload\". Le jail della posta invece stanno"],
+    ["# already' in jail.d.", "# gia' in jail.d."],
+    ["# RESTART, non start, e il motivo e' misurato: l'actionItem pf di una jail crea la propria", "# RESTART, non start, e il motivo e' misurato: l'azione pf di una jail crea la propria"],
+    ["# regola in \"actionstart\", una volta sola, when la jail parte. Se quella volta pf non", "# regola in \"actionstart\", una volta sola, quando la jail parte. Se quella volta pf non"],
+    ["# e NON la riprova mai: ne' un reload, ne' un \"service start\" su un servizio already' in", "# e NON la riprova mai: ne' un reload, ne' un \"service start\" su un servizio gia' in"],
+    ["# in pf stays una tabella SENZA la regola whichLabel la legge, cioe' niente. Misurato: con", "# in pf resta una tabella SENZA la regola che la legge, cioe' niente. Misurato: con"],
+    ["# Succede a ogni REINSTALLAZIONE, perche' li' fail2ban e' gia' in esecuzione da beforeValue.", "# Succede a ogni REINSTALLAZIONE, perche' li' fail2ban e' gia' in esecuzione da prima."],
+    ["# e lockedPackages con regola: block in quick from <permaban>", "# e bloccati con regola: block in quick from <permaban>"]
   ]
 }

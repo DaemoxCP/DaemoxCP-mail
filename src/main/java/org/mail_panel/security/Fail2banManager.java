@@ -2535,6 +2535,10 @@ public class Fail2banManager {
     public static final String PERMABAN_DIR  = "/var/db/mail-panel";
     public static final String PERMABAN_FILE = PERMABAN_DIR + "/permaban.list";
     public static final String PERMABAN_TABLE = "permaban";
+    /** Le righe di commento in testa alla lista, e la riga vuota che le separa dagli IP. */
+    public static final String PERMABAN_HEADER = "# Permaban list — gestito dal mail panel\n"
+            + "# IP qui dentro vengono caricati nella tabella pf <permaban>\n"
+            + "# e bloccati con regola: block in quick from <permaban>\n\n";
 
     /**
      * Aggiunge un IP alla lista permaban.
@@ -2658,10 +2662,7 @@ public class Fail2banManager {
 
     private void writePermabanFile(java.util.Set<String> ips) throws java.io.IOException {
         ensurePermanentBanFile();
-        StringBuilder content = new StringBuilder();
-        content.append("# Permaban list — gestito dal mail panel\n");
-        content.append("# IP qui dentro vengono caricati nella tabella pf <permaban>\n");
-        content.append("# e lockedPackages con regola: block in quick from <permaban>\n\n");
+        StringBuilder content = new StringBuilder(PERMABAN_HEADER);
         for (String ip : ips) content.append(ip).append("\n");
         Files.writeString(Paths.get(PERMABAN_FILE), content.toString(), java.nio.charset.StandardCharsets.UTF_8);
         try {
