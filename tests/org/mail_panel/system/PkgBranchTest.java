@@ -208,6 +208,8 @@ public class PkgBranchTest {
                 && !an.getString("content").contains("FreeBSD:15"));
         real("FreeBSD-base non compare nel file", !an.getString("content").contains("FreeBSD-base"));
         real("dice che non aggiorna nessun pacchetto", an.getJSONArray("warnings").getString(0).startsWith("Non si aggiorna nessun pacchetto"));
+        real("dice come si torna indietro anche al primo cambio, col file da cancellare: " + an.optString("howToReturn"),
+                an.optString("howToReturn").contains("quarterly") && an.optString("howToReturn").contains("zz-panel-branch.conf"));
         real("verso il ramo in cui si e' gia': no", !PkgBranch.preview(f, "quarterly").getBoolean("possible"));
         real("un ramo inventato: no", !PkgBranch.preview(f, "weekly").getBoolean("success"));
         real("l'anteprima non tocca niente", f.folder.isEmpty() && f.updates == 0);

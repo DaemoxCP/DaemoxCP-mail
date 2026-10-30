@@ -6265,5 +6265,6 @@
   "up.asks.restart": "A RESTART, then to be called again",
   "up.asks.finished": "nothing, there is nothing else to install",
   "up.asks.again": "to be run again",
-  "up.asks.rebuild": "to be run again AND TO REBUILD THE PACKAGES"
+  "up.asks.rebuild": "to be run again AND TO REBUILD THE PACKAGES",
+  "server.branch.howToReturn": "To go back: choose {from} again from this same card, or delete {file} and the branch goes back to the default one."
 }
