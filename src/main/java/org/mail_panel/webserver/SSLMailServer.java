@@ -507,6 +507,11 @@ public class SSLMailServer {
             // Idempotente, fail-safe: salta tutto se Fail2ban non è installato.
             org.mail_panel.security.Fail2banAutoSetup.run();
 
+            // La superficie pubblica sulla 443 col nome inglese (mailpanel-public) sui server
+            // installati prima: nginx, il suo log, filtro e jail di fail2ban, tutto insieme o
+            // niente. Dopo Fail2banAutoSetup, che ricarica fail2ban per conto suo.
+            org.mail_panel.system.PublicSurfaceRename.ensureAtBoot();
+
             // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
             // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".
             // Idempotente: se è tutto OK non fa nulla.
@@ -8495,7 +8500,7 @@ public class SSLMailServer {
         // La causa vera del guasto piu' grave trovato finora. Cinque jail dichiaravano
         // "action = pf[...]", due no: non dichiarandola ereditavano il valore predefinito di
         // jail.conf, costruito su iptables, che su FreeBSD non esiste. Quelle due rilevavano,
-        // contavano i tentativi e incrementavano i ban — 14.370 e 46 su mailpanel-pubblico —
+        // contavano i tentativi e incrementavano i ban — 14.370 e 46 sulla jail della 443 —
         // senza bloccare niente, e nessuna schermata poteva accorgersene perche' nessuna
         // guardava se il comando di ban fosse un comando. Questo lo guarda.
         JSONObject diagBan = new JSONObject().put("broken", new JSONArray());

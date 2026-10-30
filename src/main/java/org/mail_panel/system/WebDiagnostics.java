@@ -191,7 +191,7 @@ public class WebDiagnostics {
         //
         // Prima la domanda era posta al NOME: "l'elenco delle jail contiene la parola nginx?".
         // Sbagliava in tutte e due le direzioni. Su questo server la jail che protegge la 443
-        // si chiama "mailpanel-pubblico" e guarda /var/log/nginx/mailpanel-pubblico-access.log:
+        // si chiama "mailpanel-public" e guarda /var/log/nginx/mailpanel-public-access.log:
         // un log di nginx a tutti gli effetti, ma senza quella parola nel nome — e la diagnosi
         // annunciava che nessuno viene bannato sulle porte web, mentre veniva bannato. Al
         // contrario, una jail chiamata "nginx-qualcosa" ma puntata altrove sarebbe passata per

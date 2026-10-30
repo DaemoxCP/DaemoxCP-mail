@@ -2167,7 +2167,7 @@ public class Fail2banManager {
          *
          * Ci finiscono TUTTE quelle non lette, qualunque ne sia il motivo. La prima versione
          * contava solo gli errori di lettura e lasciava fuori le jail per cui non si trovava
-         * una tabella pf: mailpanel-pubblico aveva un indirizzo bannato, nessuna verifica, e
+         * una tabella pf: la jail della 443 aveva un indirizzo bannato, nessuna verifica, e
          * il riepilogo diceva "Coerenti". Un verde che nasce da cio' che non si e' guardato e'
          * il difetto che questa scheda esiste per scoprire, e ce l'aveva dentro.
          */

@@ -14,11 +14,11 @@ public class PfComparisonTest {
 
     public static void main(String[] args) {
         // --- Il comando di ban vero di fail2ban su FreeBSD (action.d/pf.conf) ---
-        String real = "pfctl -a f2b/mailpanel-pubblico -t f2b-mailpanel-pubblico -T add <ip>";
+        String real = "pfctl -a f2b/mailpanel-public -t f2b-mailpanel-public -T add <ip>";
         Fail2banManager.PfTarget b = Fail2banManager.targetFromCommand(real);
         real("comando reale: riconosciuto", b != null);
-        same("comando reale: tabella", "f2b-mailpanel-pubblico", b == null ? null : b.table);
-        same("comando reale: ancora", "f2b/mailpanel-pubblico", b == null ? null : b.anchor);
+        same("comando reale: tabella", "f2b-mailpanel-public", b == null ? null : b.table);
+        same("comando reale: ancora", "f2b/mailpanel-public", b == null ? null : b.anchor);
 
         // Su piu' righe, come lo restituisce fail2ban-client quando l'azione ne ha piu' d'una.
         Fail2banManager.PfTarget m = Fail2banManager.targetFromCommand(
@@ -43,8 +43,8 @@ public class PfComparisonTest {
         same("segnaposto: ancora ricavata dalle definizioni", "f2b/dovecot",
             v == null ? null : v.stillLikely);
         // Il nome puo' contenere trattini: si divide al PRIMO, che separa il prefisso f2b.
-        same("nome con trattini", "f2b/mailpanel-pubblico",
-            Fail2banManager.targetFromCommand("<pfctl> -t f2b-mailpanel-pubblico -T add <ip>").stillLikely);
+        same("nome con trattini", "f2b/mailpanel-public",
+            Fail2banManager.targetFromCommand("<pfctl> -t f2b-mailpanel-public -T add <ip>").stillLikely);
         // Una tabella senza trattino non lascia ricavare niente, e non si inventa.
         real("niente da ricavare", Fail2banManager.targetFromCommand("pfctl -t permaban -T add <ip>").stillLikely == null);
 

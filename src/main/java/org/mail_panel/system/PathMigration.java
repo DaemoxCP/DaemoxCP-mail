@@ -28,10 +28,10 @@ import java.util.logging.Logger;
  * nuovo deve restare alfabeticamente ultimo. Il nome scelto e' lo stesso del pannello web,
  * cosi' i due smettono di chiamare in due modi la stessa cosa.
  *
- * <p>NON sono qui tre nomi che un servizio esterno legge, e che vogliono la rigenerazione
- * della sua configurazione invece di uno spostamento: i due filtri fail2ban
- * (filter.d e jail.d, mailpanel-pubblico.conf) e il log di accesso di nginx
- * (/var/log/nginx/mailpanel-pubblico-access.log), che e' anche in newsyslog.
+ * <p>NON sono qui i nomi che leggono anche nginx e fail2ban: il file della superficie pubblica
+ * sulla 443, il suo log di accesso, il filtro e la jail di fail2ban (e con la jail l'ancora e la
+ * tabella di pf). Vanno spostati tutti insieme, con nginx e fail2ban ricaricati e un ritorno
+ * indietro se uno dei due rifiuta: li sposta PublicSurfaceRename.
  */
 public final class PathMigration {
 

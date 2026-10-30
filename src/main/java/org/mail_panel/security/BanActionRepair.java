@@ -17,15 +17,16 @@ import java.util.List;
  * Fa bannare con pf le jail che bannavano con iptables.
  *
  * Cosa era successo. Delle sette jail attive, cinque dichiaravano la propria azione
- * ("action = pf[name=...]") e due no: mailpanel-pubblico e mail-panel-auth, cioe' proprio le
+ * ("action = pf[name=...]") e due no: la superficie pubblica (oggi mailpanel-public, allora
+ * mailpanel-pubblico) e mail-panel-auth, cioe' proprio le
  * due che proteggono il pannello. Non dichiarandola ereditavano il valore predefinito di
  * jail.conf, che e' costruito su iptables — un comando che su FreeBSD non esiste. Il risultato
  * non era un errore visibile: le jail rilevavano, contavano i tentativi e incrementavano i ban
- * regolarmente. Su mailpanel-pubblico erano 14.370 tentativi e 46 ban, nessuno dei quali ha mai
+ * regolarmente. Sulla superficie pubblica erano 14.370 tentativi e 46 ban, nessuno dei quali ha mai
  * bloccato niente. Una jail che sbaglia comando di ban e' indistinguibile da una che funziona,
  * finche' non si guarda il firewall.
  *
- * Perche' non basta correggere il codice. Il file di mailpanel-pubblico lo riscrive il pannello
+ * Perche' non basta correggere il codice. Il file della superficie pubblica lo riscrive il pannello
  * a ogni installazione, quindi li' la fix arriva da sola. La sezione [mail-panel-auth] no:
  * viene aggiunta a jail.local una volta sola e poi mai piu' toccata, per non calpestare le
  * modifiche di chi la personalizza. Ottima regola, che pero' significa che su un'installazione
@@ -40,7 +41,8 @@ import java.util.List;
 public final class BanActionRepair {
 
     private static final String JAIL_LOCAL = "/usr/local/etc/fail2ban/jail.local";
-    private static final String PUBLIC_JAIL = "/usr/local/etc/fail2ban/jail.d/mailpanel-pubblico.conf";
+    private static final String PUBLIC_JAIL = org.mail_panel.system.WebProtection.JAIL;
+    private static final String PUBLIC_NAME = org.mail_panel.system.WebProtection.NAME;
     private static final String CLIENT = "/usr/local/bin/fail2ban-client";
 
     private BanActionRepair() { }
@@ -95,7 +97,7 @@ public final class BanActionRepair {
             boolean touched = false;
             boolean toReviewByHand = false;
 
-            // 1. mailpanel-pubblico: il file e' del pannello, si riscrive intero.
+            // 1. La superficie pubblica: il file e' del pannello, si riscrive intero.
             Path pub = Paths.get(PUBLIC_JAIL);
             if (Files.exists(pub)) {
                 String before = Files.readString(pub, StandardCharsets.UTF_8);
@@ -104,20 +106,20 @@ public final class BanActionRepair {
                 // Se qualcuno lo ha sostituito con il proprio, sovrascriverlo cancellerebbe il
                 // suo lavoro senza avvisare — e questo e' un rimedio, non un ripristino.
                 if (!before.contains("Scritto dal pannello")) {
-                    steps.put(step("mailpanel-pubblico", false,
-                        I18n.tr("server.banfix.notOurFile", java.util.Map.of("file", String.valueOf(PUBLIC_JAIL)))));
+                    steps.put(step(PUBLIC_NAME, false,
+                        I18n.tr("server.banfix.notOurFile", java.util.Map.of("file", String.valueOf(PUBLIC_JAIL), "jail", PUBLIC_NAME))));
                     toReviewByHand = true;
                 } else if (!before.equals(after)) {
                     copies.add(copy(pub));
                     Files.writeString(pub, after, StandardCharsets.UTF_8);
                     touched = true;
-                    steps.put(step("mailpanel-pubblico", true,
+                    steps.put(step(PUBLIC_NAME, true,
                         I18n.tr("server.banfix.rewritten", java.util.Map.of("file", String.valueOf(PUBLIC_JAIL), "line", String.valueOf(actionLineOf(after))))));
                 } else {
-                    steps.put(step("mailpanel-pubblico", true, I18n.tr("server.banfix.alreadyOk")));
+                    steps.put(step(PUBLIC_NAME, true, I18n.tr("server.banfix.alreadyOk")));
                 }
             } else {
-                steps.put(step("mailpanel-pubblico", true,
+                steps.put(step(PUBLIC_NAME, true,
                     I18n.tr("server.banfix.notInstalled")));
             }
 
@@ -153,7 +155,7 @@ public final class BanActionRepair {
                 // direbbe "non serviva" guardando solo il disco. Se il runtime non riporta
                 // l'azione di qualche jail, il lavoro non e' finito — si ricarica e si riguarda.
                 java.util.List<String> mute = new ArrayList<>();
-                for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
+                for (String jail : new String[] { PUBLIC_NAME, "mail-panel-auth" }) {
                     String c = banCommand(jail);
                     if (c == null || c.isEmpty()) mute.add(jail);
                 }
@@ -188,7 +190,7 @@ public final class BanActionRepair {
             // la configurazione e' giusta ma non e' stata applicata: si ricrea la jail. Senza
             // "--unban", che il manuale indica come l'opzione che invece toglierebbe i ban.
             java.util.List<String> stillMute = new ArrayList<>();
-            for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
+            for (String jail : new String[] { PUBLIC_NAME, "mail-panel-auth" }) {
                 String c = banCommand(jail);
                 if (c == null || c.isEmpty()) stillMute.add(jail);
             }
@@ -201,7 +203,7 @@ public final class BanActionRepair {
             // 4. La verifica che conta: cosa esegue ADESSO, chiesto a fail2ban.
             JSONArray verification = new JSONArray();
             boolean allOk = true;
-            for (String jail : new String[] { "mailpanel-pubblico", "mail-panel-auth" }) {
+            for (String jail : new String[] { PUBLIC_NAME, "mail-panel-auth" }) {
                 String cmd = banCommand(jail);
                 boolean ok = cmd != null && cmd.contains("pfctl");
                 if (cmd == null || cmd.isEmpty()) {
