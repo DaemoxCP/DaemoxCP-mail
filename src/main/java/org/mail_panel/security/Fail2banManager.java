@@ -1902,7 +1902,7 @@ public class Fail2banManager {
                 j.logFail2ban = BanActionRepair.logErrorsFor(jail);
                 j.sections = BanActionRepair.sectionsDefining(jail);
                 j.dump = BanActionRepair.readConfiguration(jail);
-                // Non si conclude "non banna via pf": non e' stato measured. Si dice cosa
+                // Non si conclude "non banna via pf": non e' stato misurato. Si dice cosa
                 // esegue davvero, perche' e' l'unico modo perche' qualcuno se ne accorga se
                 // quel comando su questo sistema non fa niente.
                 j.note = j.unreachable
@@ -2144,7 +2144,7 @@ public class Fail2banManager {
          *
          * Ci finiscono anche quelli presenti nella tabella quando nessuna regola la legge:
          * essere nella tabella e' una condizione necessaria, non sufficiente, e contarli come
-         * lockedPackages sarebbe lo stesso errore di leggere "Currently banned" come una prova.
+         * bloccati sarebbe lo stesso errore di leggere "Currently banned" come una prova.
          */
         public int totalNotApplied() {
             int n = 0;

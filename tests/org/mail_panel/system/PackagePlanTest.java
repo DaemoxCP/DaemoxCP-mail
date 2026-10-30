@@ -308,7 +308,7 @@ public class PackagePlanTest {
         real("simulazione: il JDK del pannello resta un impedimento con il suo motivo",
             p.getJSONArray("blockers").length() == 1
             && p.getJSONArray("blockers").getJSONObject(0).getString("reason").contains("JDK"));
-        real("simulazione: con un impedimento non e' runnable", !p.getBoolean("runnable"));
+        real("simulazione: con un impedimento non e' eseguibile", !p.getBoolean("runnable"));
         real("simulazione: anche qui la copia e' sparita", remainingCopies() == copiesBefore);
 
         p = PackagePlan.planFor(List.of("nginx"), protectedNames, x -> null);

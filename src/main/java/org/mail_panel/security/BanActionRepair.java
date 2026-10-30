@@ -45,7 +45,7 @@ public final class BanActionRepair {
 
     private BanActionRepair() { }
 
-    /** Le jail il cui comando di ban non e' runnable su questo sistema. Legge e basta. */
+    /** Le jail il cui comando di ban non e' eseguibile su questo sistema. Legge e basta. */
     public static JSONObject diagnosis() {
         JSONObject r = new JSONObject();
         JSONArray broken = new JSONArray();
@@ -332,7 +332,7 @@ public final class BanActionRepair {
     }
 
     /**
-     * Il primo comando runnable nominato da un comando di ban, o null se non si puo' dire.
+     * Il primo comando eseguibile nominato da un comando di ban, o null se non si puo' dire.
      *
      * Null non e' un fallimento ma una risposta: su questo si costruisce l'accusa "questa jail
      * banna con un comando che non esiste", e un'accusa sbagliata farebbe premere un pulsante

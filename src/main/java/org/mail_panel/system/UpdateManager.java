@@ -42,7 +42,7 @@ public final class UpdateManager {
     private static final Logger LOGGER = Logger.getLogger(UpdateManager.class.getName());
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
 
-    /** Elenco dei pacchetti unlockedPackages durante una manutenzione, per rimetterli a posto dopo un crash. */
+    /** Elenco dei pacchetti sbloccati durante una manutenzione, per rimetterli a posto dopo un crash. */
     private static final String MAINTENANCE_STATE = PackageQueue.STATE_PATH;
 
     private UpdateManager() {}
@@ -318,7 +318,7 @@ public final class UpdateManager {
     // ===================== la regola dei blocchi =====================
 
     /**
-     * I pacchetti dello stack di posta restano lockedPackages: e' cosi' che un pkg upgrade, da qui o
+     * I pacchetti dello stack di posta restano bloccati: e' cosi' che un pkg upgrade, da qui o
      * da SSH, non li sostituisce senza i controlli dell'aggiornamento guidato. Fanno eccezione
      * solo quelli che un amministratore ha sbloccato con il pannello: quella scelta si ricorda
      * (impostazione pkg.unlocked_by_admin) e si rispetta.
@@ -344,7 +344,7 @@ public final class UpdateManager {
 
     /**
      * All'avvio: blocca ogni pacchetto dello stack installato e non bloccato, tranne quelli
-     * unlockedPackages apposta da un amministratore. Non fa niente se c'e' lo stato di un lavoro
+     * sbloccati apposta da un amministratore. Non fa niente se c'e' lo stato di un lavoro
      * interrotto (prima va ripristinato quello) o se il database del pannello non risponde:
      * senza l'elenco degli sblocchi voluti bloccherebbe anche quelli.
      */
@@ -805,7 +805,7 @@ public final class UpdateManager {
 
     /**
      * Versioni disponibili per i pacchetti BLOCCATI. Serve un comando diverso da
-     * `pkg upgrade -n`: quello i lockedPackages li salta e non dice a che versione andrebbero,
+     * `pkg upgrade -n`: quello i bloccati li salta e non dice a che versione andrebbero,
      * quindi da solo lascerebbe credere che non abbiano aggiornamenti.
      */
     public static JSONArray lockedUpdates() {
@@ -2057,7 +2057,7 @@ public final class UpdateManager {
 
     /**
      * Il blocco finale di runMaintenanceJob non viene eseguito se il processo muore
-     * (riavvio del pannello, kill, crash della JVM): i pacchetti resterebbero unlockedPackages e
+     * (riavvio del pannello, kill, crash della JVM): i pacchetti resterebbero sbloccati e
      * nessuno se ne accorgerebbe finche' un aggiornamento successivo non porta via un
      * servizio. Questo file e' l'unica cosa che sopravvive.
      *
@@ -4554,7 +4554,7 @@ public final class UpdateManager {
                         I18n.tr("server.um.javaPreflight.12", java.util.Map.of("size", String.valueOf(large), "jdkDir", String.valueOf(JDK_DIR), "free", String.valueOf(free))));
             }
 
-            addCheck(checks, "down", "Interruzione", "wait",
+            addCheck(checks, "down", I18n.tr("server.um.x.downtime"), "wait",
                     I18n.tr("server.um.javaPreflight.13"));
 
             r.put("success", true).put("checks", checks)
@@ -4613,7 +4613,7 @@ public final class UpdateManager {
                 return new JSONObject().put("success", false)
                         .put("error", I18n.tr("server.um.startJavaUpdateNow.4", java.util.Map.of("trim", String.valueOf(syntaxCheck.trim()))));
 
-            // Il pannello segna i pacchetti unlockedPackages: se lo script morisse a meta', al prossimo
+            // Il pannello segna i pacchetti sbloccati: se lo script morisse a meta', al prossimo
             // avvio restoreLocksAfterCrash() li riprotegge da solo. Se l'elenco non si scrive,
             // lo script non parte. Finche' l'elenco c'e', nessun altro lavoro sui pacchetti parte:
             // lo script lavora fuori dal pannello, e il turno del pannello non lo vede.
@@ -5074,7 +5074,7 @@ public final class UpdateManager {
 
             // Un file che NOMINA il percorso dell'interprete non lo esegue per forza: un testo
             // che lo cita combacia come uno script che lo lancia, e grep non sa distinguerli.
-            // La differenza la fanno due fatti verificabili: il file e' runnable, oppure sta
+            // La differenza la fanno due fatti verificabili: il file e' eseguibile, oppure sta
             // dove il sistema va a prendere cose da eseguire (cron, rc.d). Tutto il resto e'
             // molto probabilmente prosa, e non deve sbarrare una rimozione legittima — ma
             // finisce comunque in un elenco a parte, perche' "probabile" non e' "certo".
@@ -5379,7 +5379,7 @@ public final class UpdateManager {
         } finally {
             // Si protegge ogni pacchetto dell'elenco che e' installato adesso: i nuovi arrivati e,
             // se il passaggio si e' fermato prima di toglierli, i vecchi. Prima, con un pkg delete
-            // fallito, i vecchi restavano installati e unlockedPackages, con solo un avviso.
+            // fallito, i vecchi restavano installati e sbloccati, con solo un avviso.
             if (!listOnDisk.isEmpty()) {
                 java.util.List<String> failed = new ArrayList<>();
                 int done = 0;
@@ -6501,7 +6501,7 @@ public final class UpdateManager {
             } else {
                 // L'elenco si salva PRIMA di sbloccare: se il pannello muore adesso, il
                 // ripristino all'avvio sa cosa riproteggere. Se non si scrive, non si sblocca
-                // niente: un'interruzione li lascerebbe unlockedPackages senza traccia.
+                // niente: un'interruzione li lascerebbe sbloccati senza traccia.
                 for (String m : protectedNames)
                     if (!isValidName(m)) throw new IllegalStateException("invalid package name in the plan: " + m);
                 String stateError = PackageQueue.writeState(protectedNames);
@@ -7759,7 +7759,7 @@ public final class UpdateManager {
             // Non basta sapere che una seconda copia esiste: bisogna sapere QUALE delle due
             // gira adesso. Se il PATH gia' sceglie l'altra, togliere il pacchetto non cambia
             // nulla — dire "diventerebbe un altro binario" sarebbe falso, e contraddirebbe il
-            // riquadro qui sopra che ha appena measured chi vince nel PATH.
+            // riquadro qui sopra che ha appena misurato chi vince nel PATH.
             String inUseNow = sh("command -v " + e.getKey() + " 2>/dev/null", 15).trim();
             boolean isItsOwn = inUseNow.equals(e.getValue());
             used.put(new JSONObject().put("command", e.getKey()).put("path", e.getValue())
@@ -10219,9 +10219,9 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.runRelinking.6"));
             StringBuilder el = new StringBuilder();
             for (String n : names) el.append(' ').append(n);
-            // PRIMA una simulazione: se pkg segnala hasConflicts di file, ci si ferma.
+            // PRIMA una simulazione: se pkg segnala conflitti di file, ci si ferma.
             // "-f" serve a forzare la REINSTALLAZIONE, ma forza anche il passare sopra ai
-            // hasConflicts — e sono due cose diverse. Averle confuse ha fatto sovrascrivere i
+            // conflitti — e sono due cose diverse. Averle confuse ha fatto sovrascrivere i
             // file del client MySQL 8.4 con quelli di un altro pacchetto.
             String simulation = sh("pkg install -f -n" + el + " 2>&1", 600);
             if (simulation.toLowerCase().contains("conflicts with")) {
@@ -10307,7 +10307,7 @@ public final class UpdateManager {
                 () -> runUpdateJob(j, approvedSignature));
     }
 
-    /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti lockedPackages. */
+    /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti bloccati. */
     private static void runUpdateJob(Job job, String approvedSignature) {
         job.status = "running";
         // Lo stato dei servizi PRIMA dell'aggiornamento: e' l'unico modo di distinguere un
@@ -10433,7 +10433,7 @@ public final class UpdateManager {
     /**
      * Sblocca -> aggiorna -> riprotegge ESATTAMENTE cio' che era protetto.
      * La riprotezione sta in un finally: deve avvenire anche se l'aggiornamento fallisce o
-     * solleva un'eccezione. Lasciare i pacchetti unlockedPackages dopo un errore e' lo scenario
+     * solleva un'eccezione. Lasciare i pacchetti sbloccati dopo un errore e' lo scenario
      * peggiore, perche' nessuno se ne accorge finche' un upgrade successivo non porta via
      * un servizio.
      */

@@ -4,7 +4,7 @@ package org.mail_panel.webserver;
  * Da quale pezzo di X-Forwarded-For si ricava l'indirizzo di chi bussa.
  *
  * E' la riga che, letta da sinistra, rendeva inutile il limite dei tentativi di accesso:
- * bastava cambiare l'intestazione a ogni prova per non essere mai lockedPackages.
+ * bastava cambiare l'intestazione a ogni prova per non essere mai bloccati.
  */
 public class RealIpTest {
 

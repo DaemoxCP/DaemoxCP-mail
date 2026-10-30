@@ -70,21 +70,7 @@ public class DnsRecordsGenerator {
             dkimPlaceholder.checkType = "DKIM";
             dkimPlaceholder.required = true;
             dkimPlaceholder.configured = false;
-            dkimPlaceholder.explanation = """
-                <div class="alert alert-warning mb-2">
-                    <strong>⚠️ DKIM non ancora configurato</strong>
-                </div>
-                <div class="alert alert-primary mb-2">
-                    <strong>📍 Andrà configurato su Cloudflare nel dominio: %s</strong>
-                </div>
-                <strong>Come configurare DKIM:</strong>
-                <ol>
-                    <li>Vai alla pagina <strong>Domini</strong> nel pannello</li>
-                    <li>Clicca sul dominio <strong>%s</strong></li>
-                    <li>Clicca su <strong>"Genera chiavi DKIM"</strong></li>
-                    <li>Copia il valore generato e crealo su Cloudflare</li>
-                </ol>
-                """.formatted(domain, domain);
+            dkimPlaceholder.explanation = dkimPlaceholderExplanation(domain);
             records.records.add(dkimPlaceholder);
         }
 
@@ -119,21 +105,10 @@ public class DnsRecordsGenerator {
         record.fullValue = DEFAULT_MX_PRIORITY + " " + mailServer;
         record.required = true;
         record.copyValue = mailServer;
-        record.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>MX</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>@</code> (oppure lascia vuoto)</td></tr>
-                <tr><td><strong>Mail server:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>Priority:</strong></td><td><code>10</code></td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            <small class="text-muted">
-            Questo dice ai server email "la posta per %s va consegnata a %s"
-            </small>
-            """.formatted(domain, mailServer, domain, mailServer);
+        record.explanation = zone(domain)
+            + table(row("Type:", "MX"), row("Name:", "<code>@</code> " + tx("mx.orEmpty")), row("Mail server:", code(mailServer)),
+                    row("Priority:", "<code>10</code>"), row("TTL:", "Auto"))
+            + "<small class=\"text-muted\">\n" + tx("mx.meaning", "domain", domain, "server", mailServer) + "\n</small>\n";
         return record;
     }
 
@@ -155,22 +130,10 @@ public class DnsRecordsGenerator {
         record.description = I18n.tr("server.dnsg.descA", java.util.Map.of("h", String.valueOf(hostname)));
         record.checkType = "A";
         record.required = true;
-        record.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>A</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>IPv4 address:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>Proxy status:</strong></td><td><span class="text-danger">⚠️ DNS only (nuvola GRIGIA, NON arancione!)</span></td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            <div class="alert alert-warning mt-2 mb-0">
-                <strong>⚠️ IMPORTANTE:</strong> Il proxy Cloudflare (nuvola arancione) <strong>NON</strong> deve essere attivo!<br>
-                Clicca sulla nuvola arancione per renderla grigia (DNS only).
-            </div>
-            """.formatted(parentDomain, subdomain, ip);
+        record.explanation = zone(parentDomain)
+            + table(row("Type:", "A"), row("Name:", code(subdomain)), row("IPv4 address:", code(ip)),
+                    row("Proxy status:", "<span class=\"text-danger\">⚠️ " + tx("a.proxy") + "</span>"), row("TTL:", "Auto"))
+            + "<div class=\"alert alert-warning mt-2 mb-0\">\n⚠️ " + th("a.warn") + "\n</div>\n";
         return record;
     }
 
@@ -189,25 +152,14 @@ public class DnsRecordsGenerator {
         record.description = I18n.tr("server.dnsg.descSpf", java.util.Map.of("d", String.valueOf(domain)));
         record.checkType = "SPF";
         record.required = true;
-        record.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>TXT</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>@</code></td></tr>
-                <tr><td><strong>Content:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            <hr>
-            <strong>Cosa significa:</strong>
-            <ul class="mb-0 small">
-                <li><code>v=spf1</code> = versione SPF</li>
-                <li><code>ip4:%s</code> = autorizza questo IP a inviare email</li>
-                <li><code>mx</code> = autorizza anche i server MX</li>
-                <li><code>-all</code> = rifiuta tutti gli altri</li>
-            </ul>
-            """.formatted(domain, spfValue, serverIp);
+        record.explanation = zone(domain)
+            + table(row("Type:", "TXT"), row("Name:", "<code>@</code>"), row("Content:", code(spfValue)), row("TTL:", "Auto"))
+            + "<hr>\n<strong>" + tx("meaning") + "</strong>\n<ul class=\"mb-0 small\">\n"
+            + li("<code>v=spf1</code> = " + tx("spf.v"))
+            + li(code("ip4:" + serverIp) + " = " + tx("spf.ip"))
+            + li("<code>mx</code> = " + tx("spf.mx"))
+            + li("<code>-all</code> = " + tx("spf.all"))
+            + "</ul>\n";
         return record;
     }
 
@@ -227,17 +179,8 @@ public class DnsRecordsGenerator {
         record.checkType = "DKIM";
         record.required = true;
         record.configured = true;
-        record.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>TXT</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>Content:</strong></td><td style="word-break:break-all"><code>%s</code></td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            """.formatted(domain, dkimName, dkimValue);
+        record.explanation = zone(domain)
+            + table(row("Type:", "TXT"), row("Name:", code(dkimName)), wideRow("Content:", code(dkimValue)), row("TTL:", "Auto"));
         return record;
     }
 
@@ -259,27 +202,11 @@ public class DnsRecordsGenerator {
         record.description = I18n.tr("server.dnsg.descDmarc");
         record.checkType = "DMARC";
         record.required = true;
-        record.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>TXT</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>_dmarc</code></td></tr>
-                <tr><td><strong>Content:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            <hr>
-            <strong>Cosa significa:</strong>
-            <ul class="mb-0 small">
-                <li><code>p=none</code> = non bloccare nulla, limitati a segnalare. E&rsquo; il punto di
-                    partenza: prima si guarda chi spedisce a nome tuo, poi si stringe verso
-                    <code>quarantine</code> e infine <code>reject</code>.</li>
-                <li><code>rua=mailto:...</code> = dove mandare i rapporti. Non &egrave; un dettaglio
-                    opzionale: senza, non si sapr&agrave; mai se si pu&ograve; stringere la politica
-                    senza fermare posta buona. L&rsquo;indirizzo deve esistere gi&agrave;.</li>
-            </ul>
-            """.formatted(domain, dmarcValue);
+        record.explanation = zone(domain)
+            + table(row("Type:", "TXT"), row("Name:", "<code>_dmarc</code>"), row("Content:", code(dmarcValue)), row("TTL:", "Auto"))
+            + "<hr>\n<strong>" + tx("meaning") + "</strong>\n<ul class=\"mb-0 small\">\n"
+            + li(th("dmarc.none")) + li(th("dmarc.rua"))
+            + "</ul>\n";
         return record;
     }
 
@@ -301,19 +228,10 @@ public class DnsRecordsGenerator {
         autoconfig.description = I18n.tr("server.dnsg.descAutoconfig", java.util.Map.of("d", String.valueOf(domain)));
         autoconfig.checkType = "Autoconfig";
         autoconfig.required = false;
-        autoconfig.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>CNAME</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>autoconfig</code></td></tr>
-                <tr><td><strong>Target:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>Proxy status:</strong></td><td>DNS only (nuvola grigia)</td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            <small class="text-muted">Permette a Thunderbird di configurare automaticamente l'account email.</small>
-            """.formatted(domain, mailServer);
+        autoconfig.explanation = zone(domain)
+            + table(row("Type:", "CNAME"), row("Name:", "<code>autoconfig</code>"), row("Target:", code(mailServer)),
+                    row("Proxy status:", tx("dnsOnly")), row("TTL:", "Auto"))
+            + "<small class=\"text-muted\">" + tx("autoconfig.note") + "</small>\n";
         records.add(autoconfig);
 
         // I due SRV di RFC 6186: questi funzionano da soli, senza alcun file da servire.
@@ -329,20 +247,9 @@ public class DnsRecordsGenerator {
         // Un SRV non e' scrivibile senza priorita', peso e porta: qui c'e' il record intero.
         srvImap.fullValue = "0 1 993 " + mailServer;
         srvImap.required = false;
-        srvImap.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>SRV</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>_imaps._tcp</code></td></tr>
-                <tr><td><strong>Priority:</strong></td><td><code>0</code></td></tr>
-                <tr><td><strong>Weight:</strong></td><td><code>1</code></td></tr>
-                <tr><td><strong>Port:</strong></td><td><code>993</code></td></tr>
-                <tr><td><strong>Target:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            """.formatted(domain, mailServer);
+        srvImap.explanation = zone(domain)
+            + table(row("Type:", "SRV"), row("Name:", "<code>_imaps._tcp</code>"), row("Priority:", "<code>0</code>"),
+                    row("Weight:", "<code>1</code>"), row("Port:", "<code>993</code>"), row("Target:", code(mailServer)), row("TTL:", "Auto"));
         records.add(srvImap);
 
         DnsRecord srvSmtp = new DnsRecord();
@@ -356,20 +263,9 @@ public class DnsRecordsGenerator {
         srvSmtp.checkType = "SRV (_submission)";
         srvSmtp.fullValue = "0 1 587 " + mailServer;
         srvSmtp.required = false;
-        srvSmtp.explanation = """
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Configura su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>SRV</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>_submission._tcp</code></td></tr>
-                <tr><td><strong>Priority:</strong></td><td><code>0</code></td></tr>
-                <tr><td><strong>Weight:</strong></td><td><code>1</code></td></tr>
-                <tr><td><strong>Port:</strong></td><td><code>587</code></td></tr>
-                <tr><td><strong>Target:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            """.formatted(domain, mailServer);
+        srvSmtp.explanation = zone(domain)
+            + table(row("Type:", "SRV"), row("Name:", "<code>_submission._tcp</code>"), row("Priority:", "<code>0</code>"),
+                    row("Weight:", "<code>1</code>"), row("Port:", "<code>587</code>"), row("Target:", code(mailServer)), row("TTL:", "Auto"));
         records.add(srvSmtp);
 
         return records;
@@ -388,175 +284,7 @@ public class DnsRecordsGenerator {
         record.description = I18n.tr("server.dnsg.descPtr");
         record.checkType = "PTR";
         record.required = true;
-        record.explanation = """
-            <div class="alert alert-danger mb-3">
-                <strong>⚠️ ATTENZIONE:</strong> Questo record <strong>NON</strong> si configura su Cloudflare!<br>
-                <small>Il PTR (Reverse DNS) si configura SOLO sul pannello del tuo provider VPS/hosting.</small>
-            </div>
-
-            <div class="alert alert-dark mb-3">
-                <strong>🎯 Cosa devi configurare:</strong>
-                <table class="table table-sm table-bordered mt-2 mb-0 bg-white">
-                    <tr><td width="120"><strong>IP Address:</strong></td><td><code>%s</code></td></tr>
-                    <tr><td><strong>Hostname:</strong></td><td><code>%s</code></td></tr>
-                </table>
-            </div>
-
-            <hr>
-
-            <div class="accordion" id="ptrAccordion">
-                <!-- HETZNER -->
-                <div class="accordion-item">
-                    <h2 class="accordion-header">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#hetznerGuide">
-                            <strong>🟠 Guida HETZNER (Cloud Console 2025)</strong>
-                        </button>
-                    </h2>
-                    <div id="hetznerGuide" class="accordion-collapse collapse" data-bs-parent="#ptrAccordion">
-                        <div class="accordion-body">
-                            <ol>
-                                <li>Vai su <a href="https://console.hetzner.cloud" target="_blank"><strong>console.hetzner.cloud</strong></a></li>
-                                <li>Seleziona il tuo <strong>Progetto</strong> dalla lista</li>
-                                <li>Clicca su <strong>"Servers"</strong> nel menu a sinistra</li>
-                                <li>Clicca sul nome del tuo server</li>
-                                <li>Vai nella tab <strong>"Networking"</strong></li>
-                                <li>Nella sezione <strong>"Public Network"</strong>, vedrai una tabella con:
-                                    <ul>
-                                        <li><strong>Primary IP</strong> - <strong>Protocol</strong> - <strong>Reverse DNS</strong></li>
-                                        <li>Il tuo IP <code>%s</code> avrà un reverse DNS di default tipo <code>static.xxx.xxx.xxx.xxx.clients.your-server.de</code></li>
-                                    </ul>
-                                </li>
-                                <li>Clicca sui <strong>tre puntini ⋮</strong> a destra della riga dell'IP</li>
-                                <li>Dal menu, seleziona <strong>"Edit Reverse DNS"</strong></li>
-                                <li>Nel campo inserisci: <code>%s</code></li>
-                                <li>Clicca <strong>"Save"</strong></li>
-                            </ol>
-                            <div class="alert alert-info mb-2">
-                                <small><strong>Nota:</strong> Il reverse DNS di default Hetzner è tipo <code>static.77.113.0.203.clients.your-server.de</code> - devi cambiarlo!</small>
-                            </div>
-                            <div class="alert alert-success mb-0">
-                                <small>✅ La propagazione su Hetzner è immediata (1-5 minuti)</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- OVH -->
-                <div class="accordion-item">
-                    <h2 class="accordion-header">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ovhGuide">
-                            <strong>🔵 Guida OVH / OVHcloud (2025)</strong>
-                        </button>
-                    </h2>
-                    <div id="ovhGuide" class="accordion-collapse collapse" data-bs-parent="#ptrAccordion">
-                        <div class="accordion-body">
-                            <ol>
-                                <li>Vai su <a href="https://www.ovh.com/manager/" target="_blank"><strong>www.ovh.com/manager</strong></a></li>
-                                <li>Effettua il login con il tuo account OVH</li>
-                                <li>Nel menu a sinistra, vai su <strong>"Bare Metal Cloud"</strong> oppure <strong>"Public Cloud"</strong> (dipende dal tipo di server)</li>
-                                <li><strong>Per VPS:</strong>
-                                    <ul>
-                                        <li>Clicca su <strong>"VPS"</strong></li>
-                                        <li>Seleziona il tuo VPS dalla lista</li>
-                                        <li>Vai nella sezione <strong>"IP"</strong></li>
-                                    </ul>
-                                </li>
-                                <li><strong>Per Dedicated Server:</strong>
-                                    <ul>
-                                        <li>Clicca su <strong>"Server dedicati"</strong></li>
-                                        <li>Seleziona il server</li>
-                                        <li>Vai su <strong>"IP"</strong> nel menu</li>
-                                    </ul>
-                                </li>
-                                <li>Trova l'IP <code>%s</code> nella lista</li>
-                                <li>Clicca sui <strong>tre puntini ⋮</strong> a destra</li>
-                                <li>Seleziona <strong>"Modifica il reverse"</strong></li>
-                                <li>Inserisci: <code>%s</code></li>
-                                <li>Clicca <strong>"Conferma"</strong></li>
-                            </ol>
-                            <div class="alert alert-warning mb-0">
-                                <small>⏱️ OVH può richiedere fino a 24 ore per la propagazione</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- DIGITALOCEAN -->
-                <div class="accordion-item">
-                    <h2 class="accordion-header">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#doGuide">
-                            <strong>🔷 Guida DigitalOcean (2025)</strong>
-                        </button>
-                    </h2>
-                    <div id="doGuide" class="accordion-collapse collapse" data-bs-parent="#ptrAccordion">
-                        <div class="accordion-body">
-                            <div class="alert alert-info mb-2">
-                                <strong>Nota:</strong> Su DigitalOcean, il PTR viene impostato automaticamente in base al nome del Droplet.
-                            </div>
-                            <ol>
-                                <li>Vai su <a href="https://cloud.digitalocean.com" target="_blank"><strong>cloud.digitalocean.com</strong></a></li>
-                                <li>Clicca sul tuo <strong>Droplet</strong></li>
-                                <li>In alto, clicca sul <strong>nome del Droplet</strong> (es. "ubuntu-server")</li>
-                                <li>Rinomina il Droplet esattamente in: <code>%s</code></li>
-                                <li>Premi <strong>Enter</strong> per salvare</li>
-                            </ol>
-                            <div class="alert alert-success mb-0">
-                                <small>✅ Il PTR si aggiorna automaticamente entro pochi minuti</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ALTRI PROVIDER -->
-                <div class="accordion-item">
-                    <h2 class="accordion-header">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#otherGuide">
-                            <strong>⚪ Altri Provider (Vultr, Linode, AWS, etc.)</strong>
-                        </button>
-                    </h2>
-                    <div id="otherGuide" class="accordion-collapse collapse" data-bs-parent="#ptrAccordion">
-                        <div class="accordion-body">
-                            <strong>Istruzioni generiche:</strong>
-                            <ol>
-                                <li>Accedi al pannello di controllo del tuo provider</li>
-                                <li>Cerca una di queste voci nel menu:
-                                    <ul>
-                                        <li><strong>"Reverse DNS"</strong></li>
-                                        <li><strong>"rDNS"</strong></li>
-                                        <li><strong>"PTR Record"</strong></li>
-                                        <li><strong>"DNS inverso"</strong></li>
-                                    </ul>
-                                </li>
-                                <li>Associa l'IP <code>%s</code> all'hostname <code>%s</code></li>
-                                <li>Salva le modifiche</li>
-                            </ol>
-                            <div class="alert alert-secondary mb-0">
-                                <small>💡 Se non trovi l'opzione, contatta il supporto del tuo provider e chiedi di configurare il PTR per te.</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <hr>
-
-            <div class="alert alert-warning mb-2">
-                <strong>🔍 Come verificare se il PTR è configurato correttamente:</strong><br>
-                Esegui questo comando dal terminale:
-                <pre class="bg-dark text-light p-2 rounded mt-2 mb-0">dig -x %s +short</pre>
-                <small>Deve restituire: <code>%s.</code> (con il punto finale)</small>
-            </div>
-
-            <div class="alert alert-danger mb-0">
-                <strong>⚠️ Perché è FONDAMENTALE:</strong>
-                <ul class="mb-0 mt-2">
-                    <li><strong>Senza PTR corretto, le tue email finiranno in SPAM</strong></li>
-                    <li>Gmail, Outlook e altri provider rifiutano email da IP senza PTR valido</li>
-                    <li>Il PTR deve corrispondere <strong>ESATTAMENTE</strong> a <code>%s</code></li>
-                    <li>Deve anche corrispondere al record A (mail.tuodominio.xx → IP → PTR → mail.tuodominio.xx)</li>
-                </ul>
-            </div>
-            """.formatted(ip, hostname, ip, hostname, ip, hostname, hostname, ip, hostname, ip, hostname, hostname);
+        record.explanation = ptrExplanation(ip, hostname);
         return record;
     }
 
@@ -590,26 +318,146 @@ public class DnsRecordsGenerator {
         record.description = I18n.tr("server.dnsg.descSts");
         record.checkType = "MTA-STS";
         record.required = false;
-        record.explanation = """
-            <div class="alert alert-secondary mb-2">
-                <strong>ℹ️ Questo record è OPZIONALE e avanzato</strong>
-            </div>
-            <div class="alert alert-primary mb-2">
-                <strong>📍 Se vuoi configurarlo, fallo su Cloudflare nel dominio: %s</strong>
-            </div>
-            <table class="table table-sm">
-                <tr><td width="120"><strong>Type:</strong></td><td>TXT</td></tr>
-                <tr><td><strong>Name:</strong></td><td><code>_mta-sts</code></td></tr>
-                <tr><td><strong>Content:</strong></td><td><code>%s</code></td></tr>
-                <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
-            </table>
-            <small class="text-muted">
-            MTA-STS forza i server mittenti a usare TLS. Richiede anche:<br>
-            - Un record CNAME <code>mta-sts</code> che punta a un web server<br>
-            - Un file <code>https://mta-sts.%s/.well-known/mta-sts.txt</code>
-            </small>
-            """.formatted(domain, mtaStsValue, domain);
+        record.explanation = "<div class=\"alert alert-secondary mb-2\">\n<strong>ℹ️ " + tx("sts.optional") + "</strong>\n</div>\n"
+            + "<div class=\"alert alert-primary mb-2\">\n<strong>📍 " + tx("sts.zone", "zone", domain) + "</strong>\n</div>\n"
+            + table(row("Type:", "TXT"), row("Name:", "<code>_mta-sts</code>"), row("Content:", code(mtaStsValue)), row("TTL:", "Auto"))
+            + "<small class=\"text-muted\">\n" + th("sts.note", "domain", domain) + "\n</small>\n";
         return record;
+    }
+
+    // ============== Le spiegazioni: la struttura qui, le frasi nei file di lingua ==============
+    //
+    // Le frasi stanno in server.dnsx.*. Le etichette dei campi (Type, Name, Content, TTL, Proxy
+    // status) restano in inglese: sono quelle che si leggono nel pannello di Cloudflare. I valori
+    // (dominio, IP, hostname) entrano sempre con l'escape; nelle chiavi .html il testo ha solo
+    // strong, code e br, e lo controlla I18nTest.
+
+    /** Una frase senza HTML, pronta per la pagina. Gli argomenti vanno a coppie: nome, valore. */
+    private static String tx(String key, String... kv) {
+        return I18n.escapeHtml(I18n.tr("server.dnsx." + key, pairs(kv, true)));
+    }
+
+    /** Una frase con dentro strong, code o br (chiave .html): l'escape tocca i valori, non il testo. */
+    private static String th(String key, String... kv) {
+        return I18n.tr("server.dnsx." + key + ".html", pairs(kv, true));
+    }
+
+    /** Come th, con un solo valore che e' gia' HTML scritto qui (un collegamento). */
+    private static String thLink(String key, String linkHtml) {
+        return I18n.tr("server.dnsx." + key + ".html", java.util.Map.of("link", linkHtml));
+    }
+
+    private static java.util.Map<String, String> pairs(String[] kv, boolean escape) {
+        java.util.Map<String, String> m = new java.util.LinkedHashMap<>();
+        for (int i = 0; i + 1 < kv.length; i += 2) m.put(kv[i], escape ? I18n.escapeHtml(kv[i + 1]) : kv[i + 1]);
+        return m;
+    }
+
+    private static String code(String value) { return "<code>" + I18n.escapeHtml(value) + "</code>"; }
+
+    private static String li(String html) { return "<li>" + html + "</li>\n"; }
+
+    private static String[] row(String label, String valueHtml) { return new String[] {label, valueHtml}; }
+
+    /** Una riga col valore lungo che va a capo dove capita (la chiave DKIM). */
+    private static String[] wideRow(String label, String valueHtml) { return new String[] {label, valueHtml, "wide"}; }
+
+    private static String table(String[]... rows) {
+        StringBuilder sb = new StringBuilder("<table class=\"table table-sm\">\n");
+        for (int i = 0; i < rows.length; i++) {
+            sb.append("<tr><td").append(i == 0 ? " width=\"120\"" : "").append("><strong>").append(rows[i][0])
+              .append("</strong></td><td").append(rows[i].length > 2 ? " style=\"word-break:break-all\"" : "")
+              .append(">").append(rows[i][1]).append("</td></tr>\n");
+        }
+        return sb.append("</table>\n").toString();
+    }
+
+    private static String zone(String domain) {
+        return "<div class=\"alert alert-primary mb-2\">\n<strong>📍 " + tx("zone", "zone", domain) + "</strong>\n</div>\n";
+    }
+
+    private static String link(String url, String label) {
+        return "<a href=\"" + url + "\" target=\"_blank\" rel=\"noopener\"><strong>" + label + "</strong></a>";
+    }
+
+    private static String guide(String id, String title, String body) {
+        return "<div class=\"accordion-item\">\n<h2 class=\"accordion-header\">\n"
+            + "<button class=\"accordion-button collapsed\" type=\"button\" data-bs-toggle=\"collapse\" data-bs-target=\"#" + id + "\">\n"
+            + "<strong>" + title + "</strong>\n</button>\n</h2>\n"
+            + "<div id=\"" + id + "\" class=\"accordion-collapse collapse\" data-bs-parent=\"#ptrAccordion\">\n"
+            + "<div class=\"accordion-body\">\n" + body + "</div>\n</div>\n</div>\n";
+    }
+
+    /** DKIM non ancora generato: cosa fare, con i nomi di pagina e di pulsante che si vedono davvero. */
+    private static String dkimPlaceholderExplanation(String domain) {
+        return "<div class=\"alert alert-warning mb-2\">\n<strong>⚠️ " + tx("dkimTodo.title") + "</strong>\n</div>\n"
+            + "<div class=\"alert alert-primary mb-2\">\n<strong>📍 " + tx("dkimTodo.zone", "zone", domain) + "</strong>\n</div>\n"
+            + "<strong>" + tx("dkimTodo.how") + "</strong>\n<ol>\n"
+            + li(th("dkimTodo.1", "page", I18n.tr("nav.domains")))
+            + li(th("dkimTodo.2", "domain", domain))
+            + li(th("dkimTodo.3", "button", I18n.tr("dns.generateDkim")))
+            + li(tx("dkimTodo.4"))
+            + "</ol>\n";
+    }
+
+    /** Il PTR non si configura su Cloudflare: la guida per i provider piu' comuni. */
+    private static String ptrExplanation(String ip, String hostname) {
+        return "<div class=\"alert alert-danger mb-3\">\n⚠️ " + th("ptr.notCf") + "<br>\n<small>" + tx("ptr.onlyHost") + "</small>\n</div>\n\n"
+            + "<div class=\"alert alert-dark mb-3\">\n<strong>🎯 " + tx("ptr.what") + "</strong>\n"
+            + "<table class=\"table table-sm table-bordered mt-2 mb-0 bg-white\">\n"
+            + "<tr><td width=\"120\"><strong>IP Address:</strong></td><td>" + code(ip) + "</td></tr>\n"
+            + "<tr><td><strong>Hostname:</strong></td><td>" + code(hostname) + "</td></tr>\n"
+            + "</table>\n</div>\n\n<hr>\n\n"
+            + "<div class=\"accordion\" id=\"ptrAccordion\">\n"
+            + guide("hetznerGuide", "🟠 " + tx("ptr.hetzner.title"), "<ol>\n"
+                + li(thLink("ptr.goTo", link("https://console.hetzner.cloud", "console.hetzner.cloud")))
+                + li(th("ptr.hetzner.2")) + li(th("ptr.hetzner.3")) + li(tx("ptr.hetzner.4")) + li(th("ptr.hetzner.5"))
+                + "<li>" + th("ptr.hetzner.6") + "\n<ul>\n"
+                + li("<strong>Primary IP</strong> - <strong>Protocol</strong> - <strong>Reverse DNS</strong>")
+                + li(th("ptr.hetzner.6b", "ip", ip))
+                + "</ul>\n</li>\n"
+                + li(th("ptr.hetzner.7")) + li(th("ptr.hetzner.8")) + li(th("ptr.hetzner.9", "host", hostname)) + li(th("ptr.hetzner.10"))
+                + "</ol>\n"
+                + "<div class=\"alert alert-info mb-2\">\n<small>" + th("ptr.hetzner.note") + "</small>\n</div>\n"
+                + "<div class=\"alert alert-success mb-0\">\n<small>✅ " + tx("ptr.hetzner.prop") + "</small>\n</div>\n")
+            + guide("ovhGuide", "🔵 " + tx("ptr.ovh.title"), "<ol>\n"
+                + li(thLink("ptr.goTo", link("https://www.ovh.com/manager/", "www.ovh.com/manager")))
+                + li(tx("ptr.ovh.2")) + li(th("ptr.ovh.3"))
+                + "<li>" + th("ptr.ovh.vps") + "\n<ul>\n"
+                + li(th("ptr.clickOn", "label", "VPS")) + li(tx("ptr.ovh.vps.2")) + li(th("ptr.ovh.vps.3"))
+                + "</ul>\n</li>\n"
+                + "<li>" + th("ptr.ovh.ded") + "\n<ul>\n"
+                + li(th("ptr.clickOn", "label", I18n.tr("server.dnsx.ptr.ovh.dedLabel"))) + li(tx("ptr.ovh.ded.2")) + li(th("ptr.ovh.ded.3"))
+                + "</ul>\n</li>\n"
+                + li(th("ptr.ovh.4", "ip", ip)) + li(th("ptr.threeDots"))
+                + li(th("ptr.ovh.select", "label", I18n.tr("server.dnsx.ptr.ovh.reverseLabel")))
+                + li(th("ptr.ovh.7", "host", hostname))
+                + li(th("ptr.ovh.click", "label", I18n.tr("server.dnsx.ptr.ovh.confirmLabel")))
+                + "</ol>\n"
+                + "<div class=\"alert alert-warning mb-0\">\n<small>⏱️ " + tx("ptr.ovh.prop") + "</small>\n</div>\n")
+            + guide("doGuide", "🔷 " + tx("ptr.do.title"),
+                "<div class=\"alert alert-info mb-2\">\n" + th("ptr.do.note") + "\n</div>\n<ol>\n"
+                + li(thLink("ptr.goTo", link("https://cloud.digitalocean.com", "cloud.digitalocean.com")))
+                + li(th("ptr.do.2")) + li(th("ptr.do.3")) + li(th("ptr.do.4", "host", hostname)) + li(th("ptr.do.5"))
+                + "</ol>\n"
+                + "<div class=\"alert alert-success mb-0\">\n<small>✅ " + tx("ptr.do.prop") + "</small>\n</div>\n")
+            + guide("otherGuide", "⚪ " + tx("ptr.other.title"),
+                "<strong>" + tx("ptr.other.generic") + "</strong>\n<ol>\n"
+                + li(tx("ptr.other.1"))
+                + "<li>" + tx("ptr.other.2") + "\n<ul>\n"
+                + li("<strong>\"Reverse DNS\"</strong>") + li("<strong>\"rDNS\"</strong>") + li("<strong>\"PTR Record\"</strong>")
+                + li("<strong>\"" + tx("ptr.other.inverse") + "\"</strong>")
+                + "</ul>\n</li>\n"
+                + li(th("ptr.other.3", "ip", ip, "host", hostname)) + li(tx("ptr.other.4"))
+                + "</ol>\n"
+                + "<div class=\"alert alert-secondary mb-0\">\n<small>💡 " + tx("ptr.other.help") + "</small>\n</div>\n")
+            + "</div>\n\n<hr>\n\n"
+            + "<div class=\"alert alert-warning mb-2\">\n<strong>🔍 " + tx("ptr.verify.title") + "</strong><br>\n"
+            + tx("ptr.verify.run") + "\n<pre class=\"bg-dark text-light p-2 rounded mt-2 mb-0\">dig -x " + I18n.escapeHtml(ip) + " +short</pre>\n"
+            + "<small>" + th("ptr.verify.expect", "host", hostname) + "</small>\n</div>\n\n"
+            + "<div class=\"alert alert-danger mb-0\">\n<strong>⚠️ " + tx("ptr.why.title") + "</strong>\n<ul class=\"mb-0 mt-2\">\n"
+            + li(th("ptr.why.1")) + li(tx("ptr.why.2")) + li(th("ptr.why.3", "host", hostname)) + li(tx("ptr.why.4"))
+            + "</ul>\n</div>\n";
     }
 
     // ============== DNS Verification ==============
