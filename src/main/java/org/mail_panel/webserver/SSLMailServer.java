@@ -175,7 +175,7 @@ public class SSLMailServer {
         context("/home", Access.page(HOME), this::handleProtectedPage);
         context("/api/status", Access.api(HOME), this::handleApiStatus);
         context("/api/stats", Access.api(HOME), this::handleApiStats);
-        context("/api/versioni", Access.api(HOME), this::handleApiVersions);
+        context("/api/versions", Access.api(HOME), this::handleApiVersions);
         context("/account", Access.page(ACCOUNT), this::handleProtectedPage);
         context("/api/account", Access.api(ACCOUNT), auth::handleAccount);
         context("/api/theme", Access.api(ACCOUNT), this::handleApiTheme);
@@ -202,8 +202,8 @@ public class SSLMailServer {
         context("/api/ratelimits", Access.api(MAIL_VIEW, DOMAINS), this::handleApiRateLimits);
         context("/statistics", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/statistics", Access.api(MAIL_VIEW), this::handleApiStatistics);
-        context("/api/profilo-apple", Access.api(MAIL_VIEW, DNS_MANAGE, Access.actions(MAIL_VIEW, "status", "preview")), this::handleApiAppleProfile);
-        context("/profilo-apple", Access.api(MAIL_VIEW), this::handleDownloadAppleProfile);
+        context("/api/apple-profile", Access.api(MAIL_VIEW, DNS_MANAGE, Access.actions(MAIL_VIEW, "status", "preview")), this::handleApiAppleProfile);
+        context("/apple-profile", Access.api(MAIL_VIEW), this::handleDownloadAppleProfile);
 
         // ---------- DNS e certificati ----------
         context("/dns", Access.page(DNS_VIEW), this::handleProtectedPage);
@@ -1100,8 +1100,8 @@ public class SSLMailServer {
      * invece di scoprirlo dopo con /api/theme (era il lampo bianco).
      */
     private String withTheme(HttpExchange exchange, String html) {
-        String tema = savedTheme(exchange);
-        return html.replace("{{THEME}}", tema).replace("{{COLOR_SCHEME}}", "auto".equals(tema) ? "light dark" : tema);
+        String theme = savedTheme(exchange);
+        return html.replace("{{THEME}}", theme).replace("{{COLOR_SCHEME}}", "auto".equals(theme) ? "light dark" : theme);
     }
 
     // ============== LINGUA ==============
@@ -1432,7 +1432,7 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
-                    String transform = queryParameter(exchange.getRequestURI().getRawQuery(), "trasforma");
+                    String transform = queryParameter(exchange.getRequestURI().getRawQuery(), "transform");
                     if (transform != null) {
                         // Anteprima di "casella -> alias": cosa si perde, cosa resta. Non cambia niente.
                         int tid;
@@ -1517,7 +1517,7 @@ public class SSLMailServer {
                     // Sub-routing per action specifiche (no email/password richieste)
                     String action = req.optString("action", "");
 
-                    if ("trasforma_in_alias".equals(action)) {
+                    if ("transform_to_alias".equals(action)) {
                         sendJsonResponse(exchange, mailboxToAlias(req, getClientIp(exchange)));
                         return;
                     }
@@ -2017,7 +2017,7 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
-                    String transform = queryParameter(exchange.getRequestURI().getRawQuery(), "trasforma");
+                    String transform = queryParameter(exchange.getRequestURI().getRawQuery(), "transform");
                     if (transform != null) {
                         // Anteprima di "alias -> casella": cosa succede, o perche' non si puo'. Non cambia niente.
                         String address = transform.trim().toLowerCase(java.util.Locale.ROOT);
@@ -2057,7 +2057,7 @@ public class SSLMailServer {
                         return;
                     }
 
-                    if ("trasforma_in_casella".equals(req.optString("action", ""))) {
+                    if ("transform_to_mailbox".equals(req.optString("action", ""))) {
                         response = aliasToMailbox(req, getClientIp(exchange));
                         break;
                     }
@@ -2281,7 +2281,7 @@ public class SSLMailServer {
     /**
      * Le versioni del software per la Home (colonna Versione di "Servizi Mail" e "Altro software").
      * Una lettura lancia una quindicina di comandi brevi: si tiene per trenta secondi, cosi' piu'
-     * schede aperte o ricaricate non li rilanciano ogni volta. "?fresco=1" (il pulsante Rileggi)
+     * schede aperte o ricaricate non li rilanciano ogni volta. "?fresh=1" (il pulsante Rileggi)
      * rilegge subito, ma non piu' di una volta ogni tre secondi; dopo un'azione su un servizio si
      * rilegge comunque. Le letture vanno una alla volta.
      */
@@ -2294,17 +2294,17 @@ public class SSLMailServer {
             sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
             return;
         }
-        String fresco = queryParameter(exchange.getRequestURI().getRawQuery(), "fresco");
-        if (fresco != null && !fresco.equals("1")) {
+        String fresh = queryParameter(exchange.getRequestURI().getRawQuery(), "fresh");
+        if (fresh != null && !fresh.equals("1")) {
             sendJsonError(exchange, 400, I18n.tr("server.badParameter"));
             return;
         }
         JSONObject r;
         try {
             synchronized (VERSIONS_LOCK) {
-                long eta = System.currentTimeMillis() - readVersionsMs;
+                long age = System.currentTimeMillis() - readVersionsMs;
                 long actions = ACTION_VERSIONS.get();
-                if (readVersions == null || actions != readActionVersions || eta > 30_000 || (fresco != null && eta > 3_000)) {
+                if (readVersions == null || actions != readActionVersions || age > 30_000 || (fresh != null && age > 3_000)) {
                     readVersions = org.mail_panel.system.SoftwareVersions.read(org.mail_panel.system.SoftwareVersions.real(
                             () -> Main.mysqlAvailable && Main.mailDatabase != null ? Main.mailDatabase.serverVersion() : null));
                     // Il ramo accanto alle versioni: quali versioni arrivano dipende da li'.
@@ -3559,7 +3559,7 @@ public class SSLMailServer {
                         response.put("events", arr);
                     }
 
-                } else if ("riepilogo_domini".equals(action)) {
+                } else if ("domains_summary".equals(action)) {
                     // Interroga il DNS una volta per dominio: e' lento come una verifica
                     // singola moltiplicata per il numero di domini, ed e' il prezzo di una
                     // risposta vera invece di una lettura del database.
@@ -5323,8 +5323,8 @@ public class SSLMailServer {
                                 .put("note", j.note)
                                 .put("believed_banned", new JSONArray(j.believedBanned))
                                 .put("in_firewall", new JSONArray(j.inFirewall))
-                                .put("solo_in_fail2ban", new JSONArray(j.soloInFail2ban))
-                                .put("solo_in_pf", new JSONArray(j.soloInPf))
+                                .put("only_in_fail2ban", new JSONArray(j.onlyInFail2ban))
+                                .put("only_in_pf", new JSONArray(j.onlyInPf))
                                 .put("ban_commands", new JSONArray(j.banCommands))
                                 .put("actions_output", j.actionsOutput)
                                 .put("log", j.logFail2ban)
@@ -7018,7 +7018,7 @@ public class SSLMailServer {
                 case "dovecot_config_regen" -> {
                     // Riscrive la sola configurazione, senza toccare i pacchetti. La conferma
                     // scritta a mano c'e' perche' l'operazione ricarica un servizio vivo.
-                    if (!"RIGENERA".equals(req.optString("confirm", ""))) {
+                    if (!"REGENERATE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7057,7 +7057,7 @@ public class SSLMailServer {
                     logAudit("SERVER_REBOOT_CANCEL", ip, response.optString("pid", ""));
                 }
                 case "reboot_now" -> {
-                    if (!"RIAVVIA IL SERVER".equals(req.optString("confirm", ""))) {
+                    if (!"REBOOT THE SERVER".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7069,7 +7069,7 @@ public class SSLMailServer {
                 case "cf_intervals" -> response = UpdateManager.cloudflareRanges();
                 case "rc_remove_preview" -> response = UpdateManager.removePanelRcScript(false);
                 case "rc_remove" -> {
-                    if (!"RIMUOVI RC".equals(req.optString("confirm", ""))) {
+                    if (!"REMOVE RC".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7079,7 +7079,7 @@ public class SSLMailServer {
                 }
                 case "rc_preview" -> response = UpdateManager.panelRcScript(false);
                 case "rc_install" -> {
-                    if (!"INSTALLA RC".equals(req.optString("confirm", ""))) {
+                    if (!"INSTALL RC".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7164,7 +7164,7 @@ public class SSLMailServer {
                             ? "restriction applied" : "NOT applied: " + response.optString("error", "?"));
                 }
                 case "postfix_level" -> {
-                    if (!"ALZA".equals(req.optString("confirm", ""))) {
+                    if (!"RAISE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7194,7 +7194,7 @@ public class SSLMailServer {
                                : " - NOT deleted: " + response.optString("error", "?")));
                 }
                 case "jump_continue" -> {
-                    if (!"PROSEGUI".equals(req.optString("confirm", ""))) {
+                    if (!"CONTINUE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7202,7 +7202,7 @@ public class SSLMailServer {
                     logAudit("RELEASE_JUMP_CONTINUE", ip, response.optString("jobId", ""));
                 }
                 case "os_upgrade_prepare" -> {
-                    if (!"PREPARA AGGIORNAMENTO".equals(req.optString("confirm", ""))) {
+                    if (!"PREPARE UPGRADE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7210,7 +7210,7 @@ public class SSLMailServer {
                     logAudit("OS_UPGRADE_PREPARE", ip, req.optString("target", ""));
                 }
                 case "os_fetch" -> {
-                    if (!"CERCA AGGIORNAMENTI".equals(req.optString("confirm", ""))) {
+                    if (!"FETCH UPDATES".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7220,7 +7220,7 @@ public class SSLMailServer {
                 case "python_preflight" -> response = UpdateManager.pythonPreflight();
                 case "python_leftovers" -> response = UpdateManager.pythonLeftovers(false);
                 case "python_leftovers_clean" -> {
-                    if (!"PULISCI PYTHON".equals(req.optString("confirm", ""))) {
+                    if (!"CLEAN PYTHON".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7228,7 +7228,7 @@ public class SSLMailServer {
                     logAudit("PYTHON_LEFTOVERS_CLEAN", ip, response.optString("removed", ""));
                 }
                 case "python_move" -> {
-                    if (!"SPOSTA PYTHON".equals(req.optString("confirm", ""))) {
+                    if (!"MOVE PYTHON".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7238,7 +7238,7 @@ public class SSLMailServer {
                 case "java_preflight" -> response = UpdateManager.javaPreflight();
                 case "java_status" -> response = UpdateManager.javaUpdateStatus();
                 case "java_update" -> {
-                    if (!"AGGIORNA JAVA".equals(req.optString("confirm", ""))) {
+                    if (!"UPGRADE JAVA".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7249,7 +7249,7 @@ public class SSLMailServer {
                 case "roundcube_diag" -> response = UpdateManager.roundcubeDiagnostics();
                 case "roundcube_nginx_preview" -> response = UpdateManager.repairNginxPathInfo(false);
                 case "roundcube_nginx_fix" -> {
-                    if (!"RIPARA NGINX".equals(req.optString("confirm", ""))) {
+                    if (!"FIX NGINX".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7257,7 +7257,7 @@ public class SSLMailServer {
                     logAudit("ROUNDCUBE_NGINX_FIX", ip, response.optString("backup", ""));
                 }
                 case "roundcube_update" -> {
-                    if (!"AGGIORNA ROUNDCUBE".equals(req.optString("confirm", ""))) {
+                    if (!"UPGRADE ROUNDCUBE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7274,7 +7274,7 @@ public class SSLMailServer {
                     logAudit("MYSQL_CLIENT_CLEANUP", ip, req.optString("foreign", ""));
                 }
                 case "relink" -> {
-                    if (!"RICOLLEGA".equals(req.optString("confirm", ""))) {
+                    if (!"RELINK".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7284,7 +7284,7 @@ public class SSLMailServer {
                 case "rspamd_clean_cache" -> {
                     // E' una cancellazione: la conferma si scrive a mano, e il percorso non
                     // arriva dalla richiesta ma e' fissato nel codice.
-                    if (!"ELIMINA CACHE".equals(req.optString("confirm", ""))) {
+                    if (!"DELETE CACHE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7292,7 +7292,7 @@ public class SSLMailServer {
                     logAudit("RSPAMD_CACHE_CLEANED", ip, response.optString("jobId", ""));
                 }
                 case "mysql84_migrate" -> {
-                    if (!"MIGRA A 8.4".equals(req.optString("confirm", ""))) {
+                    if (!"MIGRATE TO 8.4".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7335,7 +7335,7 @@ public class SSLMailServer {
                     logAudit("UPDATES_APPLY_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "maintenance_run" -> {
-                    if (!"MANUTENZIONE".equals(req.optString("confirm", ""))) {
+                    if (!"MAINTENANCE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -8591,8 +8591,8 @@ public class SSLMailServer {
                             d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noRule", Map.of("table", String.valueOf(j.table))));
                             continue;
                         }
-                        if (!j.soloInFail2ban.isEmpty())
-                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notInFirewall", Map.of("ips", String.join(", ", j.soloInFail2ban))));
+                        if (!j.onlyInFail2ban.isEmpty())
+                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notInFirewall", Map.of("ips", String.join(", ", j.onlyInFail2ban))));
                     }
                 }
                 appliedBansDetail = d.toString();
@@ -9612,7 +9612,7 @@ public class SSLMailServer {
                 String which = req.optString("which", "");
                 // Il predefinito e' "none", non "quarantine": RFC 9989 §5.1.5. Un valore
                 // predefinito che blocca posta e' una trappola per chi preme senza scegliere.
-                response = auto.crea(domainId, which, req.optString("policy", "none"));
+                response = auto.create(domainId, which, req.optString("policy", "none"));
                 logAudit("AUTODNS_CREATE", ip, which + " on domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
@@ -9632,7 +9632,7 @@ public class SSLMailServer {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = auto.creaTxtMtaSts(domainId);
+                response = auto.createTxtMtaSts(domainId);
                 // I record MTA-STS in piu' che la scrittura toglie sono cancellazioni nel DNS:
                 // restano scritte anche qui, non solo nella risposta.
                 JSONArray removed = response.optJSONArray("removed");
@@ -9721,7 +9721,7 @@ public class SSLMailServer {
                         + (response.optBoolean("success") ? " - created" : " - NOT created"));
             }
             case "send" -> {
-                if (!"INVIA".equals(req.optString("confirm", ""))) {
+                if (!"SEND".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
@@ -10652,8 +10652,8 @@ public class SSLMailServer {
     /** La preferenza di tema dell'admin di questa sessione, da scrivere nella pagina: auto, light o dark, mai altro. */
     private String savedTheme(HttpExchange exchange) {
         try {
-            String tema = Main.mailDatabase != null ? Main.mailDatabase.getAdminTheme(getSessionUsername(exchange)) : null;
-            return "light".equals(tema) || "dark".equals(tema) ? tema : "auto";
+            String theme = Main.mailDatabase != null ? Main.mailDatabase.getAdminTheme(getSessionUsername(exchange)) : null;
+            return "light".equals(theme) || "dark".equals(theme) ? theme : "auto";
         } catch (Exception e) {
             return "auto";
         }
@@ -11826,8 +11826,8 @@ http {
                 return trimmed;
             }
         }
-        String daXff = ipDaForwardedFor(exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
-        if (daXff != null) return daXff;
+        String fromXff = ipFromForwardedFor(exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
+        if (fromXff != null) return fromXff;
         String realIp = exchange.getRequestHeaders().getFirst("X-Real-IP");
         if (realIp != null && !realIp.isEmpty()) {
             String trimmed = realIp.trim();
@@ -11859,7 +11859,7 @@ http {
      * HttpExchange vero, e una logica che nessun test raggiunge e' una logica che nessuno
      * controlla.
      */
-    static String ipDaForwardedFor(String header) {
+    static String ipFromForwardedFor(String header) {
         if (header == null || header.isEmpty()) return null;
         String[] pieces = header.split(",");
         for (int i = pieces.length - 1; i >= 0; i--) {

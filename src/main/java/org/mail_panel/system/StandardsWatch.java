@@ -172,9 +172,9 @@ public class StandardsWatch {
     }
 
     private static String describe(List<String> rfc) {
-        List<String> con = new ArrayList<>();
-        for (String x : rfc) con.add("RFC " + x);
-        return String.join(", ", con);
+        List<String> rfcList = new ArrayList<>();
+        for (String x : rfc) rfcList.add("RFC " + x);
+        return String.join(", ", rfcList);
     }
 
     /** Le voci da mettere nel rapporto periodico: solo cio' che merita di essere letto. */
@@ -258,7 +258,7 @@ public class StandardsWatch {
     }
 
     /** L'abstract: c'e' sempre, e serve da ripiego quando l'elenco dei cambiamenti manca. */
-    public static String abstractDi(String rfcText) {
+    public static String abstractOf(String rfcText) {
         String t = cleanUp(rfcText);
         String[] lines = t.split("\n");
         int start = -1;
@@ -313,7 +313,7 @@ public class StandardsWatch {
 
             String changes = changeList(text);
             if (changes != null) {
-                r.put("type", "elenco").put("text", changes)
+                r.put("type", "list").put("text", changes)
                  .put("note", I18n.tr("server.watch.changeList"));
                 // Incrocio con cio' che il pannello usa davvero.
                 List<String> touches = linesTouching(changes, identifiersOf(reference));
@@ -326,7 +326,7 @@ public class StandardsWatch {
                 return r;
             }
 
-            String ab = abstractDi(text);
+            String ab = abstractOf(text);
             if (ab != null)
                 return r.put("type", "abstract").put("text", ab)
                         .put("note", I18n.tr("server.watch.abstract"));

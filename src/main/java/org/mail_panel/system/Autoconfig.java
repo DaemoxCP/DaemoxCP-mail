@@ -181,9 +181,9 @@ public class Autoconfig {
         int reviewed = 0, working = 0;
         boolean readList = false;
         try {
-            var tutti = Main.mailDatabase.getDomains();
+            var allItems = Main.mailDatabase.getDomains();
             readList = true;
-            for (var d : tutti) {
+            for (var d : allItems) {
                 String name = "autoconfig." + d.domain;
                 JSONObject j = new JSONObject().put("domain", d.domain).put("name", name);
                 j.put("dns", resolves(name));
@@ -438,12 +438,12 @@ public class Autoconfig {
                         .put("error", I18n.tr("server.autoconf.nginxRejected", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
-            Outcome ric = run("service", "nginx", "reload");
-            if (ric.code != 0) {
+            Outcome reloadOutcome = run("service", "nginx", "reload");
+            if (reloadOutcome.code != 0) {
                 Files.writeString(p, text);
                 run("service", "nginx", "reload");
                 return r.put("success", false).put("restored", true)
-                        .put("error", I18n.tr("server.autoconf.reloadFailed", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
+                        .put("error", I18n.tr("server.autoconf.reloadFailed", java.util.Map.of("out", String.valueOf(reloadOutcome.output.trim()))));
             }
 
             // Una verifica non puo' guardare solo cio' che volevo ottenere: va guardato anche
@@ -452,13 +452,13 @@ public class Autoconfig {
             // politica MTA-STS. Con i record TXT gia' pubblicati, farla sparire vuol dire
             // lasciare al mondo la dichiarazione di una protezione che non risponde piu'.
             List<String> policiesAfter = answeringPolicies();
-            List<String> perse = new ArrayList<>(policiesBefore);
-            perse.removeAll(policiesAfter);
-            if (!perse.isEmpty()) {
+            List<String> lost = new ArrayList<>(policiesBefore);
+            lost.removeAll(policiesAfter);
+            if (!lost.isEmpty()) {
                 Files.writeString(p, text);
                 run("service", "nginx", "reload");
                 return r.put("success", false).put("restored", true)
-                        .put("error", I18n.tr("server.autoconf.stsLost", java.util.Map.of("list", String.valueOf(String.join(", ", perse)))));
+                        .put("error", I18n.tr("server.autoconf.stsLost", java.util.Map.of("list", String.valueOf(String.join(", ", lost)))));
             }
 
             JSONObject after = state();
@@ -487,12 +487,12 @@ public class Autoconfig {
      * farebbe fallire un'installazione riuscita.
      */
     private static List<String> answeringPolicies() {
-        List<String> vive = new ArrayList<>();
+        List<String> liveOnes = new ArrayList<>();
         try {
             for (var d : Main.mailDatabase.getDomains())
-                if (MtaSts.publicTest(d.domain).optBoolean("ok", false)) vive.add(d.domain);
+                if (MtaSts.publicTest(d.domain).optBoolean("ok", false)) liveOnes.add(d.domain);
         } catch (Exception ignore) {}
-        return vive;
+        return liveOnes;
     }
 
     private record Outcome(int code, String output) {}

@@ -310,10 +310,10 @@ firme vecchie di diciannove giorni, MySQL irraggiungibile, programmi che rispond
 o con dell'HTML, che non passa mai come versione. Poi il socket di clamd, vero: un demone finto
 che risponde e uno muto, dal quale la lettura si deve staccare in tre secondi.
 
-**VersionsApiTest** — /api/versioni e /api/service sul server vero (SSLMailServer), via HTTPS,
+**VersionsApiTest** — /api/versions e /api/service sul server vero (SSLMailServer), via HTTPS,
 con una sessione come quella del login: si accende solo il server HTTP con le sue rotte, non i
 gestori che toccherebbero il sistema. Senza sessione 401; con la sessione le versioni, MySQL
-letto dal server vero; la lettura tenuta trenta secondi e "fresco" che non rilegge prima di tre;
+letto dal server vero; la lettura tenuta trenta secondi e "fresh" che non rilegge prima di tre;
 parametri e metodi sbagliati rifiutati. /api/service senza token CSRF, o con un token sbagliato,
 e' 403 e finisce nel registro di audit; con il token giusto la richiesta passa; un'azione su un
 servizio (redis, che qui non c'e': il comando fallisce senza toccare niente) va nel registro e fa

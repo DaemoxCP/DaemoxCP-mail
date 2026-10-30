@@ -97,7 +97,7 @@
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
                 return;
             }
-            let h = '<div class="alert alert-' + (r.type === 'elenco' ? 'info' : 'secondary')
+            let h = '<div class="alert alert-' + (r.type === 'list' ? 'info' : 'secondary')
                   + ' py-2 small mb-2"><strong>RFC ' + updEsc(r.rfc) + '</strong> &mdash; '
                   + updEsc(r.note) + '</div>';
 

@@ -75,7 +75,7 @@ public final class PackagePlan {
 
     private static final String VULNERABLE = " (vulnerable!)";
 
-    private static final Pattern DA_A = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
+    private static final Pattern FROM_TO = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
     private static final Pattern REPO_VERSION_NAME = Pattern.compile("^(\\S+): (\\S+)(?: \\[([^\\]]+)\\])?$");
     private static final Pattern REINSTALL = Pattern.compile("^(\\S+)-([^\\s-]+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
     private static final Pattern REMOVES = Pattern.compile("^(\\S+): (\\S+)(?: \\((.*)\\))?$");
@@ -169,7 +169,7 @@ public final class PackagePlan {
         Matcher m;
         switch (section) {
             case "upgrade", "downgrade" -> {
-                m = DA_A.matcher(s);
+                m = FROM_TO.matcher(s);
                 if (!m.find()) return false;
                 changes.put(entry(section, m.group(1), m.group(2), m.group(3), "", m.group(4), vulnerable));
             }
@@ -457,11 +457,11 @@ public final class PackagePlan {
             boolean already = false;
             for (int i = 0; i < changes.length(); i++) if ("pkg".equals(changes.getJSONObject(i).optString("name"))) already = true;
             if (!already) {
-                JSONArray conPkg = new JSONArray().put(entry("upgrade", "pkg", before.getString("from"), before.getString("to"),
+                JSONArray withPkg = new JSONArray().put(entry("upgrade", "pkg", before.getString("from"), before.getString("to"),
                         I18n.tr("server.plan.pkgFirst"), "", false));
-                for (int i = 0; i < changes.length(); i++) conPkg.put(changes.get(i));
-                plan.put("changes", conPkg);
-                changes = conPkg;
+                for (int i = 0; i < changes.length(); i++) withPkg.put(changes.get(i));
+                plan.put("changes", withPkg);
+                changes = withPkg;
             }
         }
 
@@ -788,15 +788,15 @@ public final class PackagePlan {
      * il catalogo offre, e gli ranges di VuXML di ogni problema.
      *
      * Verdetti, dal migliore al peggiore:
-     *  - "si-risolve-aggiornando": il catalogo ha una versione piu' recente che VuXML non
+     *  - "fixed-by-upgrade": il catalogo ha una versione piu' recente che VuXML non
      *    considera vulnerabile per nessuno dei problemi;
-     *  - "aggiornamento-non-basta": il catalogo ha una versione piu' recente, ma per almeno un
+     *  - "upgrade-not-enough": il catalogo ha una versione piu' recente, ma per almeno un
      *    problema e' ancora vulnerabile;
-     *  - "fix-fuori-dal-ramo": il catalogo non va oltre, ma VuXML indica da quale
+     *  - "fix-outside-branch": il catalogo non va oltre, ma VuXML indica da quale
      *    versione il problema e' corretto — esiste, non e' ancora nel tuo ramo;
-     *  - "fix-non-indicata": vulnerabile fino a una versione compresa, senza dire la prima
+     *  - "fix-not-stated": vulnerabile fino a una versione compresa, senza dire la prima
      *    corretta;
-     *  - "nessuna-fix": VuXML non mette un limite superiore, cioe' nessuna versione
+     *  - "no-fix": VuXML non mette un limite superiore, cioe' nessuna versione
      *    pubblicata e' corretta;
      *  - "non-so": un intervallo non si lascia leggere o il confronto non ha risposto.
      */
@@ -824,24 +824,24 @@ public final class PackagePlan {
                     unreadable = true;
                     d.put("type", "non-so");
                 } else {
-                    Bound sup = null;
+                    Bound upperBound = null;
                     boolean exact = false;
                     for (Bound e : its) {
-                        if (e.op().equals("<") || e.op().equals("<=")) sup = e;
+                        if (e.op().equals("<") || e.op().equals("<=")) upperBound = e;
                         if (e.op().equals("=")) exact = true;
                     }
                     if (exact) {
                         onlyThis = true;
-                        d.put("type", "solo-questa-versione");
-                    } else if (sup == null) {
+                        d.put("type", "this-version-only");
+                    } else if (upperBound == null) {
                         withoutLimit = true;
-                        d.put("type", "senza-limite");
-                    } else if (sup.op().equals("<")) {
-                        d.put("type", "corretta-da").put("firstFixed", sup.version());
-                        if (firstFixed == null || c.compare(sup.version(), firstFixed) > 0) firstFixed = sup.version();
+                        d.put("type", "no-upper-bound");
+                    } else if (upperBound.op().equals("<")) {
+                        d.put("type", "fixed-in").put("firstFixed", upperBound.version());
+                        if (firstFixed == null || c.compare(upperBound.version(), firstFixed) > 0) firstFixed = upperBound.version();
                     } else {
-                        d.put("type", "vulnerabile-fino-a").put("upTo", sup.version());
-                        upTo = sup.version();
+                        d.put("type", "vulnerable-up-to").put("upTo", upperBound.version());
+                        upTo = upperBound.version();
                     }
                 }
                 if (newerCatalog && insideAny(catalog, ranges, c)) {
@@ -858,23 +858,23 @@ public final class PackagePlan {
                 verdict = "non-so";
                 explain = I18n.tr("server.plan.v.unknownRange");
             } else if (newerCatalog && stillOpenInCatalog.isEmpty()) {
-                verdict = "si-risolve-aggiornando";
+                verdict = "fixed-by-upgrade";
                 explain = I18n.tr("server.plan.v.fixedByUpgrade", java.util.Map.of("v", String.valueOf(catalog)));
             } else if (newerCatalog) {
-                verdict = "aggiornamento-non-basta";
+                verdict = "upgrade-not-enough";
                 explain = I18n.tr("server.plan.v.upgradeNotEnough", java.util.Map.of("v", String.valueOf(catalog), "list", String.valueOf(String.join("; ", stillOpenInCatalog))))
                         + (firstFixed != null ? " " + I18n.tr("server.plan.v.fixedFrom", java.util.Map.of("v", String.valueOf(firstFixed))) : "");
             } else if (withoutLimit) {
-                verdict = "nessuna-fix";
+                verdict = "no-fix";
                 explain = I18n.tr("server.plan.v.noFix");
             } else if (upTo != null && firstFixed == null) {
-                verdict = "fix-non-indicata";
+                verdict = "fix-not-stated";
                 explain = I18n.tr("server.plan.v.fixNotStated", java.util.Map.of("upTo", String.valueOf(upTo), "cat", String.valueOf(emptyIf(catalog, installed))));
             } else if (onlyThis && firstFixed == null) {
-                verdict = "fix-fuori-dal-ramo";
+                verdict = "fix-outside-branch";
                 explain = I18n.tr("server.plan.v.onlyThis", java.util.Map.of("v", String.valueOf(installed)));
             } else if (firstFixed != null) {
-                verdict = "fix-fuori-dal-ramo";
+                verdict = "fix-outside-branch";
                 explain = I18n.tr("server.plan.v.fixOutsideBranch", java.util.Map.of("fixed", String.valueOf(firstFixed), "cat", String.valueOf(emptyIf(catalog, installed))));
             } else {
                 verdict = "non-so";

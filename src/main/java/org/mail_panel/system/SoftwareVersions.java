@@ -202,13 +202,13 @@ public final class SoftwareVersions {
         }
 
         /** Il processo e' partito prima che il suo pacchetto fosse installato: sta eseguendo la versione di prima. */
-        void startupAndInstall(JSONObject r, String pidfile, String packageName, String chi) {
+        void startupAndInstall(JSONObject r, String pidfile, String packageName, String who) {
             Long pid = pid(s.read(pidfile));
             Instant startup = pid == null ? null : s.startup(pid);
             Long installed = installedOn.get(packageName);
             if (startup == null || installed == null) return;
             if (startup.getEpochSecond() < installed) {
-                r.put("restart", true).put("restartNote", I18n.tr("server.ver.startedBefore", java.util.Map.of("who", String.valueOf(chi), "start", String.valueOf(data(startup)), "inst", String.valueOf(data(Instant.ofEpochSecond(installed))))));
+                r.put("restart", true).put("restartNote", I18n.tr("server.ver.startedBefore", java.util.Map.of("who", String.valueOf(who), "start", String.valueOf(data(startup)), "inst", String.valueOf(data(Instant.ofEpochSecond(installed))))));
             }
         }
 
@@ -218,11 +218,11 @@ public final class SoftwareVersions {
         }
 
         /** Il processo risponde con una versione diversa da quella del pacchetto: va riavviato. */
-        void compare(JSONObject r, String running, String installed, String chi, String remedy) {
+        void compare(JSONObject r, String running, String installed, String who, String remedy) {
             String a = numbers(running), b = numbers(installed);
             if (a.isEmpty() || b.isEmpty() || a.equals(b)) return;
             r.put("restart", true).put("installedVersion", installed)
-             .put("restartNote", I18n.tr("server.ver.runningVsInstalled", java.util.Map.of("who", String.valueOf(chi), "run", String.valueOf(running), "inst", String.valueOf(installed), "fix", String.valueOf(remedy))));
+             .put("restartNote", I18n.tr("server.ver.runningVsInstalled", java.util.Map.of("who", String.valueOf(who), "run", String.valueOf(running), "inst", String.valueOf(installed), "fix", String.valueOf(remedy))));
         }
 
         JSONObject mysql() {

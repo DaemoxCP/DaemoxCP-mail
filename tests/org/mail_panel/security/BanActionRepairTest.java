@@ -51,8 +51,8 @@ public class BanActionRepairTest {
             e.content.replace("backend  = auto\n", "").replace("action   = pf[name=mail-panel-auth, port=\"0:65535\"]\n", ""));
 
         // --- Applicarlo due volte non deve aggiungerne due ---
-        BanActionRepair.Outcome bis = BanActionRepair.withPfAction(e.content, "mail-panel-auth");
-        real("seconda passata: gia' a posto", bis.type == BanActionRepair.Outcome.Kind.ALREADY_IN_PLACE);
+        BanActionRepair.Outcome again = BanActionRepair.withPfAction(e.content, "mail-panel-auth");
+        real("seconda passata: gia' a posto", again.type == BanActionRepair.Outcome.Kind.ALREADY_IN_PLACE);
 
         // --- Un'azione iptables va sostituita, non affiancata ---
         String ipt = REAL + "action   = iptables-multiport[name=x, port=\"http\"]\n";
@@ -110,8 +110,8 @@ public class BanActionRepairTest {
                 == BanActionRepair.Outcome.Kind.ABSENT);
 
         // --- Il rischio peggiore: scrivere nella sezione di un'altra jail ---
-        String due = REAL + "\n[sshd]\nenabled  = true\nmaxretry = 3\n";
-        BanActionRepair.Outcome d = BanActionRepair.withPfAction(due, "mail-panel-auth");
+        String second = REAL + "\n[sshd]\nenabled  = true\nmaxretry = 3\n";
+        BanActionRepair.Outcome d = BanActionRepair.withPfAction(second, "mail-panel-auth");
         real("due sezioni: modificata", d.type == BanActionRepair.Outcome.Kind.MODIFIED);
         String sshd = d.content.substring(d.content.indexOf("[sshd]"));
         same("la sezione sshd e' intatta", "[sshd]\nenabled  = true\nmaxretry = 3\n", sshd);

@@ -402,7 +402,7 @@ public class DkimManager {
                         unverifiable++;
                         j.put("state", "uncertain");
                     } else if (!v.match) {
-                        j.put("state", "non_corrisponde");
+                        j.put("state", "not_matching");
                     } else {
                         j.put("state", "ok");
                     }

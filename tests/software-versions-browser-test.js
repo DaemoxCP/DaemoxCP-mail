@@ -74,7 +74,7 @@ async function served(route) {
     requests.push({ metodo: req.method(), path: p + url.search, body: bodyText });
     if (p === '/api/status') return json(route, { postfix: true, dovecot: true, mysql: true, rspamd: true, redis: false, clamav: true, roundcube: true,
         domains: 2, mailboxes: 5, aliases: 3, mail_hostname: '', server_ip: '' });
-    if (p === '/api/versioni') return json(route, VERSIONS);
+    if (p === '/api/versions') return json(route, VERSIONS);
     if (p === '/api/service') return json(route, { success: true });
     if (p === '/api/updates') return json(route, { success: true, active: true, reason: 'Il pannello riparte da solo.' });
     return json(route, { success: true });
@@ -143,7 +143,7 @@ async function served(route) {
     const post = requests.find(r => r.path === '/api/service');
     real('confermato: POST con servizio, azione e token CSRF', post && post.body.service === 'postfix' && post.body.action === 'stop'
         && post.body.csrf_token === 'csrf-prova');
-    real('dopo il comando si rileggono le versioni subito (?fresco=1)', requests.some(r => r.path === '/api/versioni?fresco=1'));
+    real('dopo il comando si rileggono le versioni subito (?fresh=1)', requests.some(r => r.path === '/api/versions?fresh=1'));
     dialogs2.length = 0;
     await page.click('button[aria-label="Riavvia Postfix"]');
     await page.waitForTimeout(400);
@@ -154,11 +154,11 @@ async function served(route) {
     real('Riavvia MySQL: chiede prima — ' + dialogs2[0], dialogs2.length === 2 && dialogs2[0].startsWith('Riavviare MySQL?'));
     const mysql = requests.filter(r => r.path === '/api/service').pop();
     real('e manda mysql-server', mysql.body.service === 'mysql-server' && mysql.body.action === 'restart');
-    const n = requests.filter(r => r.path === '/api/versioni?fresco=1').length;
+    const n = requests.filter(r => r.path === '/api/versions?fresh=1').length;
     await page.click('#versioniRileggi');
     await page.waitForFunction(k => true, n);
     await page.waitForTimeout(300);
-    real('"Rileggi le versioni" chiede una lettura fresca', requests.filter(r => r.path === '/api/versioni?fresco=1').length === n + 1);
+    real('"Rileggi le versioni" chiede una lettura fresca', requests.filter(r => r.path === '/api/versions?fresh=1').length === n + 1);
 
     console.log('\n== Tema scuro e telefono ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));

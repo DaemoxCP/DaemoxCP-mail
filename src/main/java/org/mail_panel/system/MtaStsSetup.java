@@ -105,10 +105,10 @@ public class MtaStsSetup {
         // proprio perche' non ha guardato niente. E' l'errore che sto togliendo dal pannello:
         // non deve tornare dalla porta di servizio.
         int domainCount = domains().size();
-        Breakdown rip = split(reviews);
-        List<String> absent = rip.absent, crooked = rip.crooked, proxied = rip.proxied,
-                     blindOnes = rip.blind, propagating = rip.propagating;
-        boolean proxyDaJolly = rip.proxyDaJolly;
+        Breakdown breakdown = split(reviews);
+        List<String> absent = breakdown.absent, crooked = breakdown.crooked, proxied = breakdown.proxied,
+                     blindOnes = breakdown.blind, propagating = breakdown.propagating;
+        boolean proxyFromWildcard = breakdown.proxyFromWildcard;
         if (reviews.size() < domainCount)
             blindOnes.add(I18n.tr("server.sts.notExamined", java.util.Map.of("n", String.valueOf((domainCount - reviews.size())))));
         List<String> cnameTroubles = new ArrayList<>(absent); cnameTroubles.addAll(crooked);
@@ -134,7 +134,7 @@ public class MtaStsSetup {
                 !proxied.isEmpty() ? "da fare" : (blind ? "uncertain" : "done"),
                 proxied.isEmpty() ? null
                     : I18n.tr("server.sts.proxyWhy")
-                    + (proxyDaJolly
+                    + (proxyFromWildcard
                         ? " " + I18n.tr("server.sts.wildcardWhy")
                         : "")));
 
@@ -164,25 +164,25 @@ public class MtaStsSetup {
         steps.addAll(testAndTxtSteps(txtReviews, expectedTxt()));
 
         JSONArray a = new JSONArray();
-        int daFare = 0, uncertain = 0;
+        int toDo = 0, uncertain = 0;
         for (Step p : steps) {
             a.put(p.json());
-            if ("da fare".equals(p.state)) daFare++;
+            if ("da fare".equals(p.state)) toDo++;
             else if ("uncertain".equals(p.state)) uncertain++;
         }
-        r.put("steps", a).put("daFare", daFare).put("uncertain", uncertain);
+        r.put("steps", a).put("toDo", toDo).put("uncertain", uncertain);
         // "completo" accende la spunta verde e fa sparire il pulsante, quindi non puo' bastare
         // che non ci sia niente DA FARE: serve anche che non sia rimasto niente da VERIFICARE.
-        // Con la sola condizione daFare==0, un passo "incerto" — cioe' uno che il pannello non
+        // Con la sola condizione toDo==0, un passo "incerto" — cioe' uno che il pannello non
         // ha potuto controllare — sarebbe bastato da solo a dichiarare "attivo su tutti i domini".
-        boolean complete = daFare == 0 && uncertain == 0;
+        boolean complete = toDo == 0 && uncertain == 0;
         r.put("complete", complete);
         String uncertainCount = uncertain == 1 ? I18n.tr("server.sts.steps.one") : I18n.tr("server.sts.steps.other", java.util.Map.of("n", String.valueOf(uncertain)));
         r.put("note", complete
                 ? I18n.tr("server.sts.complete")
-                : daFare == 0
+                : toDo == 0
                   ? I18n.tr("server.sts.onlyUncertain", java.util.Map.of("steps", String.valueOf(uncertainCount)))
-                  : (daFare == 1 ? I18n.tr("server.sts.missing.one") : I18n.tr("server.sts.missing.other", java.util.Map.of("n", String.valueOf(daFare))))
+                  : (toDo == 1 ? I18n.tr("server.sts.missing.one") : I18n.tr("server.sts.missing.other", java.util.Map.of("n", String.valueOf(toDo))))
                     + (uncertain > 0 ? ", " + I18n.tr("server.sts.plusUncertain", java.util.Map.of("steps", String.valueOf(uncertainCount))) : "")
                     + ". " + I18n.tr("server.sts.buttonRuns"));
         return r;
@@ -276,7 +276,7 @@ public class MtaStsSetup {
         final List<String> absent = new ArrayList<>(), crooked = new ArrayList<>(),
                            proxied = new ArrayList<>(), blind = new ArrayList<>(),
                            propagating = new ArrayList<>();
-        boolean proxyDaJolly;
+        boolean proxyFromWildcard;
     }
 
     static Breakdown split(List<NameReview> reviews) {
@@ -286,9 +286,9 @@ public class MtaStsSetup {
             // sbagliato E proxato, e i due fatti devono comparire tutti e due, nei due passi
             // a cui appartengono.
             if (e.goesThroughProxy) {
-                boolean daJolly = e.state == NameState.ABSENT;
-                if (daJolly) r.proxyDaJolly = true;
-                r.proxied.add(e.domain + (daJolly
+                boolean fromWildcard = e.state == NameState.ABSENT;
+                if (fromWildcard) r.proxyFromWildcard = true;
+                r.proxied.add(e.domain + (fromWildcard
                         ? " " + I18n.tr("server.sts.wildcardAnswers", java.util.Map.of("d", String.valueOf(e.domain))) : ""));
             }
             switch (e.state) {
@@ -376,10 +376,10 @@ public class MtaStsSetup {
      * Il confronto e' senza distinzione di maiuscole perche' i nomi di dominio non ne hanno,
      * ed e' ESATTO: "ake.net" non deve trovare "domain-d.test".
      */
-    static List<MailDatabase.Domain> filter(List<MailDatabase.Domain> tutti, String domainOnly) {
+    static List<MailDatabase.Domain> filter(List<MailDatabase.Domain> allItems, String domainOnly) {
         List<MailDatabase.Domain> out = new ArrayList<>();
-        if (tutti == null) return out;
-        for (MailDatabase.Domain d : tutti)
+        if (allItems == null) return out;
+        for (MailDatabase.Domain d : allItems)
             if (domainOnly == null || (d != null && domainOnly.equalsIgnoreCase(d.domain)))
                 out.add(d);
         return out;
@@ -504,17 +504,17 @@ public class MtaStsSetup {
                     continue;
                 }
                 String name = ("mta-sts." + d.domain).toLowerCase(Locale.ROOT);
-                java.util.List<CloudflareManager.DnsRecordInfo> tutti =
+                java.util.List<CloudflareManager.DnsRecordInfo> allItems =
                         cf.listRecords(a.apiToken, zl.zoneId);
-                if (tutti.isEmpty()) {
+                if (allItems.isEmpty()) {
                     blind++;
                     proxy.put(note(d.domain, false, I18n.tr("server.sts.emptyZone")));
                     continue;
                 }
-                boolean visto = false;
-                for (CloudflareManager.DnsRecordInfo t : tutti) {
+                boolean seen = false;
+                for (CloudflareManager.DnsRecordInfo t : allItems) {
                     if (t.name == null || !t.name.toLowerCase(Locale.ROOT).equals(name)) continue;
-                    visto = true;
+                    seen = true;
                     if (!t.proxied) {
                         straight++;
                         proxy.put(note(d.domain, true, I18n.tr("server.sts.pointsStraight", java.util.Map.of("kind", String.valueOf(t.type)))));
@@ -527,7 +527,7 @@ public class MtaStsSetup {
                             done ? I18n.tr("server.sts.proxyRemoved", java.util.Map.of("kind", String.valueOf(t.type)))
                                   : I18n.tr("server.sts.proxyNotRemoved", java.util.Map.of("kind", String.valueOf(t.type), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error)))));
                 }
-                if (!visto) {
+                if (!seen) {
                     blind++;
                     proxy.put(note(d.domain, false, I18n.tr("server.sts.noRecordNamed", java.util.Map.of("name", String.valueOf(name)))));
                 }
@@ -622,7 +622,7 @@ public class MtaStsSetup {
                 // Non si salta piu' quando il record c'e': va controllato che l'id corrisponda
                 // alla politica servita. I record creati dal vecchio pannello hanno un id fisso
                 // che non cambierebbe mai.
-                JSONObject e = auto.creaTxtMtaSts(d.id);
+                JSONObject e = auto.createTxtMtaSts(d.id);
                 finals.put(note(d.domain, e.optBoolean("success", false),
                         e.optString("note", e.optString("error", ""))));
             }
@@ -738,7 +738,7 @@ public class MtaStsSetup {
             var certAcct = acme.certificateAccount(MtaSts.mailHost());
             if (certAcct == null) return outside;
             for (var d : Main.mailDatabase.getDomains()) {
-                var a = acme.accountDi(d.id);
+                var a = acme.accountOf(d.id);
                 if (a == null || a.id != certAcct.id) outside.add(d.domain);
             }
         } catch (Exception ignore) {}
@@ -827,15 +827,15 @@ public class MtaStsSetup {
                             I18n.tr("server.sts.blindZone"), resolves));
                     continue;
                 }
-                List<CloudflareManager.DnsRecordInfo> tutti = cf.listRecords(a.apiToken, zl.zoneId);
-                if (tutti.isEmpty()) {
+                List<CloudflareManager.DnsRecordInfo> allItems = cf.listRecords(a.apiToken, zl.zoneId);
+                if (allItems.isEmpty()) {
                     out.add(new NameReview(d.domain, NameState.BLIND,
                             I18n.tr("server.sts.blindEmpty"), resolves));
                     continue;
                 }
                 CloudflareManager.DnsRecordInfo found = null;
                 String searched = full.toLowerCase(Locale.ROOT);
-                for (CloudflareManager.DnsRecordInfo t : tutti)
+                for (CloudflareManager.DnsRecordInfo t : allItems)
                     if (t.name != null && t.name.toLowerCase(Locale.ROOT).equals(searched)) {
                         found = t; break;
                     }
@@ -845,42 +845,42 @@ public class MtaStsSetup {
                     // E la differenza pesa: un jolly DIETRO PROXY non e' solo il motivo per cui
                     // il nome risponde, e' il motivo per cui risponde 526 — un fatto che il
                     // passo del proxy deve sapere, e che una supposizione non gli puo' dare.
-                    CloudflareManager.DnsRecordInfo jolly = null;
+                    CloudflareManager.DnsRecordInfo wildcard = null;
                     String wildcardName = ("*." + d.domain).toLowerCase(Locale.ROOT);
-                    for (CloudflareManager.DnsRecordInfo t : tutti)
+                    for (CloudflareManager.DnsRecordInfo t : allItems)
                         if (t.name != null && t.name.toLowerCase(Locale.ROOT).equals(wildcardName)) {
-                            jolly = t; break;
+                            wildcard = t; break;
                         }
                     String why;
-                    if (jolly != null)
+                    if (wildcard != null)
                         // Niente parentesi qui dentro: questo motivo viene mostrato gia' dentro
                         // una parentesi, e due livelli annidati si leggono male.
-                        why = ", " + (jolly.proxied
-                                ? I18n.tr("server.sts.wildcardProxied", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(jolly.type), "v", String.valueOf(jolly.content)))
-                                : I18n.tr("server.sts.wildcardStraight", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(jolly.type), "v", String.valueOf(jolly.content))));
+                        why = ", " + (wildcard.proxied
+                                ? I18n.tr("server.sts.wildcardProxied", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(wildcard.type), "v", String.valueOf(wildcard.content)))
+                                : I18n.tr("server.sts.wildcardStraight", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(wildcard.type), "v", String.valueOf(wildcard.content))));
                     else if (resolves)
                         why = ", " + I18n.tr("server.sts.answersFromOutside", java.util.Map.of("d", String.valueOf(d.domain)));
                     else why = "";
                     out.add(new NameReview(d.domain, NameState.ABSENT,
                             I18n.tr("server.sts.noRecordInZone") + why, resolves,
-                            jolly != null && jolly.proxied, false));
+                            wildcard != null && wildcard.proxied, false));
                     continue;
                 }
                 String target = Main.mailDatabase.getSetting("mail_hostname", "mail." + d.domain);
-                List<String> male = new ArrayList<>();
+                List<String> badOnes = new ArrayList<>();
                 boolean crooked = false;
                 if (!"CNAME".equalsIgnoreCase(found.type)) {
-                    male.add(I18n.tr("server.sts.notCname", java.util.Map.of("kind", String.valueOf(found.type))));
+                    badOnes.add(I18n.tr("server.sts.notCname", java.util.Map.of("kind", String.valueOf(found.type))));
                     crooked = true;
                 } else if (!DnsRules.sameName(found.content, target)) {
-                    male.add(I18n.tr("server.sts.pointsElsewhere", java.util.Map.of("v", String.valueOf(found.content), "b", String.valueOf(target))));
+                    badOnes.add(I18n.tr("server.sts.pointsElsewhere", java.util.Map.of("v", String.valueOf(found.content), "b", String.valueOf(target))));
                     crooked = true;
                 }
                 if (found.proxied)
-                    male.add(I18n.tr("server.sts.viaCfInstead"));
-                out.add(male.isEmpty()
+                    badOnes.add(I18n.tr("server.sts.viaCfInstead"));
+                out.add(badOnes.isEmpty()
                         ? new NameReview(d.domain, NameState.RIGHT, I18n.tr("server.sts.pointsStraightTo", java.util.Map.of("b", String.valueOf(target))), resolves)
-                        : new NameReview(d.domain, NameState.TO_FIX, String.join("; ", male),
+                        : new NameReview(d.domain, NameState.TO_FIX, String.join("; ", badOnes),
                                         resolves, found.proxied, crooked));
             } catch (Exception e) {
                 out.add(new NameReview(d.domain, NameState.BLIND,
@@ -918,7 +918,7 @@ public class MtaStsSetup {
      * DNS che risponde con un errore (SERVFAIL, REFUSED) invece che con il contenuto del nome.
      *
      * TROPPI vuol dire piu' di un record v=STSv1 sullo stesso nome: per i mittenti e' come non
-     * averne nessuno (RFC 8461 §3.1, vedi DnsRules.soloMtaSts). Prima si leggeva il primo e si
+     * averne nessuno (RFC 8461 §3.1, vedi DnsRules.onlyMtaSts). Prima si leggeva il primo e si
      * diceva PRESENTE, e il passo poteva risultare fatto su un MTA-STS che nessuno usa.
      *
      * E' pubblica perche' la stessa lettura serve alla pagina DNS: due letture dello stesso
@@ -1014,7 +1014,7 @@ public class MtaStsSetup {
             Matcher m = LINE_TXT.matcher(t);          // un CNAME davanti al TXT si salta
             if (m.matches()) txt.addAll(DnsRules.recordTxt(m.group(1)));
         }
-        return found(DnsRules.soloMtaSts(txt));
+        return found(DnsRules.onlyMtaSts(txt));
     }
 
     /**
@@ -1029,7 +1029,7 @@ public class MtaStsSetup {
         // Non si ricalcola qui: lo sa MtaSts, che e' anche chi serve la politica. Tre punti
         // che compongono la stessa stringa sono tre stringhe che un giorno divergono — ed e'
         // gia' successo, con l'id da orologio del riepilogo DNS.
-        return MtaSts.recordTxtCorrente();
+        return MtaSts.currentTxtRecord();
     }
 
     private static boolean jailActive() {

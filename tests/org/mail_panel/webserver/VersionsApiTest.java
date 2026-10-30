@@ -20,12 +20,12 @@ import java.security.cert.X509Certificate;
 import java.util.concurrent.Executors;
 
 /**
- * /api/versioni e /api/service sul server VERO (SSLMailServer), via HTTPS, con una sessione come
+ * /api/versions e /api/service sul server VERO (SSLMailServer), via HTTPS, con una sessione come
  * quella del login e il MySQL di prova. Non parte nient'altro del pannello: si accende solo il
  * server HTTP con le sue rotte, senza i gestori (ACME, DKIM, rapporto) che toccherebbero il sistema.
  *
  * Si controlla: senza sessione 401; con la sessione le versioni, con MySQL letto dal server vero;
- * la lettura tenuta trenta secondi e "fresco" che non rilegge prima di tre; parametri e metodi
+ * la lettura tenuta trenta secondi e "fresh" che non rilegge prima di tre; parametri e metodi
  * sbagliati rifiutati; /api/service senza token CSRF o con un token sbagliato 403, scritto nel
  * registro di audit; con il token giusto la richiesta passa (e un servizio sconosciuto e' 400);
  * un'azione su un servizio finisce nel registro e fa rileggere le versioni.
@@ -71,8 +71,8 @@ public class VersionsApiTest {
      * header parser received no bytes", una volta su venti. Non e' quello che si sta provando.
      */
     static HttpResponse<String> askSeparately(String method, String path, String body, boolean withSession) throws Exception {
-        try (HttpClient solo = HttpClient.newBuilder().sslContext(http.sslContext()).build()) {
-            return ask(solo, method, path, body, withSession);
+        try (HttpClient onlyOne = HttpClient.newBuilder().sslContext(http.sslContext()).build()) {
+            return ask(onlyOne, method, path, body, withSession);
         }
     }
 
@@ -145,9 +145,9 @@ public class VersionsApiTest {
         http = HttpClient.newBuilder().sslContext(trusted).build();
 
         try {
-            System.out.println("\n== /api/versioni ==");
-            real("senza sessione: 401", ask("GET", "/api/versioni", null, false).statusCode() == 401);
-            HttpResponse<String> r = ask("GET", "/api/versioni", null, true);
+            System.out.println("\n== /api/versions ==");
+            real("senza sessione: 401", ask("GET", "/api/versions", null, false).statusCode() == 401);
+            HttpResponse<String> r = ask("GET", "/api/versions", null, true);
             JSONObject j = new JSONObject(r.body());
             String mysql = db.serverVersion();
             JSONObject line = j.getJSONObject("services").getJSONObject("mysql");
@@ -157,13 +157,13 @@ public class VersionsApiTest {
                     mysql != null && mysql.equals(line.optString("version")) && line.optBoolean("running"));
             String read = j.getString("readAt");
             real("seconda richiesta: la stessa lettura (" + read + ")",
-                    new JSONObject(ask("GET", "/api/versioni", null, true).body()).getString("readAt").equals(read));
-            real("\"fresco\" entro tre secondi: la stessa lettura",
-                    new JSONObject(ask("GET", "/api/versioni?fresco=1", null, true).body()).getString("readAt").equals(read));
-            real("fresco=2: 400", ask("GET", "/api/versioni?fresco=2", null, true).statusCode() == 400);
+                    new JSONObject(ask("GET", "/api/versions", null, true).body()).getString("readAt").equals(read));
+            real("\"fresh\" entro tre secondi: la stessa lettura",
+                    new JSONObject(ask("GET", "/api/versions?fresh=1", null, true).body()).getString("readAt").equals(read));
+            real("fresh=2: 400", ask("GET", "/api/versions?fresh=2", null, true).statusCode() == 400);
             // Il token CSRF si guarda prima di tutto (il filtro di ogni rotta): senza, 403; con, il 405 del gestore
-            real("POST without the CSRF token: 403", askSeparately("POST", "/api/versioni", "{}", true).statusCode() == 403);
-            real("POST with the token: 405", askSeparately("POST", "/api/versioni", "{\"csrf_token\":\"" + csrf + "\"}", true).statusCode() == 405);
+            real("POST without the CSRF token: 403", askSeparately("POST", "/api/versions", "{}", true).statusCode() == 403);
+            real("POST with the token: 405", askSeparately("POST", "/api/versions", "{\"csrf_token\":\"" + csrf + "\"}", true).statusCode() == 405);
 
             System.out.println("\n== /api/service: il token CSRF ==");
             HttpResponse<String> without = ask("POST", "/api/service", "{\"service\":\"redis\",\"action\":\"stop\"}", true);
@@ -198,8 +198,8 @@ public class VersionsApiTest {
                     && waitForLine(log, "service=redis"));
             real("e il registro dice lo STESSO esito della risposta",
                     outcomeInRegistry(log, "SERVICE_RESTART") == succeeded);
-            String after = new JSONObject(ask("GET", "/api/versioni", null, true).body()).getString("readAt");
-            real("dopo l'azione le versioni si rileggono, anche senza fresco: " + after, !after.equals(read));
+            String after = new JSONObject(ask("GET", "/api/versions", null, true).body()).getString("readAt");
+            real("dopo l'azione le versioni si rileggono, anche senza fresh: " + after, !after.equals(read));
         } finally {
             https.stop(0);
             db.close();

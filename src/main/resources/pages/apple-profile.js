@@ -2,7 +2,7 @@
         // Le chiavi del profilo vengono dallo schema ufficiale Apple (com.apple.mail.managed);
         // il file generato passa la validazione di plutil, non e' stato guardato a occhio.
         async function paApi(actionItem, extra) {
-            const r = await fetch('/api/profilo-apple', {
+            const r = await fetch('/api/apple-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(Object.assign({ action: actionItem }, extra || {}))
@@ -51,7 +51,7 @@
         function paDownload() {
             const sel = document.getElementById('paCasella');
             if (!sel || !sel.value) return;
-            window.location = '/profilo-apple?email=' + encodeURIComponent(sel.value);
+            window.location = '/apple-profile?email=' + encodeURIComponent(sel.value);
         }
 
         async function paPreview() {

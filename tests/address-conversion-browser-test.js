@@ -60,18 +60,18 @@ async function served(route) {
     requests.push({ metodo: req.method(), path: p + url.search, body: bodyText });
     if (p === '/api/domains') return json(route, { success: true, domains: [{ id: 1, domain: 'domain-d.test' }] });
     if (p === '/api/aliases' && req.method() === 'GET') {
-        if (url.searchParams.get('trasforma') === 'dmarc@domain-d.test') return json(route, { success: true, possible: true,
+        if (url.searchParams.get('transform') === 'dmarc@domain-d.test') return json(route, { success: true, possible: true,
             address: 'dmarc@domain-d.test', fingerprint: 'imp-alias',
             destinations: [{ destination: 'owner@example.net', active: true }], copy: false,
             towardsHere: [{ source: 'postmaster@domain-d.test', active: true }],
             mail: { present: true, messages: 1234, atLeast: false, bytes: 52428800, size: '50,0 MB', filters: true, last: '2025-05-12T09:30:00+02:00' } });
-        if (url.searchParams.get('trasforma')) return json(route, { success: true, possible: false, reason: 'Non si puo\' in questa prova.' });
+        if (url.searchParams.get('transform')) return json(route, { success: true, possible: false, reason: 'Non si puo\' in questa prova.' });
         return json(route, { success: true, aliases: ALIAS });
     }
-    if (p === '/api/aliases' && req.method() === 'POST' && bodyText.action === 'trasforma_in_casella')
+    if (p === '/api/aliases' && req.method() === 'POST' && bodyText.action === 'transform_to_mailbox')
         return json(route, { success: true, id: 99, message: 'dmarc@domain-d.test ora e\' una casella. La posta di prima e\' in /var/vmail/.archivio-pannello/domain-d.test/dmarc-20261003T120000Z.' });
     if (p === '/api/mailboxes' && req.method() === 'GET') {
-        if (url.searchParams.get('trasforma') === '7') return json(route, { success: true, possible: true, id: 7,
+        if (url.searchParams.get('transform') === '7') return json(route, { success: true, possible: true, id: 7,
             address: 'info@domain-d.test', fingerprint: 'imp-casella',
             losses: { lastAccess: '2026-09-30T10:00:00+02:00', sendOnly: false, active: true, autoReply: true,
                 forwards: ['owner@example.net'], filters: 2 },
@@ -83,7 +83,7 @@ async function served(route) {
     }
     if (p === '/api/mailboxes' && req.method() === 'POST' && bodyText.action === 'generate_password')
         return json(route, { success: true, password: 'Proposta-Dal-Generatore-42', entropy_bits: 120, strength_label: 'Molto forte' });
-    if (p === '/api/mailboxes' && req.method() === 'POST' && bodyText.action === 'trasforma_in_alias')
+    if (p === '/api/mailboxes' && req.method() === 'POST' && bodyText.action === 'transform_to_alias')
         return json(route, { success: true, message: 'info@domain-d.test ora e\' un alias verso owner@example.net.' });
     if (p === '/api/mailboxes' && req.method() === 'DELETE') return json(route, { success: true });
     return json(route, { success: true });
@@ -121,7 +121,7 @@ async function served(route) {
     if (photos) await page.screenshot({ path: path.join(photos, 'trasforma-in-casella.png') });
     await page.click('#acVia');
     await page.waitForSelector('#aCasellaModal', { state: 'hidden' });
-    const post = requests.find(r => r.body && r.body.action === 'trasforma_in_casella');
+    const post = requests.find(r => r.body && r.body.action === 'transform_to_mailbox');
     real('la richiesta: password, scelta "archivia", fingerprint, CSRF, inoltri non tenuti', post && post.body.password === 'Proposta-Dal-Generatore-42'
         && post.body.old_mail === 'archive' && post.body.fingerprint === 'imp-alias' && post.body.csrf_token === 'csrf-prova'
         && post.body.keep_forwards === false && post.body.name === 'DMARC' && post.body.quota_mb === 1024);
@@ -149,7 +149,7 @@ async function served(route) {
     if (photos) await page.screenshot({ path: path.join(photos, 'trasforma-in-alias.png') });
     await page.click('#aaVia');
     await page.waitForSelector('#aAliasModal', { state: 'hidden' });
-    const pa = requests.find(r => r.body && r.body.action === 'trasforma_in_alias');
+    const pa = requests.find(r => r.body && r.body.action === 'transform_to_alias');
     real('la richiesta: due destinazioni, la conferma, l\'fingerprint, il CSRF', pa && pa.body.destinations.length === 2
         && pa.body.destinations[1] === 'postmaster@domain-c.test' && pa.body.confirmation === 'INFO@domain-d.test'
         && pa.body.fingerprint === 'imp-casella' && pa.body.csrf_token === 'csrf-prova' && pa.body.id === 7);

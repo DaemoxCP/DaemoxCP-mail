@@ -27,11 +27,11 @@ function real(whatItem, ok) {
 const requests = [];
 let rounds = 0, readings = 0;
 
-const VULN_NGINX = { verdict: 'si-risolve-aggiornando', installedVersion: '1.30.4,3', catalog: '1.30.5_1,3', firstFixed: '1.30.5,3',
+const VULN_NGINX = { verdict: 'fixed-by-upgrade', installedVersion: '1.30.4,3', catalog: '1.30.5_1,3', firstFixed: '1.30.5,3',
     explanation: 'Si: aggiornare alla 1.30.5_1,3, che il tuo catalogo offre, corregge il problema.',
     issues: [{ description: 'nginx -- buffer overflow <img src=x onerror="window.injectedRan=1">', cve: ['CVE-2026-90439'],
                  url: 'https://vuxml.FreeBSD.org/freebsd/7dc8fd4b.html' }] };
-const VULN_EXPAT = { verdict: 'aggiornamento-non-basta', installedVersion: '2.8.1', catalog: '2.8.4', firstFixed: '2.8.5',
+const VULN_EXPAT = { verdict: 'upgrade-not-enough', installedVersion: '2.8.1', catalog: '2.8.4', firstFixed: '2.8.5',
     explanation: 'Il catalogo offre 2.8.4, ma VuXML la considera ancora vulnerabile. La fix e\' dalla 2.8.5.',
     issues: [{ description: 'libexpat -- Improper Handling of Unicode Encoding', cve: ['CVE-2026-93990'], url: 'https://vuxml.FreeBSD.org/freebsd/7fed71c4.html' }] };
 

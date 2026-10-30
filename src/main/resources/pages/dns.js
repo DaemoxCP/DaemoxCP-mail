@@ -815,7 +815,7 @@
                 const resp = await fetch('/api/dkim', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'riepilogo_domini' })
+                    body: JSON.stringify({ action: 'domains_summary' })
                 });
                 r = await resp.json();
             } catch (e) {
@@ -835,7 +835,7 @@
             if (r.withoutKey > 0) {
                 cls = 'danger';
                 textValue = tn('dns.sumNoKey', r.withoutKey);
-            } else if (lines.some(d => d.state === 'non_corrisponde')) {
+            } else if (lines.some(d => d.state === 'not_matching')) {
                 cls = 'danger';
                 textValue = t('dns.sumMismatch');
             } else if (r.unverifiable > 0) {
@@ -853,7 +853,7 @@
                     state = '<span class="badge bg-danger">' + escHtml(t('dns.noKey')) + '</span>';
                 else if (d.state === 'ok')
                     state = '<span class="badge bg-success">' + escHtml(t('dns.yes')) + '</span>';
-                else if (d.state === 'non_corrisponde')
+                else if (d.state === 'not_matching')
                     state = '<span class="badge bg-danger">' + escHtml(t('dns.otherKey')) + '</span>';
                 else
                     // "Non ho potuto controllare" non e' "va bene", e non e' nemmeno "e' rotto".

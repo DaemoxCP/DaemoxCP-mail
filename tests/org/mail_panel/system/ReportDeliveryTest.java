@@ -228,10 +228,10 @@ public class ReportDeliveryTest {
 
         // --- Confronti letterali, non espressioni regolari ---
         // Nel Message-ID il punto e' un punto: "rapportoX..." non e' il nostro messaggio.
-        List<String> quasi = List.of(
+        List<String> almost = List.of(
             "Sep 25 18:40:00 mail postfix/cleanup[1]: 4ABCDEF128: message-id=<" + ID.replace("rapporto.", "rapportoX") + ">",
             "Sep 25 18:40:01 mail postfix/smtp[2]: 4ABCDEF128: to=<owner@example.com>, relay=x[1.2.3.4]:25, delay=1, delays=0/0/0/1, dsn=2.0.0, status=sent (250 ok)");
-        real("un Message-ID quasi uguale non e' il nostro", PeriodicReport.outcomeInLog(quasi, ID, A).optString("state").isEmpty());
+        real("un Message-ID quasi uguale non e' il nostro", PeriodicReport.outcomeInLog(almost, ID, A).optString("state").isEmpty());
         // Un numero di coda che finisce come il nostro non e' il nostro.
         List<String> suffix = List.of(
             "Sep 25 18:50:00 mail postfix/cleanup[1]: 4ABC12: message-id=<" + ID + ">",
@@ -269,10 +269,10 @@ public class ReportDeliveryTest {
             !s.optBoolean("success") && s.optString("error").contains("mailwrapper"));
         s = PeriodicReport.sendmailChoice(stopped.toString(), nobody, mw.toString());
         real("non runnable e inesistente: errore", !s.optBoolean("success") && s.optString("error").contains("non c'è"));
-        real("hard link a mailwrapper: riconosciuto", PeriodicReport.nonEPostfix(physical.toString(), mw.toString()) != null);
-        real("un sendmail vero: accettato", PeriodicReport.nonEPostfix(postfix.toString(), mw.toString()) == null);
+        real("hard link a mailwrapper: riconosciuto", PeriodicReport.notPostfix(physical.toString(), mw.toString()) != null);
+        real("un sendmail vero: accettato", PeriodicReport.notPostfix(postfix.toString(), mw.toString()) == null);
         real("mailwrapper assente (non FreeBSD): non blocca",
-            PeriodicReport.nonEPostfix(postfix.toString(), nobody) == null);
+            PeriodicReport.notPostfix(postfix.toString(), nobody) == null);
 
         System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
         if (failed > 0) System.exit(1);

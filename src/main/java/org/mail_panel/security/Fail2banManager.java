@@ -230,7 +230,7 @@ public class Fail2banManager {
 
             // Il log sorvegliato: stessa funzione che usa la verifica del filtro, cosi' le
             // due non possono contraddirsi come e' successo con roundcube-auth.
-            java.util.List<String> lp = logPathDi(jailName);
+            java.util.List<String> lp = logPathOf(jailName);
             if (!lp.isEmpty()) jail.logFile = String.join(", ", lp);
 
         } catch (Exception e) {
@@ -1571,7 +1571,7 @@ public class Fail2banManager {
         try {
             if (!isValidJailName(jailName)) { c.message = I18n.tr("server.f2bm.badJailLower"); return c; }
 
-            java.util.List<String> logs = logPathDi(jailName);
+            java.util.List<String> logs = logPathOf(jailName);
             if (logs.isEmpty()) { c.message = I18n.tr("server.f2bm.noLog"); return c; }
             String log = logs.get(0);
             c.log = log;
@@ -1701,7 +1701,7 @@ public class Fail2banManager {
      * Qui si cerca un percorso assoluto ovunque nella riga, e si prova la seconda fonte se la
      * prima non da' niente.
      */
-    private java.util.List<String> logPathDi(String jailName) {
+    private java.util.List<String> logPathOf(String jailName) {
         java.util.List<String> out = new ArrayList<>();
         for (String command : new String[] {
                 FAIL2BAN_CLIENT + " get " + jailName + " logpath",
@@ -1750,9 +1750,9 @@ public class Fail2banManager {
             if (dir == null || !dir.isDirectory()) return null;
             String name = watched.getName();
             String root = name.contains(".") ? name.substring(0, name.indexOf('.')) : name;
-            java.io.File[] tutti = dir.listFiles();
-            if (tutti == null) return null;
-            for (java.io.File f : tutti) {
+            java.io.File[] allItems = dir.listFiles();
+            if (allItems == null) return null;
+            for (java.io.File f : allItems) {
                 if (f.equals(watched) || !f.isFile()) continue;
                 String n = f.getName();
                 if (!n.equals(root) && !n.startsWith(root + ".")) continue;
@@ -1805,8 +1805,8 @@ public class Fail2banManager {
     public LogReview reviewWatchedLogs(java.util.Collection<String> jails) {
         LogReview e = new LogReview();
         for (String jail : jails) {
-            if (!isValidJailName(jail)) { e.saltate.add(jail); continue; }
-            java.util.List<String> logs = logPathDi(jail);
+            if (!isValidJailName(jail)) { e.skipped.add(jail); continue; }
+            java.util.List<String> logs = logPathOf(jail);
             if (logs.isEmpty()) { e.withoutLog.add(jail); continue; }
             e.reviewed.add(jail);
             for (String log : logs) {
@@ -1846,7 +1846,7 @@ public class Fail2banManager {
         /** Jail che non hanno un file di log da sorvegliare, o che non ce lo hanno detto. */
         public final java.util.List<String> withoutLog = new ArrayList<>();
         /** Nomi che non passano la validazione: non ci si costruisce un comando sopra. */
-        public final java.util.List<String> saltate = new ArrayList<>();
+        public final java.util.List<String> skipped = new ArrayList<>();
         public final java.util.List<WrongLog> issues = new ArrayList<>();
     }
 
@@ -1954,8 +1954,8 @@ public class Fail2banManager {
                 j.rulePresent = rules.contains(b.table);
             }
             j.inFirewall.addAll(t.addresses);
-            for (String ip : j.believedBanned) if (!j.inFirewall.contains(ip)) j.soloInFail2ban.add(ip);
-            for (String ip : j.inFirewall) if (!j.believedBanned.contains(ip)) j.soloInPf.add(ip);
+            for (String ip : j.believedBanned) if (!j.inFirewall.contains(ip)) j.onlyInFail2ban.add(ip);
+            for (String ip : j.inFirewall) if (!j.believedBanned.contains(ip)) j.onlyInPf.add(ip);
             c.jails.add(j);
         }
         return c;
@@ -1966,9 +1966,9 @@ public class Fail2banManager {
      * confronto: sono identiche per tutte le jail che condividono l'ancora, e rileggerle a ogni
      * jail vorrebbe dire eseguire pfctl sette volte per avere sette volte lo stesso testo.
      */
-    private String rulesOf(String anchor, PfComparison memoria) {
+    private String rulesOf(String anchor, PfComparison inMemory) {
         String key = anchor == null ? "" : anchor;
-        String already = memoria.rules.get(key);
+        String already = inMemory.rules.get(key);
         if (already != null) return already;
         String text = null;   // null = non letto. Diverso da "letto e non contiene niente".
         try {
@@ -1980,7 +1980,7 @@ public class Fail2banManager {
                 java.time.Duration.ofSeconds(20), argv.toArray(new String[0]));
             if (r.success() && r.output() != null) text = r.output();
         } catch (Exception ignore) { }
-        if (text != null) memoria.rules.put(key, text);
+        if (text != null) inMemory.rules.put(key, text);
         return text;
     }
 
@@ -2151,7 +2151,7 @@ public class Fail2banManager {
             for (JailPf j : jails) {
                 if (!j.read) continue;
                 n += (!j.ruleVerified || j.rulePresent)
-                        ? j.soloInFail2ban.size() : j.believedBanned.size();
+                        ? j.onlyInFail2ban.size() : j.believedBanned.size();
             }
             return n;
         }
@@ -2194,8 +2194,8 @@ public class Fail2banManager {
         public boolean ruleVerified;
         public final java.util.List<String> believedBanned = new ArrayList<>();
         public final java.util.List<String> inFirewall = new ArrayList<>();
-        public final java.util.List<String> soloInFail2ban = new ArrayList<>();
-        public final java.util.List<String> soloInPf = new ArrayList<>();
+        public final java.util.List<String> onlyInFail2ban = new ArrayList<>();
+        public final java.util.List<String> onlyInPf = new ArrayList<>();
         /** Cosa esegue davvero per bannare. Si mostra quando non si e' potuto verificare. */
         public final java.util.List<String> banCommands = new ArrayList<>();
         /** L'uscita cruda di "get <jail> actions": l'indizio quando non se ne ricava niente. */

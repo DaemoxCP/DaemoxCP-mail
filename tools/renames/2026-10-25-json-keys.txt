@@ -1,0 +1,10 @@
+daFare toDo
+daPhp fromPhp
+daPkg fromPkg
+delPort fromPort
+soloRedirect onlyRedirect
+solo_in_fail2ban only_in_fail2ban
+solo_in_pf only_in_pf
+su443 on443
+su80 on80
+suNginx onNginx

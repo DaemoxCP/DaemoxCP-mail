@@ -26,20 +26,20 @@ public class MtaStsSequenceTest {
     }
 
     public static void main(String[] a) {
-        List<MailDatabase.Domain> tutti = new ArrayList<>();
-        for (String s : new String[]{"domain-d.test", "domain-b.test", "domain-a.test"}) tutti.add(dom(s));
+        List<MailDatabase.Domain> allItems = new ArrayList<>();
+        for (String s : new String[]{"domain-d.test", "domain-b.test", "domain-a.test"}) allItems.add(dom(s));
 
         System.out.println("\n== filtra(): il filtro per dominio ==");
-        require("null vuol dire tutti", MtaStsSetup.filter(tutti, null).size() == 3);
-        require("un nome preciso ne lascia uno", MtaStsSetup.filter(tutti, "domain-d.test").size() == 1);
+        require("null vuol dire tutti", MtaStsSetup.filter(allItems, null).size() == 3);
+        require("un nome preciso ne lascia uno", MtaStsSetup.filter(allItems, "domain-d.test").size() == 1);
         require("le maiuscole non contano",
-                MtaStsSetup.filter(tutti, "DoMaIn-D.TeSt").size() == 1);
+                MtaStsSetup.filter(allItems, "DoMaIn-D.TeSt").size() == 1);
         // Se il confronto fosse "contiene", "ake.net" pescherebbe domain-d.test e la sequenza
         // lavorerebbe su un dominio che nessuno ha chiesto.
         require("il confronto e' esatto, non 'contiene'",
-                MtaStsSetup.filter(tutti, "ake.net").isEmpty());
+                MtaStsSetup.filter(allItems, "ake.net").isEmpty());
         require("un dominio che non esiste da lista VUOTA (e' la guardia del falso successo)",
-                MtaStsSetup.filter(tutti, "nonesiste.invalid").isEmpty());
+                MtaStsSetup.filter(allItems, "nonesiste.invalid").isEmpty());
         require("una lista nulla non fa esplodere niente",
                 MtaStsSetup.filter(null, "x.it").isEmpty());
 

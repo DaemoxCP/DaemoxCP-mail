@@ -110,8 +110,8 @@ public class ResetDatabaseTest {
         List<String> empty = before.stream().filter(t -> lines(c, t) == 0).toList();
         real("una riga in ognuna delle " + before.size() + " tabelle del pannello" + (empty.isEmpty() ? "" : " (vuote: " + empty + ")"),
                 empty.isEmpty() && before.size() == n + 3);
-        List<String> cancellate = db.dropAllTables();
-        real("restituisce le tabelle che ha cancellato: " + cancellate.size(), new HashSet<>(cancellate).equals(new HashSet<>(before)));
+        List<String> deleted = db.dropAllTables();
+        real("restituisce le tabelle che ha cancellato: " + deleted.size(), new HashSet<>(deleted).equals(new HashSet<>(before)));
         real("non resta nessuna tabella del pannello, nemmeno le virtual_*: " + tables(c), tables(c).equals(List.of("foreign_test")));
         real("la tabella d'altri resta, con la sua riga", lines(c, "foreign_test") == 1);
         db.createSchema();

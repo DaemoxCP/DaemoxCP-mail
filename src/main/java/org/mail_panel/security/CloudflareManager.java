@@ -486,10 +486,10 @@ public class CloudflareManager {
                     JSONObject data = r.optJSONObject("data");
                     if (data != null) {
                         if (data.has("priority")) info.srvPriority = data.optInt("priority");
-                        if (data.has("weight"))   info.srvPeso     = data.optInt("weight");
+                        if (data.has("weight"))   info.srvWeight     = data.optInt("weight");
                         if (data.has("port"))     info.srvPort    = data.optInt("port");
-                        String bers = data.optString("target", "");
-                        if (!bers.isEmpty()) info.srvDestination = bers;
+                        String targetValue = data.optString("target", "");
+                        if (!targetValue.isEmpty()) info.srvDestination = targetValue;
                     }
                     // La priorita' Cloudflare la espone anche fuori da "data".
                     if (info.srvPriority == null && r.has("priority"))
@@ -522,7 +522,7 @@ public class CloudflareManager {
          * due SRV che erano gia' giusti, annunciando ogni volta una differenza inesistente.
          */
         public Integer srvPriority;
-        public Integer srvPeso;
+        public Integer srvWeight;
         public Integer srvPort;
         public String srvDestination;
     }

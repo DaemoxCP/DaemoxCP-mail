@@ -14,7 +14,7 @@ public class RealIpTest {
         if (!ok) failed++;
     }
     static void expected(String header, String wanted) {
-        String got = SSLMailServer.ipDaForwardedFor(header);
+        String got = SSLMailServer.ipFromForwardedFor(header);
         boolean ok = (wanted == null) ? (got == null) : wanted.equals(got);
         System.out.println((ok ? "  OK   " : "  FALLITO ")
                 + String.format("%-46s -> %s", "\"" + header + "\"", got)
@@ -32,7 +32,7 @@ public class RealIpTest {
         // Prima si prendeva il PRIMO pezzo: qui avrebbe restituito 1.2.3.4, cioe' un indirizzo
         // scelto da chi bussa. Cambiandolo a ogni tentativo, nessun blocco sarebbe mai scattato.
         require("un indirizzo messo dal client non vince sul valore aggiunto dal proxy",
-                !"1.2.3.4".equals(SSLMailServer.ipDaForwardedFor("1.2.3.4, 203.0.113.9")));
+                !"1.2.3.4".equals(SSLMailServer.ipFromForwardedFor("1.2.3.4, 203.0.113.9")));
         expected("1.2.3.4, 203.0.113.9", "203.0.113.9");
 
         System.out.println("\n== catene con piu' proxy fidati in coda ==");

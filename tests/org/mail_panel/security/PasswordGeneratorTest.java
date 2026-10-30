@@ -71,16 +71,16 @@ public class PasswordGeneratorTest {
 
         System.out.println("\n== la regola non e' cambiata: stessa risposta della vecchia espressione ==");
         Pattern old = Pattern.compile("^[a-zA-Z0-9!@#$%^&*()_+\\-=\\[\\]{}|;:,.?]{4,128}$");
-        int diverse = 0;
+        int different = 0;
         for (char c = 0x20; c < 0x7F; c++) {
             String s = String.valueOf(c).repeat(4);
-            if (old.matcher(s).matches() != SecurityUtils.isValidPassword(s)) diverse++;
+            if (old.matcher(s).matches() != SecurityUtils.isValidPassword(s)) different++;
         }
         for (char c : new char[] { 'è', 'é', '€', '\t', '\n', ' ' }) {
             String s = "Abc1" + c;
-            if (old.matcher(s).matches() != SecurityUtils.isValidPassword(s)) diverse++;
+            if (old.matcher(s).matches() != SecurityUtils.isValidPassword(s)) different++;
         }
-        require("ogni carattere ASCII stampabile, accenti, tab, a capo, spazio unificatore: " + diverse + " differenze", diverse == 0);
+        require("ogni carattere ASCII stampabile, accenti, tab, a capo, spazio unificatore: " + different + " differenze", different == 0);
         require("3 caratteri no, 4 si'", !SecurityUtils.isValidPassword("Ab1") && SecurityUtils.isValidPassword("Ab1!"));
         require("128 caratteri si', 129 no", SecurityUtils.isValidPassword("a".repeat(128)) && !SecurityUtils.isValidPassword("a".repeat(129)));
         require("la classe per la pagina e' quella attesa",

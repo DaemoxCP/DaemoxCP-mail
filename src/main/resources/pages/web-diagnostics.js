@@ -23,7 +23,7 @@
                     let whatItem = [];
                     if (s.servePhp) whatItem.push('PHP');
                     if (s.serveFile) whatItem.push(t('wd.filesFrom.html', { root: updEsc(s.root) }));
-                    if (s.soloRedirect) whatItem.push(escHtml(t('wd.redirectOnly')));
+                    if (s.onlyRedirect) whatItem.push(escHtml(t('wd.redirectOnly')));
                     if (!whatItem.length) whatItem.push(escHtml(t('wd.nothing')));
                     h += '<tr class="upd-cell"><td><code class="small">' + updEsc(s.listens) + '</code>'
                        + (s.encrypted ? ' <span class="badge bg-success">' + escHtml(t('wd.encrypted')) + '</span>'

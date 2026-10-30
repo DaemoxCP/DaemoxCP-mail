@@ -80,11 +80,11 @@ public class WebProtection {
             if (t.startsWith("#") || !t.startsWith("include ")) continue;
             String v = t.substring(8).replace(";", "").trim();
             // Interessano solo gli include a modello: "include qualcosa/*.conf".
-            int stella = v.indexOf('*');
-            if (stella < 0) continue;
-            int barra = v.lastIndexOf('/', stella);
-            if (barra <= 0) continue;
-            String folder = v.substring(0, barra);
+            int star = v.indexOf('*');
+            if (star < 0) continue;
+            int slash = v.lastIndexOf('/', star);
+            if (slash <= 0) continue;
+            String folder = v.substring(0, slash);
             if (!folder.startsWith("/")) folder = NGINX_PREFIX + "/" + folder;
             outside.add(folder);
         }
@@ -92,15 +92,15 @@ public class WebProtection {
     }
 
     /** La cartella in cui scrivere: la prima inclusa che esiste ed e' scrivibile. */
-    public static String chosenFolder(java.util.List<String> incluse) {
-        for (String c : incluse) {
+    public static String chosenFolder(java.util.List<String> included) {
+        for (String c : included) {
             try {
                 Path p = Path.of(c);
                 if (Files.isDirectory(p) && Files.isWritable(p)) return c;
             } catch (Exception ignore) {}
         }
         // Nessuna esiste: si prende la prima dichiarata, che si puo' creare.
-        return incluse.isEmpty() ? null : incluse.get(0);
+        return included.isEmpty() ? null : included.get(0);
     }
 
     public static String configuration(String cert, String key) {
@@ -202,9 +202,9 @@ public class WebProtection {
             return r.put("ok", false)
                     .put("reason", I18n.tr("server.pubweb.dumpFailed", java.util.Map.of("out", String.valueOf(dump.output.trim()))));
 
-        java.util.List<String> incluse = includedFolders(dump.output);
-        r.put("folders", new org.json.JSONArray(incluse));
-        String choice = chosenFolder(incluse);
+        java.util.List<String> included = includedFolders(dump.output);
+        r.put("folders", new org.json.JSONArray(included));
+        String choice = chosenFolder(included);
         if (choice == null)
             return r.put("ok", false)
                     .put("reason", I18n.tr("server.pubweb.noInclude"));
@@ -261,12 +261,12 @@ public class WebProtection {
                         .put("error", I18n.tr("server.pubweb.nginxRejectedRemoved", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
-            RunResult ric = run("service", "nginx", "reload");
-            if (ric.code != 0) {
+            RunResult reloadOutcome = run("service", "nginx", "reload");
+            if (reloadOutcome.code != 0) {
                 if (before != null) Files.writeString(f, before); else Files.deleteIfExists(f);
                 run("service", "nginx", "reload");
                 return r.put("success", false).put("restored", true)
-                        .put("error", I18n.tr("server.pubweb.reloadFailedRemoved", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
+                        .put("error", I18n.tr("server.pubweb.reloadFailedRemoved", java.util.Map.of("out", String.valueOf(reloadOutcome.output.trim()))));
             }
 
             // 4. Non basta che i comandi non abbiano protestato: si prova la porta.
@@ -336,7 +336,7 @@ public class WebProtection {
      * Restituisce null se il blocco http non si trova o se l'include c'e' gia': meglio non
      * fare niente che scrivere una riga in un punto a caso di una configurazione che funziona.
      */
-    public static String conInclude(String main, String folder) {
+    public static String withInclude(String main, String folder) {
         if (main == null || folder == null) return null;
         if (main.contains(folder + "/*.conf")) return null;
 
@@ -377,7 +377,7 @@ public class WebProtection {
             r.put("file", main).put("folder", PROPOSED_FOLDER);
 
             String before = Files.readString(Path.of(main));
-            String after = conInclude(before, PROPOSED_FOLDER);
+            String after = withInclude(before, PROPOSED_FOLDER);
             if (after == null)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.noHttpBlock", java.util.Map.of("file", String.valueOf(main))));
@@ -396,19 +396,19 @@ public class WebProtection {
                         .put("error", I18n.tr("server.pubweb.nginxRejectedRestored", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
-            RunResult ric = run("service", "nginx", "reload");
-            if (ric.code != 0) {
+            RunResult reloadOutcome = run("service", "nginx", "reload");
+            if (reloadOutcome.code != 0) {
                 Files.writeString(Path.of(main), before);
                 run("service", "nginx", "reload");
                 return r.put("success", false).put("restored", true)
-                        .put("error", I18n.tr("server.pubweb.reloadFailedRestored", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
+                        .put("error", I18n.tr("server.pubweb.reloadFailedRestored", java.util.Map.of("out", String.valueOf(reloadOutcome.output.trim()))));
             }
 
             // Si rilegge da nginx, non dal file: conta cosa nginx include davvero.
             RunResult afterDump = run("nginx", "-T");
-            boolean visto = afterDump.code == 0
+            boolean seen = afterDump.code == 0
                     && includedFolders(afterDump.output).contains(PROPOSED_FOLDER);
-            if (!visto)
+            if (!seen)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.includeNotSeen", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(main))));
 

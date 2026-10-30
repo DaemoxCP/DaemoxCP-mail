@@ -14,7 +14,7 @@ import java.util.Locale;
  * Fonti (verificate, non a memoria):
  *  - SPF:     RFC 7208
  *  - DMARC:   RFC 9989 (maggio 2026, sostituisce RFC 7489) e RFC 9990 per i rapporti
- *  - MTA-STS: RFC 8461 §3.1, confrontata con due mittenti veri (vedi soloMtaSts)
+ *  - MTA-STS: RFC 8461 §3.1, confrontata con due mittenti veri (vedi onlyMtaSts)
  *
  * Tre regole valgono da sole tutto questo file, perche' descrivono guasti silenziosi:
  *
@@ -101,7 +101,7 @@ public final class DnsRules {
      * %s"DMARC1", ed e' per questo che piu' sotto il confronto e' sensibile: non e' una
      * distrazione, e' la differenza fra le due specifiche.
      */
-    public static List<String> soloSpf(List<String> record) {
+    public static List<String> onlySpf(List<String> record) {
         List<String> outside = new ArrayList<>();
         if (record == null) return outside;
         for (String r : record) {
@@ -114,7 +114,7 @@ public final class DnsRules {
     }
 
     /** I termini di un record SPF, saltata la versione. */
-    public static List<String> termini(String spf) {
+    public static List<String> terms(String spf) {
         List<String> outside = new ArrayList<>();
         if (spf == null) return outside;
         boolean first = true;
@@ -127,15 +127,15 @@ public final class DnsRules {
     }
 
     /** Toglie il qualificatore iniziale (+ - ~ ?), che non fa parte del nome. */
-    public static String withoutQualifier(String termine) {
-        if (termine == null || termine.isEmpty()) return "";
-        char q = termine.charAt(0);
-        return (q == '+' || q == '-' || q == '~' || q == '?') ? termine.substring(1) : termine;
+    public static String withoutQualifier(String term) {
+        if (term == null || term.isEmpty()) return "";
+        char q = term.charAt(0);
+        return (q == '+' || q == '-' || q == '~' || q == '?') ? term.substring(1) : term;
     }
 
     /** Il nome del meccanismo o modificatore: la parte prima di ':', '=' o '/'. */
-    public static String mechanismName(String termine) {
-        String t = withoutQualifier(termine);
+    public static String mechanismName(String term) {
+        String t = withoutQualifier(term);
         for (int i = 0; i < t.length(); i++) {
             char c = t.charAt(i);
             if (c == ':' || c == '=' || c == '/') return t.substring(0, i).toLowerCase(Locale.ROOT);
@@ -144,8 +144,8 @@ public final class DnsRules {
     }
 
     /** Il valore dopo ':' o '=', vuoto se il termine non ne ha. */
-    public static String mechanismValue(String termine) {
-        String t = withoutQualifier(termine);
+    public static String mechanismValue(String term) {
+        String t = withoutQualifier(term);
         for (int i = 0; i < t.length(); i++) {
             char c = t.charAt(i);
             if (c == ':' || c == '=') return t.substring(i + 1);
@@ -170,14 +170,14 @@ public final class DnsRules {
      */
     public static int directDnsLookups(String spf) {
         int n = 0;
-        for (String t : termini(spf)) if (costsALookup(mechanismName(t))) n++;
+        for (String t : terms(spf)) if (costsALookup(mechanismName(t))) n++;
         return n;
     }
 
     /** Quanti termini portano dentro altre ricerche non conoscibili da qui. */
     public static int includeCount(String spf) {
         int n = 0;
-        for (String t : termini(spf)) {
+        for (String t : terms(spf)) {
             String name = mechanismName(t);
             if (name.equals("include") || name.equals("redirect")) n++;
         }
@@ -186,14 +186,14 @@ public final class DnsRules {
 
     /** Il meccanismo c'e' come termine vero, non come pezzo di un'altra parola. */
     public static boolean hasMechanism(String spf, String name) {
-        for (String t : termini(spf)) if (mechanismName(t).equals(name)) return true;
+        for (String t : terms(spf)) if (mechanismName(t).equals(name)) return true;
         return false;
     }
 
     /** Come si chiude il record: "-all", "~all", "?all", "+all" o null se non si chiude. */
     public static String closing(String spf) {
         String found = null;
-        for (String t : termini(spf)) {
+        for (String t : terms(spf)) {
             if (mechanismName(t).equals("all")) {
                 char q = t.isEmpty() ? '+' : t.charAt(0);
                 found = (q == '-' || q == '~' || q == '?' || q == '+') ? (q + "all") : "+all";
@@ -212,7 +212,7 @@ public final class DnsRules {
         String network = spec, bit = "32";
         int s = spec.indexOf('/');
         if (s >= 0) { network = spec.substring(0, s); bit = spec.substring(s + 1); }
-        long r = aNumero(network), a = aNumero(ip);
+        long r = toNumber(network), a = toNumber(ip);
         if (r < 0 || a < 0) return false;
         int p;
         try { p = Integer.parseInt(bit.trim()); } catch (Exception e) { return false; }
@@ -222,7 +222,7 @@ public final class DnsRules {
         return (r & mask) == (a & mask);
     }
 
-    private static long aNumero(String ip) {
+    private static long toNumber(String ip) {
         if (ip == null) return -1;
         String[] p = ip.trim().split("\\.");
         if (p.length != 4) return -1;
@@ -240,7 +240,7 @@ public final class DnsRules {
     /** L'SPF autorizza quell'IP con un ip4 esplicito (prefissi compresi). */
     public static boolean authorizeIp4(String spf, String ip) {
         if (ip == null || ip.isBlank()) return false;
-        for (String t : termini(spf)) {
+        for (String t : terms(spf)) {
             if (!mechanismName(t).equals("ip4")) continue;
             if (ip4Covers(mechanismValue(t), ip)) return true;
         }
@@ -260,7 +260,7 @@ public final class DnsRules {
 
     public static SpfOutcome analyzeSpf(List<String> recordTxt, String ipServer) {
         SpfOutcome e = new SpfOutcome();
-        List<String> spf = soloSpf(recordTxt);
+        List<String> spf = onlySpf(recordTxt);
         e.howMany = spf.size();
 
         if (e.howMany == 0) {
@@ -322,7 +322,7 @@ public final class DnsRules {
         return r != null && r.trim().toLowerCase(Locale.ROOT).startsWith("v=stsv1");
     }
 
-    public static List<String> soloMtaSts(List<String> record) {
+    public static List<String> onlyMtaSts(List<String> record) {
         List<String> outside = new ArrayList<>();
         if (record == null) return outside;
         for (String r : record) if (eMtaSts(r)) outside.add(r.trim());
@@ -350,7 +350,7 @@ public final class DnsRules {
 
     /** I quattro campi di un record SRV: priorita', peso, porta, destinazione. */
     public static class Srv {
-        public int priority, peso, port;
+        public int priority, weight, port;
         public String destination;
     }
 
@@ -362,7 +362,7 @@ public final class DnsRules {
         try {
             Srv s = new Srv();
             s.priority = Integer.parseInt(p[0]);
-            s.peso = Integer.parseInt(p[1]);
+            s.weight = Integer.parseInt(p[1]);
             s.port = Integer.parseInt(p[2]);
             s.destination = p[3].trim();
             return s;
@@ -399,7 +399,7 @@ public final class DnsRules {
             && first.substring(eq + 1).trim().equals("DMARC1");
     }
 
-    public static List<String> soloDmarc(List<String> record) {
+    public static List<String> onlyDmarc(List<String> record) {
         List<String> outside = new ArrayList<>();
         if (record == null) return outside;
         for (String r : record) if (eDmarc(r)) outside.add(r.trim());
@@ -420,7 +420,7 @@ public final class DnsRules {
      * chiave: RFC 6376 §3.6.1 rende il tag "v=" soltanto RACCOMANDATO, con "DKIM1" come
      * valore predefinito, quindi pretenderlo escluderebbe record validi.
      */
-    public static List<String> soloDkim(List<String> record) {
+    public static List<String> onlyDkim(List<String> record) {
         List<String> outside = new ArrayList<>();
         if (record == null) return outside;
         for (String r : record) {
@@ -467,7 +467,7 @@ public final class DnsRules {
     }
 
     /** La parte dopo la chiocciola. */
-    public static String hostDi(String address) {
+    public static String hostOf(String address) {
         if (address == null) return "";
         int a = address.lastIndexOf('@');
         return a < 0 ? "" : address.substring(a + 1).trim().toLowerCase(Locale.ROOT);
@@ -560,7 +560,7 @@ public final class DnsRules {
 
     public static DmarcOutcome analyzeDmarc(List<String> recordTxt, String domain) {
         DmarcOutcome e = new DmarcOutcome();
-        List<String> dm = soloDmarc(recordTxt);
+        List<String> dm = onlyDmarc(recordTxt);
         e.howMany = dm.size();
 
         if (e.howMany == 0) {
@@ -608,7 +608,7 @@ public final class DnsRules {
         } else {
             for (String ind : reportAddresses(rua)) {
                 e.rua.add(ind);
-                String host = hostDi(ind);
+                String host = hostOf(ind);
                 if (host.isEmpty()) {
                     e.warnings.add(I18n.tr("server.dnsrules.ruaNoDomain", java.util.Map.of("addr", String.valueOf(ind))));
                 } else if (needsAuthorization(domain, host)) {

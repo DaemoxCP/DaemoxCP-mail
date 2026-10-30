@@ -578,8 +578,8 @@ public class DnsRecordsGenerator {
         // secondo: il valore mostrato cambiava a ogni sguardo, mentre la riga accanto diceva
         // "configurato correttamente". Due modi di calcolare lo stesso record sono due record
         // che un giorno divergono; qui divergevano subito.
-        String mtaStsValue = org.mail_panel.system.MtaSts.recordTxtCorrente();
-        // recordTxtCorrente() torna vuoto quando non riesce a calcolarlo: meglio niente che un
+        String mtaStsValue = org.mail_panel.system.MtaSts.currentTxtRecord();
+        // currentTxtRecord() torna vuoto quando non riesce a calcolarlo: meglio niente che un
         // valore inventato. Ma una casella "Content" vuota nelle istruzioni non aiuta nessuno,
         // quindi si dice a parole cosa ci andra', senza suggerire di incollare una sciocchezza.
         if (mtaStsValue == null || mtaStsValue.isBlank())
@@ -753,7 +753,7 @@ public class DnsRecordsGenerator {
             // stringhe che vanno unite senza spazi (RFC 7208 §3.3). Confrontare l'uscita
             // grezza di dig significherebbe confrontare anche le virgolette in mezzo.
             java.util.List<String> txt = DnsRules.recordTxt(dkimCheck.currentValue);
-            java.util.List<String> keys = DnsRules.soloDkim(txt);
+            java.util.List<String> keys = DnsRules.onlyDkim(txt);
 
             if (keys.isEmpty()) {
                 dkimCheck.passed = false;
@@ -817,7 +817,7 @@ public class DnsRecordsGenerator {
                 for (String authName : e.toAuthorize) {
                     DnsCheck authorization = verifyRecord(authName, "TXT");
                     boolean granted = authorization.currentValue != null
-                            && !DnsRules.soloDmarc(DnsRules.recordTxt(authorization.currentValue)).isEmpty();
+                            && !DnsRules.onlyDmarc(DnsRules.recordTxt(authorization.currentValue)).isEmpty();
                     if (!granted) {
                         // Si SEGNALA senza bocciare. Per sapere se l'autorizzazione serve davvero
                         // occorre confrontare i domini ORGANIZZATIVI, che RFC 9989 §4.10 ricava con
@@ -845,13 +845,13 @@ public class DnsRecordsGenerator {
         autoconfigCheck.recordType = "Autoconfig";
         autoconfigCheck.expectedValue = mailHostname + ".";
         if (autoconfigCheck.currentValue != null) {
-            String puntaA = autoconfigCheck.currentValue.trim().split("\\s+")[0];
-            if (DnsRules.sameName(puntaA, mailHostname)) {
+            String pointsTo = autoconfigCheck.currentValue.trim().split("\\s+")[0];
+            if (DnsRules.sameName(pointsTo, mailHostname)) {
                 autoconfigCheck.passed = true;
                 autoconfigCheck.message = "OK: autoconfig → " + mailHostname;
             } else {
                 autoconfigCheck.passed = false;
-                autoconfigCheck.message = I18n.tr("server.dnsg.pointsInstead", java.util.Map.of("a", String.valueOf(puntaA), "h", String.valueOf(mailHostname)));
+                autoconfigCheck.message = I18n.tr("server.dnsg.pointsInstead", java.util.Map.of("a", String.valueOf(pointsTo), "h", String.valueOf(mailHostname)));
             }
         } else if (autoconfigCheck.message != null && autoconfigCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
             autoconfigCheck.passed = false;
@@ -878,7 +878,7 @@ public class DnsRecordsGenerator {
         DnsCheck mtaStsCheck = mtaStsCheck(domain,
                 org.mail_panel.system.MtaStsSetup.readTxt(domain),
                 org.mail_panel.system.MtaSts::publicTest);
-        mtaStsCheck.expectedValue = org.mail_panel.system.MtaSts.recordTxtCorrente();
+        mtaStsCheck.expectedValue = org.mail_panel.system.MtaSts.currentTxtRecord();
         result.checks.add(mtaStsCheck);
         // Don't fail overall for optional records
         // if (!mtaStsCheck.passed) result.allPassed = false;

@@ -161,7 +161,7 @@
             const field = document.getElementById('adVersoAltro');
             const noteText = document.getElementById('adVersoAltroNota');
             if (!sel || !field) return;
-            const otherOne = sel.value === '__altro__';
+            const otherOne = sel.value === '__other__';
             field.classList.toggle('d-none', !otherOne);
             if (noteText) noteText.classList.toggle('d-none', !otherOne);
             if (otherOne) field.focus();
@@ -177,13 +177,13 @@
             const mailboxes = (r.success && r.mailboxes) ? r.mailboxes : [];
             sel.innerHTML = '<option value="">&mdash; ' + escHtml(t('ad.chooseAddress')) + ' &mdash;</option>'
                 + mailboxes.map(c => '<option value="' + adEsc(c) + '">' + adEsc(c) + '</option>').join('')
-                + '<option value="__altro__">&mdash; ' + escHtml(t('ad.anotherAddress')) + ' &mdash;</option>';
+                + '<option value="__other__">&mdash; ' + escHtml(t('ad.anotherAddress')) + ' &mdash;</option>';
         }
 
         function adDestinationChosen() {
             const sel = document.getElementById('adVerso');
             if (!sel) return '';
-            if (sel.value === '__altro__') {
+            if (sel.value === '__other__') {
                 const field = document.getElementById('adVersoAltro');
                 return field ? field.value.trim() : '';
             }

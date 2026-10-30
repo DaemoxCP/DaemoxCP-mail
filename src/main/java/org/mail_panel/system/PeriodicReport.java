@@ -101,12 +101,12 @@ public final class PeriodicReport {
         return outcome;
     }
 
-    private static String imp(String key, String defaultValue) {
+    private static String setting(String key, String defaultValue) {
         try { return Main.mailDatabase.getSetting(key, defaultValue); }
         catch (Exception e) { return defaultValue; }
     }
 
-    private static void impSet(String key, String value) {
+    private static void storeSetting(String key, String value) {
         try { Main.mailDatabase.setSetting(key, value); } catch (Exception ignored) { }
     }
 
@@ -133,17 +133,17 @@ public final class PeriodicReport {
 
     public static JSONObject state() {
         String domain = panelDomain();
-        String last = imp("report_last", "");
+        String last = setting("report_last", "");
         JSONObject r = new JSONObject()
                 .put("success", true)
-                .put("active", "1".equals(imp("report_enabled", "0")))
-                .put("sender", imp("report_from", "no-reply@" + domain))
-                .put("recipient", imp("report_to", ""))
-                .put("frequency", normalizedFrequency(imp("report_freq", "weekly")))
-                .put("now", imp("report_hour", "8"))
+                .put("active", "1".equals(setting("report_enabled", "0")))
+                .put("sender", setting("report_from", "no-reply@" + domain))
+                .put("recipient", setting("report_to", ""))
+                .put("frequency", normalizedFrequency(setting("report_freq", "weekly")))
+                .put("now", setting("report_hour", "8"))
                 .put("domain", domain)
                 .put("lastSend", last)
-                .put("lastOutcome", shownOutcome(imp("report_last_result", "")));
+                .put("lastOutcome", shownOutcome(setting("report_last_result", "")));
         r.put("next", describeNext(r));
         return r;
     }
@@ -206,14 +206,14 @@ public final class PeriodicReport {
         catch (Exception e) { return r.put("success", false).put("error", I18n.tr("server.rp.badHour")); }
         if (h < 0 || h > 23) return r.put("success", false).put("error", I18n.tr("server.rp.hourRange"));
 
-        impSet("report_to", recipient);
-        if (!sender.isEmpty()) impSet("report_from", sender);
-        impSet("report_freq", frequency);
-        impSet("report_hour", String.valueOf(h));
-        impSet("report_enabled", active ? "1" : "0");
+        storeSetting("report_to", recipient);
+        if (!sender.isEmpty()) storeSetting("report_from", sender);
+        storeSetting("report_freq", frequency);
+        storeSetting("report_hour", String.valueOf(h));
+        storeSetting("report_enabled", active ? "1" : "0");
         // Il rapporto automatico parte da solo, fuori da ogni richiesta: esce nella lingua di chi
         // ha salvato le impostazioni
-        impSet("report_lang", I18n.current());
+        storeSetting("report_lang", I18n.current());
         return state().put("success", true).put("note", active
                 ? I18n.tr("server.rp.savedOn", java.util.Map.of("recipient", String.valueOf(recipient)))
                 : I18n.tr("server.rp.savedOff"));
@@ -226,17 +226,17 @@ public final class PeriodicReport {
             JSONObject data = UpdateManager.reportData(false);
             JSONObject cert = certificateWarning();
             if (cert != null) {
-                JSONArray df = data.optJSONArray("daFare");
+                JSONArray df = data.optJSONArray("toDo");
                 if (df == null) df = new JSONArray();
                 df.put(cert);
-                data.put("daFare", df);
+                data.put("toDo", df);
             }
             String host = Shell.runShell(java.time.Duration.ofSeconds(10), "hostname").outputTrim();
-            String mitt = imp("report_from", "no-reply@" + panelDomain());
-            String dest = imp("report_to", I18n.tr("server.rp.noRecipient"));
+            String sender = setting("report_from", "no-reply@" + panelDomain());
+            String dest = setting("report_to", I18n.tr("server.rp.noRecipient"));
             return new JSONObject().put("success", true)
-                    .put("text", compose(data, host, mitt, dest))
-                    .put("thingsToDo", data.optJSONArray("daFare") == null ? 0 : data.getJSONArray("daFare").length());
+                    .put("text", compose(data, host, sender, dest))
+                    .put("thingsToDo", data.optJSONArray("toDo") == null ? 0 : data.getJSONArray("toDo").length());
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", I18n.tr("server.rp.composeFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
@@ -281,7 +281,7 @@ public final class PeriodicReport {
 
     public static JSONObject identityState() {
         JSONObject r = new JSONObject().put("success", true);
-        String sender = imp("report_from", "").trim();
+        String sender = setting("report_from", "").trim();
         try {
             java.util.List<org.mail_panel.database.MailDatabase.Domain> domains = Main.mailDatabase.getDomains();
             JSONArray names = new JSONArray();
@@ -388,7 +388,7 @@ public final class PeriodicReport {
             int id = Main.mailDatabase.addMailbox(its.id, address, pw.toString(),
                     I18n.tr("server.rp.mailboxName"), 128, true);
             if (id <= 0) return r.put("success", false).put("error", I18n.tr("server.rp.createFailed"));
-            impSet("report_from", address);
+            storeSetting("report_from", address);
             return r.put("success", true).put("alreadyExisted", false).put("id", id)
                     .put("note", I18n.tr("server.rp.created"));
         } catch (Exception e) {
@@ -400,12 +400,12 @@ public final class PeriodicReport {
 
     private void tick() {
         try {
-            if (!"1".equals(imp("report_enabled", "0"))) return;
-            String a = imp("report_to", "");
+            if (!"1".equals(setting("report_enabled", "0"))) return;
+            String a = setting("report_to", "");
             if (a.isEmpty()) return;
             if (!isTheMoment()) return;
             // Fuori da ogni richiesta: il rapporto esce nella lingua di chi l'ha configurato
-            I18n.setCurrent(imp("report_lang", "it"));
+            I18n.setCurrent(setting("report_lang", "it"));
             JSONObject outcome;
             try { outcome = sendNow(a); }
             finally { I18n.clearCurrent(); }
@@ -468,8 +468,8 @@ public final class PeriodicReport {
     static final int HOURS_AFTER_FAILURE = 6;
 
     private boolean isTheMoment() {
-        return isTheMoment(normalizedFrequency(imp("report_freq", "weekly")), imp("report_hour", "8"),
-                imp("report_last", ""), imp("report_last_try", ""), imp("report_last_result", ""),
+        return isTheMoment(normalizedFrequency(setting("report_freq", "weekly")), setting("report_hour", "8"),
+                setting("report_last", ""), setting("report_last_try", ""), setting("report_last_result", ""),
                 LocalDateTime.now());
     }
 
@@ -479,7 +479,7 @@ public final class PeriodicReport {
         JSONObject r = new JSONObject().put("recipient", recipient);
         if (!org.mail_panel.webserver.SecurityUtils.isValidEmail(recipient))
             return r.put("success", false).put("error", I18n.tr("server.rp.badRecipientLower"));
-        String sender = imp("report_from", "no-reply@" + panelDomain());
+        String sender = setting("report_from", "no-reply@" + panelDomain());
         if (!org.mail_panel.webserver.SecurityUtils.isValidEmail(sender))
             return r.put("success", false).put("error", I18n.tr("server.rp.badSenderLower", java.util.Map.of("m", String.valueOf(sender))));
 
@@ -488,7 +488,7 @@ public final class PeriodicReport {
         catch (Exception e) { return r.put("success", false).put("error", I18n.tr("server.rp.collectFailed", java.util.Map.of("m", String.valueOf(e.getMessage())))); }
         // Il certificato lo conosce solo questa classe: si aggiunge qui alle cose da fare,
         // e si riordina, altrimenti "scade fra 3 giorni" finirebbe in fondo all'elenco.
-        JSONArray df = data.optJSONArray("daFare");
+        JSONArray df = data.optJSONArray("toDo");
         if (df == null) df = new JSONArray();
 
         JSONObject certWarning = certificateWarning();
@@ -502,12 +502,12 @@ public final class PeriodicReport {
         java.util.List<JSONObject> l = new java.util.ArrayList<>();
         for (int i = 0; i < df.length(); i++) l.add(df.getJSONObject(i));
         l.sort(java.util.Comparator.comparingInt(x -> x.optInt("urgency", 9)));
-        JSONArray ord = new JSONArray();
-        for (JSONObject x : l) ord.put(x);
-        data.put("daFare", ord);
+        JSONArray sorted = new JSONArray();
+        for (JSONObject x : l) sorted.put(x);
+        data.put("toDo", sorted);
 
         String host = Shell.runShell(java.time.Duration.ofSeconds(10), "hostname").outputTrim();
-        int howMany = data.optJSONArray("daFare") == null ? 0 : data.getJSONArray("daFare").length();
+        int howMany = data.optJSONArray("toDo") == null ? 0 : data.getJSONArray("toDo").length();
         String subject = "[" + (host.isEmpty() ? I18n.tr("server.rp.mailServer") : host) + "] "
                 + (howMany == 0 ? I18n.tr("server.rp.allGood")
                    : howMany == 1 ? I18n.tr("server.rp.todo.one")
@@ -517,20 +517,20 @@ public final class PeriodicReport {
 
         // Prima di provare, non dopo: se il pannello muore durante l'invio, al riavvio questa
         // data c'e' gia' e la pausa dopo un fallimento vale lo stesso.
-        impSet("report_last_try", LocalDateTime.now().format(ISO));
+        storeSetting("report_last_try", LocalDateTime.now().format(ISO));
 
         JSONObject outcome = delivery(sender, recipient, subject, body);
         r.put("subject", subject).put("body", body).put("sender", sender)
          .put("thingsToDo", howMany).put("output", outcome.optString("output", ""));
         if (outcome.optBoolean("success")) {
             String now = LocalDateTime.now().format(ISO);
-            impSet("report_last", now);
-            impSet("report_last_result", outcome.optString("outcome", I18n.tr("server.rp.lastSucceeded")));
+            storeSetting("report_last", now);
+            storeSetting("report_last_result", outcome.optString("outcome", I18n.tr("server.rp.lastSucceeded")));
             return r.put("success", true).put("when", now)
                     .put("warning", outcome.optBoolean("warning", false))
                     .put("note", outcome.optString("note", ""));
         }
-        impSet("report_last_result", FAILED_PREFIX + outcome.optString("error", "?"));
+        storeSetting("report_last_result", FAILED_PREFIX + outcome.optString("error", "?"));
         return r.put("success", false).put("error", outcome.optString("error", I18n.tr("server.rp.sendFailed")));
     }
 
@@ -541,7 +541,7 @@ public final class PeriodicReport {
      * righe del log della posta qui non si restituiscono.
      */
     public static boolean sendPanelMessage(String recipient, String subject, String body) {
-        String sender = imp("report_from", "no-reply@" + panelDomain());
+        String sender = setting("report_from", "no-reply@" + panelDomain());
         if (!org.mail_panel.webserver.SecurityUtils.isValidEmail(sender)
                 || !org.mail_panel.webserver.SecurityUtils.isValidEmail(recipient)) return false;
         return delivery(sender, recipient, subject, body).optBoolean("success", false);
@@ -651,14 +651,14 @@ public final class PeriodicReport {
     }
 
     /** La scelta vera e propria, separata da postconf e dai percorsi reali per poterla provare. */
-    static JSONObject sendmailChoice(String declared, String delPort, String mailwrapper) {
+    static JSONObject sendmailChoice(String declared, String fromPort, String mailwrapper) {
         java.util.LinkedHashSet<String> candidates = new java.util.LinkedHashSet<>();
         if (declared != null && declared.startsWith("/") && declared.indexOf('\n') < 0)
             candidates.add(declared);
-        candidates.add(delPort);
+        candidates.add(fromPort);
         java.util.List<String> discarded = new java.util.ArrayList<>();
         for (String c : candidates) {
-            String no = nonEPostfix(c, mailwrapper);
+            String no = notPostfix(c, mailwrapper);
             if (no == null) return new JSONObject().put("success", true).put("path", c);
             discarded.add(no);
         }
@@ -667,7 +667,7 @@ public final class PeriodicReport {
     }
 
     /** null se il percorso puo' essere il sendmail di Postfix, altrimenti il motivo per cui non lo e'. */
-    static String nonEPostfix(String path, String mailwrapper) {
+    static String notPostfix(String path, String mailwrapper) {
         java.nio.file.Path p = java.nio.file.Path.of(path);
         if (!java.nio.file.Files.isRegularFile(p) || !java.nio.file.Files.isExecutable(p))
             return I18n.tr("server.rp.notExecutable", java.util.Map.of("p", String.valueOf(path)));
@@ -750,18 +750,18 @@ public final class PeriodicReport {
      */
     static JSONObject outcomeInLog(java.util.List<String> lines, String messageId, String recipient) {
         JSONObject r = new JSONObject().put("state", "").put("lines", new JSONArray());
-        java.util.regex.Pattern conId = java.util.regex.Pattern.compile(
+        java.util.regex.Pattern withId = java.util.regex.Pattern.compile(
                 "(?:^|\\s)([0-9A-Za-z]+): message-id=<" + java.util.regex.Pattern.quote(messageId) + ">");
         String queue = null;
         for (String line : lines) {
-            java.util.regex.Matcher m = conId.matcher(line);
+            java.util.regex.Matcher m = withId.matcher(line);
             if (m.find()) { queue = m.group(1); break; }
         }
         if (queue == null) return r;
         r.put("queue", queue).put("state", "queued");
 
         // Le righe di QUESTO messaggio: il numero di coda come parola intera, seguito da ": ".
-        java.util.regex.Pattern sue = java.util.regex.Pattern.compile(
+        java.util.regex.Pattern ownPattern = java.util.regex.Pattern.compile(
                 "(?:^|\\s)" + java.util.regex.Pattern.quote(queue) + ": (.*)$");
         java.util.regex.Pattern state = java.util.regex.Pattern.compile(", status=([a-z]+) \\((.*)\\)\\s*$");
         java.util.List<Integer> indexes = new java.util.ArrayList<>();
@@ -769,7 +769,7 @@ public final class PeriodicReport {
         boolean forRecipient = false;
         String refusal = null;
         for (int i = 0; i < lines.size(); i++) {
-            java.util.regex.Matcher m = sue.matcher(lines.get(i));
+            java.util.regex.Matcher m = ownPattern.matcher(lines.get(i));
             if (!m.find()) continue;
             indexes.add(i);
             String rest = m.group(1);
@@ -779,18 +779,18 @@ public final class PeriodicReport {
             // Con piu' destinatari (un alias, una copia nascosta) conta la riga del destinatario
             // del rapporto; fra quelle, l'ultima, perche' un "rimandato" puo' essere seguito da
             // un "consegnato".
-            boolean its = recipient.equalsIgnoreCase(fra(rest, "to=<", ">"))
-                       || recipient.equalsIgnoreCase(fra(rest, "orig_to=<", ">"));
+            boolean its = recipient.equalsIgnoreCase(between(rest, "to=<", ">"))
+                       || recipient.equalsIgnoreCase(between(rest, "orig_to=<", ">"));
             if (its || !forRecipient) { delivery = i; forRecipient = its; }
         }
 
         if (delivery >= 0) {
-            java.util.regex.Matcher m = sue.matcher(lines.get(delivery));
+            java.util.regex.Matcher m = ownPattern.matcher(lines.get(delivery));
             m.find();
             String rest = m.group(1);
             java.util.regex.Matcher s = state.matcher(rest);
             s.find();
-            String relay = fra(rest, "relay=", ",");
+            String relay = between(rest, "relay=", ",");
             r.put("relay", relay).put("answer", s.group(2)).put("state", switch (s.group(1)) {
                 case "sent" -> "delivered";
                 case "deferred" -> "deferred";
@@ -858,8 +858,8 @@ public final class PeriodicReport {
      * messaggio e magari da un altro processo: la sua apertura non si lega a questa consegna.
      */
     static int tlsOpening(java.util.List<String> lines, int delivery, String queue, String relay) {
-        Row chi = line(lines.get(delivery));
-        if (chi == null || relay.isEmpty() || "none".equals(relay) || chi.text().contains(", conn_use=")) return -1;
+        Row who = line(lines.get(delivery));
+        if (who == null || relay.isEmpty() || "none".equals(relay) || who.text().contains(", conn_use=")) return -1;
         java.util.regex.Pattern opening = java.util.regex.Pattern.compile(
                 "^(?:Anonymous|Untrusted|Trusted|Verified) TLS connection established to "
                 + java.util.regex.Pattern.quote(relay) + ": \\S+ with cipher ");
@@ -867,7 +867,7 @@ public final class PeriodicReport {
                 "^" + java.util.regex.Pattern.quote(queue) + ": to=<.*, status=[a-z]+ \\(");
         for (int i = delivery - 1; i >= 0; i--) {
             Row r = line(lines.get(i));
-            if (r == null || !chi.process().equals(r.process())) continue;
+            if (r == null || !who.process().equals(r.process())) continue;
             String t = r.text();
             if (ownDelivery.matcher(t).find() || t.startsWith("SSL_connect:")
                     || t.startsWith("save session ") || t.startsWith("remove session ")) continue;
@@ -877,7 +877,7 @@ public final class PeriodicReport {
     }
 
     /** Il testo fra 'dopo' e il primo 'fino' che lo segue; "" se 'dopo' non c'e'. */
-    private static String fra(String s, String after, String until) {
+    private static String between(String s, String after, String until) {
         int i = s.indexOf(after);
         if (i < 0) return "";
         i += after.length();
@@ -940,8 +940,8 @@ public final class PeriodicReport {
 
     /** Oggetto con lettere accentate: RFC 2047, altrimenti l'intestazione non e' valida. */
     private static String subject2047(String s) {
-        boolean soloAscii = s.chars().allMatch(c -> c >= 32 && c < 127);
-        if (soloAscii) return s;
+        boolean onlyAscii = s.chars().allMatch(c -> c >= 32 && c < 127);
+        if (onlyAscii) return s;
         return "=?UTF-8?B?" + Base64.getEncoder().encodeToString(s.getBytes(StandardCharsets.UTF_8)) + "?=";
     }
 
@@ -1006,7 +1006,7 @@ public final class PeriodicReport {
     static String compose(JSONObject d, String host, String sender, String recipient) {
         StringBuilder t = new StringBuilder();
         JSONObject os = d.optJSONObject("system");
-        JSONArray daFare = d.optJSONArray("daFare");
+        JSONArray toDo = d.optJSONArray("toDo");
 
         t.append(I18n.tr("server.rp.c.title")).append("\n")
          .append(line("=", 60)).append("\n")
@@ -1017,11 +1017,11 @@ public final class PeriodicReport {
 
         // --- cio' per cui il rapporto esiste ---
         t.append(I18n.tr("server.rp.c.todo")).append("\n").append(line("-", 60)).append("\n");
-        if (daFare == null || daFare.length() == 0) {
+        if (toDo == null || toDo.length() == 0) {
             t.append(I18n.tr("server.rp.c.nothing")).append("\n\n");
         } else {
-            for (int i = 0; i < daFare.length(); i++) {
-                JSONObject x = daFare.getJSONObject(i);
+            for (int i = 0; i < toDo.length(); i++) {
+                JSONObject x = toDo.getJSONObject(i);
                 int u = x.optInt("urgency", 9);
                 String label = u == 0 ? I18n.tr("server.rp.c.now") : u == 1 ? I18n.tr("server.rp.c.urgent")
                         : u == 2 ? I18n.tr("server.rp.c.todoTag") : I18n.tr("server.rp.c.whenYouCan");

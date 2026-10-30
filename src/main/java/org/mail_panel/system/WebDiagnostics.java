@@ -40,7 +40,7 @@ public class WebDiagnostics {
         public boolean encrypted;          // ha "ssl" fra i parametri di listen
         public boolean servePhp;
         public boolean serveFile;        // ha una root e un location che consegna qualcosa
-        public boolean soloRedirect;     // non fa altro che rimandare altrove
+        public boolean onlyRedirect;     // non fa altro che rimandare altrove
         public int line;
     }
 
@@ -94,27 +94,27 @@ public class WebDiagnostics {
         for (String r : body.split("\n")) {
             String t = r.trim();
             if (t.startsWith("#")) continue;
-            String basso = t.toLowerCase(Locale.ROOT);
+            String lower = t.toLowerCase(Locale.ROOT);
 
-            if (basso.startsWith("listen ")) {
+            if (lower.startsWith("listen ")) {
                 String v = t.substring(7).replace(";", "").trim();
                 b.listens.add(v);
                 if (v.toLowerCase(Locale.ROOT).contains("ssl")) b.encrypted = true;
-            } else if (basso.startsWith("server_name ")) {
+            } else if (lower.startsWith("server_name ")) {
                 b.names = t.substring(12).replace(";", "").trim();
-            } else if (basso.startsWith("root ")) {
+            } else if (lower.startsWith("root ")) {
                 b.root = t.substring(5).replace(";", "").trim();
-            } else if (basso.contains("fastcgi_pass") || basso.matches("location\\s+~\\s*\\\\?\\.php.*")) {
+            } else if (lower.contains("fastcgi_pass") || lower.matches("location\\s+~\\s*\\\\?\\.php.*")) {
                 b.servePhp = true;
-            } else if (basso.startsWith("try_files") || basso.startsWith("index ")
-                    || basso.startsWith("alias ")) {
+            } else if (lower.startsWith("try_files") || lower.startsWith("index ")
+                    || lower.startsWith("alias ")) {
                 hasLocationWithContent = true;
-            } else if (basso.startsWith("return ") || basso.startsWith("rewrite ")) {
+            } else if (lower.startsWith("return ") || lower.startsWith("rewrite ")) {
                 haReturn = true;
             }
         }
         b.serveFile = !b.root.isEmpty() && (hasLocationWithContent || b.servePhp);
-        b.soloRedirect = haReturn && !b.serveFile && !b.servePhp;
+        b.onlyRedirect = haReturn && !b.serveFile && !b.servePhp;
     }
 
     /** Il blocco ascolta sulla porta indicata. */
@@ -145,10 +145,10 @@ public class WebDiagnostics {
             JSONArray sites = new JSONArray();
             boolean inPlain = false, eighty = false;
             for (Block b : bl) {
-                boolean su80 = listensOn(b, 80);
-                boolean su443 = listensOn(b, 443);
-                if (su80) eighty = true;
-                boolean dangerous = su80 && !b.encrypted && (b.serveFile || b.servePhp);
+                boolean on80 = listensOn(b, 80);
+                boolean on443 = listensOn(b, 443);
+                if (on80) eighty = true;
+                boolean dangerous = on80 && !b.encrypted && (b.serveFile || b.servePhp);
                 if (dangerous) inPlain = true;
                 sites.put(new JSONObject()
                         .put("listens", String.join(", ", b.listens))
@@ -157,8 +157,8 @@ public class WebDiagnostics {
                         .put("encrypted", b.encrypted)
                         .put("servePhp", b.servePhp)
                         .put("serveFile", b.serveFile)
-                        .put("soloRedirect", b.soloRedirect)
-                        .put("su80", su80).put("su443", su443)
+                        .put("onlyRedirect", b.onlyRedirect)
+                        .put("on80", on80).put("on443", on443)
                         .put("inPlain", dangerous));
             }
             boolean four43 = false;
@@ -216,8 +216,8 @@ public class WebDiagnostics {
                 RunResult lp = run("sh", "-c", "fail2ban-client get "
                         + name.replace("\"", "") + " logpath 2>/dev/null");
                 if (lp.code != 0) { allRead = false; continue; }
-                boolean suNginx = lp.output.contains("/nginx/") || lp.output.contains("nginx-");
-                if (suNginx) watchNginx = true;
+                boolean onNginx = lp.output.contains("/nginx/") || lp.output.contains("nginx-");
+                if (onNginx) watchNginx = true;
 
                 // Quale porta protegge. Non e' una proprieta' della jail ma dell'AZIONE
                 // (fail2ban-client(1): "get <JAIL> actions", poi "get <JAIL> action <ACT>
@@ -240,7 +240,7 @@ public class WebDiagnostics {
                     }
                 }
                 watch.put(new JSONObject().put("jail", name)
-                        .put("log", lp.output.trim()).put("suNginx", suNginx)
+                        .put("log", lp.output.trim()).put("onNginx", onNginx)
                         .put("actions", actions)
                         .put("ports", String.join(", ", ports))
                         // "Non dichiarata" non e' "nessuna": con l'azione predefinita di pf il
@@ -292,7 +292,7 @@ public class WebDiagnostics {
                 JSONArray sv = r.optJSONArray("jailWatch");
                 for (int i = 0; sv != null && i < sv.length(); i++) {
                     JSONObject j = sv.optJSONObject(i);
-                    if (j == null || !j.optBoolean("suNginx", false)) continue;
+                    if (j == null || !j.optBoolean("onNginx", false)) continue;
                     if (which.length() > 0) which.append(", ");
                     which.append(j.optString("jail", "?"));
                 }
