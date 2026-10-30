@@ -60,6 +60,15 @@ public class SetTimeOnSystem {
             echo ""
             echo "[5/5] Configuring DNS settings (Cloudflare)..."
 
+            # Con il risolutore ricorsivo locale acceso (LocalResolverScript, lo accende
+            # l'installazione) il DNS resta com'e': rimettere 1.1.1.1 farebbe rifiutare da Spamhaus
+            # ogni domanda di rspamd (DBL_BLOCKED_OPENRESOLVER, misurato il 29/10/2026).
+            DNS_SUMMARY="1.1.1.1, 1.0.0.1 (Cloudflare)"
+            if [ "$(sysrc -n local_unbound_enable 2>/dev/null)" = "YES" ] && grep -q "^nameserver 127.0.0.1" /etc/resolv.conf; then
+                DNS_SUMMARY="127.0.0.1 (local_unbound, left as it is)"
+                echo "Local recursive resolver in use: resolv.conf and dhclient.conf left as they are."
+            else
+
             # Update resolv.conf
             if grep -q "nameserver 1.1.1.1" /etc/resolv.conf && grep -q "nameserver 1.0.0.1" /etc/resolv.conf; then
                 echo "resolv.conf already contains Cloudflare DNS servers."
@@ -85,12 +94,14 @@ RESOLVCONF
                 fi
             fi
 
+            fi
+
             echo ""
             echo "=== Configuration Complete ==="
             echo ""
             echo "Timezone:  Europe/Rome"
             echo "NTP:       Enabled (syncs on boot)"
-            echo "DNS:       1.1.1.1, 1.0.0.1 (Cloudflare)"
+            echo "DNS:       $DNS_SUMMARY"
             echo ""
             """;
     }
