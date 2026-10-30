@@ -516,6 +516,11 @@ public class SSLMailServer {
                 LOGGER.warning("PostfixAliases ensureAtBoot failed: " + t.getMessage());
             }
 
+            // Postfix come MTA locale sui server installati prima che l'installatore lo facesse:
+            // dopo gli alias, perche' senza aliases.db la posta di sistema resterebbe in coda.
+            // Idempotente, e non attiva niente se la posta di sistema rimbalzerebbe.
+            org.mail_panel.system.LocalMtaRepair.ensureAtBoot();
+
             // Start auto-renewal for certificates
             acmeManager.startAutoRenewal();
 
