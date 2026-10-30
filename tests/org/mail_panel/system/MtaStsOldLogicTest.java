@@ -10,32 +10,32 @@ import java.util.List;
  */
 public class MtaStsOldLogicTest {
     public static void main(String[] a) {
-        List<MtaStsSetup.EsameNome> casi = List.of(
-            new MtaStsSetup.EsameNome("domain-d.test", MtaStsSetup.StatoNome.ASSENTE,
+        List<MtaStsSetup.NameReview> cases = List.of(
+            new MtaStsSetup.NameReview("domain-d.test", MtaStsSetup.NameState.ABSENT,
                 "nella zona non c'e' nessun record con questo nome", true),
-            new MtaStsSetup.EsameNome("x.it", MtaStsSetup.StatoNome.DA_CORREGGERE,
+            new MtaStsSetup.NameReview("x.it", MtaStsSetup.NameState.TO_FIX,
                 "punta a \"altro.host\" invece che a \"mail.domain-b.test\"; passa da Cloudflare", true));
 
-        List<String> assenti = new ArrayList<>(), storti = new ArrayList<>(),
-                     proxati = new ArrayList<>(), ciechi = new ArrayList<>(),
-                     inPropagazione = new ArrayList<>();
-        for (MtaStsSetup.EsameNome e : casi) {
-            switch (e.stato) {
-                case ASSENTE -> assenti.add(e.dominio + " (" + e.reason + ")");
-                case CIECO -> ciechi.add(e.dominio + " (" + e.reason + ")");
-                case DA_CORREGGERE -> {
-                    if (e.reason.contains("Cloudflare")) proxati.add(e.dominio);
-                    else storti.add(e.dominio + " (" + e.reason + ")");
+        List<String> absent = new ArrayList<>(), crooked = new ArrayList<>(),
+                     proxied = new ArrayList<>(), blind = new ArrayList<>(),
+                     propagating = new ArrayList<>();
+        for (MtaStsSetup.NameReview e : cases) {
+            switch (e.state) {
+                case ABSENT -> absent.add(e.domain + " (" + e.reason + ")");
+                case BLIND -> blind.add(e.domain + " (" + e.reason + ")");
+                case TO_FIX -> {
+                    if (e.reason.contains("Cloudflare")) proxied.add(e.domain);
+                    else crooked.add(e.domain + " (" + e.reason + ")");
                 }
-                case GIUSTO -> { if (!e.risolve) inPropagazione.add(e.dominio); }
+                case RIGHT -> { if (!e.resolves) propagating.add(e.domain); }
             }
         }
         System.out.println("LOGICA VECCHIA, stessi due casi:");
-        System.out.println("  proxati  = " + proxati);
-        System.out.println("  storti   = " + storti);
-        boolean bugA = !proxati.contains("domain-d.test (non c'e' il record, risponde il jolly *.domain-d.test che sta dietro Cloudflare)")
-                    && proxati.stream().noneMatch(s -> s.startsWith("domain-d.test"));
-        boolean bugB = storti.isEmpty();
+        System.out.println("  proxati  = " + proxied);
+        System.out.println("  storti   = " + crooked);
+        boolean bugA = !proxied.contains("domain-d.test (non c'e' il record, risponde il jolly *.domain-d.test che sta dietro Cloudflare)")
+                    && proxied.stream().noneMatch(s -> s.startsWith("domain-d.test"));
+        boolean bugB = crooked.isEmpty();
         System.out.println("\n  domain-d.test NON risulta passare dal proxy  -> " + bugA
                          + "   (passo 5 verde: \"nessuno passa da Cloudflare\")");
         System.out.println("  il record che punta ALTROVE non risulta storto -> " + bugB

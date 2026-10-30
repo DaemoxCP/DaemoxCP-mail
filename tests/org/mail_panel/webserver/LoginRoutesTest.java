@@ -45,7 +45,7 @@ import java.util.regex.Pattern;
  * password and TOTP routes are gone.
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.LoginRoutesTest
  */
 public class LoginRoutesTest {
@@ -298,10 +298,10 @@ public class LoginRoutesTest {
             //    gestore: 421, e il corpo non e' JSON. Prima questa riga ci costruiva sopra un
             //    JSONObject e la prova si spaccava con "A JSONObject text must begin with '{'".
             String body = "{\"action\":\"passkey_options\",\"csrf_token\":\"" + token + "\"}";
-            HttpResponse<String> perIndirizzo = ask("POST", "/api/login", body,
+            HttpResponse<String> byAddress = ask("POST", "/api/login", body,
                     "Cookie", preCookie, "Host", "127.0.0.1:" + port);
             check("opened by IP address while the panel answers to a name: 421, before the handler",
-                    perIndirizzo.statusCode() == 421);
+                    byAddress.statusCode() == 421);
 
             // 2) E con l'indirizzo configurato a wildcard -- quello che scrive l'installatore --
             //    un Host che e' un indirizzo viene servito, e allora e' il gestore delle

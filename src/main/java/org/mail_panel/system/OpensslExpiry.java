@@ -28,7 +28,7 @@ import java.time.temporal.ChronoUnit;
 public class OpensslExpiry {
 
     /** ramo -> fine del supporto upstream. Trascritte da openssl-library.org. */
-    private static final String[][] SCADENZE = {
+    private static final String[][] DEADLINES = {
         { "4.0",   "2027-05-14", "no"  },
         { "3.6",   "2026-11-01", "no"  },
         { "3.5",   "2030-04-08", "si"  },
@@ -48,53 +48,53 @@ public class OpensslExpiry {
      * =================================================================== */
 
     /** Il ramo di una versione: "3.5.6" -> "3.5", "1.1.1w" -> "1.1.1". */
-    public static String ramo(String versione) {
-        if (versione == null) return null;
-        String v = versione.trim();
+    public static String branch(String version) {
+        if (version == null) return null;
+        String v = version.trim();
         if (v.startsWith("1.1.1")) return "1.1.1";
         if (v.startsWith("1.0.2")) return "1.0.2";
         String[] p = v.split("\\.");
         if (p.length < 2) return null;
-        String a = soloCifre(p[0]), b = soloCifre(p[1]);
+        String a = digitsOnly(p[0]), b = digitsOnly(p[1]);
         if (a.isEmpty() || b.isEmpty()) return null;
         return a + "." + b;
     }
 
-    private static String soloCifre(String s) {
+    private static String digitsOnly(String s) {
         StringBuilder sb = new StringBuilder();
         for (char c : s.toCharArray()) { if (!Character.isDigit(c)) break; sb.append(c); }
         return sb.toString();
     }
 
     /** La data di fine supporto di quel ramo, o null se il ramo non e' in tabella. */
-    public static String fineSupporto(String versione) {
-        String r = ramo(versione);
+    public static String endOfSupport(String version) {
+        String r = branch(version);
         if (r == null) return null;
-        for (String[] s : SCADENZE) if (s[0].equals(r)) return s[1];
+        for (String[] s : DEADLINES) if (s[0].equals(r)) return s[1];
         return null;
     }
 
-    public static boolean eLts(String versione) {
-        String r = ramo(versione);
+    public static boolean isLts(String version) {
+        String r = branch(version);
         if (r == null) return false;
-        for (String[] s : SCADENZE) if (s[0].equals(r)) return "si".equals(s[2]);
+        for (String[] s : DEADLINES) if (s[0].equals(r)) return "si".equals(s[2]);
         return false;
     }
 
     /** Giorni che mancano. Negativi se la data e' passata. "oggi" si passa: cosi' si prova. */
-    public static Long giorniRimasti(String versione, LocalDate oggi) {
-        String f = fineSupporto(versione);
-        if (f == null || oggi == null) return null;
+    public static Long daysLeft(String version, LocalDate today) {
+        String f = endOfSupport(version);
+        if (f == null || today == null) return null;
         try {
-            return ChronoUnit.DAYS.between(oggi, LocalDate.parse(f));
+            return ChronoUnit.DAYS.between(today, LocalDate.parse(f));
         } catch (Exception e) {
             return null;
         }
     }
 
     /** 0 = a posto, 1 = scade presto (entro 90 giorni), 2 = scaduto, 3 = non lo so. */
-    public static int urgenza(String versione, LocalDate oggi) {
-        Long g = giorniRimasti(versione, oggi);
+    public static int urgency(String version, LocalDate today) {
+        Long g = daysLeft(version, today);
         if (g == null) return 3;
         if (g < 0) return 2;
         if (g <= 90) return 1;
@@ -102,10 +102,10 @@ public class OpensslExpiry {
     }
 
     /** La versione dentro l'uscita di "openssl version": "OpenSSL 3.5.6 30 Sep 2025" -> 3.5.6 */
-    public static String estraiVersione(String output) {
+    public static String extractVersion(String output) {
         if (output == null) return null;
-        for (String riga : output.split("\n")) {
-            String t = riga.trim();
+        for (String line : output.split("\n")) {
+            String t = line.trim();
             if (!t.startsWith("OpenSSL") && !t.startsWith("LibreSSL")) continue;
             String[] p = t.split("\\s+");
             if (p.length >= 2 && !p[1].isEmpty() && Character.isDigit(p[1].charAt(0))) return p[1];
@@ -117,83 +117,83 @@ public class OpensslExpiry {
      * Parte che interroga il server
      * =================================================================== */
 
-    public static JSONObject stato() {
+    public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
-        LocalDate oggi = LocalDate.now();
-        r.put("oggi", oggi.toString());
+        LocalDate today = LocalDate.now();
+        r.put("today", today.toString());
 
-        JSONArray trovati = new JSONArray();
-        trovati.put(esamina("base", "/usr/bin/openssl", oggi,
+        JSONArray found = new JSONArray();
+        found.put(review("base", "/usr/bin/openssl", today,
                 I18n.tr("server.sslexp.base")));
-        trovati.put(esamina("port", "/usr/local/bin/openssl", oggi,
+        found.put(review("port", "/usr/local/bin/openssl", today,
                 I18n.tr("server.sslexp.port")));
-        r.put("installazioni", trovati);
+        r.put("installs", found);
 
         // Chi vince nel PATH del pannello: e' quello che finirebbe negli script.
-        Ris quale = esegui("sh", "-c", "command -v openssl");
-        r.put("nelPath", quale.codice == 0 ? quale.output.trim() : "");
+        RunResult which = run("sh", "-c", "command -v openssl");
+        r.put("inPath", which.code == 0 ? which.output.trim() : "");
 
-        Ris fv = esegui("freebsd-version", "-k");
-        if (fv.codice == 0) r.put("freebsd", fv.output.trim());
+        RunResult fv = run("freebsd-version", "-k");
+        if (fv.code == 0) r.put("freebsd", fv.output.trim());
 
         // Il verdict guarda solo cio' che c'e' davvero.
-        int peggiore = 0;
-        boolean qualcosa = false;
-        for (int i = 0; i < trovati.length(); i++) {
-            JSONObject o = trovati.getJSONObject(i);
-            if (!o.optBoolean("presente", false)) continue;
-            qualcosa = true;
-            peggiore = Math.max(peggiore, o.optInt("urgenza", 3));
+        int worst = 0;
+        boolean something = false;
+        for (int i = 0; i < found.length(); i++) {
+            JSONObject o = found.getJSONObject(i);
+            if (!o.optBoolean("present", false)) continue;
+            something = true;
+            worst = Math.max(worst, o.optInt("urgency", 3));
         }
-        r.put("urgenza", qualcosa ? peggiore : 3);
-        r.put("nota", !qualcosa
+        r.put("urgency", something ? worst : 3);
+        r.put("note", !something
                 ? I18n.tr("server.sslexp.noBinary")
-                : peggiore == 0 ? I18n.tr("server.sslexp.allSupported")
-                : peggiore == 1 ? I18n.tr("server.sslexp.soon")
-                : peggiore == 2 ? I18n.tr("server.sslexp.expired")
+                : worst == 0 ? I18n.tr("server.sslexp.allSupported")
+                : worst == 1 ? I18n.tr("server.sslexp.soon")
+                : worst == 2 ? I18n.tr("server.sslexp.expired")
                 : I18n.tr("server.sslexp.unknownVersion"));
         return r;
     }
 
-    private static JSONObject esamina(String tipo, String percorso, LocalDate oggi, String cosaSignifica) {
-        JSONObject o = new JSONObject().put("tipo", tipo).put("percorso", percorso)
-                .put("cosaSignifica", cosaSignifica);
-        Ris v = esegui(percorso, "version");
-        if (v.codice != 0) return o.put("presente", false);
+    private static JSONObject review(String type, String path, LocalDate today, String whatItMeans) {
+        JSONObject o = new JSONObject().put("type", type).put("path", path)
+                .put("whatItMeans", whatItMeans);
+        RunResult v = run(path, "version");
+        if (v.code != 0) return o.put("present", false);
 
-        String versione = estraiVersione(v.output);
-        o.put("presente", true).put("output", v.output.trim()).put("versione", versione == null ? "" : versione);
-        if (versione == null)
-            return o.put("urgenza", 3)
-                    .put("commento", I18n.tr("server.sslexp.unreadable", java.util.Map.of("out", String.valueOf(v.output.trim()))));
+        String version = extractVersion(v.output);
+        o.put("present", true).put("output", v.output.trim()).put("version", version == null ? "" : version);
+        if (version == null)
+            return o.put("urgency", 3)
+                    .put("comment", I18n.tr("server.sslexp.unreadable", java.util.Map.of("out", String.valueOf(v.output.trim()))));
 
-        String fine = fineSupporto(versione);
-        Long giorni = giorniRimasti(versione, oggi);
-        int u = urgenza(versione, oggi);
-        o.put("branch", ramo(versione)).put("lts", eLts(versione)).put("urgenza", u);
-        if (fine == null)
-            return o.put("commento", I18n.tr("server.sslexp.notInTable", java.util.Map.of("b", String.valueOf(ramo(versione)))));
+        String end = endOfSupport(version);
+        Long days = daysLeft(version, today);
+        int u = urgency(version, today);
+        o.put("branch", branch(version)).put("lts", isLts(version)).put("urgency", u);
+        if (end == null)
+            return o.put("comment", I18n.tr("server.sslexp.notInTable", java.util.Map.of("b", String.valueOf(branch(version)))));
 
-        o.put("fineSupporto", fine).put("giorni", giorni);
-        o.put("commento", u == 2
-                ? I18n.tr("server.sslexp.outSince", java.util.Map.of("date", String.valueOf(fine), "d", String.valueOf(-giorni)))
-                : u == 1 ? I18n.tr("server.sslexp.leaves", java.util.Map.of("date", String.valueOf(fine), "d", String.valueOf(giorni)))
-                : I18n.tr("server.sslexp.until", java.util.Map.of("date", String.valueOf(fine), "lts", String.valueOf(eLts(versione) ? " (LTS)" : ""), "d", String.valueOf(giorni))));
+        o.put("endOfSupport", end).put("days", days);
+        o.put("comment", u == 2
+                ? I18n.tr("server.sslexp.outSince", java.util.Map.of("date", String.valueOf(end), "d", String.valueOf(-days)))
+                : u == 1 ? I18n.tr("server.sslexp.leaves", java.util.Map.of("date", String.valueOf(end), "d", String.valueOf(days)))
+                : I18n.tr("server.sslexp.until", java.util.Map.of("date", String.valueOf(end), "lts", String.valueOf(isLts(version) ? " (LTS)" : ""), "d", String.valueOf(days))));
         return o;
     }
 
-    private record Ris(int codice, String output) {}
+    private record RunResult(int code, String output) {}
 
-    private static Ris esegui(String... cmd) {
+    private static RunResult run(String... cmd) {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            return new Ris(p.waitFor(), out);
+            return new RunResult(p.waitFor(), out);
         } catch (Exception e) {
-            return new Ris(-1, String.valueOf(e.getMessage()));
+            return new RunResult(-1, String.valueOf(e.getMessage()));
         }
     }
 }

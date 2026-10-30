@@ -32,9 +32,9 @@ public class PlanAfterFetchTest {
                 .put("measured", true)
                 .put("unlockedPackages", new JSONArray().put("postfix-mysql"))
                 .put("changes", new JSONArray()
-                        .put(change("installa", "lmdb0", "", "0.9.35"))
-                        .put(change("installa", "mysql97-client", "", "9.7.2"))
-                        .put(change("aggiorna", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1")));
+                        .put(change("install", "lmdb0", "", "0.9.35"))
+                        .put(change("install", "mysql97-client", "", "9.7.2"))
+                        .put(change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1")));
 
         // Lo stesso piano ricalcolato DOPO lo sblocco vero: niente piu' da sbloccare, e i
         // cambiamenti arrivano in un altro ordine perche' li elenca un'altra simulazione.
@@ -42,19 +42,19 @@ public class PlanAfterFetchTest {
                 .put("measured", true)
                 .put("unlockedPackages", new JSONArray())
                 .put("changes", new JSONArray()
-                        .put(change("aggiorna", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"))
-                        .put(change("installa", "mysql97-client", "", "9.7.2"))
-                        .put(change("installa", "lmdb0", "", "0.9.35")));
+                        .put(change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"))
+                        .put(change("install", "mysql97-client", "", "9.7.2"))
+                        .put(change("install", "lmdb0", "", "0.9.35")));
 
         // Il piano con la rimozione che compare solo dopo lo scaricamento.
         JSONObject grown = new JSONObject()
                 .put("measured", true)
                 .put("unlockedPackages", new JSONArray())
                 .put("changes", new JSONArray()
-                        .put(change("installa", "lmdb0", "", "0.9.35"))
-                        .put(change("installa", "mysql97-client", "", "9.7.2"))
-                        .put(change("aggiorna", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"))
-                        .put(change("rimuove", "lmdb", "1.0.2,1", "")));
+                        .put(change("install", "lmdb0", "", "0.9.35"))
+                        .put(change("install", "mysql97-client", "", "9.7.2"))
+                        .put(change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"))
+                        .put(change("remove", "lmdb", "1.0.2,1", "")));
 
         String approvedSignature = PackagePlan.changesSignature(approved);
         String afterSignature = PackagePlan.changesSignature(afterUnlock);
@@ -75,9 +75,9 @@ public class PlanAfterFetchTest {
         JSONObject otherVersion = new JSONObject()
                 .put("measured", true).put("unlockedPackages", new JSONArray())
                 .put("changes", new JSONArray()
-                        .put(change("installa", "lmdb0", "", "0.9.35"))
-                        .put(change("installa", "mysql97-client", "", "9.7.2"))
-                        .put(change("aggiorna", "postfix-mysql", "3.11.7_1,1", "3.11.8,1")));
+                        .put(change("install", "lmdb0", "", "0.9.35"))
+                        .put(change("install", "mysql97-client", "", "9.7.2"))
+                        .put(change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.8,1")));
         check("una versione di arrivo diversa cambia la firma",
              !approvedSignature.equals(PackagePlan.changesSignature(otherVersion)));
 
@@ -86,7 +86,7 @@ public class PlanAfterFetchTest {
         JSONObject reduced = new JSONObject()
                 .put("measured", true).put("unlockedPackages", new JSONArray())
                 .put("changes", new JSONArray()
-                        .put(change("aggiorna", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1")));
+                        .put(change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1")));
         check("un cambiamento in meno cambia la firma", !approvedSignature.equals(PackagePlan.changesSignature(reduced)));
 
         // Piani vuoti: nessuna eccezione, e due vuoti si somigliano.
@@ -128,7 +128,7 @@ public class PlanAfterFetchTest {
     }
 
     private static JSONObject change(String type, String name, String from, String a) {
-        return new JSONObject().put("tipo", type).put("nome", name).put("da", from).put("a", a);
+        return new JSONObject().put("type", type).put("name", name).put("from", from).put("to", a);
     }
 
     /** Lo stesso piano con i cambiamenti all'incontrario. */

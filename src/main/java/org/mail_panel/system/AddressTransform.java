@@ -65,7 +65,7 @@ public final class AddressTransform {
     static Path vmail = Path.of("/var/vmail");
     static Path sieve = Path.of("/var/mail/sieve");
     /** La posta messa da parte: sotto /var/vmail (stesso disco, lo spostamento e' istantaneo), con un nome che nessun dominio puo' avere. */
-    static Path archivio() { return vmail.resolve(".archivio-pannello"); }
+    static Path archive() { return vmail.resolve(".panel-archive"); }
 
     static final int MAX_DESTINATIONS = 20;
     /** Oltre, il conto dei messaggi si ferma e si dice "almeno". */
@@ -77,50 +77,50 @@ public final class AddressTransform {
     // ===================== Lo stato di un indirizzo =====================
 
     /** La posta sul disco per un indirizzo. */
-    public record Posta(boolean presente, long messaggi, boolean almeno, long byteTotali, long ultimoMs, boolean filtri) {
-        static final Posta NESSUNA = new Posta(false, 0, false, 0, 0, false);
+    public record MailContent(boolean present, long messages, boolean atLeast, long totalBytes, long lastMs, boolean filters) {
+        static final MailContent NONE = new MailContent(false, 0, false, 0, 0, false);
     }
 
     /** Cio' che una casella ha e un alias no. */
-    public record Perdite(boolean rispostaAutomatica, List<String> inoltri, int filtri) {}
+    public record Losses(boolean autoReply, List<String> forwards, int filters) {}
 
     /** Quello che conta per decidere, letto dal database e dal disco. */
-    public record Stato(String indirizzo, boolean dominioDelPannello, MailDatabase.Mailbox mailbox,
-                        List<MailDatabase.Alias> conQuestaSorgente, List<MailDatabase.Alias> versoQui,
-                        Posta posta, Perdite perdite) {}
+    public record AddressState(String address, boolean panelDomain, MailDatabase.Mailbox mailbox,
+                        List<MailDatabase.Alias> withThisSource, List<MailDatabase.Alias> towardsHere,
+                        MailContent mail, Losses losses) {}
 
     /** Le domande sulle destinazioni, a cui risponde il database (o la prova). */
-    public interface Rete {
-        boolean dominioDelPannello(String dominio) throws SQLException;
+    public interface Network {
+        boolean panelDomain(String domain) throws SQLException;
         /** Una casella attiva che riceve: Postfix la conosce. */
-        boolean riceve(String indirizzo) throws SQLException;
+        boolean receives(String address) throws SQLException;
         /** Le destinazioni degli alias attivi con questa sorgente. */
-        List<String> destinazioniAttive(String sorgente) throws SQLException;
+        List<String> activeDestinations(String source) throws SQLException;
     }
 
-    public static Stato stato(MailDatabase db, String indirizzo) throws SQLException {
-        String dominio = dominio(indirizzo);
-        boolean delPannello = dominio != null && db.getDomainByName(dominio) != null;
-        MailDatabase.Mailbox m = db.getMailboxByEmail(indirizzo);
-        Perdite perdite = null;
+    public static AddressState state(MailDatabase db, String address) throws SQLException {
+        String domain = domain(address);
+        boolean ofPanel = domain != null && db.getDomainByName(domain) != null;
+        MailDatabase.Mailbox m = db.getMailboxByEmail(address);
+        Losses losses = null;
         if (m != null) {
             MailDatabase.AutoResponder ar = db.getAutoResponder(m.id);
-            List<String> inoltri = new ArrayList<>();
-            for (MailDatabase.ForwardingRule f : db.getForwardingRules(m.id)) if (f.enabled) inoltri.add(f.destination);
-            perdite = new Perdite(ar != null && ar.enabled, inoltri, db.getSieveFilters(m.id).size());
+            List<String> forwards = new ArrayList<>();
+            for (MailDatabase.ForwardingRule f : db.getForwardingRules(m.id)) if (f.enabled) forwards.add(f.destination);
+            losses = new Losses(ar != null && ar.enabled, forwards, db.getSieveFilters(m.id).size());
         }
-        return new Stato(indirizzo, delPannello, m, db.getAliasesBySource(indirizzo), db.getAliasesByDestination(indirizzo),
-                posta(indirizzo), perdite);
+        return new AddressState(address, ofPanel, m, db.getAliasesBySource(address), db.getAliasesByDestination(address),
+                mail(address), losses);
     }
 
-    public static Rete rete(MailDatabase db) {
-        return new Rete() {
-            @Override public boolean dominioDelPannello(String d) throws SQLException { return db.getDomainByName(d) != null; }
-            @Override public boolean riceve(String a) throws SQLException {
+    public static Network network(MailDatabase db) {
+        return new Network() {
+            @Override public boolean panelDomain(String d) throws SQLException { return db.getDomainByName(d) != null; }
+            @Override public boolean receives(String a) throws SQLException {
                 MailDatabase.Mailbox m = db.getMailboxByEmail(a);
                 return m != null && m.active && m.receiveEnabled;
             }
-            @Override public List<String> destinazioniAttive(String s) throws SQLException {
+            @Override public List<String> activeDestinations(String s) throws SQLException {
                 List<String> d = new ArrayList<>();
                 for (MailDatabase.Alias a : db.getAliasesBySource(s)) if (a.active) d.add(a.destination);
                 return d;
@@ -131,23 +131,23 @@ public final class AddressTransform {
     // ===================== Indirizzi e percorsi =====================
 
     /** Un indirizzo come lo vuole il pannello: i caratteri di isValidEmail, 254 in tutto, 64 prima della @. */
-    public static boolean indirizzoValido(String a) {
+    public static boolean validAddress(String a) {
         return a != null && a.length() <= 254 && SecurityUtils.isValidEmail(a) && a.indexOf('@') <= 64;
     }
 
     /** Solo ASCII stampabile: la lista bianca dei testi liberi (il nome di una casella). */
-    public static boolean stampabile(String t) {
+    public static boolean printable(String t) {
         for (int k = 0; k < t.length(); k++) if (t.charAt(k) < 0x20 || t.charAt(k) > 0x7E) return false;
         return true;
     }
 
     /** Dove sta la posta dell'indirizzo, per dirlo all'amministratore. */
-    public static String cartellaPosta(String indirizzo) {
-        Path p = cartella(vmail, indirizzo);
+    public static String mailFolder(String address) {
+        Path p = folder(vmail, address);
         return p == null ? "" : p.toString();
     }
 
-    static String dominio(String a) {
+    static String domain(String a) {
         int at = a == null ? -1 : a.lastIndexOf('@');
         return at < 0 ? null : a.substring(at + 1);
     }
@@ -156,113 +156,113 @@ public final class AddressTransform {
      * La cartella della posta di un indirizzo, o null se il nome non si puo' usare come percorso.
      * isValidEmail ammette anche "..@dominio": qui un nome cosi' uscirebbe da /var/vmail.
      */
-    static Path cartella(Path radice, String indirizzo) {
-        if (!indirizzoValido(indirizzo)) return null;
-        String nome = indirizzo.substring(0, indirizzo.lastIndexOf('@'));
-        String dom = dominio(indirizzo);
-        if (nome.startsWith(".") || dom.startsWith(".")) return null;
-        Path p = radice.resolve(dom).resolve(nome).normalize();
-        return p.startsWith(radice) && !p.equals(radice) ? p : null;
+    static Path folder(Path root, String address) {
+        if (!validAddress(address)) return null;
+        String name = address.substring(0, address.lastIndexOf('@'));
+        String dom = domain(address);
+        if (name.startsWith(".") || dom.startsWith(".")) return null;
+        Path p = root.resolve(dom).resolve(name).normalize();
+        return p.startsWith(root) && !p.equals(root) ? p : null;
     }
 
     /** Quanta posta c'e' sul disco per l'indirizzo: i messaggi sono i file in cur/ e new/, anche nelle cartelle. */
-    public static Posta posta(String indirizzo) {
-        Path dir = cartella(vmail, indirizzo);
-        Path filtri = cartella(sieve, indirizzo);
-        boolean ciSonoFiltri = filtri != null && Files.isRegularFile(filtri.resolve(".dovecot.sieve"));
-        if (dir == null || !Files.isDirectory(dir)) return new Posta(false, 0, false, 0, 0, ciSonoFiltri);
-        long messaggi = 0, byteTotali = 0, ultimo = 0;
-        boolean almeno = false;
+    public static MailContent mail(String address) {
+        Path dir = folder(vmail, address);
+        Path filters = folder(sieve, address);
+        boolean hasFilters = filters != null && Files.isRegularFile(filters.resolve(".dovecot.sieve"));
+        if (dir == null || !Files.isDirectory(dir)) return new MailContent(false, 0, false, 0, 0, hasFilters);
+        long messages = 0, totalBytes = 0, last = 0;
+        boolean atLeast = false;
         try (Stream<Path> s = Files.walk(dir, 3)) {
             java.util.Iterator<Path> it = s.iterator();
             while (it.hasNext()) {
                 Path p = it.next();
-                Path cartellaPadre = p.getParent();
-                if (cartellaPadre == null || cartellaPadre.getFileName() == null) continue;
-                String padre = cartellaPadre.getFileName().toString();
-                if (!padre.equals("cur") && !padre.equals("new")) continue;
+                Path parentFolder = p.getParent();
+                if (parentFolder == null || parentFolder.getFileName() == null) continue;
+                String parentName = parentFolder.getFileName().toString();
+                if (!parentName.equals("cur") && !parentName.equals("new")) continue;
                 try {
                     BasicFileAttributes a = Files.readAttributes(p, BasicFileAttributes.class);
                     if (!a.isRegularFile()) continue;
-                    messaggi++;
-                    byteTotali += a.size();
-                    ultimo = Math.max(ultimo, a.lastModifiedTime().toMillis());
-                } catch (IOException ignorata) {
+                    messages++;
+                    totalBytes += a.size();
+                    last = Math.max(last, a.lastModifiedTime().toMillis());
+                } catch (IOException ignored) {
                     continue;   // un file sparito mentre si conta
                 }
-                if (messaggi >= MAX_COUNTED_FILES) { almeno = true; break; }
+                if (messages >= MAX_COUNTED_FILES) { atLeast = true; break; }
             }
         } catch (IOException | java.io.UncheckedIOException e) {
             // Illeggibile: c'e', ma non si sa quanta.
-            return new Posta(true, 0, true, 0, 0, ciSonoFiltri);
+            return new MailContent(true, 0, true, 0, 0, hasFilters);
         }
-        return new Posta(true, messaggi, almeno, byteTotali, ultimo, ciSonoFiltri);
+        return new MailContent(true, messages, atLeast, totalBytes, last, hasFilters);
     }
 
     /**
-     * Mette da parte posta e filtri dell'indirizzo, in /var/vmail/.archivio-pannello/dominio/nome-DATA.
+     * Mette da parte posta e filtri dell'indirizzo, in /var/vmail/.panel-archive/dominio/nome-DATA.
      * Restituisce le coppie {da, a} spostate, per rimetterle a posto se il resto non riesce.
      */
-    public static List<Path[]> archivia(String indirizzo, long adessoMs) throws IOException {
-        List<Path[]> fatti = new ArrayList<>();
-        String quando = ARCHIVE_NAME.format(Instant.ofEpochMilli(adessoMs).atOffset(ZoneOffset.UTC));
-        String nome = indirizzo.substring(0, indirizzo.lastIndexOf('@'));
-        Path base = archivio().resolve(dominio(indirizzo));
+    public static List<Path[]> archive(String address, long nowMs) throws IOException {
+        List<Path[]> done = new ArrayList<>();
+        String when = ARCHIVE_NAME.format(Instant.ofEpochMilli(nowMs).atOffset(ZoneOffset.UTC));
+        String name = address.substring(0, address.lastIndexOf('@'));
+        Path base = archive().resolve(domain(address));
         try {
-            Path posta = cartella(vmail, indirizzo);
-            if (posta != null && Files.isDirectory(posta)) {
+            Path mail = folder(vmail, address);
+            if (mail != null && Files.isDirectory(mail)) {
                 Files.createDirectories(base);
-                Path dest = libero(base.resolve(nome + "-" + quando));
-                Files.move(posta, dest, StandardCopyOption.ATOMIC_MOVE);
-                fatti.add(new Path[] { posta, dest });
+                Path dest = free(base.resolve(name + "-" + when));
+                Files.move(mail, dest, StandardCopyOption.ATOMIC_MOVE);
+                done.add(new Path[] { mail, dest });
             }
-            Path filtri = cartella(sieve, indirizzo);
-            if (filtri != null && Files.isDirectory(filtri)) {
+            Path filters = folder(sieve, address);
+            if (filters != null && Files.isDirectory(filters)) {
                 Files.createDirectories(base);
-                Path dest = libero(base.resolve(nome + "-" + quando + "-filtri"));
+                Path dest = free(base.resolve(name + "-" + when + "-filters"));
                 // Su un altro disco ATOMIC_MOVE non si puo': allora si copia e si toglie, come fa mv.
                 try {
-                    Files.move(filtri, dest, StandardCopyOption.ATOMIC_MOVE);
+                    Files.move(filters, dest, StandardCopyOption.ATOMIC_MOVE);
                 } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-                    Files.move(filtri, dest);
+                    Files.move(filters, dest);
                 }
-                fatti.add(new Path[] { filtri, dest });
+                done.add(new Path[] { filters, dest });
             }
-            return fatti;
+            return done;
         } catch (IOException e) {
-            rimetti(fatti);
+            restore(done);
             throw e;
         }
     }
 
-    private static Path libero(Path p) {
+    private static Path free(Path p) {
         Path q = p;
         for (int k = 2; Files.exists(q); k++) q = p.resolveSibling(p.getFileName() + "-" + k);
         return q;
     }
 
-    /** Rimette dov'erano le cartelle spostate da archivia(), dall'ultima. */
-    public static void rimetti(List<Path[]> spostate) {
-        for (int k = spostate.size() - 1; k >= 0; k--) {
+    /** Rimette dov'erano le cartelle spostate da archive(), dall'ultima. */
+    public static void restore(List<Path[]> moved) {
+        for (int k = moved.size() - 1; k >= 0; k--) {
             try {
-                Files.move(spostate.get(k)[1], spostate.get(k)[0]);
-            } catch (IOException ignorata) { /* resta in archivio: meglio li' che perso */ }
+                Files.move(moved.get(k)[1], moved.get(k)[0]);
+            } catch (IOException ignored) { /* resta in archivio: meglio li' che perso */ }
         }
     }
 
     // ===================== Impronta =====================
 
     /** Lo stato che l'anteprima ha mostrato. Il numero dei messaggi non conta: in una casella cambia di continuo. */
-    public static String fingerprint(Stato s) {
-        StringBuilder t = new StringBuilder(s.indirizzo()).append('|').append(s.dominioDelPannello()).append('|');
+    public static String fingerprint(AddressState s) {
+        StringBuilder t = new StringBuilder(s.address()).append('|').append(s.panelDomain()).append('|');
         MailDatabase.Mailbox m = s.mailbox();
         t.append(m == null ? "-" : m.id + "," + m.email + "," + m.active + "," + m.receiveEnabled).append('|');
-        for (MailDatabase.Alias a : ordinati(s.conQuestaSorgente())) t.append(a.id).append(':').append(a.destination).append(':').append(a.active).append(';');
+        for (MailDatabase.Alias a : sorted(s.withThisSource())) t.append(a.id).append(':').append(a.destination).append(':').append(a.active).append(';');
         t.append('|');
-        for (MailDatabase.Alias a : ordinati(s.versoQui())) t.append(a.id).append(':').append(a.source).append(':').append(a.active).append(';');
-        t.append('|').append(s.posta().presente()).append('|');
-        Perdite p = s.perdite();
-        t.append(p == null ? "-" : p.rispostaAutomatica() + "," + String.join(",", p.inoltri()) + "," + p.filtri());
+        for (MailDatabase.Alias a : sorted(s.towardsHere())) t.append(a.id).append(':').append(a.source).append(':').append(a.active).append(';');
+        t.append('|').append(s.mail().present()).append('|');
+        Losses p = s.losses();
+        t.append(p == null ? "-" : p.autoReply() + "," + String.join(",", p.forwards()) + "," + p.filters());
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(t.toString().getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
@@ -270,7 +270,7 @@ public final class AddressTransform {
         }
     }
 
-    private static List<MailDatabase.Alias> ordinati(List<MailDatabase.Alias> l) {
+    private static List<MailDatabase.Alias> sorted(List<MailDatabase.Alias> l) {
         List<MailDatabase.Alias> o = new ArrayList<>(l);
         o.sort((x, y) -> Integer.compare(x.id, y.id));
         return o;
@@ -279,54 +279,54 @@ public final class AddressTransform {
     // ===================== Alias -> casella =====================
 
     /** Perche' l'indirizzo non puo' diventare una casella, o null se puo'. */
-    public static String motivoNoCasella(Stato s) {
-        String a = s.indirizzo();
+    public static String noMailboxReason(AddressState s) {
+        String a = s.address();
         if (a != null && a.startsWith("@"))
             return I18n.tr("server.convert.catchAll", java.util.Map.of("a", String.valueOf(a)));
-        if (!indirizzoValido(a) || cartella(vmail, a) == null) return I18n.tr("server.convert.notMailboxAddress");
-        if (!s.dominioDelPannello()) return I18n.tr("server.convert.notPanelDomain", java.util.Map.of("a", String.valueOf(a)));
+        if (!validAddress(a) || folder(vmail, a) == null) return I18n.tr("server.convert.notMailboxAddress");
+        if (!s.panelDomain()) return I18n.tr("server.convert.notPanelDomain", java.util.Map.of("a", String.valueOf(a)));
         if (s.mailbox() != null) return I18n.tr("server.convert.alreadyMailbox", java.util.Map.of("a", String.valueOf(a)));
-        if (s.conQuestaSorgente().isEmpty()) return I18n.tr("server.convert.noAlias", java.util.Map.of("a", String.valueOf(a)));
+        if (s.withThisSource().isEmpty()) return I18n.tr("server.convert.noAlias", java.util.Map.of("a", String.valueOf(a)));
         return null;
     }
 
-    public static JSONObject anteprimaACasella(Stato s, ZoneId zona) {
-        JSONObject o = new JSONObject().put("indirizzo", s.indirizzo());
-        String no = motivoNoCasella(s);
-        if (no != null) return o.put("possibile", false).put("reason", no);
+    public static JSONObject previewToMailbox(AddressState s, ZoneId zone) {
+        JSONObject o = new JSONObject().put("address", s.address());
+        String no = noMailboxReason(s);
+        if (no != null) return o.put("possible", false).put("reason", no);
         JSONArray dest = new JSONArray();
-        boolean copia = false;
-        for (MailDatabase.Alias a : s.conQuestaSorgente()) {
-            if (a.destination.equals(s.indirizzo())) { copia = true; continue; }
-            dest.put(new JSONObject().put("destinazione", a.destination).put("attivo", a.active));
+        boolean copy = false;
+        for (MailDatabase.Alias a : s.withThisSource()) {
+            if (a.destination.equals(s.address())) { copy = true; continue; }
+            dest.put(new JSONObject().put("destination", a.destination).put("active", a.active));
         }
-        return o.put("possibile", true).put("destinazioni", dest).put("copia", copia)
-                .put("versoQui", versoQui(s)).put("posta", posta(s.posta(), zona)).put("fingerprint", fingerprint(s));
+        return o.put("possible", true).put("destinations", dest).put("copy", copy)
+                .put("towardsHere", towardsHere(s)).put("mail", mail(s.mail(), zone)).put("fingerprint", fingerprint(s));
     }
 
     // ===================== Casella -> alias =====================
 
-    public static JSONObject anteprimaAAlias(Stato s, ZoneId zona) {
-        JSONObject o = new JSONObject().put("indirizzo", s.indirizzo());
+    public static JSONObject previewToAlias(AddressState s, ZoneId zone) {
+        JSONObject o = new JSONObject().put("address", s.address());
         MailDatabase.Mailbox m = s.mailbox();
-        if (m == null) return o.put("possibile", false).put("reason", I18n.tr("server.convert.notMailbox", java.util.Map.of("a", String.valueOf(s.indirizzo()))));
-        Perdite p = s.perdite() == null ? new Perdite(false, List.of(), 0) : s.perdite();
-        JSONArray gia = new JSONArray();
-        boolean copia = false;
-        for (MailDatabase.Alias a : s.conQuestaSorgente()) {
-            if (a.destination.equals(s.indirizzo())) { copia = true; continue; }
-            gia.put(new JSONObject().put("destinazione", a.destination).put("attivo", a.active));
+        if (m == null) return o.put("possible", false).put("reason", I18n.tr("server.convert.notMailbox", java.util.Map.of("a", String.valueOf(s.address()))));
+        Losses p = s.losses() == null ? new Losses(false, List.of(), 0) : s.losses();
+        JSONArray already = new JSONArray();
+        boolean copy = false;
+        for (MailDatabase.Alias a : s.withThisSource()) {
+            if (a.destination.equals(s.address())) { copy = true; continue; }
+            already.put(new JSONObject().put("destination", a.destination).put("active", a.active));
         }
-        JSONObject perdite = new JSONObject()
-                .put("ultimoAccesso", m.lastLogin == null ? "" : ISO.format(m.lastLogin.toInstant().atZone(zona)))
-                .put("soloInvio", !m.receiveEnabled).put("attiva", m.active)
-                .put("rispostaAutomatica", p.rispostaAutomatica()).put("inoltri", new JSONArray(p.inoltri())).put("filtri", p.filtri());
+        JSONObject losses = new JSONObject()
+                .put("lastAccess", m.lastLogin == null ? "" : ISO.format(m.lastLogin.toInstant().atZone(zone)))
+                .put("sendOnly", !m.receiveEnabled).put("active", m.active)
+                .put("autoReply", p.autoReply()).put("forwards", new JSONArray(p.forwards())).put("filters", p.filters());
         // Gli inoltri della casella fanno gia' quello che fara' l'alias: sono le destinazioni proposte.
-        List<String> proposte = new ArrayList<>(new LinkedHashSet<>(p.inoltri()));
-        proposte.removeIf(x -> x.equals(s.indirizzo()));
-        return o.put("possibile", true).put("perdite", perdite).put("proposte", new JSONArray(proposte))
-                .put("giaInoltrata", gia).put("copia", copia).put("versoQui", versoQui(s))
-                .put("posta", posta(s.posta(), zona)).put("cartella", cartellaPosta(s.indirizzo()))
+        List<String> proposals = new ArrayList<>(new LinkedHashSet<>(p.forwards()));
+        proposals.removeIf(x -> x.equals(s.address()));
+        return o.put("possible", true).put("losses", losses).put("proposals", new JSONArray(proposals))
+                .put("alreadyForwarded", already).put("copy", copy).put("towardsHere", towardsHere(s))
+                .put("mail", mail(s.mail(), zone)).put("folder", mailFolder(s.address()))
                 .put("fingerprint", fingerprint(s));
     }
 
@@ -335,49 +335,49 @@ public final class AddressTransform {
      * domini del pannello, e senza un giro che torni all'indirizzo. Lancia IllegalArgumentException
      * con il motivo.
      */
-    public static List<String> destinazioni(Stato s, JSONArray richieste, Rete rete) throws SQLException {
-        String indirizzo = s.indirizzo();
+    public static List<String> destinations(AddressState s, JSONArray requests, Network network) throws SQLException {
+        String address = s.address();
         List<String> d = new ArrayList<>();
-        for (int k = 0; richieste != null && k < richieste.length(); k++) {
-            String x = richieste.optString(k, "").trim().toLowerCase(Locale.ROOT);
+        for (int k = 0; requests != null && k < requests.length(); k++) {
+            String x = requests.optString(k, "").trim().toLowerCase(Locale.ROOT);
             if (x.isEmpty() || d.contains(x)) continue;
-            if (!indirizzoValido(x)) throw new IllegalArgumentException(I18n.tr("server.convert.badAddress", java.util.Map.of("x", String.valueOf(x))));
-            if (x.equals(indirizzo))
-                throw new IllegalArgumentException(I18n.tr("server.convert.selfDest", java.util.Map.of("a", String.valueOf(indirizzo))));
+            if (!validAddress(x)) throw new IllegalArgumentException(I18n.tr("server.convert.badAddress", java.util.Map.of("x", String.valueOf(x))));
+            if (x.equals(address))
+                throw new IllegalArgumentException(I18n.tr("server.convert.selfDest", java.util.Map.of("a", String.valueOf(address))));
             d.add(x);
         }
-        if (d.isEmpty()) throw new IllegalArgumentException(I18n.tr("server.convert.needDest", java.util.Map.of("a", String.valueOf(indirizzo))));
+        if (d.isEmpty()) throw new IllegalArgumentException(I18n.tr("server.convert.needDest", java.util.Map.of("a", String.valueOf(address))));
         if (d.size() > MAX_DESTINATIONS) throw new IllegalArgumentException(I18n.tr("server.convert.maxDest", java.util.Map.of("n", String.valueOf(MAX_DESTINATIONS))));
         for (String x : d) {
-            String dom = dominio(x);
-            if (rete.dominioDelPannello(dom) && !rete.riceve(x) && rete.destinazioniAttive(x).isEmpty()
-                    && rete.destinazioniAttive("@" + dom).isEmpty())
+            String dom = domain(x);
+            if (network.panelDomain(dom) && !network.receives(x) && network.activeDestinations(x).isEmpty()
+                    && network.activeDestinations("@" + dom).isEmpty())
                 throw new IllegalArgumentException(I18n.tr("server.convert.deadDest", java.util.Map.of("x", String.valueOf(x))));
         }
         // Dopo, la posta per l'indirizzo andra' alle destinazioni nuove e a quelle che ha gia'.
-        Set<String> tutte = new LinkedHashSet<>(d);
-        for (MailDatabase.Alias a : s.conQuestaSorgente()) if (a.active && !a.destination.equals(indirizzo)) tutte.add(a.destination);
-        for (String x : tutte) {
-            String giro = giro(x, indirizzo, rete);
-            if (giro != null)
-                throw new IllegalArgumentException(I18n.tr("server.convert.loop", java.util.Map.of("x", String.valueOf(x), "a", String.valueOf(indirizzo), "loop", String.valueOf(giro))));
+        Set<String> all = new LinkedHashSet<>(d);
+        for (MailDatabase.Alias a : s.withThisSource()) if (a.active && !a.destination.equals(address)) all.add(a.destination);
+        for (String x : all) {
+            String round = round(x, address, network);
+            if (round != null)
+                throw new IllegalArgumentException(I18n.tr("server.convert.loop", java.util.Map.of("x", String.valueOf(x), "a", String.valueOf(address), "loop", String.valueOf(round))));
         }
         return d;
     }
 
     /** La strada da un indirizzo all'altro seguendo gli alias attivi, o null se non c'e'. */
-    static String giro(String da, String a, Rete rete) throws SQLException {
-        Deque<List<String>> coda = new ArrayDeque<>();
-        Set<String> visti = new HashSet<>();
-        coda.add(List.of(da));
-        visti.add(da);
-        while (!coda.isEmpty() && visti.size() < 1000) {
-            List<String> strada = coda.poll();
-            for (String prossimo : rete.destinazioniAttive(strada.get(strada.size() - 1))) {
-                List<String> s = new ArrayList<>(strada);
-                s.add(prossimo);
-                if (prossimo.equals(a)) return String.join(" -> ", s);
-                if (visti.add(prossimo)) coda.add(s);
+    static String round(String from, String to, Network network) throws SQLException {
+        Deque<List<String>> queue = new ArrayDeque<>();
+        Set<String> seen = new HashSet<>();
+        queue.add(List.of(from));
+        seen.add(from);
+        while (!queue.isEmpty() && seen.size() < 1000) {
+            List<String> route = queue.poll();
+            for (String next : network.activeDestinations(route.get(route.size() - 1))) {
+                List<String> s = new ArrayList<>(route);
+                s.add(next);
+                if (next.equals(to)) return String.join(" -> ", s);
+                if (seen.add(next)) queue.add(s);
             }
         }
         return null;
@@ -385,21 +385,21 @@ public final class AddressTransform {
 
     // ===================== Per la pagina =====================
 
-    private static JSONArray versoQui(Stato s) {
+    private static JSONArray towardsHere(AddressState s) {
         JSONArray v = new JSONArray();
-        for (MailDatabase.Alias a : s.versoQui())
-            if (!a.source.equals(s.indirizzo())) v.put(new JSONObject().put("sorgente", a.source).put("attivo", a.active));
+        for (MailDatabase.Alias a : s.towardsHere())
+            if (!a.source.equals(s.address())) v.put(new JSONObject().put("source", a.source).put("active", a.active));
         return v;
     }
 
-    private static JSONObject posta(Posta p, ZoneId zona) {
-        JSONObject o = new JSONObject().put("presente", p.presente()).put("messaggi", p.messaggi()).put("almeno", p.almeno())
-                .put("byte", p.byteTotali()).put("dimensione", dimensione(p.byteTotali())).put("filtri", p.filtri());
-        if (p.ultimoMs() > 0) o.put("ultimo", ISO.format(Instant.ofEpochMilli(p.ultimoMs()).atZone(zona)));
+    private static JSONObject mail(MailContent p, ZoneId zone) {
+        JSONObject o = new JSONObject().put("present", p.present()).put("messages", p.messages()).put("atLeast", p.atLeast())
+                .put("bytes", p.totalBytes()).put("size", size(p.totalBytes())).put("filters", p.filters());
+        if (p.lastMs() > 0) o.put("last", ISO.format(Instant.ofEpochMilli(p.lastMs()).atZone(zone)));
         return o;
     }
 
-    static String dimensione(long b) {
+    static String size(long b) {
         if (b < 1024) return b + " byte";
         if (b < 1024L * 1024) return String.format(Locale.ITALY, "%.1f KB", b / 1024.0);
         if (b < 1024L * 1024 * 1024) return String.format(Locale.ITALY, "%.1f MB", b / (1024.0 * 1024));

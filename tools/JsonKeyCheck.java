@@ -1,0 +1,94 @@
+import com.sun.source.tree.*;
+import com.sun.source.util.*;
+
+import javax.lang.model.element.Element;
+import javax.tools.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.*;
+import java.util.stream.Stream;
+
+/**
+ * Le chiavi JSON che finirebbero due volte sullo stesso oggetto dopo una rinomina.
+ *
+ * Per ogni put("chiave", ...) e opt*("chiave") con chiave letterale si risale all'oggetto:
+ * la variabile su cui si chiama, o la radice di una catena new JSONObject().put(...).put(...).
+ * Poi, con la mappa delle rinomine (vecchia nuova, una per riga), si segnala ogni oggetto che
+ * dopo la rinomina avrebbe due chiavi uguali: una vecchia rinominata e una che esisteva gia',
+ * o due vecchie con la stessa traduzione.
+ *
+ * Uso: java JsonKeyCheck.java <classpath> <mappa>   (dalla radice del progetto)
+ */
+public class JsonKeyCheck {
+    static String shortText(Tree t) {
+        String s = t.toString().replaceAll("\\s+", " ");
+        return s.substring(0, Math.min(40, s.length()));
+    }
+
+    public static void main(String[] a) throws Exception {
+        Map<String, String> map = new HashMap<>();
+        for (String l : Files.readAllLines(Path.of(a[1]))) {
+            String[] p = l.trim().split("\\s+");
+            if (p.length == 2) map.put(p[0], p[1]);
+        }
+        List<Path> files = new ArrayList<>();
+        for (String d : List.of("src/main/java", "tests")) try (Stream<Path> s = Files.walk(Path.of(d))) {
+            s.filter(p -> p.toString().endsWith(".java")).forEach(files::add);
+        }
+        JavaCompiler c = ToolProvider.getSystemJavaCompiler();
+        StandardJavaFileManager fm = c.getStandardFileManager(null, null, StandardCharsets.UTF_8);
+        JavacTask task = (JavacTask) c.getTask(null, fm, d -> {}, List.of("-proc:none", "-nowarn", "--release", "25", "-cp", a[0]),
+                null, fm.getJavaFileObjectsFromPaths(files));
+        Iterable<? extends CompilationUnitTree> cus = task.parse();
+        task.analyze();
+        Trees trees = Trees.instance(task);
+        // oggetto -> (chiave -> dove)
+        Map<Object, Map<String, List<String>>> puts = new LinkedHashMap<>(), reads = new LinkedHashMap<>();
+        Map<Object, String> label = new HashMap<>();
+        for (CompilationUnitTree cu : cus) {
+            String file = Path.of(cu.getSourceFile().toUri()).getFileName().toString();
+            LineMap lm = cu.getLineMap();
+            SourcePositions sp = trees.getSourcePositions();
+            new TreePathScanner<Void, Void>() {
+                @Override public Void visitMethodInvocation(MethodInvocationTree mi, Void v) {
+                    if (mi.getMethodSelect() instanceof MemberSelectTree ms && !mi.getArguments().isEmpty()
+                            && mi.getArguments().get(0) instanceof LiteralTree lt && lt.getValue() instanceof String key) {
+                        String m = ms.getIdentifier().toString();
+                        boolean put = m.equals("put") || m.equals("accumulate") || m.equals("append");
+                        boolean read = m.startsWith("opt") || m.startsWith("get") || m.equals("has") || m.equals("remove") || m.equals("isNull");
+                        if (put || read) {
+                            ExpressionTree recv = ms.getExpression();
+                            // risale la catena di put: l'oggetto e' la radice
+                            while (put && recv instanceof MethodInvocationTree inner && inner.getMethodSelect() instanceof MemberSelectTree ims
+                                    && (ims.getIdentifier().contentEquals("put") || ims.getIdentifier().contentEquals("accumulate")))
+                                recv = ims.getExpression();
+                            Object id;
+                            Element e = trees.getElement(new TreePath(getCurrentPath(), recv));
+                            if (recv instanceof IdentifierTree && e != null) id = e;
+                            else id = recv;   // la radice della catena, come nodo
+                            label.putIfAbsent(id, file + ":" + lm.getLineNumber(sp.getStartPosition(cu, mi)) + " " + shortText(recv));
+                            (put ? puts : reads).computeIfAbsent(id, k -> new TreeMap<>()).computeIfAbsent(key, k -> new ArrayList<>())
+                                    .add(file + ":" + lm.getLineNumber(sp.getStartPosition(cu, mi)));
+                        }
+                    }
+                    return super.visitMethodInvocation(mi, v);
+                }
+            }.scan(cu, null);
+        }
+        int n = 0;
+        for (Map.Entry<String, Map<Object, Map<String, List<String>>>> kind : Map.of("SCRITTE", puts, "LETTE", reads).entrySet()) {
+            for (Map.Entry<Object, Map<String, List<String>>> o : kind.getValue().entrySet()) {
+                Map<String, List<String>> after = new TreeMap<>();
+                for (String k : o.getValue().keySet()) after.computeIfAbsent(map.getOrDefault(k, k), x -> new ArrayList<>()).add(k);
+                for (Map.Entry<String, List<String>> x : after.entrySet()) {
+                    if (x.getValue().size() > 1) {
+                        n++;
+                        System.out.println(kind.getKey() + " sullo stesso oggetto (" + label.get(o.getKey()) + "): " + x.getValue() + " -> " + x.getKey());
+                    }
+                }
+            }
+        }
+        System.out.println(n == 0 ? "NESSUNA COLLISIONE" : n + " COLLISIONI");
+        System.exit(n == 0 ? 0 : 1);
+    }
+}

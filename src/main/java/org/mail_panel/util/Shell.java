@@ -123,17 +123,17 @@ public final class Shell {
      * quale binario vince per i comandi che gia' si risolvevano, e si aggiunge soltanto cio'
      * che mancava. L'ordine e' quello del PATH predefinito di FreeBSD in login.conf.
      */
-    private static final String PATH_COMPLETO = costruisciPath();
+    private static final String FULL_PATH = buildPath();
 
-    private static String costruisciPath() {
-        String ereditato = System.getenv("PATH");
-        java.util.LinkedHashSet<String> parti = new java.util.LinkedHashSet<>();
-        if (ereditato != null)
-            for (String d : ereditato.split(":")) if (!d.isBlank()) parti.add(d);
+    private static String buildPath() {
+        String inherited = System.getenv("PATH");
+        java.util.LinkedHashSet<String> parts = new java.util.LinkedHashSet<>();
+        if (inherited != null)
+            for (String d : inherited.split(":")) if (!d.isBlank()) parts.add(d);
         for (String d : new String[]{"/sbin", "/bin", "/usr/sbin", "/usr/bin",
                                      "/usr/local/sbin", "/usr/local/bin"})
-            parti.add(d);
-        return String.join(":", parti);
+            parts.add(d);
+        return String.join(":", parts);
     }
 
     /**
@@ -145,15 +145,15 @@ public final class Shell {
      * pannello e possono non trovare programmi che ci sono: e' successo con mysqldump,
      * dove --print-defaults funzionava (passava da Shell) e il dump vero no.
      */
-    public static void applicaPath(ProcessBuilder pb) {
+    public static void applyPath(ProcessBuilder pb) {
         if (pb == null) return;
-        pb.environment().put("PATH", PATH_COMPLETO);
+        pb.environment().put("PATH", FULL_PATH);
         java.util.List<String> cmd = pb.command();
         if (cmd == null || cmd.isEmpty()) return;
         String prog = cmd.get(0);
         if (prog == null || prog.isEmpty() || prog.indexOf('/') >= 0) return;   // gia' assoluto
-        String assoluto = risolvi(prog);
-        if (assoluto != null) cmd.set(0, assoluto);
+        String absolute = resolve(prog);
+        if (absolute != null) cmd.set(0, absolute);
     }
 
     /**
@@ -161,9 +161,9 @@ public final class Shell {
      * Restituisce null se non esiste da nessuna parte: in quel caso il nome resta com'era e
      * l'errore che ne segue e' quello giusto, cioe' "il programma non c'e'" davvero.
      */
-    public static String risolvi(String prog) {
+    public static String resolve(String prog) {
         if (prog == null || prog.isEmpty() || prog.indexOf('/') >= 0) return prog;
-        for (String d : PATH_COMPLETO.split(":")) {
+        for (String d : FULL_PATH.split(":")) {
             if (d.isBlank()) continue;
             java.io.File f = new java.io.File(d, prog);
             if (f.isFile() && f.canExecute()) return f.getAbsolutePath();
@@ -172,10 +172,10 @@ public final class Shell {
     }
 
     /** Il PATH che il pannello usa davvero per i sottoprocessi. */
-    public static String pathCompleto() { return PATH_COMPLETO; }
+    public static String fullPath() { return FULL_PATH; }
 
     /** Il PATH ereditato da chi ha avviato il pannello, prima dell'integrazione. */
-    public static String pathEreditato() {
+    public static String inheritedPath() {
         String e = System.getenv("PATH");
         return e == null ? "" : e;
     }
@@ -204,7 +204,7 @@ public final class Shell {
 
     private static Result runInternal(Duration timeout, List<String> cmd) {
         ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.environment().put("PATH", PATH_COMPLETO);
+        pb.environment().put("PATH", FULL_PATH);
         pb.redirectInput(ProcessBuilder.Redirect.from(NO_STDIN));
         pb.redirectErrorStream(true);
         Process p = null;

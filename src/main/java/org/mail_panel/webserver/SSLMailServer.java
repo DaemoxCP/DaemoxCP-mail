@@ -53,7 +53,7 @@ public class SSLMailServer {
     private SieveGenerator sieveGenerator;
     private DnsRecordsGenerator dnsGenerator;
     private AcmeManager acmeManager;
-    private org.mail_panel.system.PeriodicReport rapportoPeriodico;
+    private org.mail_panel.system.PeriodicReport periodicReport;
     private LogManager logManager;
     private MailQueueManager queueManager;
     private RoundcubeSsoManager ssoManager;
@@ -129,11 +129,11 @@ public class SSLMailServer {
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
         "packages_status", "packages_overview", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
         "mysql84_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "branch_status", "branch_preview",
-        "system_report", "os_status", "reboot_preview", "rc_stato", "riepilogo_sistema", "cf_intervalli",
+        "system_report", "os_status", "reboot_preview", "rc_state", "system_summary", "cf_intervals",
         "rc_remove_preview", "rc_preview", "os_upgrade_targets", "os_upgrade_preflight", "os_upgrade_instructions",
-        "os_upgrade_verify", "salto_stato", "be_list", "ssl_uso", "removal_candidates", "panel_uses", "deep_scan",
-        "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosi", "web443_status", "web443_config",
-        "mtasts_piano", "sorveglianza", "sorveglianza_cambi", "openssl_scadenza", "porta465_status",
+        "os_upgrade_verify", "jump_state", "be_list", "ssl_usage", "removal_candidates", "panel_uses", "deep_scan",
+        "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosis", "web443_status", "web443_config",
+        "mtasts_plan", "watch", "watch_changes", "openssl_expiry", "port465_status",
         "python_preflight", "python_leftovers", "java_preflight", "java_status", "roundcube_preflight",
         "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status");
 
@@ -150,13 +150,13 @@ public class SSLMailServer {
         // Rotta PUBBLICA per forza: e' Thunderbird a chiederla, prima ancora che l'utente abbia
         // inserito una password. Restituisce solo nomi di server e numeri di porta, gia' pubblici
         // nei record DNS, e solo per i domini che questo pannello ospita davvero.
-        context("/autoconfig", Access.PUBLIC, this::handleAutoconfigPubblico);
+        context("/autoconfig", Access.PUBLIC, this::handlePublicAutoconfig);
         // La politica MTA-STS la leggono i server mittenti del mondo, senza credenziali: contiene
         // solo il nome del proprio MX, che sta gia' nei record DNS.
-        context("/mta-sts", Access.PUBLIC, this::handleMtaStsPubblico);
+        context("/mta-sts", Access.PUBLIC, this::handlePublicMtaSts);
         // Font Awesome e Bootstrap dal jar: servono anche alla pagina di accesso.
-        context("/fa", Access.PUBLIC, this::handleStatico);
-        context("/vendor", Access.PUBLIC, this::handleStatico);
+        context("/fa", Access.PUBLIC, this::handleStatic);
+        context("/vendor", Access.PUBLIC, this::handleStatic);
         // Il dizionario degli script e il cambio di lingua: le pagine di accesso e di installazione
         // hanno gia' la scelta IT/EN. /api/language controlla da se' il token della pagina.
         context("/i18n/", Access.PUBLIC, this::handleI18nScript);
@@ -175,7 +175,7 @@ public class SSLMailServer {
         context("/home", Access.page(HOME), this::handleProtectedPage);
         context("/api/status", Access.api(HOME), this::handleApiStatus);
         context("/api/stats", Access.api(HOME), this::handleApiStats);
-        context("/api/versioni", Access.api(HOME), this::handleApiVersioni);
+        context("/api/versions", Access.api(HOME), this::handleApiVersions);
         context("/account", Access.page(ACCOUNT), this::handleProtectedPage);
         context("/api/account", Access.api(ACCOUNT), auth::handleAccount);
         context("/api/theme", Access.api(ACCOUNT), this::handleApiTheme);
@@ -202,8 +202,8 @@ public class SSLMailServer {
         context("/api/ratelimits", Access.api(MAIL_VIEW, DOMAINS), this::handleApiRateLimits);
         context("/statistics", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/statistics", Access.api(MAIL_VIEW), this::handleApiStatistics);
-        context("/api/profilo-apple", Access.api(MAIL_VIEW, DNS_MANAGE, Access.actions(MAIL_VIEW, "status", "preview")), this::handleApiProfiloApple);
-        context("/profilo-apple", Access.api(MAIL_VIEW), this::handleScaricaProfiloApple);
+        context("/api/apple-profile", Access.api(MAIL_VIEW, DNS_MANAGE, Access.actions(MAIL_VIEW, "status", "preview")), this::handleApiAppleProfile);
+        context("/apple-profile", Access.api(MAIL_VIEW), this::handleDownloadAppleProfile);
 
         // ---------- DNS e certificati ----------
         context("/dns", Access.page(DNS_VIEW), this::handleProtectedPage);
@@ -223,7 +223,7 @@ public class SSLMailServer {
         // ---------- Sicurezza ----------
         context("/security", Access.page(SECURITY_VIEW), this::handleProtectedPage);
         context("/firewall", Access.page(SECURITY_VIEW), this::handleProtectedPage);
-        context("/api/fail2ban", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "verifica_filtro", "confronto_pf")), this::handleApiFail2ban);
+        context("/api/fail2ban", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "verify_filter", "pf_comparison")), this::handleApiFail2ban);
         context("/api/fail2ban_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE), this::handleApiFail2banHealth);
         context("/api/clamav_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "test_eicar")), this::handleApiClamavHealth);
         context("/api/unbound_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "test_query")), this::handleApiUnboundHealth);
@@ -529,9 +529,9 @@ public class SSLMailServer {
             this.dkimRotationScheduler.start();
 
             // Il rapporto periodico: sa leggere il certificato solo se glielo si passa.
-            org.mail_panel.system.PeriodicReport.collega(this.acmeManager);
-            this.rapportoPeriodico = new org.mail_panel.system.PeriodicReport();
-            this.rapportoPeriodico.start();
+            org.mail_panel.system.PeriodicReport.link(this.acmeManager);
+            this.periodicReport = new org.mail_panel.system.PeriodicReport();
+            this.periodicReport.start();
 
             // Auto-install/update Roundcube SSO plugin if Roundcube is installed
             // (e il cambio password della webmail che passa dal pannello)
@@ -899,8 +899,8 @@ public class SSLMailServer {
                 "-keypass", password,
                 "-dname", "CN=FreeBSD Mail Panel, OU=Mail, O=FreeBSD, L=Unknown, ST=Unknown, C=US"
             );
-            org.mail_panel.util.Shell.applicaPath(pb);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.inheritIO();
             Process p = pb.start();
             p.waitFor();
@@ -976,7 +976,7 @@ public class SSLMailServer {
      * Cosa mostrare quando MySQL non risponde: il pannello non puo' leggere domini, caselle e
      * amministratori. Si dice cosa succede e come si rimedia, nella lingua di chi chiede.
      */
-    private void paginaNonDisponibile(HttpExchange exchange) throws IOException {
+    private void pageUnavailable(HttpExchange exchange) throws IOException {
         String lang = I18n.current();
         String html = "<!doctype html><html lang=\"" + lang + "\"><head><meta charset=\"utf-8\">"
                 + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
@@ -991,12 +991,12 @@ public class SSLMailServer {
                 + "<p>" + I18n.escapeHtml(I18n.tr("server.unavailable.mysql")) + "</p>"
                 + "<p>" + I18n.escapeHtml(I18n.tr("server.unavailable.mysqlFix")) + "</p>"
                 + "</main></body></html>";
-        byte[] dati = html.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] data = html.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         addSecurityHeaders(exchange);
         exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
         exchange.getResponseHeaders().set("Content-Language", lang);
-        exchange.sendResponseHeaders(503, dati.length);
-        try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
+        exchange.sendResponseHeaders(503, data.length);
+        try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(data); }
         exchange.close();
     }
 
@@ -1007,7 +1007,7 @@ public class SSLMailServer {
     private boolean notReady(HttpExchange exchange) throws IOException {
         Main.refreshSetupState();
         if (!Main.mysqlAvailable) {
-            paginaNonDisponibile(exchange);
+            pageUnavailable(exchange);
             return true;
         }
         if (Main.setupRequired) {
@@ -1049,7 +1049,7 @@ public class SSLMailServer {
     private void handleSetup(HttpExchange exchange) throws IOException {
         Main.refreshSetupState();
         if (!Main.mysqlAvailable) {
-            paginaNonDisponibile(exchange);
+            pageUnavailable(exchange);
             return;
         }
         if (!Main.setupRequired) {
@@ -1100,8 +1100,8 @@ public class SSLMailServer {
      * invece di scoprirlo dopo con /api/theme (era il lampo bianco).
      */
     private String withTheme(HttpExchange exchange, String html) {
-        String tema = temaSalvato(exchange);
-        return html.replace("{{THEME}}", tema).replace("{{COLOR_SCHEME}}", "auto".equals(tema) ? "light dark" : tema);
+        String theme = savedTheme(exchange);
+        return html.replace("{{THEME}}", theme).replace("{{COLOR_SCHEME}}", "auto".equals(theme) ? "light dark" : theme);
     }
 
     // ============== LINGUA ==============
@@ -1432,17 +1432,17 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
-                    String trasforma = parametroQuery(exchange.getRequestURI().getRawQuery(), "trasforma");
-                    if (trasforma != null) {
+                    String transform = queryParameter(exchange.getRequestURI().getRawQuery(), "transform");
+                    if (transform != null) {
                         // Anteprima di "casella -> alias": cosa si perde, cosa resta. Non cambia niente.
                         int tid;
-                        try { tid = Integer.parseInt(trasforma); } catch (NumberFormatException e) { tid = 0; }
+                        try { tid = Integer.parseInt(transform); } catch (NumberFormatException e) { tid = 0; }
                         MailDatabase.Mailbox tm = tid > 0 ? Main.mailDatabase.getMailbox(tid) : null;
                         if (tm == null) {
                             response.put("success", false).put("error", I18n.tr("server.mailbox.notFound"));
                         } else {
-                            response = org.mail_panel.system.AddressTransform.anteprimaAAlias(
-                                    org.mail_panel.system.AddressTransform.stato(Main.mailDatabase, tm.email.toLowerCase(java.util.Locale.ROOT)),
+                            response = org.mail_panel.system.AddressTransform.previewToAlias(
+                                    org.mail_panel.system.AddressTransform.state(Main.mailDatabase, tm.email.toLowerCase(java.util.Locale.ROOT)),
                                     java.time.ZoneId.systemDefault()).put("success", true).put("id", tm.id);
                         }
                         break;
@@ -1517,8 +1517,8 @@ public class SSLMailServer {
                     // Sub-routing per action specifiche (no email/password richieste)
                     String action = req.optString("action", "");
 
-                    if ("trasforma_in_alias".equals(action)) {
-                        sendJsonResponse(exchange, casellaInAlias(req, getClientIp(exchange)));
+                    if ("transform_to_alias".equals(action)) {
+                        sendJsonResponse(exchange, mailboxToAlias(req, getClientIp(exchange)));
                         return;
                     }
 
@@ -1552,10 +1552,10 @@ public class SSLMailServer {
                         int length = req.optInt("length", 20);
                         // Opzioni avanzate (stesso schema di generate_password)
                         String type = req.optString("type", "easy_to_read");
-                        boolean inclLo = req.optBoolean("include_lowercase", true);
-                        boolean inclUp = req.optBoolean("include_uppercase", true);
-                        boolean inclNu = req.optBoolean("include_numbers", true);
-                        boolean inclSy = req.optBoolean("include_symbols", true);
+                        boolean inclLocal = req.optBoolean("include_lowercase", true);
+                        boolean inclUpdated = req.optBoolean("include_uppercase", true);
+                        boolean inclNew = req.optBoolean("include_numbers", true);
+                        boolean inclSystem = req.optBoolean("include_symbols", true);
                         org.mail_panel.security.PasswordVault vault = org.mail_panel.security.PasswordVault.getInstance();
                         org.json.JSONArray results = new org.json.JSONArray();
                         int succeeded = 0, failed = 0;
@@ -1572,7 +1572,7 @@ public class SSLMailServer {
                                     continue;
                                 }
                                 r.put("email", mb.email);
-                                String pw = vault.generatePassword(length, type, inclLo, inclUp, inclNu, inclSy);
+                                String pw = vault.generatePassword(length, type, inclLocal, inclUpdated, inclNew, inclSystem);
                                 boolean ok = Main.mailDatabase.updateMailboxPassword(mid, pw);
                                 if (ok) {
                                     r.put("success", true);
@@ -1623,7 +1623,7 @@ public class SSLMailServer {
                         // Stima dell'entropia, sugli stessi insiemi che il generatore ha appena usato.
                         // Il livello e' un codice (weak, fair, strong, very_strong): il nome da
                         // mostrare lo mette la pagina, nella lingua di chi guarda.
-                        int poolSize = org.mail_panel.security.PasswordVault.dimensionePool(type, lo, up, nu, sy);
+                        int poolSize = org.mail_panel.security.PasswordVault.poolSize(type, lo, up, nu, sy);
                         double entropy = org.mail_panel.security.PasswordVault.estimateEntropy(pw.length(), poolSize);
                         response.put("entropy_bits", Math.round(entropy * 10.0) / 10.0);
                         String strength;
@@ -1907,49 +1907,49 @@ public class SSLMailServer {
      * Su una casella e' permesso: e' proprio il modo di tenerne una copia (revisione:
      * la nota lo consigliava e il controllo lo rifiutava).
      */
-    private static String aliasSuSeStesso(String indirizzo) {
-        return I18n.tr("server.alias.selfOnlyMailbox", Map.of("address", indirizzo));
+    private static String aliasOnItself(String address) {
+        return I18n.tr("server.alias.selfOnlyMailbox", Map.of("address", address));
     }
 
     /**
-     * Che cosa succede ora alla posta per {@code indirizzo}, quando c'e' da saperlo; null altrimenti.
+     * Che cosa succede ora alla posta per {@code address}, quando c'e' da saperlo; null altrimenti.
      *
      * Postfix legge solo gli alias con active=1, e li applica prima delle caselle: una casella con
      * alias attivi ma senza "se stessa -> se stessa" attivo non riceve piu' niente, e un indirizzo
      * che non e' una casella esiste solo finche' ha un alias attivo (o il dominio un catch-all).
      * Serve dopo ogni cambio: creare, modificare, disattivare, eliminare.
      */
-    private static String dopoGliAlias(String indirizzo, int domainId) throws java.sql.SQLException {
-        return dopoGliAlias(indirizzo, Main.mailDatabase.getMailboxByEmail(indirizzo) != null,
+    private static String afterAliases(String address, int domainId) throws java.sql.SQLException {
+        return afterAliases(address, Main.mailDatabase.getMailboxByEmail(address) != null,
                 Main.mailDatabase.getAliases(domainId));
     }
 
-    /** La decisione di {@link #dopoGliAlias(String, int)} senza database: la esercita tests/.../AliasMessagesTest. */
-    static String dopoGliAlias(String indirizzo, boolean mailbox, List<MailDatabase.Alias> delDominio) {
-        int at = indirizzo.indexOf('@');
-        String catchAll = at >= 0 ? indirizzo.substring(at) : null;
-        List<String> altrove = new ArrayList<>();
-        boolean copia = false, copiaSpenta = false, raccolta = false;
-        for (MailDatabase.Alias a : delDominio) {
-            if (a.active && a.source.equals(catchAll)) raccolta = true;
-            if (!a.source.equals(indirizzo)) continue;
-            if (a.destination.equals(indirizzo)) {
-                if (a.active) copia = true; else copiaSpenta = true;
+    /** La decisione di {@link #afterAliases(String, int)} senza database: la esercita tests/.../AliasMessagesTest. */
+    static String afterAliases(String address, boolean mailbox, List<MailDatabase.Alias> ofDomain) {
+        int at = address.indexOf('@');
+        String catchAll = at >= 0 ? address.substring(at) : null;
+        List<String> elsewhere = new ArrayList<>();
+        boolean copy = false, copyOff = false, collection = false;
+        for (MailDatabase.Alias a : ofDomain) {
+            if (a.active && a.source.equals(catchAll)) collection = true;
+            if (!a.source.equals(address)) continue;
+            if (a.destination.equals(address)) {
+                if (a.active) copy = true; else copyOff = true;
             } else if (a.active) {
-                altrove.add(a.destination);
+                elsewhere.add(a.destination);
             }
         }
         if (mailbox) {
-            if (copia || altrove.isEmpty()) return null;
-            return I18n.tr(copiaSpenta ? "server.alias.mailboxCopyOff" : "server.alias.mailboxNoCopy",
-                    Map.of("address", indirizzo, "targets", String.join(", ", altrove)));
+            if (copy || elsewhere.isEmpty()) return null;
+            return I18n.tr(copyOff ? "server.alias.mailboxCopyOff" : "server.alias.mailboxNoCopy",
+                    Map.of("address", address, "targets", String.join(", ", elsewhere)));
         }
-        if (copia || !altrove.isEmpty() || raccolta) return null;
-        return I18n.tr("server.alias.nowRejected", Map.of("address", indirizzo));
+        if (copy || !elsewhere.isEmpty() || collection) return null;
+        return I18n.tr("server.alias.nowRejected", Map.of("address", address));
     }
 
     /** Un indirizzo per un alias: i caratteri ammessi da isValidEmail e i limiti della RFC 5321 (254 in tutto, 64 prima della @). */
-    private static boolean indirizzoAliasValido(String email) {
+    private static boolean validAliasAddress(String email) {
         return email != null && email.length() <= 254 && SecurityUtils.isValidEmail(email) && email.indexOf('@') <= 64;
     }
 
@@ -1961,47 +1961,47 @@ public class SSLMailServer {
      * tabella a ogni messaggio, segue la nuova regola dal messaggio successivo. Disattivare
      * lascia la riga dov'e': Postfix considera solo gli alias con active=1.
      */
-    private JSONObject modificaAlias(JSONObject req, String ip) throws java.sql.SQLException {
+    private JSONObject editAlias(JSONObject req, String ip) throws java.sql.SQLException {
         JSONObject r = new JSONObject();
         int id = req.optInt("id", 0);
         MailDatabase.Alias alias = id > 0 ? Main.mailDatabase.getAliasById(id) : null;
         if (alias == null) return r.put("success", false).put("error", I18n.tr("server.aliasNotFound"));
 
-        boolean cambiaDestinazione = req.has("destination");
-        Object stato = req.opt("active");
-        if (!cambiaDestinazione && stato == null) return r.put("success", false).put("error", I18n.tr("server.alias.nothingToChange"));
-        if (stato != null && !(stato instanceof Boolean)) return r.put("success", false).put("error", I18n.tr("server.alias.badState"));
+        boolean changeDestination = req.has("destination");
+        Object state = req.opt("active");
+        if (!changeDestination && state == null) return r.put("success", false).put("error", I18n.tr("server.alias.nothingToChange"));
+        if (state != null && !(state instanceof Boolean)) return r.put("success", false).put("error", I18n.tr("server.alias.badState"));
 
-        String destinazione = cambiaDestinazione ? req.optString("destination", "").toLowerCase().trim() : alias.destination;
-        if (cambiaDestinazione && !indirizzoAliasValido(destinazione))
+        String destination = changeDestination ? req.optString("destination", "").toLowerCase().trim() : alias.destination;
+        if (changeDestination && !validAliasAddress(destination))
             return r.put("success", false).put("error", I18n.tr("server.badEmail"));
-        if (cambiaDestinazione && destinazione.equals(alias.source) && Main.mailDatabase.getMailboxByEmail(alias.source) == null)
-            return r.put("success", false).put("error", aliasSuSeStesso(alias.source));
+        if (changeDestination && destination.equals(alias.source) && Main.mailDatabase.getMailboxByEmail(alias.source) == null)
+            return r.put("success", false).put("error", aliasOnItself(alias.source));
 
-        boolean nuovaDestinazione = !destinazione.equals(alias.destination);
-        if (nuovaDestinazione) {
+        boolean newDestination = !destination.equals(alias.destination);
+        if (newDestination) {
             try {
-                if (!Main.mailDatabase.updateAliasDestination(id, destinazione))
+                if (!Main.mailDatabase.updateAliasDestination(id, destination))
                     return r.put("success", false).put("error", I18n.tr("server.aliasNotFound"));
             } catch (java.sql.SQLIntegrityConstraintViolationException dup) {
-                return r.put("success", false).put("error", I18n.tr("server.alias.exists", Map.of("source", alias.source, "target", destinazione)));
+                return r.put("success", false).put("error", I18n.tr("server.alias.exists", Map.of("source", alias.source, "target", destination)));
             }
-            logAudit("ALIAS_UPDATED", ip, alias.source + ": " + alias.destination + " -> " + destinazione);
+            logAudit("ALIAS_UPDATED", ip, alias.source + ": " + alias.destination + " -> " + destination);
         }
 
-        boolean attivo = stato == null ? alias.active : (Boolean) stato;
-        boolean nuovoStato = attivo != alias.active;
-        if (nuovoStato) {
-            if (!Main.mailDatabase.updateAliasStatus(id, attivo))
+        boolean active = state == null ? alias.active : (Boolean) state;
+        boolean newState = active != alias.active;
+        if (newState) {
+            if (!Main.mailDatabase.updateAliasStatus(id, active))
                 return r.put("success", false).put("error", I18n.tr("server.aliasNotFound"));
-            logAudit(attivo ? "ALIAS_ENABLED" : "ALIAS_DISABLED", ip, alias.source + " -> " + destinazione);
+            logAudit(active ? "ALIAS_ENABLED" : "ALIAS_DISABLED", ip, alias.source + " -> " + destination);
         }
-        if (!nuovaDestinazione && !nuovoStato) return r.put("success", true);
+        if (!newDestination && !newState) return r.put("success", true);
 
         regenerateMailConfigs();
-        String nota = dopoGliAlias(alias.source, alias.domainId);
-        if (nota != null)
-            r.put("nota", I18n.tr(nuovoStato ? (attivo ? "server.alias.reactivated" : "server.alias.deactivated") : "server.alias.modified") + " " + nota);
+        String note = afterAliases(alias.source, alias.domainId);
+        if (note != null)
+            r.put("note", I18n.tr(newState ? (active ? "server.alias.reactivated" : "server.alias.deactivated") : "server.alias.modified") + " " + note);
         return r.put("success", true);
     }
 
@@ -2017,15 +2017,15 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
-                    String trasforma = parametroQuery(exchange.getRequestURI().getRawQuery(), "trasforma");
-                    if (trasforma != null) {
+                    String transform = queryParameter(exchange.getRequestURI().getRawQuery(), "transform");
+                    if (transform != null) {
                         // Anteprima di "alias -> casella": cosa succede, o perche' non si puo'. Non cambia niente.
-                        String indirizzo = trasforma.trim().toLowerCase(java.util.Locale.ROOT);
-                        if (indirizzo.length() > 254) {
+                        String address = transform.trim().toLowerCase(java.util.Locale.ROOT);
+                        if (address.length() > 254) {
                             response.put("success", false).put("error", I18n.tr("server.badAddress"));
                         } else {
-                            response = org.mail_panel.system.AddressTransform.anteprimaACasella(
-                                    org.mail_panel.system.AddressTransform.stato(Main.mailDatabase, indirizzo),
+                            response = org.mail_panel.system.AddressTransform.previewToMailbox(
+                                    org.mail_panel.system.AddressTransform.state(Main.mailDatabase, address),
                                     java.time.ZoneId.systemDefault()).put("success", true);
                         }
                         break;
@@ -2057,22 +2057,22 @@ public class SSLMailServer {
                         return;
                     }
 
-                    if ("trasforma_in_casella".equals(req.optString("action", ""))) {
-                        response = aliasInCasella(req, getClientIp(exchange));
+                    if ("transform_to_mailbox".equals(req.optString("action", ""))) {
+                        response = aliasToMailbox(req, getClientIp(exchange));
                         break;
                     }
 
                     String source = req.optString("source", "").toLowerCase().trim();
                     String destination = req.optString("destination", "").toLowerCase().trim();
 
-                    if (!indirizzoAliasValido(source) || !indirizzoAliasValido(destination)) {
+                    if (!validAliasAddress(source) || !validAliasAddress(destination)) {
                         response.put("success", false);
                         response.put("error", I18n.tr("server.badEmail"));
                     } else if (source.equals(destination) && Main.mailDatabase.getMailboxByEmail(source) == null) {
                         // "casella -> se stessa" e' il modo di tenerne una copia quando la posta e'
                         // inoltrata altrove; su un indirizzo che non e' una casella non porta da nessuna parte.
                         response.put("success", false);
-                        response.put("error", aliasSuSeStesso(source));
+                        response.put("error", aliasOnItself(source));
                     } else {
                         String domainName = source.substring(source.indexOf("@") + 1);
                         MailDatabase.Domain domain = Main.mailDatabase.getDomainByName(domainName);
@@ -2094,8 +2094,8 @@ public class SSLMailServer {
                                 logAudit("ALIAS_CREATED", getClientIp(exchange), source + " -> " + destination);
                                 regenerateMailConfigs();
                                 // Se la sorgente e' anche una casella, da ora la sua posta va solo alle destinazioni.
-                                String nota = dopoGliAlias(source, domain.id);
-                                if (nota != null) response.put("nota", I18n.tr("server.alias.created") + " " + nota);
+                                String note = afterAliases(source, domain.id);
+                                if (note != null) response.put("note", I18n.tr("server.alias.created") + " " + note);
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.alias.alreadyExists"));
@@ -2115,7 +2115,7 @@ public class SSLMailServer {
                         sendCsrfError(exchange);
                         return;
                     }
-                    response = modificaAlias(req, getClientIp(exchange));
+                    response = editAlias(req, getClientIp(exchange));
                 }
                 case "DELETE" -> {
                     // Anche l'eliminazione cambia lo stato: stesso controllo CSRF della creazione.
@@ -2139,8 +2139,8 @@ public class SSLMailServer {
                             logAudit("ALIAS_DELETED", getClientIp(exchange),
                                     via != null ? via.source + " -> " + via.destination + " (ID " + id + ")" : "Alias ID: " + id);
                             regenerateMailConfigs();
-                            String nota = via != null ? dopoGliAlias(via.source, via.domainId) : null;
-                            if (nota != null) response.put("nota", I18n.tr("server.alias.deleted") + " " + nota);
+                            String note = via != null ? afterAliases(via.source, via.domainId) : null;
+                            if (note != null) response.put("note", I18n.tr("server.alias.deleted") + " " + note);
                         }
                     } else {
                         response.put("success", false);
@@ -2254,7 +2254,7 @@ public class SSLMailServer {
                     "service=" + service + (success ? "" : " (failed)"));
             // Dopo un riavvio "da riavviare" deve sparire subito, non fra trenta secondi. Senza
             // prendere il lock delle letture: una lettura in corso non deve trattenere questa risposta.
-            VERSIONI_AZIONI.incrementAndGet();
+            ACTION_VERSIONS.incrementAndGet();
 
             JSONObject response = new JSONObject();
             response.put("success", success);
@@ -2273,19 +2273,19 @@ public class SSLMailServer {
      * Ultima lettura delle versioni (SoftwareVersions), quando e' stata fatta e quante azioni sui
      * servizi c'erano state quando e' partita: un'azione arrivata dopo la rende vecchia.
      */
-    private static final Object VERSIONI_LOCK = new Object();
-    private static final java.util.concurrent.atomic.AtomicLong VERSIONI_AZIONI = new java.util.concurrent.atomic.AtomicLong();
-    private static JSONObject versioniLette;
-    private static long versioniLetteMs, versioniLetteAzioni;
+    private static final Object VERSIONS_LOCK = new Object();
+    private static final java.util.concurrent.atomic.AtomicLong ACTION_VERSIONS = new java.util.concurrent.atomic.AtomicLong();
+    private static JSONObject readVersions;
+    private static long readVersionsMs, readActionVersions;
 
     /**
      * Le versioni del software per la Home (colonna Versione di "Servizi Mail" e "Altro software").
      * Una lettura lancia una quindicina di comandi brevi: si tiene per trenta secondi, cosi' piu'
-     * schede aperte o ricaricate non li rilanciano ogni volta. "?fresco=1" (il pulsante Rileggi)
+     * schede aperte o ricaricate non li rilanciano ogni volta. "?fresh=1" (il pulsante Rileggi)
      * rilegge subito, ma non piu' di una volta ogni tre secondi; dopo un'azione su un servizio si
      * rilegge comunque. Le letture vanno una alla volta.
      */
-    private void handleApiVersioni(HttpExchange exchange) throws IOException {
+    private void handleApiVersions(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
             sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             return;
@@ -2294,26 +2294,26 @@ public class SSLMailServer {
             sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
             return;
         }
-        String fresco = parametroQuery(exchange.getRequestURI().getRawQuery(), "fresco");
-        if (fresco != null && !fresco.equals("1")) {
+        String fresh = queryParameter(exchange.getRequestURI().getRawQuery(), "fresh");
+        if (fresh != null && !fresh.equals("1")) {
             sendJsonError(exchange, 400, I18n.tr("server.badParameter"));
             return;
         }
         JSONObject r;
         try {
-            synchronized (VERSIONI_LOCK) {
-                long eta = System.currentTimeMillis() - versioniLetteMs;
-                long azioni = VERSIONI_AZIONI.get();
-                if (versioniLette == null || azioni != versioniLetteAzioni || eta > 30_000 || (fresco != null && eta > 3_000)) {
-                    versioniLette = org.mail_panel.system.SoftwareVersions.leggi(org.mail_panel.system.SoftwareVersions.reale(
-                            () -> Main.mysqlAvailable && Main.mailDatabase != null ? Main.mailDatabase.versioneServer() : null));
+            synchronized (VERSIONS_LOCK) {
+                long age = System.currentTimeMillis() - readVersionsMs;
+                long actions = ACTION_VERSIONS.get();
+                if (readVersions == null || actions != readActionVersions || age > 30_000 || (fresh != null && age > 3_000)) {
+                    readVersions = org.mail_panel.system.SoftwareVersions.read(org.mail_panel.system.SoftwareVersions.real(
+                            () -> Main.mysqlAvailable && Main.mailDatabase != null ? Main.mailDatabase.serverVersion() : null));
                     // Il ramo accanto alle versioni: quali versioni arrivano dipende da li'.
-                    JSONObject ramo = org.mail_panel.system.PkgBranch.stato(org.mail_panel.system.PkgBranch.reale());
-                    if (ramo.optBoolean("success")) versioniLette.put("branch", ramo.getString("branch"));
-                    versioniLetteMs = System.currentTimeMillis();
-                    versioniLetteAzioni = azioni;
+                    JSONObject branch = org.mail_panel.system.PkgBranch.state(org.mail_panel.system.PkgBranch.real());
+                    if (branch.optBoolean("success")) readVersions.put("branch", branch.getString("branch"));
+                    readVersionsMs = System.currentTimeMillis();
+                    readActionVersions = actions;
                 }
-                r = versioniLette;
+                r = readVersions;
             }
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Reading the software versions failed", e);
@@ -2332,12 +2332,12 @@ public class SSLMailServer {
     private static final java.util.regex.Pattern TIME_ZONE_VALUE =
             java.util.regex.Pattern.compile("[+-](0\\d|1[0-4]):[0-5]\\d|SYSTEM|[A-Za-z][A-Za-z0-9_+-]{0,30}(/[A-Za-z0-9_+-]{1,30}){0,2}");
 
-    private static JSONObject sulTurnoPacchetti(String description, java.util.function.Supplier<JSONObject> lavoro) {
-        String id = "installa-" + System.nanoTime();
-        String rifiuto = org.mail_panel.system.PackageQueue.prendi(id, description);
-        if (rifiuto != null) return new JSONObject().put("success", false).put("error", rifiuto).put("message", rifiuto);
-        try { return lavoro.get(); }
-        finally { org.mail_panel.system.PackageQueue.rilascia(id); }
+    private static JSONObject onPackageTurn(String description, java.util.function.Supplier<JSONObject> work) {
+        String id = "install-" + System.nanoTime();
+        String refusal = org.mail_panel.system.PackageQueue.take(id, description);
+        if (refusal != null) return new JSONObject().put("success", false).put("error", refusal).put("message", refusal);
+        try { return work.get(); }
+        finally { org.mail_panel.system.PackageQueue.release(id); }
     }
 
     private void handleApiInstall(HttpExchange exchange) throws IOException {
@@ -2381,7 +2381,7 @@ public class SSLMailServer {
             // Gli script dei componenti tolgono e rimettono pacchetti: aspettano il turno dei
             // lavori sui pacchetti. Il fuso orario no.
             final String script = scriptContent;
-            java.util.function.Supplier<JSONObject> installa = () -> {
+            java.util.function.Supplier<JSONObject> install = () -> {
                 JSONObject r = new JSONObject();
                 try {
                     String output = executeScript(script, component);
@@ -2395,8 +2395,8 @@ public class SSLMailServer {
                 }
                 return r;
             };
-            response = "timezone".equals(component) ? installa.get()
-                     : sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", component)), installa);
+            response = "timezone".equals(component) ? install.get()
+                     : onPackageTurn(I18n.tr("server.install.jobName", Map.of("component", component)), install);
         }
 
         sendJsonResponse(exchange, response);
@@ -2405,13 +2405,13 @@ public class SSLMailServer {
     // ============== HELPER METHODS ==============
 
     /** Un parametro della query (grezza), decodificato; null se non c'e'. */
-    static String parametroQuery(String rawQuery, String nome) {
+    static String queryParameter(String rawQuery, String name) {
         if (rawQuery == null) return null;
-        for (String coppia : rawQuery.split("&")) {
-            int uguale = coppia.indexOf('=');
-            if (uguale > 0 && coppia.substring(0, uguale).equals(nome)) {
+        for (String pair : rawQuery.split("&")) {
+            int same = pair.indexOf('=');
+            if (same > 0 && pair.substring(0, same).equals(name)) {
                 try {
-                    return java.net.URLDecoder.decode(coppia.substring(uguale + 1), StandardCharsets.UTF_8);
+                    return java.net.URLDecoder.decode(pair.substring(same + 1), StandardCharsets.UTF_8);
                 } catch (IllegalArgumentException e) {
                     return null;
                 }
@@ -2425,63 +2425,63 @@ public class SSLMailServer {
      * una transazione nel database, i filtri rimasti di una casella di prima riscritti vuoti.
      * Se qualcosa non riesce, non cambia niente.
      */
-    private JSONObject aliasInCasella(JSONObject req, String ip) throws Exception {
+    private JSONObject aliasToMailbox(JSONObject req, String ip) throws Exception {
         JSONObject r = new JSONObject();
-        String indirizzo = req.optString("source", "").trim().toLowerCase(java.util.Locale.ROOT);
-        if (indirizzo.length() > 254) return r.put("success", false).put("error", I18n.tr("server.badAddress"));
-        org.mail_panel.system.AddressTransform.Stato s = org.mail_panel.system.AddressTransform.stato(Main.mailDatabase, indirizzo);
-        String no = org.mail_panel.system.AddressTransform.motivoNoCasella(s);
+        String address = req.optString("source", "").trim().toLowerCase(java.util.Locale.ROOT);
+        if (address.length() > 254) return r.put("success", false).put("error", I18n.tr("server.badAddress"));
+        org.mail_panel.system.AddressTransform.AddressState s = org.mail_panel.system.AddressTransform.state(Main.mailDatabase, address);
+        String no = org.mail_panel.system.AddressTransform.noMailboxReason(s);
         if (no != null) return r.put("success", false).put("error", no);
         if (!org.mail_panel.system.AddressTransform.fingerprint(s).equals(req.optString("fingerprint", "")))
-            return r.put("success", false).put("cambiato", true).put("error",
+            return r.put("success", false).put("changed", true).put("error",
                     I18n.tr("server.convert.changedToMailbox"));
         String password = req.optString("password", "");
         if (!SecurityUtils.isValidMailboxPassword(password))
             return r.put("success", false).put("error", I18n.tr("server.mailbox.badPassword", Map.of("rule", SecurityUtils.passwordRule())));
-        String nome = req.optString("name", "").trim();
-        if (nome.length() > 100 || !org.mail_panel.system.AddressTransform.stampabile(nome))
+        String name = req.optString("name", "").trim();
+        if (name.length() > 100 || !org.mail_panel.system.AddressTransform.printable(name))
             return r.put("success", false).put("error", I18n.tr("server.convert.badName"));
         int quota = req.opt("quota_mb") instanceof Number n ? n.intValue() : 1024;
         if (quota < 0 || quota > 1_048_576) return r.put("success", false).put("error", I18n.tr("server.convert.badQuota"));
-        if (!(req.opt("tieni_inoltri") instanceof Boolean tieni))
+        if (!(req.opt("keep_forwards") instanceof Boolean keep))
             return r.put("success", false).put("error", I18n.tr("server.convert.keepMissing"));
-        String vecchia = req.optString("posta_vecchia", "");
-        boolean archivia = false;
-        if (s.posta().presente()) {
-            if (!vecchia.equals("ritrova") && !vecchia.equals("archivia"))
+        String old = req.optString("old_mail", "");
+        boolean archive = false;
+        if (s.mail().present()) {
+            if (!old.equals("recover") && !old.equals("archive"))
                 return r.put("success", false).put("error",
                         I18n.tr("server.convert.oldMailChoice"));
-            archivia = vecchia.equals("archivia");
+            archive = old.equals("archive");
         }
-        MailDatabase.Domain dominio = Main.mailDatabase.getDomainByName(indirizzo.substring(indirizzo.lastIndexOf('@') + 1));
-        if (dominio == null) return r.put("success", false).put("error", I18n.tr("server.convert.domainNotInPanel"));
+        MailDatabase.Domain domain = Main.mailDatabase.getDomainByName(address.substring(address.lastIndexOf('@') + 1));
+        if (domain == null) return r.put("success", false).put("error", I18n.tr("server.convert.domainNotInPanel"));
 
-        List<java.nio.file.Path[]> spostate = List.of();
-        if (archivia) {
+        List<java.nio.file.Path[]> moved = List.of();
+        if (archive) {
             try {
-                spostate = org.mail_panel.system.AddressTransform.archivia(indirizzo, System.currentTimeMillis());
+                moved = org.mail_panel.system.AddressTransform.archive(address, System.currentTimeMillis());
             } catch (IOException e) {
                 return r.put("success", false).put("error", I18n.tr("server.convert.archiveFailed", Map.of("error", String.valueOf(e.getMessage()))));
             }
         }
         int id;
         try {
-            id = Main.mailDatabase.trasformaAliasInCasella(dominio.id, indirizzo, password, nome, quota, tieni);
+            id = Main.mailDatabase.transformAliasToMailbox(domain.id, address, password, name, quota, keep);
         } catch (java.sql.SQLException e) {
-            org.mail_panel.system.AddressTransform.rimetti(spostate);
-            LOGGER.log(Level.WARNING, "Alias -> mailbox failed for " + indirizzo, e);
+            org.mail_panel.system.AddressTransform.restore(moved);
+            LOGGER.log(Level.WARNING, "Alias -> mailbox failed for " + address, e);
             return r.put("success", false).put("error", I18n.tr("server.convert.failed", Map.of("error", String.valueOf(e.getMessage()))));
         }
-        logAudit("ALIAS_TO_MAILBOX", ip, indirizzo + (tieni ? " (forwards kept, copy in the mailbox)" : " (aliases removed)")
-                + (archivia ? ", old mail set aside" : s.posta().presente() ? ", old mail found again" : ""));
+        logAudit("ALIAS_TO_MAILBOX", ip, address + (keep ? " (forwards kept, copy in the mailbox)" : " (aliases removed)")
+                + (archive ? ", old mail set aside" : s.mail().present() ? ", old mail found again" : ""));
         regenerateMailConfigs();
         // I filtri compilati di una casella di prima non devono valere per questa: si riscrivono, vuoti.
-        if (!archivia && s.posta().filtri() && sieveGenerator != null)
-            sieveGenerator.saveSieveScript(indirizzo, sieveGenerator.generateSieveScript(id, Main.mailDatabase));
-        StringBuilder msg = new StringBuilder(I18n.tr("server.convert.nowMailbox", Map.of("address", indirizzo)));
-        if (tieni) msg.append(' ').append(I18n.tr("server.convert.forwardsKept"));
-        if (!spostate.isEmpty()) msg.append(' ').append(I18n.tr("server.convert.oldMailIn", Map.of("path", String.valueOf(spostate.get(0)[1]))));
-        else if (s.posta().presente()) msg.append(' ').append(I18n.tr("server.convert.oldMailFound"));
+        if (!archive && s.mail().filters() && sieveGenerator != null)
+            sieveGenerator.saveSieveScript(address, sieveGenerator.generateSieveScript(id, Main.mailDatabase));
+        StringBuilder msg = new StringBuilder(I18n.tr("server.convert.nowMailbox", Map.of("address", address)));
+        if (keep) msg.append(' ').append(I18n.tr("server.convert.forwardsKept"));
+        if (!moved.isEmpty()) msg.append(' ').append(I18n.tr("server.convert.oldMailIn", Map.of("path", String.valueOf(moved.get(0)[1]))));
+        else if (s.mail().present()) msg.append(' ').append(I18n.tr("server.convert.oldMailFound"));
         return r.put("success", true).put("id", id).put("message", msg.toString());
     }
 
@@ -2490,36 +2490,36 @@ public class SSLMailServer {
      * controllate (valide, esistenti se sono tue, senza giri), una transazione nel database.
      * La posta gia' arrivata resta sul disco.
      */
-    private JSONObject casellaInAlias(JSONObject req, String ip) throws Exception {
+    private JSONObject mailboxToAlias(JSONObject req, String ip) throws Exception {
         JSONObject r = new JSONObject();
         int id = req.optInt("id", 0);
         MailDatabase.Mailbox m = id > 0 ? Main.mailDatabase.getMailbox(id) : null;
         if (m == null) return r.put("success", false).put("error", I18n.tr("server.mailbox.notFound"));
-        String indirizzo = m.email.toLowerCase(java.util.Locale.ROOT);
-        if (!indirizzo.equals(req.optString("conferma", "").trim().toLowerCase(java.util.Locale.ROOT)))
-            return r.put("success", false).put("error", I18n.tr("server.convert.typeAddress", Map.of("address", indirizzo)));
-        org.mail_panel.system.AddressTransform.Stato s = org.mail_panel.system.AddressTransform.stato(Main.mailDatabase, indirizzo);
+        String address = m.email.toLowerCase(java.util.Locale.ROOT);
+        if (!address.equals(req.optString("confirmation", "").trim().toLowerCase(java.util.Locale.ROOT)))
+            return r.put("success", false).put("error", I18n.tr("server.convert.typeAddress", Map.of("address", address)));
+        org.mail_panel.system.AddressTransform.AddressState s = org.mail_panel.system.AddressTransform.state(Main.mailDatabase, address);
         if (!org.mail_panel.system.AddressTransform.fingerprint(s).equals(req.optString("fingerprint", "")))
-            return r.put("success", false).put("cambiato", true).put("error",
+            return r.put("success", false).put("changed", true).put("error",
                     I18n.tr("server.convert.changedToAlias"));
-        List<String> destinazioni;
+        List<String> destinations;
         try {
-            destinazioni = org.mail_panel.system.AddressTransform.destinazioni(s, req.optJSONArray("destinazioni"),
-                    org.mail_panel.system.AddressTransform.rete(Main.mailDatabase));
+            destinations = org.mail_panel.system.AddressTransform.destinations(s, req.optJSONArray("destinations"),
+                    org.mail_panel.system.AddressTransform.network(Main.mailDatabase));
         } catch (IllegalArgumentException e) {
             return r.put("success", false).put("error", e.getMessage());
         }
         try {
-            Main.mailDatabase.trasformaCasellaInAlias(m.id, m.domainId, indirizzo, destinazioni);
+            Main.mailDatabase.transformMailboxToAlias(m.id, m.domainId, address, destinations);
         } catch (java.sql.SQLException e) {
-            LOGGER.log(Level.WARNING, "Mailbox -> alias failed for " + indirizzo, e);
+            LOGGER.log(Level.WARNING, "Mailbox -> alias failed for " + address, e);
             return r.put("success", false).put("error", I18n.tr("server.convert.failed", Map.of("error", String.valueOf(e.getMessage()))));
         }
-        logAudit("MAILBOX_TO_ALIAS", ip, indirizzo + " -> " + String.join(", ", destinazioni));
+        logAudit("MAILBOX_TO_ALIAS", ip, address + " -> " + String.join(", ", destinations));
         regenerateMailConfigs();
-        String msg = I18n.tr("server.convert.nowAlias", Map.of("address", indirizzo, "targets", String.join(", ", destinazioni)));
-        if (s.posta().presente())
-            msg += " " + I18n.tr("server.convert.mailStaysOnDisk", Map.of("path", String.valueOf(org.mail_panel.system.AddressTransform.cartellaPosta(indirizzo))));
+        String msg = I18n.tr("server.convert.nowAlias", Map.of("address", address, "targets", String.join(", ", destinations)));
+        if (s.mail().present())
+            msg += " " + I18n.tr("server.convert.mailStaysOnDisk", Map.of("path", String.valueOf(org.mail_panel.system.AddressTransform.mailFolder(address))));
         return r.put("success", true).put("message", msg);
     }
 
@@ -2552,7 +2552,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", serviceName, "status");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
 
@@ -2597,7 +2597,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("pkg", "info", "-e", packageName);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             boolean finished = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -2624,7 +2624,7 @@ public class SSLMailServer {
             }
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", "pkg info | grep -q '^" + pattern + "'");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             boolean finished = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -2726,7 +2726,7 @@ public class SSLMailServer {
             System.out.println("[EXEC] Running: service " + service + " " + action);
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", service, action);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
 
@@ -2769,7 +2769,7 @@ public class SSLMailServer {
 
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", scriptPath.toString());
-        org.mail_panel.util.Shell.applicaPath(pb);
+        org.mail_panel.util.Shell.applyPath(pb);
         pb.redirectErrorStream(true);
         Process process = pb.start();
 
@@ -2824,7 +2824,7 @@ public class SSLMailServer {
      * gestiti: se non e' uno di quelli, 404. Cosi' il valore che arriva da fuori non finisce
      * mai dentro il file: quello che si scrive e' sempre il nome preso dal database.
      */
-    private void handleAutoconfigPubblico(HttpExchange exchange) throws IOException {
+    private void handlePublicAutoconfig(HttpExchange exchange) throws IOException {
         try {
             String path = exchange.getRequestURI().getPath();
             if (!"/autoconfig/mail/config-v1.1.xml".equals(path)) {
@@ -2833,27 +2833,27 @@ public class SSLMailServer {
                 return;
             }
 
-            String indirizzo = parametro(exchange.getRequestURI().getRawQuery(), "emailaddress");
-            String candidato = org.mail_panel.system.Autoconfig.dominioDaIndirizzo(indirizzo);
-            if (candidato == null) {
+            String address = parameter(exchange.getRequestURI().getRawQuery(), "emailaddress");
+            String candidate = org.mail_panel.system.Autoconfig.domainFromAddress(address);
+            if (candidate == null) {
                 java.util.List<String> host = exchange.getRequestHeaders().get("Host");
-                if (host != null && !host.isEmpty()) candidato = host.get(0);
+                if (host != null && !host.isEmpty()) candidate = host.get(0);
             }
 
-            String dominio = org.mail_panel.system.Autoconfig.dominioGestito(candidato);
-            String hostPosta = org.mail_panel.system.Autoconfig.hostDiPosta();
-            if (dominio == null || hostPosta == null || hostPosta.isBlank()) {
+            String domain = org.mail_panel.system.Autoconfig.managedDomain(candidate);
+            String mailHost2 = org.mail_panel.system.Autoconfig.mailHost();
+            if (domain == null || mailHost2 == null || mailHost2.isBlank()) {
                 exchange.sendResponseHeaders(404, -1);
                 exchange.close();
                 return;
             }
 
-            byte[] dati = org.mail_panel.system.Autoconfig.xml(dominio, hostPosta)
+            byte[] data = org.mail_panel.system.Autoconfig.xml(domain, mailHost2)
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/xml; charset=UTF-8");
             exchange.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
-            exchange.sendResponseHeaders(200, dati.length);
-            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
+            exchange.sendResponseHeaders(200, data.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(data); }
         } catch (Exception e) {
             try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
         } finally {
@@ -2862,14 +2862,14 @@ public class SSLMailServer {
     }
 
     /** Un parametro dalla query, senza portarsi dietro una libreria per farlo. */
-    private static String parametro(String query, String nome) {
+    private static String parameter(String query, String name) {
         if (query == null || query.isEmpty()) return null;
-        for (String coppia : query.split("&")) {
-            int i = coppia.indexOf('=');
+        for (String pair : query.split("&")) {
+            int i = pair.indexOf('=');
             if (i <= 0) continue;
-            if (!java.net.URLDecoder.decode(coppia.substring(0, i),
-                    java.nio.charset.StandardCharsets.UTF_8).equals(nome)) continue;
-            return java.net.URLDecoder.decode(coppia.substring(i + 1),
+            if (!java.net.URLDecoder.decode(pair.substring(0, i),
+                    java.nio.charset.StandardCharsets.UTF_8).equals(name)) continue;
+            return java.net.URLDecoder.decode(pair.substring(i + 1),
                     java.nio.charset.StandardCharsets.UTF_8);
         }
         return null;
@@ -2880,28 +2880,28 @@ public class SSLMailServer {
      * dall'intestazione Host che nginx passa avanti, e viene confrontato con l'elenco dei
      * domini gestiti: se non e' uno di quelli, 404.
      */
-    private void handleMtaStsPubblico(HttpExchange exchange) throws IOException {
+    private void handlePublicMtaSts(HttpExchange exchange) throws IOException {
         try {
             if (!"/mta-sts/policy".equals(exchange.getRequestURI().getPath())) {
                 exchange.sendResponseHeaders(404, -1);
                 return;
             }
             java.util.List<String> host = exchange.getRequestHeaders().get("Host");
-            String dominio = org.mail_panel.system.MtaSts.dominioGestito(
+            String domain = org.mail_panel.system.MtaSts.managedDomain(
                     host == null || host.isEmpty() ? null : host.get(0));
-            String mail = org.mail_panel.system.MtaSts.hostDiPosta();
-            if (dominio == null || mail == null || mail.isBlank()) {
+            String mail = org.mail_panel.system.MtaSts.mailHost();
+            if (domain == null || mail == null || mail.isBlank()) {
                 exchange.sendResponseHeaders(404, -1);
                 return;
             }
-            String modo = org.mail_panel.system.MtaSts.modoCorrente();
-            byte[] dati = org.mail_panel.system.MtaSts
-                    .politica(mail, modo, org.mail_panel.system.MtaSts.maxAgeConsigliato(modo))
+            String mode = org.mail_panel.system.MtaSts.currentMode();
+            byte[] data = org.mail_panel.system.MtaSts
+                    .policy(mail, mode, org.mail_panel.system.MtaSts.recommendedMaxAge(mode))
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
             exchange.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
-            exchange.sendResponseHeaders(200, dati.length);
-            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
+            exchange.sendResponseHeaders(200, data.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(data); }
         } catch (Exception e) {
             try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
         } finally {
@@ -2921,14 +2921,14 @@ public class SSLMailServer {
 
         JSONObject response;
         switch (req.optString("action", "")) {
-            case "status" -> response = org.mail_panel.system.Autoconfig.stato();
-            case "preview" -> response = org.mail_panel.system.Autoconfig.anteprima();
+            case "status" -> response = org.mail_panel.system.Autoconfig.state();
+            case "preview" -> response = org.mail_panel.system.Autoconfig.preview();
             case "install" -> {
-                if (!"INSTALLA".equals(req.optString("confirm", ""))) {
+                if (!"INSTALL".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = org.mail_panel.system.Autoconfig.installa();
+                response = org.mail_panel.system.Autoconfig.install();
                 logAudit("AUTOCONFIG_INSTALL", ip, response.optBoolean("success")
                         ? "nginx configured" : "NOT configured: " + response.optString("error", "?"));
             }
@@ -2942,34 +2942,34 @@ public class SSLMailServer {
      * link che il browser scarica, ma richiede la sessione: il profilo contiene il nome di
      * una casella, e non ha motivo di essere pubblico. Non contiene la password.
      */
-    private void handleScaricaProfiloApple(HttpExchange exchange) throws IOException {
+    private void handleDownloadAppleProfile(HttpExchange exchange) throws IOException {
         try {
             if (!isAuthenticated(exchange)) {
                 exchange.sendResponseHeaders(401, -1);
                 return;
             }
-            String email = parametro(exchange.getRequestURI().getRawQuery(), "email");
+            String email = parameter(exchange.getRequestURI().getRawQuery(), "email");
             var mailbox = org.mail_panel.system.AppleProfile.mailbox(email);
-            String host = org.mail_panel.system.AppleProfile.hostDiPosta();
+            String host = org.mail_panel.system.AppleProfile.mailHost();
             if (mailbox == null || host == null || host.isBlank()) {
                 exchange.sendResponseHeaders(404, -1);
                 return;
             }
 
-            String profilo = org.mail_panel.system.AppleProfile
-                    .mobileconfig(mailbox.email(), mailbox.nome(), host, host);
-            if (!org.mail_panel.system.AppleProfile.benFormato(profilo)) {
+            String profile = org.mail_panel.system.AppleProfile
+                    .mobileconfig(mailbox.email(), mailbox.name(), host, host);
+            if (!org.mail_panel.system.AppleProfile.wellFormed(profile)) {
                 // Non si consegna un file rotto: Mail lo rifiuterebbe senza spiegare perche'.
                 exchange.sendResponseHeaders(500, -1);
                 return;
             }
-            byte[] dati = profilo.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            String nome = org.mail_panel.system.AppleProfile.nomeFile(mailbox.email());
+            byte[] data = profile.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            String name = org.mail_panel.system.AppleProfile.fileName(mailbox.email());
             exchange.getResponseHeaders().set("Content-Type", "application/x-apple-aspen-config");
-            exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + nome + "\"");
-            exchange.sendResponseHeaders(200, dati.length);
-            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(dati); }
-            logAudit("PROFILO_APPLE", getClientIp(exchange), "downloaded for " + mailbox.email());
+            exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + name + "\"");
+            exchange.sendResponseHeaders(200, data.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(data); }
+            logAudit("APPLE_PROFILE", getClientIp(exchange), "downloaded for " + mailbox.email());
         } catch (Exception e) {
             try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
         } finally {
@@ -2977,7 +2977,7 @@ public class SSLMailServer {
         }
     }
 
-    private void handleApiProfiloApple(HttpExchange exchange) throws IOException {
+    private void handleApiAppleProfile(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
         if (!"POST".equals(exchange.getRequestMethod())) { sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed")); return; }
         String body = readRequestBodyWithLimit(exchange);
@@ -2987,50 +2987,50 @@ public class SSLMailServer {
         catch (Exception e) { sendJsonError(exchange, 400, I18n.tr("server.badJson")); return; }
 
         JSONObject response = switch (req.optString("action", "")) {
-            case "status" -> org.mail_panel.system.AppleProfile.stato();
-            case "preview" -> org.mail_panel.system.AppleProfile.anteprima(req.optString("email", ""));
+            case "status" -> org.mail_panel.system.AppleProfile.state();
+            case "preview" -> org.mail_panel.system.AppleProfile.preview(req.optString("email", ""));
             default -> new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
         };
         sendJsonResponse(exchange, response);
     }
 
-    private void handleStatico(HttpExchange exchange) throws IOException {
+    private void handleStatic(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
-        String risorsa = null;
+        String resource = null;
         if (path.startsWith("/fa/")) {
             String rel = path.substring(4);                        // css/... oppure webfonts/...
-            if (rel.matches("(css|webfonts)/[A-Za-z0-9._-]{1,64}")) risorsa = "/fa/" + rel;
+            if (rel.matches("(css|webfonts)/[A-Za-z0-9._-]{1,64}")) resource = "/fa/" + rel;
         } else if (path.startsWith("/vendor/")) {
             String rel = path.substring(8);                        // un solo livello, nessuna cartella
-            if (rel.matches("[A-Za-z0-9._-]{1,64}")) risorsa = "/vendor/" + rel;
+            if (rel.matches("[A-Za-z0-9._-]{1,64}")) resource = "/vendor/" + rel;
         }
-        if (risorsa == null) {
+        if (resource == null) {
             exchange.sendResponseHeaders(404, -1);
             exchange.close();
             return;
         }
-        String tipo = risorsa.endsWith(".css") ? "text/css; charset=UTF-8"
-                    : risorsa.endsWith(".js") ? "application/javascript; charset=UTF-8"
-                    : risorsa.endsWith(".woff2") ? "font/woff2"
-                    : risorsa.endsWith(".woff") ? "font/woff"
-                    : risorsa.endsWith(".ttf") ? "font/ttf"
+        String type = resource.endsWith(".css") ? "text/css; charset=UTF-8"
+                    : resource.endsWith(".js") ? "application/javascript; charset=UTF-8"
+                    : resource.endsWith(".woff2") ? "font/woff2"
+                    : resource.endsWith(".woff") ? "font/woff"
+                    : resource.endsWith(".ttf") ? "font/ttf"
                     : "application/octet-stream";
-        byte[] dati;
-        try (java.io.InputStream in = getClass().getResourceAsStream(risorsa)) {
+        byte[] data;
+        try (java.io.InputStream in = getClass().getResourceAsStream(resource)) {
             if (in == null) {
                 exchange.sendResponseHeaders(404, -1);
                 exchange.close();
                 return;
             }
-            dati = in.readAllBytes();
+            data = in.readAllBytes();
         }
-        exchange.getResponseHeaders().add("Content-Type", tipo);
+        exchange.getResponseHeaders().add("Content-Type", type);
         exchange.getResponseHeaders().add("X-Content-Type-Options", "nosniff");
         // Il contenuto cambia solo quando cambia il jar: si puo' tenere in cache a lungo.
         exchange.getResponseHeaders().add("Cache-Control", "public, max-age=604800");
-        exchange.sendResponseHeaders(200, dati.length);
+        exchange.sendResponseHeaders(200, data.length);
         try (OutputStream os = exchange.getResponseBody()) {
-            os.write(dati);
+            os.write(data);
         }
     }
 
@@ -3357,8 +3357,8 @@ public class SSLMailServer {
                         // Lo scheduler vive dentro questo server web: se il pannello non
                         // riparte da solo dopo un riavvio, i passi 3 e 4 restano fermi. La
                         // scheda deve poterlo DIRE, non lasciarlo scoprire.
-                        response.put("avvio_automatico",
-                            UpdateManager.autoStart().optBoolean("attivo", false));
+                        response.put("auto_start",
+                            UpdateManager.autoStart().optBoolean("active", false));
                         putTs(response, "started_at", info.startedAt);
                         if (info.activatedAt != null) {
                             putTs(response, "activated_at", info.activatedAt);
@@ -3488,7 +3488,7 @@ public class SSLMailServer {
                                 if (ri.pendingSelector != null)
                                     response.put("rotation_pending_selector", ri.pendingSelector);
                             }
-                        } catch (Exception ignora) {
+                        } catch (Exception ignore) {
                             // Nessuno stato: il riquadro torna a dire la cosa prudente.
                         }
                         response.put("auto_activate_after_hours", org.mail_panel.security.DkimRotationScheduler.AUTO_ACTIVATE_AFTER_HOURS);
@@ -3501,14 +3501,14 @@ public class SSLMailServer {
                         // lo schedule resta inattivo" — proprio sotto al riquadro che diceva
                         // "account collegato: Pietro". Un dato che si legge dall'aria dipende
                         // dall'ordine di due richieste, e prima o poi quell'ordine cambia.
-                        response.put("avvio_automatico",
-                            UpdateManager.autoStart().optBoolean("attivo", false));
+                        response.put("auto_start",
+                            UpdateManager.autoStart().optBoolean("active", false));
                         try {
                             response.put("cloudflare_configured",
                                 dkimManager.getRotationInfo(domainId) != null
                                 && Main.mailDatabase.getDomain(domainId) != null
                                 && Main.mailDatabase.getDomain(domainId).cloudflareAccountId > 0);
-                        } catch (Exception ignora) { }
+                        } catch (Exception ignore) { }
                         // Preset consigliati (per la UI)
                         JSONArray presets = new JSONArray();
                         presets.put(new JSONObject().put("days", 0).put("label", I18n.tr("server.dkim.preset.off")));
@@ -3559,11 +3559,11 @@ public class SSLMailServer {
                         response.put("events", arr);
                     }
 
-                } else if ("riepilogo_domini".equals(action)) {
+                } else if ("domains_summary".equals(action)) {
                     // Interroga il DNS una volta per dominio: e' lento come una verifica
                     // singola moltiplicata per il numero di domini, ed e' il prezzo di una
                     // risposta vera invece di una lettura del database.
-                    response = dkimManager.riepilogoTuttiIDomini();
+                    response = dkimManager.allDomainsSummary();
 
                 } else if ("verify_active_dns".equals(action)) {
                     int domainId = req.optInt("domain_id", 0);
@@ -3642,7 +3642,7 @@ public class SSLMailServer {
                         recordJson.put("description", record.description);
                         recordJson.put("required", record.required);
                         if (record.checkType != null) recordJson.put("checkType", record.checkType);
-                        if (record.valoreCompleto != null) recordJson.put("valoreCompleto", record.valoreCompleto);
+                        if (record.fullValue != null) recordJson.put("fullValue", record.fullValue);
                         if (record.dnsZone != null) {
                             recordJson.put("dnsZone", record.dnsZone);
                         }
@@ -3679,7 +3679,7 @@ public class SSLMailServer {
                         checkJson.put("type", check.recordType);
                         checkJson.put("name", check.recordName);
                         checkJson.put("passed", check.passed);
-                        checkJson.put("informativo", check.informativo);
+                        checkJson.put("informational", check.informational);
                         checkJson.put("message", check.message);
                         if (check.currentValue != null) {
                             checkJson.put("current_value", check.currentValue);
@@ -4313,13 +4313,13 @@ public class SSLMailServer {
                             response.put("error", I18n.tr("server.acme.emailRequired"));
                         } else {
                             // installAcme fa "pkg install curl socat": aspetta il turno dei lavori sui pacchetti.
-                            JSONObject esito = sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", "acme.sh")), () -> {
+                            JSONObject outcome = onPackageTurn(I18n.tr("server.install.jobName", Map.of("component", "acme.sh")), () -> {
                                 AcmeManager.InstallResult result = acmeManager.installAcme(email);
                                 JSONObject r = new JSONObject().put("success", result.success).put("message", result.message);
                                 if (result.output != null) r.put("output", result.output);
                                 return r;
                             });
-                            for (String k : esito.keySet()) response.put(k, esito.get(k));
+                            for (String k : outcome.keySet()) response.put(k, outcome.get(k));
                         }
                     }
                     case "issue" -> {
@@ -4609,7 +4609,7 @@ public class SSLMailServer {
                         JSONObject logJson = new JSONObject();
                         logJson.put("id", logFile.id);
                         logJson.put("path", logFile.path);
-                        logJson.put("description", logFile.description);
+                        logJson.put("description", org.mail_panel.i18n.I18n.tr(logFile.description));
                         logJson.put("type", logFile.type.toString());
                         logJson.put("exists", logFile.exists);
                         logsArray.put(logJson);
@@ -5122,10 +5122,10 @@ public class SSLMailServer {
                         jailJson.put("total_banned", jail.totalBanned);
                         jailJson.put("currently_failed", jail.currentlyFailed);
                         jailJson.put("total_failed", jail.totalFailed);
-                        jailJson.put("porte", jail.porte);
-                        jailJson.put("porta_dichiarata", jail.portaDichiarata);
-                        jailJson.put("ban_usa_la_porta", jail.banUsaLaPorta);
-                        jailJson.put("comando_ban", jail.comandoBan);
+                        jailJson.put("ports", jail.ports);
+                        jailJson.put("declared_port", jail.declaredPort);
+                        jailJson.put("ban_uses_port", jail.banUsesPort);
+                        jailJson.put("ban_command", jail.banCommand);
                         if (jail.logFile != null) jailJson.put("log", jail.logFile);
 
                         JSONArray bannedIps = new JSONArray();
@@ -5240,13 +5240,13 @@ public class SSLMailServer {
 
                 } else if ("permaban_list".equals(action)) {
                     // Get permaban list (read-only, GET-friendly)
-                    java.util.List<String> fileList = fail2banManager.listPermabans();
-                    java.util.Set<String> runtimeSet = fail2banManager.listPermabanRuntime();
+                    java.util.List<String> fileList = fail2banManager.listPermanentBans();
+                    java.util.Set<String> runtimeSet = fail2banManager.listPermanentBanRuntime();
                     JSONArray arr = new JSONArray();
                     for (String ip : fileList) {
                         arr.put(new JSONObject()
                             .put("ip", ip)
-                            .put("in_runtime", runtimeSet.contains(ip)));
+                            .put("at_runtime", runtimeSet.contains(ip)));
                     }
                     response.put("success", true);
                     response.put("permabans", arr);
@@ -5300,42 +5300,42 @@ public class SSLMailServer {
                     // Legge e basta: fa girare fail2ban-regex sul log della jail e dice se il
                     // filtro aggancia qualcosa. Serve a distinguere "nessuno ha attaccato" da
                     // "la jail non vede niente", che a schermo sono lo stesso zero.
-                    case "verifica_filtro" -> {
+                    case "verify_filter" -> {
                         String jail = json.optString("jail", "");
-                        Fail2banManager.FiltroCheck c = fail2banManager.verificaFiltro(jail);
+                        Fail2banManager.FilterCheck c = fail2banManager.verifyFilter(jail);
                         response.put("success", true)
                                 .put("jail", c.jail).put("log", c.log)
-                                .put("verificato", c.verificato).put("agganci", c.agganci)
-                                .put("righe_log", c.righeLog).put("messaggio", c.messaggio)
+                                .put("verified", c.verified).put("hooks", c.hooks)
+                                .put("log_lines", c.logLines2).put("messageText", c.message)
                                 .put("output", c.output);
                     }
                     // Legge e basta: mette a confronto gli indirizzi che Fail2ban crede
                     // bannati con quelli che pf blocca davvero. "Currently banned" dice che il
                     // comando di ban e' stato eseguito, non che l'indirizzo sia bloccato.
-                    case "confronto_pf" -> {
-                        Fail2banManager.ConfrontoPf c = fail2banManager.confrontaBanConPf();
+                    case "pf_comparison" -> {
+                        Fail2banManager.PfComparison c = fail2banManager.compareBansWithPf();
                         JSONArray jj = new JSONArray();
                         for (Fail2banManager.JailPf j : c.jails) {
                             jj.put(new JSONObject()
-                                .put("jail", j.jail).put("ancora", j.ancora).put("tabella", j.tabella)
-                                .put("letta", j.letta).put("tabella_mancante", j.tabellaMancante)
-                                .put("regola_presente", j.regolaPresente)
-                                .put("nota", j.nota)
-                                .put("creduti_bannati", new JSONArray(j.credutiBannati))
-                                .put("nel_firewall", new JSONArray(j.nelFirewall))
-                                .put("solo_in_fail2ban", new JSONArray(j.soloInFail2ban))
-                                .put("solo_in_pf", new JSONArray(j.soloInPf))
-                                .put("comandi_ban", new JSONArray(j.comandiBan))
-                                .put("uscita_azioni", j.uscitaAzioni)
+                                .put("jail", j.jail).put("anchor", j.anchor).put("table", j.table)
+                                .put("read", j.read).put("missing_table", j.missingTable)
+                                .put("rule_present", j.rulePresent)
+                                .put("note", j.note)
+                                .put("believed_banned", new JSONArray(j.believedBanned))
+                                .put("in_firewall", new JSONArray(j.inFirewall))
+                                .put("only_in_fail2ban", new JSONArray(j.onlyInFail2ban))
+                                .put("only_in_pf", new JSONArray(j.onlyInPf))
+                                .put("ban_commands", new JSONArray(j.banCommands))
+                                .put("actions_output", j.actionsOutput)
                                 .put("log", j.logFail2ban)
-                                .put("sezioni", j.sezioni)
+                                .put("sections", j.sections)
                                 .put("dump", j.dump));
                         }
                         response.put("success", true).put("jails", jj)
-                                .put("non_applicati", c.totaleNonApplicati())
-                                .put("non_misurate", c.totaleNonMisurate())
-                                .put("ban_non_verificati", c.banNonVerificati())
-                                .put("senza_regola", c.totaleSenzaRegola());
+                                .put("not_applied", c.totalNotApplied())
+                                .put("unmeasured", c.totalUnmeasured())
+                                .put("unverified_bans", c.unverifiedBans())
+                                .put("without_rule", c.totalWithoutRule());
                     }
                     case "ban" -> {
                         String ip = json.getString("ip");
@@ -5476,7 +5476,7 @@ public class SSLMailServer {
                             break;
                         }
                         try {
-                            boolean added = fail2banManager.addPermaban(ip);
+                            boolean added = fail2banManager.addPermanentBan(ip);
                             response.put("success", true);
                             response.put("added", added);
                             response.put("message", I18n.tr(added ? "server.f2b.permabanAdded" : "server.f2b.permabanPresent"));
@@ -5497,7 +5497,7 @@ public class SSLMailServer {
                             break;
                         }
                         try {
-                            boolean removed = fail2banManager.removePermaban(ip);
+                            boolean removed = fail2banManager.removePermanentBan(ip);
                             response.put("success", true);
                             response.put("removed", removed);
                             response.put("message", I18n.tr(removed ? "server.f2b.permabanRemoved" : "server.f2b.permabanAbsent"));
@@ -5509,13 +5509,13 @@ public class SSLMailServer {
                         }
                     }
                     case "permaban_list" -> {
-                        java.util.List<String> fileList = fail2banManager.listPermabans();
-                        java.util.Set<String> runtimeSet = fail2banManager.listPermabanRuntime();
+                        java.util.List<String> fileList = fail2banManager.listPermanentBans();
+                        java.util.Set<String> runtimeSet = fail2banManager.listPermanentBanRuntime();
                         JSONArray arr = new JSONArray();
                         for (String ip : fileList) {
                             arr.put(new JSONObject()
                                 .put("ip", ip)
-                                .put("in_runtime", runtimeSet.contains(ip)));
+                                .put("at_runtime", runtimeSet.contains(ip)));
                         }
                         response.put("success", true);
                         response.put("permabans", arr);
@@ -5523,7 +5523,7 @@ public class SSLMailServer {
                         response.put("runtime_count", runtimeSet.size());
                     }
                     case "permaban_reload" -> {
-                        boolean ok = fail2banManager.reloadPermabanFromFile();
+                        boolean ok = fail2banManager.reloadPermanentBanFromFile();
                         response.put("success", ok);
                         response.put("message", ok
                             ? I18n.tr("server.f2b.permabanReloaded")
@@ -6055,7 +6055,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "unbound");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -6210,7 +6210,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/bin/sockstat", "-l", "-4", "-6");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()));
@@ -6277,7 +6277,7 @@ public class SSLMailServer {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1",
                 "A", "2.0.0.127.zen.spamhaus.org");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6300,7 +6300,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1", "A", "freebsd.org");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             // NIENTE redirectErrorStream: stderr di dig (es. "communications error") va separato
             // così non lo confondiamo con una risposta valida.
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
@@ -6328,15 +6328,15 @@ public class SSLMailServer {
     }
 
     private JSONObject installUnbound() {
-        return sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", "unbound")), this::eseguiInstallUnbound);
+        return onPackageTurn(I18n.tr("server.install.jobName", Map.of("component", "unbound")), this::runInstallUnbound);
     }
 
-    private JSONObject eseguiInstallUnbound() {
+    private JSONObject runInstallUnbound() {
         JSONObject r = new JSONObject();
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "unbound");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6372,7 +6372,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/local/sbin/unbound-checkconf", UNBOUND_CONF_PATH);
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6431,7 +6431,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", "+short", "+time=3", "+tries=2", "A", "freebsd.org");
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -6527,7 +6527,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pbGet = new ProcessBuilder("/usr/sbin/sysrc", "-n", "local_unbound_forwarders");
-                org.mail_panel.util.Shell.applicaPath(pbGet);
+                org.mail_panel.util.Shell.applyPath(pbGet);
                 pbGet.redirectErrorStream(true);
                 Process pg = pbGet.start();
                 String currentVal = new String(pg.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -6535,7 +6535,7 @@ public class SSLMailServer {
                 if (!currentVal.isEmpty()) {
                     // TODO: migrate to Shell.run when touched
                     ProcessBuilder pbDel = new ProcessBuilder("/usr/sbin/sysrc", "-x", "local_unbound_forwarders");
-                    org.mail_panel.util.Shell.applicaPath(pbDel);
+                    org.mail_panel.util.Shell.applyPath(pbDel);
                     pbDel.redirectErrorStream(true);
                     Process pd = pbDel.start();
                     pd.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -6579,7 +6579,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pbGet = new ProcessBuilder("/usr/sbin/sysrc", "-n", "resolvconf_enable");
-                org.mail_panel.util.Shell.applicaPath(pbGet);
+                org.mail_panel.util.Shell.applyPath(pbGet);
                 pbGet.redirectErrorStream(true);
                 Process pg = pbGet.start();
                 String currentVal = new String(pg.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -6587,7 +6587,7 @@ public class SSLMailServer {
                 if (currentVal.equalsIgnoreCase("YES")) {
                     // TODO: migrate to Shell.run when touched
                     ProcessBuilder pbSet = new ProcessBuilder("/usr/sbin/sysrc", "resolvconf_enable=NO");
-                    org.mail_panel.util.Shell.applicaPath(pbSet);
+                    org.mail_panel.util.Shell.applyPath(pbSet);
                     pbSet.redirectErrorStream(true);
                     Process ps = pbSet.start();
                     ps.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -6673,7 +6673,7 @@ public class SSLMailServer {
             // 7) RESTART (non reload) — il reload non ricarica forward.conf se l'include e' cambiato
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "local_unbound", "restart");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String reloadOut = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -6740,7 +6740,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "A", "2.0.0.127.zen.spamhaus.org");
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 dnsblOut = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -6781,7 +6781,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "unbound");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -7018,7 +7018,7 @@ public class SSLMailServer {
                 case "dovecot_config_regen" -> {
                     // Riscrive la sola configurazione, senza toccare i pacchetti. La conferma
                     // scritta a mano c'e' perche' l'operazione ricarica un servizio vivo.
-                    if (!"RIGENERA".equals(req.optString("confirm", ""))) {
+                    if (!"REGENERATE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7026,8 +7026,8 @@ public class SSLMailServer {
                     logAudit("DOVECOT_CONFIG_REGEN", ip, response.optString("jobId", ""));
                 }
                 case "maintenance_preview" -> {
-                    String adesso = org.mail_panel.system.PackageQueue.pianoNonAdesso();
-                    response = adesso != null ? new JSONObject().put("success", false).put("error", adesso)
+                    String now = org.mail_panel.system.PackageQueue.planNotNow();
+                    response = now != null ? new JSONObject().put("success", false).put("error", now)
                              : UpdateManager.maintenancePreview();
                 }
                 case "plan" -> response = UpdateManager.maintenancePlan();
@@ -7036,17 +7036,17 @@ public class SSLMailServer {
                 case "mysql_client_diag" -> response = UpdateManager.mysqlClientDiagnostics();
                 case "defaults_check" -> response = UpdateManager.defaultsConsistency();
                 case "branch_status" -> response = UpdateManager.branchStatus();
-                case "branch_preview" -> response = UpdateManager.branchPreview(req.optString("verso", ""));
+                case "branch_preview" -> response = UpdateManager.branchPreview(req.optString("destination", ""));
                 case "branch_change" -> {
                     // La conferma e' il nome del ramo scritto a mano, e l'fingerprint e' quella
                     // dell'anteprima: si cambia solo cio' che si e' visto.
-                    String verso = req.optString("verso", "");
-                    if (verso.isEmpty() || !verso.equals(req.optString("confirm", ""))) {
+                    String target = req.optString("destination", "");
+                    if (target.isEmpty() || !target.equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.updates.typeBranch"));
                         break;
                     }
-                    response = UpdateManager.startBranchChange(verso, req.optString("fingerprint", ""));
-                    logAudit("PKG_BRANCH_CHANGE", ip, "to " + verso + (response.optBoolean("success")
+                    response = UpdateManager.startBranchChange(target, req.optString("fingerprint", ""));
+                    logAudit("PKG_BRANCH_CHANGE", ip, "to " + target + (response.optBoolean("success")
                             ? " (started, job " + response.optString("jobId") + ")" : " (not started: " + response.optString("error") + ")"));
                 }
                 case "system_report" -> response = UpdateManager.systemReport();
@@ -7057,19 +7057,19 @@ public class SSLMailServer {
                     logAudit("SERVER_REBOOT_CANCEL", ip, response.optString("pid", ""));
                 }
                 case "reboot_now" -> {
-                    if (!"RIAVVIA IL SERVER".equals(req.optString("confirm", ""))) {
+                    if (!"REBOOT THE SERVER".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     logAudit("SERVER_REBOOT", ip, "requested from the panel");
-                    response = UpdateManager.restartServer(true, req.optInt("minuti", 1));
+                    response = UpdateManager.restartServer(true, req.optInt("minutes", 1));
                 }
-                case "rc_stato" -> response = UpdateManager.autoStart();
-                case "riepilogo_sistema" -> response = UpdateManager.systemSummary();
-                case "cf_intervalli" -> response = UpdateManager.cloudflareRanges();
+                case "rc_state" -> response = UpdateManager.autoStart();
+                case "system_summary" -> response = UpdateManager.systemSummary();
+                case "cf_intervals" -> response = UpdateManager.cloudflareRanges();
                 case "rc_remove_preview" -> response = UpdateManager.removePanelRcScript(false);
                 case "rc_remove" -> {
-                    if (!"RIMUOVI RC".equals(req.optString("confirm", ""))) {
+                    if (!"REMOVE RC".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7079,12 +7079,12 @@ public class SSLMailServer {
                 }
                 case "rc_preview" -> response = UpdateManager.panelRcScript(false);
                 case "rc_install" -> {
-                    if (!"INSTALLA RC".equals(req.optString("confirm", ""))) {
+                    if (!"INSTALL RC".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.panelRcScript(true);
-                    logAudit("RC_SCRIPT_INSTALL", ip, response.optString("percorso", ""));
+                    logAudit("RC_SCRIPT_INSTALL", ip, response.optString("path", ""));
                 }
                 case "os_upgrade_targets" -> response = UpdateManager.targetVersions();
                 case "os_upgrade_preflight" -> response = UpdateManager.systemUpgradePreflight(
@@ -7092,109 +7092,109 @@ public class SSLMailServer {
                 case "os_upgrade_instructions" -> response = UpdateManager.systemUpgradeInstructions(
                         req.optString("target", "15.1"));
                 case "os_upgrade_verify" -> response = UpdateManager.verifyAfterUpdate();
-                case "salto_stato" -> response = UpdateManager.versionJumpStatus();
+                case "jump_state" -> response = UpdateManager.versionJumpStatus();
                 case "be_list" -> response = UpdateManager.bootEnvironments();
-                case "ssl_uso" -> response = UpdateManager.opensslUsage();
+                case "ssl_usage" -> response = UpdateManager.opensslUsage();
                 case "removal_candidates" -> response = UpdateManager.removalCandidates();
-                case "panel_uses" -> response = UpdateManager.panelUsage(req.optString("nome", ""));
-                case "deep_scan" -> response = UpdateManager.deepAnalysis(req.optString("nome", ""));
+                case "panel_uses" -> response = UpdateManager.panelUsage(req.optString("name", ""));
+                case "deep_scan" -> response = UpdateManager.deepAnalysis(req.optString("name", ""));
                 case "panel_env" -> response = UpdateManager.panelBootEnvironment();
                 case "dovecot24_preview" -> response = UpdateManager.dovecot24Preview();
                 case "rspamd_timeout" -> response = UpdateManager.rspamdTimeoutDiagnostics();
-                case "web_diagnosi" -> response = org.mail_panel.system.WebDiagnostics.stato();
-                case "web443_status" -> response = org.mail_panel.system.WebProtection.stato();
+                case "web_diagnosis" -> response = org.mail_panel.system.WebDiagnostics.state();
+                case "web443_status" -> response = org.mail_panel.system.WebProtection.state();
                 case "web443_config" -> response = new JSONObject().put("success", true)
-                        .put("configurazione", org.mail_panel.system.WebProtection.configurazione(
+                        .put("configuration", org.mail_panel.system.WebProtection.configuration(
                                 "/usr/local/etc/ssl/mail/fullchain.pem",
                                 "/usr/local/etc/ssl/mail/privkey.pem"))
-                        .put("filtro", org.mail_panel.system.WebProtection.filtro())
+                        .put("filter", org.mail_panel.system.WebProtection.filter())
                         .put("jail", org.mail_panel.system.WebProtection.jail());
-                case "mtasts_piano" -> response = org.mail_panel.system.MtaStsSetup.piano();
-                case "mtasts_attiva" -> {
-                    if (!"ATTIVA".equals(req.optString("confirm", ""))) {
+                case "mtasts_plan" -> response = org.mail_panel.system.MtaStsSetup.plan();
+                case "mtasts_enable" -> {
+                    if (!"ENABLE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.startMtaStsActivation();
-                    logAudit("MTASTS_ATTIVA", ip, "started as job " + response.optString("jobId", ""));
+                    logAudit("MTASTS_ENABLE", ip, "started as job " + response.optString("jobId", ""));
                 }
                 case "web443_include" -> {
-                    if (!"AGGIUNGI".equals(req.optString("confirm", ""))) {
+                    if (!"ADD".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = org.mail_panel.system.WebProtection.aggiungiInclude();
+                    response = org.mail_panel.system.WebProtection.addInclude();
                     logAudit("NGINX_INCLUDE", ip, response.optBoolean("success")
                             ? "include added" : "NOT added: " + response.optString("error", "?"));
                 }
                 case "web443_install" -> {
-                    if (!"APRI".equals(req.optString("confirm", ""))) {
+                    if (!"OPEN".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = org.mail_panel.system.WebProtection.installa("", "");
+                    response = org.mail_panel.system.WebProtection.install("", "");
                     logAudit("WEB443_INSTALL", ip, response.optBoolean("success")
                             ? "443 open with minimal surface" : "NOT open: " + response.optString("error", "?"));
                 }
                 case "web443_jail" -> {
-                    if (!"ATTIVA".equals(req.optString("confirm", ""))) {
+                    if (!"ENABLE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = org.mail_panel.system.WebProtection.installaJail();
+                    response = org.mail_panel.system.WebProtection.installJail();
                     logAudit("WEB443_JAIL", ip, response.optBoolean("success")
                             ? "jail active" : "NOT active: " + response.optString("error", "?"));
                 }
-                case "sorveglianza" -> response = org.mail_panel.system.StandardsWatch.controlla();
-                case "sorveglianza_cambi" -> response = org.mail_panel.system.StandardsWatch.cosaECambiato(
+                case "watch" -> response = org.mail_panel.system.StandardsWatch.check();
+                case "watch_changes" -> response = org.mail_panel.system.StandardsWatch.whatChanged(
                         req.optString("rfc", ""),
                         // Per un aggiornamento il documento nuovo e la specifica del pannello
                         // sono due numeri diversi: gli identificatori da incrociare sono quelli
                         // della specifica, non del documento che la aggiorna.
-                        req.optString("riferimento", req.optString("rfc", "")));
-                case "openssl_scadenza" -> response = org.mail_panel.system.OpensslExpiry.stato();
-                case "porta465_status" -> response = org.mail_panel.system.SubmissionPort.stato();
-                case "porta465_apply" -> {
-                    if (!"APPLICA".equals(req.optString("confirm", ""))) {
+                        req.optString("reference", req.optString("rfc", "")));
+                case "openssl_expiry" -> response = org.mail_panel.system.OpensslExpiry.state();
+                case "port465_status" -> response = org.mail_panel.system.SubmissionPort.state();
+                case "port465_apply" -> {
+                    if (!"APPLY".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = org.mail_panel.system.SubmissionPort.applica();
-                    logAudit("PORTA_465", ip, response.optBoolean("success")
+                    response = org.mail_panel.system.SubmissionPort.apply();
+                    logAudit("PORT_465", ip, response.optBoolean("success")
                             ? "restriction applied" : "NOT applied: " + response.optString("error", "?"));
                 }
                 case "postfix_level" -> {
-                    if (!"ALZA".equals(req.optString("confirm", ""))) {
+                    if (!"RAISE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.raisePostfixCompatibilityLevel(req.optString("livello", ""));
-                    logAudit("POSTFIX_LEVEL", ip, req.optString("livello", "")
+                    response = UpdateManager.raisePostfixCompatibilityLevel(req.optString("level", ""));
+                    logAudit("POSTFIX_LEVEL", ip, req.optString("level", "")
                             + (response.optBoolean("success") ? " - done" : " - NOT done: "
                                + response.optString("error", "?")));
                 }
                 case "pkg_remove" -> {
-                    if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
+                    if (!"REMOVE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.removePackage(req.optString("nome", ""));
-                    logAudit("PKG_REMOVE", ip, req.optString("nome", "")
+                    response = UpdateManager.removePackage(req.optString("name", ""));
+                    logAudit("PKG_REMOVE", ip, req.optString("name", "")
                             + (response.optBoolean("success") ? " - removed" : " - NOT removed: "
                                + response.optString("error", "?")));
                 }
                 case "be_destroy" -> {
-                    if (!"ELIMINA".equals(req.optString("confirm", ""))) {
+                    if (!"DELETE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.deleteBootEnvironment(req.optString("nome", ""));
-                    logAudit("BE_DESTROY", ip, req.optString("nome", "")
+                    response = UpdateManager.deleteBootEnvironment(req.optString("name", ""));
+                    logAudit("BE_DESTROY", ip, req.optString("name", "")
                             + (response.optBoolean("success") ? " - deleted"
                                : " - NOT deleted: " + response.optString("error", "?")));
                 }
-                case "salto_prosegui" -> {
-                    if (!"PROSEGUI".equals(req.optString("confirm", ""))) {
+                case "jump_continue" -> {
+                    if (!"CONTINUE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7202,7 +7202,7 @@ public class SSLMailServer {
                     logAudit("RELEASE_JUMP_CONTINUE", ip, response.optString("jobId", ""));
                 }
                 case "os_upgrade_prepare" -> {
-                    if (!"PREPARA AGGIORNAMENTO".equals(req.optString("confirm", ""))) {
+                    if (!"PREPARE UPGRADE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7210,7 +7210,7 @@ public class SSLMailServer {
                     logAudit("OS_UPGRADE_PREPARE", ip, req.optString("target", ""));
                 }
                 case "os_fetch" -> {
-                    if (!"CERCA AGGIORNAMENTI".equals(req.optString("confirm", ""))) {
+                    if (!"FETCH UPDATES".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7220,15 +7220,15 @@ public class SSLMailServer {
                 case "python_preflight" -> response = UpdateManager.pythonPreflight();
                 case "python_leftovers" -> response = UpdateManager.pythonLeftovers(false);
                 case "python_leftovers_clean" -> {
-                    if (!"PULISCI PYTHON".equals(req.optString("confirm", ""))) {
+                    if (!"CLEAN PYTHON".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.pythonLeftovers(true);
-                    logAudit("PYTHON_LEFTOVERS_CLEAN", ip, response.optString("tolti", ""));
+                    logAudit("PYTHON_LEFTOVERS_CLEAN", ip, response.optString("removed", ""));
                 }
                 case "python_move" -> {
-                    if (!"SPOSTA PYTHON".equals(req.optString("confirm", ""))) {
+                    if (!"MOVE PYTHON".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7238,7 +7238,7 @@ public class SSLMailServer {
                 case "java_preflight" -> response = UpdateManager.javaPreflight();
                 case "java_status" -> response = UpdateManager.javaUpdateStatus();
                 case "java_update" -> {
-                    if (!"AGGIORNA JAVA".equals(req.optString("confirm", ""))) {
+                    if (!"UPGRADE JAVA".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7249,7 +7249,7 @@ public class SSLMailServer {
                 case "roundcube_diag" -> response = UpdateManager.roundcubeDiagnostics();
                 case "roundcube_nginx_preview" -> response = UpdateManager.repairNginxPathInfo(false);
                 case "roundcube_nginx_fix" -> {
-                    if (!"RIPARA NGINX".equals(req.optString("confirm", ""))) {
+                    if (!"FIX NGINX".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7257,7 +7257,7 @@ public class SSLMailServer {
                     logAudit("ROUNDCUBE_NGINX_FIX", ip, response.optString("backup", ""));
                 }
                 case "roundcube_update" -> {
-                    if (!"AGGIORNA ROUNDCUBE".equals(req.optString("confirm", ""))) {
+                    if (!"UPGRADE ROUNDCUBE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7265,16 +7265,16 @@ public class SSLMailServer {
                     logAudit("ROUNDCUBE_UPDATE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "clean_client" -> {
-                    if (!"RIMUOVI".equals(req.optString("confirm", ""))) {
+                    if (!"REMOVE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
                     response = UpdateManager.startForeignClientCleanup(
-                            req.optString("estraneo", ""), req.optString("corretto", ""));
-                    logAudit("MYSQL_CLIENT_CLEANUP", ip, req.optString("estraneo", ""));
+                            req.optString("foreign", ""), req.optString("correct", ""));
+                    logAudit("MYSQL_CLIENT_CLEANUP", ip, req.optString("foreign", ""));
                 }
                 case "relink" -> {
-                    if (!"RICOLLEGA".equals(req.optString("confirm", ""))) {
+                    if (!"RELINK".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7284,7 +7284,7 @@ public class SSLMailServer {
                 case "rspamd_clean_cache" -> {
                     // E' una cancellazione: la conferma si scrive a mano, e il percorso non
                     // arriva dalla richiesta ma e' fissato nel codice.
-                    if (!"ELIMINA CACHE".equals(req.optString("confirm", ""))) {
+                    if (!"DELETE CACHE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7292,7 +7292,7 @@ public class SSLMailServer {
                     logAudit("RSPAMD_CACHE_CLEANED", ip, response.optString("jobId", ""));
                 }
                 case "mysql84_migrate" -> {
-                    if (!"MIGRA A 8.4".equals(req.optString("confirm", ""))) {
+                    if (!"MIGRATE TO 8.4".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7300,8 +7300,8 @@ public class SSLMailServer {
                     logAudit("MYSQL84_MIGRATION_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "package_preflight" -> {
-                    String adesso = org.mail_panel.system.PackageQueue.pianoNonAdesso();
-                    response = adesso != null ? new JSONObject().put("success", false).put("error", adesso)
+                    String now = org.mail_panel.system.PackageQueue.planNotNow();
+                    response = now != null ? new JSONObject().put("success", false).put("error", now)
                              : UpdateManager.packagePreflight(req.optString("package", ""));
                 }
                 case "package_update" -> {
@@ -7327,7 +7327,7 @@ public class SSLMailServer {
                 case "updates_apply" -> {
                     // La conferma scritta a mano non e' burocrazia: distingue un click di
                     // riflesso da una decisione. Qui si modifica un server di posta vivo.
-                    if (!"AGGIORNA".equals(req.optString("confirm", ""))) {
+                    if (!"UPDATE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7335,7 +7335,7 @@ public class SSLMailServer {
                     logAudit("UPDATES_APPLY_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "maintenance_run" -> {
-                    if (!"MANUTENZIONE".equals(req.optString("confirm", ""))) {
+                    if (!"MAINTENANCE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
@@ -7461,7 +7461,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "clamav");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -7521,7 +7521,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/clamdscan", "--version");
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7674,8 +7674,8 @@ public class SSLMailServer {
                     if (m.find()) {
                         try {
                             // Pattern: "Wed May 14 18:30:00 2026"
-                            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("EEE MMM d HH:mm:ss yyyy", java.util.Locale.US);
-                            java.util.Date d = sdf.parse(m.group(1).trim());
+                            java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("EEE MMM d HH:mm:ss yyyy", java.util.Locale.US);
+                            java.util.Date d = dateFormat.parse(m.group(1).trim());
                             long diffMs = System.currentTimeMillis() - d.getTime();
                             result.lastUpdateAgeHours = diffMs / (1000L * 60 * 60);
                             break;
@@ -7698,7 +7698,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", key);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -7711,7 +7711,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", name, "status");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7725,7 +7725,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", key + "=" + value);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7745,7 +7745,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", svc, cmd);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7762,15 +7762,15 @@ public class SSLMailServer {
     }
 
     private JSONObject installClamav() {
-        return sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", "ClamAV")), this::eseguiInstallClamav);
+        return onPackageTurn(I18n.tr("server.install.jobName", Map.of("component", "ClamAV")), this::runInstallClamav);
     }
 
-    private JSONObject eseguiInstallClamav() {
+    private JSONObject runInstallClamav() {
         JSONObject r = new JSONObject();
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", "clamav");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7791,7 +7791,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/freshclam", "--foreground", "--stdout");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7834,7 +7834,7 @@ public class SSLMailServer {
             // Esegui clamdscan
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/clamdscan", "--no-summary", tmp.toString());
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -7903,7 +7903,7 @@ public class SSLMailServer {
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "rspamd", "reload");
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
@@ -7928,7 +7928,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "info", "-e", "clamav");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -8080,11 +8080,11 @@ public class SSLMailServer {
                         logAudit(res.success ? "FAIL2BAN_MAIL_JAILS_INSTALLED" : "FAIL2BAN_MAIL_JAILS_FAILED",
                             clientIp, res.success ? res.configPath : (res.error != null ? res.error : ""));
                     }
-                    case "ripara_azione_ban" -> {
-                        JSONObject rr = org.mail_panel.security.BanActionRepair.ripara();
+                    case "repair_ban_action" -> {
+                        JSONObject rr = org.mail_panel.security.BanActionRepair.repair();
                         response = rr;
-                        logAudit(rr.optBoolean("success", false) ? "FAIL2BAN_BANACTION_RIPARATA"
-                                                                 : "FAIL2BAN_BANACTION_RIPARAZIONE_FALLITA",
+                        logAudit(rr.optBoolean("success", false) ? "FAIL2BAN_BANACTION_REPAIRED"
+                                                                 : "FAIL2BAN_BANACTION_REPAIR_FAILED",
                             clientIp, rr.optString("message", ""));
                     }
                     case "start_pf" -> {
@@ -8266,7 +8266,7 @@ public class SSLMailServer {
                     try {
                         // TODO: migrate to Shell.run when touched
                         ProcessBuilder pb = new ProcessBuilder("/bin/hostname");
-                        org.mail_panel.util.Shell.applicaPath(pb);
+                        org.mail_panel.util.Shell.applyPath(pb);
                         pb.redirectErrorStream(true);
                         Process p = pb.start();
                         String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -8325,7 +8325,7 @@ public class SSLMailServer {
         checks.put(makeCheck("fail2ban-installed",
             I18n.tr("server.f2b.checkInstalled"),
             f2bInstalled,
-            f2bInstalled ? (I18n.tr("server.f2b.pkgPresent") + " " + versioneFail2ban())
+            f2bInstalled ? (I18n.tr("server.f2b.pkgPresent") + " " + fail2banVersion())
                          : I18n.tr("server.f2b.pkgMissing"),
             f2bInstalled ? null : I18n.tr("server.f2b.impactInstalled"),
             f2bInstalled ? null : "install_fail2ban",
@@ -8457,38 +8457,38 @@ public class SSLMailServer {
         // vuota per esito e una lista vuota per fallimento sono indistinguibili, e quella
         // ambiguita' e' esattamente la forma del difetto che questo controllo esiste per
         // scoprire. Quindi si conta, e il conteggio finisce a schermo.
-        Fail2banManager.EsameLog esame = null;
-        String erroreEsame = null;
+        Fail2banManager.LogReview review = null;
+        String reviewError = null;
         try {
-            if (f2bRunning) esame = fail2banManager.esaminaLogSorvegliati();
-        } catch (Exception e) { erroreEsame = e.getMessage(); }
+            if (f2bRunning) review = fail2banManager.reviewWatchedLogs();
+        } catch (Exception e) { reviewError = e.getMessage(); }
 
         boolean logOk;
-        StringBuilder logDettaglio = new StringBuilder();
+        StringBuilder logDetail = new StringBuilder();
         if (!f2bRunning) {
             logOk = false;
-            logDettaglio.append(I18n.tr("server.f2b.log.notRunning"));
-        } else if (esame == null) {
+            logDetail.append(I18n.tr("server.f2b.log.notRunning"));
+        } else if (review == null) {
             logOk = false;
-            logDettaglio.append(I18n.tr("server.f2b.log.examFailed"))
-                        .append(erroreEsame != null ? (": " + erroreEsame) : "")
+            logDetail.append(I18n.tr("server.f2b.log.examFailed"))
+                        .append(reviewError != null ? (": " + reviewError) : "")
                         .append(". ").append(I18n.tr("server.f2b.log.lookedAtNothing"));
-        } else if (esame.esaminate.isEmpty()) {
+        } else if (review.reviewed.isEmpty()) {
             logOk = false;
-            logDettaglio.append(I18n.tr("server.f2b.log.noFiles"));
-        } else if (esame.issues.isEmpty()) {
+            logDetail.append(I18n.tr("server.f2b.log.noFiles"));
+        } else if (review.issues.isEmpty()) {
             logOk = true;
-            logDettaglio.append(I18n.tr("server.f2b.log.allOk", Map.of("n", esame.esaminate.size(), "jails", String.join(", ", esame.esaminate))));
-            if (!esame.senzaLog.isEmpty())
-                logDettaglio.append(". ").append(I18n.tr("server.f2b.log.withoutLog", Map.of("jails", String.join(", ", esame.senzaLog))));
+            logDetail.append(I18n.tr("server.f2b.log.allOk", Map.of("n", review.reviewed.size(), "jails", String.join(", ", review.reviewed))));
+            if (!review.withoutLog.isEmpty())
+                logDetail.append(". ").append(I18n.tr("server.f2b.log.withoutLog", Map.of("jails", String.join(", ", review.withoutLog))));
         } else {
             logOk = false;
-            logDettaglio.append(I18n.tr("server.f2b.log.someBlind", Map.of("total", esame.esaminate.size(), "n", esame.issues.size()))).append(" ");
-            boolean primo = true;
-            for (Fail2banManager.LogSbagliato sb : esame.issues) {
-                if (!primo) logDettaglio.append(" | ");
-                logDettaglio.append(sb.jail).append(": ").append(sb.reason);
-                primo = false;
+            logDetail.append(I18n.tr("server.f2b.log.someBlind", Map.of("total", review.reviewed.size(), "n", review.issues.size()))).append(" ");
+            boolean first = true;
+            for (Fail2banManager.WrongLog sb : review.issues) {
+                if (!first) logDetail.append(" | ");
+                logDetail.append(sb.jail).append(": ").append(sb.reason);
+                first = false;
             }
         }
         // ========== Il comando che banna esiste su questo sistema? ==========
@@ -8498,36 +8498,36 @@ public class SSLMailServer {
         // contavano i tentativi e incrementavano i ban — 14.370 e 46 su mailpanel-pubblico —
         // senza bloccare niente, e nessuna schermata poteva accorgersene perche' nessuna
         // guardava se il comando di ban fosse un comando. Questo lo guarda.
-        JSONObject diagBan = new JSONObject().put("rotte", new JSONArray());
-        boolean banEseguibile = true;
-        String banDettaglio;
+        JSONObject diagBan = new JSONObject().put("broken", new JSONArray());
+        boolean banRunnable = true;
+        String banDetail;
         try {
-            if (f2bRunning) diagBan = org.mail_panel.security.BanActionRepair.diagnosi();
+            if (f2bRunning) diagBan = org.mail_panel.security.BanActionRepair.diagnosis();
         } catch (Exception ignored) { }
-        JSONArray rotte = diagBan.optJSONArray("rotte");
-        if (rotte == null) rotte = new JSONArray();
+        JSONArray broken = diagBan.optJSONArray("broken");
+        if (broken == null) broken = new JSONArray();
         if (!f2bRunning) {
-            banEseguibile = false;
-            banDettaglio = I18n.tr("server.f2b.ban.notRunning");
-        } else if (rotte.length() == 0) {
-            int esaminateBan = diagBan.optInt("esaminate", 0);
-            JSONArray nonGiud = diagBan.optJSONArray("non_giudicate");
-            if (esaminateBan == 0) {
-                banEseguibile = false;
-                banDettaglio = I18n.tr("server.f2b.ban.noneJudged");
+            banRunnable = false;
+            banDetail = I18n.tr("server.f2b.ban.notRunning");
+        } else if (broken.length() == 0) {
+            int reviewedBans = diagBan.optInt("reviewed", 0);
+            JSONArray notJudged = diagBan.optJSONArray("not_judged");
+            if (reviewedBans == 0) {
+                banRunnable = false;
+                banDetail = I18n.tr("server.f2b.ban.noneJudged");
             } else {
-                banDettaglio = I18n.tr("server.f2b.ban.allOk", Map.of("n", esaminateBan));
-                if (nonGiud != null && nonGiud.length() > 0) {
+                banDetail = I18n.tr("server.f2b.ban.allOk", Map.of("n", reviewedBans));
+                if (notJudged != null && notJudged.length() > 0) {
                     // Non giudicata non e' promossa. Se una jail non riporta la propria azione,
                     // il piu' delle volte e' perche' quell'azione non si e' caricata — cioe' non
                     // banna affatto — e lasciare verde il controllo per le altre nasconderebbe
                     // esattamente il caso peggiore dietro la maggioranza sana.
-                    banEseguibile = false;
+                    banRunnable = false;
                     StringBuilder ng = new StringBuilder();
-                    for (int i = 0; i < nonGiud.length(); i++) {
-                        JSONObject x = nonGiud.getJSONObject(i);
+                    for (int i = 0; i < notJudged.length(); i++) {
+                        JSONObject x = notJudged.getJSONObject(i);
                         if (ng.length() > 0) ng.append(" | ");
-                        ng.append(x.optString("jail")).append(": ").append(x.optString("perche"));
+                        ng.append(x.optString("jail")).append(": ").append(x.optString("why"));
                         // L'evidenza accanto al verdict: cosa ha risposto fail2ban, e cosa ha
                         // scritto nel proprio log. Senza, la riga dice solo che non si sa.
                         String u = x.optString("output", "");
@@ -8535,26 +8535,26 @@ public class SSLMailServer {
                         String lg = x.optString("log", "");
                         if (!lg.isEmpty()) ng.append(" [fail2ban.log: ").append(lg.replace("\n", " ⏎ ")).append("]");
                     }
-                    banDettaglio += ". " + I18n.tr("server.f2b.ban.notJudged", Map.of("jails", ng.toString()));
+                    banDetail += ". " + I18n.tr("server.f2b.ban.notJudged", Map.of("jails", ng.toString()));
                 }
             }
         } else {
-            banEseguibile = false;
+            banRunnable = false;
             StringBuilder b = new StringBuilder();
-            for (int i = 0; i < rotte.length(); i++) {
-                JSONObject x = rotte.getJSONObject(i);
+            for (int i = 0; i < broken.length(); i++) {
+                JSONObject x = broken.getJSONObject(i);
                 if (b.length() > 0) b.append(" | ");
                 b.append(x.optString("jail")).append(": ").append(I18n.tr("server.f2b.ban.missingCommand", Map.of("command", x.optString("runnable"))));
             }
-            banDettaglio = b.toString();
+            banDetail = b.toString();
         }
         checks.put(makeCheck("ban-runnable",
             I18n.tr("server.f2b.ban.check"),
-            banEseguibile,
-            banDettaglio,
-            banEseguibile ? null
+            banRunnable,
+            banDetail,
+            banRunnable ? null
                 : I18n.tr("server.f2b.ban.impact"),
-            (banEseguibile || !f2bRunning) ? null : "ripara_azione_ban",
+            (banRunnable || !f2bRunning) ? null : "repair_ban_action",
             I18n.tr("server.f2b.ban.fix")));
 
         // ========== I ban arrivano davvero a pf? ==========
@@ -8563,57 +8563,57 @@ public class SSLMailServer {
         // aveva una tabella che nessuna regola legge. Un riepilogo che non comprende il
         // controllo piu' severo non e' un riepilogo: e' la stessa mezza verita' che ha tenuto
         // nascoste per mesi una jail cieca e due che bannavano nel vuoto.
-        boolean banApplicati = true;
-        String banApplicatiDettaglio;
+        boolean appliedBans = true;
+        String appliedBansDetail;
         try {
             if (!f2bRunning) {
-                banApplicati = false;
-                banApplicatiDettaglio = I18n.tr("server.f2b.pf.notRunning");
+                appliedBans = false;
+                appliedBansDetail = I18n.tr("server.f2b.pf.notRunning");
             } else {
-                Fail2banManager.ConfrontoPf cf = fail2banManager.confrontaBanConPf();
-                int senzaRegola = cf.totaleSenzaRegola();
-                int nonApplicati = cf.totaleNonApplicati();
-                int nonMisurate = cf.totaleNonMisurate();
+                Fail2banManager.PfComparison cf = fail2banManager.compareBansWithPf();
+                int withoutRule = cf.totalWithoutRule();
+                int notApplied = cf.totalNotApplied();
+                int unmeasured = cf.totalUnmeasured();
                 int ok = 0;
                 for (Fail2banManager.JailPf j : cf.jails)
-                    if (j.letta && j.regolaVerificata && j.regolaPresente && !j.tabellaMancante) ok++;
+                    if (j.read && j.ruleVerified && j.rulePresent && !j.missingTable) ok++;
 
                 StringBuilder d = new StringBuilder();
-                if (senzaRegola == 0 && nonApplicati == 0 && nonMisurate == 0) {
+                if (withoutRule == 0 && notApplied == 0 && unmeasured == 0) {
                     d.append(I18n.tr("server.f2b.pf.allOk", Map.of("n", ok)));
                 } else {
-                    banApplicati = false;
+                    appliedBans = false;
                     d.append(I18n.tr("server.f2b.pf.someOk", Map.of("ok", ok, "total", cf.jails.size())));
                     for (Fail2banManager.JailPf j : cf.jails) {
-                        if (!j.letta) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notMeasured")); continue; }
-                        if (j.tabellaMancante) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noTable")); continue; }
-                        if (j.regolaVerificata && !j.regolaPresente) {
-                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noRule", Map.of("table", String.valueOf(j.tabella))));
+                        if (!j.read) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notMeasured")); continue; }
+                        if (j.missingTable) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noTable")); continue; }
+                        if (j.ruleVerified && !j.rulePresent) {
+                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noRule", Map.of("table", String.valueOf(j.table))));
                             continue;
                         }
-                        if (!j.soloInFail2ban.isEmpty())
-                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notInFirewall", Map.of("ips", String.join(", ", j.soloInFail2ban))));
+                        if (!j.onlyInFail2ban.isEmpty())
+                            d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notInFirewall", Map.of("ips", String.join(", ", j.onlyInFail2ban))));
                     }
                 }
-                banApplicatiDettaglio = d.toString();
+                appliedBansDetail = d.toString();
             }
         } catch (Exception e) {
-            banApplicati = false;
-            banApplicatiDettaglio = I18n.tr("server.f2b.pf.compareFailed", Map.of("error", String.valueOf(e.getMessage())));
+            appliedBans = false;
+            appliedBansDetail = I18n.tr("server.f2b.pf.compareFailed", Map.of("error", String.valueOf(e.getMessage())));
         }
-        checks.put(makeCheck("ban-applicati-in-pf",
+        checks.put(makeCheck("bans-applied-in-pf",
             I18n.tr("server.f2b.pf.check"),
-            banApplicati,
-            banApplicatiDettaglio,
-            banApplicati ? null
+            appliedBans,
+            appliedBansDetail,
+            appliedBans ? null
                 : I18n.tr("server.f2b.pf.impact"),
-            (banApplicati || !f2bInstalled) ? null : "install_mail_jails",
+            (appliedBans || !f2bInstalled) ? null : "install_mail_jails",
             I18n.tr("server.f2b.pf.fix")));
 
         checks.put(makeCheck("mail-jails-logpath",
             I18n.tr("server.f2b.log.check"),
             logOk,
-            logDettaglio.toString(),
+            logDetail.toString(),
             logOk ? null
                   : I18n.tr("server.f2b.log.impact"),
             (logOk || !f2bInstalled) ? null : "install_mail_jails",
@@ -8654,19 +8654,19 @@ public class SSLMailServer {
         // e quell'anchor contiene "pass in quick from <panel_wl_cidrs>" e la lista geografica:
         // se finisce prima di f2b, la whitelist non e' piu' una precedenza voluta ma una
         // esenzione dai ban di cui nessuno sa. Qui si guarda l'ordine reale del file.
-        boolean ordineOk = true;
-        String ordineDettaglio;
-        java.util.List<String> primaDiF2b = new java.util.ArrayList<>();
-        int rigaF2b = -1;
+        boolean orderOk = true;
+        String detailOrder;
+        java.util.List<String> beforeF2b = new java.util.ArrayList<>();
+        int f2bLine = -1;
         try {
             if (pfConfExists && pfAnchorPresent) {
-                String[] righe = java.nio.file.Files.readString(
+                String[] lines = java.nio.file.Files.readString(
                     java.nio.file.Paths.get("/etc/pf.conf")).split("\n", -1);
-                for (int i = 0; i < righe.length; i++) {
-                    String t = righe[i].trim();
+                for (int i = 0; i < lines.length; i++) {
+                    String t = lines[i].trim();
                     if (t.isEmpty() || t.startsWith("#")) continue;
-                    if (rigaF2b < 0 && (t.contains("anchor \"f2b/*\"") || t.contains("anchor f2b/*"))) {
-                        rigaF2b = i;
+                    if (f2bLine < 0 && (t.contains("anchor \"f2b/*\"") || t.contains("anchor f2b/*"))) {
+                        f2bLine = i;
                         break;
                     }
                     // Solo cio' che puo' davvero far saltare un ban in entrata.
@@ -8675,28 +8675,28 @@ public class SSLMailServer {
                     // grida a vuoto smette di essere letto.
                     if (t.startsWith("pass") && t.contains("quick")
                             && !t.matches("^pass\\s+out\\b.*")) {
-                        primaDiF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + t);
+                        beforeF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + t);
                         continue;
                     }
                     // Un anchor precedente conta solo se contiene davvero un pass quick: lo si
                     // chiede a pf invece di presumerlo dal nome. Se non si riesce a leggerlo,
                     // lo si dice — non lo si assolve.
                     if (t.startsWith("anchor ")) {
-                        String nome = t.substring(7).trim().replace("\"", "");
-                        int sp = nome.indexOf(' ');
-                        if (sp > 0) nome = nome.substring(0, sp);
-                        if (nome.isEmpty() || nome.equals("f2b/*")) continue;
+                        String name = t.substring(7).trim().replace("\"", "");
+                        int sp = name.indexOf(' ');
+                        if (sp > 0) name = name.substring(0, sp);
+                        if (name.isEmpty() || name.equals("f2b/*")) continue;
                         var reg = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
-                            "/sbin/pfctl", "-a", nome.replace("/*", ""), "-sr");
+                            "/sbin/pfctl", "-a", name.replace("/*", ""), "-sr");
                         if (!reg.success()) {
-                            primaDiF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + I18n.tr("server.pf.anchorUnreadable", Map.of("anchor", nome)));
+                            beforeF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + I18n.tr("server.pf.anchorUnreadable", Map.of("anchor", name)));
                             continue;
                         }
                         for (String rr : reg.output().split("\n")) {
                             String u = rr.trim();
                             if (u.startsWith("pass") && u.contains("quick")
                                     && !u.matches("^pass\\s+out\\b.*")) {
-                                primaDiF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + I18n.tr("server.pf.anchorContains", Map.of("anchor", nome, "rule", u)));
+                                beforeF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + I18n.tr("server.pf.anchorContains", Map.of("anchor", name, "rule", u)));
                                 break;
                             }
                         }
@@ -8706,22 +8706,22 @@ public class SSLMailServer {
         } catch (Exception ignored) { }
 
         if (!pfConfExists || !pfAnchorPresent) {
-            ordineDettaglio = I18n.tr("server.pf.order.noAnchor");
-            ordineOk = pfAnchorPresent;
-        } else if (rigaF2b < 0) {
-            ordineOk = false;
-            ordineDettaglio = I18n.tr("server.pf.order.lineNotFound");
-        } else if (primaDiF2b.isEmpty()) {
-            ordineDettaglio = I18n.tr("server.pf.order.ok", Map.of("n", rigaF2b + 1));
+            detailOrder = I18n.tr("server.pf.order.noAnchor");
+            orderOk = pfAnchorPresent;
+        } else if (f2bLine < 0) {
+            orderOk = false;
+            detailOrder = I18n.tr("server.pf.order.lineNotFound");
+        } else if (beforeF2b.isEmpty()) {
+            detailOrder = I18n.tr("server.pf.order.ok", Map.of("n", f2bLine + 1));
         } else {
-            ordineOk = false;
-            ordineDettaglio = I18n.tr("server.pf.order.blocked", Map.of("n", rigaF2b + 1, "count", primaDiF2b.size(), "rules", String.join(" | ", primaDiF2b)));
+            orderOk = false;
+            detailOrder = I18n.tr("server.pf.order.blocked", Map.of("n", f2bLine + 1, "count", beforeF2b.size(), "rules", String.join(" | ", beforeF2b)));
         }
-        checks.put(makeCheck("pf-ordine-anchor",
+        checks.put(makeCheck("pf-anchor-order",
             I18n.tr("server.pf.order.check"),
-            ordineOk,
-            ordineDettaglio,
-            ordineOk ? null
+            orderOk,
+            detailOrder,
+            orderOk ? null
                 : I18n.tr("server.pf.order.impact"),
             null,
             null));
@@ -8774,14 +8774,14 @@ public class SSLMailServer {
         // perche' nessuno si era ricordato di nominarlo anche qui. Contando le righe rosse la
         // dimenticanza non e' piu' possibile.
         boolean allOk = true;
-        boolean qualcosaDaRiparare = false;
+        boolean somethingToRepair = false;
         for (int i = 0; i < checks.length(); i++) {
             JSONObject c = checks.getJSONObject(i);
             if (c.optBoolean("ok", false)) continue;
             allOk = false;
-            if (c.has("fix_action")) qualcosaDaRiparare = true;
+            if (c.has("fix_action")) somethingToRepair = true;
         }
-        r.put("can_fix_all", qualcosaDaRiparare);
+        r.put("can_fix_all", somethingToRepair);
         r.put("success", true);
         r.put("all_ok", allOk);
         r.put("checks", checks);
@@ -8800,7 +8800,7 @@ public class SSLMailServer {
      * sistema rifiuta — con l'aggravante che il rifiuto puo' essere silenzioso, come quando una
      * jail viene caricata senza nessuna azione e continua a contare i tentativi.
      */
-    private String versioneFail2ban() {
+    private String fail2banVersion() {
         StringBuilder b = new StringBuilder();
         try {
             var v = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(10),
@@ -8853,7 +8853,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", "fail2ban_enable");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -8868,7 +8868,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "fail2ban", "status");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -8880,15 +8880,15 @@ public class SSLMailServer {
     }
 
     private JSONObject installFail2ban() {
-        return sulTurnoPacchetti(I18n.tr("server.install.jobName", Map.of("component", "fail2ban")), this::eseguiInstallFail2ban);
+        return onPackageTurn(I18n.tr("server.install.jobName", Map.of("component", "fail2ban")), this::runInstallFail2ban);
     }
 
-    private JSONObject eseguiInstallFail2ban() {
+    private JSONObject runInstallFail2ban() {
         JSONObject r = new JSONObject();
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/pkg", "install", "-y", FAIL2BAN_ORIGIN);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -8911,7 +8911,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "fail2ban_enable=YES");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -8955,7 +8955,7 @@ public class SSLMailServer {
             }
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/sbin/kldload", "pf");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -8991,7 +8991,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "-n", "pf_enable");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
@@ -9020,7 +9020,7 @@ public class SSLMailServer {
             // Se la sintassi è invalida, non lanciamo il servizio.
             // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", "/etc/pf.conf");
-            org.mail_panel.util.Shell.applicaPath(testPb);
+            org.mail_panel.util.Shell.applyPath(testPb);
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
             String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -9035,7 +9035,7 @@ public class SSLMailServer {
             // OK — avvio
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "pf", "start");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -9062,7 +9062,7 @@ public class SSLMailServer {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sysrc", "pf_enable=YES");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -9123,7 +9123,7 @@ public class SSLMailServer {
             java.nio.file.Files.writeString(tmp, content, java.nio.charset.StandardCharsets.UTF_8);
             // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", tmp.toString());
-            org.mail_panel.util.Shell.applicaPath(testPb);
+            org.mail_panel.util.Shell.applyPath(testPb);
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
             String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -9207,7 +9207,7 @@ public class SSLMailServer {
                 try {
                     // TODO: migrate to Shell.run when touched
                     ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/fail2ban-client", "status");
-                    org.mail_panel.util.Shell.applicaPath(pb);
+                    org.mail_panel.util.Shell.applyPath(pb);
                     pb.redirectErrorStream(true);
                     Process p = pb.start();
                     String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -9222,21 +9222,21 @@ public class SSLMailServer {
             // qualcosa. Con roundcube-auth erano entrambe vere mentre la jail sorvegliava un
             // file vuoto accanto a quello scritto: qui il passo veniva saltato con la motivazione
             // "gia' configurate e attive", e il percorso sbagliato sarebbe rimasto per sempre.
-            boolean logSbagliati = false;
+            boolean wrongLogs = false;
             try {
-                logSbagliati = !fail2banManager.esaminaLogSorvegliati(activeJailsNow).issues.isEmpty();
+                wrongLogs = !fail2banManager.reviewWatchedLogs(activeJailsNow).issues.isEmpty();
             } catch (Exception ignored) { }
 
             // E nemmeno "le jail ci sono e guardano il file giusto" basta: recidive aveva la
             // tabella pf e nessuna regola che la legge, quindi bannava nel vuoto, e questo passo
             // veniva saltato perche' il file la nominava ed era attiva. Ogni volta che il
             // cancello ha guardato una cosa piu' facile di quella che conta, il guasto e' passato.
-            boolean senzaRegola = false;
+            boolean withoutRule = false;
             try {
-                senzaRegola = fail2banManager.confrontaBanConPf().totaleSenzaRegola() > 0;
+                withoutRule = fail2banManager.compareBansWithPf().totalWithoutRule() > 0;
             } catch (Exception ignored) { }
 
-            if (f2bInstalled && (!mailFileOk || !allActive || logSbagliati || senzaRegola)) {
+            if (f2bInstalled && (!mailFileOk || !allActive || wrongLogs || withoutRule)) {
                 // File mancante O runtime non allineato → install (rigenera tutto: path
                 // corretti dall'auto-detect, log file mancanti, filter aggiornati, reload).
                 // install_mail_jails è idempotente: safe da chiamare anche se quasi tutto è OK.
@@ -9259,22 +9259,22 @@ public class SSLMailServer {
         // Installarle non basta: due di loro ereditavano un'azione basata su iptables, che su
         // FreeBSD non esiste, e bannavano nel vuoto contando i ban come riusciti.
         try {
-            JSONObject diag = org.mail_panel.security.BanActionRepair.diagnosi();
-            JSONArray rotte = diag.optJSONArray("rotte");
-            JSONArray nonGiudicate = diag.optJSONArray("non_giudicate");
-            boolean daRiparare = (rotte != null && rotte.length() > 0)
-                              || (nonGiudicate != null && nonGiudicate.length() > 0);
-            if (daRiparare) {
-                JSONObject rr = org.mail_panel.security.BanActionRepair.ripara();
-                steps.put(buildStep("ripara_azione_ban",
+            JSONObject diag = org.mail_panel.security.BanActionRepair.diagnosis();
+            JSONArray broken = diag.optJSONArray("broken");
+            JSONArray notJudged = diag.optJSONArray("not_judged");
+            boolean toRepair = (broken != null && broken.length() > 0)
+                              || (notJudged != null && notJudged.length() > 0);
+            if (toRepair) {
+                JSONObject rr = org.mail_panel.security.BanActionRepair.repair();
+                steps.put(buildStep("repair_ban_action",
                     I18n.tr("server.f2bfix.banAction"), rr));
                 if (!rr.optBoolean("success", false)) anyFailed = true;
             } else {
-                steps.put(buildSkipStep("ripara_azione_ban",
+                steps.put(buildSkipStep("repair_ban_action",
                     I18n.tr("server.f2bfix.banActionOk")));
             }
         } catch (Exception e) {
-            steps.put(buildErrorStep("ripara_azione_ban", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
+            steps.put(buildErrorStep("repair_ban_action", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
             anyFailed = true;
         }
 
@@ -9429,7 +9429,7 @@ public class SSLMailServer {
             // Test sintassi prima di ricaricare
             // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", "/etc/pf.conf");
-            org.mail_panel.util.Shell.applicaPath(testPb);
+            org.mail_panel.util.Shell.applyPath(testPb);
             testPb.redirectErrorStream(true);
             Process tp = testPb.start();
             String testOut = new String(tp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -9448,7 +9448,7 @@ public class SSLMailServer {
             if (isPfRunning()) {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder loadPb = new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf");
-                org.mail_panel.util.Shell.applicaPath(loadPb);
+                org.mail_panel.util.Shell.applyPath(loadPb);
                 loadPb.redirectErrorStream(true);
                 Process lp = loadPb.start();
                 loadOut = new String(lp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -9603,87 +9603,87 @@ public class SSLMailServer {
         int domainId = req.optInt("domain_id", 0);
         JSONObject response;
         switch (req.optString("action", "")) {
-            case "status" -> response = auto.stato(domainId);
+            case "status" -> response = auto.state(domainId);
             case "create" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                String quale = req.optString("quale", "");
+                String which = req.optString("which", "");
                 // Il predefinito e' "none", non "quarantine": RFC 9989 §5.1.5. Un valore
                 // predefinito che blocca posta e' una trappola per chi preme senza scegliere.
-                response = auto.crea(domainId, quale, req.optString("politica", "none"));
-                logAudit("AUTODNS_CREATE", ip, quale + " on domain " + domainId
+                response = auto.create(domainId, which, req.optString("policy", "none"));
+                logAudit("AUTODNS_CREATE", ip, which + " on domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
             case "change_policy" -> {
-                response = auto.cambiaPolitica(domainId, req.optString("politica", ""),
-                        "CAMBIA".equals(req.optString("confirm", "")));
-                if ("CAMBIA".equals(req.optString("confirm", "")))
-                    logAudit("AUTODNS_POLITICA", ip, "domain " + domainId + " -> p="
-                            + req.optString("politica", "") + (response.optBoolean("success")
+                response = auto.changePolicy(domainId, req.optString("policy", ""),
+                        "CHANGE".equals(req.optString("confirm", "")));
+                if ("CHANGE".equals(req.optString("confirm", "")))
+                    logAudit("AUTODNS_POLICY", ip, "domain " + domainId + " -> p="
+                            + req.optString("policy", "") + (response.optBoolean("success")
                             ? " - done" : " - NOT done: " + response.optString("error", "?")));
             }
-            case "mtasts_status" -> response = org.mail_panel.system.MtaSts.stato();
-            case "mtasts_mode" -> response = org.mail_panel.system.MtaSts.impostaModo(req.optString("modo", ""));
+            case "mtasts_status" -> response = org.mail_panel.system.MtaSts.state();
+            case "mtasts_mode" -> response = org.mail_panel.system.MtaSts.setMode(req.optString("mode", ""));
             case "mtasts_txt" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = auto.creaTxtMtaSts(domainId);
+                response = auto.createTxtMtaSts(domainId);
                 // I record MTA-STS in piu' che la scrittura toglie sono cancellazioni nel DNS:
                 // restano scritte anche qui, non solo nella risposta.
-                JSONArray tolti = response.optJSONArray("tolti");
+                JSONArray removed = response.optJSONArray("removed");
                 logAudit("MTASTS_TXT", ip, "domain " + domainId
                         + (response.optBoolean("success") ? " - published" : " - NOT published: "
                            + response.optString("error", "?"))
-                        + (tolti == null || tolti.length() == 0 ? ""
-                           : " - removed " + tolti.length() + " extra MTA-STS records: " + tolti.join("  ||  ")));
+                        + (removed == null || removed.length() == 0 ? ""
+                           : " - removed " + removed.length() + " extra MTA-STS records: " + removed.join("  ||  ")));
             }
             case "create_optional" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                String q = req.optString("quale", "");
-                response = auto.creaOpzionale(domainId, q);
-                logAudit("AUTODNS_OPZIONALE", ip, q + " on domain " + domainId
+                String q = req.optString("which", "");
+                response = auto.createOptional(domainId, q);
+                logAudit("AUTODNS_OPTIONAL", ip, q + " on domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
             // La pagina DNS deve poter seguire il lavoro che ha appena avviato: senza questo
             // caso resterebbe con un identificativo e nessun modo di sapere com'e' finito.
             case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
-            case "configura_tutto" -> {
-                if (!"CONFIGURA".equals(req.optString("confirm", ""))) {
+            case "configure_all" -> {
+                if (!"CONFIGURE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
                 response = UpdateManager.startDomainSetup(domainId);
-                logAudit("DOMINIO_CONFIGURA", ip, "domain " + domainId
+                logAudit("DOMAIN_CONFIGURE", ip, "domain " + domainId
                         + " - started as job " + response.optString("jobId", ""));
             }
-            case "mailboxes" -> response = auto.caselleDisponibili();
+            case "mailboxes" -> response = auto.availableMailboxes();
             case "mailbox_create" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = auto.creaCasellaRapporti(domainId);
-                logAudit("AUTODNS_CASELLA", ip, "mailbox dmarc@ domain " + domainId
+                response = auto.createReportMailbox(domainId);
+                logAudit("AUTODNS_MAILBOX", ip, "mailbox dmarc@ domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
             case "alias_create" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                String verso = req.optString("verso", "");
-                response = auto.creaAliasRapporti(domainId, verso);
-                logAudit("AUTODNS_ALIAS", ip, "alias dmarc@ domain " + domainId + " to " + verso
+                String target = req.optString("destination", "");
+                response = auto.createReportAlias(domainId, target);
+                logAudit("AUTODNS_ALIAS", ip, "alias dmarc@ domain " + domainId + " to " + target
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
@@ -9704,29 +9704,29 @@ public class SSLMailServer {
 
         JSONObject response;
         switch (req.optString("action", "")) {
-            case "status" -> response = org.mail_panel.system.PeriodicReport.stato();
-            case "identity" -> response = org.mail_panel.system.PeriodicReport.statoIdentita();
-            case "preview" -> response = org.mail_panel.system.PeriodicReport.anteprima();
-            case "save" -> response = org.mail_panel.system.PeriodicReport.salvaImpostazioni(
-                    req.optString("destinatario", ""), req.optString("mittente", ""),
-                    req.optString("frequenza", ""), req.optString("ora", ""),
-                    req.optBoolean("attivo", false));
+            case "status" -> response = org.mail_panel.system.PeriodicReport.state();
+            case "identity" -> response = org.mail_panel.system.PeriodicReport.identityState();
+            case "preview" -> response = org.mail_panel.system.PeriodicReport.preview();
+            case "save" -> response = org.mail_panel.system.PeriodicReport.saveSettings(
+                    req.optString("recipient", ""), req.optString("sender", ""),
+                    req.optString("frequency", ""), req.optString("now", ""),
+                    req.optBoolean("active", false));
             case "identity_create" -> {
-                if (!"CREA".equals(req.optString("confirm", ""))) {
+                if (!"CREATE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = org.mail_panel.system.PeriodicReport.creaIdentita(req.optString("indirizzo", ""));
-                logAudit("REPORT_IDENTITY", ip, req.optString("indirizzo", "")
+                response = org.mail_panel.system.PeriodicReport.createIdentity(req.optString("address", ""));
+                logAudit("REPORT_IDENTITY", ip, req.optString("address", "")
                         + (response.optBoolean("success") ? " - created" : " - NOT created"));
             }
             case "send" -> {
-                if (!"INVIA".equals(req.optString("confirm", ""))) {
+                if (!"SEND".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                response = org.mail_panel.system.PeriodicReport.inviaAdesso(req.optString("destinatario", ""));
-                logAudit("REPORT_SEND", ip, req.optString("destinatario", "")
+                response = org.mail_panel.system.PeriodicReport.sendNow(req.optString("recipient", ""));
+                logAudit("REPORT_SEND", ip, req.optString("recipient", "")
                         + (response.optBoolean("success") ? " - sent" : " - NOT sent"));
             }
             default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
@@ -10009,7 +10009,7 @@ public class SSLMailServer {
                                     // Restart Dovecot to clear in-memory vacation cache
                                     // TODO: migrate to Shell.run when touched
                                     ProcessBuilder pb = new ProcessBuilder("service", "dovecot", "restart");
-                                    org.mail_panel.util.Shell.applicaPath(pb);
+                                    org.mail_panel.util.Shell.applyPath(pb);
                                     pb.redirectErrorStream(true);
                                     Process p = pb.start();
                                     p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
@@ -10304,10 +10304,10 @@ public class SSLMailServer {
                     // mostrava "undefined" e il modulo si riempiva di valori predefiniti.
                     // Qui la risposta prende la forma che la pagina legge davvero.
                     JSONArray limits = new JSONArray();
-                    JSONObject globale = null;
+                    JSONObject global = null;
                     for (MailDatabase.RateLimit rl : Main.mailDatabase.getRateLimits()) {
                         if ("global".equalsIgnoreCase(rl.targetType)) {
-                            globale = new JSONObject()
+                            global = new JSONObject()
                                     .put("hourly", rl.maxPerHour)
                                     .put("daily", rl.maxPerDay)
                                     .put("max_recipients", rl.maxRecipients);
@@ -10322,18 +10322,18 @@ public class SSLMailServer {
                                 .put("max_recipients", rl.maxRecipients)
                                 .put("enabled", rl.enabled));
                     }
-                    if (globale == null)
-                        globale = new JSONObject().put("hourly", 50).put("daily", 500)
-                                                 .put("max_recipients", 50).put("nonImpostato", true);
+                    if (global == null)
+                        global = new JSONObject().put("hourly", 50).put("daily", 500)
+                                                 .put("max_recipients", 50).put("notSet", true);
                     // La dimensione massima non sta nel database: e' un parametro di Postfix,
                     // e si legge da li' invece di tenerne una copia che diverge.
-                    int mb = org.mail_panel.system.MessageSizeLimit.leggiMega();
-                    globale.put("max_size_mb", mb < 0 ? JSONObject.NULL : mb);
-                    if (mb < 0) globale.put("max_size_nota", I18n.tr("server.rl.sizeUnreadable"));
+                    int mb = org.mail_panel.system.MessageSizeLimit.readMegabytes();
+                    global.put("max_size_mb", mb < 0 ? JSONObject.NULL : mb);
+                    if (mb < 0) global.put("max_size_note", I18n.tr("server.rl.sizeUnreadable"));
 
                     response.put("success", true);
                     response.put("limits", limits);
-                    response.put("globale", globale);
+                    response.put("global", global);
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
@@ -10398,10 +10398,10 @@ public class SSLMailServer {
                             }
                             String note = I18n.tr("server.rl.globalSaved", Map.of("hourly", hourly, "daily", daily));
                             if (maxSize > 0) {
-                                JSONObject dim = org.mail_panel.system.MessageSizeLimit.imposta(maxSize);
-                                response.put("dimensione", dim);
+                                JSONObject dim = org.mail_panel.system.MessageSizeLimit.set(maxSize);
+                                response.put("size", dim);
                                 if (dim.optBoolean("success", false)) {
-                                    note += " " + dim.optString("nota", "");
+                                    note += " " + dim.optString("note", "");
                                 } else {
                                     // I limiti sono salvati, la dimensione no: si dice esattamente
                                     // questo, invece di un "errore" generico che farebbe credere
@@ -10650,10 +10650,10 @@ public class SSLMailServer {
     // ============== THEME API ==============
 
     /** La preferenza di tema dell'admin di questa sessione, da scrivere nella pagina: auto, light o dark, mai altro. */
-    private String temaSalvato(HttpExchange exchange) {
+    private String savedTheme(HttpExchange exchange) {
         try {
-            String tema = Main.mailDatabase != null ? Main.mailDatabase.getAdminTheme(getSessionUsername(exchange)) : null;
-            return "light".equals(tema) || "dark".equals(tema) ? tema : "auto";
+            String theme = Main.mailDatabase != null ? Main.mailDatabase.getAdminTheme(getSessionUsername(exchange)) : null;
+            return "light".equals(theme) || "dark".equals(theme) ? theme : "auto";
         } catch (Exception e) {
             return "auto";
         }
@@ -11582,7 +11582,7 @@ http {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", name, type);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             StringBuilder output = new StringBuilder();
@@ -11607,7 +11607,7 @@ http {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "-x", ip);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             StringBuilder output = new StringBuilder();
@@ -11826,8 +11826,8 @@ http {
                 return trimmed;
             }
         }
-        String daXff = ipDaForwardedFor(exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
-        if (daXff != null) return daXff;
+        String fromXff = ipFromForwardedFor(exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
+        if (fromXff != null) return fromXff;
         String realIp = exchange.getRequestHeaders().getFirst("X-Real-IP");
         if (realIp != null && !realIp.isEmpty()) {
             String trimmed = realIp.trim();
@@ -11848,7 +11848,7 @@ http {
      * "X-Forwarded-For: 1.2.3.4" se la vede accodare dal proxy, che aggiunge il proprio
      * mittente in coda. Il primo valore e' quindi il piu' facile da falsificare, non il piu'
      * attendibile — e usandolo per il limite dei tentativi bastava cambiarlo a ogni prova per
-     * non essere mai lockedPackages.
+     * non essere mai bloccati.
      *
      * Si scorre da destra saltando gli indirizzi che sono a loro volta proxy fidati (una
      * catena vera ne ha piu' d'uno) e ci si ferma al primo che non lo e': quello l'ha scritto
@@ -11859,11 +11859,11 @@ http {
      * HttpExchange vero, e una logica che nessun test raggiunge e' una logica che nessuno
      * controlla.
      */
-    static String ipDaForwardedFor(String intestazione) {
-        if (intestazione == null || intestazione.isEmpty()) return null;
-        String[] pezzi = intestazione.split(",");
-        for (int i = pezzi.length - 1; i >= 0; i--) {
-            String cand = pezzi[i].trim();
+    static String ipFromForwardedFor(String header) {
+        if (header == null || header.isEmpty()) return null;
+        String[] pieces = header.split(",");
+        for (int i = pieces.length - 1; i >= 0; i--) {
+            String cand = pieces[i].trim();
             if (!org.mail_panel.security.InputValidator.isValidIp(cand)) continue;
             if (org.mail_panel.security.TrustedProxy.isTrustedProxy(cand)) continue;
             return cand;

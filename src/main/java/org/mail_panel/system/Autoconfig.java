@@ -35,9 +35,9 @@ import java.util.Locale;
 public class Autoconfig {
 
     /** Porta IMAP su TLS diretto: inet_listener imaps in DovecotConfig. */
-    public static final int PORTA_IMAP = 993;
+    public static final int IMAP_PORT = 993;
     /** Submission: "submission inet" in master.cf, con TLS obbligatorio. */
-    public static final int PORTA_SMTP = 587;
+    public static final int SMTP_PORT = 587;
 
     private Autoconfig() {}
 
@@ -49,9 +49,9 @@ public class Autoconfig {
      * L'XML per un dominio. Funzione pura: stessi ingressi, stesso file, e si puo' provare
      * senza server.
      */
-    public static String xml(String dominio, String hostDiPosta) {
-        String d = esc(dominio);
-        String h = esc(hostDiPosta);
+    public static String xml(String domain, String mailHost) {
+        String d = escape(domain);
+        String h = escape(mailHost);
         return """
             <?xml version="1.0" encoding="UTF-8"?>
             <clientConfig version="1.1">
@@ -77,7 +77,7 @@ public class Autoconfig {
                 </outgoingServer>
               </emailProvider>
             </clientConfig>
-            """.formatted(d, d, d, d, h, PORTA_IMAP, h, PORTA_SMTP);
+            """.formatted(d, d, d, d, h, IMAP_PORT, h, SMTP_PORT);
     }
 
     /**
@@ -85,33 +85,33 @@ public class Autoconfig {
      * caratteri, ma il file si costruisce concatenando: se un giorno qualcuno ci mette
      * dentro un valore che arriva da fuori, questo lo regge lo stesso.
      */
-    private static String esc(String s) {
+    private static String escape(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     /** Un dominio e' servito solo se il pannello lo gestisce davvero. Whitelist, non filtro. */
-    public static String dominioGestito(String richiesto) {
-        if (richiesto == null) return null;
-        String r = richiesto.trim().toLowerCase(Locale.ROOT);
+    public static String managedDomain(String required) {
+        if (required == null) return null;
+        String r = required.trim().toLowerCase(Locale.ROOT);
         if (r.startsWith("autoconfig.")) r = r.substring("autoconfig.".length());
         int p = r.indexOf(':');
         if (p > 0) r = r.substring(0, p);
         if (r.isEmpty()) return null;
         // Non si interroga il database a ogni richiesta: questa rotta e' pubblica e chiunque
         // puo' chiamarla in continuazione. Vedi DomainCache.
-        return DomainCache.gestito(r);
+        return DomainCache.managed(r);
     }
 
     /** Il dominio della casella indicata nel parametro emailaddress, se c'e'. */
-    public static String dominioDaIndirizzo(String indirizzo) {
-        if (indirizzo == null) return null;
-        int a = indirizzo.lastIndexOf('@');
-        return a < 0 ? null : indirizzo.substring(a + 1);
+    public static String domainFromAddress(String address) {
+        if (address == null) return null;
+        int a = address.lastIndexOf('@');
+        return a < 0 ? null : address.substring(a + 1);
     }
 
-    public static String hostDiPosta() {
+    public static String mailHost() {
         try {
             return Main.mailDatabase.getSetting("mail_hostname", "");
         } catch (Exception e) {
@@ -123,14 +123,14 @@ public class Autoconfig {
      * Lo stato reale del server
      * =================================================================== */
 
-    private static final String[] CONF_CANDIDATI = {
+    private static final String[] CONF_CANDIDATES = {
         "/usr/local/etc/nginx/sites-enabled/roundcube.conf",
         "/usr/local/etc/nginx/nginx.conf",
     };
 
     /** Il file di configurazione nginx che contiene il sito in ascolto su 443. */
     public static String confNginx() {
-        for (String c : CONF_CANDIDATI) {
+        for (String c : CONF_CANDIDATES) {
             try {
                 Path p = Path.of(c);
                 if (!Files.isReadable(p)) continue;
@@ -144,65 +144,65 @@ public class Autoconfig {
         return null;
     }
 
-    private static final String MARCATORE = "# --- autoconfig Thunderbird (pannello di posta) ---";
+    private static final String MARKER = "# --- autoconfig Thunderbird (pannello di posta) ---";
 
     /**
      * Cosa manca perche' Thunderbird trovi il file. Si LEGGE, non si tocca niente.
      */
-    public static JSONObject stato() {
+    public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
-        String host = hostDiPosta();
-        r.put("hostDiPosta", host);
+        String host = mailHost();
+        r.put("mailHost", host);
         if (host == null || host.isBlank())
-            return r.put("pronto", false)
+            return r.put("ready", false)
                     .put("error", I18n.tr("server.autoconf.noHostnameFile"));
 
         String conf = confNginx();
         r.put("conf", conf == null ? JSONObject.NULL : conf);
         if (conf == null)
-            return r.put("pronto", false)
+            return r.put("ready", false)
                     .put("error", I18n.tr("server.autoconf.noNginx443"));
 
-        String testo = "";
-        try { testo = Files.readString(Path.of(conf)); } catch (Exception ignore) {}
-        boolean nomeCoperto = testo.contains("autoconfig.") && testo.contains("mta-sts.");
-        boolean rottaPresente = testo.contains(MARCATORE);
-        r.put("nomeCoperto", nomeCoperto).put("rottaPresente", rottaPresente);
-        r.put("serverName", primaRigaCon(testo, "server_name"));
+        String text = "";
+        try { text = Files.readString(Path.of(conf)); } catch (Exception ignore) {}
+        boolean coveredName = text.contains("autoconfig.") && text.contains("mta-sts.");
+        boolean brokenPresent = text.contains(MARKER);
+        r.put("coveredName", coveredName).put("brokenPresent", brokenPresent);
+        r.put("serverName", firstLineWith(text, "server_name"));
         // Se la superficie pubblica sulla 443 e' installata, quei nomi sono suoi e questa
         // scheda non deve nemmeno offrire di toccare nginx: un pulsante che, premuto, si
         // rifiuta, e' un pulsante che non andava mostrato.
-        r.put("superficie443", WebProtection.stato().optBoolean("installato", false));
+        r.put("surface443", WebProtection.state().optBoolean("installed", false));
 
         // Il certificato: se non copre autoconfig.<dominio>, Thunderbird sbatte su un errore
         // TLS prima ancora di leggere il file.
-        JSONArray domini = new JSONArray();
-        List<String> guai = new ArrayList<>();
-        int esaminati = 0, funzionanti = 0;
-        boolean elencoLetto = false;
+        JSONArray domains = new JSONArray();
+        List<String> troubles = new ArrayList<>();
+        int reviewed = 0, working = 0;
+        boolean readList = false;
         try {
-            var tutti = Main.mailDatabase.getDomains();
-            elencoLetto = true;
-            for (var d : tutti) {
-                String nome = "autoconfig." + d.domain;
-                JSONObject j = new JSONObject().put("dominio", d.domain).put("nome", nome);
-                j.put("dns", risolve(nome));
-                j.put("certificato", certificatoCopre(nome));
+            var allItems = Main.mailDatabase.getDomains();
+            readList = true;
+            for (var d : allItems) {
+                String name = "autoconfig." + d.domain;
+                JSONObject j = new JSONObject().put("domain", d.domain).put("name", name);
+                j.put("dns", resolves(name));
+                j.put("certificate", certificateCovers(name));
                 // La prova che conta: si CHIEDE il file come lo chiederebbe Thunderbird.
                 // Leggere la configurazione di nginx dice cosa dovrebbe succedere; questa
                 // dice cosa succede. Non sono la stessa cosa, e quando divergono e' sempre
                 // la seconda ad avere ragione.
-                JSONObject prova = provaScarico(nome, d.domain);
-                j.put("prova", prova);
-                esaminati++;
-                if (prova.optBoolean("ok", false)) funzionanti++;
-                else guai.add(d.domain + " (" + prova.optString("errore", I18n.tr("server.autoconf.failed")) + ")");
-                domini.put(j);
+                JSONObject test = testDownload(name, d.domain);
+                j.put("test", test);
+                reviewed++;
+                if (test.optBoolean("ok", false)) working++;
+                else troubles.add(d.domain + " (" + test.optString("error", I18n.tr("server.autoconf.failed")) + ")");
+                domains.put(j);
             }
         } catch (Exception e) {
-            guai.add(I18n.tr("server.autoconf.domainsUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            troubles.add(I18n.tr("server.autoconf.domainsUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
-        r.put("domini", domini).put("esaminati", esaminati).put("funzionanti", funzionanti);
+        r.put("domains", domains).put("reviewed", reviewed).put("working", working);
 
         // Il verdict viene dalla PROVA, non dal testo della configurazione.
         //
@@ -214,15 +214,15 @@ public class Autoconfig {
         // e un attimo dopo dichiarava che nginx non lo serve e che i client devono
         // configurarsi a mano. Il commento qui sopra diceva gia' quale delle due misure ha
         // ragione; il verdict usava l'altra.
-        boolean pronto = pronto(elencoLetto, esaminati, funzionanti);
-        r.put("pronto", pronto);
-        r.put("perche", pronto
-                ? I18n.tr("server.autoconf.arrivesAll", java.util.Map.of("n", String.valueOf(esaminati))) + " " + (rottaPresente
+        boolean ready = ready(readList, reviewed, working);
+        r.put("ready", ready);
+        r.put("why", ready
+                ? I18n.tr("server.autoconf.arrivesAll", java.util.Map.of("n", String.valueOf(reviewed))) + " " + (brokenPresent
                         ? I18n.tr("server.autoconf.routeIn", java.util.Map.of("conf", String.valueOf(conf)))
                         : I18n.tr("server.autoconf.routeElsewhere", java.util.Map.of("conf", String.valueOf(conf))))
-                : esaminati == 0
+                : reviewed == 0
                   ? I18n.tr("server.autoconf.noneTried")
-                  : I18n.tr("server.autoconf.notArriving", java.util.Map.of("n", String.valueOf(guai.size()), "tot", String.valueOf(esaminati), "list", String.valueOf(String.join("; ", guai)))));
+                  : I18n.tr("server.autoconf.notArriving", java.util.Map.of("n", String.valueOf(troubles.size()), "tot", String.valueOf(reviewed), "list", String.valueOf(String.join("; ", troubles)))));
         return r;
     }
 
@@ -234,7 +234,7 @@ public class Autoconfig {
      * manderebbe a rifare la cosa sbagliata.
      */
     /**
-     * Il verdict, staccato da stato() perche' un test possa arrivarci.
+     * Il verdict, staccato da state() perche' un test possa arrivarci.
      *
      * E' la riga che sbagliava: prima diceva "pronto" in base a una ricerca di testo dentro
      * nginx.conf, e cosi' dichiarava che nginx non serviva un file che stava servendo. Ora
@@ -247,13 +247,13 @@ public class Autoconfig {
      *  - tutte le prove sono riuscite: una sola che fallisce basta, perche' e' un dominio i
      *    cui client continuano a doversi configurare a mano.
      */
-    static boolean pronto(boolean elencoLetto, int esaminati, int funzionanti) {
-        return elencoLetto && esaminati > 0 && funzionanti == esaminati;
+    static boolean ready(boolean readList, int reviewed, int working) {
+        return readList && reviewed > 0 && working == reviewed;
     }
 
-    private static JSONObject provaScarico(String nome, String dominio) {
+    private static JSONObject testDownload(String name, String domain) {
         JSONObject r = new JSONObject();
-        String url = "https://" + nome + "/mail/config-v1.1.xml?emailaddress=prova@" + dominio;
+        String url = "https://" + name + "/mail/config-v1.1.xml?emailaddress=prova@" + domain;
         r.put("url", url);
         try {
             java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()
@@ -266,42 +266,42 @@ public class Autoconfig {
                     .GET().build();
             java.net.http.HttpResponse<String> resp =
                     http.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-            r.put("codice", resp.statusCode());
-            String corpo = resp.body() == null ? "" : resp.body();
-            boolean giusto = resp.statusCode() == 200 && corpo.contains("<clientConfig")
-                    && corpo.contains("<domain>" + dominio + "</domain>");
-            r.put("ok", giusto);
-            if (!giusto) {
+            r.put("code", resp.statusCode());
+            String body = resp.body() == null ? "" : resp.body();
+            boolean right = resp.statusCode() == 200 && body.contains("<clientConfig")
+                    && body.contains("<domain>" + domain + "</domain>");
+            r.put("ok", right);
+            if (!right) {
                 if (resp.statusCode() != 200)
-                    r.put("errore", I18n.tr("server.autoconf.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
-                else if (!corpo.contains("<clientConfig"))
-                    r.put("errore", I18n.tr("server.autoconf.notConfigFile"));
+                    r.put("error", I18n.tr("server.autoconf.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
+                else if (!body.contains("<clientConfig"))
+                    r.put("error", I18n.tr("server.autoconf.notConfigFile"));
                 else
-                    r.put("errore", I18n.tr("server.autoconf.otherDomain", java.util.Map.of("d", String.valueOf(dominio))));
+                    r.put("error", I18n.tr("server.autoconf.otherDomain", java.util.Map.of("d", String.valueOf(domain))));
             }
             return r;
         } catch (javax.net.ssl.SSLException e) {
             return r.put("ok", false).put("tls", true)
-                    .put("errore", I18n.tr("server.autoconf.certInvalid", java.util.Map.of("name", String.valueOf(nome))));
+                    .put("error", I18n.tr("server.autoconf.certInvalid", java.util.Map.of("name", String.valueOf(name))));
         } catch (java.net.UnknownHostException e) {
             return r.put("ok", false)
-                    .put("errore", I18n.tr("server.autoconf.noCname", java.util.Map.of("name", String.valueOf(nome))));
+                    .put("error", I18n.tr("server.autoconf.noCname", java.util.Map.of("name", String.valueOf(name))));
         } catch (Exception e) {
             return r.put("ok", false)
-                    .put("errore", I18n.tr("server.autoconf.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName() + (e.getMessage() == null ? "" : " - " + e.getMessage())))));
+                    .put("error", I18n.tr("server.autoconf.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName() + (e.getMessage() == null ? "" : " - " + e.getMessage())))));
         }
     }
 
-    private static String primaRigaCon(String testo, String ago) {
-        for (String r : testo.split("\n")) if (r.contains(ago)) return r.trim();
+    private static String firstLineWith(String text, String ago) {
+        for (String r : text.split("\n")) if (r.contains(ago)) return r.trim();
         return "";
     }
 
     /** Il nome risolve in DNS (il CNAME autoconfig.* creato dalla pagina DNS). */
-    private static boolean risolve(String nome) {
+    private static boolean resolves(String name) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("dig", "+short", nome);
-            Shell.applicaPath(pb);
+            ProcessBuilder pb = new ProcessBuilder("dig", "+short", name);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes()).trim();
@@ -313,22 +313,22 @@ public class Autoconfig {
     }
 
     /** Il certificato in uso contiene quel nome fra i suoi SAN. */
-    private static boolean certificatoCopre(String nome) {
+    private static boolean certificateCovers(String name) {
         try {
             Path cert = Path.of("/usr/local/etc/ssl/mail/fullchain.pem");
             if (!Files.isReadable(cert)) return false;
             ProcessBuilder pb = new ProcessBuilder("openssl", "x509", "-in", cert.toString(),
                     "-noout", "-text");
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
             p.waitFor();
             for (String r : out.split("\n")) {
                 if (!r.contains("DNS:")) continue;
-                for (String pezzo : r.split(",")) {
-                    String s = pezzo.trim();
-                    if (s.startsWith("DNS:") && s.substring(4).trim().equalsIgnoreCase(nome)) return true;
+                for (String piece : r.split(",")) {
+                    String s = piece.trim();
+                    if (s.startsWith("DNS:") && s.substring(4).trim().equalsIgnoreCase(name)) return true;
                 }
             }
             return false;
@@ -350,15 +350,15 @@ public class Autoconfig {
      * ripristina la copia e non si ricarica niente. Una webmail spenta per aggiungere un
      * file di configurazione sarebbe un pessimo scambio.
      */
-    public static JSONObject installa() {
+    public static JSONObject install() {
         JSONObject r = new JSONObject();
         try {
-            JSONObject st = stato();
+            JSONObject st = state();
             if (!st.optBoolean("success", false) || st.has("error"))
                 return r.put("success", false).put("error", st.optString("error", I18n.tr("server.autoconf.stateUnreadable")));
-            if (st.optBoolean("pronto", false))
-                return r.put("success", true).put("giaFatto", true)
-                        .put("nota", I18n.tr("server.autoconf.alreadyAll") + " " + st.optString("perche", ""));
+            if (st.optBoolean("ready", false))
+                return r.put("success", true).put("alreadyDone", true)
+                        .put("note", I18n.tr("server.autoconf.alreadyAll") + " " + st.optString("why", ""));
 
             // La guardia che conta, e vale anche quando il file NON arriva.
             //
@@ -375,48 +375,48 @@ public class Autoconfig {
             //
             // "nginx -t" non se ne accorgerebbe: e' una rottura di significato, non di
             // sintassi. Quindi la decisione va presa qui, prima di scrivere.
-            if (WebProtection.stato().optBoolean("installato", false))
-                return r.put("success", false).put("giaAltrove", true)
-                        .put("error", I18n.tr("server.autoconf.publicSurface") + " " + st.optString("perche", ""));
+            if (WebProtection.state().optBoolean("installed", false))
+                return r.put("success", false).put("alreadyElsewhere", true)
+                        .put("error", I18n.tr("server.autoconf.publicSurface") + " " + st.optString("why", ""));
 
             // Quali politiche MTA-STS rispondono PRIMA di toccare qualcosa. Senza questa
             // fotografia, dopo non c'e' modo di sapere se una l'ho rotta io.
-            List<String> politichePrima = politicheCheRispondono();
-            r.put("politichePrima", new JSONArray(politichePrima));
+            List<String> policiesBefore = answeringPolicies();
+            r.put("policiesBefore", new JSONArray(policiesBefore));
 
             String conf = st.getString("conf");
             Path p = Path.of(conf);
-            String testo = Files.readString(p);
+            String text = Files.readString(p);
             r.put("conf", conf);
 
-            Path copia = Path.of("/var/db/mailpanel/nginx-before-autoconfig.conf");
-            Files.createDirectories(copia.getParent());
-            Files.writeString(copia, testo);
-            r.put("copia", copia.toString());
+            Path copy = Path.of("/var/db/mailpanel/nginx-before-autoconfig.conf");
+            Files.createDirectories(copy.getParent());
+            Files.writeString(copy, text);
+            r.put("copy", copy.toString());
 
-            String nuovo = testo;
+            String fresh = text;
 
             // 1. i nomi: senza, nginx non risponde per autoconfig.<dominio>
-            if (!nuovo.contains("autoconfig.") || !nuovo.contains("mta-sts.")) {
-                int i = nuovo.indexOf("server_name");
+            if (!fresh.contains("autoconfig.") || !fresh.contains("mta-sts.")) {
+                int i = fresh.indexOf("server_name");
                 if (i < 0) return r.put("success", false)
                         .put("error", I18n.tr("server.autoconf.noServerName"));
-                int fine = nuovo.indexOf(';', i);
-                if (fine < 0) return r.put("success", false)
+                int end = fresh.indexOf(';', i);
+                if (end < 0) return r.put("success", false)
                         .put("error", I18n.tr("server.autoconf.serverNameNoSemicolon"));
-                nuovo = nuovo.substring(0, fine) + " autoconfig.* mta-sts.*" + nuovo.substring(fine);
+                fresh = fresh.substring(0, end) + " autoconfig.* mta-sts.*" + fresh.substring(end);
             }
 
             // 2. la rotta: la richiesta va al pannello, che sa quali domini esistono e
             //    costruisce l'XML per quello giusto. Un file statico non potrebbe.
-            if (!nuovo.contains(MARCATORE)) {
-                int i = nuovo.indexOf("location /");
+            if (!fresh.contains(MARKER)) {
+                int i = fresh.indexOf("location /");
                 if (i < 0) return r.put("success", false)
                         .put("error", I18n.tr("server.autoconf.noLocation"));
                 // Due rotte, un marcatore solo: entrambe girano la richiesta al pannello, che
                 // sa quali domini esistono e genera il contenuto per quello chiesto. Un file
                 // statico non potrebbe, perche' il contenuto dipende dal dominio.
-                String rotta = MARCATORE + "\n"
+                String broken = MARKER + "\n"
                         + "    location = /mail/config-v1.1.xml {\n"
                         + "        proxy_pass https://127.0.0.1:2096/autoconfig/mail/config-v1.1.xml;\n"
                         + "        proxy_set_header Host $host;\n"
@@ -425,25 +425,25 @@ public class Autoconfig {
                         + "        proxy_pass https://127.0.0.1:2096/mta-sts/policy;\n"
                         + "        proxy_set_header Host $host;\n"
                         + "    }\n\n    ";
-                nuovo = nuovo.substring(0, i) + rotta + nuovo.substring(i);
+                fresh = fresh.substring(0, i) + broken + fresh.substring(i);
             }
 
-            Files.writeString(p, nuovo);
+            Files.writeString(p, fresh);
 
             // 3. la validazione. Qui si decide se andare avanti o tornare indietro.
-            Esito prova = esegui("nginx", "-t");
-            if (prova.codice != 0) {
-                Files.writeString(p, testo);
-                return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.autoconf.nginxRejected", java.util.Map.of("out", String.valueOf(prova.output.trim()))));
+            Outcome test = run("nginx", "-t");
+            if (test.code != 0) {
+                Files.writeString(p, text);
+                return r.put("success", false).put("restored", true)
+                        .put("error", I18n.tr("server.autoconf.nginxRejected", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
-            Esito ric = esegui("service", "nginx", "reload");
-            if (ric.codice != 0) {
-                Files.writeString(p, testo);
-                esegui("service", "nginx", "reload");
-                return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.autoconf.reloadFailed", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
+            Outcome reloadOutcome = run("service", "nginx", "reload");
+            if (reloadOutcome.code != 0) {
+                Files.writeString(p, text);
+                run("service", "nginx", "reload");
+                return r.put("success", false).put("restored", true)
+                        .put("error", I18n.tr("server.autoconf.reloadFailed", java.util.Map.of("out", String.valueOf(reloadOutcome.output.trim()))));
             }
 
             // Una verifica non puo' guardare solo cio' che volevo ottenere: va guardato anche
@@ -451,27 +451,27 @@ public class Autoconfig {
             // richieste da un blocco all'altro, e il blocco che li perde e' quello che serve la
             // politica MTA-STS. Con i record TXT gia' pubblicati, farla sparire vuol dire
             // lasciare al mondo la dichiarazione di una protezione che non risponde piu'.
-            List<String> politicheDopo = politicheCheRispondono();
-            List<String> perse = new ArrayList<>(politichePrima);
-            perse.removeAll(politicheDopo);
-            if (!perse.isEmpty()) {
-                Files.writeString(p, testo);
-                esegui("service", "nginx", "reload");
-                return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.autoconf.stsLost", java.util.Map.of("list", String.valueOf(String.join(", ", perse)))));
+            List<String> policiesAfter = answeringPolicies();
+            List<String> lost = new ArrayList<>(policiesBefore);
+            lost.removeAll(policiesAfter);
+            if (!lost.isEmpty()) {
+                Files.writeString(p, text);
+                run("service", "nginx", "reload");
+                return r.put("success", false).put("restored", true)
+                        .put("error", I18n.tr("server.autoconf.stsLost", java.util.Map.of("list", String.valueOf(String.join(", ", lost)))));
             }
 
-            JSONObject dopo = stato();
-            r.put("statoDopo", dopo);
-            if (!dopo.optBoolean("pronto", false)) {
-                Files.writeString(p, testo);
-                esegui("service", "nginx", "reload");
-                return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.autoconf.stillNotArriving", java.util.Map.of("why", String.valueOf(dopo.optString("perche", "")), "copy", String.valueOf(copia))));
+            JSONObject after = state();
+            r.put("stateAfter", after);
+            if (!after.optBoolean("ready", false)) {
+                Files.writeString(p, text);
+                run("service", "nginx", "reload");
+                return r.put("success", false).put("restored", true)
+                        .put("error", I18n.tr("server.autoconf.stillNotArriving", java.util.Map.of("why", String.valueOf(after.optString("why", "")), "copy", String.valueOf(copy))));
             }
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.autoconf.done", java.util.Map.of("copy", String.valueOf(copia))));
+                    .put("note", I18n.tr("server.autoconf.done", java.util.Map.of("copy", String.valueOf(copy))));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.autoconf.installError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
@@ -486,42 +486,42 @@ public class Autoconfig {
      * gia' non rispondeva prima non conta come danno — non lo si e' rotto qui — e includerlo
      * farebbe fallire un'installazione riuscita.
      */
-    private static List<String> politicheCheRispondono() {
-        List<String> vive = new ArrayList<>();
+    private static List<String> answeringPolicies() {
+        List<String> liveOnes = new ArrayList<>();
         try {
             for (var d : Main.mailDatabase.getDomains())
-                if (MtaSts.provaPubblica(d.domain).optBoolean("ok", false)) vive.add(d.domain);
+                if (MtaSts.publicTest(d.domain).optBoolean("ok", false)) liveOnes.add(d.domain);
         } catch (Exception ignore) {}
-        return vive;
+        return liveOnes;
     }
 
-    private record Esito(int codice, String output) {}
+    private record Outcome(int code, String output) {}
 
-    private static Esito esegui(String... cmd) {
+    private static Outcome run(String... cmd) {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            return new Esito(p.waitFor(), out);
+            return new Outcome(p.waitFor(), out);
         } catch (Exception e) {
-            return new Esito(-1, String.valueOf(e.getMessage()));
+            return new Outcome(-1, String.valueOf(e.getMessage()));
         }
     }
 
     /** L'anteprima del file, per guardarlo prima di installare qualsiasi cosa. */
-    public static JSONObject anteprima() {
+    public static JSONObject preview() {
         JSONObject r = new JSONObject().put("success", true);
-        String host = hostDiPosta();
+        String host = mailHost();
         if (host == null || host.isBlank())
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.autoconf.noHostname"));
-        List<String> nomi = new ArrayList<>();
-        try { for (var d : Main.mailDatabase.getDomains()) nomi.add(d.domain); } catch (Exception ignore) {}
-        if (nomi.isEmpty())
+        List<String> names = new ArrayList<>();
+        try { for (var d : Main.mailDatabase.getDomains()) names.add(d.domain); } catch (Exception ignore) {}
+        if (names.isEmpty())
             return new JSONObject().put("success", false).put("error", I18n.tr("server.autoconf.noDomains"));
-        return r.put("dominio", nomi.get(0)).put("hostDiPosta", host)
-                .put("xml", xml(nomi.get(0), host)).put("quantiDomini", nomi.size());
+        return r.put("domain", names.get(0)).put("mailHost", host)
+                .put("xml", xml(names.get(0), host)).put("domainCount", names.size());
     }
 }

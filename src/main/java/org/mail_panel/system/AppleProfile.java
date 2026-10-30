@@ -47,9 +47,9 @@ import java.util.UUID;
 public class AppleProfile {
 
     /** IMAP su TLS diretto: inet_listener imaps di Dovecot. */
-    public static final int PORTA_IMAP = 993;
+    public static final int IMAP_PORT = 993;
     /** smtps in master.cf, con smtpd_tls_wrappermode=yes. */
-    public static final int PORTA_SMTP = 465;
+    public static final int SMTP_PORT = 465;
 
     private AppleProfile() {}
 
@@ -59,15 +59,19 @@ public class AppleProfile {
      * Gli identificativi sono DERIVATI dall'indirizzo, non casuali: reinstallando il profilo
      * Apple aggiorna quello esistente invece di aggiungere un secondo account identico.
      */
-    public static String mobileconfig(String email, String nomeVisualizzato, String hostDiPosta,
-                                      String organizzazione) {
-        String e = esc(email);
-        String n = esc(nomeVisualizzato == null || nomeVisualizzato.isBlank() ? email : nomeVisualizzato);
-        String h = esc(hostDiPosta);
-        String org = esc(organizzazione == null || organizzazione.isBlank() ? hostDiPosta : organizzazione);
-        String idProfilo = "org.mail-panel." + email.toLowerCase(Locale.ROOT);
-        String uuidProfilo = deterministico("profilo:" + email.toLowerCase(Locale.ROOT));
-        String uuidPosta = deterministico("posta:" + email.toLowerCase(Locale.ROOT));
+    public static String mobileconfig(String email, String displayName, String mailHost,
+                                      String organization) {
+        String e = escape(email);
+        String n = escape(displayName == null || displayName.isBlank() ? email : displayName);
+        String h = escape(mailHost);
+        String org = escape(organization == null || organization.isBlank() ? mailHost : organization);
+        String profileId = "org.mail-panel." + email.toLowerCase(Locale.ROOT);
+        String profileUuid = deterministic("profilo:" + email.toLowerCase(Locale.ROOT));
+        String mailUuid = deterministic("posta:" + email.toLowerCase(Locale.ROOT));
+        // "posta" nell'identificatore e nel seme dell'UUID resta in italiano apposta: iOS e macOS
+        // riconoscono un profilo dal suo PayloadIdentifier e dal suo UUID, e un profilo con un
+        // identificatore nuovo si installerebbe ACCANTO a quello vecchio invece di sostituirlo.
+        // E' un nome che vive gia' sui dispositivi di chi l'ha installato, non un nome del codice.
 
         return """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -112,45 +116,45 @@ public class AppleProfile {
             </dict>
             </plist>
             """.formatted(
-                esc(idProfilo), uuidProfilo,
-                esc(I18n.tr("server.appleprof.displayName", java.util.Map.of("e", String.valueOf(email)))), esc(I18n.tr("server.appleprof.description", java.util.Map.of("e", String.valueOf(email)))), org,
-                esc(idProfilo), uuidPosta, e,
+                escape(profileId), profileUuid,
+                escape(I18n.tr("server.appleprof.displayName", java.util.Map.of("e", String.valueOf(email)))), escape(I18n.tr("server.appleprof.description", java.util.Map.of("e", String.valueOf(email)))), org,
+                escape(profileId), mailUuid, e,
                 e, n, e,
-                h, PORTA_IMAP, e,
-                h, PORTA_SMTP, e);
+                h, IMAP_PORT, e,
+                h, SMTP_PORT, e);
     }
 
     /**
      * Un UUID sempre uguale per lo stesso indirizzo. Se fosse casuale, ogni download
      * genererebbe un profilo "nuovo" e Mail accumulerebbe account doppioni.
      */
-    private static String deterministico(String seme) {
-        return UUID.nameUUIDFromBytes(seme.getBytes(StandardCharsets.UTF_8))
+    private static String deterministic(String seed) {
+        return UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8))
                 .toString().toUpperCase(Locale.ROOT);
     }
 
-    private static String esc(String s) {
+    private static String escape(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     /** La casella esiste davvero? Whitelist: si serve solo cio' che il pannello ospita. */
-    public static Casella mailbox(String email) {
+    public static ProfileMailbox mailbox(String email) {
         if (email == null || email.isBlank()) return null;
-        String cercato = email.trim().toLowerCase(Locale.ROOT);
+        String searched = email.trim().toLowerCase(Locale.ROOT);
         try {
             for (var d : Main.mailDatabase.getDomains())
                 for (var m : Main.mailDatabase.getMailboxes(d.id))
-                    if (m.email != null && m.email.equalsIgnoreCase(cercato))
-                        return new Casella(m.email, m.name);
+                    if (m.email != null && m.email.equalsIgnoreCase(searched))
+                        return new ProfileMailbox(m.email, m.name);
         } catch (Exception ignore) {}
         return null;
     }
 
-    public record Casella(String email, String nome) {}
+    public record ProfileMailbox(String email, String name) {}
 
-    public static String hostDiPosta() {
+    public static String mailHost() {
         try {
             return Main.mailDatabase.getSetting("mail_hostname", "");
         } catch (Exception e) {
@@ -159,38 +163,38 @@ public class AppleProfile {
     }
 
     /** L'elenco delle caselle e lo stato generale, per la scheda del pannello. */
-    public static JSONObject stato() {
+    public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
-        String host = hostDiPosta();
-        r.put("hostDiPosta", host);
-        r.put("portaImap", PORTA_IMAP).put("portaSmtp", PORTA_SMTP);
+        String host = mailHost();
+        r.put("mailHost", host);
+        r.put("imapPort", IMAP_PORT).put("smtpPort", SMTP_PORT);
         if (host == null || host.isBlank())
             return r.put("success", false)
                     .put("error", I18n.tr("server.appleprof.noHostnameProfile"));
-        JSONArray caselle = new JSONArray();
+        JSONArray mailboxes = new JSONArray();
         try {
             for (var d : Main.mailDatabase.getDomains())
                 for (var m : Main.mailDatabase.getMailboxes(d.id))
-                    if (m.email != null && !m.email.isBlank()) caselle.put(m.email);
+                    if (m.email != null && !m.email.isBlank()) mailboxes.put(m.email);
         } catch (Exception e) {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.mailboxesUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
-        return r.put("caselle", caselle);
+        return r.put("mailboxes", mailboxes);
     }
 
     /** L'anteprima del profilo, per guardarlo prima di scaricarlo. */
-    public static JSONObject anteprima(String email) {
-        Casella c = mailbox(email);
+    public static JSONObject preview(String email) {
+        ProfileMailbox c = mailbox(email);
         if (c == null)
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.noMailbox", java.util.Map.of("e", String.valueOf(email))));
-        String host = hostDiPosta();
+        String host = mailHost();
         if (host == null || host.isBlank())
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.noHostname"));
         return new JSONObject().put("success", true).put("email", c.email())
-                .put("profilo", mobileconfig(c.email(), c.nome(), host, host));
+                .put("profile", mobileconfig(c.email(), c.name(), host, host));
     }
 
     /**
@@ -201,7 +205,7 @@ public class AppleProfile {
      * Il DOCTYPE rimanda al DTD di Apple: il caricamento di entita' esterne va spento, sia
      * per non dipendere dalla rete sia per non aprire la porta alle entita' esterne.
      */
-    public static boolean benFormato(String profilo) {
+    public static boolean wellFormed(String profile) {
         try {
             javax.xml.parsers.DocumentBuilderFactory f =
                     javax.xml.parsers.DocumentBuilderFactory.newInstance();
@@ -209,7 +213,7 @@ public class AppleProfile {
             f.setFeature("http://xml.org/sax/features/external-general-entities", false);
             f.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
             f.newDocumentBuilder().parse(new java.io.ByteArrayInputStream(
-                    profilo.getBytes(StandardCharsets.UTF_8)));
+                    profile.getBytes(StandardCharsets.UTF_8)));
             return true;
         } catch (Exception e) {
             return false;
@@ -217,7 +221,7 @@ public class AppleProfile {
     }
 
     /** Il nome del file proposto al browser. Solo caratteri innocui. */
-    public static String nomeFile(String email) {
+    public static String fileName(String email) {
         String base = email == null ? "posta" : email.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]", "-");
         return base + ".mobileconfig";
     }

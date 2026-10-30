@@ -263,7 +263,7 @@ public class Main {
 
             // TODO: migrate to Shell.run when touched
             ProcessBuilder processBuilder = new ProcessBuilder(command);
-            org.mail_panel.util.Shell.applicaPath(processBuilder);
+            org.mail_panel.util.Shell.applyPath(processBuilder);
             processBuilder.environment().putAll(secrets);
             processBuilder.redirectErrorStream(true);
             // Lo stdin del figlio e' /dev/null, sempre. L'impostazione predefinita di
@@ -363,8 +363,8 @@ public class Main {
         // finche' un aggiornamento successivo non porta via un pezzo dello stack di posta.
         // Il ripristino va fatto qui, all'avvio, prima che il pannello torni utilizzabile.
         try {
-            String ripristino = org.mail_panel.system.UpdateManager.restoreLocksAfterCrash();
-            if (!ripristino.isEmpty()) System.out.println(ripristino);
+            String restore = org.mail_panel.system.UpdateManager.restoreLocksAfterCrash();
+            if (!restore.isEmpty()) System.out.println(restore);
         } catch (Exception e) {
             System.out.println("Restoring package locks failed: " + e.getMessage());
         }
@@ -432,10 +432,10 @@ public class Main {
         try {
             // La console e' in inglese: il messaggio condiviso con il pannello si chiede in inglese.
             org.mail_panel.i18n.I18n.setCurrent("en");
-            String creato;
-            try { creato = org.mail_panel.system.UpdateManager.createRunSh(); }
+            String created;
+            try { created = org.mail_panel.system.UpdateManager.createRunSh(); }
             finally { org.mail_panel.i18n.I18n.clearCurrent(); }
-            if (!creato.isEmpty()) System.out.println(creato);
+            if (!created.isEmpty()) System.out.println(created);
         } catch (Exception e) {
             // Se non si puo' scrivere accanto al jar non e' un problema: serviva solo a comodita'.
         }
@@ -880,14 +880,14 @@ public class Main {
                     System.out.println();
                     System.out.println(ANSI_YELLOW + "Port " + port + " is already in use: "
                             + "the panel is most likely ALREADY RUNNING." + ANSI_RESET);
-                    String chi = "";
+                    String who = "";
                     try {
-                        chi = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(20),
+                        who = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(20),
                                 "sockstat -46l -p " + port + " 2>/dev/null | grep -v '^USER'").outputTrim();
                     } catch (Exception ignored) { }
-                    if (!chi.isEmpty()) {
+                    if (!who.isEmpty()) {
                         System.out.println("Who is using it:");
-                        System.out.println(chi);
+                        System.out.println(who);
                         System.out.println();
                         System.out.println("To stop it:  kill <PID>    (the PID is the third column)");
                     }
@@ -900,11 +900,11 @@ public class Main {
                 }
                 server.start();
 
-                // La regola dei blocchi: i pacchetti dello stack di posta restano lockedPackages,
-                // tranne quelli unlockedPackages apposta da un amministratore.
+                // La regola dei blocchi: i pacchetti dello stack di posta restano bloccati,
+                // tranne quelli sbloccati apposta da un amministratore.
                 try {
-                    String politica = org.mail_panel.system.UpdateManager.applyLockPolicy();
-                    if (!politica.isEmpty()) System.out.println(politica);
+                    String policy = org.mail_panel.system.UpdateManager.applyLockPolicy();
+                    if (!policy.isEmpty()) System.out.println(policy);
                 } catch (Exception e) {
                     System.out.println("Applying the package lock rule failed: " + e.getMessage());
                 }
@@ -986,7 +986,7 @@ public class Main {
     }
 
     private static void resetMySQLDatabase() {
-        azzeraDatabase();
+        resetDatabase();
         waitForEnter();
     }
 
@@ -994,7 +994,7 @@ public class Main {
      * Svuota il database del pannello e ricrea le tabelle vuote. Vero solo se non e' rimasta
      * nessuna tabella di prima: "completato" si scrive solo allora, altrimenti si dice cosa resta.
      */
-    private static boolean azzeraDatabase() {
+    private static boolean resetDatabase() {
         System.out.println(ANSI_RED + "RESETTING MySQL database..." + ANSI_RESET);
 
         try (ResultSet result = dbManager.get_data_config()) {
@@ -1018,25 +1018,25 @@ public class Main {
                 System.out.println(ANSI_RED + "Failed to connect to MySQL: database not touched." + ANSI_RESET);
                 return false;
             }
-            String errore = null;
-            java.util.List<String> cancellate = java.util.List.of();
+            String error = null;
+            java.util.List<String> deleted = java.util.List.of();
             try {
-                cancellate = mailDatabase.dropAllTables();
+                deleted = mailDatabase.dropAllTables();
             } catch (java.sql.SQLException e) {
-                errore = e.getMessage();
+                error = e.getMessage();
             }
             try {
                 // Anche dopo un reset non riuscito: il pannello ritrova le tabelle che mancano.
                 mailDatabase.createSchema();
             } catch (java.sql.SQLException e) {
-                errore = (errore == null ? "" : errore + " ") + "Tables not recreated: " + e.getMessage();
+                error = (error == null ? "" : error + " ") + "Tables not recreated: " + e.getMessage();
             }
-            if (errore != null) {
-                System.out.println(ANSI_RED + "Database NOT reset. " + errore + ANSI_RESET);
+            if (error != null) {
+                System.out.println(ANSI_RED + "Database NOT reset. " + error + ANSI_RESET);
                 return false;
             }
             System.out.println("Tables dropped: "
-                    + (cancellate.isEmpty() ? "none, the database was already empty" : String.join(", ", cancellate)));
+                    + (deleted.isEmpty() ? "none, the database was already empty" : String.join(", ", deleted)));
             System.out.println(ANSI_GREEN + "Database reset completed!" + ANSI_RESET);
             return true;
         } catch (Exception e) {
@@ -1066,12 +1066,12 @@ public class Main {
         executeCommand("rm -rf /usr/local/etc/rspamd/*");
 
         // Reset database
-        boolean databaseAzzerato = azzeraDatabase();
+        boolean databaseReset = resetDatabase();
 
         // Reset service status in SQLite
         dbManager.resetAllServices();
 
-        if (databaseAzzerato) {
+        if (databaseReset) {
             System.out.println(ANSI_GREEN + "Full reset completed!" + ANSI_RESET);
             System.out.println(ANSI_YELLOW + "You can now reinstall services from the menu." + ANSI_RESET);
         } else {
@@ -1086,7 +1086,7 @@ public class Main {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.inheritIO();
             Process p = pb.start();
             p.waitFor();

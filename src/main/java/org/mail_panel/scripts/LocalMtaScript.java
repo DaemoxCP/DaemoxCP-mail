@@ -13,7 +13,7 @@ package org.mail_panel.scripts;
  * `sendmail -t` locale e il mail() di PHP finivano entrambi in dma ("dma[...]: delivery
  * successful" nel maillog), e Postfix non ne vedeva nessuno. Per la posta verso fuori vuol dire
  * niente milter, quindi niente firma DKIM, e nessuna politica TLS: e' il difetto che il rapporto
- * periodico aveva gia' incontrato e aggirato da solo (PeriodicReport.sendmailDiPostfix).
+ * periodico aveva gia' incontrato e aggirato da solo (PeriodicReport.postfixSendmail).
  *
  * Questo pezzo da solo NON basta, e anche questo e' misurato: va insieme a "myorigin = localhost"
  * in main.cf, che ciascuno script scrive. Senza, "root" diventava root@<nome del server>, che non

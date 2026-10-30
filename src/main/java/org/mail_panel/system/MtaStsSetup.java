@@ -49,7 +49,7 @@ public class MtaStsSetup {
      *
      * Non e' un numero scelto a sentimento: un resolver che ha gia' in cache la risposta
      * precedente la tiene per il TTL di quella risposta, e su un jolly Cloudflare quel TTL
-     * measured vale 300 secondi. Sotto i cinque minuti l'attesa non servirebbe a niente; sei
+     * misurato vale 300 secondi. Sotto i cinque minuti l'attesa non servirebbe a niente; sei
      * lasciano il margine perche' la cache scada davvero.
      */
     private static final long MAX_WAIT_MS = 6 * 60 * 1000L;
@@ -61,18 +61,18 @@ public class MtaStsSetup {
      */
     private static final long WAIT_INTERVAL_MS = 30 * 1000L;
 
-    public static class Passo {
-        public String chiave, titolo, dettaglio, stato, reason;
+    public static class Step {
+        public String key, title, detail, state, reason;
         public JSONObject json() {
-            return new JSONObject().put("chiave", chiave).put("titolo", titolo)
-                    .put("dettaglio", dettaglio == null ? "" : dettaglio)
-                    .put("stato", stato).put("reason", reason == null ? "" : reason);
+            return new JSONObject().put("key", key).put("title", title)
+                    .put("detail", detail == null ? "" : detail)
+                    .put("state", state).put("reason", reason == null ? "" : reason);
         }
     }
 
-    private static Passo passo(String c, String t, String d, String s, String m) {
-        Passo p = new Passo();
-        p.chiave = c; p.titolo = t; p.dettaglio = d; p.stato = s; p.reason = m;
+    private static Step step(String c, String t, String d, String s, String m) {
+        Step p = new Step();
+        p.key = c; p.title = t; p.detail = d; p.state = s; p.reason = m;
         return p;
     }
 
@@ -80,119 +80,119 @@ public class MtaStsSetup {
      * A che punto siamo
      * =================================================================== */
 
-    public static JSONObject piano() {
+    public static JSONObject plan() {
         JSONObject r = new JSONObject().put("success", true);
-        List<Passo> passi = new ArrayList<>();
+        List<Step> steps = new ArrayList<>();
 
         // 1-2-3: la superficie sulla 443
-        JSONObject web = WebProtection.stato();
-        JSONObject inc = web.optJSONObject("include");
-        boolean includeOk = inc != null && inc.optBoolean("ok", false);
-        passi.add(passo("include", I18n.tr("server.sts.stepInclude"),
-                inc == null ? "" : inc.optString("reason", ""),
-                includeOk ? "fatto" : "da fare", null));
-        passi.add(passo("config443", I18n.tr("server.sts.step443"),
+        JSONObject web = WebProtection.state();
+        JSONObject inclusion = web.optJSONObject("include");
+        boolean includeOk = inclusion != null && inclusion.optBoolean("ok", false);
+        steps.add(step("include", I18n.tr("server.sts.stepInclude"),
+                inclusion == null ? "" : inclusion.optString("reason", ""),
+                includeOk ? "done" : "da fare", null));
+        steps.add(step("config443", I18n.tr("server.sts.step443"),
                 web.optString("file", ""),
-                web.optBoolean("installato", false) ? "fatto" : "da fare", null));
-        passi.add(passo("jail", I18n.tr("server.sts.stepJail"), "",
-                jailAttiva() ? "fatto" : "da fare", null));
+                web.optBoolean("installed", false) ? "done" : "da fare", null));
+        steps.add(step("jail", I18n.tr("server.sts.stepJail"), "",
+                jailActive() ? "done" : "da fare", null));
 
         // 4 e 4-bis: i CNAME. Una sola lettura della zona per entrambi i passi, cosi' non
         // possono contraddirsi come e' successo con domain-d.test.
-        List<EsameNome> esami = esaminaCname();
+        List<NameReview> reviews = reviewCname();
         // Se l'esame non copre tutti i domini vuol dire che si e' fermato per un guasto:
         // senza questa riga le liste resterebbero vuote e il piano direbbe "tutti a posto"
         // proprio perche' non ha guardato niente. E' l'errore che sto togliendo dal pannello:
         // non deve tornare dalla porta di servizio.
-        int quantiDomini = domini().size();
-        Ripartizione rip = ripartisci(esami);
-        List<String> assenti = rip.assenti, storti = rip.storti, proxati = rip.proxati,
-                     ciechi = rip.ciechi, inPropagazione = rip.inPropagazione;
-        boolean proxyDaJolly = rip.proxyDaJolly;
-        if (esami.size() < quantiDomini)
-            ciechi.add(I18n.tr("server.sts.notExamined", java.util.Map.of("n", String.valueOf((quantiDomini - esami.size())))));
-        List<String> guaiCname = new ArrayList<>(assenti); guaiCname.addAll(storti);
-        String dettCname;
-        if (!guaiCname.isEmpty()) dettCname = I18n.tr("server.sts.toFix", java.util.Map.of("elenco", String.valueOf(String.join("; ", guaiCname))));
-        else if (!ciechi.isEmpty()) dettCname = I18n.tr("server.sts.unverifiable", java.util.Map.of("elenco", String.valueOf(String.join("; ", ciechi))));
-        else if (!inPropagazione.isEmpty())
-            dettCname = I18n.tr("server.sts.propagating", java.util.Map.of("elenco", String.valueOf(String.join(", ", inPropagazione))));
-        else if (!proxati.isEmpty())
-            dettCname = I18n.tr("server.sts.allPresentProxy");
-        else dettCname = I18n.tr("server.sts.allPresentOk");
-        passi.add(passo("cname", I18n.tr("server.sts.stepCname"), dettCname,
-                !guaiCname.isEmpty() ? "da fare" : (ciechi.isEmpty() ? "fatto" : "incerto"),
-                ciechi.isEmpty() ? null
+        int domainCount = domains().size();
+        Breakdown breakdown = split(reviews);
+        List<String> absent = breakdown.absent, crooked = breakdown.crooked, proxied = breakdown.proxied,
+                     blindOnes = breakdown.blind, propagating = breakdown.propagating;
+        boolean proxyFromWildcard = breakdown.proxyFromWildcard;
+        if (reviews.size() < domainCount)
+            blindOnes.add(I18n.tr("server.sts.notExamined", java.util.Map.of("n", String.valueOf((domainCount - reviews.size())))));
+        List<String> cnameTroubles = new ArrayList<>(absent); cnameTroubles.addAll(crooked);
+        String cnameDetail;
+        if (!cnameTroubles.isEmpty()) cnameDetail = I18n.tr("server.sts.toFix", java.util.Map.of("list", String.valueOf(String.join("; ", cnameTroubles))));
+        else if (!blindOnes.isEmpty()) cnameDetail = I18n.tr("server.sts.unverifiable", java.util.Map.of("list", String.valueOf(String.join("; ", blindOnes))));
+        else if (!propagating.isEmpty())
+            cnameDetail = I18n.tr("server.sts.propagating", java.util.Map.of("list", String.valueOf(String.join(", ", propagating))));
+        else if (!proxied.isEmpty())
+            cnameDetail = I18n.tr("server.sts.allPresentProxy");
+        else cnameDetail = I18n.tr("server.sts.allPresentOk");
+        steps.add(step("cname", I18n.tr("server.sts.stepCname"), cnameDetail,
+                !cnameTroubles.isEmpty() ? "da fare" : (blindOnes.isEmpty() ? "done" : "uncertain"),
+                blindOnes.isEmpty() ? null
                     : I18n.tr("server.sts.blindDns")));
 
         // 4-bis: i record che devono puntare DRITTI al server
-        boolean cieco = !ciechi.isEmpty();
-        passi.add(passo("proxy", I18n.tr("server.sts.stepProxy"),
-                !proxati.isEmpty() ? I18n.tr("server.sts.viaCf", java.util.Map.of("elenco", String.valueOf(String.join(", ", proxati))))
-                        : (cieco ? I18n.tr("server.sts.checkedVisible")
+        boolean blind = !blindOnes.isEmpty();
+        steps.add(step("proxy", I18n.tr("server.sts.stepProxy"),
+                !proxied.isEmpty() ? I18n.tr("server.sts.viaCf", java.util.Map.of("list", String.valueOf(String.join(", ", proxied))))
+                        : (blind ? I18n.tr("server.sts.checkedVisible")
                                  : I18n.tr("server.sts.noneViaCf")),
-                !proxati.isEmpty() ? "da fare" : (cieco ? "incerto" : "fatto"),
-                proxati.isEmpty() ? null
+                !proxied.isEmpty() ? "da fare" : (blind ? "uncertain" : "done"),
+                proxied.isEmpty() ? null
                     : I18n.tr("server.sts.proxyWhy")
-                    + (proxyDaJolly
+                    + (proxyFromWildcard
                         ? " " + I18n.tr("server.sts.wildcardWhy")
                         : "")));
 
         // 5: il certificato
-        List<String> nomiServiti = nomiDaCoprire();
-        List<String> scoperti = new ArrayList<>();
-        for (String n : nomiServiti) if (!certificatoCopre(n)) scoperti.add(n);
-        List<String> esclusi = dominiSuAltroAccount();
-        passi.add(passo("certificato", I18n.tr("server.sts.stepCert"),
-                scoperti.isEmpty() ? I18n.tr("server.sts.allCovered") : I18n.tr("server.sts.uncovered", java.util.Map.of("elenco", String.valueOf(String.join(", ", scoperti)))),
-                scoperti.isEmpty() ? "fatto" : "da fare",
-                esclusi.isEmpty() ? null
-                    : I18n.tr("server.sts.otherAccount", java.util.Map.of("elenco", String.valueOf(String.join(", ", esclusi))))));
+        List<String> servedNames = namesToCover();
+        List<String> uncovered = new ArrayList<>();
+        for (String n : servedNames) if (!certificateCovers(n)) uncovered.add(n);
+        List<String> excluded = domainsOnOtherAccount();
+        steps.add(step("certificate", I18n.tr("server.sts.stepCert"),
+                uncovered.isEmpty() ? I18n.tr("server.sts.allCovered") : I18n.tr("server.sts.uncovered", java.util.Map.of("list", String.valueOf(String.join(", ", uncovered)))),
+                uncovered.isEmpty() ? "done" : "da fare",
+                excluded.isEmpty() ? null
+                    : I18n.tr("server.sts.otherAccount", java.util.Map.of("list", String.valueOf(String.join(", ", excluded))))));
 
         // 6-7: la prova e il record
-        List<EsameTxt> esamiTxt = new ArrayList<>();
-        for (String d : domini()) {
-            boolean risponde = MtaSts.provaPubblica(d).optBoolean("ok", false);
+        List<TxtReview> txtReviews = new ArrayList<>();
+        for (String d : domains()) {
+            boolean answers = MtaSts.publicTest(d).optBoolean("ok", false);
             // Il TXT si legge SEMPRE, e soprattutto quando la politica NON risponde: e' proprio
             // quella la combinazione da scoprire, un record gia' pubblicato che manda i mittenti
             // del mondo contro un errore. Prima qui c'era un "else if" e a quel ramo non si
             // arrivava mai: su domain-d.test il pannello scriveva "in attesa dei passi precedenti"
             // mentre il record era pubblicato, con un id vecchio, e la politica dava 526. Cieco
             // esattamente sulla cosa che questa scheda esiste per sorvegliare.
-            esamiTxt.add(new EsameTxt(d, risponde, leggiTxt(d)));
+            txtReviews.add(new TxtReview(d, answers, readTxt(d)));
         }
-        passi.addAll(passiProvaETxt(esamiTxt, txtAtteso()));
+        steps.addAll(testAndTxtSteps(txtReviews, expectedTxt()));
 
         JSONArray a = new JSONArray();
-        int daFare = 0, incerti = 0;
-        for (Passo p : passi) {
+        int toDo = 0, uncertain = 0;
+        for (Step p : steps) {
             a.put(p.json());
-            if ("da fare".equals(p.stato)) daFare++;
-            else if ("incerto".equals(p.stato)) incerti++;
+            if ("da fare".equals(p.state)) toDo++;
+            else if ("uncertain".equals(p.state)) uncertain++;
         }
-        r.put("passi", a).put("daFare", daFare).put("incerti", incerti);
+        r.put("steps", a).put("toDo", toDo).put("uncertain", uncertain);
         // "completo" accende la spunta verde e fa sparire il pulsante, quindi non puo' bastare
         // che non ci sia niente DA FARE: serve anche che non sia rimasto niente da VERIFICARE.
-        // Con la sola condizione daFare==0, un passo "incerto" — cioe' uno che il pannello non
+        // Con la sola condizione toDo==0, un passo "incerto" — cioe' uno che il pannello non
         // ha potuto controllare — sarebbe bastato da solo a dichiarare "attivo su tutti i domini".
-        boolean completo = daFare == 0 && incerti == 0;
-        r.put("completo", completo);
-        String quantiIncerti = incerti == 1 ? I18n.tr("server.sts.steps.one") : I18n.tr("server.sts.steps.other", java.util.Map.of("n", String.valueOf(incerti)));
-        r.put("nota", completo
+        boolean complete = toDo == 0 && uncertain == 0;
+        r.put("complete", complete);
+        String uncertainCount = uncertain == 1 ? I18n.tr("server.sts.steps.one") : I18n.tr("server.sts.steps.other", java.util.Map.of("n", String.valueOf(uncertain)));
+        r.put("note", complete
                 ? I18n.tr("server.sts.complete")
-                : daFare == 0
-                  ? I18n.tr("server.sts.onlyUncertain", java.util.Map.of("passi", String.valueOf(quantiIncerti)))
-                  : (daFare == 1 ? I18n.tr("server.sts.missing.one") : I18n.tr("server.sts.missing.other", java.util.Map.of("n", String.valueOf(daFare))))
-                    + (incerti > 0 ? ", " + I18n.tr("server.sts.plusUncertain", java.util.Map.of("passi", String.valueOf(quantiIncerti))) : "")
+                : toDo == 0
+                  ? I18n.tr("server.sts.onlyUncertain", java.util.Map.of("steps", String.valueOf(uncertainCount)))
+                  : (toDo == 1 ? I18n.tr("server.sts.missing.one") : I18n.tr("server.sts.missing.other", java.util.Map.of("n", String.valueOf(toDo))))
+                    + (uncertain > 0 ? ", " + I18n.tr("server.sts.plusUncertain", java.util.Map.of("steps", String.valueOf(uncertainCount))) : "")
                     + ". " + I18n.tr("server.sts.buttonRuns"));
         return r;
     }
 
     /** Cosa si e' visto di un dominio per i passi della prova e del record. */
-    static final class EsameTxt {
-        final String dominio; final boolean risponde; final LetturaTxt txt;
-        EsameTxt(String dominio, boolean risponde, LetturaTxt txt) {
-            this.dominio = dominio; this.risponde = risponde; this.txt = txt;
+    static final class TxtReview {
+        final String domain; final boolean answers; final TxtReading txt;
+        TxtReview(String domain, boolean answers, TxtReading txt) {
+            this.domain = domain; this.answers = answers; this.txt = txt;
         }
     }
 
@@ -202,102 +202,102 @@ public class MtaStsSetup {
      * con letture costruite, senza DNS e senza la politica vera: due record v=STSv1 non
      * devono poterlo far diventare "fatto".
      */
-    static List<Passo> passiProvaETxt(List<EsameTxt> esami, String atteso) {
-        List<String> nonRisponde = new ArrayList<>(), senzaTxt = new ArrayList<>(),
-                     nonMantenuti = new ArrayList<>(), txtIgnoti = new ArrayList<>(),
-                     troppi = new ArrayList<>();
-        for (EsameTxt e : esami) {
-            String d = e.dominio;
-            LetturaTxt txt = e.txt;
-            if (!e.risponde) {
-                nonRisponde.add(d);
+    static List<Step> testAndTxtSteps(List<TxtReview> reviews, String expected) {
+        List<String> notAnswering = new ArrayList<>(), withoutTxt = new ArrayList<>(),
+                     unmaintained = new ArrayList<>(), unknownTxt = new ArrayList<>(),
+                     tooMany = new ArrayList<>();
+        for (TxtReview e : reviews) {
+            String d = e.domain;
+            TxtReading txt = e.txt;
+            if (!e.answers) {
+                notAnswering.add(d);
                 // Anche con piu' record: se uno e' scritto male, i mittenti che lo scartano
                 // contano solo l'altro, e quello li manda contro la politica che non risponde.
-                if (txt.esito == EsitoTxt.PRESENTE || txt.esito == EsitoTxt.TROPPI)
-                    nonMantenuti.add(d + " -> " + String.join("  ||  ", txt.valori));
+                if (txt.outcome == TxtOutcome.PRESENT || txt.outcome == TxtOutcome.TOO_MANY)
+                    unmaintained.add(d + " -> " + String.join("  ||  ", txt.values));
                 continue;
             }
-            switch (txt.esito) {
-                case NON_CHIESTO -> txtIgnoti.add(d + " (" + txt.reason + ")");
-                case ASSENTE -> senzaTxt.add(d);
-                case TROPPI -> troppi.add(d + " (" + txt.valori.size() + " record: "
-                        + String.join("  ||  ", txt.valori) + ")");
-                case PRESENTE -> {
-                    if (!atteso.equals(txt.contenuto)) senzaTxt.add(d + " " + I18n.tr("server.sts.idToUpdate"));
+            switch (txt.outcome) {
+                case NOT_ASKED -> unknownTxt.add(d + " (" + txt.reason + ")");
+                case ABSENT -> withoutTxt.add(d);
+                case TOO_MANY -> tooMany.add(d + " (" + txt.values.size() + " record: "
+                        + String.join("  ||  ", txt.values) + ")");
+                case PRESENT -> {
+                    if (!expected.equals(txt.content)) withoutTxt.add(d + " " + I18n.tr("server.sts.idToUpdate"));
                 }
             }
         }
-        List<Passo> passi = new ArrayList<>();
-        passi.add(passo("prova", I18n.tr("server.sts.stepTest"),
-                nonRisponde.isEmpty()
+        List<Step> steps = new ArrayList<>();
+        steps.add(step("test", I18n.tr("server.sts.stepTest"),
+                notAnswering.isEmpty()
                     ? I18n.tr("server.sts.answersAll")
-                    : I18n.tr("server.sts.noAnswerFor", java.util.Map.of("elenco", String.valueOf(String.join(", ", nonRisponde)))),
-                nonRisponde.isEmpty() ? "fatto" : "da fare", null));
+                    : I18n.tr("server.sts.noAnswerFor", java.util.Map.of("list", String.valueOf(String.join(", ", notAnswering)))),
+                notAnswering.isEmpty() ? "done" : "da fare", null));
 
-        String dettTxt, statoTxt, motivoTxt = null;
-        if (!nonMantenuti.isEmpty()) {
-            dettTxt = I18n.tr("server.sts.notKept", java.util.Map.of("elenco", String.valueOf(String.join("; ", nonMantenuti))));
-            statoTxt = "da fare";
-            motivoTxt = I18n.tr("server.sts.notKeptWhy");
-        } else if (!troppi.isEmpty()) {
-            dettTxt = I18n.tr("server.sts.moreThanOne", java.util.Map.of("elenco", String.valueOf(String.join(", ", troppi))));
-            statoTxt = "da fare";
-            motivoTxt = I18n.tr("server.sts.moreThanOneWhy");
-        } else if (!txtIgnoti.isEmpty()) {
-            dettTxt = "non so se c'e' per: " + String.join(", ", txtIgnoti);
-            statoTxt = "incerto";
-            motivoTxt = I18n.tr("server.sts.notMarkedDone");
-        } else if (!nonRisponde.isEmpty()) {
-            dettTxt = I18n.tr("server.sts.waitingPrev"); statoTxt = "da fare";
-        } else if (!senzaTxt.isEmpty()) {
-            dettTxt = I18n.tr("server.sts.missingList", java.util.Map.of("elenco", String.valueOf(String.join(", ", senzaTxt)))); statoTxt = "da fare";
+        String txtDetail, txtState, txtReason = null;
+        if (!unmaintained.isEmpty()) {
+            txtDetail = I18n.tr("server.sts.notKept", java.util.Map.of("list", String.valueOf(String.join("; ", unmaintained))));
+            txtState = "da fare";
+            txtReason = I18n.tr("server.sts.notKeptWhy");
+        } else if (!tooMany.isEmpty()) {
+            txtDetail = I18n.tr("server.sts.moreThanOne", java.util.Map.of("list", String.valueOf(String.join(", ", tooMany))));
+            txtState = "da fare";
+            txtReason = I18n.tr("server.sts.moreThanOneWhy");
+        } else if (!unknownTxt.isEmpty()) {
+            txtDetail = "non so se c'e' per: " + String.join(", ", unknownTxt);
+            txtState = "uncertain";
+            txtReason = I18n.tr("server.sts.notMarkedDone");
+        } else if (!notAnswering.isEmpty()) {
+            txtDetail = I18n.tr("server.sts.waitingPrev"); txtState = "da fare";
+        } else if (!withoutTxt.isEmpty()) {
+            txtDetail = I18n.tr("server.sts.missingList", java.util.Map.of("list", String.valueOf(String.join(", ", withoutTxt)))); txtState = "da fare";
         } else {
-            dettTxt = I18n.tr("server.sts.allPublished"); statoTxt = "fatto";
+            txtDetail = I18n.tr("server.sts.allPublished"); txtState = "done";
         }
-        passi.add(passo("txt", I18n.tr("server.sts.stepTxt"), dettTxt, statoTxt, motivoTxt));
-        return passi;
+        steps.add(step("txt", I18n.tr("server.sts.stepTxt"), txtDetail, txtState, txtReason));
+        return steps;
     }
 
     /**
      * Come i domini esaminati si distribuiscono fra i passi del piano.
      *
-     * Sta in un metodo suo, staccato da piano(), per una ragione precisa: e' QUI che sono nati
+     * Sta in un metodo suo, staccato da plan(), per una ragione precisa: e' QUI che sono nati
      * i falsi verdi. Un dominio senza record che rispondeva grazie a un jolly proxato non
      * entrava nel conto del proxy, e il passo diceva "nessuno passa da Cloudflare"; un record
      * insieme SBAGLIATO e PROXATO finiva nel solo conto del proxy — perche' la classificazione
      * cercava la parola "Cloudflare" dentro una frase scritta per un essere umano — e il passo
      * dei CNAME dichiarava "tutti presenti e giusti" un record che puntava altrove.
      *
-     * Dentro piano(), che per esistere ha bisogno del database e di Cloudflare, questa logica
+     * Dentro plan(), che per esistere ha bisogno del database e di Cloudflare, questa logica
      * non si poteva provare con un test. Una logica che nessun test puo' raggiungere e' una
      * logica che nessuno controlla: qui infatti non la controllava nessuno.
      */
-    static final class Ripartizione {
-        final List<String> assenti = new ArrayList<>(), storti = new ArrayList<>(),
-                           proxati = new ArrayList<>(), ciechi = new ArrayList<>(),
-                           inPropagazione = new ArrayList<>();
-        boolean proxyDaJolly;
+    static final class Breakdown {
+        final List<String> absent = new ArrayList<>(), crooked = new ArrayList<>(),
+                           proxied = new ArrayList<>(), blind = new ArrayList<>(),
+                           propagating = new ArrayList<>();
+        boolean proxyFromWildcard;
     }
 
-    static Ripartizione ripartisci(List<EsameNome> esami) {
-        Ripartizione r = new Ripartizione();
-        for (EsameNome e : esami) {
+    static Breakdown split(List<NameReview> reviews) {
+        Breakdown r = new Breakdown();
+        for (NameReview e : reviews) {
             // Il proxy si conta per conto suo, da un booleano: un record puo' essere insieme
             // sbagliato E proxato, e i due fatti devono comparire tutti e due, nei due passi
             // a cui appartengono.
-            if (e.passaDalProxy) {
-                boolean daJolly = e.stato == StatoNome.ASSENTE;
-                if (daJolly) r.proxyDaJolly = true;
-                r.proxati.add(e.dominio + (daJolly
-                        ? " " + I18n.tr("server.sts.wildcardAnswers", java.util.Map.of("d", String.valueOf(e.dominio))) : ""));
+            if (e.goesThroughProxy) {
+                boolean fromWildcard = e.state == NameState.ABSENT;
+                if (fromWildcard) r.proxyFromWildcard = true;
+                r.proxied.add(e.domain + (fromWildcard
+                        ? " " + I18n.tr("server.sts.wildcardAnswers", java.util.Map.of("d", String.valueOf(e.domain))) : ""));
             }
-            switch (e.stato) {
-                case ASSENTE -> r.assenti.add(e.dominio + " (" + e.reason + ")");
-                case CIECO -> r.ciechi.add(e.dominio + " (" + e.reason + ")");
-                case DA_CORREGGERE -> {
-                    if (e.contenutoSbagliato) r.storti.add(e.dominio + " (" + e.reason + ")");
+            switch (e.state) {
+                case ABSENT -> r.absent.add(e.domain + " (" + e.reason + ")");
+                case BLIND -> r.blind.add(e.domain + " (" + e.reason + ")");
+                case TO_FIX -> {
+                    if (e.wrongContent) r.crooked.add(e.domain + " (" + e.reason + ")");
                 }
-                case GIUSTO -> { if (!e.risolve) r.inPropagazione.add(e.dominio); }
+                case RIGHT -> { if (!e.resolves) r.propagating.add(e.domain); }
             }
         }
         return r;
@@ -310,14 +310,14 @@ public class MtaStsSetup {
      * a System.currentTimeMillis, un test avrebbe dovuto aspettare sei minuti veri per
      * esercitarla, cioe' non l'avrebbe esercitata mai.
      */
-    interface Orologio {
-        long adesso();
-        void dormi(long ms) throws InterruptedException;
+    interface Clock {
+        long now();
+        void sleep(long ms) throws InterruptedException;
     }
 
-    static final Orologio OROLOGIO_VERO = new Orologio() {
-        public long adesso() { return System.currentTimeMillis(); }
-        public void dormi(long ms) throws InterruptedException { Thread.sleep(ms); }
+    static final Clock REAL_CLOCK = new Clock() {
+        public long now() { return System.currentTimeMillis(); }
+        public void sleep(long ms) throws InterruptedException { Thread.sleep(ms); }
     };
 
     /**
@@ -328,34 +328,34 @@ public class MtaStsSetup {
      * lista si svuota; e si smette comunque alla scadenza, perche' un ciclo di attesa senza
      * un'uscita garantita, dentro un pannello di produzione, e' un blocco che non finisce piu'.
      */
-    static List<String> attendiPropagazione(List<String> domini,
-                                            java.util.function.Predicate<String> risponde,
-                                            Orologio orologio, long maxMs, long intervalloMs,
+    static List<String> waitForPropagation(List<String> domains,
+                                            java.util.function.Predicate<String> answers,
+                                            Clock clock, long maxMs, long intervalMs,
                                             java.util.function.Consumer<String> log) {
-        List<String> restano = new ArrayList<>(domini);
-        long scadenza = orologio.adesso() + maxMs;
+        List<String> remain = new ArrayList<>(domains);
+        long expiry = clock.now() + maxMs;
         while (true) {
-            restano.removeIf(risponde);
-            if (restano.isEmpty() || orologio.adesso() >= scadenza) break;
-            log.accept("    " + I18n.tr("server.sts.stillNotAnswering", java.util.Map.of("elenco", String.valueOf(String.join(", ", restano)), "s", String.valueOf((intervalloMs / 1000)))));
+            remain.removeIf(answers);
+            if (remain.isEmpty() || clock.now() >= expiry) break;
+            log.accept("    " + I18n.tr("server.sts.stillNotAnswering", java.util.Map.of("list", String.valueOf(String.join(", ", remain)), "s", String.valueOf((intervalMs / 1000)))));
             try {
-                orologio.dormi(intervalloMs);
+                clock.sleep(intervalMs);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 log.accept("    " + I18n.tr("server.sts.waitInterrupted"));
                 break;
             }
         }
-        return restano;
+        return remain;
     }
 
     /* ===================================================================
      * L'esecuzione
      * =================================================================== */
 
-    public static JSONObject esegui() { return esegui(null, null); }
+    public static JSONObject run() { return run(null, null); }
 
-    public static JSONObject esegui(UpdateManager.Job job) { return esegui(job, null); }
+    public static JSONObject run(UpdateManager.Job job) { return run(job, null); }
 
     /**
      * I domini su cui la sequenza deve agire.
@@ -364,23 +364,23 @@ public class MtaStsSetup {
      * esiste, e chi chiama deve accorgersene invece di vedere una sequenza che "riesce"
      * senza aver toccato niente.
      */
-    private static List<MailDatabase.Domain> dominiDaToccare(String soloDominio) throws Exception {
-        return filtra(Main.mailDatabase.getDomains(), soloDominio);
+    private static List<MailDatabase.Domain> domainsToTouch(String domainOnly) throws Exception {
+        return filter(Main.mailDatabase.getDomains(), domainOnly);
     }
 
     /**
      * Il filtro vero e proprio, separato dalla lettura del database perche' possa essere
-     * provato: dentro dominiDaToccare sarebbe raggiungibile solo con un database vivo, e un
+     * provato: dentro domainsToTouch sarebbe raggiungibile solo con un database vivo, e un
      * test che non arriva alla riga che deve verificare non verifica niente.
      *
      * Il confronto e' senza distinzione di maiuscole perche' i nomi di dominio non ne hanno,
      * ed e' ESATTO: "ake.net" non deve trovare "domain-d.test".
      */
-    static List<MailDatabase.Domain> filtra(List<MailDatabase.Domain> tutti, String soloDominio) {
+    static List<MailDatabase.Domain> filter(List<MailDatabase.Domain> allItems, String domainOnly) {
         List<MailDatabase.Domain> out = new ArrayList<>();
-        if (tutti == null) return out;
-        for (MailDatabase.Domain d : tutti)
-            if (soloDominio == null || (d != null && soloDominio.equalsIgnoreCase(d.domain)))
+        if (allItems == null) return out;
+        for (MailDatabase.Domain d : allItems)
+            if (domainOnly == null || (d != null && domainOnly.equalsIgnoreCase(d.domain)))
                 out.add(d);
         return out;
     }
@@ -397,87 +397,87 @@ public class MtaStsSetup {
      * l'operazione continua. Chi guarda non sa piu' cosa sia successo — e uno stato
      * sconosciuto su un certificato di produzione e' l'anticamera del danno.
      */
-    public static JSONObject esegui(UpdateManager.Job job, String soloDominio) {
+    public static JSONObject run(UpdateManager.Job job, String domainOnly) {
         JSONObject r = new JSONObject();
-        JSONArray fatti = new JSONArray();
+        JSONArray doneOnes = new JSONArray();
         if (job != null) job.write("=== " + I18n.tr("server.sts.jobTitle") + " ==="
-                + (soloDominio == null ? "" : " " + I18n.tr("server.sts.onlyDomain", java.util.Map.of("d", String.valueOf(soloDominio)))));
+                + (domainOnly == null ? "" : " " + I18n.tr("server.sts.onlyDomain", java.util.Map.of("d", String.valueOf(domainOnly)))));
 
         // Un nome che non corrisponde a nessun dominio non deve produrre una sequenza che
         // "riesce": i cicli per dominio girerebbero a vuoto, nessun passo fallirebbe, e
         // l'esito direbbe che e' andato tutto bene senza che sia stato toccato niente. E'
         // il falso successo piu' silenzioso di tutti, e va fermato qui.
-        if (soloDominio != null) {
+        if (domainOnly != null) {
             try {
-                if (dominiDaToccare(soloDominio).isEmpty())
-                    return fermati(r, fatti, I18n.tr("server.sts.notPanelDomain", java.util.Map.of("d", String.valueOf(soloDominio))));
+                if (domainsToTouch(domainOnly).isEmpty())
+                    return stopped(r, doneOnes, I18n.tr("server.sts.notPanelDomain", java.util.Map.of("d", String.valueOf(domainOnly))));
             } catch (Exception e) {
-                return fermati(r, fatti, I18n.tr("server.sts.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                return stopped(r, doneOnes, I18n.tr("server.sts.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
             }
         }
 
         // 1. include
-        JSONObject web = WebProtection.stato();
-        JSONObject inc = web.optJSONObject("include");
-        if (inc == null || !inc.optBoolean("ok", false)) {
-            JSONObject e = WebProtection.aggiungiInclude();
-            fatti.put(esito("include", I18n.tr("server.sts.includeTitle"), e));
+        JSONObject web = WebProtection.state();
+        JSONObject inclusion = web.optJSONObject("include");
+        if (inclusion == null || !inclusion.optBoolean("ok", false)) {
+            JSONObject e = WebProtection.addInclude();
+            doneOnes.put(outcome("include", I18n.tr("server.sts.includeTitle"), e));
             if (job != null) job.write("[1/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.includeOk") : I18n.tr("server.sts.includeFail")));
-            if (!e.optBoolean("success", false)) return fermati(r, fatti,
+            if (!e.optBoolean("success", false)) return stopped(r, doneOnes,
                     I18n.tr("server.sts.noIncludeStop"));
-        } else fatti.put(gia("include", I18n.tr("server.sts.includeTitle")));
+        } else doneOnes.put(already("include", I18n.tr("server.sts.includeTitle")));
 
         // 2. la 443
-        if (!WebProtection.stato().optBoolean("installato", false)) {
-            JSONObject e = WebProtection.installa("", "");
-            fatti.put(esito("config443", I18n.tr("server.sts.config443Title"), e));
+        if (!WebProtection.state().optBoolean("installed", false)) {
+            JSONObject e = WebProtection.install("", "");
+            doneOnes.put(outcome("config443", I18n.tr("server.sts.config443Title"), e));
             if (job != null) job.write("[2/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.c443Ok") : I18n.tr("server.sts.c443Fail")));
-            if (!e.optBoolean("success", false)) return fermati(r, fatti,
+            if (!e.optBoolean("success", false)) return stopped(r, doneOnes,
                     I18n.tr("server.sts.no443Stop"));
-        } else fatti.put(gia("config443", I18n.tr("server.sts.config443Title")));
+        } else doneOnes.put(already("config443", I18n.tr("server.sts.config443Title")));
 
         // 3. la jail
-        if (!jailAttiva()) {
-            JSONObject e = WebProtection.installaJail();
-            fatti.put(esito("jail", "Jail fail2ban", e));
+        if (!jailActive()) {
+            JSONObject e = WebProtection.installJail();
+            doneOnes.put(outcome("jail", "Jail fail2ban", e));
             // Una jail mancante non impedisce a MTA-STS di funzionare: si annota e si prosegue.
-        } else fatti.put(gia("jail", "Jail fail2ban"));
+        } else doneOnes.put(already("jail", "Jail fail2ban"));
 
         // 4. i CNAME
         //
         // I domini in cui qualcosa CAMBIA davvero si segnano: sono gli unici per cui, piu'
         // avanti, ha senso aspettare la propagazione. Dove non e' cambiato niente non c'e'
         // niente da propagare, e un'attesa sarebbe solo tempo tolto a chi guarda.
-        LinkedHashSet<String> appenaCambiati = new LinkedHashSet<>();
+        LinkedHashSet<String> justChanged = new LinkedHashSet<>();
         JSONArray cname = new JSONArray();
         try {
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
-            for (MailDatabase.Domain d : dominiDaToccare(soloDominio)) {
+            for (MailDatabase.Domain d : domainsToTouch(domainOnly)) {
                 // Prima qui c'era una scorciatoia: se "mta-sts.<dominio>" RISPONDEVA, il record
-                // si dava per fatto. Ma rispondere non vuol dire esistere: un jolly "*.dominio"
+                // si dava per fatto. Ma rispondere non vuol dire esistere: un jolly "*.domain"
                 // fa rispondere qualunque nome. Su domain-d.test era esattamente cosi' — il nome
                 // rispondeva grazie al jolly, dietro Cloudflare, e la politica tornava 526.
-                // creaOpzionale guarda il record col nome ESATTO dentro la zona, corregge quelli
+                // createOptional guarda il record col nome ESATTO dentro la zona, corregge quelli
                 // sbagliati o dietro proxy e crea quelli mancanti: e' lui che deve decidere.
-                JSONObject e = auto.creaOpzionale(d.id, "mta_sts");
-                if (e.optBoolean("nonGestito", false)) {
+                JSONObject e = auto.createOptional(d.id, "mta_sts");
+                if (e.optBoolean("unmanaged", false)) {
                     // Dominio non su Cloudflare: non e' un errore, ma nemmeno una conferma.
-                    boolean risponde = risolve("mta-sts." + d.domain);
-                    cname.put(nota(d.domain, risponde,
-                            risponde ? I18n.tr("server.sts.answersNoCf")
+                    boolean answers = resolves("mta-sts." + d.domain);
+                    cname.put(note(d.domain, answers,
+                            answers ? I18n.tr("server.sts.answersNoCf")
                                      : I18n.tr("server.sts.noAnswerNoCf")));
                     continue;
                 }
-                if (e.optBoolean("success", false) && !e.optBoolean("invariato", false))
-                    appenaCambiati.add(d.domain);
-                cname.put(nota(d.domain, e.optBoolean("success", false),
-                        e.optString("nota", e.optString("error", ""))));
+                if (e.optBoolean("success", false) && !e.optBoolean("unchanged", false))
+                    justChanged.add(d.domain);
+                cname.put(note(d.domain, e.optBoolean("success", false),
+                        e.optString("note", e.optString("error", ""))));
             }
         } catch (Exception e) {
-            cname.put(nota("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
+            cname.put(note("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
-        fatti.put(new JSONObject().put("chiave", "cname").put("titolo", "CNAME mta-sts")
-                .put("dettaglio", cname));
+        doneOnes.put(new JSONObject().put("key", "cname").put("title", "CNAME mta-sts")
+                .put("detail", cname));
         if (job != null) { job.advance(4, 8); job.write("[4/8] " + I18n.tr("server.sts.cnameExamined", java.util.Map.of("n", String.valueOf(cname.length())))); }
 
         // 4-bis. I nomi mta-sts devono puntare dritti al server.
@@ -487,59 +487,59 @@ public class MtaStsSetup {
         // travestito da "va tutto bene" e' il modo piu' rapido per prendere una decisione
         // sbagliata: qui, pubblicare un record MTA-STS su un nome che passa da Cloudflare.
         JSONArray proxy = new JSONArray();
-        int sistemati = 0, dritti = 0, ciechi = 0;
+        int fixed = 0, straight = 0, blind = 0;
         try {
             CloudflareManager cf = new CloudflareManager(Main.mailDatabase);
-            for (MailDatabase.Domain d : dominiDaToccare(soloDominio)) {
+            for (MailDatabase.Domain d : domainsToTouch(domainOnly)) {
                 MailDatabase.CloudflareAccount a = cf.getAccountForDomain(d.id);
                 if (a == null) {
-                    ciechi++;
-                    proxy.put(nota(d.domain, false, I18n.tr("server.sts.notLinkedCf")));
+                    blind++;
+                    proxy.put(note(d.domain, false, I18n.tr("server.sts.notLinkedCf")));
                     continue;
                 }
                 CloudflareManager.ZoneLookup zl = cf.findZone(a.apiToken, d.domain);
                 if (!zl.found) {
-                    ciechi++;
-                    proxy.put(nota(d.domain, false, I18n.tr("server.sts.zoneNotFoundCf")));
+                    blind++;
+                    proxy.put(note(d.domain, false, I18n.tr("server.sts.zoneNotFoundCf")));
                     continue;
                 }
-                String nome = ("mta-sts." + d.domain).toLowerCase(Locale.ROOT);
-                java.util.List<CloudflareManager.DnsRecordInfo> tutti =
+                String name = ("mta-sts." + d.domain).toLowerCase(Locale.ROOT);
+                java.util.List<CloudflareManager.DnsRecordInfo> allItems =
                         cf.listRecords(a.apiToken, zl.zoneId);
-                if (tutti.isEmpty()) {
-                    ciechi++;
-                    proxy.put(nota(d.domain, false, I18n.tr("server.sts.emptyZone")));
+                if (allItems.isEmpty()) {
+                    blind++;
+                    proxy.put(note(d.domain, false, I18n.tr("server.sts.emptyZone")));
                     continue;
                 }
-                boolean visto = false;
-                for (CloudflareManager.DnsRecordInfo t : tutti) {
-                    if (t.name == null || !t.name.toLowerCase(Locale.ROOT).equals(nome)) continue;
-                    visto = true;
+                boolean seen = false;
+                for (CloudflareManager.DnsRecordInfo t : allItems) {
+                    if (t.name == null || !t.name.toLowerCase(Locale.ROOT).equals(name)) continue;
+                    seen = true;
                     if (!t.proxied) {
-                        dritti++;
-                        proxy.put(nota(d.domain, true, I18n.tr("server.sts.pointsStraight", java.util.Map.of("tipo", String.valueOf(t.type)))));
+                        straight++;
+                        proxy.put(note(d.domain, true, I18n.tr("server.sts.pointsStraight", java.util.Map.of("kind", String.valueOf(t.type)))));
                         continue;
                     }
-                    CloudflareManager.RecordOp op = cf.impostaProxy(a.apiToken, zl.zoneId, t.id, false);
-                    boolean fatto = op != null && op.success;
-                    if (fatto) { sistemati++; appenaCambiati.add(d.domain); }
-                    proxy.put(nota(d.domain, fatto,
-                            fatto ? I18n.tr("server.sts.proxyRemoved", java.util.Map.of("tipo", String.valueOf(t.type)))
-                                  : I18n.tr("server.sts.proxyNotRemoved", java.util.Map.of("tipo", String.valueOf(t.type), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error)))));
+                    CloudflareManager.RecordOp op = cf.setProxy(a.apiToken, zl.zoneId, t.id, false);
+                    boolean done = op != null && op.success;
+                    if (done) { fixed++; justChanged.add(d.domain); }
+                    proxy.put(note(d.domain, done,
+                            done ? I18n.tr("server.sts.proxyRemoved", java.util.Map.of("kind", String.valueOf(t.type)))
+                                  : I18n.tr("server.sts.proxyNotRemoved", java.util.Map.of("kind", String.valueOf(t.type), "e", String.valueOf(op == null ? I18n.tr("server.adns.noAnswer") : op.error)))));
                 }
-                if (!visto) {
-                    ciechi++;
-                    proxy.put(nota(d.domain, false, I18n.tr("server.sts.noRecordNamed", java.util.Map.of("nome", String.valueOf(nome)))));
+                if (!seen) {
+                    blind++;
+                    proxy.put(note(d.domain, false, I18n.tr("server.sts.noRecordNamed", java.util.Map.of("name", String.valueOf(name)))));
                 }
             }
         } catch (Exception e) {
-            ciechi++;
-            proxy.put(nota("", false, I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())))));
+            blind++;
+            proxy.put(note("", false, I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
-        fatti.put(new JSONObject().put("chiave", "proxy")
-                .put("titolo", I18n.tr("server.sts.stepProxy"))
-                .put("dettaglio", proxy));
-        if (job != null) job.write("[5/8] " + I18n.tr("server.sts.proxySummary", java.util.Map.of("d", String.valueOf(dritti), "s", String.valueOf(sistemati), "c", String.valueOf(ciechi))));
+        doneOnes.put(new JSONObject().put("key", "proxy")
+                .put("title", I18n.tr("server.sts.stepProxy"))
+                .put("detail", proxy));
+        if (job != null) job.write("[5/8] " + I18n.tr("server.sts.proxySummary", java.util.Map.of("d", String.valueOf(straight), "s", String.valueOf(fixed), "c", String.valueOf(blind))));
 
         // 5. il certificato
         //
@@ -548,41 +548,41 @@ public class MtaStsSetup {
         // nomi del dominio corrente cancellerebbe dal certificato i mta-sts.* e autoconfig.*
         // di tutti gli altri — e con i record MTA-STS gia' pubblicati, quella e' posta
         // rifiutata. Si guardano sempre tutti i nomi, si emette solo se ne manca qualcuno.
-        List<String> nomi = nomiDaCoprire();
-        List<String> scoperti = new ArrayList<>();
-        for (String n : nomi) if (!certificatoCopre(n)) scoperti.add(n);
-        if (!scoperti.isEmpty()) {
+        List<String> names = namesToCover();
+        List<String> uncovered = new ArrayList<>();
+        for (String n : names) if (!certificateCovers(n)) uncovered.add(n);
+        if (!uncovered.isEmpty()) {
             AcmeManager acme = new AcmeManager(Main.mailDatabase);
-            String host = MtaSts.hostDiPosta();
+            String host = MtaSts.mailHost();
 
             // La guardia "scoperti.isEmpty()" qui sopra evita di riemettere quando i nomi
             // ci sono gia': Let's Encrypt concede 5 emissioni a settimana per lo stesso
             // insieme di nomi, e un pulsante che riemette a ogni pressione consuma quel
             // margine lasciando senza rinnovo proprio quando servirebbe.
-            if (job != null) { job.advance(6, 8); job.write("[6/8] " + I18n.tr("server.sts.issuingCert", java.util.Map.of("n", String.valueOf(nomi.size()), "m", String.valueOf(scoperti.size())))); }
-            AcmeManager.CertificateResult cr = acme.emettiConNomi(host, nomi);
+            if (job != null) { job.advance(6, 8); job.write("[6/8] " + I18n.tr("server.sts.issuingCert", java.util.Map.of("n", String.valueOf(names.size()), "m", String.valueOf(uncovered.size())))); }
+            AcmeManager.CertificateResult cr = acme.emitWithNames(host, names);
             // "Emissione fallita" da solo non serve a nessuno: la ragione vera sta nell'uscita
             // di acme.sh — un dominio che il token non copre, un limite di Let's Encrypt, una
             // zona non visibile. Senza quella riga non si diagnostica niente.
-            String dettaglio = cr.output == null ? "" : cr.output.trim();
-            if (dettaglio.length() > 4000) dettaglio = dettaglio.substring(dettaglio.length() - 4000);
+            String detail = cr.output == null ? "" : cr.output.trim();
+            if (detail.length() > 4000) detail = detail.substring(detail.length() - 4000);
             JSONObject e = new JSONObject().put("success", cr.success)
-                    .put("nota", cr.message).put("error", cr.message);
-            JSONObject riga = esito("certificato", I18n.tr("server.sts.certTitle"), e);
-            riga.put("nomi", new JSONArray(nomi));
+                    .put("note", cr.message).put("error", cr.message);
+            JSONObject line = outcome("certificate", I18n.tr("server.sts.certTitle"), e);
+            line.put("names", new JSONArray(names));
             // L'uscita si mostra SEMPRE, non solo quando fallisce. Buttarla via quando il
             // comando "riesce" toglie la prova proprio nel caso peggiore: quello in cui
             // riesce ma non ha fatto quello che credevamo.
-            riga.put("output", dettaglio);
-            fatti.put(riga);
+            line.put("output", detail);
+            doneOnes.put(line);
             if (job != null) {
                 job.write("--- " + I18n.tr("server.sts.acmeOutput") + " ---");
-                for (String r2 : dettaglio.split("\n")) job.write("  " + r2);
+                for (String r2 : detail.split("\n")) job.write("  " + r2);
                 job.write("--- " + I18n.tr("server.sts.outputEnd") + " ---");
             }
-            if (!cr.success) return fermati(r, fatti,
+            if (!cr.success) return stopped(r, doneOnes,
                     I18n.tr("server.sts.noCertStop"));
-        } else fatti.put(gia("certificato", I18n.tr("server.sts.certTitle")));
+        } else doneOnes.put(already("certificate", I18n.tr("server.sts.certTitle")));
 
         // 6-bis. L'attesa della propagazione, e solo dove serve.
         //
@@ -597,51 +597,51 @@ public class MtaStsSetup {
         // Quindi si aspetta. Ma solo per i domini in cui qualcosa e' cambiato, si prova subito
         // prima di dormire, e si smette appena rispondono: un'attesa che non finisce mai
         // quando l'esito e' gia' buono e' un difetto tanto quanto non aspettare.
-        if (!appenaCambiati.isEmpty()) {
-            if (job != null) job.write("[7/8] " + I18n.tr("server.sts.waitingDns", java.util.Map.of("n", String.valueOf(appenaCambiati.size()), "min", String.valueOf((MAX_WAIT_MS / 60000)))));
-            List<String> restano = attendiPropagazione(
-                    new ArrayList<>(appenaCambiati),
-                    dom -> MtaSts.provaPubblica(dom).optBoolean("ok", false),
-                    OROLOGIO_VERO, MAX_WAIT_MS, WAIT_INTERVAL_MS,
-                    riga -> { if (job != null) job.write(riga); });
-            if (job != null) job.write(restano.isEmpty()
+        if (!justChanged.isEmpty()) {
+            if (job != null) job.write("[7/8] " + I18n.tr("server.sts.waitingDns", java.util.Map.of("n", String.valueOf(justChanged.size()), "min", String.valueOf((MAX_WAIT_MS / 60000)))));
+            List<String> remain = waitForPropagation(
+                    new ArrayList<>(justChanged),
+                    dom -> MtaSts.publicTest(dom).optBoolean("ok", false),
+                    REAL_CLOCK, MAX_WAIT_MS, WAIT_INTERVAL_MS,
+                    line -> { if (job != null) job.write(line); });
+            if (job != null) job.write(remain.isEmpty()
                     ? "    " + I18n.tr("server.sts.allAnswer")
-                    : "    " + I18n.tr("server.sts.stillNot", java.util.Map.of("elenco", String.valueOf(String.join(", ", restano)))));
+                    : "    " + I18n.tr("server.sts.stillNot", java.util.Map.of("list", String.valueOf(String.join(", ", remain)))));
         }
 
         // 6-7. la prova e il record, dominio per dominio
-        JSONArray finali = new JSONArray();
+        JSONArray finals = new JSONArray();
         try {
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
-            for (MailDatabase.Domain d : dominiDaToccare(soloDominio)) {
-                JSONObject prova = MtaSts.provaPubblica(d.domain);
-                if (!prova.optBoolean("ok", false)) {
-                    finali.put(nota(d.domain, false, I18n.tr("server.sts.policyNotYet", java.util.Map.of("e", String.valueOf(prova.optString("errore", ""))))));
+            for (MailDatabase.Domain d : domainsToTouch(domainOnly)) {
+                JSONObject test = MtaSts.publicTest(d.domain);
+                if (!test.optBoolean("ok", false)) {
+                    finals.put(note(d.domain, false, I18n.tr("server.sts.policyNotYet", java.util.Map.of("e", String.valueOf(test.optString("error", ""))))));
                     continue;
                 }
                 // Non si salta piu' quando il record c'e': va controllato che l'id corrisponda
                 // alla politica servita. I record creati dal vecchio pannello hanno un id fisso
                 // che non cambierebbe mai.
-                JSONObject e = auto.creaTxtMtaSts(d.id);
-                finali.put(nota(d.domain, e.optBoolean("success", false),
-                        e.optString("nota", e.optString("error", ""))));
+                JSONObject e = auto.createTxtMtaSts(d.id);
+                finals.put(note(d.domain, e.optBoolean("success", false),
+                        e.optString("note", e.optString("error", ""))));
             }
         } catch (Exception e) {
-            finali.put(nota("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
+            finals.put(note("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
-        if (job != null) { job.advance(8, 8); job.write("[7-8/8] " + I18n.tr("server.sts.finalExamined", java.util.Map.of("n", String.valueOf(finali.length())))); }
-        fatti.put(new JSONObject().put("chiave", "txt").put("titolo", I18n.tr("server.sts.finalTitle"))
-                .put("dettaglio", finali));
+        if (job != null) { job.advance(8, 8); job.write("[7-8/8] " + I18n.tr("server.sts.finalExamined", java.util.Map.of("n", String.valueOf(finals.length())))); }
+        doneOnes.put(new JSONObject().put("key", "txt").put("title", I18n.tr("server.sts.finalTitle"))
+                .put("detail", finals));
 
-        return r.put("success", true).put("passi", fatti)
-                .put("nota", I18n.tr("server.sts.sequenceDone"));
+        return r.put("success", true).put("steps", doneOnes)
+                .put("note", I18n.tr("server.sts.sequenceDone"));
     }
 
     /**
      * L'esito della sequenza tradotto nelle righe che la pagina DNS gia' sa disegnare
      * ({titolo, ok, messaggio}).
      *
-     * La traduzione sta QUI e non nella pagina DNS perche' le forme che escono da esegui()
+     * La traduzione sta QUI e non nella pagina DNS perche' le forme che escono da run()
      * sono di questa classe: se le conoscesse anche chi chiama, ogni cambiamento qui dentro
      * andrebbe ricordato la' — ed e' cosi' che due pezzi di codice cominciano a divergere.
      *
@@ -649,75 +649,75 @@ public class MtaStsSetup {
      * perche'. Un elenco di passi riusciti che si interrompe senza spiegazioni sarebbe la
      * cosa peggiore da mostrare, perche' somiglia a un successo.
      */
-    public static JSONArray comeVoci(JSONObject esito) {
-        JSONArray voci = new JSONArray();
-        JSONArray passi = esito.optJSONArray("passi");
-        for (int i = 0; passi != null && i < passi.length(); i++) {
-            JSONObject p = passi.optJSONObject(i);
+    public static JSONArray asEntries(JSONObject outcome) {
+        JSONArray entries = new JSONArray();
+        JSONArray steps = outcome.optJSONArray("steps");
+        for (int i = 0; steps != null && i < steps.length(); i++) {
+            JSONObject p = steps.optJSONObject(i);
             if (p == null) continue;
-            String titolo = p.optString("titolo", p.optString("chiave", "passo"));
-            JSONArray dett = p.optJSONArray("dettaglio");
-            if (dett == null) {
-                voci.put(new JSONObject().put("titolo", titolo)
+            String title = p.optString("title", p.optString("key", "step"));
+            JSONArray detail = p.optJSONArray("detail");
+            if (detail == null) {
+                entries.put(new JSONObject().put("title", title)
                         .put("ok", p.optBoolean("ok", false))
-                        .put("messaggio", p.optString("messaggio", "")));
+                        .put("messageText", p.optString("messageText", "")));
                 continue;
             }
             // Un passo per dominio: riuscito solo se lo sono tutte le righe, e il messaggio
             // le riporta tutte. Riassumerlo in "fatto" perderebbe l'unica riga che spiega.
-            boolean tutte = dett.length() > 0;
-            List<String> righe = new ArrayList<>();
-            for (int j = 0; j < dett.length(); j++) {
-                JSONObject x = dett.optJSONObject(j);
+            boolean all = detail.length() > 0;
+            List<String> lines = new ArrayList<>();
+            for (int j = 0; j < detail.length(); j++) {
+                JSONObject x = detail.optJSONObject(j);
                 if (x == null) continue;
-                if (!x.optBoolean("ok", false)) tutte = false;
-                String dom = x.optString("dominio", "");
-                righe.add((dom.isEmpty() ? "" : dom + ": ") + x.optString("messaggio", ""));
+                if (!x.optBoolean("ok", false)) all = false;
+                String dom = x.optString("domain", "");
+                lines.add((dom.isEmpty() ? "" : dom + ": ") + x.optString("messageText", ""));
             }
-            voci.put(new JSONObject().put("titolo", titolo).put("ok", tutte)
-                    .put("messaggio", String.join(" | ", righe)));
+            entries.put(new JSONObject().put("title", title).put("ok", all)
+                    .put("messageText", String.join(" | ", lines)));
         }
-        if (!esito.optBoolean("success", false) && !esito.optString("error", "").isEmpty())
-            voci.put(new JSONObject().put("titolo", I18n.tr("server.sts.interrupted")).put("ok", false)
-                    .put("messaggio", esito.getString("error")));
-        return voci;
+        if (!outcome.optBoolean("success", false) && !outcome.optString("error", "").isEmpty())
+            entries.put(new JSONObject().put("title", I18n.tr("server.sts.interrupted")).put("ok", false)
+                    .put("messageText", outcome.getString("error")));
+        return entries;
     }
 
-    private static JSONObject fermati(JSONObject r, JSONArray fatti, String perche) {
-        return r.put("success", false).put("passi", fatti).put("error", perche);
+    private static JSONObject stopped(JSONObject r, JSONArray done, String why) {
+        return r.put("success", false).put("steps", done).put("error", why);
     }
 
-    private static JSONObject esito(String chiave, String titolo, JSONObject e) {
-        return new JSONObject().put("chiave", chiave).put("titolo", titolo)
+    private static JSONObject outcome(String key, String title, JSONObject e) {
+        return new JSONObject().put("key", key).put("title", title)
                 .put("ok", e.optBoolean("success", false))
-                .put("messaggio", e.optString("nota", e.optString("error", "")));
+                .put("messageText", e.optString("note", e.optString("error", "")));
     }
 
-    private static JSONObject gia(String chiave, String titolo) {
-        return new JSONObject().put("chiave", chiave).put("titolo", titolo)
-                .put("ok", true).put("messaggio", I18n.tr("server.sts.alreadyOk"));
+    private static JSONObject already(String key, String title) {
+        return new JSONObject().put("key", key).put("title", title)
+                .put("ok", true).put("messageText", I18n.tr("server.sts.alreadyOk"));
     }
 
-    private static JSONObject nota(String dominio, boolean ok, String messaggio) {
-        return new JSONObject().put("dominio", dominio).put("ok", ok).put("messaggio", messaggio);
+    private static JSONObject note(String domain, boolean ok, String message) {
+        return new JSONObject().put("domain", domain).put("ok", ok).put("messageText", message);
     }
 
     /* ===================================================================
      * Misure
      * =================================================================== */
 
-    private static List<String> domini() {
+    private static List<String> domains() {
         List<String> l = new ArrayList<>();
         try { for (var d : Main.mailDatabase.getDomains()) l.add(d.domain); } catch (Exception ignore) {}
         return l;
     }
 
     /** I nomi che il certificato deve coprire: l'hostname piu' mta-sts e autoconfig dei domini. */
-    public static List<String> nomiDaCoprire() {
+    public static List<String> namesToCover() {
         LinkedHashSet<String> n = new LinkedHashSet<>();
-        List<String> esclusi = dominiSuAltroAccount();
-        for (String d : domini()) {
-            if (esclusi.contains(d)) continue;
+        List<String> excluded = domainsOnOtherAccount();
+        for (String d : domains()) {
+            if (excluded.contains(d)) continue;
             n.add("mta-sts." + d);
             n.add("autoconfig." + d);
         }
@@ -731,35 +731,35 @@ public class MtaStsSetup {
      * un nome che non si riesce a validare fa fallire l'emissione INTERA. Escluderli prima
      * significa ottenere un certificato valido per gli altri, invece di nessun certificato.
      */
-    public static List<String> dominiSuAltroAccount() {
-        List<String> fuori = new ArrayList<>();
+    public static List<String> domainsOnOtherAccount() {
+        List<String> outside = new ArrayList<>();
         try {
             AcmeManager acme = new AcmeManager(Main.mailDatabase);
-            var certAcct = acme.accountDelCertificato(MtaSts.hostDiPosta());
-            if (certAcct == null) return fuori;
+            var certAcct = acme.certificateAccount(MtaSts.mailHost());
+            if (certAcct == null) return outside;
             for (var d : Main.mailDatabase.getDomains()) {
-                var a = acme.accountDi(d.id);
-                if (a == null || a.id != certAcct.id) fuori.add(d.domain);
+                var a = acme.accountOf(d.id);
+                if (a == null || a.id != certAcct.id) outside.add(d.domain);
             }
         } catch (Exception ignore) {}
-        return fuori;
+        return outside;
     }
 
-    private static boolean certificatoCopre(String nome) {
+    private static boolean certificateCovers(String name) {
         try {
             Path cert = Path.of("/usr/local/etc/ssl/mail/fullchain.pem");
             if (!Files.isReadable(cert)) return false;
             ProcessBuilder pb = new ProcessBuilder("openssl", "x509", "-in", cert.toString(),
                     "-noout", "-text");
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
             p.waitFor();
             // Una sola implementazione della lettura dei nomi, condivisa con AcmeManager:
             // due letture separate finiscono per divergere, e una delle due sbaglia in silenzio.
-            for (String n : AcmeManager.nomiDaSubjectAltName(out))
-                if (n.equalsIgnoreCase(nome)) return true;
+            for (String n : AcmeManager.namesFromSubjectAltName(out))
+                if (n.equalsIgnoreCase(name)) return true;
         } catch (Exception ignore) {}
         return false;
     }
@@ -773,11 +773,11 @@ public class MtaStsSetup {
      * rispondeva (grazie a un jolly della zona), mentre nella zona non esisteva alcun record
      * con quel nome. Una sola domanda, una sola risposta, e un valore apposta per "non lo so".
      */
-    public enum StatoNome { GIUSTO, DA_CORREGGERE, ASSENTE, CIECO }
+    public enum NameState { RIGHT, TO_FIX, ABSENT, BLIND }
 
-    public static final class EsameNome {
-        public final String dominio; public final StatoNome stato;
-        public final String reason; public final boolean risolve;
+    public static final class NameReview {
+        public final String domain; public final NameState state;
+        public final String reason; public final boolean resolves;
         /**
          * Il nome risponde ATTRAVERSO Cloudflare: o il record esplicito e' proxato, o il
          * record manca e a rispondere e' un jolly proxato. Nei due casi l'effetto e' lo
@@ -790,111 +790,111 @@ public class MtaStsSetup {
          * puntava altrove. Una classificazione si calcola dove stanno i fatti, non
          * rileggendo il testo scritto per un essere umano.
          */
-        public final boolean passaDalProxy;
+        public final boolean goesThroughProxy;
         /** Il record c'e' ma il contenuto e' sbagliato: tipo errato o destinazione errata. */
-        public final boolean contenutoSbagliato;
-        EsameNome(String d, StatoNome s, String m, boolean r) { this(d, s, m, r, false, false); }
-        EsameNome(String d, StatoNome s, String m, boolean r, boolean proxy, boolean storto) {
-            dominio = d; stato = s; reason = m; risolve = r;
-            passaDalProxy = proxy; contenutoSbagliato = storto;
+        public final boolean wrongContent;
+        NameReview(String d, NameState s, String m, boolean r) { this(d, s, m, r, false, false); }
+        NameReview(String d, NameState s, String m, boolean r, boolean proxy, boolean crooked) {
+            domain = d; state = s; reason = m; resolves = r;
+            goesThroughProxy = proxy; wrongContent = crooked;
         }
     }
 
-    public static List<EsameNome> esaminaCname() {
-        List<EsameNome> out = new ArrayList<>();
+    public static List<NameReview> reviewCname() {
+        List<NameReview> out = new ArrayList<>();
         CloudflareManager cf;
-        List<MailDatabase.Domain> domini;
+        List<MailDatabase.Domain> domains;
         try {
             cf = new CloudflareManager(Main.mailDatabase);
-            domini = Main.mailDatabase.getDomains();
+            domains = Main.mailDatabase.getDomains();
         } catch (Exception e) {
             // Nessun dominio esaminato: chi chiama vede una lista vuota, non un falso "a posto".
             return out;
         }
-        for (MailDatabase.Domain d : domini) {
-            String pieno = "mta-sts." + d.domain;
-            boolean risolve = risolve(pieno);
+        for (MailDatabase.Domain d : domains) {
+            String full = "mta-sts." + d.domain;
+            boolean resolves = resolves(full);
             try {
                 MailDatabase.CloudflareAccount a = cf.getAccountForDomain(d.id);
                 if (a == null) {
-                    out.add(new EsameNome(d.domain, StatoNome.CIECO,
-                            I18n.tr("server.sts.blindNoAccount"), risolve));
+                    out.add(new NameReview(d.domain, NameState.BLIND,
+                            I18n.tr("server.sts.blindNoAccount"), resolves));
                     continue;
                 }
                 CloudflareManager.ZoneLookup zl = cf.findZone(a.apiToken, d.domain);
                 if (!zl.found) {
-                    out.add(new EsameNome(d.domain, StatoNome.CIECO,
-                            I18n.tr("server.sts.blindZone"), risolve));
+                    out.add(new NameReview(d.domain, NameState.BLIND,
+                            I18n.tr("server.sts.blindZone"), resolves));
                     continue;
                 }
-                List<CloudflareManager.DnsRecordInfo> tutti = cf.listRecords(a.apiToken, zl.zoneId);
-                if (tutti.isEmpty()) {
-                    out.add(new EsameNome(d.domain, StatoNome.CIECO,
-                            I18n.tr("server.sts.blindEmpty"), risolve));
+                List<CloudflareManager.DnsRecordInfo> allItems = cf.listRecords(a.apiToken, zl.zoneId);
+                if (allItems.isEmpty()) {
+                    out.add(new NameReview(d.domain, NameState.BLIND,
+                            I18n.tr("server.sts.blindEmpty"), resolves));
                     continue;
                 }
-                CloudflareManager.DnsRecordInfo trovato = null;
-                String cercato = pieno.toLowerCase(Locale.ROOT);
-                for (CloudflareManager.DnsRecordInfo t : tutti)
-                    if (t.name != null && t.name.toLowerCase(Locale.ROOT).equals(cercato)) {
-                        trovato = t; break;
+                CloudflareManager.DnsRecordInfo found = null;
+                String searched = full.toLowerCase(Locale.ROOT);
+                for (CloudflareManager.DnsRecordInfo t : allItems)
+                    if (t.name != null && t.name.toLowerCase(Locale.ROOT).equals(searched)) {
+                        found = t; break;
                     }
-                if (trovato == null) {
+                if (found == null) {
                     // "Quasi certamente c'e' un jolly" era una supposizione, scritta mentre la
                     // lista completa dei record della zona era gia' in mano. Il jolly si guarda.
                     // E la differenza pesa: un jolly DIETRO PROXY non e' solo il motivo per cui
                     // il nome risponde, e' il motivo per cui risponde 526 — un fatto che il
                     // passo del proxy deve sapere, e che una supposizione non gli puo' dare.
-                    CloudflareManager.DnsRecordInfo jolly = null;
-                    String nomeJolly = ("*." + d.domain).toLowerCase(Locale.ROOT);
-                    for (CloudflareManager.DnsRecordInfo t : tutti)
-                        if (t.name != null && t.name.toLowerCase(Locale.ROOT).equals(nomeJolly)) {
-                            jolly = t; break;
+                    CloudflareManager.DnsRecordInfo wildcard = null;
+                    String wildcardName = ("*." + d.domain).toLowerCase(Locale.ROOT);
+                    for (CloudflareManager.DnsRecordInfo t : allItems)
+                        if (t.name != null && t.name.toLowerCase(Locale.ROOT).equals(wildcardName)) {
+                            wildcard = t; break;
                         }
-                    String perche;
-                    if (jolly != null)
+                    String why;
+                    if (wildcard != null)
                         // Niente parentesi qui dentro: questo motivo viene mostrato gia' dentro
                         // una parentesi, e due livelli annidati si leggono male.
-                        perche = ", " + (jolly.proxied
-                                ? I18n.tr("server.sts.wildcardProxied", java.util.Map.of("d", String.valueOf(d.domain), "tipo", String.valueOf(jolly.type), "v", String.valueOf(jolly.content)))
-                                : I18n.tr("server.sts.wildcardStraight", java.util.Map.of("d", String.valueOf(d.domain), "tipo", String.valueOf(jolly.type), "v", String.valueOf(jolly.content))));
-                    else if (risolve)
-                        perche = ", " + I18n.tr("server.sts.answersFromOutside", java.util.Map.of("d", String.valueOf(d.domain)));
-                    else perche = "";
-                    out.add(new EsameNome(d.domain, StatoNome.ASSENTE,
-                            I18n.tr("server.sts.noRecordInZone") + perche, risolve,
-                            jolly != null && jolly.proxied, false));
+                        why = ", " + (wildcard.proxied
+                                ? I18n.tr("server.sts.wildcardProxied", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(wildcard.type), "v", String.valueOf(wildcard.content)))
+                                : I18n.tr("server.sts.wildcardStraight", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(wildcard.type), "v", String.valueOf(wildcard.content))));
+                    else if (resolves)
+                        why = ", " + I18n.tr("server.sts.answersFromOutside", java.util.Map.of("d", String.valueOf(d.domain)));
+                    else why = "";
+                    out.add(new NameReview(d.domain, NameState.ABSENT,
+                            I18n.tr("server.sts.noRecordInZone") + why, resolves,
+                            wildcard != null && wildcard.proxied, false));
                     continue;
                 }
-                String bersaglio = Main.mailDatabase.getSetting("mail_hostname", "mail." + d.domain);
-                List<String> male = new ArrayList<>();
-                boolean storto = false;
-                if (!"CNAME".equalsIgnoreCase(trovato.type)) {
-                    male.add(I18n.tr("server.sts.notCname", java.util.Map.of("tipo", String.valueOf(trovato.type))));
-                    storto = true;
-                } else if (!DnsRules.stessoNome(trovato.content, bersaglio)) {
-                    male.add(I18n.tr("server.sts.pointsElsewhere", java.util.Map.of("v", String.valueOf(trovato.content), "b", String.valueOf(bersaglio))));
-                    storto = true;
+                String target = Main.mailDatabase.getSetting("mail_hostname", "mail." + d.domain);
+                List<String> badOnes = new ArrayList<>();
+                boolean crooked = false;
+                if (!"CNAME".equalsIgnoreCase(found.type)) {
+                    badOnes.add(I18n.tr("server.sts.notCname", java.util.Map.of("kind", String.valueOf(found.type))));
+                    crooked = true;
+                } else if (!DnsRules.sameName(found.content, target)) {
+                    badOnes.add(I18n.tr("server.sts.pointsElsewhere", java.util.Map.of("v", String.valueOf(found.content), "b", String.valueOf(target))));
+                    crooked = true;
                 }
-                if (trovato.proxied)
-                    male.add(I18n.tr("server.sts.viaCfInstead"));
-                out.add(male.isEmpty()
-                        ? new EsameNome(d.domain, StatoNome.GIUSTO, I18n.tr("server.sts.pointsStraightTo", java.util.Map.of("b", String.valueOf(bersaglio))), risolve)
-                        : new EsameNome(d.domain, StatoNome.DA_CORREGGERE, String.join("; ", male),
-                                        risolve, trovato.proxied, storto));
+                if (found.proxied)
+                    badOnes.add(I18n.tr("server.sts.viaCfInstead"));
+                out.add(badOnes.isEmpty()
+                        ? new NameReview(d.domain, NameState.RIGHT, I18n.tr("server.sts.pointsStraightTo", java.util.Map.of("b", String.valueOf(target))), resolves)
+                        : new NameReview(d.domain, NameState.TO_FIX, String.join("; ", badOnes),
+                                        resolves, found.proxied, crooked));
             } catch (Exception e) {
-                out.add(new EsameNome(d.domain, StatoNome.CIECO,
-                        I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage()))), risolve));
+                out.add(new NameReview(d.domain, NameState.BLIND,
+                        I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage()))), resolves));
             }
         }
         return out;
     }
 
 
-    private static boolean risolve(String nome) {
+    private static boolean resolves(String name) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("dig", "+short", nome);
-            Shell.applicaPath(pb);
+            ProcessBuilder pb = new ProcessBuilder("dig", "+short", name);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes()).trim();
@@ -918,61 +918,61 @@ public class MtaStsSetup {
      * DNS che risponde con un errore (SERVFAIL, REFUSED) invece che con il contenuto del nome.
      *
      * TROPPI vuol dire piu' di un record v=STSv1 sullo stesso nome: per i mittenti e' come non
-     * averne nessuno (RFC 8461 §3.1, vedi DnsRules.soloMtaSts). Prima si leggeva il primo e si
+     * averne nessuno (RFC 8461 §3.1, vedi DnsRules.onlyMtaSts). Prima si leggeva il primo e si
      * diceva PRESENTE, e il passo poteva risultare fatto su un MTA-STS che nessuno usa.
      *
      * E' pubblica perche' la stessa lettura serve alla pagina DNS: due letture dello stesso
      * record sono due letture che un giorno rispondono in modo diverso.
      */
-    public enum EsitoTxt { PRESENTE, ASSENTE, TROPPI, NON_CHIESTO }
+    public enum TxtOutcome { PRESENT, ABSENT, TOO_MANY, NOT_ASKED }
 
-    public static final class LetturaTxt {
-        public final EsitoTxt esito;
+    public static final class TxtReading {
+        public final TxtOutcome outcome;
         /** Con PRESENTE, il record. Altrimenti vuoto, anche con TROPPI: li' "il" record non c'e'. */
-        public final String contenuto;
+        public final String content;
         /** Tutti i record v=STSv1 trovati: uno con PRESENTE, piu' d'uno con TROPPI. */
-        public final List<String> valori;
+        public final List<String> values;
         /**
          * Con NON_CHIESTO, il perche': "il DNS risponde SERVFAIL" e "nessun DNS risponde"
          * portano a cercare il guasto in posti diversi.
          */
         public final String reason;
 
-        private LetturaTxt(EsitoTxt esito, List<String> valori, String reason) {
-            this.esito = esito;
-            this.valori = List.copyOf(valori);
-            this.contenuto = esito == EsitoTxt.PRESENTE ? valori.get(0) : "";
+        private TxtReading(TxtOutcome outcome, List<String> values, String reason) {
+            this.outcome = outcome;
+            this.values = List.copyOf(values);
+            this.content = outcome == TxtOutcome.PRESENT ? values.get(0) : "";
             this.reason = reason;
         }
     }
 
     /** Dai record v=STSv1 del nome: nessuno, uno solo, o troppi. */
-    private static LetturaTxt trovati(List<String> sts) {
-        EsitoTxt e = sts.isEmpty() ? EsitoTxt.ASSENTE
-                   : sts.size() == 1 ? EsitoTxt.PRESENTE : EsitoTxt.TROPPI;
-        return new LetturaTxt(e, sts, "");
+    private static TxtReading found(List<String> sts) {
+        TxtOutcome e = sts.isEmpty() ? TxtOutcome.ABSENT
+                   : sts.size() == 1 ? TxtOutcome.PRESENT : TxtOutcome.TOO_MANY;
+        return new TxtReading(e, sts, "");
     }
 
-    private static LetturaTxt ignoto(String reason) {
-        return new LetturaTxt(EsitoTxt.NON_CHIESTO, List.of(), reason);
+    private static TxtReading unknown(String reason) {
+        return new TxtReading(TxtOutcome.NOT_ASKED, List.of(), reason);
     }
 
-    public static LetturaTxt leggiTxt(String dominio) {
+    public static TxtReading readTxt(String domain) {
         try {
             // Senza +short: serve lo stato della risposta. Con +short un SERVFAIL (una zona
             // rotta, un DNSSEC che non torna) esce con 0 e non stampa niente, esattamente come un
             // nome senza record: il piano leggeva "assente" e proponeva di pubblicare un record
             // che forse c'e' gia'.
             ProcessBuilder pb = new ProcessBuilder("dig", "+noall", "+comments", "+answer",
-                    "TXT", "_mta-sts." + dominio);
-            Shell.applicaPath(pb);
+                    "TXT", "_mta-sts." + domain);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            return interpretaTxt(p.waitFor(), out);
+            return parseTxt(p.waitFor(), out);
         } catch (Exception e) {
             // dig che non c'e' o non parte: non ho chiesto niente a nessuno.
-            return ignoto(I18n.tr("server.sts.digNoStart"));
+            return unknown(I18n.tr("server.sts.digNoStart"));
         }
     }
 
@@ -995,26 +995,26 @@ public class MtaStsSetup {
      *   un altro stato (SERVFAIL, REFUSED...) o nessuno -> il DNS non ha detto che cosa c'e':
      *   NON_CHIESTO.
      */
-    public static LetturaTxt interpretaTxt(int uscitaDig, String stampato) {
+    public static TxtReading parseTxt(int digOutput, String printed) {
         // dig torna 0 anche quando il nome non esiste: un'uscita diversa da zero vuol dire
         // che non ho CHIESTO, non che la risposta sia "niente". Sono cose opposte.
-        if (uscitaDig == 9) return ignoto(I18n.tr("server.sts.noDnsAnswers"));
-        if (uscitaDig != 0 || stampato == null) return ignoto(I18n.tr("server.sts.digExit", java.util.Map.of("c", String.valueOf(uscitaDig))));
-        Matcher stato = DIG_STATE.matcher(stampato);
-        String s = stato.find() ? stato.group(1) : "";
-        if (s.equals("NXDOMAIN")) return trovati(List.of());
-        if (s.isEmpty()) return ignoto(I18n.tr("server.sts.digNoStatus"));
-        if (!s.equals("NOERROR")) return ignoto(I18n.tr("server.sts.dnsAnswers", java.util.Map.of("s", String.valueOf(s))));
+        if (digOutput == 9) return unknown(I18n.tr("server.sts.noDnsAnswers"));
+        if (digOutput != 0 || printed == null) return unknown(I18n.tr("server.sts.digExit", java.util.Map.of("c", String.valueOf(digOutput))));
+        Matcher state = DIG_STATE.matcher(printed);
+        String s = state.find() ? state.group(1) : "";
+        if (s.equals("NXDOMAIN")) return found(List.of());
+        if (s.isEmpty()) return unknown(I18n.tr("server.sts.digNoStatus"));
+        if (!s.equals("NOERROR")) return unknown(I18n.tr("server.sts.dnsAnswers", java.util.Map.of("s", String.valueOf(s))));
         // Tutti i TXT del nome, non il primo che va bene: il conto dei record v=STSv1 e' parte
         // della risposta.
         List<String> txt = new ArrayList<>();
-        for (String riga : stampato.split("\n")) {
-            String t = riga.trim();
+        for (String line : printed.split("\n")) {
+            String t = line.trim();
             if (t.isEmpty() || t.startsWith(";")) continue;
             Matcher m = LINE_TXT.matcher(t);          // un CNAME davanti al TXT si salta
             if (m.matches()) txt.addAll(DnsRules.recordTxt(m.group(1)));
         }
-        return trovati(DnsRules.soloMtaSts(txt));
+        return found(DnsRules.onlyMtaSts(txt));
     }
 
     /**
@@ -1025,17 +1025,17 @@ public class MtaStsSetup {
      * pannello hanno un id fisso — un orologio scritto una volta sola — che non cambierebbe
      * mai. Un piano che li desse per "fatti" nasconderebbe proprio la cosa da sistemare.
      */
-    private static String txtAtteso() {
+    private static String expectedTxt() {
         // Non si ricalcola qui: lo sa MtaSts, che e' anche chi serve la politica. Tre punti
         // che compongono la stessa stringa sono tre stringhe che un giorno divergono — ed e'
         // gia' successo, con l'id da orologio del riepilogo DNS.
-        return MtaSts.recordTxtCorrente();
+        return MtaSts.currentTxtRecord();
     }
 
-    private static boolean jailAttiva() {
+    private static boolean jailActive() {
         try {
             ProcessBuilder pb = new ProcessBuilder("fail2ban-client", "status", "mailpanel-pubblico");
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             p.getInputStream().readAllBytes();

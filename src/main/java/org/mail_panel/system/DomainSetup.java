@@ -35,7 +35,7 @@ public class DomainSetup {
 
     private DomainSetup() {}
 
-    public static JSONObject esegui(int domainId) { return esegui(domainId, null); }
+    public static JSONObject run(int domainId) { return run(domainId, null); }
 
     /**
      * @param job dove scrivere l'avanzamento mentre accade.
@@ -45,43 +45,43 @@ public class DomainSetup {
      * del proxy mentre sul server il lavoro continua — e uno stato sconosciuto su un
      * certificato di produzione e' l'anticamera del danno.
      */
-    public static JSONObject esegui(int domainId, UpdateManager.Job job) {
+    public static JSONObject run(int domainId, UpdateManager.Job job) {
         JSONObject r = new JSONObject();
-        JSONArray passi = new JSONArray();
+        JSONArray steps = new JSONArray();
         try {
-            MailDatabase.Domain d = trova(domainId);
+            MailDatabase.Domain d = find(domainId);
             if (d == null) return r.put("success", false).put("error", I18n.tr("server.cfgdom.notFound"));
-            r.put("dominio", d.domain);
+            r.put("domain", d.domain);
             if (job != null) job.write("=== " + I18n.tr("server.cfgdom.title", java.util.Map.of("d", String.valueOf(d.domain))) + " ===");
 
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
 
             // 1. DKIM: la chiave e il suo record.
-            passi.put(dkim(d));
+            steps.put(dkim(d));
 
             // 2. SPF.
-            passi.put(riduci("SPF", auto.crea(domainId, "spf", "")));
+            steps.put(reduce("SPF", auto.create(domainId, "spf", "")));
 
             // 3. La cassetta dei rapporti, con la destinazione copiata da un altro dominio.
-            String verso = destinazioneRapportiEsistente();
-            JSONObject cassetta = auto.recapitoRapporti(d);
-            if (cassetta.optBoolean("esiste", false))
-                passi.put(voce(I18n.tr("server.cfgdom.reportBox"), true, I18n.tr("server.cfgdom.boxPresent", java.util.Map.of("kind", String.valueOf(cassetta.optString("tipo"))))));
-            else if (verso == null)
-                passi.put(voce(I18n.tr("server.cfgdom.reportBox"), false,
+            String target = existingReportDestination();
+            JSONObject deliveryState = auto.reportDelivery(d);
+            if (deliveryState.optBoolean("exists", false))
+                steps.put(entry(I18n.tr("server.cfgdom.reportBox"), true, I18n.tr("server.cfgdom.boxPresent", java.util.Map.of("kind", String.valueOf(deliveryState.optString("type"))))));
+            else if (target == null)
+                steps.put(entry(I18n.tr("server.cfgdom.reportBox"), false,
                         I18n.tr("server.cfgdom.boxNoSource")));
             else
-                passi.put(riduci(I18n.tr("server.cfgdom.reportBox"), auto.creaAliasRapporti(domainId, verso)));
+                steps.put(reduce(I18n.tr("server.cfgdom.reportBox"), auto.createReportAlias(domainId, target)));
 
             // 4. DMARC, sempre in osservazione: si stringe dopo aver letto i rapporti.
-            passi.put(riduci("DMARC (p=none)", auto.crea(domainId, "dmarc", "none")));
+            steps.put(reduce("DMARC (p=none)", auto.create(domainId, "dmarc", "none")));
 
             // 5. I record che aiutano i client.
             for (String[] o : new String[][] {
                     {"autoconfig", "Autoconfig (Thunderbird)"},
                     {"srv_imaps", "server.cfgdom.srvIn"},
                     {"srv_submission", "server.cfgdom.srvOut"} })
-                passi.put(riduci(I18n.tr(o[1]), auto.creaOpzionale(domainId, o[0])));
+                steps.put(reduce(I18n.tr(o[1]), auto.createOptional(domainId, o[0])));
 
             // 6. MTA-STS: tutta la catena, per questo dominio, dall'include di nginx al
             //    record TXT.
@@ -103,18 +103,18 @@ public class DomainSetup {
             // stessa cosa divergono sempre, e quella che si preme di rado resta indietro
             // senza che nessuno se ne accorga.
             if (job != null) job.write("--- MTA-STS: " + I18n.tr("server.cfgdom.stsChain") + " ---");
-            JSONArray mtasts = MtaStsSetup.comeVoci(MtaStsSetup.esegui(job, d.domain));
-            for (int i = 0; i < mtasts.length(); i++) passi.put(mtasts.get(i));
+            JSONArray mtasts = MtaStsSetup.asEntries(MtaStsSetup.run(job, d.domain));
+            for (int i = 0; i < mtasts.length(); i++) steps.put(mtasts.get(i));
 
-            int riusciti = 0;
-            for (int i = 0; i < passi.length(); i++)
-                if (passi.getJSONObject(i).optBoolean("ok", false)) riusciti++;
+            int succeeded = 0;
+            for (int i = 0; i < steps.length(); i++)
+                if (steps.getJSONObject(i).optBoolean("ok", false)) succeeded++;
 
-            return r.put("success", true).put("passi", passi)
-                    .put("riusciti", riusciti).put("totale", passi.length())
-                    .put("nota", I18n.tr("server.cfgdom.summary", java.util.Map.of("ok", String.valueOf(riusciti), "tot", String.valueOf(passi.length()))));
+            return r.put("success", true).put("steps", steps)
+                    .put("succeeded", succeeded).put("total", steps.length())
+                    .put("note", I18n.tr("server.cfgdom.summary", java.util.Map.of("ok", String.valueOf(succeeded), "tot", String.valueOf(steps.length()))));
         } catch (Exception e) {
-            return r.put("success", false).put("passi", passi)
+            return r.put("success", false).put("steps", steps)
                     .put("error", I18n.tr("server.cfgdom.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
@@ -127,37 +127,37 @@ public class DomainSetup {
         try {
             if (d.dkimSelector != null && !d.dkimSelector.isBlank()
                     && d.dkimPublicKey != null && !d.dkimPublicKey.isBlank())
-                return voce("DKIM", true, I18n.tr("server.cfgdom.dkimPresent", java.util.Map.of("s", String.valueOf(d.dkimSelector))));
+                return entry("DKIM", true, I18n.tr("server.cfgdom.dkimPresent", java.util.Map.of("s", String.valueOf(d.dkimSelector))));
 
             DkimManager dk = new DkimManager(Main.mailDatabase);
             CloudflareManager cf = new CloudflareManager(Main.mailDatabase);
             dk.setCloudflareManager(cf);
             DkimManager.DkimResult res = dk.generateDkimKeys(d.id, d.domain, "mail");
             if (!res.success)
-                return voce("DKIM", false, I18n.tr("server.cfgdom.dkimGenFailed", java.util.Map.of("err", String.valueOf(res.error))));
+                return entry("DKIM", false, I18n.tr("server.cfgdom.dkimGenFailed", java.util.Map.of("err", String.valueOf(res.error))));
 
             // La chiave senza il record in DNS non serve a niente: chi riceve non puo'
             // verificare la signature, e la posta parte firmata da nessuno.
             MailDatabase.CloudflareAccount acct = cf.getAccountForDomain(d.id);
             if (acct == null)
-                return voce("DKIM", false, I18n.tr("server.cfgdom.dkimNoCf", java.util.Map.of("d", String.valueOf(d.domain))));
+                return entry("DKIM", false, I18n.tr("server.cfgdom.dkimNoCf", java.util.Map.of("d", String.valueOf(d.domain))));
             CloudflareManager.ZoneLookup zl = cf.findZone(acct.apiToken, d.domain);
             if (!zl.found)
-                return voce("DKIM", false, I18n.tr("server.cfgdom.dkimNoZone", java.util.Map.of("err", String.valueOf(zl.error))));
+                return entry("DKIM", false, I18n.tr("server.cfgdom.dkimNoZone", java.util.Map.of("err", String.valueOf(zl.error))));
 
-            String nome = res.selector + "._domainkey." + d.domain;
+            String name = res.selector + "._domainkey." + d.domain;
             for (CloudflareManager.TxtRecordInfo t :
-                    cf.listTxtRecordsContaining(acct.apiToken, zl.zoneId, nome))
-                if (t.name != null && t.name.equalsIgnoreCase(nome))
-                    return voce("DKIM", false, I18n.tr("server.cfgdom.dkimExists", java.util.Map.of("name", String.valueOf(nome))));
+                    cf.listTxtRecordsContaining(acct.apiToken, zl.zoneId, name))
+                if (t.name != null && t.name.equalsIgnoreCase(name))
+                    return entry("DKIM", false, I18n.tr("server.cfgdom.dkimExists", java.util.Map.of("name", String.valueOf(name))));
 
-            CloudflareManager.RecordOp op = cf.createTxtRecord(acct.apiToken, zl.zoneId, nome,
+            CloudflareManager.RecordOp op = cf.createTxtRecord(acct.apiToken, zl.zoneId, name,
                     "v=DKIM1; k=rsa; p=" + res.publicKey, 3600);
             return op != null && op.success
-                    ? voce("DKIM", true, I18n.tr("server.cfgdom.dkimPublished", java.util.Map.of("name", String.valueOf(nome))))
-                    : voce("DKIM", false, I18n.tr("server.cfgdom.dkimRejected", java.util.Map.of("err", String.valueOf(op == null ? I18n.tr("server.cfgdom.noAnswer") : op.error))));
+                    ? entry("DKIM", true, I18n.tr("server.cfgdom.dkimPublished", java.util.Map.of("name", String.valueOf(name))))
+                    : entry("DKIM", false, I18n.tr("server.cfgdom.dkimRejected", java.util.Map.of("err", String.valueOf(op == null ? I18n.tr("server.cfgdom.noAnswer") : op.error))));
         } catch (Exception e) {
-            return voce("DKIM", false, I18n.tr("server.cfgdom.dkimError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return entry("DKIM", false, I18n.tr("server.cfgdom.dkimError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -167,7 +167,7 @@ public class DomainSetup {
      * Si guarda un alias dmarc@ gia' esistente e si riusa la sua destinazione: chi ha gia'
      * deciso dove vuole i rapporti non deve deciderlo di nuovo a ogni dominio.
      */
-    public static String destinazioneRapportiEsistente() {
+    public static String existingReportDestination() {
         try {
             for (MailDatabase.Domain d : Main.mailDatabase.getDomains())
                 for (MailDatabase.Alias a : Main.mailDatabase.getAliases(d.id))
@@ -178,24 +178,24 @@ public class DomainSetup {
         return null;
     }
 
-    private static MailDatabase.Domain trova(int id) throws Exception {
+    private static MailDatabase.Domain find(int id) throws Exception {
         for (MailDatabase.Domain d : Main.mailDatabase.getDomains()) if (d.id == id) return d;
         return null;
     }
 
     /** Riduce l'esito di un'operazione a una riga leggibile. */
-    private static JSONObject riduci(String titolo, JSONObject e) {
+    private static JSONObject reduce(String title, JSONObject e) {
         boolean ok = e.optBoolean("success", false);
-        String msg = ok ? e.optString("nota", I18n.tr("server.cfgdom.done"))
+        String msg = ok ? e.optString("note", I18n.tr("server.cfgdom.done"))
                         : e.optString("error", I18n.tr("server.cfgdom.failed"));
         // "Esiste gia'" non e' un fallimento: e' la regola che protegge cio' che c'era.
-        if (!ok && (e.optBoolean("esisteGia", false) || e.optBoolean("invariato", false)))
-            return voce(titolo, true, msg);
-        return voce(titolo, ok, msg);
+        if (!ok && (e.optBoolean("alreadyExists", false) || e.optBoolean("unchanged", false)))
+            return entry(title, true, msg);
+        return entry(title, ok, msg);
     }
 
-    private static JSONObject voce(String titolo, boolean ok, String messaggio) {
-        return new JSONObject().put("titolo", titolo).put("ok", ok)
-                .put("messaggio", messaggio == null ? "" : messaggio);
+    private static JSONObject entry(String title, boolean ok, String message) {
+        return new JSONObject().put("title", title).put("ok", ok)
+                .put("messageText", message == null ? "" : message);
     }
 }

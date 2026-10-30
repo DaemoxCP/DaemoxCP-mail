@@ -39,7 +39,7 @@ const now = Date.now();
 const API = {
     'GET /api/domains': { success: true, domains: [{ id: 1, domain: 'example.com' }] },
     'GET /api/dns': { success: true, mail_hostname: 'mail.example.com', server_ip: '192.0.2.1',
-        records: [{ name: '@', type: 'MX', value: 'mail.example.com', valoreCompleto: '10 mail.example.com', required: true,
+        records: [{ name: '@', type: 'MX', value: 'mail.example.com', fullValue: '10 mail.example.com', required: true,
                     description: 'Where mail for the domain goes', dnsZone: 'example.com', checkType: 'MX' },
                   { name: '_dmarc', type: 'TXT', value: 'v=DMARC1; p=none', required: false, description: 'DMARC', dnsZone: 'example.com', checkType: 'DMARC' }] },
     'POST /api/dns': { success: true, domain: 'example.com', score: 50, all_passed: false,
@@ -48,16 +48,16 @@ const API = {
     'GET /api/dkim': { success: true, configured: true, selector: 's2026', dns_record_name: 's2026._domainkey.example.com' },
     'POST /api/dkim': { success: true, presets: [{ days: 0, label: 'Off' }, { days: 90, label: 'Every 90 days' }], interval_days: 90,
         last_rotation_at_ms: now - 10 * 86400000, next_rotation_at_ms: now + 80 * 86400000, server_now_ms: now, cloudflare_configured: true,
-        auto_activate_after_hours: 24, grace_period_days: 7, avvio_automatico: true, has_dkim: true, events: [], records: [], domini: [] },
+        auto_activate_after_hours: 24, grace_period_days: 7, auto_start: true, has_dkim: true, events: [], records: [], domains: [] },
     'GET /api/cloudflare': { success: true, accounts: [{ id: 3, label: 'Main', email: 'me@example.com', token_masked: 'abc…xyz' }],
         domains: [{ id: 1, domain: 'example.com', cloudflare_account_id: 3 }], mail_server: { hostname: 'mail.example.com', cloudflare_account_id: 3 } },
     'GET /api/timezone-diag': { alignment: 'OK', os_now_ms: now, jvm_now_ms: now, mysql_now_ms: now, os_offset: '+00:00', os_tz: 'UTC',
         jvm_default_zone: 'UTC', jvm_offset: '+00:00', mysql_now: '2026-10-10 10:00:00', mysql_utc_now: '2026-10-10 10:00:00',
         mysql_session_tz: 'SYSTEM', mysql_global_tz: 'SYSTEM', mysql_system_tz: 'UTC' },
-    'POST /api/autodns': { success: true, cloudflare: false, nota: 'This domain has no Cloudflare account.', modo: 'testing',
-        politica: 'version: STSv1\nmode: testing', recordTxt: 'v=STSv1; id=20261010', domini: [] },
-    'POST /api/autoconfig': { success: true, pronto: true, conf: '/usr/local/etc/nginx/nginx.conf', hostDiPosta: 'mail.example.com',
-        nomeCoperto: true, rottaPresente: true, domini: [{ nome: 'autoconfig.example.com', dns: true, certificato: true, prova: { ok: true } }] },
+    'POST /api/autodns': { success: true, cloudflare: false, note: 'This domain has no Cloudflare account.', mode: 'testing',
+        policy: 'version: STSv1\nmode: testing', recordTxt: 'v=STSv1; id=20261010', domains: [] },
+    'POST /api/autoconfig': { success: true, ready: true, conf: '/usr/local/etc/nginx/nginx.conf', mailHost: 'mail.example.com',
+        coveredName: true, brokenPresent: true, domains: [{ name: 'autoconfig.example.com', dns: true, certificate: true, test: { ok: true } }] },
     'GET /api/blacklist_check': { success: true, reports: [] },
     'GET /api/ssl': { certificate_installed: true, lets_encrypt: true, common_name: 'mail.example.com', issuer: "Let's Encrypt R11",
         valid_from: 'Sep 1 2026', expires_at: 'Nov 30 2026', days_until_expiry: 51, algorithm: 'ECDSA', serial: '04AB' },
@@ -67,14 +67,14 @@ const API = {
     'GET /api/fail2ban': (q) => ({
         status: { installed: true, running: true, total_banned: 2, total_banned_total: 9, active_jails: ['postfix-sasl'],
             jails: [{ name: 'postfix-sasl', enabled: true, currently_banned: 2, currently_failed: 1, total_banned: 9,
-                      porta_dichiarata: true, porte: 'smtp,submission', ban_usa_la_porta: false, log: '/var/log/maillog' }],
+                      declared_port: true, ports: 'smtp,submission', ban_uses_port: false, log: '/var/log/maillog' }],
             recent_bans: [{ action: 'ban', ip: '192.0.2.7', jail: 'postfix-sasl', timestamp: now - 600000 }] },
         banned: { success: true, banned: [{ ip: '192.0.2.7', jail: 'postfix-sasl' }] },
         live_state_all: { success: true, installed: true, running: true,
             jails: [{ name: 'postfix-sasl', currently_banned: 2, total_banned: 9, currently_failed: 1, total_failed: 30,
                       maxretry: '5', findtime: '600', bantime: '3600', logpath: '/var/log/maillog', filter: 'postfix-sasl',
                       ignoreip: '127.0.0.1/8', banned_ips_raw: '192.0.2.7 198.51.100.9', status_raw: 'Status for the jail: postfix-sasl' }] },
-        permaban_list: { success: true, count: 1, permabans: [{ ip: '203.0.113.5', in_runtime: true }, { ip: '203.0.113.6', in_runtime: false }] },
+        permaban_list: { success: true, count: 1, permabans: [{ ip: '203.0.113.5', at_runtime: true }, { ip: '203.0.113.6', at_runtime: false }] },
     })[q.get('action')] || { success: true },
     'POST /api/fail2ban': (q, body) => ({
         get_jail_config: { success: true, max_retry: 5, find_time: 600, ban_time: 3600, filter: 'postfix-sasl', ignoreip: ['127.0.0.1/8'] },
@@ -117,24 +117,24 @@ const API = {
     'GET /api/hostname': { success: true, consistent: false, sqlite_hostname: 'mail.example.com', mysql_hostname: 'mail.example.com' },
     'GET /api/roundcube-domain': { success: true, domain: 'webmail.example.com', dns_ok: false },
     'POST /api/report': (q, body) => ({
-        status: { success: true, mittente: 'panel@example.com', destinatario: 'me@example.com', frequenza: 'settimanale', ora: 7, attivo: true,
-                  prossimo: 'Next report: Monday 07:00' },
-        identity: { success: true, esiste: false, dominioGestito: true, creabile: true, mittente: 'panel@example.com', nota: 'The address is free.',
-                    dominioDelPannelloGestito: true, dominioDelPannello: 'example.com', caselleDisponibili: ['panel@example.com'], dominiGestiti: ['example.com'] },
+        status: { success: true, sender: 'panel@example.com', recipient: 'me@example.com', frequency: 'weekly', now: 7, active: true,
+                  next: 'Next report: Monday 07:00' },
+        identity: { success: true, exists: false, managedDomain: true, creatable: true, sender: 'panel@example.com', note: 'The address is free.',
+                    panelDomainManaged: true, panelDomain: 'example.com', availableMailboxes: ['panel@example.com'], managedDomains: ['example.com'] },
     })[body.action] || { success: true },
     // Updates: one endpoint, the reply depends on the action in the body.
     'POST /api/updates': (q, body) => ({
-        branch_status: { success: true, branch: 'quarterly', explanation: 'Quarterly is the default.', changeable: true, verso: ['latest'], panelOwnedFile: false,
-                      repository: [{ nome: 'FreeBSD', ruolo: 'packages', branch: 'quarterly', acceso: true, url: 'pkg+https://pkg.FreeBSD.org/...' }] },
-        os_status: { success: true, kernelInstallato: '15.0-RELEASE-p3', uname: '15.0-RELEASE-p3', riavvioNecessario: false, userland: '15.0-RELEASE-p3',
-                     arch: 'amd64', fineSupporto: '2026-12-31', noteSupporto: '', fonteSupporto: 'freebsd.org', aggiornabileConFreebsdUpdate: true, giaPronti: 'none' },
-        plan: { success: true, daFare: 1, passi: [
-            { gruppo: 'fase', lettera: 'A', titolo: 'Lock the stack', stato: 'fatto', situazione: 'Locked.', perche: 'So nothing replaces it.' },
-            { gruppo: 'pacchetto', titolo: 'curl', stato: 'dafare', situazione: '8.9 to 8.10', perche: 'Fixes a CVE.', azione: { tipo: 'package_update', package: 'curl' } }],
-            senzaRimedio: ['libfoo'] },
+        branch_status: { success: true, branch: 'quarterly', explanation: 'Quarterly is the default.', changeable: true, destination: ['latest'], panelOwnedFile: false,
+                      repository: [{ name: 'FreeBSD', role: 'packages', branch: 'quarterly', enabled: true, url: 'pkg+https://pkg.FreeBSD.org/...' }] },
+        os_status: { success: true, installedKernel: '15.0-RELEASE-p3', uname: '15.0-RELEASE-p3', restartNeeded: false, userland: '15.0-RELEASE-p3',
+                     arch: 'amd64', endOfSupport: '2026-12-31', supportNotes: '', supportSource: 'freebsd.org', updatableWithFreebsdUpdate: true, alreadyReady: 'none' },
+        plan: { success: true, toDo: 1, steps: [
+            { group: 'phase', letter: 'A', title: 'Lock the stack', state: 'done', situation: 'Locked.', why: 'So nothing replaces it.' },
+            { group: 'package', title: 'curl', state: 'todo', situation: '8.9 to 8.10', why: 'Fixes a CVE.', action: { type: 'package_update', package: 'curl' } }],
+            withoutRemedy: ['libfoo'] },
         packages_overview: { success: true, summary: { updates: 2, stackUpdates: 1, vulnerable: 1, fixable: 1, locked: 1, stackUnlocked: 1, panelRestart: true },
             packages: [{ name: 'postfix', installed: '3.9', available: '3.10', update: true, locked: true, stack: true, role: 'SMTP', canUpdate: true, whyNot: '',
-                         vuln: { verdict: 'aggiornamento-non-basta', catalogo: '3.10', explanation: 'Not enough.', issues: [] } },
+                         vuln: { verdict: 'upgrade-not-enough', catalog: '3.10', explanation: 'Not enough.', issues: [] } },
                        { name: 'openjdk25', installed: '25.0.1', available: '25.0.2', update: true, locked: true, stack: true, role: 'Java', javaFlow: true,
                          inUse: 'the panel runs on it', panelRestart: 'Restart the panel.', canUpdate: false, whyNot: 'Own procedure.' }],
             others: [{ name: 'curl', installed: '8.9', available: '8.10' }] },
@@ -142,12 +142,12 @@ const API = {
             { name: 'postfix', role: 'SMTP', version: '3.9', locked: true }, { name: 'dovecot', role: 'IMAP', version: '2.3', locked: false }] },
         updates_status: { success: true, rebootPending: true, kernel: '15.0-p3', running: '15.0-p2', dryRun: 'Nothing to do.',
             vulnerable: [{ name: 'curl', role: 'tools', locked: false, fixedByUpgrade: true, cve: ['CVE-2026-0001'],
-                           fix: { verdict: 'si-risolve-aggiornando', explanation: 'The repository has 8.10.' } }],
-            lockedUpdates: [{ name: 'postfix', role: 'SMTP', current: '3.9', available: '3.10', majorJump: false, advisory: { level: 'verifica', text: 'Read the notes.' } }] },
-        defaults_check: { success: true, fonte: 'ports', avvertenza: 'Defaults move.', branch: { branch: 'quarterly', explanation: 'Default.', dove: '/etc/pkg' },
-            righe: [{ componente: 'OpenSSL', perche: 'TLS', predefinito: 'base', installato: 'base', esito: 'coerente', dipendenti: [] }] },
-        panel_env: { success: true, explanation: 'Every tool is reachable.', pathEreditato: '/usr/bin', pathUsato: '/usr/bin:/usr/local/bin',
-            strumenti: [{ comando: 'doveadm', aCosaServe: 'mailboxes', risolto: '/usr/local/bin/doveadm', stato: 'raggiungibile' }] },
+                           fix: { verdict: 'fixed-by-upgrade', explanation: 'The repository has 8.10.' } }],
+            lockedUpdates: [{ name: 'postfix', role: 'SMTP', current: '3.9', available: '3.10', majorJump: false, advisory: { level: 'review', text: 'Read the notes.' } }] },
+        defaults_check: { success: true, source: 'ports', caveat: 'Defaults move.', branch: { branch: 'quarterly', explanation: 'Default.', where: '/etc/pkg' },
+            lines: [{ component: 'OpenSSL', why: 'TLS', defaultValue: 'base', installed: 'base', outcome: 'consistent', dependents: [] }] },
+        panel_env: { success: true, explanation: 'Every tool is reachable.', inheritedPath: '/usr/bin', pathUsed: '/usr/bin:/usr/local/bin',
+            tools: [{ command: 'doveadm', purpose: 'mailboxes', resolved: '/usr/local/bin/doveadm', state: 'reachable' }] },
     })[body.action] || { success: true },
     'GET /api/postfix-aliases-health': { success: true, overall: 'OK', summary: 'The aliases are fine.', alias_file: '/etc/mail/aliases',
         source_exists: true, alias_db_file: '/etc/mail/aliases.db', db_exists: true, root_forward: 'admin@example.com' },
@@ -192,7 +192,7 @@ const VISITS = [
         await page.waitForSelector('#verificationResults:not(.d-none) table');
         await page.click('.card-header[onclick="toggleTzDiag()"]');
         await page.waitForSelector('#tzDiagTable table');
-        await page.evaluate(() => { autoDnsCarica(); acCarica(); stsCarica(); });
+        await page.evaluate(() => { autoDnsLoad(); acLoad(); stsLoad(); });
         await page.waitForTimeout(800);
     } },
     { path: '/ssl', prepare: async page => {
@@ -247,14 +247,14 @@ const VISITS = [
     { path: '/settings', prepare: async page => {
         await page.waitForSelector('#hostnameConsistency .alert');
         await page.waitForSelector('#rcDomainDns .badge');
-        await page.click('.card-header button[onclick="repCarica()"]');
+        await page.click('.card-header button[onclick="repLoad()"]');
         await page.waitForSelector('#repFreq');
     } },
     { path: '/install' },
     { path: '/setup' },
     { path: '/updates', prepare: async page => {
         await page.waitForSelector('#branch-body table');
-        for (const [fn, sel] of [['osStato', '#os-body table'], ['planLoad', '#plan-body .border'], ['pkOverview', '#pk-body table'],
+        for (const [fn, sel] of [['osState', '#os-body table'], ['planLoad', '#plan-body .border'], ['pkOverview', '#pk-body table'],
                                  ['updStatus', '#upd-status .alert-danger'], ['defCheck', '#def-body table'], ['envCheck', '#env-body table']]) {
             await page.evaluate(f => window[f](), fn);
             await page.waitForSelector(sel);

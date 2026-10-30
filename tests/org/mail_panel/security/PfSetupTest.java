@@ -67,13 +67,13 @@ public class PfSetupTest {
                 Fail2banAutoSetup.whyBansWouldNotBite(true, true, true, false).contains("Status: Disabled"));
         // Nessuna combinazione incompleta deve dare "va tutto bene": e' la cosa che il
         // pannello faceva, cioe' tacere.
-        int silenzi = 0;
+        int silences = 0;
         for (int c = 0; c < 16; c++) {
             boolean m = (c & 1) != 0, f = (c & 2) != 0, a = (c & 4) != 0, e = (c & 8) != 0;
-            boolean tutto = m && f && a && e;
-            if (!tutto && Fail2banAutoSetup.whyBansWouldNotBite(m, f, a, e).isEmpty()) silenzi++;
+            boolean everything = m && f && a && e;
+            if (!everything && Fail2banAutoSetup.whyBansWouldNotBite(m, f, a, e).isEmpty()) silences++;
         }
-        check("nessuna delle 15 combinazioni incomplete passa in silenzio", silenzi == 0);
+        check("nessuna delle 15 combinazioni incomplete passa in silenzio", silences == 0);
 
         OUT.println("\n== L'installazione mette in piedi pf ==");
         // La riga si cerca nella forma in cui lo script la scrive: se non la trova, indexOf da'
@@ -142,17 +142,17 @@ public class PfSetupTest {
         for (String r : rules) if (r.startsWith("block")) blocks.add(r);
         check("pf vede un solo blocco, e sono i blocchi permanenti del pannello: "
                 + blocks.size() + " blocco/i", blocks.size() == 1 && blocks.get(0).contains("<permaban>"));
-        boolean passaTutto = false;
-        for (String r : rules) if (r.startsWith("pass all") || r.equals("pass")) passaTutto = true;
-        check("e il predefinito e' passare tutto: accendere pf non chiude fuori nessuno", passaTutto);
-        boolean anchorPrimaDelPass = false;
+        boolean passesAll = false;
+        for (String r : rules) if (r.startsWith("pass all") || r.equals("pass")) passesAll = true;
+        check("e il predefinito e' passare tutto: accendere pf non chiude fuori nessuno", passesAll);
+        boolean anchorBeforePass = false;
         int iAnchor = -1, iPass = -1;
         for (int i = 0; i < rules.size(); i++) {
             if (rules.get(i).startsWith("anchor") && rules.get(i).contains("f2b/")) iAnchor = i;
             if (rules.get(i).startsWith("pass")) iPass = i;
         }
-        anchorPrimaDelPass = iAnchor >= 0 && iPass >= 0 && iAnchor < iPass;
-        check("anche per pf, l'anchor sta prima del pass", anchorPrimaDelPass);
+        anchorBeforePass = iAnchor >= 0 && iPass >= 0 && iAnchor < iPass;
+        check("anche per pf, l'anchor sta prima del pass", anchorBeforePass);
         check("e il pannello riconosce il proprio anchor in quel file",
                 Fail2banAutoSetup.hasF2bAnchor(pfConf));
 

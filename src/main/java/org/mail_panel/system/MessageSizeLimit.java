@@ -28,19 +28,19 @@ public class MessageSizeLimit {
     public static final int MEGA = 1024 * 1024;
 
     /** Megabyte -> byte. */
-    public static long aByte(int mb) { return (long) mb * MEGA; }
+    public static long toBytes(int mb) { return (long) mb * MEGA; }
 
     /** Byte -> megabyte, arrotondato per difetto ma mai a zero se c'e' un limite. */
-    public static int aMega(long byteTotali) {
-        if (byteTotali <= 0) return 0;
-        int mb = (int) (byteTotali / MEGA);
+    public static int aMega(long totalBytes) {
+        if (totalBytes <= 0) return 0;
+        int mb = (int) (totalBytes / MEGA);
         return mb == 0 ? 1 : mb;
     }
 
     /** Il valore attuale in megabyte, o -1 se non si riesce a leggerlo. */
-    public static int leggiMega() {
-        Ris r = esegui("postconf", "-h", "message_size_limit");
-        if (r.codice != 0) return -1;
+    public static int readMegabytes() {
+        RunResult r = run("postconf", "-h", "message_size_limit");
+        if (r.code != 0) return -1;
         try {
             return aMega(Long.parseLong(r.output.trim()));
         } catch (Exception e) {
@@ -51,64 +51,64 @@ public class MessageSizeLimit {
     /**
      * Imposta il limite. Restituisce sempre un esito leggibile, mai un'eccezione muta.
      */
-    public static JSONObject imposta(int mb) {
-        JSONObject r = new JSONObject().put("megabyte", mb);
+    public static JSONObject set(int mb) {
+        JSONObject r = new JSONObject().put("megabytes", mb);
         if (mb < 1 || mb > 1024)
             return r.put("success", false)
                     .put("error", I18n.tr("server.size.outOfRange", Map.of("mb", mb)));
 
-        int prima = leggiMega();
-        if (prima < 0)
+        int before = readMegabytes();
+        if (before < 0)
             return r.put("success", false)
                     .put("error", I18n.tr("server.size.unreadable"));
-        r.put("prima", prima);
-        if (prima == mb)
-            return r.put("success", true).put("invariato", true)
-                    .put("nota", I18n.tr("server.size.unchanged", Map.of("mb", mb)));
+        r.put("before", before);
+        if (before == mb)
+            return r.put("success", true).put("unchanged", true)
+                    .put("note", I18n.tr("server.size.unchanged", Map.of("mb", mb)));
 
-        Ris set = esegui("postconf", "-e", "message_size_limit=" + aByte(mb));
-        if (set.codice != 0)
+        RunResult set = run("postconf", "-e", "message_size_limit=" + toBytes(mb));
+        if (set.code != 0)
             return r.put("success", false)
                     .put("error", I18n.tr("server.size.postconfRefused", Map.of("output", set.output.trim())));
 
-        Ris check = esegui("postfix", "check");
-        if (check.codice != 0) {
-            esegui("postconf", "-e", "message_size_limit=" + aByte(prima));
-            return r.put("success", false).put("ripristinato", true)
-                    .put("error", I18n.tr("server.size.checkFailed", Map.of("before", prima, "output", check.output.trim())));
+        RunResult check = run("postfix", "check");
+        if (check.code != 0) {
+            run("postconf", "-e", "message_size_limit=" + toBytes(before));
+            return r.put("success", false).put("restored", true)
+                    .put("error", I18n.tr("server.size.checkFailed", Map.of("before", before, "output", check.output.trim())));
         }
 
-        Ris reload = esegui("postfix", "reload");
-        if (reload.codice != 0) {
-            esegui("postconf", "-e", "message_size_limit=" + aByte(prima));
-            esegui("postfix", "reload");
-            return r.put("success", false).put("ripristinato", true)
-                    .put("error", I18n.tr("server.size.reloadFailed", Map.of("before", prima, "output", reload.output.trim())));
+        RunResult reload = run("postfix", "reload");
+        if (reload.code != 0) {
+            run("postconf", "-e", "message_size_limit=" + toBytes(before));
+            run("postfix", "reload");
+            return r.put("success", false).put("restored", true)
+                    .put("error", I18n.tr("server.size.reloadFailed", Map.of("before", before, "output", reload.output.trim())));
         }
 
         // Non basta che i comandi non abbiano protestato: si rilegge.
-        int dopo = leggiMega();
-        r.put("dopo", dopo);
-        if (dopo != mb)
+        int after = readMegabytes();
+        r.put("after", after);
+        if (after != mb)
             return r.put("success", false)
-                    .put("error", I18n.tr("server.size.readBackDiffers", Map.of("mb", mb, "after", dopo)));
+                    .put("error", I18n.tr("server.size.readBackDiffers", Map.of("mb", mb, "after", after)));
 
         return r.put("success", true)
-                .put("nota", I18n.tr("server.size.changed", Map.of("before", prima, "mb", mb)));
+                .put("note", I18n.tr("server.size.changed", Map.of("before", before, "mb", mb)));
     }
 
-    private record Ris(int codice, String output) {}
+    private record RunResult(int code, String output) {}
 
-    private static Ris esegui(String... cmd) {
+    private static RunResult run(String... cmd) {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            return new Ris(p.waitFor(), out);
+            return new RunResult(p.waitFor(), out);
         } catch (Exception e) {
-            return new Ris(-1, String.valueOf(e.getMessage()));
+            return new RunResult(-1, String.valueOf(e.getMessage()));
         }
     }
 }

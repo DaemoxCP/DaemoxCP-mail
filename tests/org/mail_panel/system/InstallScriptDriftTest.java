@@ -143,7 +143,7 @@ public class InstallScriptDriftTest {
 
     private static void messages() {
         System.out.println("A. Il filtro dei messaggi sull'uscita vera dell'aggiornamento di postfix-mysql");
-        List<String> m = UpdateManager.messaggiCheChiedonoAzione(POSTFIX_UPGRADE_OUTPUT);
+        List<String> m = UpdateManager.messagesAskingForAction(POSTFIX_UPGRADE_OUTPUT);
         System.out.println("     messaggi trovati: " + m.size());
         check("l'avviso COMPATIBILITY, fuori da ogni blocco «Message from», viene ripescato",
                 any(m, "COMPATIBILITY: editing /usr/local/etc/postfix/main.cf") && any(m, "inet_protocols=ipv4"));
@@ -162,11 +162,11 @@ public class InstallScriptDriftTest {
         // Quello che il filtro sapeva gia' fare non si deve perdere.
         String rspamd = "[1/1] Upgrading rspamd from 3.12 to 4.1...\n[1/1] Extracting rspamd-4.1: .... done\n"
                 + "=====\nMessage from rspamd-4.1:\n\n--\nThe statistics format changed.\nIt is recommended to remove\nthe old cache files:\n  rm /var/db/rspamd/*.hs*\n";
-        List<String> r = UpdateManager.messaggiCheChiedonoAzione(rspamd);
+        List<String> r = UpdateManager.messagesAskingForAction(rspamd);
         check("un blocco «Message from» che chiede un'azione resta ripescato, intero",
                 r.size() == 1 && r.get(0).contains("It is recommended") && r.get(0).contains("rm /var/db/rspamd"));
         check("un'uscita senza niente da fare non da' messaggi",
-                UpdateManager.messaggiCheChiedonoAzione("[1/1] Upgrading nginx from 1.30.5_2,3 to 1.30.6,3...\n"
+                UpdateManager.messagesAskingForAction("[1/1] Upgrading nginx from 1.30.5_2,3 to 1.30.6,3...\n"
                         + "[1/1] Extracting nginx-1.30.6,3: .......... done\n"
                         + "You may need to manually remove /usr/local/etc/nginx/nginx.conf if it is no longer needed.\n").isEmpty());
     }
@@ -276,7 +276,7 @@ public class InstallScriptDriftTest {
         switch (flow) {
             case "guided" -> {
                 JSONObject pf = UpdateManager.packagePreflight(PKG);
-                plan = pf.optJSONObject("piano");
+                plan = pf.optJSONObject("plan");
                 signature = pf.optString("signature");
                 if (!pf.optBoolean("canProceed")) {
                     check(flow + " " + version + ": il preflight lascia partire", false);
@@ -286,18 +286,18 @@ public class InstallScriptDriftTest {
             }
             case "unprotected" -> {
                 JSONObject st = UpdateManager.updatesStatus();
-                plan = st.optJSONObject("piano");
+                plan = st.optJSONObject("plan");
                 signature = st.optString("signature");
             }
             default -> {
                 JSONObject pv = UpdateManager.maintenancePreview();
-                plan = pv.optJSONObject("piano");
+                plan = pv.optJSONObject("plan");
                 signature = pv.optString("signature");
             }
         }
         Set<String> inPlan = new TreeSet<>();
         JSONArray ch = plan == null ? new JSONArray() : plan.optJSONArray("changes");
-        for (int i = 0; ch != null && i < ch.length(); i++) inPlan.add(ch.getJSONObject(i).optString("nome"));
+        for (int i = 0; ch != null && i < ch.length(); i++) inPlan.add(ch.getJSONObject(i).optString("name"));
         if (!inPlan.equals(Set.of(PKG))) {
             // Un piano con altri pacchetti cambierebbe la macchina per davvero: non si parte.
             check(flow + " " + version + ": il piano contiene solo " + PKG + " (trovato " + inPlan + ")", false);
@@ -313,7 +313,7 @@ public class InstallScriptDriftTest {
         // La fine e' il turno libero, non lo stato: la manutenzione dice «completed» prima dei
         // suoi controlli finali (reperto 43), e chi si fermasse li' guarderebbe un lavoro a meta'.
         long deadline = System.currentTimeMillis() + 600_000;
-        while (PackageQueue.chi() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
+        while (PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
         JSONObject job = UpdateManager.jobStatus(id).getJSONObject("job");
         // -De2e.dump=<cartella>: il JSON del lavoro com'e', quello che la pagina riceve da
         // job_status. Serve a far vedere a un browser l'esito vero, non uno scritto a mano.
@@ -333,7 +333,7 @@ public class InstallScriptDriftTest {
             check(label + "  e quello che ha scritto in /etc", error.contains(ETC_FILE));
             check(label + "l'esito nomina l'indirizzo perso", error.contains("[::1]:" + PORT));
             check(label + "il log mostra la riga che lo script ha aggiunto", log.contains("+ protocols = ipv4"));
-            String header = I18n.tr("server.um.runAggiornamentoGuidato.33");
+            String header = I18n.tr("server.um.runGuidedUpdate.33");
             int h = log.lastIndexOf(header);
             check(label + "e ristampa alla fine l'avviso COMPATIBILITY dello script",
                     h >= 0 && log.indexOf("COMPATIBILITY: editing", h) > h);

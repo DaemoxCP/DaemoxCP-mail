@@ -60,7 +60,7 @@ public final class Layout {
         new Section("nav.section.dns", List.of(
             new Item("dns", "/dns", "fas fa-sitemap", "nav.dns", "dns.view", "dns.manage"),
             new Item("ssl", "/ssl", "fas fa-lock", "nav.ssl", "dns.view", "dns.manage"),
-            new Item("cloudflare", "/cloudflare", "fas fa-cloud icona-cloudflare", "nav.cloudflare", "dns.view", "dns.manage"))),
+            new Item("cloudflare", "/cloudflare", "fas fa-cloud icon-cloudflare", "nav.cloudflare", "dns.view", "dns.manage"))),
         new Section("nav.section.security", List.of(
             new Item("security", "/security", "fas fa-shield-halved", "nav.security", "security.view", "security.manage"),
             new Item("firewall", "/firewall", "fas fa-fire", "nav.firewall", "security.view", "security.manage"))),

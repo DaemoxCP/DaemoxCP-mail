@@ -33,15 +33,15 @@ public class WebDiagnostics {
      * Il parser, come funzione pura
      * =================================================================== */
 
-    public static class Blocco {
-        public final List<String> ascolta = new ArrayList<>();
-        public String nomi = "";
-        public String radice = "";
-        public boolean cifrato;          // ha "ssl" fra i parametri di listen
+    public static class Block {
+        public final List<String> listens = new ArrayList<>();
+        public String names = "";
+        public String root = "";
+        public boolean encrypted;          // ha "ssl" fra i parametri di listen
         public boolean servePhp;
         public boolean serveFile;        // ha una root e un location che consegna qualcosa
-        public boolean soloRedirect;     // non fa altro che rimandare altrove
-        public int riga;
+        public boolean onlyRedirect;     // non fa altro che rimandare altrove
+        public int line;
     }
 
     /**
@@ -51,79 +51,79 @@ public class WebDiagnostics {
      * un server ci sono altri blocchi (location, if) e una regex si fermerebbe alla prima
      * graffa chiusa, attribuendo al blocco sbagliato meta' delle direttive.
      */
-    public static List<Blocco> blocchi(String dump) {
-        List<Blocco> fuori = new ArrayList<>();
-        if (dump == null) return fuori;
-        String[] righe = dump.split("\n");
-        for (int i = 0; i < righe.length; i++) {
-            String t = righe[i].trim();
+    public static List<Block> blocks(String dump) {
+        List<Block> outside = new ArrayList<>();
+        if (dump == null) return outside;
+        String[] lines = dump.split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            String t = lines[i].trim();
             if (t.startsWith("#")) continue;
             if (!t.equals("server {") && !t.startsWith("server {") && !t.equals("server")) continue;
 
-            Blocco b = new Blocco();
-            b.riga = i + 1;
-            int profondita = contaGraffe(righe[i]);
+            Block b = new Block();
+            b.line = i + 1;
+            int depth = countBraces(lines[i]);
             int j = i + 1;
-            StringBuilder corpo = new StringBuilder();
-            while (j < righe.length && profondita > 0) {
-                corpo.append(righe[j]).append("\n");
-                profondita += contaGraffe(righe[j]);
+            StringBuilder body = new StringBuilder();
+            while (j < lines.length && depth > 0) {
+                body.append(lines[j]).append("\n");
+                depth += countBraces(lines[j]);
                 j++;
             }
-            leggiCorpo(b, corpo.toString());
-            fuori.add(b);
+            readBody(b, body.toString());
+            outside.add(b);
             i = j - 1;
         }
-        return fuori;
+        return outside;
     }
 
-    private static int contaGraffe(String riga) {
+    private static int countBraces(String line) {
         int n = 0;
-        boolean commento = false;
-        for (char c : riga.toCharArray()) {
-            if (c == '#') commento = true;
-            if (commento) continue;
+        boolean comment = false;
+        for (char c : line.toCharArray()) {
+            if (c == '#') comment = true;
+            if (comment) continue;
             if (c == '{') n++;
             else if (c == '}') n--;
         }
         return n;
     }
 
-    private static void leggiCorpo(Blocco b, String corpo) {
-        boolean haLocationConContenuto = false, haReturn = false;
-        for (String r : corpo.split("\n")) {
+    private static void readBody(Block b, String body) {
+        boolean hasLocationWithContent = false, haReturn = false;
+        for (String r : body.split("\n")) {
             String t = r.trim();
             if (t.startsWith("#")) continue;
-            String basso = t.toLowerCase(Locale.ROOT);
+            String lower = t.toLowerCase(Locale.ROOT);
 
-            if (basso.startsWith("listen ")) {
+            if (lower.startsWith("listen ")) {
                 String v = t.substring(7).replace(";", "").trim();
-                b.ascolta.add(v);
-                if (v.toLowerCase(Locale.ROOT).contains("ssl")) b.cifrato = true;
-            } else if (basso.startsWith("server_name ")) {
-                b.nomi = t.substring(12).replace(";", "").trim();
-            } else if (basso.startsWith("root ")) {
-                b.radice = t.substring(5).replace(";", "").trim();
-            } else if (basso.contains("fastcgi_pass") || basso.matches("location\\s+~\\s*\\\\?\\.php.*")) {
+                b.listens.add(v);
+                if (v.toLowerCase(Locale.ROOT).contains("ssl")) b.encrypted = true;
+            } else if (lower.startsWith("server_name ")) {
+                b.names = t.substring(12).replace(";", "").trim();
+            } else if (lower.startsWith("root ")) {
+                b.root = t.substring(5).replace(";", "").trim();
+            } else if (lower.contains("fastcgi_pass") || lower.matches("location\\s+~\\s*\\\\?\\.php.*")) {
                 b.servePhp = true;
-            } else if (basso.startsWith("try_files") || basso.startsWith("index ")
-                    || basso.startsWith("alias ")) {
-                haLocationConContenuto = true;
-            } else if (basso.startsWith("return ") || basso.startsWith("rewrite ")) {
+            } else if (lower.startsWith("try_files") || lower.startsWith("index ")
+                    || lower.startsWith("alias ")) {
+                hasLocationWithContent = true;
+            } else if (lower.startsWith("return ") || lower.startsWith("rewrite ")) {
                 haReturn = true;
             }
         }
-        b.serveFile = !b.radice.isEmpty() && (haLocationConContenuto || b.servePhp);
-        b.soloRedirect = haReturn && !b.serveFile && !b.servePhp;
+        b.serveFile = !b.root.isEmpty() && (hasLocationWithContent || b.servePhp);
+        b.onlyRedirect = haReturn && !b.serveFile && !b.servePhp;
     }
 
     /** Il blocco ascolta sulla porta indicata. */
-    public static boolean ascoltaSu(Blocco b, int porta) {
-        for (String a : b.ascolta) {
+    public static boolean listensOn(Block b, int port) {
+        for (String a : b.listens) {
             String p = a.split("\\s+")[0];
             int i = p.lastIndexOf(':');
-            String soloPorta = i >= 0 ? p.substring(i + 1) : p;
-            if (soloPorta.equals(String.valueOf(porta))) return true;
+            String portOnly = i >= 0 ? p.substring(i + 1) : p;
+            if (portOnly.equals(String.valueOf(port))) return true;
         }
         return false;
     }
@@ -132,59 +132,59 @@ public class WebDiagnostics {
      * Le misure sul server
      * =================================================================== */
 
-    public static JSONObject stato() {
+    public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
 
-        Ris dump = esegui("nginx", "-T");
-        if (dump.codice != 0) {
-            r.put("nginxLeggibile", false)
-             .put("nginxProblema", I18n.tr("server.webdiag.dumpFailed", java.util.Map.of("out", String.valueOf(primeRighe(dump.output, 3)))));
+        RunResult dump = run("nginx", "-T");
+        if (dump.code != 0) {
+            r.put("nginxReadable", false)
+             .put("nginxProblem", I18n.tr("server.webdiag.dumpFailed", java.util.Map.of("out", String.valueOf(firstLines(dump.output, 3)))));
         } else {
-            r.put("nginxLeggibile", true);
-            List<Blocco> bl = blocchi(dump.output);
-            JSONArray siti = new JSONArray();
-            boolean inChiaro = false, ottanta = false;
-            for (Blocco b : bl) {
-                boolean su80 = ascoltaSu(b, 80);
-                boolean su443 = ascoltaSu(b, 443);
-                if (su80) ottanta = true;
-                boolean pericoloso = su80 && !b.cifrato && (b.serveFile || b.servePhp);
-                if (pericoloso) inChiaro = true;
-                siti.put(new JSONObject()
-                        .put("ascolta", String.join(", ", b.ascolta))
-                        .put("nomi", b.nomi)
-                        .put("radice", b.radice)
-                        .put("cifrato", b.cifrato)
+            r.put("nginxReadable", true);
+            List<Block> bl = blocks(dump.output);
+            JSONArray sites = new JSONArray();
+            boolean inPlain = false, eighty = false;
+            for (Block b : bl) {
+                boolean on80 = listensOn(b, 80);
+                boolean on443 = listensOn(b, 443);
+                if (on80) eighty = true;
+                boolean dangerous = on80 && !b.encrypted && (b.serveFile || b.servePhp);
+                if (dangerous) inPlain = true;
+                sites.put(new JSONObject()
+                        .put("listens", String.join(", ", b.listens))
+                        .put("names", b.names)
+                        .put("root", b.root)
+                        .put("encrypted", b.encrypted)
                         .put("servePhp", b.servePhp)
                         .put("serveFile", b.serveFile)
-                        .put("soloRedirect", b.soloRedirect)
-                        .put("su80", su80).put("su443", su443)
-                        .put("inChiaro", pericoloso));
+                        .put("onlyRedirect", b.onlyRedirect)
+                        .put("on80", on80).put("on443", on443)
+                        .put("inPlain", dangerous));
             }
-            boolean quattro43 = false;
-            for (Blocco b : bl) if (ascoltaSu(b, 443)) quattro43 = true;
-            r.put("siti", siti).put("porta80Presente", ottanta).put("contenutiInChiaro", inChiaro)
-             .put("porta443Presente", quattro43);
+            boolean four43 = false;
+            for (Block b : bl) if (listensOn(b, 443)) four43 = true;
+            r.put("sites", sites).put("port80Present", eighty).put("plainContents", inPlain)
+             .put("port443Present", four43);
 
             boolean limReq = dump.output.contains("limit_req"), limConn = dump.output.contains("limit_conn");
             r.put("limitReq", limReq).put("limitConn", limConn);
-            r.put("sslProtocols", primaRigaCon(dump.output, "ssl_protocols"));
-            r.put("workerConnections", primaRigaCon(dump.output, "worker_connections"));
+            r.put("sslProtocols", firstLineWith(dump.output, "ssl_protocols"));
+            r.put("workerConnections", firstLineWith(dump.output, "worker_connections"));
         }
 
         // Chi e' davvero in ascolto sulla macchina, indipendentemente da nginx.
-        Ris sock = esegui("sh", "-c", "sockstat -4 -6 -l 2>/dev/null | awk 'NR==1 || $6 ~ /:(80|443)$/'");
-        r.put("inAscolto", sock.codice == 0 ? sock.output.trim() : "")
-         .put("inAscoltoLetto", sock.codice == 0);
+        RunResult sock = run("sh", "-c", "sockstat -4 -6 -l 2>/dev/null | awk 'NR==1 || $6 ~ /:(80|443)$/'");
+        r.put("listening", sock.code == 0 ? sock.output.trim() : "")
+         .put("listeningRead", sock.code == 0);
 
         // Il firewall: le porte web sono filtrate?
-        Ris pf = esegui("sh", "-c", "pfctl -sr 2>/dev/null");
-        if (pf.codice == 0 && !pf.output.isBlank()) {
-            r.put("pfLetto", true).put("pfRegole", pf.output.trim().split("\n").length);
-            r.put("pfCita80", pf.output.contains(" 80") || pf.output.contains("{ 80"));
-            r.put("pfCita443", pf.output.contains("443"));
+        RunResult pf = run("sh", "-c", "pfctl -sr 2>/dev/null");
+        if (pf.code == 0 && !pf.output.isBlank()) {
+            r.put("pfRead", true).put("pfRules", pf.output.trim().split("\n").length);
+            r.put("pfMentions80", pf.output.contains(" 80") || pf.output.contains("{ 80"));
+            r.put("pfMentions443", pf.output.contains("443"));
         } else {
-            r.put("pfLetto", false);
+            r.put("pfRead", false);
         }
 
         // fail2ban: c'e' una jail che guarda un log di nginx?
@@ -197,63 +197,63 @@ public class WebDiagnostics {
         // contrario, una jail chiamata "nginx-qualcosa" ma puntata altrove sarebbe passata per
         // buona. Il nome di una cosa non e' la cosa: adesso si chiede a fail2ban QUALI FILE
         // ogni jail sorveglia.
-        Ris f2b = esegui("sh", "-c", "fail2ban-client status 2>/dev/null");
-        if (f2b.codice == 0) {
-            r.put("fail2banLetto", true).put("jail", f2b.output.trim());
+        RunResult f2b = run("sh", "-c", "fail2ban-client status 2>/dev/null");
+        if (f2b.code == 0) {
+            r.put("fail2banRead", true).put("jail", f2b.output.trim());
 
-            List<String> nomi = new ArrayList<>();
-            for (String riga : f2b.output.split("\n")) {
-                int i = riga.toLowerCase(Locale.ROOT).indexOf("jail list:");
+            List<String> names = new ArrayList<>();
+            for (String line : f2b.output.split("\n")) {
+                int i = line.toLowerCase(Locale.ROOT).indexOf("jail list:");
                 if (i < 0) continue;
-                for (String x : riga.substring(i + "jail list:".length()).split(","))
-                    if (!x.trim().isEmpty()) nomi.add(x.trim());
+                for (String x : line.substring(i + "jail list:".length()).split(","))
+                    if (!x.trim().isEmpty()) names.add(x.trim());
             }
 
-            JSONArray sorveglianza = new JSONArray();
-            boolean guardaNginx = false;
-            boolean tutteLette = true;
-            for (String nome : nomi) {
-                Ris lp = esegui("sh", "-c", "fail2ban-client get "
-                        + nome.replace("\"", "") + " logpath 2>/dev/null");
-                if (lp.codice != 0) { tutteLette = false; continue; }
-                boolean suNginx = lp.output.contains("/nginx/") || lp.output.contains("nginx-");
-                if (suNginx) guardaNginx = true;
+            JSONArray watch = new JSONArray();
+            boolean watchNginx = false;
+            boolean allRead = true;
+            for (String name : names) {
+                RunResult lp = run("sh", "-c", "fail2ban-client get "
+                        + name.replace("\"", "") + " logpath 2>/dev/null");
+                if (lp.code != 0) { allRead = false; continue; }
+                boolean onNginx = lp.output.contains("/nginx/") || lp.output.contains("nginx-");
+                if (onNginx) watchNginx = true;
 
                 // Quale porta protegge. Non e' una proprieta' della jail ma dell'AZIONE
                 // (fail2ban-client(1): "get <JAIL> actions", poi "get <JAIL> action <ACT>
                 // <proprieta'>"), quindi si passa di li'. Una jail puo' avere piu' azioni e
                 // ognuna la sua porta.
-                String azioni = "";
-                Ris ac = esegui("sh", "-c", "fail2ban-client get " + sicuro(nome) + " actions 2>/dev/null");
-                if (ac.codice == 0) azioni = ac.output.trim();
-                java.util.LinkedHashSet<String> porte = new java.util.LinkedHashSet<>();
-                boolean porteLette = false;
-                for (String az : azioni.replaceAll("(?s).*?:", "").split(",")) {
+                String actions = "";
+                RunResult ac = run("sh", "-c", "fail2ban-client get " + safe(name) + " actions 2>/dev/null");
+                if (ac.code == 0) actions = ac.output.trim();
+                java.util.LinkedHashSet<String> ports = new java.util.LinkedHashSet<>();
+                boolean readPorts = false;
+                for (String az : actions.replaceAll("(?s).*?:", "").split(",")) {
                     String a = az.trim();
                     if (a.isEmpty()) continue;
-                    Ris pr = esegui("sh", "-c", "fail2ban-client get " + sicuro(nome)
-                            + " action " + sicuro(a) + " port 2>/dev/null");
-                    if (pr.codice != 0) continue;
+                    RunResult pr = run("sh", "-c", "fail2ban-client get " + safe(name)
+                            + " action " + safe(a) + " port 2>/dev/null");
+                    if (pr.code != 0) continue;
                     String v = pr.output.trim();
                     if (!v.isEmpty() && !v.toLowerCase(Locale.ROOT).contains("not ")) {
-                        porte.add(v); porteLette = true;
+                        ports.add(v); readPorts = true;
                     }
                 }
-                sorveglianza.put(new JSONObject().put("jail", nome)
-                        .put("log", lp.output.trim()).put("suNginx", suNginx)
-                        .put("azioni", azioni)
-                        .put("porte", String.join(", ", porte))
+                watch.put(new JSONObject().put("jail", name)
+                        .put("log", lp.output.trim()).put("onNginx", onNginx)
+                        .put("actions", actions)
+                        .put("ports", String.join(", ", ports))
                         // "Non dichiarata" non e' "nessuna": con l'azione predefinita di pf il
                         // ban vale per l'indirizzo, non per una porta sola. Dirlo invece di
                         // lasciare la casella vuota, che si legge come "non protegge niente".
-                        .put("portaDichiarata", porteLette));
+                        .put("declaredPort", readPorts));
             }
-            r.put("jailSorveglianza", sorveglianza);
-            r.put("jailNginx", guardaNginx);
+            r.put("jailWatch", watch);
+            r.put("jailNginx", watchNginx);
             // "Non sono riuscito a chiedere a tutte" non e' "nessuna guarda nginx".
-            r.put("jailTutteLette", tutteLette);
+            r.put("allJailsRead", allRead);
         } else {
-            r.put("fail2banLetto", false);
+            r.put("fail2banRead", false);
         }
 
         r.put("verdict", verdict(r));
@@ -262,55 +262,55 @@ public class WebDiagnostics {
 
     /** Un nome che finisce dentro una riga di shell: si accettano solo i caratteri di un
      *  nome di jail o di azione. Non si costruisce un comando con quello che arriva da fuori. */
-    private static String sicuro(String s) {
+    private static String safe(String s) {
         return s == null ? "" : s.replaceAll("[^A-Za-z0-9._-]", "");
     }
 
     /** Il riassunto, costruito solo su cio' che si e' potuto misurare. */
     private static String verdict(JSONObject r) {
         List<String> p = new ArrayList<>();
-        if (!r.optBoolean("nginxLeggibile", false))
+        if (!r.optBoolean("nginxReadable", false))
             p.add(I18n.tr("server.webdiag.nginxUnreadable"));
         else {
-            if (r.optBoolean("contenutiInChiaro", false))
+            if (r.optBoolean("plainContents", false))
                 p.add(I18n.tr("server.webdiag.plain80"));
-            else if (r.optBoolean("porta80Presente", false))
+            else if (r.optBoolean("port80Present", false))
                 p.add(I18n.tr("server.webdiag.port80NoContent"));
             else
                 p.add(I18n.tr("server.webdiag.httpsOnly"));
 
-            if (!r.optBoolean("porta443Presente", false))
+            if (!r.optBoolean("port443Present", false))
                 p.add(I18n.tr("server.webdiag.no443"));
 
             if (!r.optBoolean("limitReq", false) && !r.optBoolean("limitConn", false))
                 p.add(I18n.tr("server.webdiag.noLimits"));
         }
-        if (r.optBoolean("fail2banLetto", false)) {
+        if (r.optBoolean("fail2banRead", false)) {
             if (r.optBoolean("jailNginx", false)) {
                 // Si dice QUALE, cosi' l'affermazione e' verificabile da chi legge.
-                StringBuilder quali = new StringBuilder();
-                JSONArray sv = r.optJSONArray("jailSorveglianza");
+                StringBuilder which = new StringBuilder();
+                JSONArray sv = r.optJSONArray("jailWatch");
                 for (int i = 0; sv != null && i < sv.length(); i++) {
                     JSONObject j = sv.optJSONObject(i);
-                    if (j == null || !j.optBoolean("suNginx", false)) continue;
-                    if (quali.length() > 0) quali.append(", ");
-                    quali.append(j.optString("jail", "?"));
+                    if (j == null || !j.optBoolean("onNginx", false)) continue;
+                    if (which.length() > 0) which.append(", ");
+                    which.append(j.optString("jail", "?"));
                 }
-                p.add(I18n.tr("server.webdiag.jailWatches", java.util.Map.of("which", String.valueOf(quali))));
-            } else if (!r.optBoolean("jailTutteLette", true)) {
+                p.add(I18n.tr("server.webdiag.jailWatches", java.util.Map.of("which", String.valueOf(which))));
+            } else if (!r.optBoolean("allJailsRead", true)) {
                 p.add(I18n.tr("server.webdiag.jailsUnknown"));
             } else {
                 p.add(I18n.tr("server.webdiag.noNginxJail"));
             }
         }
-        if (!r.optBoolean("pfLetto", false))
+        if (!r.optBoolean("pfRead", false))
             p.add(I18n.tr("server.webdiag.pfUnread"));
         return String.join(" ", p);
     }
 
-    private static String primaRigaCon(String testo, String ago) {
-        if (testo == null) return "";
-        for (String r : testo.split("\n")) {
+    private static String firstLineWith(String text, String ago) {
+        if (text == null) return "";
+        for (String r : text.split("\n")) {
             String t = r.trim();
             if (t.startsWith("#")) continue;
             if (t.contains(ago)) return t;
@@ -318,7 +318,7 @@ public class WebDiagnostics {
         return "";
     }
 
-    private static String primeRighe(String t, int n) {
+    private static String firstLines(String t, int n) {
         if (t == null) return "";
         String[] r = t.split("\n");
         StringBuilder sb = new StringBuilder();
@@ -326,18 +326,18 @@ public class WebDiagnostics {
         return sb.toString().trim();
     }
 
-    private record Ris(int codice, String output) {}
+    private record RunResult(int code, String output) {}
 
-    private static Ris esegui(String... cmd) {
+    private static RunResult run(String... cmd) {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            Shell.applicaPath(pb);
+            Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
-            return new Ris(p.waitFor(), out);
+            return new RunResult(p.waitFor(), out);
         } catch (Exception e) {
-            return new Ris(-1, String.valueOf(e.getMessage()));
+            return new RunResult(-1, String.valueOf(e.getMessage()));
         }
     }
 }

@@ -110,7 +110,7 @@ public final class I18n {
         return text != null ? text : key;
     }
 
-    /** Un testo con i suoi valori: {nome} diventa params.get("nome"). Il risultato non e' HTML. */
+    /** Un testo con i suoi valori: {nome} diventa params.get("name"). Il risultato non e' HTML. */
     public static String t(String lang, String key, Map<String, ?> params) {
         return format(t(lang, key), params);
     }
@@ -170,8 +170,8 @@ public final class I18n {
     }
 
     /**
-     * t(chiave, valori) e tn(chiave, numero, valori) per gli script. tn sceglie chiave.one o
-     * chiave.other: italiano e inglese hanno la stessa regola (uno, altrimenti molti), e il numero
+     * t(chiave, valori) e tn(chiave, numero, valori) per gli script. tn sceglie key.one o
+     * key.other: italiano e inglese hanno la stessa regola (uno, altrimenti molti), e il numero
      * e' gia' fra i valori come {n}. I valori entrano cosi' come sono: il risultato e' testo, da
      * mettere con textContent o da passare per escHtml() prima di innerHTML.
      */
@@ -192,7 +192,7 @@ public final class I18n {
             var values = Object.assign({ n: count }, params || {});
             return t(key + (count === 1 ? '.one' : '.other'), values);
         }
-        // La frase tradotta come nodi: dove c'e' {nome} e params.nome e' un elemento (un <code>
+        // La frase tradotta come nodi: dove c'e' {nome} e params.name e' un elemento (un <code>
         // con un percorso, un badge), ci va quell'elemento; il resto e' testo. Cosi' la frase resta
         // intera nella sua lingua e niente diventa HTML: el.append(...tNodes('chiave', { file: code })).
         function tNodes(key, params) {
@@ -241,7 +241,7 @@ public final class I18n {
         return t(current(), key, params);
     }
 
-    /** Come tn() negli script: chiave.one o chiave.other secondo il numero, che entra come {n}. */
+    /** Come tn() negli script: key.one o key.other secondo il numero, che entra come {n}. */
     public static String trn(String key, long count, Map<String, ?> params) {
         Map<String, Object> values = new java.util.HashMap<>(params);
         values.put("n", count);

@@ -22,7 +22,7 @@ import java.util.logging.Logger;
  * client MySQL, l'installazione dei componenti, la protezione e la rimozione dei pacchetti: tutti
  * cambiano i pacchetti o le loro protezioni, e due insieme si pestano i piedi. Il secondo
  * sovrascriveva l'elenco su disco del primo; il primo, finendo, lo cancellava mentre il secondo
- * aveva ancora pacchetti unlockedPackages; e un'interruzione in quel momento li lasciava unlockedPackages senza
+ * aveva ancora pacchetti sbloccati; e un'interruzione in quel momento li lasciava sbloccati senza
  * che l'avvio lo sapesse. Un "pkg upgrade" dei non protetti, partito mentre la manutenzione aveva
  * tolto la protezione a Dovecot, aggiornava anche Dovecot. E il piano calcolato da uno non vale
  * piu' se l'altro cambia i pacchetti nel frattempo.
@@ -47,55 +47,55 @@ public final class PackageQueue {
     /** Dove sta l'elenco. E' una variabile solo perche' le prove non scrivano in /var/db. */
     static Path list = Path.of(STATE_PATH);
 
-    private record Turno(String id, String description, long inizio) {}
+    private record Turn(String id, String description, long start) {}
 
-    private static final AtomicReference<Turno> IN_CORSO = new AtomicReference<>();
+    private static final AtomicReference<Turn> IN_PROGRESS = new AtomicReference<>();
 
     /**
      * Prende il turno per il lavoro 'id'. null se l'ha preso; altrimenti il motivo per cui il
      * lavoro non puo' partire, da mostrare cosi' com'e'.
      *
      * Non lo prende nemmeno se su disco c'e' l'elenco di un lavoro che non si e' chiuso: quei
-     * pacchetti potrebbero essere ancora unlockedPackages, e un "pkg upgrade" o un "pkg install" li
+     * pacchetti potrebbero essere ancora sbloccati, e un "pkg upgrade" o un "pkg install" li
      * cambierebbe come se niente fosse.
      */
-    public static String prendi(String id, String description) {
-        return prendi(id, description, true);
+    public static String take(String id, String description) {
+        return take(id, description, true);
     }
 
     /**
      * Come prendi, ma anche con l'elenco di un lavoro interrotto su disco. Solo per rimettere o
      * togliere protezioni: rimetterle e' proprio il rimedio a quell'elenco.
      */
-    public static String prendiPerLeProtezioni(String id, String description) {
-        return prendi(id, description, false);
+    public static String takeForLocks(String id, String description) {
+        return take(id, description, false);
     }
 
-    private static String prendi(String id, String description, boolean nonConElencoAperto) {
-        Turno nuovo = new Turno(id, description, System.currentTimeMillis());
-        while (!IN_CORSO.compareAndSet(null, nuovo)) {
-            String chi = chi();
-            if (chi != null) return occupato(chi);
+    private static String take(String id, String description, boolean notWithOpenList) {
+        Turn fresh = new Turn(id, description, System.currentTimeMillis());
+        while (!IN_PROGRESS.compareAndSet(null, fresh)) {
+            String holder = holder();
+            if (holder != null) return busy(holder);
             // Rilasciato fra i due passi: si riprova.
         }
-        if (nonConElencoAperto && statoPresente()) {
-            rilascia(id);
+        if (notWithOpenList && statePresent()) {
+            release(id);
             return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(list)));
         }
         return null;
     }
 
     /** Rilascia il turno, ma solo se e' di 'id': un lavoro non puo' liberare quello di un altro. */
-    public static void rilascia(String id) {
-        Turno t = IN_CORSO.get();
-        if (t != null && t.id().equals(id)) IN_CORSO.compareAndSet(t, null);
+    public static void release(String id) {
+        Turn t = IN_PROGRESS.get();
+        if (t != null && t.id().equals(id)) IN_PROGRESS.compareAndSet(t, null);
     }
 
     /** Chi tiene il turno adesso ("manutenzione, in corso da 3 minuti"), o null se e' libero. */
-    public static String chi() {
-        Turno t = IN_CORSO.get();
+    public static String holder() {
+        Turn t = IN_PROGRESS.get();
         if (t == null) return null;
-        long min = (System.currentTimeMillis() - t.inizio()) / 60000;
+        long min = (System.currentTimeMillis() - t.start()) / 60000;
         return t.description() + ", " + (min < 1 ? I18n.tr("server.turn.justStarted")
                 : min == 1 ? I18n.tr("server.turn.running.one")
                 : I18n.tr("server.turn.running.other", java.util.Map.of("n", String.valueOf(min))));
@@ -105,32 +105,32 @@ public final class PackageQueue {
      * Mentre un lavoro cambia i pacchetti, un piano calcolato adesso vedrebbe protezioni tolte e
      * versioni che stanno cambiando: null se si puo' calcolare, altrimenti il motivo.
      */
-    public static String pianoNonAdesso() {
-        String chi = chi();
-        return chi == null ? null
-             : I18n.tr("server.turn.busyPlan", java.util.Map.of("who", String.valueOf(chi)));
+    public static String planNotNow() {
+        String holder = holder();
+        return holder == null ? null
+             : I18n.tr("server.turn.busyPlan", java.util.Map.of("who", String.valueOf(holder)));
     }
 
     /** Il messaggio per chi trova il turno preso. */
-    static String occupato(String chi) {
-        return I18n.tr("server.turn.busy", java.util.Map.of("who", String.valueOf(chi)));
+    static String busy(String holder) {
+        return I18n.tr("server.turn.busy", java.util.Map.of("who", String.valueOf(holder)));
     }
 
     /**
      * Avvia in un thread il lavoro che ha GIA' preso il turno 'id', e rilascia il turno quando il
      * lavoro finisce, anche con un errore. Se il thread non parte, lo rilascia subito.
      */
-    public static void avvia(String id, String nome, Runnable lavoro) {
+    public static void start(String id, String name, Runnable work) {
         try {
             // La lingua di chi ha chiesto il lavoro segue il lavoro nel suo thread (messaggi e log)
             Thread t = new Thread(I18n.withCurrent(() -> {
-                try { lavoro.run(); }
-                finally { rilascia(id); }
-            }), nome);
+                try { work.run(); }
+                finally { release(id); }
+            }), name);
             t.setDaemon(true);   // come prima: un lavoro non tiene acceso un pannello che si sta spegnendo
             t.start();
         } catch (RuntimeException | Error e) {
-            rilascia(id);
+            release(id);
             throw e;
         }
     }
@@ -146,15 +146,15 @@ public final class PackageQueue {
      * l'elenco di un lavoro interrotto che l'avvio non e' riuscito a chiudere, e sovrascriverlo
      * perderebbe proprio i pacchetti da riproteggere.
      */
-    public static String scriviStato(List<String> pacchetti) {
-        return scriviStato(list, pacchetti);
+    public static String writeState(List<String> packages) {
+        return writeState(list, packages);
     }
 
-    static String scriviStato(Path f, List<String> pacchetti) {
-        boolean creato = false;
+    static String writeState(Path f, List<String> packages) {
+        boolean created = false;
         try (FileChannel c = FileChannel.open(f, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-            creato = true;
-            ByteBuffer b = ByteBuffer.wrap((String.join("\n", pacchetti) + "\n").getBytes(StandardCharsets.US_ASCII));
+            created = true;
+            ByteBuffer b = ByteBuffer.wrap((String.join("\n", packages) + "\n").getBytes(StandardCharsets.US_ASCII));
             while (b.hasRemaining()) c.write(b);
             c.force(true);
             return null;
@@ -163,7 +163,7 @@ public final class PackageQueue {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Cannot write " + f, e);
             // Un elenco scritto a meta' non deve restare: l'avvio lo leggerebbe come vero.
-            if (creato) {
+            if (created) {
                 try { Files.deleteIfExists(f); }
                 catch (Exception x) { LOGGER.log(Level.WARNING, "Cannot remove " + f, x); }
             }
@@ -172,13 +172,13 @@ public final class PackageQueue {
     }
 
     /** Cancella l'elenco. Lo fa solo il lavoro che l'ha scritto, dopo aver riprotetto tutto. */
-    public static void cancellaStato() {
+    public static void deleteState() {
         try { Files.deleteIfExists(list); }
         catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + list, e); }
     }
 
     /** Se c'e' un elenco di un lavoro non concluso. */
-    public static boolean statoPresente() {
+    public static boolean statePresent() {
         return Files.exists(list);
     }
 }

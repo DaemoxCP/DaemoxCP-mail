@@ -49,13 +49,14 @@ public class LogManager {
         this.tailProcesses = new ConcurrentHashMap<>();
 
         // Register log files
-        registerLogFile("maillog", MAILLOG, "Postfix/Sistema", LogType.SMTP);
-        registerLogFile("dovecot", DOVECOT_LOG, "Dovecot IMAP/POP3", LogType.IMAP);
-        registerLogFile("dovecot-info", DOVECOT_INFO_LOG, "Dovecot Info", LogType.IMAP);
-        registerLogFile("rspamd", RSPAMD_LOG, "Rspamd Anti-Spam", LogType.ANTISPAM);
-        registerLogFile("clamav", CLAMAV_LOG, "ClamAV Antivirus", LogType.ANTIVIRUS);
+        registerLogFile("maillog", MAILLOG, "server.log.maillog", LogType.SMTP);
+        registerLogFile("dovecot", DOVECOT_LOG, "server.log.dovecot", LogType.IMAP);
+        registerLogFile("dovecot-info", DOVECOT_INFO_LOG, "server.log.dovecot-info", LogType.IMAP);
+        registerLogFile("rspamd", RSPAMD_LOG, "server.log.rspamd", LogType.ANTISPAM);
+        registerLogFile("clamav", CLAMAV_LOG, "server.log.clamav", LogType.ANTIVIRUS);
     }
 
+    /** description e' una chiave di lingua (server.log.<id>): si traduce quando esce verso la pagina. */
     private void registerLogFile(String id, String path, String description, LogType type) {
         LogFile logFile = new LogFile();
         logFile.id = id;
@@ -91,11 +92,11 @@ public class LogManager {
                 // TODO: migrate to Shell.run when touched
                 pb = new ProcessBuilder("/bin/sh", "-c",
                     String.format("tail -n %d '%s' | grep -i '%s'", lines * 2, logFile.path, filter.replace("'", "\\'")));
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
             } else {
                 // TODO: migrate to Shell.run when touched
                 pb = new ProcessBuilder("tail", "-n", String.valueOf(lines), logFile.path);
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
             }
 
             pb.redirectErrorStream(true);
@@ -139,7 +140,7 @@ public class LogManager {
             ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c",
                 String.format("grep -E '%s' '%s' | tail -n %d",
                     pattern.replace("'", "'\\''"), logFile.path, maxResults));
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
 
             pb.redirectErrorStream(true);
             Process process = pb.start();
@@ -184,7 +185,7 @@ public class LogManager {
 
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("tail", "-f", "-n", "0", logFile.path);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             Process process = pb.start();
             tailProcesses.put(logId, process);
 

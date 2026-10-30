@@ -178,11 +178,11 @@ della risposta DNS: con NOERROR si contano i record v=STSv1 (nessuno e' ASSENTE,
 PRESENTE, piu' d'uno e' TROPPI); NXDOMAIN e' ASSENTE; un errore (SERVFAIL, REFUSED) o nessuna
 risposta e' NON_CHIESTO, con il motivo che il piano scrive accanto al dominio. Si prova in
 due modi:
-- `interpretaTxt()` con uscite di `dig` vere, registrate il 2/10/2026 (record pubblicato,
+- `parseTxt()` con uscite di `dig` vere, registrate il 2/10/2026 (record pubblicato,
   SERVFAIL di dnssec-failed.org, NXDOMAIN, nome senza TXT, DNS che non risponde), piu'
   varianti costruite su quelle (record spezzato, accanto ad altri TXT, dietro un CNAME,
   REFUSED, due record v=STSv1 in varie forme). Vale ovunque, anche senza rete;
-- `leggiTxt()` sul DNS vero. Se da qui `dig` raggiunge un DNS si esigono i fatti veri: su
+- `readTxt()` sul DNS vero. Se da qui `dig` raggiunge un DNS si esigono i fatti veri: su
   domain-d.test il record c'e', un nome inesistente non ce l'ha, e se il resolver convalida
   DNSSEC il SERVFAIL di dnssec-failed.org e' NON_CHIESTO. Se non lo raggiunge (`dig` assente
   o rete chiusa) si esige NON_CHIESTO, mai un ASSENTE inventato.
@@ -190,18 +190,18 @@ Prima la lettura usava `dig +short`, che per un SERVFAIL non stampa niente, come
 senza record: il piano leggeva "assente" e proponeva di pubblicare un record che forse c'e'
 gia'. Contro quella versione la prova fallisce in cinque punti. E prima ancora la prova dava
 per scontato il DNS e falliva su ogni macchina che non ce l'aveva.
-Prova anche `passiProvaETxt()`, dove il passo del record diventa "fatto": con due record
+Prova anche `testAndTxtSteps()`, dove il passo del record diventa "fatto": con due record
 v=STSv1 non deve diventarlo, perche' per i mittenti due record valgono zero (RFC 8461 §3.1).
 Prima la lettura prendeva il primo record: se era quello giusto, il passo risultava fatto.
 
 **MtaStsRecordTest** — il record `_mta-sts` dal lato di Cloudflare e della pagina DNS, senza
 rete. La regola comune (`DnsRules.eMtaSts`: conta ogni record che almeno un mittente vero
-conta, anche scritto in maiuscolo). La scrittura, `AutoDns.allineaTxtMtaSts()`, contro un
+conta, anche scritto in maiuscolo). La scrittura, `AutoDns.alignMtaStsTxt()`, contro un
 Cloudflare finto con la zona in memoria: crea, lascia stare, aggiorna, e con piu' record ne
 lascia uno solo e giusto senza toccare gli altri TXT; con Cloudflare che rifiuta una
 cancellazione o un aggiornamento lo dice; se la prima lettura della zona torna vuota per un
 errore, la rilettura finale si accorge dei due record. La riga MTA-STS della pagina DNS,
-`controlloMtaSts()`: due record non sono mai verdi, un SERVFAIL non e' "Non attivo". In fondo
+`mtaStsCheck()`: due record non sono mai verdi, un SERVFAIL non e' "Non attivo". In fondo
 rimette la scrittura di prima davanti ai due record, uno gia' giusto: diceva "invariato" e li
 lasciava tutti e due, e la prova lo vede.
 
@@ -225,7 +225,7 @@ per sempre.
 **MtaStsSequenceTest** — i pezzi nati dall'unione delle due sequenze: `filtra()`, il filtro
 per dominio (confronto esatto e senza maiuscole: "ake.net" non deve pescare "domain-d.test", e
 un dominio inesistente deve dare lista vuota, che e' la guardia contro il falso successo), e
-`comeVoci()`, che traduce l'esito nelle righe della pagina DNS senza perdere le righe rosse.
+`asEntries()`, che traduce l'esito nelle righe della pagina DNS senza perdere le righe rosse.
 
 **AutoconfigTest** — il verdict della scheda Autoconfig. Il caso che conta e' `pronto(true, 0, 0)`:
 zero domini provati, zero riusciti, e senza la condizione `esaminati > 0` il conteggio direbbe
@@ -233,7 +233,7 @@ verde proprio quando non e' stato guardato niente.
 
 **SrvRecordTest** — il confronto di un record SRV, che faceva riscrivere in produzione due SRV
 gia' giusti a ogni esecuzione. Cloudflare mette nel `content` di un SRV tre campi (peso,
-porta, destinazione) e tiene la priorita' a parte; `analizzaSrv` ne pretende quattro perche'
+porta, destinazione) e tiene la priorita' a parte; `analyzeSrv` ne pretende quattro perche'
 e' scritta per l'uscita di `dig`, quindi tornava `null` — "non lo riconosco" — e il record
 risultava sbagliato. La prova copre tutte e tre le forme e finisce riproducendo il difetto
 sulla logica vecchia: se un giorno quell'ultimo controllo passa, la prova non verifica piu'
@@ -333,10 +333,10 @@ firme vecchie di diciannove giorni, MySQL irraggiungibile, programmi che rispond
 o con dell'HTML, che non passa mai come versione. Poi il socket di clamd, vero: un demone finto
 che risponde e uno muto, dal quale la lettura si deve staccare in tre secondi.
 
-**VersionsApiTest** — /api/versioni e /api/service sul server vero (SSLMailServer), via HTTPS,
+**VersionsApiTest** — /api/versions e /api/service sul server vero (SSLMailServer), via HTTPS,
 con una sessione come quella del login: si accende solo il server HTTP con le sue rotte, non i
 gestori che toccherebbero il sistema. Senza sessione 401; con la sessione le versioni, MySQL
-letto dal server vero; la lettura tenuta trenta secondi e "fresco" che non rilegge prima di tre;
+letto dal server vero; la lettura tenuta trenta secondi e "fresh" che non rilegge prima di tre;
 parametri e metodi sbagliati rifiutati. /api/service senza token CSRF, o con un token sbagliato,
 e' 403 e finisce nel registro di audit; con il token giusto la richiesta passa; un'azione su un
 servizio (redis, che qui non c'e': il comando fallisce senza toccare niente) va nel registro e fa

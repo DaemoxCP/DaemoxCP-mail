@@ -547,7 +547,7 @@ final class InstallSideEffects {
     private static JSONArray shown(List<String> lines) {
         JSONArray r = new JSONArray();
         for (int i = 0; i < lines.size() && i < MAX_SHOWN_LINES; i++) {
-            String l = UpdateManager.oscuraCredenziali(lines.get(i)).replace('\t', ' ');
+            String l = UpdateManager.maskCredentials(lines.get(i)).replace('\t', ' ');
             r.put(l.length() > 160 ? l.substring(0, 160) + "..." : l);
         }
         return r;
@@ -746,7 +746,7 @@ final class InstallSideEffects {
         /**
          * True se uno script ha cambiato la configurazione fuori dai file dei pacchetti (un
          * allarme, non un predefinito rimesso o dei commenti). L'aggiornamento guidato lo
-         * chiede prima di riavviare: vedi runAggiornamentoGuidato.
+         * chiede prima di riavviare: vedi runGuidedUpdate.
          */
         boolean configChangedByScript() { return changedByScript; }
 
@@ -783,7 +783,7 @@ final class InstallSideEffects {
         Set<String> r = new TreeSet<>();
         JSONArray changes = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; changes != null && i < changes.length(); i++) {
-            String n = changes.getJSONObject(i).optString("nome");
+            String n = changes.getJSONObject(i).optString("name");
             if (!n.isEmpty()) r.add(n);
         }
         for (int i = 0; outsidePlan != null && i < outsidePlan.length(); i++) {

@@ -213,12 +213,12 @@ public class DkimManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("chown", "rspamd:rspamd", keyFile.toString());
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.start().waitFor();
 
             // TODO: migrate to Shell.run when touched
             pb = new ProcessBuilder("chmod", "600", keyFile.toString());
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.start().waitFor();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -263,7 +263,7 @@ public class DkimManager {
         try {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("service", "rspamd", "reload");
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.start().waitFor();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -305,7 +305,7 @@ public class DkimManager {
             for (String resolver : resolvers) {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", r.dnsRecordName);
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 Process proc = pb.start();
                 StringBuilder out = new StringBuilder();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
@@ -371,76 +371,76 @@ public class DkimManager {
      * la scheda di un dominio solo. Una seconda implementazione della stessa verifica
      * divergerebbe, e le due risposte finirebbero per contraddirsi.
      */
-    public org.json.JSONObject riepilogoTuttiIDomini() {
+    public org.json.JSONObject allDomainsSummary() {
         org.json.JSONObject r = new org.json.JSONObject().put("success", true);
-        org.json.JSONArray righe = new org.json.JSONArray();
-        int senzaChiave = 0, nonVerificabili = 0, senzaRotazione = 0;
+        org.json.JSONArray lines = new org.json.JSONArray();
+        int withoutKey = 0, unverifiable = 0, withoutRotation = 0;
         try {
             for (MailDatabase.Domain d : database.getDomains()) {
-                org.json.JSONObject j = new org.json.JSONObject().put("dominio", d.domain);
+                org.json.JSONObject j = new org.json.JSONObject().put("domain", d.domain);
                 try {
                     DkimInfo info = getDkimInfo(d.id);
-                    boolean haChiave = info != null && info.configured;
-                    j.put("haChiave", haChiave);
-                    j.put("selettore", info == null || info.selector == null ? "" : info.selector);
-                    if (!haChiave) {
-                        senzaChiave++;
+                    boolean hasKey = info != null && info.configured;
+                    j.put("hasKey", hasKey);
+                    j.put("selector", info == null || info.selector == null ? "" : info.selector);
+                    if (!hasKey) {
+                        withoutKey++;
                         // Niente chiave vuol dire niente signature: e' il caso piu' grave e non
                         // deve nascondersi in mezzo a righe che parlano di rotazioni.
-                        j.put("stato", "assente");
-                        j.put("nota", I18n.tr("server.dkimm.noPanelKey"));
-                        righe.put(j);
+                        j.put("state", "absent");
+                        j.put("note", I18n.tr("server.dkimm.noPanelKey"));
+                        lines.put(j);
                         continue;
                     }
 
                     // La verifica vera: la chiave pubblicata coincide con quella del pannello?
                     ActiveKeyVerifyResult v = verifyActiveKeyInDns(d.id);
-                    j.put("verificaRiuscita", v != null && v.success);
-                    j.put("corrisponde", v != null && v.match);
-                    j.put("messaggio", v == null ? "" : (v.message == null ? "" : v.message));
+                    j.put("checkSucceeded", v != null && v.success);
+                    j.put("matches", v != null && v.match);
+                    j.put("messageText", v == null ? "" : (v.message == null ? "" : v.message));
                     if (v == null || !v.success) {
-                        nonVerificabili++;
-                        j.put("stato", "incerto");
+                        unverifiable++;
+                        j.put("state", "uncertain");
                     } else if (!v.match) {
-                        j.put("stato", "non_corrisponde");
+                        j.put("state", "not_matching");
                     } else {
-                        j.put("stato", "ok");
+                        j.put("state", "ok");
                     }
 
                     // Eta' della chiave e rotazione programmata.
                     ScheduleResult sc = getRotationSchedule(d.id);
                     if (sc != null) {
-                        j.put("intervalloGiorni", sc.intervalDays);
+                        j.put("intervalDays", sc.intervalDays);
                         if (sc.lastRotationAt != null) {
-                            j.put("ultimaRotazione", sc.lastRotationAt.toString());
-                            long giorni = (System.currentTimeMillis() - sc.lastRotationAt.getTime())
+                            j.put("lastRotation", sc.lastRotationAt.toString());
+                            long days = (System.currentTimeMillis() - sc.lastRotationAt.getTime())
                                         / 86400000L;
-                            j.put("giorniDallUltima", giorni);
+                            j.put("daysSinceLast", days);
                         }
                         if (sc.nextRotationAt != null)
-                            j.put("prossimaRotazione", sc.nextRotationAt.toString());
-                        if (sc.intervalDays <= 0) senzaRotazione++;
+                            j.put("nextRotation", sc.nextRotationAt.toString());
+                        if (sc.intervalDays <= 0) withoutRotation++;
                     }
 
                     RotationInfo ri = getRotationInfo(d.id);
                     if (ri != null && ri.rotationState != null && !ri.rotationState.isBlank()) {
-                        j.put("rotazioneInCorso", ri.rotationState);
-                        j.put("selettorePrecedente",
+                        j.put("rotationInProgress", ri.rotationState);
+                        j.put("previousSelector",
                                 ri.previousSelector == null ? "" : ri.previousSelector);
                     }
                 } catch (Exception e) {
-                    nonVerificabili++;
-                    j.put("stato", "incerto").put("messaggio", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                    unverifiable++;
+                    j.put("state", "uncertain").put("messageText", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
                 }
-                righe.put(j);
+                lines.put(j);
             }
         } catch (Exception e) {
             return new org.json.JSONObject().put("success", false)
                     .put("error", I18n.tr("server.dkimm.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
-        r.put("domini", righe);
-        r.put("senzaChiave", senzaChiave).put("nonVerificabili", nonVerificabili)
-         .put("senzaRotazione", senzaRotazione);
+        r.put("domains", lines);
+        r.put("withoutKey", withoutKey).put("unverifiable", unverifiable)
+         .put("withoutRotation", withoutRotation);
         return r;
     }
 
@@ -623,7 +623,7 @@ public class DkimManager {
                     if (recordId.equals(entry.recordId)) {
                         // Protezione 1: blocca cancellazione di record current/pending/previous
                         if (entry.isCurrent || entry.isPending || entry.isPrevious) {
-                            return new RotationActionResult(false, I18n.tr("server.dkimm.blockedActive", java.util.Map.of("s", String.valueOf(entry.selector), "stato", String.valueOf(entry.isCurrent ? I18n.tr("server.dkimm.stateActive") : entry.isPending ? "PENDING" : "PREVIOUS"))));
+                            return new RotationActionResult(false, I18n.tr("server.dkimm.blockedActive", java.util.Map.of("s", String.valueOf(entry.selector), "state", String.valueOf(entry.isCurrent ? I18n.tr("server.dkimm.stateActive") : entry.isPending ? "PENDING" : "PREVIOUS"))));
                         }
                         // Protezione 2: blocca cancellazione di orfani ancora in grace period
                         if (entry.inGracePeriod && entry.gracePeriodEndsAt != null) {
@@ -820,7 +820,7 @@ public class DkimManager {
             for (String resolver : resolvers) {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", recordName);
-                org.mail_panel.util.Shell.applicaPath(pb);
+                org.mail_panel.util.Shell.applyPath(pb);
                 pb.redirectErrorStream(false);
                 Process proc = pb.start();
                 StringBuilder out = new StringBuilder();
@@ -900,7 +900,7 @@ public class DkimManager {
                 "Key promoted: " + oldSelector + " → " + newSelector + ". Rspamd reloaded. Old key kept for the grace period.");
 
             return new RotationActionResult(true,
-                I18n.tr("server.dkimm.activated", java.util.Map.of("nuovo", String.valueOf(newSelector), "vecchio", String.valueOf(oldSelector))));
+                I18n.tr("server.dkimm.activated", java.util.Map.of("newer", String.valueOf(newSelector), "old", String.valueOf(oldSelector))));
         } catch (Exception e) {
             return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
@@ -1164,7 +1164,7 @@ public class DkimManager {
 
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "TXT", recordName);
-            org.mail_panel.util.Shell.applicaPath(pb);
+            org.mail_panel.util.Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process process = pb.start();
 

@@ -51,37 +51,37 @@ public final class PackagePlan {
     // ===================== leggere il piano di pkg =====================
 
     /** Le intestazioni che pkg stampa per ogni tipo di cambiamento, e il nome che usiamo qui. */
-    private static final String[][] SEZIONI = {
-        {"Installed packages to be UPGRADED:",    "aggiorna"},
-        {"Installed packages to be DOWNGRADED:",  "retrocede"},
-        {"New packages to be INSTALLED:",         "installa"},
-        {"Installed packages to be REINSTALLED:", "reinstalla"},
-        {"Installed packages to be REMOVED:",     "rimuove"},
-        {"Installed packages LOCKED:",            "protetto"},
-        {"New packages to be FETCHED:",           "scarica"},
-        {"New groups to be UPGRADED:",            "gruppo"},
-        {"New groups to be INSTALLED:",           "gruppo"},
+    private static final String[][] SECTIONS = {
+        {"Installed packages to be UPGRADED:",    "upgrade"},
+        {"Installed packages to be DOWNGRADED:",  "downgrade"},
+        {"New packages to be INSTALLED:",         "install"},
+        {"Installed packages to be REINSTALLED:", "reinstall"},
+        {"Installed packages to be REMOVED:",     "remove"},
+        {"Installed packages LOCKED:",            "locked"},
+        {"New packages to be FETCHED:",           "download"},
+        {"New groups to be UPGRADED:",            "group"},
+        {"New groups to be INSTALLED:",           "group"},
     };
 
     /** I totali che pkg scrive in fondo al piano: il controllo incrociato del parser. */
-    private static final String[][] TOTALI = {
-        {"Number of packages to be upgraded: ",    "aggiorna"},
-        {"Number of packages to be downgraded: ",  "retrocede"},
-        {"Number of packages to be installed: ",   "installa"},
-        {"Number of packages to be reinstalled: ", "reinstalla"},
-        {"Number of packages to be removed: ",     "rimuove"},
-        {"Number of packages to be fetched: ",     "scarica"},
+    private static final String[][] TOTALS = {
+        {"Number of packages to be upgraded: ",    "upgrade"},
+        {"Number of packages to be downgraded: ",  "downgrade"},
+        {"Number of packages to be installed: ",   "install"},
+        {"Number of packages to be reinstalled: ", "reinstall"},
+        {"Number of packages to be removed: ",     "remove"},
+        {"Number of packages to be fetched: ",     "download"},
     };
 
-    private static final String VULNERABILE = " (vulnerable!)";
+    private static final String VULNERABLE = " (vulnerable!)";
 
-    private static final Pattern DA_A = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
+    private static final Pattern FROM_TO = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
     private static final Pattern REPO_VERSION_NAME = Pattern.compile("^(\\S+): (\\S+)(?: \\[([^\\]]+)\\])?$");
-    private static final Pattern REINSTALLA = Pattern.compile("^(\\S+)-([^\\s-]+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
-    private static final Pattern RIMUOVE = Pattern.compile("^(\\S+): (\\S+)(?: \\((.*)\\))?$");
-    private static final Pattern PROTETTO_NEL_PIANO = Pattern.compile(
+    private static final Pattern REINSTALL = Pattern.compile("^(\\S+)-([^\\s-]+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
+    private static final Pattern REMOVES = Pattern.compile("^(\\S+): (\\S+)(?: \\((.*)\\))?$");
+    private static final Pattern PROTECTED_IN_PLAN = Pattern.compile(
             "^Package (\\S+)-([^\\s-]+) is locked and may not be (\\S+)(?: to version (\\S+))?");
-    private static final Pattern PROTETTO_EVENTO = Pattern.compile("^(\\S+)-([^\\s-]+) is locked and may not be modified$");
+    private static final Pattern PROTECTED_EVENT = Pattern.compile("^(\\S+)-([^\\s-]+) is locked and may not be modified$");
 
     /**
      * Il piano come lo stampa {@code pkg upgrade -n}, letto sezione per sezione.
@@ -91,121 +91,121 @@ public final class PackagePlan {
      * stampa da solo, il piano esce con "measured" falso: un piano letto a meta' e presentato
      * come completo e' peggio di nessun piano.
      */
-    static JSONObject leggiPiano(String output) {
+    static JSONObject readPlan(String output) {
         JSONArray changes = new JSONArray(), lockedPackages = new JSONArray();
-        JSONArray errori = new JSONArray(), warnings = new JSONArray(), illeggibili = new JSONArray();
-        Map<String, Integer> contati = new HashMap<>(), dichiarati = new HashMap<>();
-        Set<String> giaBloccati = new LinkedHashSet<>();
-        boolean aggiornato = false, hasConflicts = false;
-        String sezione = null;
+        JSONArray errors = new JSONArray(), warnings = new JSONArray(), unreadable = new JSONArray();
+        Map<String, Integer> counted = new HashMap<>(), declared = new HashMap<>();
+        Set<String> alreadyLocked = new LinkedHashSet<>();
+        boolean updated = false, hasConflicts = false;
+        String section = null;
 
-        for (String grezza : (output == null ? "" : output).split("\n")) {
-            String riga = grezza.replace("\r", "");
-            String t = riga.trim();
+        for (String raw : (output == null ? "" : output).split("\n")) {
+            String line = raw.replace("\r", "");
+            String t = line.trim();
 
-            String nuova = null;
-            for (String[] s : SEZIONI) if (t.equals(s[0])) nuova = s[1];
-            if (nuova != null) { sezione = nuova; continue; }
+            String fresh = null;
+            for (String[] s : SECTIONS) if (t.equals(s[0])) fresh = s[1];
+            if (fresh != null) { section = fresh; continue; }
 
-            if (sezione != null && riga.startsWith("\t") && !t.isEmpty()) {
-                if (!leggiVoce(sezione, t, changes, lockedPackages, giaBloccati)) illeggibili.put(t);
-                else if (!"protetto".equals(sezione) && !"gruppo".equals(sezione))
-                    contati.merge(sezione, 1, Integer::sum);
+            if (section != null && line.startsWith("\t") && !t.isEmpty()) {
+                if (!readEntry(section, t, changes, lockedPackages, alreadyLocked)) unreadable.put(t);
+                else if (!"locked".equals(section) && !"group".equals(section))
+                    counted.merge(section, 1, Integer::sum);
                 continue;
             }
-            sezione = null;   // una riga vuota o non rientrata chiude la sezione
+            section = null;   // una riga vuota o non rientrata chiude la sezione
             if (t.isEmpty()) continue;
 
-            Matcher ev = PROTETTO_EVENTO.matcher(t);
+            Matcher ev = PROTECTED_EVENT.matcher(t);
             if (ev.find()) {
-                if (giaBloccati.add(ev.group(1)))
-                    lockedPackages.put(new JSONObject().put("nome", ev.group(1)).put("versione", ev.group(2))
-                            .put("azione", "modified").put("verso", ""));
+                if (alreadyLocked.add(ev.group(1)))
+                    lockedPackages.put(new JSONObject().put("name", ev.group(1)).put("version", ev.group(2))
+                            .put("action", "modified").put("destination", ""));
                 continue;
             }
-            boolean totale = false;
-            for (String[] tt : TOTALI) {
+            boolean total = false;
+            for (String[] tt : TOTALS) {
                 if (t.startsWith(tt[0])) {
-                    try { dichiarati.put(tt[1], Integer.parseInt(t.substring(tt[0].length()).trim())); }
-                    catch (NumberFormatException e) { illeggibili.put(t); }
-                    totale = true;
+                    try { declared.put(tt[1], Integer.parseInt(t.substring(tt[0].length()).trim())); }
+                    catch (NumberFormatException e) { unreadable.put(t); }
+                    total = true;
                 }
             }
-            if (totale) continue;
-            if (t.equals("Your packages are up to date.")) { aggiornato = true; continue; }
+            if (total) continue;
+            if (t.equals("Your packages are up to date.")) { updated = true; continue; }
             if (t.startsWith("Conflicts with the existing packages")) { hasConflicts = true; continue; }
             if (t.startsWith("pkg:")) {
-                if (t.toLowerCase().contains("warning")) warnings.put(t); else errori.put(t);
+                if (t.toLowerCase().contains("warning")) warnings.put(t); else errors.put(t);
             }
             // Il resto (dimensioni, "Checking for upgrades", "Updating ... repository catalogue")
             // non cambia il piano.
         }
 
         JSONObject r = new JSONObject().put("changes", changes).put("lockedPackages", lockedPackages)
-                .put("erroriPkg", errori).put("avvisiPkg", warnings)
-                .put("nothingToDo", aggiornato || (changes.isEmpty() && lockedPackages.isEmpty() && errori.isEmpty()))
+                .put("pkgErrors", errors).put("pkgWarnings", warnings)
+                .put("nothingToDo", updated || (changes.isEmpty() && lockedPackages.isEmpty() && errors.isEmpty()))
                 .put("hasConflicts", hasConflicts);
 
-        if (illeggibili.length() > 0)
-            return r.put("measured", false).put("illeggibili", illeggibili)
-                    .put("errore", I18n.tr("server.plan.unreadableLines", java.util.Map.of("n", String.valueOf(illeggibili.length()), "first", String.valueOf(illeggibili.getString(0)))));
+        if (unreadable.length() > 0)
+            return r.put("measured", false).put("unreadable", unreadable)
+                    .put("error", I18n.tr("server.plan.unreadableLines", java.util.Map.of("n", String.valueOf(unreadable.length()), "first", String.valueOf(unreadable.getString(0)))));
         // pkg stampa un totale per ogni tipo che compare: i due conti devono coincidere, in
         // entrambe le direzioni. Un tipo contato senza totale e' un totale che non ho letto.
-        Set<String> tipi = new LinkedHashSet<>(contati.keySet());
-        tipi.addAll(dichiarati.keySet());
-        for (String tipo : tipi) {
-            int a = contati.getOrDefault(tipo, 0), b = dichiarati.getOrDefault(tipo, -1);
+        Set<String> kinds = new LinkedHashSet<>(counted.keySet());
+        kinds.addAll(declared.keySet());
+        for (String type : kinds) {
+            int a = counted.getOrDefault(type, 0), b = declared.getOrDefault(type, -1);
             if (a != b)
                 return r.put("measured", false)
-                        .put("errore", I18n.tr("server.plan.countMismatch", java.util.Map.of("b", String.valueOf(b < 0 ? I18n.tr("server.plan.noTotal") : String.valueOf(b)), "kind", String.valueOf(tipo), "a", String.valueOf(a))));
+                        .put("error", I18n.tr("server.plan.countMismatch", java.util.Map.of("b", String.valueOf(b < 0 ? I18n.tr("server.plan.noTotal") : String.valueOf(b)), "kind", String.valueOf(type), "a", String.valueOf(a))));
         }
         return r.put("measured", true);
     }
 
     /** Una riga rientrata di una sezione. false se non ha la forma che la sezione prevede. */
-    private static boolean leggiVoce(String sezione, String t, JSONArray changes, JSONArray lockedPackages, Set<String> giaBloccati) {
-        boolean vulnerabile = t.endsWith(VULNERABILE);
-        String s = vulnerabile ? t.substring(0, t.length() - VULNERABILE.length()) : t;
+    private static boolean readEntry(String section, String t, JSONArray changes, JSONArray lockedPackages, Set<String> alreadyLocked) {
+        boolean vulnerable = t.endsWith(VULNERABLE);
+        String s = vulnerable ? t.substring(0, t.length() - VULNERABLE.length()) : t;
         Matcher m;
-        switch (sezione) {
-            case "aggiorna", "retrocede" -> {
-                m = DA_A.matcher(s);
+        switch (section) {
+            case "upgrade", "downgrade" -> {
+                m = FROM_TO.matcher(s);
                 if (!m.find()) return false;
-                changes.put(voce(sezione, m.group(1), m.group(2), m.group(3), "", m.group(4), vulnerabile));
+                changes.put(entry(section, m.group(1), m.group(2), m.group(3), "", m.group(4), vulnerable));
             }
-            case "installa" -> {
+            case "install" -> {
                 m = REPO_VERSION_NAME.matcher(s);
                 if (!m.find()) return false;
-                changes.put(voce(sezione, m.group(1), "", m.group(2), "", m.group(3), vulnerabile));
+                changes.put(entry(section, m.group(1), "", m.group(2), "", m.group(3), vulnerable));
             }
-            case "reinstalla" -> {
-                m = REINSTALLA.matcher(s);
+            case "reinstall" -> {
+                m = REINSTALL.matcher(s);
                 if (!m.find()) return false;
-                changes.put(voce(sezione, m.group(1), m.group(2), m.group(2), m.group(4), m.group(3), vulnerabile));
+                changes.put(entry(section, m.group(1), m.group(2), m.group(2), m.group(4), m.group(3), vulnerable));
             }
-            case "rimuove" -> {
-                m = RIMUOVE.matcher(s);
+            case "remove" -> {
+                m = REMOVES.matcher(s);
                 if (!m.find()) return false;
-                changes.put(voce(sezione, m.group(1), m.group(2), "", m.group(3), null, false));
+                changes.put(entry(section, m.group(1), m.group(2), "", m.group(3), null, false));
             }
-            case "protetto" -> {
-                m = PROTETTO_NEL_PIANO.matcher(s);
+            case "locked" -> {
+                m = PROTECTED_IN_PLAN.matcher(s);
                 if (!m.find()) return false;
-                if (giaBloccati.add(m.group(1)))
-                    lockedPackages.put(new JSONObject().put("nome", m.group(1)).put("versione", m.group(2))
-                            .put("azione", m.group(3)).put("verso", m.group(4) == null ? "" : m.group(4)));
+                if (alreadyLocked.add(m.group(1)))
+                    lockedPackages.put(new JSONObject().put("name", m.group(1)).put("version", m.group(2))
+                            .put("action", m.group(3)).put("destination", m.group(4) == null ? "" : m.group(4)));
             }
-            case "scarica", "gruppo" -> { /* non cambiano pacchetti installati */ }
+            case "download", "group" -> { /* non cambiano pacchetti installati */ }
             default -> { return false; }
         }
         return true;
     }
 
-    private static JSONObject voce(String tipo, String nome, String da, String a, String reason,
-                                   String repo, boolean vulnerabile) {
-        return new JSONObject().put("tipo", tipo).put("nome", nome).put("da", da).put("a", a)
+    private static JSONObject entry(String type, String name, String from, String to, String reason,
+                                   String repo, boolean vulnerable) {
+        return new JSONObject().put("type", type).put("name", name).put("from", from).put("to", to)
                 .put("reason", reason == null ? "" : reason).put("repo", repo == null ? "" : repo)
-                .put("stillVulnerable", vulnerabile);
+                .put("stillVulnerable", vulnerable);
     }
 
     /**
@@ -216,19 +216,19 @@ public final class PackagePlan {
      * l'fingerprint, il pannello se ne accorge e si ferma invece di eseguire un piano diverso da
      * quello che e' stato letto.
      */
-    static String signature(JSONObject piano) {
-        List<String> righe = new ArrayList<>();
-        JSONArray sb = piano.optJSONArray("unlockedPackages");
-        for (int i = 0; sb != null && i < sb.length(); i++) righe.add("sblocca " + sb.getString(i));
-        JSONArray c = piano.optJSONArray("changes");
+    static String signature(JSONObject plan) {
+        List<String> lines = new ArrayList<>();
+        JSONArray sb = plan.optJSONArray("unlockedPackages");
+        for (int i = 0; sb != null && i < sb.length(); i++) lines.add("unlock " + sb.getString(i));
+        JSONArray c = plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            righe.add(x.optString("tipo") + " " + x.optString("nome") + " " + x.optString("da") + " " + x.optString("a"));
+            lines.add(x.optString("type") + " " + x.optString("name") + " " + x.optString("from") + " " + x.optString("to"));
         }
-        java.util.Collections.sort(righe);
+        java.util.Collections.sort(lines);
         try {
             byte[] h = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(String.join("\n", righe).getBytes(StandardCharsets.UTF_8));
+                    .digest(String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(h).substring(0, 16);
         } catch (Exception e) {
             throw new IllegalStateException("SHA-256 not available", e);
@@ -249,7 +249,7 @@ public final class PackagePlan {
         JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            lines.add(x.optString("tipo") + " " + x.optString("nome") + " " + x.optString("da") + " " + x.optString("a"));
+            lines.add(x.optString("type") + " " + x.optString("name") + " " + x.optString("from") + " " + x.optString("to"));
         }
         java.util.Collections.sort(lines);
         try {
@@ -267,10 +267,10 @@ public final class PackagePlan {
         JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            String a = x.optString("a");
-            lines.add(typeName(x.optString("tipo")) + " " + x.optString("nome")
-                    + (x.optString("da").isEmpty() ? "" : " " + x.optString("da"))
-                    + (a.isEmpty() || a.equals(x.optString("da")) ? "" : " -> " + a));
+            String a = x.optString("to");
+            lines.add(typeName(x.optString("type")) + " " + x.optString("name")
+                    + (x.optString("from").isEmpty() ? "" : " " + x.optString("from"))
+                    + (a.isEmpty() || a.equals(x.optString("from")) ? "" : " -> " + a));
         }
         java.util.Collections.sort(lines);
         return lines;
@@ -280,14 +280,14 @@ public final class PackagePlan {
 
     /** Solo nomi di pacchetto plausibili: finiscono in una riga di comando. */
     /** Il tipo di cambiamento ("aggiorna", "rimuove"...) detto nella lingua di chi legge. */
-    public static String typeName(String tipo) {
-        return switch (tipo == null ? "" : tipo) {
-            case "aggiorna" -> I18n.tr("up.tUpgrade");
-            case "installa" -> I18n.tr("up.tInstall");
-            case "reinstalla" -> I18n.tr("up.tReinstall");
-            case "rimuove" -> I18n.tr("up.tRemove");
-            case "retrocede" -> I18n.tr("up.tDowngrade");
-            default -> String.valueOf(tipo);
+    public static String typeName(String type) {
+        return switch (type == null ? "" : type) {
+            case "upgrade" -> I18n.tr("up.tUpgrade");
+            case "install" -> I18n.tr("up.tInstall");
+            case "reinstall" -> I18n.tr("up.tReinstall");
+            case "remove" -> I18n.tr("up.tRemove");
+            case "downgrade" -> I18n.tr("up.tDowngrade");
+            default -> String.valueOf(type);
         };
     }
 
@@ -295,12 +295,12 @@ public final class PackagePlan {
         return n != null && n.matches("[A-Za-z0-9._+-]{1,64}");
     }
 
-    private static String sh(String cmd, int secondi) {
-        return Shell.runShell(Duration.ofSeconds(secondi), cmd).outputTrim();
+    private static String sh(String cmd, int seconds) {
+        return Shell.runShell(Duration.ofSeconds(seconds), cmd).outputTrim();
     }
 
     /** La cartella del database di pkg: la si chiede a pkg invece di supporla. */
-    static String cartellaDb() {
+    static String dbFolder() {
         String d = sh("pkg config PKG_DBDIR 2>/dev/null", 30);
         return d.matches("/[A-Za-z0-9._/-]{1,200}") ? d : "/var/db/pkg";
     }
@@ -317,42 +317,42 @@ public final class PackagePlan {
      * {@code -U}: il catalogo non si riscarica, si usa quello che c'e'. Il pannello lo aggiorna
      * prima di mostrare lo stato; qui conta che la simulazione e l'esecuzione usino lo STESSO.
      */
-    public static JSONObject simula(List<String> daSbloccare, List<String> pacchetti) {
-        for (String n : daSbloccare) if (!isValidName(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
-        for (String n : pacchetti) if (!isValidName(n)) return fallito(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
-        String list = pacchetti.isEmpty() ? "" : " " + String.join(" ", pacchetti);
-        String prefisso = "pkg";
-        String copia = null;
+    public static JSONObject simulate(List<String> toUnlock, List<String> packages) {
+        for (String n : toUnlock) if (!isValidName(n)) return failed(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
+        for (String n : packages) if (!isValidName(n)) return failed(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
+        String list = packages.isEmpty() ? "" : " " + String.join(" ", packages);
+        String prefix = "pkg";
+        String copy = null;
         try {
-            if (!daSbloccare.isEmpty()) {
-                String db = cartellaDb();
+            if (!toUnlock.isEmpty()) {
+                String db = dbFolder();
                 long kb = number(sh("du -sk " + db + " 2>/dev/null | cut -f1", 120));
-                long liberi = number(sh("df -k /var/tmp 2>/dev/null | tail -1 | awk '{print $4}'", 30));
-                if (kb <= 0) return fallito(I18n.tr("server.plan.cannotMeasure", java.util.Map.of("db", String.valueOf(db))));
-                if (liberi < kb * 2)
-                    return fallito(I18n.tr("server.plan.noSpace", java.util.Map.of("mb", String.valueOf(kb / 1024), "free", String.valueOf(liberi / 1024))));
-                copia = sh("mktemp -d /var/tmp/pannello-simulazione.XXXXXX 2>/dev/null", 30);
-                if (!copia.matches("/var/tmp/pannello-simulazione\\.[A-Za-z0-9]{6,}")) {
-                    String cartellaStrana = copia;
-                    copia = null;
-                    return fallito(I18n.tr("server.plan.mktempFailed", java.util.Map.of("d", String.valueOf(cartellaStrana))));
+                long free = number(sh("df -k /var/tmp 2>/dev/null | tail -1 | awk '{print $4}'", 30));
+                if (kb <= 0) return failed(I18n.tr("server.plan.cannotMeasure", java.util.Map.of("db", String.valueOf(db))));
+                if (free < kb * 2)
+                    return failed(I18n.tr("server.plan.noSpace", java.util.Map.of("mb", String.valueOf(kb / 1024), "free", String.valueOf(free / 1024))));
+                copy = sh("mktemp -d /var/tmp/panel-simulation.XXXXXX 2>/dev/null", 30);
+                if (!copy.matches("/var/tmp/panel-simulation\\.[A-Za-z0-9]{6,}")) {
+                    String oddFolder = copy;
+                    copy = null;
+                    return failed(I18n.tr("server.plan.mktempFailed", java.util.Map.of("d", String.valueOf(oddFolder))));
                 }
-                Shell.Result cp = Shell.runShell(Duration.ofSeconds(600), "cp -Rp " + db + "/. " + copia + "/ 2>&1");
-                if (!cp.success()) return fallito(I18n.tr("server.plan.copyFailed", java.util.Map.of("out", String.valueOf(cp.outputTrim()))));
-                prefisso = "pkg -o PKG_DBDIR=" + copia;
-                for (String n : daSbloccare) {
-                    Shell.Result u = Shell.runShell(Duration.ofSeconds(60), prefisso + " unlock -y " + n + " 2>&1");
-                    if (!u.success()) return fallito(I18n.tr("server.plan.unlockFailed", java.util.Map.of("n", String.valueOf(n), "out", String.valueOf(u.outputTrim()))));
+                Shell.Result cp = Shell.runShell(Duration.ofSeconds(600), "cp -Rp " + db + "/. " + copy + "/ 2>&1");
+                if (!cp.success()) return failed(I18n.tr("server.plan.copyFailed", java.util.Map.of("out", String.valueOf(cp.outputTrim()))));
+                prefix = "pkg -o PKG_DBDIR=" + copy;
+                for (String n : toUnlock) {
+                    Shell.Result u = Shell.runShell(Duration.ofSeconds(60), prefix + " unlock -y " + n + " 2>&1");
+                    if (!u.success()) return failed(I18n.tr("server.plan.unlockFailed", java.util.Map.of("n", String.valueOf(n), "out", String.valueOf(u.outputTrim()))));
                 }
             }
-            Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefisso + " upgrade -n -U" + list + " 2>&1");
-            JSONObject piano = leggiPiano(r.output());
-            return piano.put("success", true).put("codice", r.exitCode()).put("output", r.outputTrim())
-                    .put("onBackup", copia != null)
-                    .put("comando", "pkg upgrade -n -U" + list);
+            Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefix + " upgrade -n -U" + list + " 2>&1");
+            JSONObject plan = readPlan(r.output());
+            return plan.put("success", true).put("code", r.exitCode()).put("output", r.outputTrim())
+                    .put("onBackup", copy != null)
+                    .put("command", "pkg upgrade -n -U" + list);
         } finally {
             // La copia se ne va sempre. Il percorso e' quello creato da mktemp e verificato sopra.
-            if (copia != null) Shell.runShell(Duration.ofSeconds(300), "rm -rf " + copia);
+            if (copy != null) Shell.runShell(Duration.ofSeconds(300), "rm -rf " + copy);
         }
     }
 
@@ -366,114 +366,114 @@ public final class PackagePlan {
      * il loro nome e il motivo: e' esattamente quello che serve sapere prima di premere.
      *
      * @param protetti          i pacchetti protetti adesso
-     * @param motivoPerNonSbloccare riceve il pacchetto protetto che pkg ha nominato (nome, versione
+     * @param reasonNotToUnlock riceve il pacchetto protetto che pkg ha nominato (nome, versione
      *                          e, se pkg la dice, la versione a cui andrebbe); restituisce null se
      *                          si puo' sbloccare, altrimenti il perche'
      */
-    public static JSONObject planFor(List<String> pacchetti, Set<String> protetti,
-                                      Function<JSONObject, String> motivoPerNonSbloccare) {
-        return planFor(pacchetti, protetti, motivoPerNonSbloccare, n -> null);
+    public static JSONObject planFor(List<String> packages, Set<String> protectedNames,
+                                      Function<JSONObject, String> reasonNotToUnlock) {
+        return planFor(packages, protectedNames, reasonNotToUnlock, n -> null);
     }
 
     /**
      * @param gemelloInstallato riceve il nome di un pacchetto che il piano INSTALLEREBBE e
      *                          restituisce il nome di un pacchetto GIA' installato della
      *                          stessa famiglia, o null. Serve a riconoscere quando pkg sta
-     *                          girando attorno a un blocco: vedi il ciclo di pianoCon.
+     *                          girando attorno a un blocco: vedi il ciclo di planWith.
      */
     public static JSONObject planFor(List<String> packages, Set<String> protectedNames,
                                       Function<JSONObject, String> reasonNotToUnlock,
                                       Function<String, String> installedTwin) {
-        LinkedHashSet<String> sblocca = new LinkedHashSet<>();
-        for (String p : packages) if (protectedNames.contains(p)) sblocca.add(p);
-        return pianoCon(packages, sblocca, protectedNames, reasonNotToUnlock, installedTwin, true);
+        LinkedHashSet<String> unlock = new LinkedHashSet<>();
+        for (String p : packages) if (protectedNames.contains(p)) unlock.add(p);
+        return planWith(packages, unlock, protectedNames, reasonNotToUnlock, installedTwin, true);
     }
 
     /**
      * Il piano della manutenzione completa: tutto cio' che pkg aggiornerebbe, con 'daSbloccare'
-     * unlockedPackages. Qui un pacchetto protetto che pkg nomina e che non si puo' sbloccare non e' un
+     * sbloccati. Qui un pacchetto protetto che pkg nomina e che non si puo' sbloccare non e' un
      * impedimento: e' uno di quelli trattenuti apposta, pkg lo salta e aggiorna il resto. Resta
      * nel piano, con il suo motivo, perche' chi legge sappia cosa NON verra' aggiornato.
      */
-    public static JSONObject fullPlan(Set<String> daSbloccare, Set<String> protetti,
-                                         Function<JSONObject, String> motivoPerNonSbloccare) {
-        return fullPlan(daSbloccare, protetti, motivoPerNonSbloccare, n -> null);
+    public static JSONObject fullPlan(Set<String> toUnlock, Set<String> protectedNames,
+                                         Function<JSONObject, String> reasonNotToUnlock) {
+        return fullPlan(toUnlock, protectedNames, reasonNotToUnlock, n -> null);
     }
 
     public static JSONObject fullPlan(Set<String> toUnlock, Set<String> protectedNames,
                                          Function<JSONObject, String> reasonNotToUnlock,
                                          Function<String, String> installedTwin) {
-        return pianoCon(List.of(), new LinkedHashSet<>(toUnlock), protectedNames, reasonNotToUnlock,
+        return planWith(List.of(), new LinkedHashSet<>(toUnlock), protectedNames, reasonNotToUnlock,
                 installedTwin, false);
     }
 
-    private static JSONObject pianoCon(List<String> pacchetti, LinkedHashSet<String> sblocca, Set<String> protetti,
+    private static JSONObject planWith(List<String> packages, LinkedHashSet<String> unlock, Set<String> protectedNames,
                                        Function<JSONObject, String> reasonNotToUnlock,
                                        Function<String, String> installedTwin, boolean blockersBlock) {
-        JSONObject piano = null;
+        JSONObject plan = null;
         JSONArray blockers = new JSONArray();
         JSONArray unlockedFamily = new JSONArray();
-        for (int giro = 0; giro < 6; giro++) {
-            piano = simula(new ArrayList<>(sblocca), pacchetti);
-            if (!piano.optBoolean("success") || !piano.optBoolean("measured")) break;
+        for (int round = 0; round < 6; round++) {
+            plan = simulate(new ArrayList<>(unlock), packages);
+            if (!plan.optBoolean("success") || !plan.optBoolean("measured")) break;
             blockers = new JSONArray();
-            boolean aggiunti = false;
-            JSONArray bl = piano.getJSONArray("lockedPackages");
+            boolean added = false;
+            JSONArray bl = plan.getJSONArray("lockedPackages");
             for (int i = 0; i < bl.length(); i++) {
-                JSONObject blocco = bl.getJSONObject(i);
-                String n = blocco.getString("nome");
-                if (sblocca.contains(n)) continue;
-                String no = !protetti.contains(n)
+                JSONObject block = bl.getJSONObject(i);
+                String n = block.getString("name");
+                if (unlock.contains(n)) continue;
+                String no = !protectedNames.contains(n)
                         ? I18n.tr("server.plan.lockedUnknown")
-                        : reasonNotToUnlock.apply(blocco);
-                if (no != null) { blockers.put(new JSONObject().put("nome", n).put("reason", no)); continue; }
-                sblocca.add(n);
-                aggiunti = true;
+                        : reasonNotToUnlock.apply(block);
+                if (no != null) { blockers.put(new JSONObject().put("name", n).put("reason", no)); continue; }
+                unlock.add(n);
+                added = true;
             }
-            if (familyAddition(piano, sblocca, protetti, installedTwin, blockers, unlockedFamily))
-                aggiunti = true;
-            if (!aggiunti) break;
+            if (familyAddition(plan, unlock, protectedNames, installedTwin, blockers, unlockedFamily))
+                added = true;
+            if (!added) break;
         }
-        piano.put("unlockedPackages", new JSONArray(new ArrayList<>(sblocca))).put("blockers", blockers)
+        plan.put("unlockedPackages", new JSONArray(new ArrayList<>(unlock))).put("blockers", blockers)
              .put("familyUnlocked", unlockedFamily);
 
         // I pacchetti chiesti che il piano NON cambia: pkg li lascerebbe dove sono.
-        JSONArray fermi = new JSONArray();
-        JSONArray changes = piano.optJSONArray("changes");
-        for (String p : pacchetti) {
-            boolean cambia = false;
+        JSONArray stopped = new JSONArray();
+        JSONArray changes = plan.optJSONArray("changes");
+        for (String p : packages) {
+            boolean change = false;
             for (int i = 0; changes != null && i < changes.length(); i++)
-                if (p.equals(changes.getJSONObject(i).optString("nome"))) cambia = true;
-            if (!cambia) fermi.put(p);
+                if (p.equals(changes.getJSONObject(i).optString("name"))) change = true;
+            if (!change) stopped.put(p);
         }
-        piano.put("unchangedPackages", fermi);
+        plan.put("unchangedPackages", stopped);
 
         // pkg aggiorna prima se stesso. In un aggiornamento vero, se il catalogo ha un pkg piu'
         // recente, pkg installa quello, si rilancia e poi fa il resto; con -n questo passo lo
         // salta, quindi la simulazione non lo mostra. Un piano "esatto" che tace un pacchetto
         // che cambiera' non lo e': si aggiunge in testa, entra nell'fingerprint e viene verificato.
-        JSONObject prima = piano.optBoolean("measured") ? pkgDaAggiornare() : null;
-        if (prima != null && changes != null) {
-            boolean gia = false;
-            for (int i = 0; i < changes.length(); i++) if ("pkg".equals(changes.getJSONObject(i).optString("nome"))) gia = true;
-            if (!gia) {
-                JSONArray conPkg = new JSONArray().put(voce("aggiorna", "pkg", prima.getString("da"), prima.getString("a"),
+        JSONObject before = plan.optBoolean("measured") ? pkgToUpdate() : null;
+        if (before != null && changes != null) {
+            boolean already = false;
+            for (int i = 0; i < changes.length(); i++) if ("pkg".equals(changes.getJSONObject(i).optString("name"))) already = true;
+            if (!already) {
+                JSONArray withPkg = new JSONArray().put(entry("upgrade", "pkg", before.getString("from"), before.getString("to"),
                         I18n.tr("server.plan.pkgFirst"), "", false));
-                for (int i = 0; i < changes.length(); i++) conPkg.put(changes.get(i));
-                piano.put("changes", conPkg);
-                changes = conPkg;
+                for (int i = 0; i < changes.length(); i++) withPkg.put(changes.get(i));
+                plan.put("changes", withPkg);
+                changes = withPkg;
             }
         }
 
-        boolean runnable = piano.optBoolean("success") && piano.optBoolean("measured")
-                && (!blockersBlock || (blockers.isEmpty() && piano.optJSONArray("lockedPackages") != null
-                                             && piano.getJSONArray("lockedPackages").length() == 0))
-                && piano.getJSONArray("erroriPkg").length() == 0 && !piano.optBoolean("hasConflicts")
+        boolean runnable = plan.optBoolean("success") && plan.optBoolean("measured")
+                && (!blockersBlock || (blockers.isEmpty() && plan.optJSONArray("lockedPackages") != null
+                                             && plan.getJSONArray("lockedPackages").length() == 0))
+                && plan.getJSONArray("pkgErrors").length() == 0 && !plan.optBoolean("hasConflicts")
                 && changes != null && changes.length() > 0
                 // Se nessuno dei pacchetti chiesti cambia, non c'e' niente da eseguire: nemmeno
                 // se nel piano c'e' pkg che aggiornerebbe se stesso.
-                && (pacchetti.isEmpty() || fermi.length() < pacchetti.size());
-        return piano.put("runnable", runnable).put("signature", piano.optBoolean("measured") ? signature(piano) : "");
+                && (packages.isEmpty() || stopped.length() < packages.size());
+        return plan.put("runnable", runnable).put("signature", plan.optBoolean("measured") ? signature(plan) : "");
     }
 
     /**
@@ -509,30 +509,30 @@ public final class PackagePlan {
         JSONArray changes = plan.optJSONArray("changes");
         for (int i = 0; changes != null && i < changes.length(); i++) {
             JSONObject c = changes.getJSONObject(i);
-            if (!"installa".equals(c.optString("tipo"))) continue;
-            String newName = c.optString("nome");
+            if (!"install".equals(c.optString("type"))) continue;
+            String newName = c.optString("name");
             String twin = installedTwin == null ? null : installedTwin.apply(newName);
             if (twin == null || twin.equals(newName) || unlock.contains(twin)
                     || !isValidName(twin)) continue;
             if (alreadyBlocked(blockers, twin)) continue;
             if (!protectedNames.contains(twin)) {
-                blockers.put(new JSONObject().put("nome", newName)
+                blockers.put(new JSONObject().put("name", newName)
                         .put("reason", I18n.tr("server.plan.familyConflict",
-                                java.util.Map.of("nuovo", String.valueOf(newName), "gemello", String.valueOf(twin)))));
+                                java.util.Map.of("newer", String.valueOf(newName), "twin", String.valueOf(twin)))));
                 continue;
             }
             String installed = sh("pkg query %v " + twin + " 2>/dev/null", 20).trim();
             String catalog = "";
             for (String line : sh("pkg rquery -U %v " + twin + " 2>/dev/null", 30).split("\n")) {
                 String x = line.trim();
-                if (versioneValida(x)) { catalog = x; break; }
+                if (validVersion(x)) { catalog = x; break; }
             }
-            if (!versioneValida(installed) || !installed.equals(catalog)) {
-                blockers.put(new JSONObject().put("nome", twin)
+            if (!validVersion(installed) || !installed.equals(catalog)) {
+                blockers.put(new JSONObject().put("name", twin)
                         .put("reason", I18n.tr("server.plan.familyLockedNewer",
-                                java.util.Map.of("nuovo", String.valueOf(newName), "gemello", String.valueOf(twin),
-                                        "installata", String.valueOf(installed.isEmpty() ? "?" : installed),
-                                        "catalogo", String.valueOf(catalog.isEmpty() ? "?" : catalog)))));
+                                java.util.Map.of("newer", String.valueOf(newName), "twin", String.valueOf(twin),
+                                        "installed", String.valueOf(installed.isEmpty() ? "?" : installed),
+                                        "catalog", String.valueOf(catalog.isEmpty() ? "?" : catalog)))));
                 continue;
             }
             unlock.add(twin);
@@ -545,24 +545,24 @@ public final class PackagePlan {
 
     private static boolean alreadyBlocked(JSONArray blockers, String name) {
         for (int i = 0; i < blockers.length(); i++)
-            if (name.equals(blockers.getJSONObject(i).optString("nome"))) return true;
+            if (name.equals(blockers.getJSONObject(i).optString("name"))) return true;
         return false;
     }
 
     /** Il pkg installato e quello del catalogo, se il catalogo ne ha uno piu' recente; altrimenti null. */
-    static JSONObject pkgDaAggiornare() {
-        String da = sh("pkg query %v pkg 2>/dev/null", 30), a = "";
-        for (String riga : sh("pkg rquery -U %v pkg 2>/dev/null", 60).split("\n"))
-            if (versioneValida(riga.trim())) { a = riga.trim(); break; }
-        if (!versioneValida(da) || !versioneValida(a)) return null;
+    static JSONObject pkgToUpdate() {
+        String from = sh("pkg query %v pkg 2>/dev/null", 30), to = "";
+        for (String line : sh("pkg rquery -U %v pkg 2>/dev/null", 60).split("\n"))
+            if (validVersion(line.trim())) { to = line.trim(); break; }
+        if (!validVersion(from) || !validVersion(to)) return null;
         try {
-            return confrontoPkg().confronta(a, da) > 0 ? new JSONObject().put("da", da).put("a", a) : null;
+            return pkgComparison().compare(to, from) > 0 ? new JSONObject().put("from", from).put("to", to) : null;
         } catch (RuntimeException e) {
             return null;
         }
     }
 
-    /** Le versioni installate senza lo stato di blocco: {@code nome -> versione}. */
+    /** Le versioni installate senza lo stato di blocco: {@code name -> versione}. */
     public static Map<String, String> versionsOnly(Map<String, String[]> installed) {
         Map<String, String> r = new java.util.TreeMap<>();
         if (installed != null)
@@ -574,7 +574,7 @@ public final class PackagePlan {
     /**
      * Che cosa e' cambiato DAVVERO, messo a confronto con il piano firmato.
      *
-     * {@link #verificaEsito} scorre le righe del PIANO: vede un pacchetto del piano che non
+     * {@link #verifyOutcome} scorre le righe del PIANO: vede un pacchetto del piano che non
      * e' arrivato dove doveva, e non puo' vedere un pacchetto cambiato che nel piano non
      * c'era. Il 18/10/2026, sulla VM, e' successo: il piano firmato (465385a9d669def8) aveva
      * dieci cambi e nessuna rimozione; durante l'esecuzione pkg ha trovato un conflitto
@@ -588,7 +588,7 @@ public final class PackagePlan {
      * di posta una rimozione non prevista e' precisamente il caso che deve intercettare.
      *
      * Una reinstallazione non lascia traccia nell'inventario (stessa versione) e quindi non
-     * puo' comparire qui: quel caso lo copre {@link #verificaEsito}. I due controlli sono
+     * puo' comparire qui: quel caso lo copre {@link #verifyOutcome}. I due controlli sono
      * complementari e servono entrambi.
      *
      * Funzione pura: riceve i due inventari e il piano, cosi' si prova con uscite vere.
@@ -607,7 +607,7 @@ public final class PackagePlan {
         JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            planned.putIfAbsent(x.optString("nome"), x);
+            planned.putIfAbsent(x.optString("name"), x);
         }
 
         Set<String> names = new java.util.TreeSet<>(a.keySet());
@@ -626,11 +626,11 @@ public final class PackagePlan {
                 continue;
             }
             // Nel piano c'era: il tipo e la versione di arrivo devono combaciare.
-            String type = p.optString("tipo"), expected = p.optString("a");
+            String type = p.optString("type"), expected = p.optString("to");
             boolean matches = switch (happened) {
-                case "removed" -> "rimuove".equals(type);
-                case "installed" -> "installa".equals(type) && expected.equals(versionB);
-                default -> ("aggiorna".equals(type) || "retrocede".equals(type)) && expected.equals(versionB);
+                case "removed" -> "remove".equals(type);
+                case "installed" -> "install".equals(type) && expected.equals(versionB);
+                default -> ("upgrade".equals(type) || "downgrade".equals(type)) && expected.equals(versionB);
             };
             if (matches) continue;
             outside.put(divergenceEntry(name, happened, versionA, versionB,
@@ -663,30 +663,30 @@ public final class PackagePlan {
      * Dopo l'aggiornamento vero: ogni pacchetto del piano e' dove il piano diceva?
      * Una riga per cambiamento, con cio' che era atteso e cio' che c'e'.
      */
-    public static JSONArray verificaEsito(JSONObject piano) {
-        JSONArray esito = new JSONArray();
-        JSONArray c = piano.optJSONArray("changes");
+    public static JSONArray verifyOutcome(JSONObject plan) {
+        JSONArray outcome = new JSONArray();
+        JSONArray c = plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            String nome = x.optString("nome");
-            if (!isValidName(nome)) continue;
-            String ora = sh("pkg query %v " + nome + " 2>/dev/null", 30);
-            String atteso = "rimuove".equals(x.optString("tipo")) ? "" : x.optString("a");
-            esito.put(new JSONObject().put("nome", nome).put("tipo", x.optString("tipo"))
-                    .put("atteso", atteso.isEmpty() ? I18n.tr("server.plan.removed") : atteso)
-                    .put("trovato", ora.isEmpty() ? I18n.tr("server.plan.notInstalled") : ora)
-                    .put("ok", atteso.equals(ora)));
+            String name = x.optString("name");
+            if (!isValidName(name)) continue;
+            String now = sh("pkg query %v " + name + " 2>/dev/null", 30);
+            String expected = "remove".equals(x.optString("type")) ? "" : x.optString("to");
+            outcome.put(new JSONObject().put("name", name).put("type", x.optString("type"))
+                    .put("expected", expected.isEmpty() ? I18n.tr("server.plan.removed") : expected)
+                    .put("found", now.isEmpty() ? I18n.tr("server.plan.notInstalled") : now)
+                    .put("ok", expected.equals(now)));
         }
-        return esito;
+        return outcome;
     }
 
     // ===================== la fix c'e'? =====================
 
     /** Confronto di due versioni, con le regole di pkg. Negativo, zero o positivo. */
-    public interface Confronto { int confronta(String a, String b); }
+    public interface VersionComparator { int compare(String a, String b); }
 
     /** Solo versioni plausibili: finiscono in una riga di comando. */
-    static boolean versioneValida(String v) {
+    static boolean validVersion(String v) {
         return v != null && v.matches("[A-Za-z0-9._,+~]{1,64}");
     }
 
@@ -696,12 +696,12 @@ public final class PackagePlan {
      * Riscriverle qui vorrebbe dire sbagliarle sul caso che conta. Le risposte si ricordano:
      * lo stesso confronto non si chiede due volte.
      */
-    public static Confronto confrontoPkg() {
-        Map<String, Integer> gia = new HashMap<>();
+    public static VersionComparator pkgComparison() {
+        Map<String, Integer> already = new HashMap<>();
         return (a, b) -> {
-            if (!versioneValida(a) || !versioneValida(b))
+            if (!validVersion(a) || !validVersion(b))
                 throw new IllegalArgumentException("version not comparable: " + a + " / " + b);
-            return gia.computeIfAbsent(a + " " + b, k -> {
+            return already.computeIfAbsent(a + " " + b, k -> {
                 String o = sh("pkg version -t '" + a + "' '" + b + "'", 15);
                 return switch (o) {
                     case "<" -> -1;
@@ -714,24 +714,24 @@ public final class PackagePlan {
     }
 
     /** Un estremo di un intervallo di VuXML, come lo scrive pkg: operatore e versione. */
-    record Estremo(String op, String versione) {}
+    record Bound(String op, String version) {}
 
-    private static final Pattern ESTREMO = Pattern.compile("^(<=|>=|<|>|=)\\s*(\\S+)$");
+    private static final Pattern BOUND = Pattern.compile("^(<=|>=|<|>|=)\\s*(\\S+)$");
 
     /** "&gt;= 1.25.0 : &lt; 1.30.5,3" diventa due estremi; "&lt; 1.30.5,3" uno solo. */
-    static List<Estremo> estremi(String intervallo) {
-        List<Estremo> r = new ArrayList<>();
-        for (String parte : intervallo.split(":")) {
-            Matcher m = ESTREMO.matcher(parte.trim());
-            if (m.find()) r.add(new Estremo(m.group(1), m.group(2)));
+    static List<Bound> bounds(String interval) {
+        List<Bound> r = new ArrayList<>();
+        for (String part : interval.split(":")) {
+            Matcher m = BOUND.matcher(part.trim());
+            if (m.find()) r.add(new Bound(m.group(1), m.group(2)));
         }
         return r;
     }
 
-    static boolean dentro(String v, List<Estremo> es, Confronto c) {
+    static boolean inside(String v, List<Bound> es, VersionComparator c) {
         if (es.isEmpty()) return false;
-        for (Estremo e : es) {
-            int x = c.confronta(v, e.versione());
+        for (Bound e : es) {
+            int x = c.compare(v, e.version());
             boolean ok = switch (e.op()) {
                 case "<" -> x < 0;
                 case "<=" -> x <= 0;
@@ -745,9 +745,9 @@ public final class PackagePlan {
         return true;
     }
 
-    private static boolean dentroUnoQualsiasi(String v, JSONArray ranges, Confronto c) {
+    private static boolean insideAny(String v, JSONArray ranges, VersionComparator c) {
         for (int i = 0; ranges != null && i < ranges.length(); i++)
-            if (dentro(v, estremi(ranges.getString(i)), c)) return true;
+            if (inside(v, bounds(ranges.getString(i)), c)) return true;
         return false;
     }
 
@@ -758,15 +758,15 @@ public final class PackagePlan {
      * Attenzione alla forma dell'opzione: e' {@code -Rjson}, attaccato. Con {@code -R json}
      * pkg prende "json" per il nome di un pacchetto e produce un altro formato.
      */
-    static JSONObject leggiAudit(String json) {
-        JSONObject fuori = new JSONObject();
+    static JSONObject readAudit(String json) {
+        JSONObject outside = new JSONObject();
         int g = json == null ? -1 : json.indexOf('{');
-        if (g < 0) return fuori;
+        if (g < 0) return outside;
         JSONObject top = new JSONObject(json.substring(g));
         JSONObject pk = top.optJSONObject("packages");
-        if (pk == null) return fuori;
-        for (String nome : pk.keySet()) {
-            JSONObject p = pk.getJSONObject(nome);
+        if (pk == null) return outside;
+        for (String name : pk.keySet()) {
+            JSONObject p = pk.getJSONObject(name);
             JSONArray issues = new JSONArray();
             JSONArray is = p.optJSONArray("issues");
             for (int i = 0; is != null && i < is.length(); i++) {
@@ -778,9 +778,9 @@ public final class PackagePlan {
                         .put("cve", x.optJSONArray("cve") == null ? new JSONArray() : x.getJSONArray("cve"))
                         .put("url", x.optString("url", "")));
             }
-            fuori.put(nome, new JSONObject().put("versione", p.optString("version", "")).put("issues", issues));
+            outside.put(name, new JSONObject().put("version", p.optString("version", "")).put("issues", issues));
         }
-        return fuori;
+        return outside;
     }
 
     /**
@@ -788,113 +788,113 @@ public final class PackagePlan {
      * il catalogo offre, e gli ranges di VuXML di ogni problema.
      *
      * Verdetti, dal migliore al peggiore:
-     *  - "si-risolve-aggiornando": il catalogo ha una versione piu' recente che VuXML non
+     *  - "fixed-by-upgrade": il catalogo ha una versione piu' recente che VuXML non
      *    considera vulnerabile per nessuno dei problemi;
-     *  - "aggiornamento-non-basta": il catalogo ha una versione piu' recente, ma per almeno un
+     *  - "upgrade-not-enough": il catalogo ha una versione piu' recente, ma per almeno un
      *    problema e' ancora vulnerabile;
-     *  - "fix-fuori-dal-ramo": il catalogo non va oltre, ma VuXML indica da quale
+     *  - "fix-outside-branch": il catalogo non va oltre, ma VuXML indica da quale
      *    versione il problema e' corretto — esiste, non e' ancora nel tuo ramo;
-     *  - "fix-non-indicata": vulnerabile fino a una versione compresa, senza dire la prima
+     *  - "fix-not-stated": vulnerabile fino a una versione compresa, senza dire la prima
      *    corretta;
-     *  - "nessuna-fix": VuXML non mette un limite superiore, cioe' nessuna versione
+     *  - "no-fix": VuXML non mette un limite superiore, cioe' nessuna versione
      *    pubblicata e' corretta;
      *  - "non-so": un intervallo non si lascia leggere o il confronto non ha risposto.
      */
-    static JSONObject valutaCorrezione(String installata, String catalogo, JSONArray issues, Confronto c) {
-        JSONObject r = new JSONObject().put("installata", installata).put("catalogo", catalogo == null ? "" : catalogo);
+    static JSONObject assessFix(String installed, String catalog, JSONArray issues, VersionComparator c) {
+        JSONObject r = new JSONObject().put("installedVersion", installed).put("catalog", catalog == null ? "" : catalog);
         try {
-            boolean catalogoPiuNuovo = catalogo != null && !catalogo.isEmpty() && c.confronta(catalogo, installata) > 0;
-            JSONArray dettagli = new JSONArray();
+            boolean newerCatalog = catalog != null && !catalog.isEmpty() && c.compare(catalog, installed) > 0;
+            JSONArray details = new JSONArray();
             String firstFixed = null;          // la piu' alta fra le prime versioni corrette
-            String finoA = null;                  // un "<=": vulnerabile fino a questa compresa
-            boolean senzaLimite = false, illeggibile = false, soloQuesta = false;
-            List<String> ancoraApertiNelCatalogo = new ArrayList<>();
+            String upTo = null;                  // un "<=": vulnerabile fino a questa compresa
+            boolean withoutLimit = false, unreadable = false, onlyThis = false;
+            List<String> stillOpenInCatalog = new ArrayList<>();
             for (int i = 0; issues != null && i < issues.length(); i++) {
                 JSONObject p = issues.getJSONObject(i);
                 JSONArray ranges = p.optJSONArray("ranges");
-                List<Estremo> suo = null;
+                List<Bound> its = null;
                 for (int k = 0; ranges != null && k < ranges.length(); k++) {
-                    List<Estremo> es = estremi(ranges.getString(k));
-                    if (dentro(installata, es, c)) { suo = es; break; }
+                    List<Bound> es = bounds(ranges.getString(k));
+                    if (inside(installed, es, c)) { its = es; break; }
                 }
                 JSONObject d = new JSONObject().put("description", p.optString("description"))
                         .put("cve", p.optJSONArray("cve")).put("url", p.optString("url"))
                         .put("ranges", ranges);
-                if (suo == null) {
-                    illeggibile = true;
-                    d.put("tipo", "non-so");
+                if (its == null) {
+                    unreadable = true;
+                    d.put("type", "non-so");
                 } else {
-                    Estremo sup = null;
-                    boolean esatta = false;
-                    for (Estremo e : suo) {
-                        if (e.op().equals("<") || e.op().equals("<=")) sup = e;
-                        if (e.op().equals("=")) esatta = true;
+                    Bound upperBound = null;
+                    boolean exact = false;
+                    for (Bound e : its) {
+                        if (e.op().equals("<") || e.op().equals("<=")) upperBound = e;
+                        if (e.op().equals("=")) exact = true;
                     }
-                    if (esatta) {
-                        soloQuesta = true;
-                        d.put("tipo", "solo-questa-versione");
-                    } else if (sup == null) {
-                        senzaLimite = true;
-                        d.put("tipo", "senza-limite");
-                    } else if (sup.op().equals("<")) {
-                        d.put("tipo", "corretta-da").put("firstFixed", sup.versione());
-                        if (firstFixed == null || c.confronta(sup.versione(), firstFixed) > 0) firstFixed = sup.versione();
+                    if (exact) {
+                        onlyThis = true;
+                        d.put("type", "this-version-only");
+                    } else if (upperBound == null) {
+                        withoutLimit = true;
+                        d.put("type", "no-upper-bound");
+                    } else if (upperBound.op().equals("<")) {
+                        d.put("type", "fixed-in").put("firstFixed", upperBound.version());
+                        if (firstFixed == null || c.compare(upperBound.version(), firstFixed) > 0) firstFixed = upperBound.version();
                     } else {
-                        d.put("tipo", "vulnerabile-fino-a").put("finoA", sup.versione());
-                        finoA = sup.versione();
+                        d.put("type", "vulnerable-up-to").put("upTo", upperBound.version());
+                        upTo = upperBound.version();
                     }
                 }
-                if (catalogoPiuNuovo && dentroUnoQualsiasi(catalogo, ranges, c)) {
-                    ancoraApertiNelCatalogo.add(p.optString("description"));
+                if (newerCatalog && insideAny(catalog, ranges, c)) {
+                    stillOpenInCatalog.add(p.optString("description"));
                     d.put("openInCatalog", true);
                 }
-                dettagli.put(d);
+                details.put(d);
             }
-            r.put("issues", dettagli);
+            r.put("issues", details);
             if (firstFixed != null) r.put("firstFixed", firstFixed);
 
-            String verdict, spiega;
-            if (illeggibile) {
+            String verdict, explain;
+            if (unreadable) {
                 verdict = "non-so";
-                spiega = I18n.tr("server.plan.v.unknownRange");
-            } else if (catalogoPiuNuovo && ancoraApertiNelCatalogo.isEmpty()) {
-                verdict = "si-risolve-aggiornando";
-                spiega = I18n.tr("server.plan.v.fixedByUpgrade", java.util.Map.of("v", String.valueOf(catalogo)));
-            } else if (catalogoPiuNuovo) {
-                verdict = "aggiornamento-non-basta";
-                spiega = I18n.tr("server.plan.v.upgradeNotEnough", java.util.Map.of("v", String.valueOf(catalogo), "list", String.valueOf(String.join("; ", ancoraApertiNelCatalogo))))
+                explain = I18n.tr("server.plan.v.unknownRange");
+            } else if (newerCatalog && stillOpenInCatalog.isEmpty()) {
+                verdict = "fixed-by-upgrade";
+                explain = I18n.tr("server.plan.v.fixedByUpgrade", java.util.Map.of("v", String.valueOf(catalog)));
+            } else if (newerCatalog) {
+                verdict = "upgrade-not-enough";
+                explain = I18n.tr("server.plan.v.upgradeNotEnough", java.util.Map.of("v", String.valueOf(catalog), "list", String.valueOf(String.join("; ", stillOpenInCatalog))))
                         + (firstFixed != null ? " " + I18n.tr("server.plan.v.fixedFrom", java.util.Map.of("v", String.valueOf(firstFixed))) : "");
-            } else if (senzaLimite) {
-                verdict = "nessuna-fix";
-                spiega = I18n.tr("server.plan.v.noFix");
-            } else if (finoA != null && firstFixed == null) {
-                verdict = "fix-non-indicata";
-                spiega = I18n.tr("server.plan.v.fixNotStated", java.util.Map.of("upTo", String.valueOf(finoA), "cat", String.valueOf(vuotoSe(catalogo, installata))));
-            } else if (soloQuesta && firstFixed == null) {
-                verdict = "fix-fuori-dal-ramo";
-                spiega = I18n.tr("server.plan.v.onlyThis", java.util.Map.of("v", String.valueOf(installata)));
+            } else if (withoutLimit) {
+                verdict = "no-fix";
+                explain = I18n.tr("server.plan.v.noFix");
+            } else if (upTo != null && firstFixed == null) {
+                verdict = "fix-not-stated";
+                explain = I18n.tr("server.plan.v.fixNotStated", java.util.Map.of("upTo", String.valueOf(upTo), "cat", String.valueOf(emptyIf(catalog, installed))));
+            } else if (onlyThis && firstFixed == null) {
+                verdict = "fix-outside-branch";
+                explain = I18n.tr("server.plan.v.onlyThis", java.util.Map.of("v", String.valueOf(installed)));
             } else if (firstFixed != null) {
-                verdict = "fix-fuori-dal-ramo";
-                spiega = I18n.tr("server.plan.v.fixOutsideBranch", java.util.Map.of("fixed", String.valueOf(firstFixed), "cat", String.valueOf(vuotoSe(catalogo, installata))));
+                verdict = "fix-outside-branch";
+                explain = I18n.tr("server.plan.v.fixOutsideBranch", java.util.Map.of("fixed", String.valueOf(firstFixed), "cat", String.valueOf(emptyIf(catalog, installed))));
             } else {
                 verdict = "non-so";
-                spiega = I18n.tr("server.plan.v.noComparable");
+                explain = I18n.tr("server.plan.v.noComparable");
             }
-            return r.put("verdict", verdict).put("explanation", spiega);
+            return r.put("verdict", verdict).put("explanation", explain);
         } catch (RuntimeException e) {
             return r.put("verdict", "non-so").put("explanation", I18n.tr("server.plan.v.compareFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
-    private static String vuotoSe(String catalogo, String installata) {
-        return catalogo == null || catalogo.isEmpty() ? installata + " " + I18n.tr("server.plan.noNewer") : catalogo;
+    private static String emptyIf(String catalog, String installed) {
+        return catalog == null || catalog.isEmpty() ? installed + " " + I18n.tr("server.plan.noNewer") : catalog;
     }
 
     /**
      * Per ogni pacchetto vulnerabile: se e dove esiste la fix. Legge il database delle
      * vulnerabilita' gia' scaricato (chi chiama decide se riscaricarlo prima) e il catalogo.
      */
-    public static JSONObject correzioni() {
+    public static JSONObject fixes() {
         Shell.Result a = Shell.runShell(Duration.ofSeconds(180), "pkg audit -Rjson 2>/dev/null");
         // pkg audit esce con 0 senza vulnerabilita' e con un codice diverso quando ne trova:
         // conta se il JSON c'e', non il codice.
@@ -902,72 +902,72 @@ public final class PackagePlan {
         if (out == null || out.indexOf('{') < 0)
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.plan.auditUnreadable", java.util.Map.of("c", String.valueOf(a.exitCode()))));
-        JSONObject vul;
-        try { vul = leggiAudit(out); }
+        JSONObject vuln;
+        try { vuln = readAudit(out); }
         catch (Exception e) {
             return new JSONObject().put("success", false).put("error", I18n.tr("server.plan.auditJson", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
-        Confronto c = confrontoPkg();
+        VersionComparator c = pkgComparison();
         JSONObject per = new JSONObject();
-        for (String nome : vul.keySet()) {
-            if (!isValidName(nome)) continue;
-            JSONObject v = vul.getJSONObject(nome);
-            String catalogo = "";
-            for (String riga : sh("pkg rquery -U %v " + nome + " 2>/dev/null", 60).split("\n")) {
-                String x = riga.trim();
-                if (!versioneValida(x)) continue;
-                try { if (catalogo.isEmpty() || c.confronta(x, catalogo) > 0) catalogo = x; }
-                catch (RuntimeException ignora) { /* resta quella che c'era */ }
+        for (String name : vuln.keySet()) {
+            if (!isValidName(name)) continue;
+            JSONObject v = vuln.getJSONObject(name);
+            String catalog = "";
+            for (String line : sh("pkg rquery -U %v " + name + " 2>/dev/null", 60).split("\n")) {
+                String x = line.trim();
+                if (!validVersion(x)) continue;
+                try { if (catalog.isEmpty() || c.compare(x, catalog) > 0) catalog = x; }
+                catch (RuntimeException ignore) { /* resta quella che c'era */ }
             }
-            per.put(nome, valutaCorrezione(v.getString("versione"), catalogo, v.getJSONArray("issues"), c));
+            per.put(name, assessFix(v.getString("version"), catalog, v.getJSONArray("issues"), c));
         }
-        return new JSONObject().put("success", true).put("pacchetti", per);
+        return new JSONObject().put("success", true).put("packages", per);
     }
 
     // ===================== utilita' =====================
 
     // ===================== il quadro dei pacchetti =====================
 
-    private static final Pattern DA_AGGIORNARE = Pattern.compile("^(\\S+)-([^\\s-]+)\\s+<\\s.*\\(remote has ([^)]+)\\)\\s*$");
+    private static final Pattern TO_UPDATE = Pattern.compile("^(\\S+)-([^\\s-]+)\\s+<\\s.*\\(remote has ([^)]+)\\)\\s*$");
 
     /**
      * Le righe "<" di {@code pkg version -U -vRL=}: nome -> versione del catalogo. Le altre
      * ("?" fuori catalogo, ">" piu' nuovo del catalogo, "!" non confrontabile) non sono
      * aggiornamenti disponibili e restano fuori.
      */
-    public static Map<String, String> daAggiornare(String output) {
+    public static Map<String, String> toUpdate(String output) {
         Map<String, String> r = new java.util.TreeMap<>();
-        for (String riga : (output == null ? "" : output).split("\n")) {
-            Matcher m = DA_AGGIORNARE.matcher(riga.trim());
-            if (m.find() && isValidName(m.group(1)) && versioneValida(m.group(3))) r.put(m.group(1), m.group(3));
+        for (String line : (output == null ? "" : output).split("\n")) {
+            Matcher m = TO_UPDATE.matcher(line.trim());
+            if (m.find() && isValidName(m.group(1)) && validVersion(m.group(3))) r.put(m.group(1), m.group(3));
         }
         return r;
     }
 
     /** Da {@code pkg query '%n\t%v\t%k'}: nome -> {versione, "1" se bloccato}. */
-    public static Map<String, String[]> installati(String output) {
+    public static Map<String, String[]> installed(String output) {
         Map<String, String[]> r = new java.util.TreeMap<>();
-        for (String riga : (output == null ? "" : output).split("\n")) {
-            String[] c = riga.split("\t");
-            if (c.length == 3 && isValidName(c[0].trim()) && versioneValida(c[1].trim()))
+        for (String line : (output == null ? "" : output).split("\n")) {
+            String[] c = line.split("\t");
+            if (c.length == 3 && isValidName(c[0].trim()) && validVersion(c[1].trim()))
                 r.put(c[0].trim(), new String[]{c[1].trim(), c[2].trim()});
         }
         return r;
     }
 
     /** I pacchetti installati, letti adesso. */
-    public static Map<String, String[]> installati() {
-        return installati(Shell.runShell(Duration.ofSeconds(60), "pkg query '%n\t%v\t%k' 2>/dev/null").output());
+    public static Map<String, String[]> installed() {
+        return installed(Shell.runShell(Duration.ofSeconds(60), "pkg query '%n\t%v\t%k' 2>/dev/null").output());
     }
 
     /** Gli aggiornamenti disponibili nel catalogo gia' scaricato: -U, nessuna rete. */
-    public static Shell.Result leggiDaAggiornare() {
+    public static Shell.Result readToUpdate() {
         return Shell.runShell(Duration.ofSeconds(180), "pkg version -U -vRL= 2>&1");
     }
 
-    private static JSONObject fallito(String errore) {
-        return new JSONObject().put("success", false).put("measured", false).put("error", errore)
-                .put("changes", new JSONArray()).put("lockedPackages", new JSONArray()).put("erroriPkg", new JSONArray());
+    private static JSONObject failed(String error) {
+        return new JSONObject().put("success", false).put("measured", false).put("error", error)
+                .put("changes", new JSONArray()).put("lockedPackages", new JSONArray()).put("pkgErrors", new JSONArray());
     }
 
     private static long number(String s) {

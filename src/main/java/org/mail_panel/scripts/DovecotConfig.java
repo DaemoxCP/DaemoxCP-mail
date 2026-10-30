@@ -1,5 +1,7 @@
 package org.mail_panel.scripts;
 
+import org.mail_panel.i18n.I18n;
+
 import org.mail_panel.Main;
 
 import java.sql.ResultSet;
@@ -57,11 +59,11 @@ public final class DovecotConfig {
         } catch (Exception ignored) {
             // Config non leggibile: restano i predefiniti, che sono quelli giusti.
         }
-        return new DovecotConfig(sanifica(db, "mailserver"), sanifica(user, "mailpanel"));
+        return new DovecotConfig(sanitize(db, "mailserver"), sanitize(user, "mailpanel"));
     }
 
     /** Un identificatore MySQL finisce dentro un file di configurazione e un comando: va ristretto. */
-    private static String sanifica(String v, String fallback) {
+    private static String sanitize(String v, String fallback) {
         return (v != null && v.matches("[A-Za-z0-9_]{1,64}")) ? v : fallback;
     }
 
@@ -421,7 +423,7 @@ public final class DovecotConfig {
 
     /** Un file di configurazione: percorso relativo a /usr/local/etc/dovecot, contenuto,
      *  e se il contenuto contiene variabili di shell da espandere (la password del database). */
-    public record FileConf(String percorso, String contenuto, boolean espandi) {}
+    public record FileConf(String path, String content, boolean expand) {}
 
     public static java.util.List<FileConf> file24() {
         java.util.List<FileConf> f = new java.util.ArrayList<>();
@@ -616,41 +618,28 @@ public final class DovecotConfig {
      * confermare sul campo. Dichiararlo e' il punto: un template dato per buono e mai provato
      * e' esattamente cio' che ha prodotto i sei errori trovati oggi.
      */
-    public static String[][] verifiche24() {
+    public static String[][] checks24() {
         return new String[][]{
-            {"confermato", "dovecot_config_version / dovecot_storage_version", "obbligatorie; la prima dev'essere in cima a dovecot.conf"},
-            {"confermato", "mail_driver + mail_path", "sostituiscono mail_location"},
-            {"confermato", "%{user}, %{user | username}, %{user | domain}", "sostituiscono %u, %n, %d"},
-            {"confermato", "auth_allow_cleartext", "sostituisce disable_plaintext_auth, e il valore si inverte"},
-            {"confermato", "ssl_server_cert_file / ssl_server_key_file", "sostituiscono ssl_cert / ssl_key, senza il prefisso <"},
-            {"confermato", "ssl_server_prefer_ciphers", "sostituisce ssl_prefer_server_ciphers"},
-            {"confermato", "passdb sql { query = ... }", "il blocco vuole un nome; password_query si chiama query"},
-            {"confermato", "userdb static { fields { ... } }", "esempio ufficiale identico"},
-            {"confermato", "passdb passwd-file { passwd_file_path = ... }", "args si chiama passwd_file_path"},
-            {"confermato", "sql_driver + blocco mysql <host> { ... }", "dovecot-sql.conf non esiste piu'"},
-            {"confermato", "mail_plugins { sieve = yes }", "non piu' un elenco su una riga: e' un boollist"},
-            {"confermato", "default_password_scheme dentro passdb", "non piu' al livello globale"},
-            {"confermato", "blocchi sieve_script al posto di sieve_dir e sieve_global_dir",
-             "sieve_dir, sieve_global_dir e sieve_global_path sono nell'elenco ufficiale delle rimosse"},
-            {"confermato", "protocols va scritto esplicitamente",
-             "nella 2.4 il valore predefinito e' vuoto: senza quella riga non si abilita nessun protocollo"},
-            {"confermato", "auth_master_user_separator = *",
-             "NON e' rimossa: l'esempio ufficiale della 2.4 la mostra. Il pannello ne dipende, perche' "
-             + "l'accesso unico a Roundcube fa login come email*masteruser"},
-            {"confermato", "first_valid_uid / first_valid_gid / mail_privileged_group / ssl_cipher_list",
-             "non compaiono fra le impostazioni rimosse: si tengono come nella 2.3"},
-            {"da confermare", "sieve_script { type = ... }",
-             "la descrizione elenca 'type' fra le chiavi, l'esempio ufficiale non lo scrive. Qui c'e': se doveconf lo rifiuta, va tolto"},
-            {"da confermare", "mail_uid / mail_gid",
-             "non citate fra le modifiche, quindi tenute. Se la 2.4 le avesse tolte, doveconf lo direbbe: "
-             + "uid e gid arrivano comunque anche da userdb static, quindi togliendole non cambia niente"},
-            {"da confermare", "ssl = required, ssl_min_protocol, sendmail_path, !include",
-             "non citate fra le modifiche, quindi presumibilmente invariate"},
-            {"criterio", "si tiene cio' che la 2.3 aveva, salvo changes documentati",
-             "i due errori possibili non pesano uguale: un'impostazione che la 2.4 non conosce piu' fa "
-             + "fallire doveconf, quindi si scopre subito e la configurazione precedente torna al suo "
-             + "posto; un'impostazione giusta ma non scritta non fa fallire niente e cambia il "
-             + "comportamento in silenzio. Fra i due si sceglie l'errore rumoroso"},
+            {"confirmed", "dovecot_config_version / dovecot_storage_version", I18n.tr("server.dv24.1.note")},
+            {"confirmed", "mail_driver + mail_path", I18n.tr("server.dv24.2.note")},
+            {"confirmed", "%{user}, %{user | username}, %{user | domain}", I18n.tr("server.dv24.3.note")},
+            {"confirmed", "auth_allow_cleartext", I18n.tr("server.dv24.4.note")},
+            {"confirmed", "ssl_server_cert_file / ssl_server_key_file", I18n.tr("server.dv24.5.note")},
+            {"confirmed", "ssl_server_prefer_ciphers", I18n.tr("server.dv24.6.note")},
+            {"confirmed", "passdb sql { query = ... }", I18n.tr("server.dv24.7.note")},
+            {"confirmed", "userdb static { fields { ... } }", I18n.tr("server.dv24.8.note")},
+            {"confirmed", "passdb passwd-file { passwd_file_path = ... }", I18n.tr("server.dv24.9.note")},
+            {"confirmed", I18n.tr("server.dv24.10.setting"), I18n.tr("server.dv24.10.note")},
+            {"confirmed", "mail_plugins { sieve = yes }", I18n.tr("server.dv24.11.note")},
+            {"confirmed", I18n.tr("server.dv24.12.setting"), I18n.tr("server.dv24.12.note")},
+            {"confirmed", I18n.tr("server.dv24.13.setting"), I18n.tr("server.dv24.13.note")},
+            {"confirmed", I18n.tr("server.dv24.14.setting"), I18n.tr("server.dv24.14.note")},
+            {"confirmed", "auth_master_user_separator = *", I18n.tr("server.dv24.15.note")},
+            {"confirmed", "first_valid_uid / first_valid_gid / mail_privileged_group / ssl_cipher_list", I18n.tr("server.dv24.16.note")},
+            {"unconfirmed", "sieve_script { type = ... }", I18n.tr("server.dv24.17.note")},
+            {"unconfirmed", "mail_uid / mail_gid", I18n.tr("server.dv24.18.note")},
+            {"unconfirmed", "ssl = required, ssl_min_protocol, sendmail_path, !include", I18n.tr("server.dv24.19.note")},
+            {"criterion", I18n.tr("server.dv24.20.setting"), I18n.tr("server.dv24.20.note")},
         };
     }
 
@@ -663,12 +652,12 @@ public final class DovecotConfig {
             echo "[CONFIG] la configurazione precedente torna al suo posto senza riavvii."
             """);
         for (FileConf f : file24()) {
-            String delim = "DOVECOT_" + f.percorso().replaceAll("[^A-Za-z0-9]", "_").toUpperCase();
+            String delim = "DOVECOT_" + f.path().replaceAll("[^A-Za-z0-9]", "_").toUpperCase();
             // Heredoc quotato quando NON ci sono variabili da espandere: cosi' un $ nel
             // contenuto (le %{...} non ne hanno, ma le query potrebbero) resta letterale.
-            sb.append("\ncat > \"$DOVECOT_ETC/").append(f.percorso()).append("\" <<")
-              .append(f.espandi() ? delim : "'" + delim + "'").append("\n");
-            sb.append(f.contenuto());
+            sb.append("\ncat > \"$DOVECOT_ETC/").append(f.path()).append("\" <<")
+              .append(f.expand() ? delim : "'" + delim + "'").append("\n");
+            sb.append(f.content());
             sb.append(delim).append("\n");
         }
         sb.append("""

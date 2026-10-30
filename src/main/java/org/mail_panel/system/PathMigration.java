@@ -58,8 +58,17 @@ public final class PathMigration {
         rename(db + "system/salto.json", db + "system/version-jump.json");
 
         rename("/var/db/mail-panel/copie-fail2ban", "/var/db/mail-panel/fail2ban-backups");
+        migrateArchive(AddressTransform.vmail);
         rename("/usr/local/etc/pkg/repos/zz-pannello-ramo.conf",
                "/usr/local/etc/pkg/repos/zz-panel-branch.conf");
+    }
+
+    /**
+     * L'archivio della posta delle caselle tolte o trasformate in alias, sotto /var/vmail.
+     * A parte, perche' si possa provare su una cartella qualunque senza toccare le altre.
+     */
+    static void migrateArchive(Path vmail) {
+        rename(vmail.resolve(".archivio-pannello").toString(), vmail.resolve(".panel-archive").toString());
     }
 
     /** Sposta oldName su newName se c'e' il primo e non c'e' il secondo. Non segue i link. */

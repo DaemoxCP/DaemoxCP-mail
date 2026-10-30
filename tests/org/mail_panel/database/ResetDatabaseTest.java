@@ -21,41 +21,41 @@ import java.util.List;
  * elenco; un reset sul database gia' vuoto; uno che MySQL deve rifiutare (una tabella d'altri
  * punta a domains), che non cancella niente e lo dice. Senza MySQL si prova solo che senza
  * collegamento il reset non parte. Il MySQL si indica cosi':
- *   -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
+ *   -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
  */
 public class ResetDatabaseTest {
 
-    static int falliti = 0;
+    static int failed = 0;
 
-    static void vero(String cosa, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + cosa);
-        if (!ok) falliti++;
+    static void real(String what, boolean ok) {
+        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        if (!ok) failed++;
     }
 
     public static void main(String[] a) throws Exception {
         System.out.println("\n== Senza collegamento a MySQL il reset non parte ==");
         try {
             new MailDatabase().dropAllTables();
-            vero("un'eccezione", false);
+            real("un'eccezione", false);
         } catch (SQLException e) {
-            vero("un'eccezione: " + e.getMessage(), e.getMessage().contains("Not connected"));
+            real("un'eccezione: " + e.getMessage(), e.getMessage().contains("Not connected"));
         }
 
-        String porta = System.getProperty("mysql.porta");
-        if (porta == null) {
+        String port = System.getProperty("mysql.porta");
+        if (port == null) {
             System.out.println("\n== MySQL non indicato (-Dmysql.porta=...): salto la parte sul database ==");
         } else {
-            database(porta);
+            database(port);
         }
-        System.out.println("\n" + (falliti == 0 ? "TUTTO VERDE" : falliti + " CONTROLLI FALLITI"));
-        if (falliti > 0) System.exit(1);
+        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        if (failed > 0) System.exit(1);
     }
 
-    static void database(String porta) throws Exception {
+    static void database(String port) throws Exception {
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(porta), System.getProperty("mysql.database", "mailpanel_prova"));
-        if (!db.connect()) { vero("connessione a MySQL", false); return; }
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
+        if (!db.connect()) { real("connessione a MySQL", false); return; }
         Connection c = db.getConnection();
         try (Statement st = c.createStatement(); ResultSet r = st.executeQuery("SELECT VERSION()")) {
             r.next();
@@ -63,34 +63,34 @@ public class ResetDatabaseTest {
         }
 
         System.out.println("\n== Ogni tabella che il pannello crea e' nell'elenco del reset ==");
-        svuota(c);
+        empty(c);
         schema(db);
-        List<String> create = tabelle(c);
+        List<String> create = tables(c);
         int n = create.size();
-        List<String> fuori = create.stream().filter(t -> !MailDatabase.TABELLE_DEL_PANNELLO.contains(t)).toList();
-        vero("createSchema e le migrazioni creano " + n + " tabelle, tutte nell'elenco"
-                + (fuori.isEmpty() ? "" : " (mancano: " + fuori + ")"), fuori.isEmpty() && n >= 17);
+        List<String> outside = create.stream().filter(t -> !MailDatabase.PANEL_TABLES.contains(t)).toList();
+        real("createSchema e le migrazioni creano " + n + " tabelle, tutte nell'elenco"
+                + (outside.isEmpty() ? "" : " (mancano: " + outside + ")"), outside.isEmpty() && n >= 17);
 
         System.out.println("\n== Il vecchio reset, rifatto: che cosa lasciava ==");
-        popola(c);
-        List<String> warnings = vecchioReset(c);
-        vero("MySQL rifiutava tre DROP, e restavano solo warnings: " + warnings,
+        populate(c);
+        List<String> warnings = oldReset(c);
+        real("MySQL rifiutava tre DROP, e restavano solo warnings: " + warnings,
                 warnings.equals(List.of("mailboxes", "domains", "panel_admin")));
-        List<String> rimaste = tabelle(c);
-        vero("restavano " + rimaste, new HashSet<>(rimaste).equals(new HashSet<>(List.of("admin_passkeys",
+        List<String> left = tables(c);
+        real("restavano " + left, new HashSet<>(left).equals(new HashSet<>(List.of("admin_passkeys",
                 "cloudflare_accounts", "dkim_rotation_history", "domains", "mailboxes", "panel_admin", "panel_sessions",
                 "login_code_email", "login_code_console", "stepup_code", "email_change_code"))));
         db.createSchema();
-        vero("e dopo \"Database reset completed!\" c'erano ancora il dominio, la casella e l'amministratore di prima",
-                righe(c, "domains") == 1 && righe(c, "mailboxes") == 1 && righe(c, "panel_admin") == 1
-                        && righe(c, "admin_passkeys") == 1);
+        real("e dopo \"Database reset completed!\" c'erano ancora il dominio, la casella e l'amministratore di prima",
+                lines(c, "domains") == 1 && lines(c, "mailboxes") == 1 && lines(c, "panel_admin") == 1
+                        && lines(c, "admin_passkeys") == 1);
         List<String> via = db.dropAllTables();
-        vero("il reset nuovo, sui resti del vecchio: non resta niente (" + via.size() + " tabelle cancellate)",
-                tabelle(c).isEmpty() && via.size() == n);
+        real("il reset nuovo, sui resti del vecchio: non resta niente (" + via.size() + " tabelle cancellate)",
+                tables(c).isEmpty() && via.size() == n);
 
         System.out.println("\n== Il reset nuovo: una riga in ogni tabella, una tabella d'altri accanto ==");
         schema(db);
-        popola(c);
+        populate(c);
         try (Statement st = c.createStatement()) {
             // Le tabelle di versioni vecchie del pannello, legate fra loro come allora.
             st.execute("CREATE TABLE virtual_domains (id INT PRIMARY KEY) ENGINE=InnoDB");
@@ -102,55 +102,55 @@ public class ResetDatabaseTest {
             st.execute("INSERT INTO virtual_users VALUES (1, 1)");
             st.execute("INSERT INTO virtual_aliases VALUES (1, 1)");
             // Una tabella che non e' del pannello: il reset non la deve toccare.
-            st.execute("CREATE TABLE estranea_prova (id INT PRIMARY KEY, nota VARCHAR(40) NOT NULL) ENGINE=InnoDB");
+            st.execute("CREATE TABLE foreign_test (id INT PRIMARY KEY, note VARCHAR(40) NOT NULL) ENGINE=InnoDB");
         }
-        inserisci(c, "INSERT INTO estranea_prova (id, nota) VALUES (?, ?)", 1, "non e' del pannello");
-        List<String> prima = tabelle(c);
-        prima.remove("estranea_prova");
-        List<String> vuote = prima.stream().filter(t -> righe(c, t) == 0).toList();
-        vero("una riga in ognuna delle " + prima.size() + " tabelle del pannello" + (vuote.isEmpty() ? "" : " (vuote: " + vuote + ")"),
-                vuote.isEmpty() && prima.size() == n + 3);
-        List<String> cancellate = db.dropAllTables();
-        vero("restituisce le tabelle che ha cancellato: " + cancellate.size(), new HashSet<>(cancellate).equals(new HashSet<>(prima)));
-        vero("non resta nessuna tabella del pannello, nemmeno le virtual_*: " + tabelle(c), tabelle(c).equals(List.of("estranea_prova")));
-        vero("la tabella d'altri resta, con la sua riga", righe(c, "estranea_prova") == 1);
+        insert(c, "INSERT INTO foreign_test (id, note) VALUES (?, ?)", 1, "non e' del pannello");
+        List<String> before = tables(c);
+        before.remove("foreign_test");
+        List<String> empty = before.stream().filter(t -> lines(c, t) == 0).toList();
+        real("una riga in ognuna delle " + before.size() + " tabelle del pannello" + (empty.isEmpty() ? "" : " (vuote: " + empty + ")"),
+                empty.isEmpty() && before.size() == n + 3);
+        List<String> deleted = db.dropAllTables();
+        real("restituisce le tabelle che ha cancellato: " + deleted.size(), new HashSet<>(deleted).equals(new HashSet<>(before)));
+        real("non resta nessuna tabella del pannello, nemmeno le virtual_*: " + tables(c), tables(c).equals(List.of("foreign_test")));
+        real("la tabella d'altri resta, con la sua riga", lines(c, "foreign_test") == 1);
         db.createSchema();
-        List<String> piene = tabelle(c).stream().filter(t -> !t.equals("estranea_prova") && righe(c, t) > 0).toList();
-        vero("ricreate da createSchema, le tabelle sono vuote: nessun dato di prima" + (piene.isEmpty() ? "" : " (piene: " + piene + ")"),
-                piene.isEmpty() && tabelle(c).size() == n + 1);
+        List<String> full = tables(c).stream().filter(t -> !t.equals("foreign_test") && lines(c, t) > 0).toList();
+        real("ricreate da createSchema, le tabelle sono vuote: nessun dato di prima" + (full.isEmpty() ? "" : " (piene: " + full + ")"),
+                full.isEmpty() && tables(c).size() == n + 1);
 
         System.out.println("\n== Il reset sul database gia' vuoto ==");
-        vero("con le tabelle vuote: le cancella tutte", db.dropAllTables().size() == n && tabelle(c).equals(List.of("estranea_prova")));
-        List<String> niente = db.dropAllTables();
-        vero("senza tabelle: nessun errore, nessuna tabella cancellata", niente.isEmpty() && tabelle(c).equals(List.of("estranea_prova")));
+        real("con le tabelle vuote: le cancella tutte", db.dropAllTables().size() == n && tables(c).equals(List.of("foreign_test")));
+        List<String> nothing = db.dropAllTables();
+        real("senza tabelle: nessun errore, nessuna tabella cancellata", nothing.isEmpty() && tables(c).equals(List.of("foreign_test")));
 
         System.out.println("\n== Una tabella d'altri punta a domains: MySQL rifiuta, e non si cancella niente ==");
         schema(db);
-        int dominio = popola(c);
+        int domain = populate(c);
         try (Statement st = c.createStatement()) {
-            st.execute("CREATE TABLE estranea_figlia (id INT PRIMARY KEY, dominio INT NOT NULL, "
-                    + "FOREIGN KEY (dominio) REFERENCES domains(id)) ENGINE=InnoDB");
+            st.execute("CREATE TABLE foreign_child (id INT PRIMARY KEY, domain_id INT NOT NULL, "
+                    + "FOREIGN KEY (domain_id) REFERENCES domains(id)) ENGINE=InnoDB");
         }
-        inserisci(c, "INSERT INTO estranea_figlia (id, dominio) VALUES (?, ?)", 1, dominio);
+        insert(c, "INSERT INTO foreign_child (id, domain_id) VALUES (?, ?)", 1, domain);
         try {
             db.dropAllTables();
-            vero("un'eccezione", false);
+            real("un'eccezione", false);
         } catch (SQLException e) {
             String m = e.getMessage();
             System.out.println("  " + m);
-            vero("un'eccezione che dice perche' e che cosa resta", m.startsWith("Reset failed")
-                    && m.contains("estranea_figlia") && m.contains("still present: admin_passkeys, aliases"));
+            real("un'eccezione che dice perche' e che cosa resta", m.startsWith("Reset failed")
+                    && m.contains("foreign_child") && m.contains("still present: admin_passkeys, aliases"));
         }
-        vero("tutto com'era: le " + n + " tabelle, con i loro dati", tabelle(c).size() == n + 2
-                && righe(c, "domains") == 1 && righe(c, "mailboxes") == 1 && righe(c, "admin_passkeys") == 1);
+        real("tutto com'era: le " + n + " tabelle, con i loro dati", tables(c).size() == n + 2
+                && lines(c, "domains") == 1 && lines(c, "mailboxes") == 1 && lines(c, "admin_passkeys") == 1);
         try (Statement st = c.createStatement()) {
-            st.execute("DROP TABLE estranea_figlia");
+            st.execute("DROP TABLE foreign_child");
         }
         db.dropAllTables();
-        vero("tolta la tabella che puntava a domains, il reset passa", tabelle(c).equals(List.of("estranea_prova")));
+        real("tolta la tabella che puntava a domains, il reset passa", tables(c).equals(List.of("foreign_test")));
 
         try (Statement st = c.createStatement()) {
-            st.execute("DROP TABLE estranea_prova");
+            st.execute("DROP TABLE foreign_test");
         }
         db.close();
     }
@@ -168,44 +168,44 @@ public class ResetDatabaseTest {
     }
 
     /** Una riga in ogni tabella del pannello, legate come nell'uso vero. Restituisce l'id del dominio. */
-    static int popola(Connection c) throws SQLException {
-        int dominio = inserisci(c, "INSERT INTO domains (domain) VALUES (?)", "esempio.test");
-        int mailbox = inserisci(c, "INSERT INTO mailboxes (domain_id, email, password) VALUES (?, ?, ?)",
-                dominio, "posta@esempio.test", "x");
-        int admin = inserisci(c, "INSERT INTO panel_admin (username) VALUES (?)", "amministratore");
-        inserisci(c, "INSERT INTO panel_sessions (token_hash, admin_id, ua_hash, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+    static int populate(Connection c) throws SQLException {
+        int domain = insert(c, "INSERT INTO domains (domain) VALUES (?)", "esempio.test");
+        int mailbox = insert(c, "INSERT INTO mailboxes (domain_id, email, password) VALUES (?, ?, ?)",
+                domain, "posta@esempio.test", "x");
+        int admin = insert(c, "INSERT INTO panel_admin (username) VALUES (?)", "amministratore");
+        insert(c, "INSERT INTO panel_sessions (token_hash, admin_id, ua_hash, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
                 "a".repeat(64), admin, "b".repeat(64), "2030-01-01 00:00:00", "2030-01-01 00:00:00", "2030-01-01 12:00:00");
         for (String t : List.of("login_code_email", "login_code_console", "stepup_code"))
-            inserisci(c, "INSERT INTO " + t + " (admin_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            insert(c, "INSERT INTO " + t + " (admin_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)",
                     admin, "c".repeat(64), "2030-01-01 00:00:00", "2030-01-01 00:10:00");
-        inserisci(c, "INSERT INTO email_change_code (admin_id, code_hash, target_enc, target_index, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+        insert(c, "INSERT INTO email_change_code (admin_id, code_hash, target_enc, target_index, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
                 admin, "c".repeat(64), "v1:x", "d".repeat(64), "2030-01-01 00:00:00", "2030-01-01 00:15:00");
-        inserisci(c, "INSERT INTO admin_passkeys (admin_id, credential_id, public_key_cose) VALUES (?, ?, ?)",
+        insert(c, "INSERT INTO admin_passkeys (admin_id, credential_id, public_key_cose) VALUES (?, ?, ?)",
                 admin, new byte[] {1, 2, 3}, new byte[] {4, 5, 6});
-        inserisci(c, "INSERT INTO rspamd_training (message_id, trained_as, trained_by) VALUES (?, ?, ?)",
+        insert(c, "INSERT INTO rspamd_training (message_id, trained_as, trained_by) VALUES (?, ?, ?)",
                 "<1@esempio.test>", "spam", admin);
-        inserisci(c, "INSERT INTO roundcube_tokens (token, mailbox_id, expires_at) VALUES (?, ?, ?)",
+        insert(c, "INSERT INTO roundcube_tokens (token, mailbox_id, expires_at) VALUES (?, ?, ?)",
                 "t".repeat(64), mailbox, "2030-01-01 00:00:00");
-        inserisci(c, "INSERT INTO auto_responders (mailbox_id, body) VALUES (?, ?)", mailbox, "Sono in ferie.");
-        inserisci(c, "INSERT INTO sieve_filters (mailbox_id, name, conditions, actions) VALUES (?, ?, ?, ?)",
+        insert(c, "INSERT INTO auto_responders (mailbox_id, body) VALUES (?, ?)", mailbox, "Sono in ferie.");
+        insert(c, "INSERT INTO sieve_filters (mailbox_id, name, conditions, actions) VALUES (?, ?, ?, ?)",
                 mailbox, "filtro", "[]", "[]");
-        inserisci(c, "INSERT INTO forwarding_rules (mailbox_id, destination) VALUES (?, ?)", mailbox, "altro@esempio.test");
-        inserisci(c, "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id) VALUES (?, ?, ?)",
-                "2026-10-03", mailbox, dominio);
-        inserisci(c, "INSERT INTO aliases (domain_id, source, destination) VALUES (?, ?, ?)",
-                dominio, "info@esempio.test", "posta@esempio.test");
-        inserisci(c, "INSERT INTO dkim_rotation_history (domain_id, domain, event_type) VALUES (?, ?, ?)",
-                dominio, "esempio.test", "key_generated");
-        inserisci(c, "INSERT INTO cloudflare_accounts (label, api_token) VALUES (?, ?)", "prova", "x");
-        inserisci(c, "INSERT INTO audit_log (action, ip_address) VALUES (?, ?)", "PROVA", "192.0.2.1");
-        inserisci(c, "INSERT INTO rate_limits (target_type, target_id) VALUES (?, ?)", "domain", dominio);
-        inserisci(c, "INSERT INTO panel_settings (setting_key, setting_value) VALUES (?, ?)", "prova", "1");
-        inserisci(c, "INSERT INTO installed_components (component_name) VALUES (?)", "postfix");
-        return dominio;
+        insert(c, "INSERT INTO forwarding_rules (mailbox_id, destination) VALUES (?, ?)", mailbox, "altro@esempio.test");
+        insert(c, "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id) VALUES (?, ?, ?)",
+                "2026-10-03", mailbox, domain);
+        insert(c, "INSERT INTO aliases (domain_id, source, destination) VALUES (?, ?, ?)",
+                domain, "info@esempio.test", "posta@esempio.test");
+        insert(c, "INSERT INTO dkim_rotation_history (domain_id, domain, event_type) VALUES (?, ?, ?)",
+                domain, "esempio.test", "key_generated");
+        insert(c, "INSERT INTO cloudflare_accounts (label, api_token) VALUES (?, ?)", "prova", "x");
+        insert(c, "INSERT INTO audit_log (action, ip_address) VALUES (?, ?)", "PROVA", "192.0.2.1");
+        insert(c, "INSERT INTO rate_limits (target_type, target_id) VALUES (?, ?)", "domain", domain);
+        insert(c, "INSERT INTO panel_settings (setting_key, setting_value) VALUES (?, ?)", "prova", "1");
+        insert(c, "INSERT INTO installed_components (component_name) VALUES (?)", "postfix");
+        return domain;
     }
 
     /** Il reset di prima, com'era: una tabella alla volta, e di un errore solo un avviso. */
-    static List<String> vecchioReset(Connection c) throws SQLException {
+    static List<String> oldReset(Connection c) throws SQLException {
         String[] tables = {
             "audit_log", "rspamd_training", "email_statistics", "roundcube_tokens", "aliases", "mailboxes",
             "domains", "virtual_aliases", "virtual_users", "virtual_domains", "rate_limits", "forwarding_rules",
@@ -225,18 +225,18 @@ public class ResetDatabaseTest {
     }
 
     /** Il database di prova vuoto, senza passare dal codice che si prova. */
-    static void svuota(Connection c) throws SQLException {
+    static void empty(Connection c) throws SQLException {
         try (Statement st = c.createStatement()) {
             st.execute("SET FOREIGN_KEY_CHECKS=0");
             try {
-                for (String t : tabelle(c)) st.execute("DROP TABLE `" + t.replace("`", "") + "`");
+                for (String t : tables(c)) st.execute("DROP TABLE `" + t.replace("`", "") + "`");
             } finally {
                 st.execute("SET FOREIGN_KEY_CHECKS=1");
             }
         }
     }
 
-    static List<String> tabelle(Connection c) throws SQLException {
+    static List<String> tables(Connection c) throws SQLException {
         List<String> t = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name");
@@ -246,9 +246,9 @@ public class ResetDatabaseTest {
         return t;
     }
 
-    static int righe(Connection c, String tabella) {
+    static int lines(Connection c, String table) {
         try (Statement st = c.createStatement();
-             ResultSet r = st.executeQuery("SELECT COUNT(*) FROM `" + tabella.replace("`", "") + "`")) {
+             ResultSet r = st.executeQuery("SELECT COUNT(*) FROM `" + table.replace("`", "") + "`")) {
             r.next();
             return r.getInt(1);
         } catch (SQLException e) {
@@ -256,9 +256,9 @@ public class ResetDatabaseTest {
         }
     }
 
-    static int inserisci(Connection c, String sql, Object... parametri) throws SQLException {
+    static int insert(Connection c, String sql, Object... parameters) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            for (int k = 0; k < parametri.length; k++) ps.setObject(k + 1, parametri[k]);
+            for (int k = 0; k < parameters.length; k++) ps.setObject(k + 1, parameters[k]);
             ps.executeUpdate();
             try (ResultSet r = ps.getGeneratedKeys()) {
                 return r.next() ? r.getInt(1) : -1;

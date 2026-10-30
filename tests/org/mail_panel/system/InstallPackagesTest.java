@@ -316,9 +316,9 @@ public class InstallPackagesTest {
         check("aggiornare dovecot-pigeonhole-mysql riavvia dovecot",
                 List.of("dovecot").equals(services.invoke(null, "dovecot-pigeonhole-mysql")));
 
-        String family = UpdateManager.famigliaDi("dovecot-mysql");
+        String family = UpdateManager.familyOf("dovecot-mysql");
         check("dovecot-mysql e dovecot-pigeonhole-mysql si muovono insieme (stessa famiglia)",
-                family != null && family.equals(UpdateManager.famigliaDi("dovecot-pigeonhole-mysql")));
+                family != null && family.equals(UpdateManager.familyOf("dovecot-pigeonhole-mysql")));
     }
 
     // ------------------------------------------------------------------ attrezzi

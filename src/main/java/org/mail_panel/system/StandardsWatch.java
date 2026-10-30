@@ -71,23 +71,23 @@ public class StandardsWatch {
      * =================================================================== */
 
     /** Cio' che c'e' adesso e che non sapevamo. Ordine conservato, nessun doppione. */
-    public static List<String> novita(String notiSeparatiDaVirgole, List<String> attuali) {
-        Set<String> noti = new LinkedHashSet<>();
-        if (notiSeparatiDaVirgole != null)
-            for (String n : notiSeparatiDaVirgole.split(","))
-                if (!n.trim().isEmpty()) noti.add(normalizza(n));
-        List<String> fuori = new ArrayList<>();
-        if (attuali == null) return fuori;
-        for (String a : attuali) {
-            String x = normalizza(a);
-            if (x.isEmpty() || noti.contains(x)) continue;
-            if (!fuori.contains(x)) fuori.add(x);
+    public static List<String> news(String knownCommaSeparated, List<String> current) {
+        Set<String> known = new LinkedHashSet<>();
+        if (knownCommaSeparated != null)
+            for (String n : knownCommaSeparated.split(","))
+                if (!n.trim().isEmpty()) known.add(normalize(n));
+        List<String> outside = new ArrayList<>();
+        if (current == null) return outside;
+        for (String a : current) {
+            String x = normalize(a);
+            if (x.isEmpty() || known.contains(x)) continue;
+            if (!outside.contains(x)) outside.add(x);
         }
-        return fuori;
+        return outside;
     }
 
     /** "RFC9989", "rfc 9989", " 9989 " diventano tutti "9989". */
-    public static String normalizza(String rfc) {
+    public static String normalize(String rfc) {
         if (rfc == null) return "";
         String s = rfc.trim().toUpperCase(java.util.Locale.ROOT).replace(" ", "");
         if (s.startsWith("RFC")) s = s.substring(3);
@@ -98,10 +98,10 @@ public class StandardsWatch {
      * Parte che interroga il RFC Editor
      * =================================================================== */
 
-    public static JSONObject controlla() {
+    public static JSONObject check() {
         JSONObject r = new JSONObject().put("success", true);
-        JSONArray righe = new JSONArray();
-        int sostituiti = 0, aggiornati = 0, nonLetti = 0;
+        JSONArray lines = new JSONArray();
+        int replaced = 0, updated = 0, unread = 0;
 
         HttpClient http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(8))
@@ -109,7 +109,7 @@ public class StandardsWatch {
                 .build();
 
         for (String[] s : STANDARD) {
-            JSONObject o = new JSONObject().put("rfc", s[0]).put("governa", I18n.tr(s[1]));
+            JSONObject o = new JSONObject().put("rfc", s[0]).put("governs", I18n.tr(s[1]));
             try {
                 HttpRequest req = HttpRequest.newBuilder()
                         .uri(URI.create("https://www.rfc-editor.org/rfc/rfc" + s[0] + ".json"))
@@ -118,77 +118,77 @@ public class StandardsWatch {
                         .GET().build();
                 HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() != 200) {
-                    o.put("letto", false).put("problema", I18n.tr("server.watch.editorStatus", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
-                    nonLetti++; righe.put(o); continue;
+                    o.put("read", false).put("problem", I18n.tr("server.watch.editorStatus", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
+                    unread++; lines.put(o); continue;
                 }
                 JSONObject j = new JSONObject(resp.body());
-                o.put("letto", true).put("titolo", j.optString("title", ""))
-                 .put("stato", j.optString("status", ""));
+                o.put("read", true).put("title", j.optString("title", ""))
+                 .put("state", j.optString("status", ""));
 
-                List<String> obs = lista(j.optJSONArray("obsoleted_by"));
-                List<String> upd = lista(j.optJSONArray("updated_by"));
-                List<String> nuoviObs = novita(s[2], obs);
-                List<String> nuoviUpd = novita(s[3], upd);
+                List<String> obs = list(j.optJSONArray("obsoleted_by"));
+                List<String> upd = list(j.optJSONArray("updated_by"));
+                List<String> newObs = news(s[2], obs);
+                List<String> newUpd = news(s[3], upd);
 
-                o.put("sostituitoDa", new JSONArray(nuoviObs));
-                o.put("aggiornatoDa", new JSONArray(nuoviUpd));
-                if (!nuoviObs.isEmpty()) {
-                    sostituiti++;
-                    o.put("gravita", 2).put("commento", I18n.tr("server.watch.obsoleted", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(descrivi(nuoviObs)), "topic", String.valueOf(I18n.tr(s[1])))));
-                } else if (!nuoviUpd.isEmpty()) {
-                    aggiornati++;
-                    o.put("gravita", 1).put("commento", I18n.tr("server.watch.updated", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(descrivi(nuoviUpd)), "topic", String.valueOf(I18n.tr(s[1])))));
+                o.put("replacedBy", new JSONArray(newObs));
+                o.put("updatedBy", new JSONArray(newUpd));
+                if (!newObs.isEmpty()) {
+                    replaced++;
+                    o.put("severity", 2).put("comment", I18n.tr("server.watch.obsoleted", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(describe(newObs)), "topic", String.valueOf(I18n.tr(s[1])))));
+                } else if (!newUpd.isEmpty()) {
+                    updated++;
+                    o.put("severity", 1).put("comment", I18n.tr("server.watch.updated", java.util.Map.of("n", String.valueOf(s[0]), "by", String.valueOf(describe(newUpd)), "topic", String.valueOf(I18n.tr(s[1])))));
                 } else {
-                    o.put("gravita", 0).put("commento", I18n.tr("server.watch.nothingNew"));
+                    o.put("severity", 0).put("comment", I18n.tr("server.watch.nothingNew"));
                 }
             } catch (Exception e) {
                 // Un controllo che non e' riuscito non e' un "tutto a posto".
-                o.put("letto", false).put("gravita", 3)
-                 .put("problema", I18n.tr("server.watch.editorFailed", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
-                nonLetti++;
+                o.put("read", false).put("severity", 3)
+                 .put("problem", I18n.tr("server.watch.editorFailed", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
+                unread++;
             }
-            righe.put(o);
+            lines.put(o);
         }
 
-        r.put("standard", righe).put("sostituiti", sostituiti)
-         .put("aggiornati", aggiornati).put("nonLetti", nonLetti);
-        r.put("fonte", "https://www.rfc-editor.org/rfc/rfcNNNN.json");
-        r.put("nota", sostituiti > 0
-                ? (sostituiti == 1 ? I18n.tr("server.watch.sumObsoleted.one")
-                                   : I18n.tr("server.watch.sumObsoleted.other", java.util.Map.of("n", String.valueOf(sostituiti))))
-                : aggiornati > 0
-                ? I18n.tr("server.watch.sumUpdated", java.util.Map.of("n", String.valueOf(aggiornati)))
-                : nonLetti > 0
-                ? I18n.tr("server.watch.sumUnread", java.util.Map.of("n", String.valueOf(nonLetti)))
+        r.put("standard", lines).put("replaced", replaced)
+         .put("updated", updated).put("unread", unread);
+        r.put("source", "https://www.rfc-editor.org/rfc/rfcNNNN.json");
+        r.put("note", replaced > 0
+                ? (replaced == 1 ? I18n.tr("server.watch.sumObsoleted.one")
+                                   : I18n.tr("server.watch.sumObsoleted.other", java.util.Map.of("n", String.valueOf(replaced))))
+                : updated > 0
+                ? I18n.tr("server.watch.sumUpdated", java.util.Map.of("n", String.valueOf(updated)))
+                : unread > 0
+                ? I18n.tr("server.watch.sumUnread", java.util.Map.of("n", String.valueOf(unread)))
                 : I18n.tr("server.watch.sumAllCurrent"));
         return r;
     }
 
-    private static List<String> lista(JSONArray a) {
+    private static List<String> list(JSONArray a) {
         List<String> l = new ArrayList<>();
         if (a == null) return l;
         for (int i = 0; i < a.length(); i++) l.add(a.optString(i, ""));
         return l;
     }
 
-    private static String descrivi(List<String> rfc) {
-        List<String> con = new ArrayList<>();
-        for (String x : rfc) con.add("RFC " + x);
-        return String.join(", ", con);
+    private static String describe(List<String> rfc) {
+        List<String> rfcList = new ArrayList<>();
+        for (String x : rfc) rfcList.add("RFC " + x);
+        return String.join(", ", rfcList);
     }
 
     /** Le voci da mettere nel rapporto periodico: solo cio' che merita di essere letto. */
-    public static List<String> perIlRapporto(JSONObject controllo) {
-        List<String> fuori = new ArrayList<>();
-        if (controllo == null || !controllo.optBoolean("success", false)) return fuori;
-        JSONArray a = controllo.optJSONArray("standard");
-        if (a == null) return fuori;
+    public static List<String> forReport(JSONObject check) {
+        List<String> outside = new ArrayList<>();
+        if (check == null || !check.optBoolean("success", false)) return outside;
+        JSONArray a = check.optJSONArray("standard");
+        if (a == null) return outside;
         for (int i = 0; i < a.length(); i++) {
             JSONObject o = a.getJSONObject(i);
-            int g = o.optInt("gravita", 0);
-            if (g == 1 || g == 2) fuori.add(o.optString("commento"));
+            int g = o.optInt("severity", 0);
+            if (g == 1 || g == 2) outside.add(o.optString("comment"));
         }
-        return fuori;
+        return outside;
     }
 
     /* ===================================================================
@@ -200,10 +200,10 @@ public class StandardsWatch {
      * "[Page 42]" e le intestazioni ripetute in cima a ogni pagina. Senza, l'elenco dei
      * cambiamenti esce spezzato da righe che non c'entrano.
      */
-    public static String ripulisci(String testo) {
-        if (testo == null) return "";
+    public static String cleanUp(String text) {
+        if (text == null) return "";
         StringBuilder sb = new StringBuilder();
-        for (String r : testo.split("\n")) {
+        for (String r : text.split("\n")) {
             String t = r.replace("\f", "");
             if (t.matches("^.*\\[Page \\d+\\]\\s*$")) continue;
             if (t.matches("^RFC \\d+\\s+.*\\s+[A-Z][a-z]+ \\d{4}\\s*$")) continue;
@@ -213,9 +213,9 @@ public class StandardsWatch {
     }
 
     /** Sembra l'inizio di una nuova sezione di primo livello. */
-    private static boolean nuovaSezione(String riga) {
-        return riga.matches("^(?:Appendix\\s+[A-Z]|[0-9]+)\\.\\s+\\S.*")
-            || riga.matches("^(?:Acknowledge?ments|Authors?'? Addresses?|Contributors|"
+    private static boolean newSection(String line) {
+        return line.matches("^(?:Appendix\\s+[A-Z]|[0-9]+)\\.\\s+\\S.*")
+            || line.matches("^(?:Acknowledge?ments|Authors?'? Addresses?|Contributors|"
                           + "Normative References|Informative References|References|Index)\\s*$");
     }
 
@@ -227,9 +227,9 @@ public class StandardsWatch {
      *
      * Si prende l'ULTIMA occorrenza dell'intestazione: la prima e' quella dell'indice.
      */
-    public static String elencoCambiamenti(String testoRfc) {
-        String t = ripulisci(testoRfc);
-        String[] righe = t.split("\n");
+    public static String changeList(String rfcText) {
+        String t = cleanUp(rfcText);
+        String[] lines = t.split("\n");
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
                 "^\\s*(?:Appendix\\s+)?[A-Z0-9]{1,4}(?:\\.[0-9]+)*\\.?\\s+"
               // Fra "Changes" e "from/since" ci possono stare altre parole: RFC 7208 intitola
@@ -238,41 +238,41 @@ public class StandardsWatch {
               // Period" (RFC 9990 §3.3) verrebbe scambiata per un elenco di cambiamenti.
               + "(?:(?:Summary of\\s+)?Changes?\\b[^.]{0,60}?\\b(?:from|since)\\b.*|Change\\s+Log\\b.*)$",
                 java.util.regex.Pattern.CASE_INSENSITIVE);
-        int inizio = -1;
-        for (int i = 0; i < righe.length; i++) {
-            String r = righe[i];
+        int start = -1;
+        for (int i = 0; i < lines.length; i++) {
+            String r = lines[i];
             if (!p.matcher(r).matches()) continue;
             // Le righe dell'indice finiscono con puntini e un numero di pagina.
             if (r.matches("^.*\\.\\s*\\.\\s*\\..*\\d+\\s*$")) continue;
-            inizio = i;
+            start = i;
         }
-        if (inizio < 0) return null;
+        if (start < 0) return null;
 
-        StringBuilder sb = new StringBuilder(righe[inizio].trim()).append("\n");
-        for (int i = inizio + 1; i < righe.length; i++) {
-            if (nuovaSezione(righe[i])) break;
-            sb.append(righe[i]).append("\n");
+        StringBuilder sb = new StringBuilder(lines[start].trim()).append("\n");
+        for (int i = start + 1; i < lines.length; i++) {
+            if (newSection(lines[i])) break;
+            sb.append(lines[i]).append("\n");
         }
         String out = sb.toString().replaceAll("\n{3,}", "\n\n").trim();
         return out.isEmpty() ? null : out;
     }
 
     /** L'abstract: c'e' sempre, e serve da ripiego quando l'elenco dei cambiamenti manca. */
-    public static String abstractDi(String testoRfc) {
-        String t = ripulisci(testoRfc);
-        String[] righe = t.split("\n");
-        int inizio = -1;
-        for (int i = 0; i < righe.length; i++)
-            if (righe[i].trim().equalsIgnoreCase("Abstract")) { inizio = i; break; }
-        if (inizio < 0) return null;
+    public static String abstractOf(String rfcText) {
+        String t = cleanUp(rfcText);
+        String[] lines = t.split("\n");
+        int start = -1;
+        for (int i = 0; i < lines.length; i++)
+            if (lines[i].trim().equalsIgnoreCase("Abstract")) { start = i; break; }
+        if (start < 0) return null;
         StringBuilder sb = new StringBuilder();
-        for (int i = inizio + 1; i < righe.length; i++) {
-            String r = righe[i];
+        for (int i = start + 1; i < lines.length; i++) {
+            String r = lines[i];
             String tt = r.trim();
             if (tt.equalsIgnoreCase("Status of This Memo")
                     || tt.equalsIgnoreCase("Copyright Notice")
                     || tt.equalsIgnoreCase("Table of Contents")
-                    || nuovaSezione(r)) break;
+                    || newSection(r)) break;
             sb.append(r).append("\n");
         }
         String out = sb.toString().replaceAll("\n{3,}", "\n\n").trim();
@@ -287,16 +287,16 @@ public class StandardsWatch {
      * Decidere se tocca il nostro codice resta un lavoro di lettura — ma partire dall'elenco
      * scritto dagli autori e' un'altra cosa rispetto a partire da centottanta pagine.
      */
-    public static JSONObject cosaECambiato(String number) { return cosaECambiato(number, number); }
+    public static JSONObject whatChanged(String number) { return whatChanged(number, number); }
 
     /**
      * @param numero     il documento nuovo, da scaricare
      * @param rifermento la specifica del pannello a cui si riferisce, per sapere quali
      *                   identificatori incrociare (per un aggiornamento sono diversi)
      */
-    public static JSONObject cosaECambiato(String number, String rifermento) {
-        JSONObject r = new JSONObject().put("rfc", normalizza(number));
-        String n = normalizza(number);
+    public static JSONObject whatChanged(String number, String reference) {
+        JSONObject r = new JSONObject().put("rfc", normalize(number));
+        String n = normalize(number);
         if (!n.matches("[0-9]{1,5}"))
             return r.put("success", false).put("error", I18n.tr("server.watch.badNumber"));
         try {
@@ -308,28 +308,28 @@ public class StandardsWatch {
             if (resp.statusCode() != 200)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.watch.editorStatus", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
-            String testo = resp.body();
-            r.put("success", true).put("byte", testo.length());
+            String text = resp.body();
+            r.put("success", true).put("bytes", text.length());
 
-            String changes = elencoCambiamenti(testo);
+            String changes = changeList(text);
             if (changes != null) {
-                r.put("tipo", "elenco").put("testo", changes)
-                 .put("nota", I18n.tr("server.watch.changeList"));
+                r.put("type", "list").put("text", changes)
+                 .put("note", I18n.tr("server.watch.changeList"));
                 // Incrocio con cio' che il pannello usa davvero.
-                List<String> tocca = righeCheToccano(changes, identificatoriDi(rifermento));
-                r.put("tiRiguarda", new JSONArray(tocca));
-                r.put("notaIncrocio", tocca.isEmpty()
+                List<String> touches = linesTouching(changes, identifiersOf(reference));
+                r.put("concernsYou", new JSONArray(touches));
+                r.put("crossNote", touches.isEmpty()
                         ? I18n.tr("server.watch.crossNone")
-                        : tocca.size() == 1
+                        : touches.size() == 1
                           ? I18n.tr("server.watch.crossSome.one")
-                          : I18n.tr("server.watch.crossSome.other", java.util.Map.of("n", String.valueOf(tocca.size()))));
+                          : I18n.tr("server.watch.crossSome.other", java.util.Map.of("n", String.valueOf(touches.size()))));
                 return r;
             }
 
-            String ab = abstractDi(testo);
+            String ab = abstractOf(text);
             if (ab != null)
-                return r.put("tipo", "abstract").put("testo", ab)
-                        .put("nota", I18n.tr("server.watch.abstract"));
+                return r.put("type", "abstract").put("text", ab)
+                        .put("note", I18n.tr("server.watch.abstract"));
 
             return r.put("success", false)
                     .put("error", I18n.tr("server.watch.noChangesNoAbstract"));
@@ -358,7 +358,7 @@ public class StandardsWatch {
      *
      * numero | identificatori separati da virgola
      */
-    private static final String[][] RILEVANTI = {
+    private static final String[][] RELEVANT = {
         { "7208", "v=spf1,ip4,ip6,include,redirect,exists,all,mx,ptr,permerror,10" },
         { "6376", "rsa-sha256,rsa-sha1,_domainkey,k=rsa,selector,2048,1024" },
         { "8301", "rsa-sha256,rsa-sha1,2048,1024,4096" },
@@ -371,9 +371,9 @@ public class StandardsWatch {
         { "8461", "_mta-sts,mta-sts.txt,policy,max_age" },
     };
 
-    private static String identificatoriDi(String rfc) {
-        String n = normalizza(rfc);
-        for (String[] x : RILEVANTI) if (x[0].equals(n)) return x[1];
+    private static String identifiersOf(String rfc) {
+        String n = normalize(rfc);
+        for (String[] x : RELEVANT) if (x[0].equals(n)) return x[1];
         return "";
     }
 
@@ -385,34 +385,34 @@ public class StandardsWatch {
      * qualunque cosa, e la segnalazione diventerebbe rumore. E' lo stesso errore che sull'SPF
      * faceva passare per buono un record che non autorizzava il server.
      */
-    public static List<String> righeCheToccano(String list, String identificatori) {
-        List<String> fuori = new ArrayList<>();
-        if (list == null || identificatori == null) return fuori;
-        List<String> chiavi = new ArrayList<>();
-        for (String k : identificatori.split(",")) if (!k.trim().isEmpty()) chiavi.add(k.trim());
-        if (chiavi.isEmpty()) return fuori;
+    public static List<String> linesTouching(String list, String identifiers) {
+        List<String> outside = new ArrayList<>();
+        if (list == null || identifiers == null) return outside;
+        List<String> keys = new ArrayList<>();
+        for (String k : identifiers.split(",")) if (!k.trim().isEmpty()) keys.add(k.trim());
+        if (keys.isEmpty()) return outside;
 
-        for (String riga : list.split("\n")) {
-            String r = riga.trim();
+        for (String line : list.split("\n")) {
+            String r = line.trim();
             if (r.length() < 3) continue;
-            LinkedHashSet<String> trovati = new LinkedHashSet<>();
-            for (String k : chiavi) if (contieneIdentificatore(riga, k)) trovati.add(k);
-            if (!trovati.isEmpty()) fuori.add(String.join(", ", trovati) + "  ->  " + r);
+            LinkedHashSet<String> found = new LinkedHashSet<>();
+            for (String k : keys) if (containsIdentifier(line, k)) found.add(k);
+            if (!found.isEmpty()) outside.add(String.join(", ", found) + "  ->  " + r);
         }
-        return fuori;
+        return outside;
     }
 
     /** Parola intera per gli identificatori alfanumerici, sottostringa per gli altri. */
-    public static boolean contieneIdentificatore(String riga, String chiave) {
-        if (riga == null || chiave == null || chiave.isEmpty()) return false;
-        boolean semplice = chiave.chars().allMatch(c -> Character.isLetterOrDigit(c));
-        if (!semplice) return riga.toLowerCase(java.util.Locale.ROOT)
-                                  .contains(chiave.toLowerCase(java.util.Locale.ROOT));
+    public static boolean containsIdentifier(String line, String key) {
+        if (line == null || key == null || key.isEmpty()) return false;
+        boolean simple = key.chars().allMatch(c -> Character.isLetterOrDigit(c));
+        if (!simple) return line.toLowerCase(java.util.Locale.ROOT)
+                                  .contains(key.toLowerCase(java.util.Locale.ROOT));
         return java.util.regex.Pattern
-                .compile("(?<![A-Za-z0-9])" + java.util.regex.Pattern.quote(chiave) + "(?![A-Za-z0-9])",
+                .compile("(?<![A-Za-z0-9])" + java.util.regex.Pattern.quote(key) + "(?![A-Za-z0-9])",
                          java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(riga).find();
+                .matcher(line).find();
     }
 
-    static String[][] standardPerProva() { return Arrays.stream(STANDARD).toArray(String[][]::new); }
+    static String[][] standardForTest() { return Arrays.stream(STANDARD).toArray(String[][]::new); }
 }

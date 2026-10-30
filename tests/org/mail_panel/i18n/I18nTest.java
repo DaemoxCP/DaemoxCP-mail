@@ -89,7 +89,7 @@ public class I18nTest {
         }
         check("the .html sentences only have strong, em, code, kbd, br (no attributes)" + (oddTags.isEmpty() ? "" : ": " + oddTags), oddTags.isEmpty());
         // Gli script mettono i testi semplici anche dentro dell'HTML costruito a mano: senza < > &
-        // il text e' lo stesso, scappato o no. (I messaggi del server passano sempre da esc().)
+        // il text e' lo stesso, scappato o no. (I messaggi del server passano sempre da escape().)
         List<String> withSigns = new ArrayList<>();
         for (Map<String, String> b : List.of(it, en)) {
             for (Map.Entry<String, String> e : b.entrySet()) {
@@ -186,7 +186,7 @@ public class I18nTest {
         // (un text "server.x" con un punto solo, come server.properties di Kafka, non e' una chiave)
         // (qui solo le chiamate: nel pannello mail "server.example.com" e' un name di host, non una chiave)
         Pattern serverKey = Pattern.compile("(?:I18n\\.tr|jsonError)\\(\"([A-Za-z0-9_.-]*[A-Za-z0-9_-])\"()");
-        // I18n.trn("chiave", n, ...) usa chiave.one e chiave.other
+        // I18n.trn("chiave", n, ...) usa key.one e key.other
         Pattern pluralCall = Pattern.compile("I18n\\.trn\\(\"([A-Za-z0-9_.-]*[A-Za-z0-9_-])\"");
         Set<String> serverPlurals = new TreeSet<>();
         try (var files = java.nio.file.Files.walk(java.nio.file.Path.of("src/main/java"))) {

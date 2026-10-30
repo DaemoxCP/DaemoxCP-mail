@@ -20,36 +20,36 @@ public class SecurityUtils {
     // simboli di "Tutti i caratteri") e la pagina delle caselle, che avvisa mentre si scrive o si
     // incolla. Prima il generatore aveva simboli suoi, e produceva password che qui non passavano.
     /** I simboli ammessi in una password di casella, oltre a lettere (senza accenti) e cifre. */
-    public static final String PASSWORD_SIMBOLI = "!@#$%^&*()_+-=[]{}|;:,.?";
+    public static final String PASSWORD_SYMBOLS = "!@#$%^&*()_+-=[]{}|;:,.?";
     /** La stessa regola come classe di caratteri, valida sia in Java sia in JavaScript. */
-    public static final String PASSWORD_CARATTERI = classeDiCaratteri(PASSWORD_SIMBOLI);
+    public static final String PASSWORD_CHARACTERS = characterClass(PASSWORD_SYMBOLS);
     public static final int PASSWORD_MIN = 4, PASSWORD_MAX = 128;
     private static final Pattern PASSWORD_PATTERN =
-            Pattern.compile("^" + PASSWORD_CARATTERI + "{" + PASSWORD_MIN + "," + PASSWORD_MAX + "}$");
+            Pattern.compile("^" + PASSWORD_CHARACTERS + "{" + PASSWORD_MIN + "," + PASSWORD_MAX + "}$");
 
     // Le password delle CASELLE: stessi caratteri, ma almeno 12 (dal 01/10/2026; prima 4, come
     // quelle dell'admin). isValidPassword resta com'era perche' la usa anche il login dell'admin:
     // alzarla avrebbe chiuso fuori chi ha una password piu' corta. Le caselle esistenti non sono
     // toccate: la regola vale quando una password si crea o si cambia.
-    public static final int PASSWORD_CASELLA_MIN = 12;
-    private static final Pattern PASSWORD_CASELLA_PATTERN =
-            Pattern.compile("^" + PASSWORD_CARATTERI + "{" + PASSWORD_CASELLA_MIN + "," + PASSWORD_MAX + "}$");
+    public static final int MAILBOX_PASSWORD_MIN = 12;
+    private static final Pattern MAILBOX_PASSWORD_PATTERN =
+            Pattern.compile("^" + PASSWORD_CHARACTERS + "{" + MAILBOX_PASSWORD_MIN + "," + PASSWORD_MAX + "}$");
 
-    /** Una password di casella: 12..128 caratteri tra lettere senza accenti, cifre e PASSWORD_SIMBOLI. */
+    /** Una password di casella: 12..128 caratteri tra lettere senza accenti, cifre e PASSWORD_SYMBOLS. */
     public static boolean isValidMailboxPassword(String password) {
-        return password != null && PASSWORD_CASELLA_PATTERN.matcher(password).matches();
+        return password != null && MAILBOX_PASSWORD_PATTERN.matcher(password).matches();
     }
 
     /** Il perche' del rifiuto, per chi crea o modifica una casella. */
     public static String passwordRule() {
-        return org.mail_panel.i18n.I18n.tr("server.mailbox.passwordRule", java.util.Map.of("min", PASSWORD_CASELLA_MIN, "max", PASSWORD_MAX,
-                "symbols", String.join(" ", PASSWORD_SIMBOLI.split(""))));
+        return org.mail_panel.i18n.I18n.tr("server.mailbox.passwordRule", java.util.Map.of("min", MAILBOX_PASSWORD_MIN, "max", PASSWORD_MAX,
+                "symbols", String.join(" ", PASSWORD_SYMBOLS.split(""))));
     }
 
     /** [a-zA-Z0-9 + simboli], con i soli caratteri che dentro una classe vanno protetti: \ [ ] ^ - */
-    private static String classeDiCaratteri(String simboli) {
+    private static String characterClass(String symbols) {
         StringBuilder sb = new StringBuilder("[a-zA-Z0-9");
-        for (char c : simboli.toCharArray()) {
+        for (char c : symbols.toCharArray()) {
             if ("\\[]^-".indexOf(c) >= 0) sb.append('\\');
             sb.append(c);
         }

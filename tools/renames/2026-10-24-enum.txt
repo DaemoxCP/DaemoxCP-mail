@@ -1,0 +1,15 @@
+enum:org.mail_panel.system.SubmissionPort$Outcome#AGGIUNTA ADDED
+enum:org.mail_panel.system.SubmissionPort$Outcome#GIA_PRESENTE ALREADY_PRESENT
+enum:org.mail_panel.system.SubmissionPort$Outcome#VOCE_ASSENTE ENTRY_MISSING
+enum:org.mail_panel.security.BanActionRepair$Outcome$Kind#ASSENTE ABSENT
+enum:org.mail_panel.security.BanActionRepair$Outcome$Kind#GIA_A_POSTO ALREADY_IN_PLACE
+enum:org.mail_panel.security.BanActionRepair$Outcome$Kind#MODIFICATO MODIFIED
+enum:org.mail_panel.security.BanActionRepair$Outcome$Kind#DA_GUARDARE TO_REVIEW
+enum:org.mail_panel.system.MtaStsSetup$NameState#GIUSTO RIGHT
+enum:org.mail_panel.system.MtaStsSetup$NameState#DA_CORREGGERE TO_FIX
+enum:org.mail_panel.system.MtaStsSetup$NameState#ASSENTE ABSENT
+enum:org.mail_panel.system.MtaStsSetup$NameState#CIECO BLIND
+enum:org.mail_panel.system.MtaStsSetup$TxtOutcome#PRESENTE PRESENT
+enum:org.mail_panel.system.MtaStsSetup$TxtOutcome#ASSENTE ABSENT
+enum:org.mail_panel.system.MtaStsSetup$TxtOutcome#TROPPI TOO_MANY
+enum:org.mail_panel.system.MtaStsSetup$TxtOutcome#NON_CHIESTO NOT_ASKED

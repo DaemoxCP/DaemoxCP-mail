@@ -16,7 +16,7 @@ import org.json.JSONObject;
  *    quindi il lettore dei dettagli — che cerca "nome-versione is vulnerable:" — non
  *    entrava mai nel blocco: zero CVE sempre, in entrambe le direzioni;
  *  - su php84 8.4.26, vulnerabile per davvero, la scheda del pannello diceva "[ok] Nessuna
- *    vulnerabilita' nota registrata per questo pacchetto", mentre PackagePlan.correzioni
+ *    vulnerabilita' nota registrata per questo pacchetto", mentre PackagePlan.fixes
  *    trovava la fix nella 8.4.27;
  *  - senza il database delle vulnerabilita' pkg dice "vulnxml file vuln.xml does not exist"
  *    ed esce 1, e chi cerca solo le righe "is vulnerable" conclude "nessuna vulnerabilita'":
@@ -108,13 +108,13 @@ public class AuditReportTest {
         if (!hasPkg()) {
             skip("il confronto con pkg vero: pkg non c'e' su questa macchina");
         } else {
-            JSONObject fixes = PackagePlan.correzioni();
+            JSONObject fixes = PackagePlan.fixes();
             if (!fixes.optBoolean("success")) {
                 skip("il confronto con pkg vero: " + fixes.optString("error")
                     + " (serve il database delle vulnerabilita': pkg audit -F)");
             } else {
-                JSONObject byPackage = fixes.getJSONObject("pacchetti");
-                java.util.Map<String, String[]> inst = PackagePlan.installati();
+                JSONObject byPackage = fixes.getJSONObject("packages");
+                java.util.Map<String, String[]> inst = PackagePlan.installed();
                 int checked = 0, agreeing = 0;
                 StringBuilder disagreeing = new StringBuilder();
                 for (String name : byPackage.keySet()) {

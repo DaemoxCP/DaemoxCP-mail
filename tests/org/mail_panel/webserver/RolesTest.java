@@ -34,7 +34,7 @@ import java.util.concurrent.Executors;
  * unknown job, an action that does not exist, a confirmation that is missing).
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RolesTest
  */
 public class RolesTest {

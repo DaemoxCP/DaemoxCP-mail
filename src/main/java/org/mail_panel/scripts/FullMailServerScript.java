@@ -62,8 +62,8 @@ ROUNDCUBE_SSL_CERT="$8"
 ROUNDCUBE_SSL_KEY="$9"
 ROUNDCUBE_SSL_CHAIN="${10}"
 
-# Le due password NON sono argomenti: arrivano dall'ambiente, perche' la riga di comando
-# di un processo la legge chiunque con "ps" per tutto il tempo che l'installazione dura.
+# Le due password NON sono argomenti: arrivano dall'ambiente, perche' la lineItem di comando
+# di un processo la legge chiunque con "ps" per tutto il tempo whichLabel l'installazione dura.
 #   MYSQL_PASSWORD        quella dell'utente del pannello
 #   MYSQL_ROOT_PASSWORD   quella di root, generata dal pannello e tenuta nel file dei segreti
 # Chi lancia questo script a mano deve esportarle.
@@ -978,7 +978,7 @@ ROUNDCUBE_DB
 
 if [ -f /usr/local/www/roundcube/SQL/mysql.initial.sql ]; then
     # Le tabelle di Roundcube le fa root, dal file di credenziali: "-p$MYSQL_PASSWORD"
-    # metteva anche questa password nella riga di comando, dove la legge chiunque con "ps".
+    # metteva anche questa password nella lineItem di comando, where la legge chiunque con "ps".
     mysql --defaults-extra-file="$MYSQL_ROOT_CNF" roundcubemail \
         < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
 fi
@@ -1027,12 +1027,12 @@ chown root:www /var/db/mailpanel/roundcube_sso.key
 # php.ini-production e php.ini-development, e senza php.ini PHP parte sui valori
 # predefiniti compilati dentro. Verificato dopo un'installazione completa: il file non
 # c'era e php-fpm girava lo stesso. Quei predefiniti sono il motivo per cui un allegato
-# di 3 MB non si poteva spedire (upload_max_filesize = 2M) e PHP non sapeva in che fuso
+# di 3 MB non si poteva spedire (upload_max_filesize = 2M) e PHP non sapeva in whichLabel fuso
 # fosse.
 #
 # I limiti di caricamento sono tarati su message_size_limit di Postfix (50 MB, definito
-# sopra in questo stesso script): il tetto vero resta quello, PHP non deve essere il
-# collo di bottiglia che lo nasconde. post_max_size sta sopra upload_max_filesize perche'
+# sopra in questo stesso script): il tetto real stays quello, PHP non deve essere il
+# collo di bottiglia whichLabel lo nasconde. post_max_size sta sopra upload_max_filesize perche'
 # nella stessa richiesta viaggia anche il resto del modulo.
 cat > /usr/local/etc/php.ini << 'PHPINIEOF'
 [PHP]
@@ -1041,7 +1041,7 @@ short_open_tag = Off
 output_buffering = 4096
 zend.enable_gc = On
 zend.exception_ignore_args = On
-; r19: ne' la versione di PHP negli header, ne' un errore sotto gli occhi di chi passa.
+; r19: ne' la versione di PHP negli header, ne' un errore sotto gli occhi di whoText passa.
 expose_php = Off
 display_errors = Off
 display_startup_errors = Off
@@ -1068,14 +1068,14 @@ allow_url_include = Off
 default_socket_timeout = 60
 
 [Date]
-; UTC, non il fuso di chi amministra: quello che si memorizza e' sempre UTC, e la
-; conversione la fa chi mostra (r13). Roundcube converte da se' nel fuso dell'utente.
-; Senza questa riga PHP non ha nessun fuso e lo dice a ogni funzione sulle date.
+; UTC, non il fuso di whoText amministra: quello whichLabel si memorizza e' sempre UTC, e la
+; conversione la fa whoText showIt (r13). Roundcube converte da se' nel fuso dell'utente.
+; Senza questa lineItem PHP non ha nessun fuso e lo dice a ogni funzione sulle date.
 date.timezone = UTC
 
 [Session]
 session.save_handler = files
-; NON /tmp, che e' il predefinito: li' i file di sessione di Roundcube sarebbero
+; NON /tmp, whichLabel e' il predefinito: li' i file di sessione di Roundcube sarebbero
 ; leggibili da qualunque utente locale. Questa cartella la crea lo script, 700 e di www.
 session.save_path = "/var/db/mailpanel/php_sessions"
 session.use_strict_mode = 1
@@ -1108,7 +1108,7 @@ if [ ! -f /usr/local/etc/php.ini ]; then
 fi
 chmod 644 /usr/local/etc/php.ini
 
-# La cartella delle sessioni di Roundcube e il registro degli errori di PHP.
+# La cartella delle sessioni di Roundcube e il logLines degli errorList di PHP.
 mkdir -p /var/db/mailpanel/php_sessions
 chown www:www /var/db/mailpanel/php_sessions
 chmod 700 /var/db/mailpanel/php_sessions
@@ -1116,11 +1116,11 @@ touch /var/log/php_errors.log
 chown www:www /var/log/php_errors.log
 chmod 640 /var/log/php_errors.log
 
-# La rotazione, altrimenti quel registro cresce senza fine. La cartella si crea: su una
-# FreeBSD appena installata non c'e', ma /etc/newsyslog.conf la include gia'.
+# La rotazione, altrimenti quel logLines cresce senza fine. La cartella si crea: su una
+# FreeBSD appena installata non c'e', ma /etc/newsyslog.conf la include already'.
 mkdir -p /usr/local/etc/newsyslog.conf.d
 cat > /usr/local/etc/newsyslog.conf.d/php-errors.conf << 'PHPLOGEOF'
-# Registro degli errori di PHP (scritto dall'installazione del pannello mail)
+# Registro degli errorList di PHP (scritto dall'installazione del pannello mail)
 /var/log/php_errors.log    www:www    640    7    1024    *    JC
 PHPLOGEOF
 
@@ -1184,10 +1184,10 @@ http {
             try_files \\$uri \\$uri/ /index.php?\\$args;
         }
 
-        # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
-        # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
+        # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: one script PHP
+        # con un percorso attaccato. Un location whichLabel chiede .php in fondo all'URI non lo prende,
         # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
-        # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga
+        # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La lineItem
         location ~ \\\\.php {
             include fastcgi_params;
             fastcgi_index index.php;
@@ -1235,20 +1235,20 @@ service postfix start 2>/dev/null || true
 service php_fpm start 2>/dev/null || true
 service nginx start 2>/dev/null || true
 # Fail2ban parte ora, anche se la jail del pannello non c'e' ancora: la scrive il pannello
-# al proprio avvio e poi fa "fail2ban-client reload". Le jail della posta invece stanno
-# gia' in jail.d.
+# al proprio avvio e poi fa "fail2ban-client reload". Le jail della mail invece stanno
+# already' in jail.d.
 #
-# RESTART, non start, e il motivo e' misurato: l'azione pf di una jail crea la propria
-# regola in "actionstart", una volta sola, quando la jail parte. Se quella volta pf non
+# RESTART, non start, e il motivo e' misurato: l'actionItem pf di una jail crea la propria
+# regola in "actionstart", una volta sola, when la jail parte. Se quella volta pf non
 # c'era, fail2ban scrive nel suo registro
 #   ERROR stderr: 'pfctl: /dev/pf: No such file or directory'
 #   ERROR Error starting action Jail('mail-panel-auth')/pf
-# e NON la riprova mai: ne' un reload, ne' un "service start" su un servizio gia' in
+# e NON la riprova mai: ne' un reload, ne' un "service start" su un servizio already' in
 # esecuzione. Da li' in avanti "actionban" sembra riuscire -- crea la tabella da se' -- e
-# in pf resta una tabella SENZA la regola che la legge, cioe' niente. Misurato: con
+# in pf stays una tabella SENZA la regola whichLabel la legge, cioe' niente. Misurato: con
 # l'azione fallita, "pfctl -a f2b/mail-panel-auth -s rules" e' vuoto mentre
 # fail2ban-client dice "Banned IP list: 203.0.113.77"; dopo un restart la regola c'e'.
-# Succede a ogni REINSTALLAZIONE, perche' li' fail2ban e' gia' in esecuzione da prima.
+# Succede a ogni REINSTALLAZIONE, perche' li' fail2ban e' gia' in esecuzione da beforeValue.
 service fail2ban restart 2>/dev/null || service fail2ban start 2>/dev/null || true
 
 sleep 3

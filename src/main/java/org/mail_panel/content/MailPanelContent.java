@@ -27,16 +27,16 @@ public class MailPanelContent {
      * Il contenuto e' fissato al momento della compilazione, quindi nessun percorso arriva
      * mai dalla rete: qui non c'e' niente da filtrare, a differenza della rotta /fa e /vendor.
      */
-    private static String risorsa(String percorso) {
-        try (java.io.InputStream in = MailPanelContent.class.getResourceAsStream("/" + percorso)) {
+    private static String resource(String path) {
+        try (java.io.InputStream in = MailPanelContent.class.getResourceAsStream("/" + path)) {
             if (in == null) {
-                System.err.println("[Contenuto] risorsa mancante nel jar: " + percorso);
-                return "<!-- risorsa mancante: " + percorso + " -->";
+                System.err.println("[Contenuto] risorsa mancante nel jar: " + path);
+                return "<!-- risorsa mancante: " + path + " -->";
             }
             return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception e) {
-            System.err.println("[Contenuto] non riesco a leggere " + percorso + ": " + e.getMessage());
-            return "<!-- risorsa illeggibile: " + percorso + " -->";
+            System.err.println("[Contenuto] non riesco a leggere " + path + ": " + e.getMessage());
+            return "<!-- risorsa illeggibile: " + path + " -->";
         }
     }
 
@@ -205,7 +205,7 @@ public class MailPanelContent {
         .sidebar-link:hover { background: rgba(255, 255, 255, .08); color: #fff; }
         .sidebar-link:focus-visible { outline: 2px solid #fff; outline-offset: -2px; color: #fff; }
         .sidebar-link.active { background: rgba(233, 69, 96, .22); border-left-color: #e94560; color: #fff; font-weight: 600; }
-        .icona-cloudflare { color: #f6821f; }
+        .icon-cloudflare { color: #f6821f; }
         @media (min-width: 992px) {
             body:has(> #sidebar) { padding-left: var(--sidebar-width); }
             .sidebar { position: fixed; top: 0; bottom: 0; left: 0; width: var(--sidebar-width); overflow-y: auto; z-index: 1030; }
@@ -225,23 +225,23 @@ public class MailPanelContent {
         .table-responsive { overflow: visible; }
         .dropdown-menu { z-index: 1050; }
         #nav-placeholder, #footer-placeholder { display: contents; }
-        /* Celle con "parole" lunghissime: indirizzi, domini, host, errori di consegna (classe testo-lungo).
+        /* Celle con "parole" lunghissime: indirizzi, domini, host, errori di consegna (classe text-long).
            Vanno a capo anche a meta' parola, quando serve, invece di allargare la tabella e con lei la
            pagina: su computer le tabelle non scorrono nel loro riquadro, perche' i menu a tendina delle
            righe devono poter uscire. Solo su queste celle: una regola su tutte spezzava anche le parole
            corte nelle colonne strette ("deferre-d", le date a meta' numero). */
-        .table td.testo-lungo { overflow-wrap: anywhere; }
+        .table td.text-long { overflow-wrap: anywhere; }
         /* Fuori dalle tabelle (finestre, messaggi): un indirizzo lungo va a capo invece di allargare. */
-        .modal .testo-lungo, .alert.testo-lungo, code.testo-lungo { overflow-wrap: anywhere; }
+        .modal .text-long, .alert.text-long, code.text-long { overflow-wrap: anywhere; }
         /* Testo che dice com'e' andata: verde, giallo, rosso leggibili in tutti e due i temi.
            text-success, text-warning e text-danger di Bootstrap sul fondo scuro stanno sotto
            il contrasto minimo di 4.5:1 (gli stessi colori del pannello web). */
-        .testo-ok { color: #146c43; }
+        .text-ok { color: #146c43; }
         .testo-avviso { color: #7a4e00; }
-        .testo-rischio { color: #b02a37; }
-        [data-theme="dark"] .testo-ok { color: #75d9a3; }
+        .text-risk { color: #b02a37; }
+        [data-theme="dark"] .text-ok { color: #75d9a3; }
         [data-theme="dark"] .testo-avviso { color: #ffcf5c; }
-        [data-theme="dark"] .testo-rischio { color: #f1aeb5; }
+        [data-theme="dark"] .text-risk { color: #f1aeb5; }
         /* ===== Telefono e tablet: sotto i 992px niente deve allargare la pagina =====
            Una pagina piu' larga della finestra scorre tutta in orizzontale. Regole per i casi che si
            ripetono, invece di una pezza per pagina (agiscono solo quando il contenuto non ci sta):
@@ -254,7 +254,7 @@ public class MailPanelContent {
              innodb_flush_log_at_trx_commit nelle etichette) vanno a capo. */
         @media (max-width: 991.98px) {
             .table-responsive { overflow-x: auto; }
-            .table-responsive:has(> .tabella-schede) { overflow-x: visible; }
+            .table-responsive:has(> .table-cards) { overflow-x: visible; }
             /* Tabelle senza riquadro che scorre: un indirizzo o un dominio lungo va a capo nella cella. */
             table.table:not(.table-responsive table) td { overflow-wrap: anywhere; }
             .d-flex.justify-content-between { flex-wrap: wrap; gap: .5rem; }
@@ -264,20 +264,20 @@ public class MailPanelContent {
             code, .form-label { overflow-wrap: anywhere; }
         }
         /* Tabelle che su telefono e tablet (sotto i 992px, come la barra laterale che si chiude) diventano schede:
-           classe tabella-schede sulla <table> e data-label su ogni cella. Cinque colonne in 375px non
+           classe table-cards sulla <table> e data-label su ogni cella. Cinque colonne in 375px non
            ci stanno, e una tabella piu' larga della pagina la faceva scorrere tutta in orizzontale; il
            suo riquadro non scorre, perche' i menu a tendina nelle righe non vengano tagliati. */
         @media (max-width: 991.98px) {
-            .tabella-schede thead { display: none; }
-            .tabella-schede, .tabella-schede tbody, .tabella-schede tr, .tabella-schede td { display: block; width: 100%; }
-            .tabella-schede tr { border: 1px solid var(--border-color); border-radius: 8px; padding: .5rem .75rem; margin-bottom: .75rem; }
-            .tabella-schede td { border: 0; padding: .2rem 0; overflow-wrap: anywhere; }
-            .tabella-schede td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--text-secondary); }
-            .tabella-schede td:empty { display: none; }
+            .table-cards thead { display: none; }
+            .table-cards, .table-cards tbody, .table-cards tr, .table-cards td { display: block; width: 100%; }
+            .table-cards tr { border: 1px solid var(--border-color); border-radius: 8px; padding: .5rem .75rem; margin-bottom: .75rem; }
+            .table-cards td { border: 0; padding: .2rem 0; overflow-wrap: anywhere; }
+            .table-cards td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--text-secondary); }
+            .table-cards td:empty { display: none; }
         }
         /* Campo password (campoPassword): su un telefono, accanto ai tre pulsanti, una password di
            20 caratteri deve vedersi tutta. */
-        @media (max-width: 575.98px) { .campo-password { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
+        @media (max-width: 575.98px) { .password-field { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
         /* I ruoli, con lo stesso colore ovunque: barra in alto, pagina Amministratori. */
         .role-badge { color: #fff; font-weight: 500; }
         .role-badge.superadmin { background-color: #dc3545; }
@@ -366,8 +366,8 @@ public class MailPanelContent {
         // pagina (data-theme-pref). Qui resta il contorno: icona, pulsante, e "auto" che segue il sistema.
         (function() {
             let savedTheme = document.documentElement.getAttribute('data-theme-pref');
-            const scrittoDalServer = savedTheme === 'auto' || savedTheme === 'light' || savedTheme === 'dark';
-            if (!scrittoDalServer) savedTheme = 'auto';
+            const writtenByServer = savedTheme === 'auto' || savedTheme === 'light' || savedTheme === 'dark';
+            if (!writtenByServer) savedTheme = 'auto';
 
             // Get browser preference
             function getBrowserTheme() {
@@ -426,7 +426,7 @@ public class MailPanelContent {
 
             // Initialize theme toggle
             document.addEventListener('DOMContentLoaded', function() {
-                if (!scrittoDalServer) loadTheme();
+                if (!writtenByServer) loadTheme();
                 const toggle = document.getElementById('themeToggle');
                 if (toggle) {
                     toggle.addEventListener('click', cycleTheme);
@@ -996,37 +996,37 @@ public class MailPanelContent {
 
             <div class="d-flex justify-content-between align-items-center mt-4 mb-1">
                 <h3 class="mb-0"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:home.services}}</h3>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="versioniRileggi" onclick="caricaVersioni(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.rereadVersions}}</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="versionsReread" onclick="loadVersions(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.rereadVersions}}</button>
             </div>
-            <p class="small text-muted mb-2" id="versioniStato" role="status">{{t:home.readingVersions}}</p>
+            <p class="small text-muted mb-2" id="versionsState" role="status">{{t:home.readingVersions}}</p>
             <div class="table-responsive">
-                <table class="table table-hover tabella-schede" aria-label="{{t:home.servicesTable}}">
+                <table class="table table-hover table-cards" aria-label="{{t:home.servicesTable}}">
                     <thead class="table-light"><tr><th scope="col">{{t:home.colService}}</th><th scope="col">{{t:home.colVersion}}</th><th scope="col">{{t:home.colState}}</th><th scope="col">{{t:home.colActions}}</th></tr></thead>
                     <tbody>
-""" + rigaServizio("postfix", "postfix", "fa-paper-plane", "Postfix (SMTP)", "Postfix")
-    + rigaServizio("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP/POP3)", "Dovecot")
-    + rigaServizio("mysql", "mysql-server", "fa-database", "MySQL (Database)", "MySQL")
-    + rigaServizio("rspamd", "rspamd", "fa-shield-alt", "Rspamd (Anti-Spam)", "Rspamd")
-    + rigaServizio("redis", "redis", "fa-memory", "Redis ({{t:home.redisRole}})", "Redis")
-    + rigaServizio("clamav", "clamav", "fa-bug", "ClamAV (Antivirus)", "ClamAV")
-    + rigaServizio("roundcube", "roundcube", "fa-envelope-open-text", "Roundcube (Webmail)", "{{t:home.theWebmail}}") + """
+""" + serviceLine("postfix", "postfix", "fa-paper-plane", "Postfix (SMTP)", "Postfix")
+    + serviceLine("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP/POP3)", "Dovecot")
+    + serviceLine("mysql", "mysql-server", "fa-database", "MySQL (Database)", "MySQL")
+    + serviceLine("rspamd", "rspamd", "fa-shield-alt", "Rspamd (Anti-Spam)", "Rspamd")
+    + serviceLine("redis", "redis", "fa-memory", "Redis ({{t:home.redisRole}})", "Redis")
+    + serviceLine("clamav", "clamav", "fa-bug", "ClamAV (Antivirus)", "ClamAV")
+    + serviceLine("roundcube", "roundcube", "fa-envelope-open-text", "Roundcube (Webmail)", "{{t:home.theWebmail}}") + """
                     </tbody>
                 </table>
             </div>
 
             <h3 class="mt-4"><i class="fas fa-cubes me-2" aria-hidden="true"></i>{{t:home.otherSoftware}}</h3>
             <div class="table-responsive">
-                <table class="table table-hover tabella-schede" aria-label="{{t:home.otherTable}}">
+                <table class="table table-hover table-cards" aria-label="{{t:home.otherTable}}">
                     <thead class="table-light"><tr><th scope="col">Software</th><th scope="col">{{t:home.colPurpose}}</th><th scope="col">{{t:home.colVersion}}</th></tr></thead>
-                    <tbody id="altroSoftware"><tr><td colspan="3" class="text-muted small">{{t:home.readingVersions}}</td></tr></tbody>
+                    <tbody id="otherSoftware"><tr><td colspan="3" class="text-muted small">{{t:home.readingVersions}}</td></tr></tbody>
                 </table>
             </div>
-""" + risorsa("pages/home-status-card.html") + """
+""" + resource("pages/home-status-card.html") + """
         </div>
     </div>
 """ + getFooterSection() + getScriptStart() + """
         // Fermare un servizio (e riavviare MySQL) tocca tutta la posta: prima si chiede, dicendo cosa succede.
-        const domandeServizi = {
+        const serviceQuestions = {
             'postfix:stop': t('home.confirm.postfix.stop'),
             'dovecot:stop': t('home.confirm.dovecot.stop'),
             'mysql-server:stop': t('home.confirm.mysql.stop'),
@@ -1038,8 +1038,8 @@ public class MailPanelContent {
         };
 
         function serviceAction(service, action) {
-            const domanda = domandeServizi[service + ':' + action];
-            if (domanda && !confirm(domanda)) return;
+            const question = serviceQuestions[service + ':' + action];
+            if (question && !confirm(question)) return;
             fetch('/api/service', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1050,7 +1050,7 @@ public class MailPanelContent {
                 if (data.csrf_token) csrfToken = data.csrf_token;
                 alert(data.success ? t('common.done') : t('common.error', { message: data.error || data.message || t('common.unknown') }));
                 checkStatus();
-                caricaVersioni(true);
+                loadVersions(true);
             })
             .catch(() => alert(t('home.noAnswer')));
         }
@@ -1166,10 +1166,10 @@ public class MailPanelContent {
                 const domain = hostname.indexOf('.') > 0 ? hostname.substring(hostname.indexOf('.') + 1) : hostname;
                 const subdomain = hostname.indexOf('.') > 0 ? hostname.substring(0, hostname.indexOf('.')) : hostname;
 
-                const avviso = document.getElementById('dnsSetupWarning');
+                const noticeText = document.getElementById('dnsSetupWarning');
 
                 if (data.all_passed) {
-                    if (avviso) avviso.style.display = 'none';
+                    if (noticeText) noticeText.style.display = 'none';
                     header.className = 'card-header bg-success text-white';
                     header.innerHTML = '<i class="fas fa-check-circle me-2" aria-hidden="true"></i>' + escHtml(t('home.dnsOk'));
                     summary.innerHTML = '<div class="alert alert-success mb-0 py-2">' +
@@ -1182,7 +1182,7 @@ public class MailPanelContent {
                     const failed = data.checks.filter(c => !c.passed);
                     // Le istruzioni per il record A si mostrano quando e' il record A a
                     // mancare, non ogni volta che un qualsiasi record opzionale non c'e'.
-                    if (avviso) avviso.style.display = failed.some(c => c.type === 'A') ? 'block' : 'none';
+                    if (noticeText) noticeText.style.display = failed.some(c => c.type === 'A') ? 'block' : 'none';
                     let advice = '';
 
                     failed.forEach(c => {
@@ -1303,7 +1303,7 @@ public class MailPanelContent {
         }
 
         checkStatus();
-""" + getVersioniJs() + risorsa("pages/home-status.js") + getScriptEnd();
+""" + getVersionsJs() + resource("pages/home-status.js") + getScriptEnd();
     }
 
     /**
@@ -1311,7 +1311,7 @@ public class MailPanelContent {
      * stato (checkStatus) e i tre comandi, con il loro nome per chi usa un lettore di schermo.
      * Una definizione sola per tutte le righe.
      */
-    private static String rigaServizio(String chiave, String service, String icona, String nome, String chi) {
+    private static String serviceLine(String key, String service, String icon, String name, String who) {
         return """
                         <tr>
                             <td data-label="{{t:home.colService}}" class="text-nowrap"><i class="fas %s me-2" aria-hidden="true"></i>%s</td>
@@ -1323,7 +1323,7 @@ public class MailPanelContent {
                                 <button type="button" class="btn btn-danger action-btn" onclick="serviceAction('%s','stop')" aria-label="{{t:home.stop}} %s" title="{{t:home.stop}}"><i class="fas fa-stop" aria-hidden="true"></i></button>
                             </td>
                         </tr>
-""".formatted(icona, nome, chiave, chiave, service, chi, service, chi, service, chi);
+""".formatted(icon, name, key, key, service, who, service, who, service, who);
     }
 
     /**
@@ -1331,97 +1331,97 @@ public class MailPanelContent {
      * e la tabella "Altro software". Tutto con textContent: le versioni arrivano da programmi e
      * file del server, e non devono poter diventare HTML.
      */
-    private static String getVersioniJs() {
+    private static String getVersionsJs() {
         return """
         // ===== Versioni del software (SoftwareVersions sul server) =====
-        function verCella(cella, v) {
-            cella.textContent = '';
-            if (!v || !v.installato) {
+        function verCell(cell, v) {
+            cell.textContent = '';
+            if (!v || !v.installed) {
                 const n = document.createElement('span');
                 n.className = 'text-muted';
                 n.textContent = t('ver.notInstalled');
-                cella.appendChild(n);
+                cell.appendChild(n);
                 return;
             }
-            const riga = document.createElement('div');
+            const lineItem = document.createElement('div');
             const num = document.createElement('strong');
-            num.textContent = v.versione || t('ver.notRead');
-            if (v.fonte) num.title = t('ver.readWith', { source: v.fonte });
-            riga.appendChild(num);
-            if (v.inEsecuzione) {
+            num.textContent = v.version || t('ver.notRead');
+            if (v.source) num.title = t('ver.readWith', { source: v.source });
+            lineItem.appendChild(num);
+            if (v.running) {
                 const e = document.createElement('span');
                 e.className = 'small text-muted ms-1';
                 e.textContent = t('ver.running');
-                riga.appendChild(e);
+                lineItem.appendChild(e);
             }
-            if (v.riavvio) {
+            if (v.restart) {
                 const b = document.createElement('span');
                 b.className = 'badge bg-warning text-dark ms-1';
                 b.textContent = t('ver.restartNeeded');
-                riga.appendChild(b);
+                lineItem.appendChild(b);
             }
-            cella.appendChild(riga);
-            [[v.dettaglio, 'small text-muted'], [v.pacchetto ? t('ver.package', { name: v.pacchetto }) : '', 'small text-muted'],
-             [v.notaRiavvio, 'small testo-avviso'], [v.avviso, 'small testo-rischio']].forEach(([testo, classe]) => {
-                if (!testo) return;
+            cell.appendChild(lineItem);
+            [[v.detail, 'small text-muted'], [v.pkgName ? t('ver.package', { name: v.pkgName }) : '', 'small text-muted'],
+             [v.restartNote, 'small testo-avviso'], [v.warning, 'small text-risk']].forEach(([textValue, cssClass]) => {
+                if (!textValue) return;
                 const d = document.createElement('div');
-                d.className = classe;
-                d.textContent = testo;
-                cella.appendChild(d);
+                d.className = cssClass;
+                d.textContent = textValue;
+                cell.appendChild(d);
             });
         }
 
-        function caricaVersioni(fresco) {
-            const stato = document.getElementById('versioniStato');
-            const btn = document.getElementById('versioniRileggi');
+        function loadVersions(freshRead) {
+            const stateValue = document.getElementById('versionsState');
+            const btn = document.getElementById('versionsReread');
             btn.disabled = true;
-            stato.textContent = t('home.readingVersions');
-            fetch('/api/versioni' + (fresco ? '?fresco=1' : '')).then(r => r.json()).then(d => {
+            stateValue.textContent = t('home.readingVersions');
+            fetch('/api/versions' + (freshRead ? '?fresh=1' : '')).then(r => r.json()).then(d => {
                 btn.disabled = false;
                 if (!d.success) {
-                    stato.textContent = t('ver.readFailed', { error: d.error || t('common.unknownError') });
+                    stateValue.textContent = t('ver.readFailed', { error: d.error || t('common.unknownError') });
                     return;
                 }
-                Object.keys(d.servizi).forEach(k => {
-                    const cella = document.getElementById('ver-' + k);
-                    if (cella) verCella(cella, d.servizi[k]);
+                Object.keys(d.services).forEach(k => {
+                    const cell = document.getElementById('ver-' + k);
+                    if (cell) verCell(cell, d.services[k]);
                 });
-                const corpo = document.getElementById('altroSoftware');
-                corpo.textContent = '';
-                d.altro.forEach(v => {
+                const bodyText = document.getElementById('otherSoftware');
+                bodyText.textContent = '';
+                d.other.forEach(v => {
                     const tr = document.createElement('tr');
-                    const nome = document.createElement('td');
-                    nome.setAttribute('data-label', 'Software');
-                    const forte = document.createElement('strong');
-                    forte.textContent = v.nome;
-                    nome.appendChild(forte);
-                    const ruolo = document.createElement('td');
-                    ruolo.setAttribute('data-label', t('home.colPurpose'));
-                    ruolo.textContent = v.ruolo;
+                    const entryName = document.createElement('td');
+                    entryName.setAttribute('data-label', 'Software');
+                    const strongEl = document.createElement('strong');
+                    strongEl.textContent = v.name;
+                    entryName.appendChild(strongEl);
+                    const roleName = document.createElement('td');
+                    roleName.setAttribute('data-label', t('home.colPurpose'));
+                    roleName.textContent = v.role;
                     const ver = document.createElement('td');
                     ver.setAttribute('data-label', t('home.colVersion'));
-                    verCella(ver, v);
-                    tr.append(nome, ruolo, ver);
-                    corpo.appendChild(tr);
+                    verCell(ver, v);
+                    tr.append(entryName, roleName, ver);
+                    bodyText.appendChild(tr);
                 });
-                const daRiavviare = Object.values(d.servizi).concat(d.altro).filter(v => v.riavvio).length;
-                stato.textContent = t('ver.readAt', { time: d.letteAlle.substring(11, 19) })
-                    + (daRiavviare > 0 ? ' ' + tn('ver.toRestart', daRiavviare) : '');
+                const toRestart = Object.values(d.services).concat(d.other).filter(v => v.restart).length;
+                stateValue.textContent = t('ver.readAt', { time: d.readAt.substring(11, 19) })
+                    + (toRestart > 0 ? ' ' + tn('ver.toRestart', toRestart) : '');
                 if (d.branch) {
                     // Da quale ramo arrivano i pacchetti: lo si cambia in Aggiornamenti.
-                    stato.appendChild(document.createTextNode(' ' + t('ver.branch') + ' '));
+                    stateValue.appendChild(document.createTextNode(' ' + t('ver.branch') + ' '));
                     const a = document.createElement('a');
-                    a.href = '/updates#ramo';
-                    a.textContent = d.branch === 'misti' ? t('ver.branchMixed') : d.branch === 'nessuno' ? t('ver.branchNone') : d.branch;
-                    stato.appendChild(a);
-                    stato.appendChild(document.createTextNode('.'));
+                    a.href = '/updates#branch';
+                    a.textContent = d.branch === 'mixed' ? t('ver.branchMixed') : d.branch === 'none' ? t('ver.branchNone') : d.branch;
+                    stateValue.appendChild(a);
+                    stateValue.appendChild(document.createTextNode('.'));
                 }
             }).catch(() => {
                 btn.disabled = false;
-                stato.textContent = t('ver.noAnswer');
+                stateValue.textContent = t('ver.noAnswer');
             });
         }
-        caricaVersioni(false);
+        loadVersions(false);
 """;
     }
 
@@ -1436,7 +1436,7 @@ public class MailPanelContent {
             </div>
 
             <div class="table-responsive">
-                <table class="table table-hover tabella-schede">
+                <table class="table table-hover table-cards">
                     <thead class="table-light">
                         <tr><th>{{t:dom.colDomain}}</th><th>{{t:dom.colDesc}}</th><th>{{t:nav.mailboxes}}</th><th>{{t:nav.aliases}}</th><th>DKIM</th><th>{{t:home.colActions}}</th></tr>
                     </thead>
@@ -1513,7 +1513,7 @@ public class MailPanelContent {
                 currentDomains = data.domains;
                 tbody.innerHTML = data.domains.map(d => `
                     <tr>
-                        <td data-label="${escDom(t('dom.colDomain'))}" class="testo-lungo"><strong>${escDom(d.domain)}</strong></td>
+                        <td data-label="${escDom(t('dom.colDomain'))}" class="text-long"><strong>${escDom(d.domain)}</strong></td>
                         <td data-label="${escDom(t('dom.colDesc'))}">${escDom(d.description || '-')}</td>
                         <td data-label="${escDom(t('nav.mailboxes'))}"><span class="badge bg-info">${d.mailbox_count || 0}</span></td>
                         <td data-label="${escDom(t('nav.aliases'))}"><span class="badge bg-info">${d.alias_count || 0}</span></td>
@@ -1567,12 +1567,12 @@ public class MailPanelContent {
             return d.innerHTML;
         }
 
-        function trovaDominio(id) {
+        function findDomain(id) {
             return (currentDomains || []).find(x => x.id === id) || null;
         }
 
         function editDomain(id) {
-            const d = trovaDominio(id);
+            const d = findDomain(id);
             if (!d) return;
             document.getElementById('editDomainId').value = d.id;
             document.getElementById('editDomainName').value = d.domain;
@@ -1581,7 +1581,7 @@ public class MailPanelContent {
         }
 
         function viewDnsById(id) {
-            const d = trovaDominio(id);
+            const d = findDomain(id);
             if (d) viewDns(d.domain);
         }
 
@@ -1877,7 +1877,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN));
+""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN));
     }
 
     /**
@@ -1886,55 +1886,55 @@ public class MailPanelContent {
      *
      * Lo stesso componente per "Aggiungi Casella" e "Modifica Casella". Prima la seconda aveva gli
      * strumenti e la prima no: la password di una casella nuova si digitava alla cieca, senza poterla
-     * generare ne' copiare per chi l'avrebbe usata. Il codice del componente e' getCampoPasswordJs().
+     * generare ne' copiare per chi l'avrebbe usata. Il codice del componente e' getPasswordFieldJs().
      */
-    private static String campoPassword(String id, String segnaposto) {
+    private static String passwordField(String id, String placeholder) {
         return """
                         <div class="input-group has-validation">
-                            <input type="password" class="form-control font-monospace campo-password" id="%1$s" placeholder="%2$s" maxlength="128"
-                                   autocomplete="new-password" autocapitalize="off" spellcheck="false" oninput="pwControlla('%1$s')" aria-describedby="%1$sErr">
-                            <button class="btn btn-outline-secondary" type="button" id="%1$sMostra" onclick="pwMostra('%1$s')" title="{{t:pw.showHide}}" aria-label="{{t:pw.show}}"><i class="fas fa-eye" aria-hidden="true"></i></button>
-                            <button class="btn btn-outline-primary" type="button" onclick="pwGenera('%1$s')" title="{{t:pw.generateSafe}}" aria-label="{{t:pw.generateSafe}}"><i class="fas fa-magic" aria-hidden="true"></i><span class="d-none d-sm-inline ms-1">{{t:pw.generate}}</span></button>
-                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopia" onclick="pwCopia('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                            <input type="password" class="form-control font-monospace password-field" id="%1$s" placeholder="%2$s" maxlength="128"
+                                   autocomplete="new-password" autocapitalize="off" spellcheck="false" oninput="pwCheck('%1$s')" aria-describedby="%1$sErr">
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sShow" onclick="pwShow('%1$s')" title="{{t:pw.showHide}}" aria-label="{{t:pw.show}}"><i class="fas fa-eye" aria-hidden="true"></i></button>
+                            <button class="btn btn-outline-primary" type="button" onclick="pwGenerate('%1$s')" title="{{t:pw.generateSafe}}" aria-label="{{t:pw.generateSafe}}"><i class="fas fa-magic" aria-hidden="true"></i><span class="d-none d-sm-inline ms-1">{{t:pw.generate}}</span></button>
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopy" onclick="pwDoCopy('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                             <div class="invalid-feedback" id="%1$sErr" role="alert"></div>
                         </div>
-""".formatted(id, segnaposto);
+""".formatted(id, placeholder);
     }
 
     /**
-     * Il codice del campo password (campoPassword). La regola dei caratteri arriva da SecurityUtils
+     * Il codice del campo password (passwordField). La regola dei caratteri arriva da SecurityUtils
      * quando si genera la pagina: e' la stessa che applica il server, che resta l'unico a decidere.
      */
-    private static String getCampoPasswordJs() {
+    private static String getPasswordFieldJs() {
         // Righe normali, non text block: un text block comincia sempre a capo, e la regex si spezzerebbe.
-        String regola = "        const PW_CARATTERE = /^" + org.mail_panel.webserver.SecurityUtils.PASSWORD_CARATTERI + "$/;\n"
-                + "        const PW_MIN = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN
+        String rule = "        const PW_CHARACTER = /^" + org.mail_panel.webserver.SecurityUtils.PASSWORD_CHARACTERS + "$/;\n"
+                + "        const PW_MIN = " + org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN
                 + ", PW_MAX = " + org.mail_panel.webserver.SecurityUtils.PASSWORD_MAX + ";\n"
-                + "        const PW_SIMBOLI = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SIMBOLI
+                + "        const PW_SYMBOLS = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SYMBOLS
                         .replace("\\", "\\\\").replace("'", "\\'") + "';\n";
         return """
         // ===== Campo password (componente condiviso, vedi campoPassword) =====
-""" + regola + """
+""" + rule + """
 
-        function pwMostra(id, mostra) {
+        function pwShow(id, showIt) {
             const input = document.getElementById(id);
-            const btn = document.getElementById(id + 'Mostra');
-            const visibile = mostra === undefined ? input.type === 'password' : mostra;
-            input.type = visibile ? 'text' : 'password';
-            btn.innerHTML = visibile ? '<i class="fas fa-eye-slash" aria-hidden="true"></i>' : '<i class="fas fa-eye" aria-hidden="true"></i>';
-            btn.setAttribute('aria-label', visibile ? t('pw.hide') : t('pw.show'));
+            const btn = document.getElementById(id + 'Show');
+            const isVisible = showIt === undefined ? input.type === 'password' : showIt;
+            input.type = isVisible ? 'text' : 'password';
+            btn.innerHTML = isVisible ? '<i class="fas fa-eye-slash" aria-hidden="true"></i>' : '<i class="fas fa-eye" aria-hidden="true"></i>';
+            btn.setAttribute('aria-label', isVisible ? t('pw.hide') : t('pw.show'));
         }
 
         // Vuoto va bene (in Modifica vuol dire "non cambiare"): l'obbligo lo controlla chi salva.
-        function pwControlla(id) {
+        function pwCheck(id) {
             const input = document.getElementById(id);
             const v = input.value;
             let msg = '';
             if (v) {
-                const vietati = [...new Set([...v].filter(c => !PW_CARATTERE.test(c)))];
-                if (vietati.length) {
-                    msg = t('pw.badChar', { chars: vietati.map(c => c === ' ' ? t('pw.space') : c.trim() === '' ? t('pw.specialSpace') : c).join(' '),
-                                            symbols: PW_SIMBOLI.split('').join(' ') });
+                const forbidden = [...new Set([...v].filter(c => !PW_CHARACTER.test(c)))];
+                if (forbidden.length) {
+                    msg = t('pw.badChar', { chars: forbidden.map(c => c === ' ' ? t('pw.space') : c.trim() === '' ? t('pw.specialSpace') : c).join(' '),
+                                            symbols: PW_SYMBOLS.split('').join(' ') });
                 } else if (v.length < PW_MIN) {
                     msg = t('pw.min', { n: PW_MIN });
                 } else if (v.length > PW_MAX) {
@@ -1946,17 +1946,17 @@ public class MailPanelContent {
             return !msg;
         }
 
-        function pwMettiPassword(id, pw) {
+        function pwPutPassword(id, pw) {
             const input = document.getElementById(id);
             input.value = pw;
-            pwMostra(id, true);
-            pwControlla(id);
+            pwShow(id, true);
+            pwCheck(id);
         }
 
         // Il generatore completo, con le sue opzioni: la scelta torna nel campo da cui e' partito.
-        function pwGenera(id) {
+        function pwGenerate(id) {
             window.__pwGenCallback = function (pw) {
-                pwMettiPassword(id, pw);
+                pwPutPassword(id, pw);
                 const input = document.getElementById(id);
                 input.focus();
                 input.select();
@@ -1966,101 +1966,101 @@ public class MailPanelContent {
 
         // Una password proposta subito, con le impostazioni di default del generatore (sul server).
         // Se nel frattempo nel campo e' stato scritto o incollato qualcosa, la proposta si scarta.
-        function pwProponi(id) {
+        function pwPropose(id) {
             fetch('/api/mailboxes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'generate_password', csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
-                if (data.success && data.password && !document.getElementById(id).value) pwMettiPassword(id, data.password);
+                if (data.success && data.password && !document.getElementById(id).value) pwPutPassword(id, data.password);
             }).catch(() => {});
         }
 
-        function pwCopia(id) {
+        function pwDoCopy(id) {
             const input = document.getElementById(id);
             if (!input.value) { document.getElementById(id + 'Err').textContent = t('pw.empty'); input.classList.add('is-invalid'); return; }
-            const fatto = () => {
-                const btn = document.getElementById(id + 'Copia');
+            const done = () => {
+                const btn = document.getElementById(id + 'Copy');
                 btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i>';
                 btn.setAttribute('aria-label', t('pw.copied'));
                 setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy" aria-hidden="true"></i>'; btn.setAttribute('aria-label', t('pw.copy')); }, 1500);
             };
             if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(input.value).then(fatto).catch(() => { if (pwCopiaVecchioModo(input)) fatto(); });
-            } else if (pwCopiaVecchioModo(input)) {
-                fatto();
+                navigator.clipboard.writeText(input.value).then(done).catch(() => { if (pwCopyOldWay(input)) done(); });
+            } else if (pwCopyOldWay(input)) {
+                done();
             }
         }
 
         // execCommand('copy') non copia da un campo password: lo si rende leggibile per l'istante della copia.
-        function pwCopiaVecchioModo(input) {
-            const tipo = input.type;
+        function pwCopyOldWay(input) {
+            const kindValue = input.type;
             input.type = 'text';
             input.select();
             let ok = false;
             try { ok = document.execCommand('copy'); } catch (e) { }
-            input.type = tipo;
+            input.type = kindValue;
             return ok;
         }
 """;
     }
 
     /** Finestra "Trasforma in casella" della pagina Alias (AddressTransform sul server). */
-    private static String getAliasACasellaModal() {
+    private static String getAliasToMailboxModal() {
         return """
-    <div class="modal fade" id="aCasellaModal" tabindex="-1" aria-labelledby="aCasellaTitolo" aria-hidden="true">
+    <div class="modal fade" id="aMailboxModal" tabindex="-1" aria-labelledby="aMailboxTitle" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title testo-lungo" id="aCasellaTitolo">{{t:ac.title}}</h5>
+                    <h5 class="modal-title text-long" id="aMailboxTitle">{{t:ac.title}}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
                 </div>
                 <div class="modal-body">
-                    <p id="acCaricamento" class="mb-0" role="status">{{t:conv.checking}}</p>
-                    <div id="acNo" class="alert alert-warning d-none mb-0 testo-lungo" role="alert"></div>
+                    <p id="acLoading" class="mb-0" role="status">{{t:conv.checking}}</p>
+                    <div id="acNo" class="alert alert-warning d-none mb-0 text-long" role="alert"></div>
                     <div id="acSi" class="d-none">
-                        <p><strong id="acIndirizzo" class="testo-lungo"></strong></p>
+                        <p><strong id="acAddress" class="text-long"></strong></p>
                         <p>{{t:ac.intro}}</p>
-                        <p id="acDestinazioni" class="mb-2 testo-lungo"></p>
+                        <p id="acDestinations" class="mb-2 text-long"></p>
                         <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" id="acTieni">
-                            <label class="form-check-label" for="acTieni">{{t:ac.keep}}</label>
+                            <input class="form-check-input" type="checkbox" id="acKeep">
+                            <label class="form-check-label" for="acKeep">{{t:ac.keep}}</label>
                         </div>
-                        <p id="acVersoQui" class="small text-muted testo-lungo"></p>
-                        <fieldset id="acPostaBlocco" class="border rounded p-2 mb-3 d-none">
+                        <p id="acToHere" class="small text-muted text-long"></p>
+                        <fieldset id="acMailBlock" class="border rounded p-2 mb-3 d-none">
                             <legend class="fs-6 float-none w-auto px-1 mb-0">{{t:ac.oldMail}}</legend>
-                            <p class="small mb-2" id="acPostaInfo"></p>
+                            <p class="small mb-2" id="acMailInfo"></p>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acPosta" id="acRitrova" value="ritrova">
-                                <label class="form-check-label" for="acRitrova">{{t:ac.recover}}</label>
+                                <input class="form-check-input" type="radio" name="acPosta" id="acRecover" value="recover">
+                                <label class="form-check-label" for="acRecover">{{t:ac.recover}}</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acPosta" id="acArchivia" value="archivia">
-                                <label class="form-check-label" for="acArchivia">{{t:ac.archive}}</label>
+                                <input class="form-check-input" type="radio" name="acPosta" id="acArchive" value="archive">
+                                <label class="form-check-label" for="acArchive">{{t:ac.archive}}</label>
                             </div>
                         </fieldset>
                         <div class="mb-3">
                             <label class="form-label" for="acPass">{{t:ac.pass}}</label>
-""" + campoPassword("acPass", "") + """
+""" + passwordField("acPass", "") + """
                             <small class="d-block text-muted mt-1">{{t:ac.passHint}}</small>
                         </div>
                         <div class="row g-2">
                             <div class="col-sm-8">
-                                <label class="form-label" for="acNome">{{t:mbx.colName}} <span class="text-muted small">{{t:ac.nameHint}}</span></label>
-                                <input type="text" class="form-control" id="acNome" maxlength="100" autocomplete="off">
+                                <label class="form-label" for="acName">{{t:mbx.colName}} <span class="text-muted small">{{t:ac.nameHint}}</span></label>
+                                <input type="text" class="form-control" id="acName" maxlength="100" autocomplete="off">
                             </div>
                             <div class="col-sm-4">
                                 <label class="form-label" for="acQuota">{{t:ac.quota}}</label>
-                                <input type="number" class="form-control" id="acQuota" min="0" max="1048576" value="1024" aria-describedby="acQuotaAiuto">
-                                <small class="text-muted" id="acQuotaAiuto">{{t:ac.quotaHint}}</small>
+                                <input type="number" class="form-control" id="acQuota" min="0" max="1048576" value="1024" aria-describedby="acQuotaHelp">
+                                <small class="text-muted" id="acQuotaHelp">{{t:ac.quotaHint}}</small>
                             </div>
                         </div>
-                        <div id="acErr" class="text-danger small mt-2 testo-lungo" role="alert"></div>
+                        <div id="acErr" class="text-danger small mt-2 text-long" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" id="acVia" onclick="trasformaACasella()" disabled><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:ac.title}}</button>
+                    <button type="button" class="btn btn-mail" id="acVia" onclick="transformToMailbox()" disabled><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:ac.title}}</button>
                 </div>
             </div>
         </div>
@@ -2069,77 +2069,77 @@ public class MailPanelContent {
     }
 
     /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua fingerprint. */
-    private static String getAliasACasellaJs() {
+    private static String getAliasToMailboxJs() {
         return """
         // ===== Trasforma in casella (decide il server: AddressTransform) =====
-        let acDati = null;
-        function acMostra(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
+        let acInfo = null;
+        function acShow(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
         function acData(iso) { return iso ? iso.substring(8, 10) + '/' + iso.substring(5, 7) + '/' + iso.substring(0, 4) : ''; }
 
-        function apriACasella(id) {
+        function openToMailbox(id) {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
-            acDati = { indirizzo: a.source, fingerprint: '', posta: false };
-            document.getElementById('aCasellaTitolo').textContent = t('ac.titleFor', { address: a.source });
+            acInfo = { address: a.source, fingerprint: '', mail: false };
+            document.getElementById('aMailboxTitle').textContent = t('ac.titleFor', { address: a.source });
             document.getElementById('acErr').textContent = '';
-            acMostra('acCaricamento', true);
-            acMostra('acNo', false);
-            acMostra('acSi', false);
+            acShow('acLoading', true);
+            acShow('acNo', false);
+            acShow('acSi', false);
             document.getElementById('acVia').disabled = true;
-            document.getElementById('acTieni').checked = false;
-            document.getElementById('acRitrova').checked = false;
-            document.getElementById('acArchivia').checked = false;
+            document.getElementById('acKeep').checked = false;
+            document.getElementById('acRecover').checked = false;
+            document.getElementById('acArchive').checked = false;
             document.getElementById('acPass').value = '';
-            pwMostra('acPass', false);
-            pwControlla('acPass');
-            document.getElementById('acNome').value = '';
+            pwShow('acPass', false);
+            pwCheck('acPass');
+            document.getElementById('acName').value = '';
             document.getElementById('acQuota').value = '1024';
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('aCasellaModal')).show();
-            fetch('/api/aliases?trasforma=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
-                acMostra('acCaricamento', false);
-                if (!d.success || !d.possibile) {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('aMailboxModal')).show();
+            fetch('/api/aliases?transform=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
+                acShow('acLoading', false);
+                if (!d.success || !d.possible) {
                     document.getElementById('acNo').textContent = d.reason || d.error || t('conv.notPossible');
-                    acMostra('acNo', true);
+                    acShow('acNo', true);
                     return;
                 }
-                acDati.fingerprint = d.fingerprint;
-                acDati.posta = !!(d.posta && d.posta.presente);
-                document.getElementById('acIndirizzo').textContent = d.indirizzo;
-                const box = document.getElementById('acDestinazioni');
+                acInfo.fingerprint = d.fingerprint;
+                acInfo.mail = !!(d.mail && d.mail.present);
+                document.getElementById('acAddress').textContent = d.address;
+                const box = document.getElementById('acDestinations');
                 box.textContent = '';
-                if (d.destinazioni.length) {
+                if (d.destinations.length) {
                     box.appendChild(document.createTextNode(t('ac.nowGoesTo') + ' '));
-                    d.destinazioni.forEach((x, k) => {
+                    d.destinations.forEach((x, k) => {
                         if (k) box.appendChild(document.createTextNode(', '));
                         const c = document.createElement('code');
-                        c.textContent = x.destinazione;
+                        c.textContent = x.destination;
                         box.appendChild(c);
-                        if (!x.attivo) box.appendChild(document.createTextNode(' ' + t('ac.inactive')));
+                        if (!x.active) box.appendChild(document.createTextNode(' ' + t('ac.inactive')));
                     });
                     box.appendChild(document.createTextNode('. ' + t('ac.withoutTick')));
                 }
-                const vq = (d.versoQui || []).filter(x => x.attivo).map(x => x.sorgente);
-                document.getElementById('acVersoQui').textContent = vq.length
+                const vq = (d.towardsHere || []).filter(x => x.active).map(x => x.source);
+                document.getElementById('acToHere').textContent = vq.length
                     ? t('ac.alsoFrom', { list: vq.join(', ') }) : '';
-                if (acDati.posta) {
-                    const p = d.posta;
-                    document.getElementById('acPostaInfo').textContent = t('ac.oldMailInfo', {
-                            messages: (p.almeno ? t('ac.atLeast') + ' ' : '') + tn('conv.messages', p.messaggi), size: p.dimensione })
-                        + (p.ultimo ? ' ' + t('ac.lastOne', { date: acData(p.ultimo) }) : '')
-                        + (p.filtri ? ' ' + t('ac.oldFilters') : '');
+                if (acInfo.mail) {
+                    const p = d.mail;
+                    document.getElementById('acMailInfo').textContent = t('ac.oldMailInfo', {
+                            messages: (p.atLeast ? t('ac.atLeast') + ' ' : '') + tn('conv.messages', p.messages), size: p.size })
+                        + (p.last ? ' ' + t('ac.lastOne', { date: acData(p.last) }) : '')
+                        + (p.filters ? ' ' + t('ac.oldFilters') : '');
                 }
-                acMostra('acPostaBlocco', acDati.posta);
-                acMostra('acSi', true);
+                acShow('acMailBlock', acInfo.mail);
+                acShow('acSi', true);
                 document.getElementById('acVia').disabled = false;
-                pwProponi('acPass');
+                pwPropose('acPass');
             }).catch(() => {
-                acMostra('acCaricamento', false);
+                acShow('acLoading', false);
                 document.getElementById('acNo').textContent = t('common.noAnswer');
-                acMostra('acNo', true);
+                acShow('acNo', true);
             });
         }
 
-        function trasformaACasella() {
+        function transformToMailbox() {
             const err = document.getElementById('acErr');
             err.textContent = '';
             const pass = document.getElementById('acPass');
@@ -2148,12 +2148,12 @@ public class MailPanelContent {
                 pass.classList.add('is-invalid');
                 return;
             }
-            if (!pwControlla('acPass')) return;
-            let posta = '';
-            if (acDati.posta) {
-                const scelta = document.querySelector('input[name="acPosta"]:checked');
-                if (!scelta) { err.textContent = t('ac.chooseMail'); return; }
-                posta = scelta.value;
+            if (!pwCheck('acPass')) return;
+            let mail = '';
+            if (acInfo.mail) {
+                const choice = document.querySelector('input[name="acPosta"]:checked');
+                if (!choice) { err.textContent = t('ac.chooseMail'); return; }
+                mail = choice.value;
             }
             const quota = parseInt(document.getElementById('acQuota').value);
             const btn = document.getElementById('acVia');
@@ -2162,15 +2162,15 @@ public class MailPanelContent {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'trasforma_in_casella', source: acDati.indirizzo, password: pass.value,
-                    name: document.getElementById('acNome').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
-                    tieni_inoltri: document.getElementById('acTieni').checked, posta_vecchia: posta,
-                    fingerprint: acDati.fingerprint, csrf_token: csrfToken
+                    action: 'transform_to_mailbox', source: acInfo.address, password: pass.value,
+                    name: document.getElementById('acName').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
+                    keep_forwards: document.getElementById('acKeep').checked, old_mail: mail,
+                    fingerprint: acInfo.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 btn.disabled = false;
                 if (d.success) {
-                    bootstrap.Modal.getInstance(document.getElementById('aCasellaModal')).hide();
+                    bootstrap.Modal.getInstance(document.getElementById('aMailboxModal')).hide();
                     aliasMsg(d.message, 'success');
                     loadAliases();
                 } else {
@@ -2189,40 +2189,40 @@ public class MailPanelContent {
     }
 
     /** Finestra "Trasforma in alias" della pagina Caselle (AddressTransform sul server). */
-    private static String getCasellaAAliasModal() {
+    private static String getMailboxToAliasModal() {
         return """
-    <div class="modal fade" id="aAliasModal" tabindex="-1" aria-labelledby="aAliasTitolo" aria-hidden="true">
+    <div class="modal fade" id="aAliasModal" tabindex="-1" aria-labelledby="aAliasTitle" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title testo-lungo" id="aAliasTitolo">{{t:mbx.toAlias}}</h5>
+                    <h5 class="modal-title text-long" id="aAliasTitle">{{t:mbx.toAlias}}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
                 </div>
                 <div class="modal-body">
-                    <p id="aaCaricamento" class="mb-0" role="status">{{t:conv.checking}}</p>
-                    <div id="aaNo" class="alert alert-warning d-none mb-0 testo-lungo" role="alert"></div>
+                    <p id="aaLoading" class="mb-0" role="status">{{t:conv.checking}}</p>
+                    <div id="aaNo" class="alert alert-warning d-none mb-0 text-long" role="alert"></div>
                     <div id="aaSi" class="d-none">
-                        <p><strong id="aaIndirizzo" class="testo-lungo"></strong></p>
+                        <p><strong id="aaAddress" class="text-long"></strong></p>
                         <p>{{t:aa.intro}}</p>
-                        <h6 class="testo-rischio"><i class="fas fa-minus-circle me-1" aria-hidden="true"></i>{{t:conv.lost}}</h6>
-                        <ul id="aaPerdite" class="small testo-lungo"></ul>
-                        <h6 class="testo-ok"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>{{t:conv.kept}}</h6>
-                        <ul id="aaResta" class="small testo-lungo"></ul>
+                        <h6 class="text-risk"><i class="fas fa-minus-circle me-1" aria-hidden="true"></i>{{t:conv.lost}}</h6>
+                        <ul id="aaLosses" class="small text-long"></ul>
+                        <h6 class="text-ok"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>{{t:conv.kept}}</h6>
+                        <ul id="aaStays" class="small text-long"></ul>
                         <div class="mb-3">
                             <label class="form-label" for="aaDest">{{t:aa.dest}}</label>
-                            <textarea class="form-control font-monospace" id="aaDest" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="aaDestAiuto"></textarea>
-                            <small class="text-muted" id="aaDestAiuto">{{t:aa.destHint}}</small>
+                            <textarea class="form-control font-monospace" id="aaDest" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="aaDestHelp"></textarea>
+                            <small class="text-muted" id="aaDestHelp">{{t:aa.destHint}}</small>
                         </div>
                         <div class="mb-1">
-                            <label class="form-label" for="aaConferma">{{t:conv.typeAddress}} <code id="aaIndirizzoConferma" class="testo-lungo"></code></label>
-                            <input type="text" class="form-control" id="aaConferma" autocomplete="off" autocapitalize="off" spellcheck="false">
+                            <label class="form-label" for="aaConfirm">{{t:conv.typeAddress}} <code id="aaAddressConfirm" class="text-long"></code></label>
+                            <input type="text" class="form-control" id="aaConfirm" autocomplete="off" autocapitalize="off" spellcheck="false">
                         </div>
-                        <div id="aaErr" class="text-danger small mt-2 testo-lungo" role="alert"></div>
+                        <div id="aaErr" class="text-danger small mt-2 text-long" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-danger" id="aaVia" onclick="trasformaAAlias()" disabled><i class="fas fa-share me-1" aria-hidden="true"></i>{{t:mbx.toAlias}}</button>
+                    <button type="button" class="btn btn-danger" id="aaVia" onclick="transformToAlias()" disabled><i class="fas fa-share me-1" aria-hidden="true"></i>{{t:mbx.toAlias}}</button>
                 </div>
             </div>
         </div>
@@ -2231,83 +2231,83 @@ public class MailPanelContent {
     }
 
     /** Lo script di "Trasforma in alias": anteprima di cosa si perde e cosa resta, conferma scritta. */
-    private static String getCasellaAAliasJs() {
+    private static String getMailboxToAliasJs() {
         return """
         // ===== Trasforma in alias (decide il server: AddressTransform) =====
-        let aaDati = null;
-        function aaMostra(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
-        function aaVoce(lista, testo) {
+        let aaInfo = null;
+        function aaShow(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
+        function aaEntry(itemList, textValue) {
             const li = document.createElement('li');
-            li.textContent = testo;
-            document.getElementById(lista).appendChild(li);
+            li.textContent = textValue;
+            document.getElementById(itemList).appendChild(li);
         }
         function aaData(iso) { return iso ? iso.substring(8, 10) + '/' + iso.substring(5, 7) + '/' + iso.substring(0, 4) : ''; }
-        function mbMsg(testo, tipo) {
+        function mbMsg(textValue, kindValue) {
             const box = document.getElementById('mbMsg');
             box.textContent = '';
-            if (!testo) return;
+            if (!textValue) return;
             const div = document.createElement('div');
-            div.className = 'alert alert-' + tipo + ' py-2 small testo-lungo';
-            div.textContent = testo;
+            div.className = 'alert alert-' + kindValue + ' py-2 small text-long';
+            div.textContent = textValue;
             box.appendChild(div);
         }
 
-        function apriAAlias(id) {
-            aaDati = { id: id, indirizzo: '', fingerprint: '' };
+        function openToAlias(id) {
+            aaInfo = { id: id, address: '', fingerprint: '' };
             document.getElementById('aaErr').textContent = '';
             document.getElementById('aaDest').value = '';
-            document.getElementById('aaConferma').value = '';
-            document.getElementById('aaPerdite').textContent = '';
-            document.getElementById('aaResta').textContent = '';
-            aaMostra('aaCaricamento', true);
-            aaMostra('aaNo', false);
-            aaMostra('aaSi', false);
+            document.getElementById('aaConfirm').value = '';
+            document.getElementById('aaLosses').textContent = '';
+            document.getElementById('aaStays').textContent = '';
+            aaShow('aaLoading', true);
+            aaShow('aaNo', false);
+            aaShow('aaSi', false);
             document.getElementById('aaVia').disabled = true;
             bootstrap.Modal.getOrCreateInstance(document.getElementById('aAliasModal')).show();
-            fetch('/api/mailboxes?trasforma=' + id).then(r => r.json()).then(d => {
-                aaMostra('aaCaricamento', false);
-                if (!d.success || !d.possibile) {
+            fetch('/api/mailboxes?transform=' + id).then(r => r.json()).then(d => {
+                aaShow('aaLoading', false);
+                if (!d.success || !d.possible) {
                     document.getElementById('aaNo').textContent = d.reason || d.error || t('conv.notPossible');
-                    aaMostra('aaNo', true);
+                    aaShow('aaNo', true);
                     return;
                 }
-                aaDati.indirizzo = d.indirizzo;
-                aaDati.fingerprint = d.fingerprint;
-                document.getElementById('aAliasTitolo').textContent = t('aa.titleFor', { address: d.indirizzo });
-                document.getElementById('aaIndirizzo').textContent = d.indirizzo;
-                document.getElementById('aaIndirizzoConferma').textContent = d.indirizzo;
-                const p = d.perdite;
-                aaVoce('aaPerdite', t('aa.lostLogin') + ' '
-                    + (p.ultimoAccesso ? t('aa.lastLogin', { date: aaData(p.ultimoAccesso) }) : t('aa.neverUsed')));
-                if (p.soloInvio) aaVoce('aaPerdite', t('aa.lostSendOnly'));
-                if (p.rispostaAutomatica) aaVoce('aaPerdite', t('aa.lostAutoReply'));
-                if (p.filtri) aaVoce('aaPerdite', tn('aa.lostFilters', p.filtri));
-                if (p.inoltri.length) aaVoce('aaPerdite', t('aa.lostForwards', { list: p.inoltri.join(', ') }));
-                if (d.copia) aaVoce('aaPerdite', t('aa.lostSelfAlias', { address: d.indirizzo }));
-                const posta = d.posta;
-                aaVoce('aaResta', posta.presente
-                    ? (posta.almeno ? t('aa.keptMailAtLeast', { messages: tn('conv.messages', posta.messaggi), size: posta.dimensione, folder: d.cartella }) : t('aa.keptMail', { messages: tn('conv.messages', posta.messaggi), size: posta.dimensione, folder: d.cartella }))
+                aaInfo.address = d.address;
+                aaInfo.fingerprint = d.fingerprint;
+                document.getElementById('aAliasTitle').textContent = t('aa.titleFor', { address: d.address });
+                document.getElementById('aaAddress').textContent = d.address;
+                document.getElementById('aaAddressConfirm').textContent = d.address;
+                const p = d.losses;
+                aaEntry('aaLosses', t('aa.lostLogin') + ' '
+                    + (p.lastAccess ? t('aa.lastLogin', { date: aaData(p.lastAccess) }) : t('aa.neverUsed')));
+                if (p.sendOnly) aaEntry('aaLosses', t('aa.lostSendOnly'));
+                if (p.autoReply) aaEntry('aaLosses', t('aa.lostAutoReply'));
+                if (p.filters) aaEntry('aaLosses', tn('aa.lostFilters', p.filters));
+                if (p.forwards.length) aaEntry('aaLosses', t('aa.lostForwards', { list: p.forwards.join(', ') }));
+                if (d.copy) aaEntry('aaLosses', t('aa.lostSelfAlias', { address: d.address }));
+                const mail = d.mail;
+                aaEntry('aaStays', mail.present
+                    ? (mail.atLeast ? t('aa.keptMailAtLeast', { messages: tn('conv.messages', mail.messages), size: mail.size, folder: d.folder }) : t('aa.keptMail', { messages: tn('conv.messages', mail.messages), size: mail.size, folder: d.folder }))
                     : t('aa.noMail'));
-                const gia = (d.giaInoltrata || []).filter(x => x.attivo).map(x => x.destinazione);
-                if (gia.length) aaVoce('aaResta', t('aa.keptAliases', { list: gia.join(', ') }));
-                const vq = (d.versoQui || []).filter(x => x.attivo).map(x => x.sorgente);
-                if (vq.length) aaVoce('aaResta', t('aa.keptIncoming', { list: vq.join(', ') }));
-                document.getElementById('aaDest').value = (d.proposte || []).join(String.fromCharCode(10));
-                aaMostra('aaSi', true);
-                aaControlla();
+                const already = (d.alreadyForwarded || []).filter(x => x.active).map(x => x.destination);
+                if (already.length) aaEntry('aaStays', t('aa.keptAliases', { list: already.join(', ') }));
+                const vq = (d.towardsHere || []).filter(x => x.active).map(x => x.source);
+                if (vq.length) aaEntry('aaStays', t('aa.keptIncoming', { list: vq.join(', ') }));
+                document.getElementById('aaDest').value = (d.proposals || []).join(String.fromCharCode(10));
+                aaShow('aaSi', true);
+                aaCheck();
             }).catch(() => {
-                aaMostra('aaCaricamento', false);
+                aaShow('aaLoading', false);
                 document.getElementById('aaNo').textContent = t('common.noAnswer');
-                aaMostra('aaNo', true);
+                aaShow('aaNo', true);
             });
         }
 
-        function aaControlla() {
-            document.getElementById('aaVia').disabled = !aaDati || !aaDati.fingerprint
-                || document.getElementById('aaConferma').value.trim().toLowerCase() !== aaDati.indirizzo;
+        function aaCheck() {
+            document.getElementById('aaVia').disabled = !aaInfo || !aaInfo.fingerprint
+                || document.getElementById('aaConfirm').value.trim().toLowerCase() !== aaInfo.address;
         }
 
-        function trasformaAAlias() {
+        function transformToAlias() {
             const err = document.getElementById('aaErr');
             err.textContent = '';
             const dest = document.getElementById('aaDest').value.split(String.fromCharCode(10)).map(x => x.trim()).filter(x => x);
@@ -2318,8 +2318,8 @@ public class MailPanelContent {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'trasforma_in_alias', id: aaDati.id, destinazioni: dest,
-                    conferma: document.getElementById('aaConferma').value.trim(), fingerprint: aaDati.fingerprint, csrf_token: csrfToken
+                    action: 'transform_to_alias', id: aaInfo.id, destinations: dest,
+                    confirmation: document.getElementById('aaConfirm').value.trim(), fingerprint: aaInfo.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 if (d.success) {
@@ -2328,20 +2328,20 @@ public class MailPanelContent {
                     loadMailboxes();
                 } else {
                     err.textContent = d.error || t('conv.failed');
-                    aaControlla();
+                    aaCheck();
                 }
             }).catch(() => {
                 err.textContent = t('conv.noAnswer');
-                aaControlla();
+                aaCheck();
             });
         }
-        document.getElementById('aaConferma').addEventListener('input', aaControlla);
+        document.getElementById('aaConfirm').addEventListener('input', aaCheck);
 """;
     }
 
     /**
-     * Il codice del Generatore Password (getPasswordGeneratorModal): con campoPassword e
-     * getCampoPasswordJs e' il componente condiviso delle password delle caselle, in "Aggiungi
+     * Il codice del Generatore Password (getPasswordGeneratorModal): con passwordField e
+     * getPasswordFieldJs e' il componente condiviso delle password delle caselle, in "Aggiungi
      * casella", "Modifica casella" e "Trasforma in casella" (pagina Alias).
      */
     private static String getPasswordGeneratorJs() {
@@ -2430,12 +2430,12 @@ public class MailPanelContent {
                 }
                 document.getElementById('pwgenPreview').value = data.password;
                 const ent = data.entropy_bits || 0;
-                const livello = data.strength || '';
+                const levelValue = data.strength || '';
                 document.getElementById('pwgenEntropyText').textContent = t('pw.entropy', { bits: ent });
                 const badge = document.getElementById('pwgenStrengthBadge');
-                badge.textContent = ({ weak: t('pw.strength.weak'), fair: t('pw.strength.fair'), strong: t('pw.strength.strong'), very_strong: t('pw.strength.very_strong') })[livello] || '—';
-                if (livello === 'very_strong' || livello === 'strong') badge.className = 'badge bg-success';
-                else if (livello === 'fair')      badge.className = 'badge bg-warning text-dark';
+                badge.textContent = ({ weak: t('pw.strength.weak'), fair: t('pw.strength.fair'), strong: t('pw.strength.strong'), very_strong: t('pw.strength.very_strong') })[levelValue] || '—';
+                if (levelValue === 'very_strong' || levelValue === 'strong') badge.className = 'badge bg-success';
+                else if (levelValue === 'fair')      badge.className = 'badge bg-warning text-dark';
                 else                              badge.className = 'badge bg-danger';
                 document.getElementById('pwgenUseBtn').disabled = false;
             })
@@ -2574,7 +2574,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.PASSWORD_CASELLA_MIN));
+""".replace("{{PW_MIN}}", String.valueOf(org.mail_panel.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN));
     }
 
     /**
@@ -2695,12 +2695,12 @@ public class MailPanelContent {
                     return;
                 }
                 const ent = data.entropy_bits || 0;
-                const livello = data.strength || '';
-                const label = ({ weak: t('pw.strength.weak'), fair: t('pw.strength.fair'), strong: t('pw.strength.strong'), very_strong: t('pw.strength.very_strong') })[livello] || '—';
+                const levelValue = data.strength || '';
+                const label = ({ weak: t('pw.strength.weak'), fair: t('pw.strength.fair'), strong: t('pw.strength.strong'), very_strong: t('pw.strength.very_strong') })[levelValue] || '—';
                 let badgeClass = 'bg-secondary';
-                if (livello === 'very_strong' || livello === 'strong') badgeClass = 'bg-success';
-                else if (livello === 'fair') badgeClass = 'bg-warning text-dark';
-                else if (livello === 'weak') badgeClass = 'bg-danger';
+                if (levelValue === 'very_strong' || levelValue === 'strong') badgeClass = 'bg-success';
+                else if (levelValue === 'fair') badgeClass = 'bg-warning text-dark';
+                else if (levelValue === 'weak') badgeClass = 'bg-danger';
                 box.innerHTML = '<strong>' + escapeHtmlBl(t('bulk.example')) + '</strong> <code class="font-monospace">' + escapeHtmlBl(data.password) +
                     '</code>  <span class="badge ' + badgeClass + ' ms-1">' + escapeHtmlBl(label) + '</span>' +
                     ' <span class="text-muted">' + escapeHtmlBl(t('bulk.bits', { bits: ent })) + '</span>';
@@ -2843,7 +2843,7 @@ public class MailPanelContent {
 
             <div id="mbMsg" role="status" aria-live="polite"></div>
             <div class="table-responsive">
-                <table class="table table-hover tabella-schede">
+                <table class="table table-hover table-cards">
                     <thead class="table-light">
                         <tr><th>Email</th><th>{{t:mbx.colName}}</th><th>Quota</th><th>{{t:mbx.colFeatures}}</th><th>{{t:home.colActions}}</th></tr>
                     </thead>
@@ -2852,7 +2852,7 @@ public class MailPanelContent {
                     </tbody>
                 </table>
             </div>
-""" + risorsa("pages/apple-profile-card.html") + """
+""" + resource("pages/apple-profile-card.html") + """
         </div>
     </div>
 
@@ -2873,12 +2873,12 @@ public class MailPanelContent {
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="mbPass">Password</label>
-""" + campoPassword("mbPass", "") + """
+""" + passwordField("mbPass", "") + """
                             <small class="d-block text-muted mt-1">{{t:mbx.passHint}}</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="mbName">{{t:mbx.fullName}}</label>
-                            <input type="text" class="form-control" id="mbName" placeholder="Mario Rossi">
+                            <input type="text" class="form-control" id="mbName" placeholder="{{t:mb.namePh}}">
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="mbQuota">Quota</label>
@@ -2923,11 +2923,11 @@ public class MailPanelContent {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editMbName">{{t:mbx.fullName}}</label>
-                        <input type="text" class="form-control" id="editMbName" placeholder="Mario Rossi">
+                        <input type="text" class="form-control" id="editMbName" placeholder="{{t:mb.namePh}}">
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editMbPass">{{t:mbx.newPass}} <small class="text-muted">{{t:mbx.newPassHint}}</small></label>
-""" + campoPassword("editMbPass", "{{t:mbx.newPassPh}}") + """
+""" + passwordField("editMbPass", "{{t:mbx.newPassPh}}") + """
                         <small class="text-muted">{{t:mbx.vaultHint}}</small>
 
                         <!-- Riquadro per password archiviata: rivelabile con click -->
@@ -2993,7 +2993,7 @@ public class MailPanelContent {
         </div>
     </div>
 
-""" + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + getCasellaAAliasModal() + """
+""" + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + getMailboxToAliasModal() + """
     <!-- Mail Client Config Modal -->
 """ + getMailConfigModal() + """
 
@@ -3182,7 +3182,7 @@ public class MailPanelContent {
                 }
                 tbody.innerHTML = currentMailboxes.map(m => `
                     <tr>
-                        <td data-label="Email" class="testo-lungo">
+                        <td data-label="Email" class="text-long">
                             <strong>${escMbx(m.email)}</strong>
                             ${!m.receive_enabled ? '<span class="badge bg-secondary ms-1" title="' + escMbx(t('mbx.sendOnly')) + '"><i class="fas fa-ban" aria-hidden="true"></i> No-Reply</span>' : ''}
                             ${!m.active ? '<span class="badge bg-danger ms-1">' + escMbx(t('mbx.inactive')) + '</span>' : ''}
@@ -3218,7 +3218,7 @@ public class MailPanelContent {
                                     <li><a class="dropdown-item" href="#" onclick="openSieveFilters(${m.id}, '${m.email}')">
                                         <i class="fas fa-filter me-2" aria-hidden="true"></i>${escMbx(t('mbx.filters'))}
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="apriAAlias(${m.id}); return false;">
+                                    <li><a class="dropdown-item" href="#" onclick="openToAlias(${m.id}); return false;">
                                         <i class="fas fa-share me-2" aria-hidden="true"></i>${escMbx(t('mbx.toAlias'))}
                                     </a></li>
                                     <li><hr class="dropdown-divider"></li>
@@ -3240,7 +3240,7 @@ public class MailPanelContent {
                 passInput.classList.add('is-invalid');
                 return;
             }
-            if (!pwControlla('mbPass')) return;
+            if (!pwCheck('mbPass')) return;
             const domainId = document.getElementById('mbDomain').value;
             const domainName = document.getElementById('mbDomain').selectedOptions[0].dataset.domain;
             const user = document.getElementById('mbUser').value;
@@ -3263,7 +3263,7 @@ public class MailPanelContent {
                     // Reset form
                     document.getElementById('mbUser').value = '';
                     document.getElementById('mbPass').value = '';
-                    pwControlla('mbPass');
+                    pwCheck('mbPass');
                     document.getElementById('mbName').value = '';
                     document.getElementById('mbQuota').value = '1024';
                     document.getElementById('mbReceive').checked = true;
@@ -3299,8 +3299,8 @@ public class MailPanelContent {
                     document.getElementById('editMbActive').checked = m.active;
                     document.getElementById('editMbReceive').checked = m.receive_enabled;
                     // Reset stato del campo password (sempre nascosto all'apertura)
-                    pwMostra('editMbPass', false);
-                    pwControlla('editMbPass');
+                    pwShow('editMbPass', false);
+                    pwCheck('editMbPass');
                     // Reset stato del riquadro vault
                     const vaultBox = document.getElementById('editMbVaultBox');
                     const revealedBox = document.getElementById('editMbRevealedBox');
@@ -3316,13 +3316,13 @@ public class MailPanelContent {
             });
         }
 
-""" + getCampoPasswordJs() + """
+""" + getPasswordFieldJs() + """
         // Una casella nuova parte con una password gia' proposta, in chiaro (vedi pwProponi).
         document.getElementById('addMailboxModal').addEventListener('show.bs.modal', function () {
-            if (!document.getElementById('mbPass').value) pwProponi('mbPass');
+            if (!document.getElementById('mbPass').value) pwPropose('mbPass');
         });
 
-""" + getPasswordGeneratorJs() + getCasellaAAliasJs() + """
+""" + getPasswordGeneratorJs() + getMailboxToAliasJs() + """
         function revealMailboxStoredPassword() {
             const id = parseInt(document.getElementById('editMbId').value);
             if (!id) return;
@@ -3361,7 +3361,7 @@ public class MailPanelContent {
 
 """ + getBulkRotateMailboxesJs() + """
         function saveMailbox() {
-            if (!pwControlla('editMbPass')) return;
+            if (!pwCheck('editMbPass')) return;
             const id = parseInt(document.getElementById('editMbId').value);
             const data = {
                 id: id,
@@ -3838,10 +3838,10 @@ public class MailPanelContent {
             });
         }
 
-""" + risorsa("pages/apple-profile.js") + """
+""" + resource("pages/apple-profile.js") + """
         loadDomains();
         loadMailboxes();
-        paCarica();
+        paLoad();
     </script>
 </body>
 </html>
@@ -3925,7 +3925,7 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-""" + getAliasACasellaModal() + getPasswordGeneratorModal() + getFooterSection() + """
+""" + getAliasToMailboxModal() + getPasswordGeneratorModal() + getFooterSection() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
 
@@ -3935,17 +3935,17 @@ public class MailPanelContent {
             return d.innerHTML;
         }
 
-        function aliasMsg(testo, tipo) {
-            document.getElementById('aliasMsg').innerHTML = testo
-                ? '<div class="alert alert-' + tipo + ' py-2 small">' + escAl(testo) + '</div>' : '';
+        function aliasMsg(textValue, kindValue) {
+            document.getElementById('aliasMsg').innerHTML = textValue
+                ? '<div class="alert alert-' + kindValue + ' py-2 small">' + escAl(textValue) + '</div>' : '';
         }
 
         function loadAliasDomains() {
             fetch('/api/domains').then(r => r.json()).then(data => {
-                const domini = data.domains || [];
+                const domainList = data.domains || [];
                 const select = document.getElementById('alDomain');
-                select.innerHTML = domini.map(d => '<option value="' + escAl(d.domain) + '">' + escAl(d.domain) + '</option>').join('');
-                if (domini.length === 0) {
+                select.innerHTML = domainList.map(d => '<option value="' + escAl(d.domain) + '">' + escAl(d.domain) + '</option>').join('');
+                if (domainList.length === 0) {
                     select.innerHTML = '<option value="">' + escAl(t('al.noDomain')) + '</option>';
                     document.getElementById('alErr').textContent = t('al.addDomainFirst');
                 }
@@ -3968,16 +3968,16 @@ public class MailPanelContent {
                 }
                 tbody.innerHTML = currentAliases.map(a => {
                     const id = parseInt(a.id);
-                    const chi = escAl(t('al.who', { source: a.source, dest: a.destination }));
-                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="testo-lungo">' + escAl(a.source) + '</td><td class="testo-lungo">' + escAl(a.destination)
+                    const whoText = escAl(t('al.who', { source: a.source, dest: a.destination }));
+                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="text-long">' + escAl(a.source) + '</td><td class="text-long">' + escAl(a.destination)
                         + (a.active ? '' : ' <span class="badge bg-secondary ms-1">' + escAl(t('mbx.inactive')) + '</span>') + '</td>'
                         + '<td class="text-nowrap">'
-                        + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + chi + '">' + escAl(t('common.edit')) + '</button>'
-                        + (a.source.startsWith('@') ? '' : '<button type="button" class="btn btn-sm btn-outline-success me-1" onclick="apriACasella(' + id + ')"'
+                        + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + whoText + '">' + escAl(t('common.edit')) + '</button>'
+                        + (a.source.startsWith('@') ? '' : '<button type="button" class="btn btn-sm btn-outline-success me-1" onclick="openToMailbox(' + id + ')"'
                             + ' title="' + escAl(t('al.toMailboxHint')) + '" aria-label="' + escAl(t('al.toMailboxOf', { source: a.source })) + '">' + escAl(t('al.toMailboxShort')) + '</button>')
                         + '<button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="toggleAlias(' + id + ', ' + (a.active ? 'false' : 'true') + ')"'
-                        + ' aria-label="' + escAl(a.active ? t('al.disableOf') : t('al.enableOf')) + ' ' + chi + '">' + escAl(a.active ? t('al.disable') : t('al.enable')) + '</button>'
-                        + '<button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + id + ')" aria-label="' + escAl(t('al.deleteOf')) + ' ' + chi + '">' + escAl(t('common.delete')) + '</button>'
+                        + ' aria-label="' + escAl(a.active ? t('al.disableOf') : t('al.enableOf')) + ' ' + whoText + '">' + escAl(a.active ? t('al.disable') : t('al.enable')) + '</button>'
+                        + '<button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + id + ')" aria-label="' + escAl(t('al.deleteOf')) + ' ' + whoText + '">' + escAl(t('common.delete')) + '</button>'
                         + '</td></tr>';
                 }).join('');
             });
@@ -4007,7 +4007,7 @@ public class MailPanelContent {
             }).then(r => r.json()).then(data => {
                 if (data.success) {
                     bootstrap.Modal.getInstance(document.getElementById('editAliasModal')).hide();
-                    aliasMsg(data.nota || t('al.updated', { source: source, dest: dest }), data.nota ? 'warning' : 'success');
+                    aliasMsg(data.note || t('al.updated', { source: source, dest: dest }), data.note ? 'warning' : 'success');
                     loadAliases();
                 } else {
                     err.textContent = data.error || t('common.unknownErrorCap');
@@ -4015,16 +4015,16 @@ public class MailPanelContent {
             }).catch(() => { err.textContent = t('common.noAnswer'); });
         }
 
-        function toggleAlias(id, attiva) {
+        function toggleAlias(id, isOn) {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
-            if (!attiva && !confirm(t('al.confirmDisable', { source: a.source, dest: a.destination }))) return;
+            if (!isOn && !confirm(t('al.confirmDisable', { source: a.source, dest: a.destination }))) return;
             fetch('/api/aliases', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id, active: attiva, csrf_token: csrfToken })
+                body: JSON.stringify({ id: id, active: isOn, csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
-                if (data.success) aliasMsg(data.nota || (attiva ? t('al.enabled', { source: a.source, dest: a.destination }) : t('al.disabled', { source: a.source, dest: a.destination })), data.nota ? 'warning' : 'success');
+                if (data.success) aliasMsg(data.note || (isOn ? t('al.enabled', { source: a.source, dest: a.destination }) : t('al.disabled', { source: a.source, dest: a.destination })), data.note ? 'warning' : 'success');
                 else aliasMsg(data.error || t('common.failed'), 'danger');
                 loadAliases();
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
@@ -4049,7 +4049,7 @@ public class MailPanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('addAliasModal')).hide();
                     document.getElementById('alLocal').value = '';
                     document.getElementById('alDest').value = '';
-                    aliasMsg(data.nota || t('al.created', { source: source, dest: dest }), data.nota ? 'warning' : 'success');
+                    aliasMsg(data.note || t('al.created', { source: source, dest: dest }), data.note ? 'warning' : 'success');
                     loadAliases();
                 } else {
                     err.textContent = data.error || t('common.unknownErrorCap');
@@ -4064,13 +4064,13 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
-                if (data.success) aliasMsg(data.nota || t('al.deleted'), data.nota ? 'warning' : 'success');
+                if (data.success) aliasMsg(data.note || t('al.deleted'), data.note ? 'warning' : 'success');
                 else aliasMsg(data.error || t('mbx.deleteFailed'), 'danger');
                 loadAliases();
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
         }
 
-""" + getCampoPasswordJs() + getPasswordGeneratorJs() + getAliasACasellaJs() + """
+""" + getPasswordFieldJs() + getPasswordGeneratorJs() + getAliasToMailboxJs() + """
         loadAliasDomains();
         loadAliases();
 """ + """
@@ -4175,10 +4175,10 @@ public class MailPanelContent {
                     // da solo trascorse le ore di propagazione, e piu' avanti completeRotation
                     // da solo a grazia finita. Dire a qualcuno che deve fare una cosa che
                     // avviene da se' lo tiene in attesa di un compito inesistente.
-                    const oreAuto = data.auto_activate_after_hours || 24;
+                    const autoHours = data.auto_activate_after_hours || 24;
                     html += '<div class="mt-2 small text-muted">' + escHtml(t('dns.newSelectorIs')) + ' <code>' + escapeHtmlBl(data.pending_selector || '') + '</code>. '
                         + escHtml(t('dns.oldKeyIs')) + ' <code>' + escapeHtmlBl(data.current_selector || '') + '</code> '
-                        + escHtml(cloudflareConfigured ? t('dns.oldSignsUntilAuto', { hours: oreAuto }) : t('dns.oldSignsUntilYou')) + '</div>';
+                        + escHtml(cloudflareConfigured ? t('dns.oldSignsUntilAuto', { hours: autoHours }) : t('dns.oldSignsUntilYou')) + '</div>';
                     html += '</div>';
 
                     if (state === 'pending_dns') {
@@ -4192,7 +4192,7 @@ public class MailPanelContent {
                     } else {
                         // propagated
                         html += '<div class="alert alert-info"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.recPublishedOk')) + ' ' + (cloudflareConfigured
-                            ? escHtml(t('dns.activationAuto', { hours: data.auto_activate_after_hours || 24, days: data.grace_period_days || 7 })) + ' ' + fraseAvvioAutomatico(data)
+                            ? escHtml(t('dns.activationAuto', { hours: data.auto_activate_after_hours || 24, days: data.grace_period_days || 7 })) + ' ' + autoStartSentence(data)
                             : escHtml(t('dns.activationYou'))) + '</div>';
                         html += '<div class="d-flex gap-2 flex-wrap">';
                         html += '<button class="btn btn-success" onclick="rotateDkimActivate(false)"><i class="fas fa-bolt me-1" aria-hidden="true"></i>' + escHtml(t('dns.activateNew')) + '</button>';
@@ -4657,7 +4657,7 @@ public class MailPanelContent {
                 // account, leggere "trovati 1 record DKIM totali nell'account Pietro" porta a
                 // concludere che gli altri quattro non hanno DKIM — mentre ce l'hanno. Un
                 // conteggio giusto sotto un'etichetta che promette un perimetro piu' largo di
-                // quello measured e' un numero falso.
+                // quello misurato e' un numero falso.
                 let html = '<div class="alert ' + (removableCount > 0 ? 'alert-warning' : 'alert-success') + ' py-2 mb-2"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>'
                     + escHtml(t('dns.orphSummary', { zone: data.domain || '?', total: records.length, active: activeCount, grace: graceProtCount, removable: removableCount, account: data.cloudflare_account_label || '?' }))
                     + ' <span class="text-muted">' + escHtml(t('dns.orphOneZone')) + '</span></div>';
@@ -5053,7 +5053,7 @@ public class MailPanelContent {
                         <div class="card-header"><i class="fas fa-envelope me-2" aria-hidden="true"></i>{{t:acc.emailTitle}}</div>
                         <div class="card-body">
                             <p class="text-muted small">{{t:acc.intro}}</p>
-                            <p class="mb-2">{{t:acc.emailCurrent}} <strong id="accEmailCurrent" class="testo-lungo">…</strong></p>
+                            <p class="mb-2">{{t:acc.emailCurrent}} <strong id="accEmailCurrent" class="text-long">…</strong></p>
                             <label class="form-label" for="accEmailNew">{{t:acc.emailNew}}</label>
                             <div class="input-group mb-2">
                                 <input type="email" class="form-control" id="accEmailNew" maxlength="254" autocomplete="email"
@@ -5810,7 +5810,7 @@ public class MailPanelContent {
             const row = document.createElement('div');
             row.className = 'd-flex justify-content-between align-items-center gap-2 p-2 bg-light rounded mb-2';
             const info = document.createElement('div');
-            info.className = 'testo-lungo';
+            info.className = 'text-long';
             const strong = document.createElement('strong');
             strong.textContent = title;
             info.append(strong);
@@ -6198,7 +6198,7 @@ public class MailPanelContent {
                     </div>
                 </div>
 
-""" + risorsa("pages/autodns-card.html") + risorsa("pages/autoconfig-card.html") + risorsa("pages/mtasts-card.html") + """
+""" + resource("pages/autodns-card.html") + resource("pages/autoconfig-card.html") + resource("pages/mtasts-card.html") + """
             </div>
 
             <!-- DNS Records -->
@@ -6264,7 +6264,7 @@ public class MailPanelContent {
                 </div>
             </div>
 
-""" + risorsa("pages/dkim-summary-card.html") + """
+""" + resource("pages/dkim-summary-card.html") + """
             <!-- DKIM Section -->
             <div class="card mt-4">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
@@ -6497,7 +6497,7 @@ public class MailPanelContent {
             loadDnsRecords();
         });
 
-""" + getDnsJsTzDiag() + risorsa("pages/dns.js") + getDnsJsPart3() + getDnsJsPart2() + risorsa("pages/autodns.js") + risorsa("pages/autoconfig.js") + risorsa("pages/mtasts.js") + """
+""" + getDnsJsTzDiag() + resource("pages/dns.js") + getDnsJsPart3() + getDnsJsPart2() + resource("pages/autodns.js") + resource("pages/autoconfig.js") + resource("pages/mtasts.js") + """
     </script>
 </body>
 </html>
@@ -7853,7 +7853,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <p class="text-muted">{{t:set.intro}}</p>
 
             <div class="card mb-4 mb-4 border-success">
-""" + risorsa("pages/report-card.html") + """
+""" + resource("pages/report-card.html") + """
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:set.reportIntro.html}}</p>
                     <div id="rep-body" aria-live="polite"><span class="text-muted">{{t:set.reportPress}}</span></div>
@@ -8078,10 +8078,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + getWebAuthnScript() + getSettingsAuthJs() + """
 """ + getSettingsHostnameJs() + """
         // Load on page load
-""" + risorsa("pages/report.js") + """
+""" + resource("pages/report.js") + """
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
-        repCarica();
+        repLoad();
 
         let csrfToken = document.getElementById('csrf_token').value;
 """ + """
@@ -8628,7 +8628,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover tabella-schede" id="queueTable" aria-labelledby="queueTableTitle">
+                        <table class="table table-hover table-cards" id="queueTable" aria-labelledby="queueTableTitle">
                             <thead>
                                 <tr>
                                     <th scope="col">{{t:que.colId}}</th>
@@ -8738,11 +8738,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         return `<tr>
                             <td data-label="${escHtml(t('que.colId'))}"><code>${id}</code></td>
                             <td data-label="${escHtml(t('que.colState'))}"><span class="queue-state state-${state.toLowerCase()}">${escHtml(QUEUE_STATES[state])}</span></td>
-                            <td data-label="${escHtml(t('que.colFrom'))}" class="testo-lungo">${escHtml(msg.sender || t('que.nullSender'))}</td>
-                            <td data-label="${escHtml(t('que.colTo'))}" class="testo-lungo">${escHtml(to || '-')}</td>
+                            <td data-label="${escHtml(t('que.colFrom'))}" class="text-long">${escHtml(msg.sender || t('que.nullSender'))}</td>
+                            <td data-label="${escHtml(t('que.colTo'))}" class="text-long">${escHtml(to || '-')}</td>
                             <td data-label="${escHtml(t('que.colSize'))}">${escHtml(formatSize(msg.size))}</td>
                             <td data-label="${escHtml(t('que.colArrival'))}">${escHtml(formatDate(msg.arrival))}</td>
-                            <td data-label="${escHtml(t('que.colError'))}" class="text-danger testo-lungo">${escHtml(msg.error || '')}</td>
+                            <td data-label="${escHtml(t('que.colError'))}" class="text-danger text-long">${escHtml(msg.error || '')}</td>
                             <td data-label="${escHtml(t('home.colActions'))}" class="text-nowrap">
                                 <button type="button" class="btn btn-sm btn-outline-info" data-queue-view="${id}" title="${escHtml(t('que.viewOf', { id: msg.id }))}" aria-label="${escHtml(t('que.viewOf', { id: msg.id }))}">
                                     <i class="fas fa-eye" aria-hidden="true"></i>
@@ -9106,7 +9106,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         </div>
                     </div>
 
-""" + risorsa("pages/pf-comparison-card.html") + """
+""" + resource("pages/pf-comparison-card.html") + """
 
                     <!-- Permaban list (via pf, independent from Fail2ban) -->
                     <div class="card">
@@ -9231,11 +9231,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <div class="mt-1">
                                     <button class="btn btn-sm btn-outline-secondary py-0" data-jail="${escHtml(jail.name)}" onclick="checkJailFilter(this.dataset.jail)" title="${escHtml(t('sec.seesHint'))}">
                                         <i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>${escHtml(t('sec.sees'))}</button>
-                                    <div id="filtro-${escapeHtml(jail.name)}" class="small mt-1"></div>
+                                    <div id="filter-${escapeHtml(jail.name)}" class="small mt-1"></div>
                                 </div>
                                 <div class="small text-muted">
-                                    ${escHtml(t('sec.port'))} ${jail.porta_dichiarata
-                                        ? '<code>' + escapeHtml(jail.porte) + '</code>' + (jail.ban_usa_la_porta
+                                    ${escHtml(t('sec.port'))} ${jail.declared_port
+                                        ? '<code>' + escapeHtml(jail.ports) + '</code>' + (jail.ban_uses_port
                                             ? ' <span class="badge bg-warning text-dark" title="' + escHtml(t('sec.portBanHint')) + '">' + escHtml(t('sec.portBan')) + '</span>'
                                             : ' <span class="text-muted" title="' + escHtml(t('sec.portIndicativeHint')) + '">' + escHtml(t('sec.portIndicative')) + '</span>')
                                         : '<span title="' + escHtml(t('sec.portNoneHint')) + '">' + escHtml(t('sec.portNone')) + '</span>'}
@@ -9411,10 +9411,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
 """ + getJailConfigurationJs() + """
-""" + risorsa("pages/security-jail.js") + risorsa("pages/pf-comparison.js") + """
+""" + resource("pages/security-jail.js") + resource("pages/pf-comparison.js") + """
 """;
         String jsPart2 = """
-""" + risorsa("pages/security-health.js") + """
+""" + resource("pages/security-health.js") + """
 """ + """
     </script>
 </body>
@@ -9574,7 +9574,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header" id="domainStatsTitle"><i class="fas fa-globe me-2" aria-hidden="true"></i>{{t:st.perDomain}}</div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover tabella-schede" aria-labelledby="domainStatsTitle">
+                        <table class="table table-hover table-cards" aria-labelledby="domainStatsTitle">
                             <thead>
                                 <tr>
                                     <th scope="col">{{t:st.colDomain}}</th>
@@ -9685,7 +9685,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             tbody.innerHTML = domains.map(d => `
                 <tr>
-                    <td data-label="${escHtml(t('st.colDomain'))}" class="testo-lungo"><i class="fas fa-globe me-1" aria-hidden="true"></i>${escHtml(d.domain)}</td>
+                    <td data-label="${escHtml(t('st.colDomain'))}" class="text-long"><i class="fas fa-globe me-1" aria-hidden="true"></i>${escHtml(d.domain)}</td>
                     <td data-label="${escHtml(t('st.sent'))}" class="text-end">${escHtml(formatNumber(d.sent))}</td>
                     <td data-label="${escHtml(t('st.received'))}" class="text-end">${escHtml(formatNumber(d.received))}</td>
                     <td data-label="${escHtml(t('st.spam'))}" class="text-end text-danger">${escHtml(formatNumber(d.spam))}</td>
@@ -9706,7 +9706,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
      * Le aree del pannello nella tabella dei ruoli: la chiave del nome, il permesso per vedere e
      * quello per cambiare ("" se nell'area non c'e' niente da cambiare).
      */
-    private static final String[][] AREE_RUOLI = {
+    private static final String[][] ROLE_AREAS = {
         {"adm.area.home", "home.view", ""},
         {"adm.area.mailboxes", "mail.view", "mailboxes.manage"},
         {"adm.area.domains", "mail.view", "domains.manage"},
@@ -9733,7 +9733,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             head.append("<th scope=\"col\" class=\"text-center\"><span class=\"badge role-badge ").append(role)
                 .append("\">{{t:").append(roleKey(role)).append("}}</span></th>");
         StringBuilder rows = new StringBuilder();
-        for (String[] area : AREE_RUOLI) {
+        for (String[] area : ROLE_AREAS) {
             rows.append("<tr><th scope=\"row\">{{t:").append(area[0]).append("}}</th>");
             for (String role : org.mail_panel.security.AuthStore.ROLES) {
                 java.util.Set<String> p = org.mail_panel.security.AuthStore.permissionsOf(role);
@@ -9858,7 +9858,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="card">
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover tabella-schede">
+                        <table class="table table-hover table-cards">
                             <thead class="table-light">
                                 <tr>
                                     <th scope="col">{{t:adm.username}}</th>
@@ -9999,12 +9999,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     // passa da escHtml, e i pulsanti portano solo l'id (data-id), mai il testo.
                     tbody.innerHTML = admList.map(admin => `
                         <tr>
-                            <td data-label="${escHtml(t('adm.username'))}" class="testo-lungo">
+                            <td data-label="${escHtml(t('adm.username'))}" class="text-long">
                                 <i class="fas fa-user me-1" aria-hidden="true"></i>${escHtml(admin.username)}
                                 ${admin.is_current ? '<span class="badge bg-info ms-1">' + escHtml(t('adm.you')) + '</span>' : ''}
                             </td>
                             <td data-label="${escHtml(t('adm.role'))}"><span class="badge role-badge ${escHtml(admin.role)}">${escHtml(admRoleLabel(admin.role))}</span></td>
-                            <td data-label="${escHtml(t('adm.email'))}" class="testo-lungo"><small>${admin.email ? escHtml(admin.email) : '<span class="text-warning">' + escHtml(t('acc.noEmail')) + '</span>'}</small></td>
+                            <td data-label="${escHtml(t('adm.email'))}" class="text-long"><small>${admin.email ? escHtml(admin.email) : '<span class="text-warning">' + escHtml(t('acc.noEmail')) + '</span>'}</small></td>
                             <td data-label="${escHtml(t('set.passkeys'))}"><small>${Number(admin.passkeys) || 0}</small></td>
                             <td data-label="${escHtml(t('adm.lastLogin'))}"><small>${escHtml(admDate(admin.last_login) || t('adm.never'))}</small></td>
                             <td data-label="${escHtml(t('adm.created'))}"><small>${escHtml(admDate(admin.created_at))}</small></td>
@@ -10148,7 +10148,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover tabella-schede" aria-labelledby="limitsTitle">
+                        <table class="table table-hover table-cards" aria-labelledby="limitsTitle">
                             <thead>
                                 <tr>
                                     <th scope="col">{{t:rl.colMailbox}}</th>
@@ -10167,7 +10167,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- La sezione "Mittenti lockedPackages" e' stata TOLTA.
+            <!-- La sezione "Mittenti bloccati" e' stata TOLTA.
                  Non esisteva nessun meccanismo di blocco: ne' una tabella nel database, ne'
                  una regola in Postfix. Era una tabella che scriveva "Nessun blocco attivo"
                  qualunque cosa succedesse, con un pulsante "Sblocca" che rispondeva "azione
@@ -10240,11 +10240,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + escHtml(data.error || t('common.unknownErrorCap')) + '</td></tr>';
                         return;
                     }
-                    const g = data.globale || {};
+                    const g = data.global || {};
                     document.getElementById('globalHourly').value = g.hourly || 50;
                     document.getElementById('globalDaily').value = g.daily || 500;
                     if (g.max_size_mb !== null && g.max_size_mb !== undefined) document.getElementById('globalMaxSize').value = g.max_size_mb;
-                    if (g.max_size_nota) rlMsg(g.max_size_nota, 'warning');
+                    if (g.max_size_note) rlMsg(g.max_size_note, 'warning');
                     currentLimits = data.limits || [];
                     if (!currentLimits.length) {
                         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">' + escHtml(t('rl.none')) + '</td></tr>';
@@ -10256,7 +10256,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     tbody.innerHTML = currentLimits.map(limit => {
                         const who = escHtml(limit.email);
                         return `<tr class="${limit.enabled ? '' : 'limit-disabled'}">
-                            <td data-label="${escHtml(t('rl.colMailbox'))}" class="testo-lungo"><i class="fas fa-envelope me-1" aria-hidden="true"></i>${who}</td>
+                            <td data-label="${escHtml(t('rl.colMailbox'))}" class="text-long"><i class="fas fa-envelope me-1" aria-hidden="true"></i>${who}</td>
                             <td data-label="${escHtml(t('rl.colHourly'))}" class="text-center">${escHtml(limit.hourly_limit)}</td>
                             <td data-label="${escHtml(t('rl.colDaily'))}" class="text-center">${escHtml(limit.daily_limit)}</td>
                             <td data-label="${escHtml(t('rl.colRecipients'))}" class="text-center">${escHtml(limit.max_recipients)}</td>
@@ -11865,7 +11865,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span>
                         <button class="btn btn-sm btn-outline-danger me-1" onclick="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>{{t:up.reboot}}</button>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcPrev()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>{{t:up.autostart}}</button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="osStato()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.sysState}}</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="osState()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.sysState}}</button>
                     </span>
                 </div>
                 <div class="card-body">
@@ -11874,7 +11874,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4" id="pacchetti">
+            <div class="card mb-4" id="packages">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span><i class="fas fa-cubes me-2" aria-hidden="true"></i><strong>{{t:pkgs.title}}</strong></span>
                     <button type="button" class="btn btn-sm btn-outline-primary" onclick="pkOverview()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
@@ -11889,7 +11889,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div class="d-flex flex-wrap gap-1">
                         <button type="button" class="btn btn-sm btn-outline-success" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:pkgs.bulk.lockAll}}</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updLockAll(false)"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>{{t:pkgs.bulk.unlockAll}}</button>
-                        <a class="btn btn-sm btn-outline-primary" href="#aggiornamenti"><i class="fas fa-arrow-down me-1" aria-hidden="true"></i>{{t:pkgs.bulk.goUpdates}}</a>
+                        <a class="btn btn-sm btn-outline-primary" href="#updates"><i class="fas fa-arrow-down me-1" aria-hidden="true"></i>{{t:pkgs.bulk.goUpdates}}</a>
                     </div>
                 </div>
             </div>
@@ -11921,7 +11921,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-""" + risorsa("pages/branch-card.html") + """
+""" + resource("pages/branch-card.html") + """
             <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i><strong>{{t:up.release}}</strong>
@@ -11930,10 +11930,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         <select id="os-target" class="form-select form-select-sm d-inline-block me-1" style="width:auto" aria-label="{{t:up.targetVersionLabel}}">
                             <option value="">{{t:up.targetVersion}}</option>
                         </select>
-                        <button class="btn btn-sm btn-warning me-1" onclick="saltoStato()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="upVerifica()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
+                        <button class="btn btn-sm btn-warning me-1" onclick="jumpState()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="upCheck()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="upPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-release-tog" onclick="procApri('proc-release')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-release-tog" onclick="procOpen('proc-release')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
                 <div class="card-body" id="proc-release" style="display:none">
@@ -11948,14 +11948,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-clipboard-list me-2" aria-hidden="true"></i><strong>{{t:up.report}}</strong>
                         <span class="small text-muted ms-2">{{t:up.reportSub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" id="rep-copy" onclick="repCopia()" style="display:none"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:common.copy}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" id="rep-copy" onclick="repCopy()" style="display:none"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:common.copy}}</button>
                         <button class="btn btn-sm btn-outline-info" onclick="repGen()"><i class="fas fa-file-lines me-1" aria-hidden="true"></i>{{t:up.genReport}}</button>
                     </span>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.reportIntro.html}}</p>
-                    <div id="rep-stato"><span class="text-muted">{{t:up.phReport}}</span></div>
-                    <pre id="rep-testo" class="upd-log mt-2" style="display:none"></pre>
+                    <div id="rep-state"><span class="text-muted">{{t:up.phReport}}</span></div>
+                    <pre id="rep-text" class="upd-log mt-2" style="display:none"></pre>
                 </div>
             </div>
 
@@ -11989,7 +11989,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-hand me-2" aria-hidden="true"></i><strong>{{t:up.remove}}</strong>
                         <span class="small text-muted ms-2">{{t:up.removeSub}}</span></span>
                     <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-warning" onclick="rimCandidati()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates}}</button>
+                        <button class="btn btn-sm btn-outline-warning" onclick="rmCandidates()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates}}</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -12046,7 +12046,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i><strong>{{t:up.ams}}</strong>
                         <span class="small text-muted ms-2">{{t:up.amsSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="amsPiano()"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:up.state}}</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="amsPlan()"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:up.state}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.amsIntro1.html}}</p>
@@ -12054,13 +12054,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div id="upd-ams"><span class="text-muted">{{t:up.phState}}</span></div>
                 </div>
             </div>
-""" + risorsa("pages/cf-ranges-card.html") + """
+""" + resource("pages/cf-ranges-card.html") + """
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-shield-halved me-2" aria-hidden="true"></i><strong>{{t:up.w443}}</strong>
                         <span class="small text-muted ms-2">{{t:up.w443Sub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="w443Carica()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.state}}</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="w443Load()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.state}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.w443Intro1.html}}</p>
@@ -12084,13 +12084,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-binoculars me-2" aria-hidden="true"></i><strong>{{t:up.sorv}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.sorvSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="sorvCarica()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                    <span><i class="fas fa-binoculars me-2" aria-hidden="true"></i><strong>{{t:up.watch}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.watchSub}}</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="watchLoad()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.sorvIntro1.html}}</p>
-                    <p class="small text-muted mb-2">{{t:up.sorvIntro2.html}}</p>
+                    <p class="small text-muted mb-2">{{t:up.watchIntro1.html}}</p>
+                    <p class="small text-muted mb-2">{{t:up.watchIntro2.html}}</p>
                     <div id="upd-sorv"><span class="text-muted">{{t:up.phCheck}}</span></div>
                 </div>
             </div>
@@ -12109,7 +12109,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
 
 
-            <div class="card mb-4" id="aggiornamenti">
+            <div class="card mb-4" id="updates">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-download me-2" aria-hidden="true"></i><strong>{{t:up.updates}}</strong>
                         <span class="small text-muted ms-2">{{t:up.updatesSub}}</span></span>
@@ -12130,9 +12130,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fab fa-python me-2" aria-hidden="true"></i><strong>{{t:up.py}}</strong>
                         <span class="small text-muted ms-2">{{t:up.pySub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="pyResti()"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:up.leftovers}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="pyLeftovers()"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:up.leftovers}}</button>
                         <button class="btn btn-sm btn-outline-primary" onclick="pyPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-python-tog" onclick="procApri('proc-python')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-python-tog" onclick="procOpen('proc-python')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
                 <div class="card-body" id="proc-python" style="display:none">
@@ -12147,9 +12147,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fab fa-java me-2" aria-hidden="true"></i><strong>{{t:up.jvm}}</strong>
                         <span class="small text-muted ms-2">{{t:up.jvmSub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="jvStato()"><i class="fas fa-file-alt me-1" aria-hidden="true"></i>{{t:up.lastReport}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="jvState()"><i class="fas fa-file-alt me-1" aria-hidden="true"></i>{{t:up.lastReport}}</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="jvPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-jvm-tog" onclick="procApri('proc-jvm')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-jvm-tog" onclick="procOpen('proc-jvm')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
                 <div class="card-body" id="proc-jvm" style="display:none">
@@ -12167,7 +12167,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.whyNoAnswer}}</button>
                         <button class="btn btn-sm btn-outline-info me-1" onclick="rcNginx()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>{{t:up.assetsNoStyle}}</button>
                         <button class="btn btn-sm btn-outline-warning" onclick="rcPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-roundcube-tog" onclick="procApri('proc-roundcube')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-roundcube-tog" onclick="procOpen('proc-roundcube')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
                 <div class="card-body" id="proc-roundcube" style="display:none">
@@ -12182,7 +12182,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-database me-2" aria-hidden="true"></i><strong>{{t:up.my84}}</strong>
                         <span class="small text-muted ms-2">{{t:up.my84Sub}}</span></span>
                     <button class="btn btn-sm btn-outline-warning" onclick="my84Pre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-mysql-tog" onclick="procApri('proc-mysql')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-mysql-tog" onclick="procOpen('proc-mysql')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                 </div>
                 <div class="card-body" id="proc-mysql" style="display:none">
                     <p class="small text-muted mb-2">{{t:up.my84Intro.html}}</p>
@@ -12207,11 +12207,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
-        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPacchetti() + risorsa("pages/branch.js");
+        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
-    private static String getUpdatesScriptPacchetti() {
+    private static String getUpdatesScriptPackages() {
         return """
         // ================= il quadro dei pacchetti =================
         // Una tabella sola: versione installata e del catalogo, vulnerabilita' con il verdict
@@ -12220,16 +12220,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         /* Il verdict sulla vulnerabilita', in una parola e un colore. */
         function pkVulnBadge(v) {
             if (!v) return '<span class="text-muted small">' + escHtml(t('pkgs.noVuln')) + '</span>';
-            const m = { 'si-risolve-aggiornando': ['bg-warning text-dark', 'pkgs.v.fixable'],
-                        'aggiornamento-non-basta': ['bg-danger', 'pkgs.v.notEnough'],
-                        'fix-fuori-dal-ramo': ['bg-danger', 'pkgs.v.outOfBranch'],
-                        'fix-non-indicata': ['bg-danger', 'pkgs.v.noFix'],
-                        'nessuna-fix': ['bg-danger', 'pkgs.v.noFix'] }[v.verdict] || ['bg-secondary', 'pkgs.v.unknown'];
+            const m = { 'fixed-by-upgrade': ['bg-warning text-dark', 'pkgs.v.fixable'],
+                        'upgrade-not-enough': ['bg-danger', 'pkgs.v.notEnough'],
+                        'fix-outside-branch': ['bg-danger', 'pkgs.v.outOfBranch'],
+                        'fix-not-stated': ['bg-danger', 'pkgs.v.noFix'],
+                        'no-fix': ['bg-danger', 'pkgs.v.noFix'] }[v.verdict] || ['bg-secondary', 'pkgs.v.unknown'];
             return '<span class="badge ' + m[0] + '"><i class="fas fa-bug me-1" aria-hidden="true"></i>' + escHtml(t(m[1])) + '</span>';
         }
 
         /* Il dettaglio di una riga: il perche' della vulnerabilita', le CVE, l'avvertenza. */
-        function pkDettaglio(p) {
+        function pkDetails(p) {
             let h = '';
             if (p.vuln) {
                 h += '<div class="small mb-1">' + escHtml(p.vuln.explanation || '') + '</div>';
@@ -12271,24 +12271,24 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + escHtml(tn('pkgs.stackUnlocked', s.stackUnlocked)) + '</span>'
                    + '<button type="button" class="btn btn-sm btn-success" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.bulk.lockAll')) + '</button></div>';
             }
-            h += '<div class="table-responsive"><table class="table tabella-schede table-sm align-middle mb-2"><thead><tr>'
+            h += '<div class="table-responsive"><table class="table table-cards table-sm align-middle mb-2"><thead><tr>'
                + '<th scope="col">' + escHtml(t('pkgs.colPackage')) + '</th><th scope="col">' + escHtml(t('pkgs.colInstalled')) + '</th><th scope="col">' + escHtml(t('pkgs.colAvailable')) + '</th>'
                + '<th scope="col">' + escHtml(t('pkgs.colSecurity')) + '</th><th scope="col">' + escHtml(t('pkgs.colLock')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th></tr></thead><tbody>';
             (r.packages || []).forEach((p, i) => {
-                const det = pkDettaglio(p);
-                let azioni = '';
+                const detailInfo = pkDetails(p);
+                let actionItems = '';
                 if (p.update) {
                     if (p.canUpdate) {
-                        azioni += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
+                        actionItems += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
                                 + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: p.available })) + '</button>';
                     } else if (p.javaFlow) {
-                        azioni += '<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1 text-nowrap" onclick="pkVaiJava()">'
+                        actionItems += '<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1 text-nowrap" onclick="pkGoJava()">'
                                 + '<i class="fab fa-java me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.javaFlow')) + '</button>';
                     } else {
-                        azioni += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
+                        actionItems += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
                     }
                 }
-                azioni += '<button type="button" class="btn btn-sm btn-outline-secondary mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" onclick="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
+                actionItems += '<button type="button" class="btn btn-sm btn-outline-secondary mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" onclick="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
                         + '<i class="fas ' + (p.locked ? 'fa-lock-open' : 'fa-lock') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.unlock') : t('pkgs.lock')) + '</button>';
                 h += '<tr class="upd-cell' + (p.vuln ? ' table-danger' : '') + '">'
                    + '<td data-label="' + escHtml(t('pkgs.colPackage')) + '"><code>' + escHtml(p.name) + '</code>'
@@ -12299,11 +12299,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         + (p.majorJump ? ' <span class="badge bg-danger">' + escHtml(t('pkgs.majorJump')) + '</span>' : '')
                         : '<span class="text-muted">' + escHtml(t('pkgs.upToDate')) + '</span>') + '</td>'
                    + '<td data-label="' + escHtml(t('pkgs.colSecurity')) + '">' + pkVulnBadge(p.vuln)
-                   + (det ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" onclick="pkDet(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
+                   + (detailInfo ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" onclick="pkDetail(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
                    + '<td data-label="' + escHtml(t('pkgs.colLock')) + '"><span class="badge ' + (p.locked ? 'bg-success' : 'bg-warning text-dark') + '"><i class="fas '
                    + (p.locked ? 'fa-lock' : 'fa-lock-open') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.locked') : t('pkgs.unlocked')) + '</span></td>'
-                   + '<td class="text-end">' + azioni + '</td></tr>';
-                if (det) h += '<tr id="pk-det-' + i + '" hidden><td colspan="6" class="small">' + det + '</td></tr>';
+                   + '<td class="text-end">' + actionItems + '</td></tr>';
+                if (detailInfo) h += '<tr id="pk-det-' + i + '" hidden><td colspan="6" class="small">' + detailInfo + '</td></tr>';
             });
             h += '</tbody></table></div>';
             if ((r.others || []).length) {
@@ -12315,7 +12315,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        function pkDet(btn, i) {
+        function pkDetail(btn, i) {
             const row = document.getElementById('pk-det-' + i);
             if (!row) return;
             row.hidden = !row.hidden;
@@ -12323,8 +12323,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         /* Il JDK del pannello ha la sua procedura: si apre la sua scheda. */
-        function pkVaiJava() {
-            procApri('proc-jvm', true);
+        function pkGoJava() {
+            procOpen('proc-jvm', true);
             const c = document.getElementById('proc-jvm');
             if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
@@ -12357,28 +12357,28 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('package_preflight', { package: name });
             if (!r.success) { body.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
             pkUpd.signature = r.signature || '';
-            const blocchi = (r.checks || []).filter(c => c.level === 'block');
-            const warnings = (r.checks || []).filter(c => c.level === 'verifica' || c.level === 'warn' || c.level === 'attendi');
-            const servizi = (r.services || []).map(x => typeof x === 'string' ? x : x.name);
+            const blocks = (r.checks || []).filter(c => c.level === 'block');
+            const warnings = (r.checks || []).filter(c => c.level === 'review' || c.level === 'warn' || c.level === 'wait');
+            const services = (r.services || []).map(x => typeof x === 'string' ? x : x.name);
             let h = '<p class="mb-2"><code>' + escHtml(r.name) + '</code> ' + escHtml(r.current) + ' &rarr; <strong>' + escHtml(r.available || '?') + '</strong></p>';
             if ((r.cve || []).length) h += '<div class="small mb-2"><strong>' + escHtml(t('up.closes')) + '</strong> ' + r.cve.map(c => '<span class="badge bg-dark me-1">' + escHtml(c) + '</span>').join('') + '</div>';
-            if (blocchi.length) {
+            if (blocks.length) {
                 h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(t('pkgs.m.blocked')) + '</strong><ul class="mb-0">'
-                   + blocchi.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul></div>';
+                   + blocks.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul></div>';
             }
-            const sbl = (r.piano && r.piano.unlockedPackages) || [];
+            const unlockedList = (r.plan && r.plan.unlockedPackages) || [];
             h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.steps')) + '</h6><ol class="small">'
-               + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepUnlock', { list: sbl.join(', ') }) : t('pkgs.m.stepNoUnlock')) + '</li>'
+               + '<li>' + escHtml(unlockedList.length ? t('pkgs.m.stepUnlock', { list: unlockedList.join(', ') }) : t('pkgs.m.stepNoUnlock')) + '</li>'
                + '<li>' + escHtml(t('pkgs.m.stepUpgrade')) + '</li>'
-               + '<li>' + escHtml(servizi.length ? t('pkgs.m.stepRestart', { list: servizi.join(', ') }) : t('pkgs.m.stepNoRestart')) + '</li>'
-               + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepRelock') : t('pkgs.m.stepCheck')) + '</li></ol>'
-               + updPianoHtml(r.piano, r.signature);
+               + '<li>' + escHtml(services.length ? t('pkgs.m.stepRestart', { list: services.join(', ') }) : t('pkgs.m.stepNoRestart')) + '</li>'
+               + '<li>' + escHtml(unlockedList.length ? t('pkgs.m.stepRelock') : t('pkgs.m.stepCheck')) + '</li></ol>'
+               + updPlanHtml(r.plan, r.signature);
             if (warnings.length) {
                 h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.warnings')) + '</h6><ul class="small">'
                    + warnings.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul>';
             }
             body.innerHTML = h;
-            if (!blocchi.length && !r.blocked) {
+            if (!blocks.length && !r.blocked) {
                 const inp = document.getElementById('pkUpdName');
                 document.getElementById('pkUpdNameLabel').textContent = t('pkgs.m.confirm', { name: name });
                 inp.value = '';
@@ -12444,8 +12444,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // sta qui, in un punto solo, invece che dentro ogni funzione.
         async function updApi(action, extra) {
             if (updBusy) return { success: false, error: t('up.busy') };
-            const lento = action !== 'job_status';
-            if (lento) updBusy = true;
+            const slow = action !== 'job_status';
+            if (slow) updBusy = true;
             try {
                 const body = Object.assign({
                     action: action,
@@ -12460,14 +12460,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } catch (e) {
                 return { success: false, error: t('common.networkError', { message: e.message }) };
             } finally {
-                if (lento) updBusy = false;
+                if (slow) updBusy = false;
             }
         }
 
         // Conferma scritta: la parola si mostra nella lingua della pagina; al server va il suo codice.
-        function updConferma(testo, parola) {
-            const typed = prompt((testo ? testo + '\\n\\n' : '') + t('ad.typeToConfirm', { word: parola }));
-            return typed !== null && typed.trim().toUpperCase() === parola.toUpperCase();
+        function updConfirm(textValue, keyword) {
+            const typed = prompt((textValue ? textValue + '\\n\\n' : '') + t('ad.typeToConfirm', { word: keyword }));
+            return typed !== null && typed.trim().toUpperCase() === keyword.toUpperCase();
         }
 
         function updEsc(v) {
@@ -12478,29 +12478,29 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // I verdetti arrivano come codici: il server e la pagina li confrontano cosi' come sono,
         // e il testo da leggere si sceglie qui, nella lingua della pagina.
-        function updVerdetto(v) {
+        function updVerdict(v) {
             return ({
-                "IL LIVELLO E' INDIETRO": t('up.vLevelBehind'),
-                'ALLINEATO': t('up.vAligned'),
-                'LOG NON LEGGIBILE': t('up.vLogUnreadable'),
-                'CI SONO ANALISI INTERROTTE': t('up.vScansInterrupted'),
-                'NESSUNA ANALISI INTERROTTA': t('up.vNoScanInterrupted'),
-                "NESSUNA TRACCIA, MA IL LOG E' CORTO": t('up.vNoTraceShortLog'),
-                "C'E' UN COSTRUTTO NON PIU' VALIDO": t('up.vInvalidConstruct'),
-                'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE': t('up.vBehaviorDiffs'),
-                'NIENTE DA SEGNALARE': t('up.vNothingToReport'),
-                'CI SONO RIFERIMENTI CHE SI ROMPEREBBERO': t('up.vRefsWouldBreak'),
-                'NESSUN RIFERIMENTO CHE SI ROMPA': t('up.vNoRefBreaks'),
-                'NON DETERMINABILE': t('up.vUndetermined'),
-                "NON NE USA I COMANDI, MA E' UNA LIBRERIA": t('up.vLibraryOnly'),
-                'IL PANNELLO NON LO USA': t('up.vPanelDoesNotUse'),
-                'LI NOMINA, MA NON SONO I SUOI': t('up.vNamesNotTheirs'),
-                "LO USA, E NON C'E' RICAMBIO": t('up.vUsesNoSpare'),
-                'LO USA': t('up.vUses'),
-                'IN USO ADESSO': t('up.vInUseNow'),
-                'RICHIESTO': t('up.vRequired'),
-                "IL COMANDO E' SUO": t('up.vCommandIsIts'),
-                'NESSUNO LO USA': t('up.vNobodyUses')
+                "LEVEL_BEHIND": t('up.vLevelBehind'),
+                'ALIGNED': t('up.vAligned'),
+                'LOG_UNREADABLE': t('up.vLogUnreadable'),
+                'SCANS_INTERRUPTED': t('up.vScansInterrupted'),
+                'NO_SCAN_INTERRUPTED': t('up.vNoScanInterrupted'),
+                "NO_TRACE_SHORT_LOG": t('up.vNoTraceShortLog'),
+                "INVALID_CONSTRUCT": t('up.vInvalidConstruct'),
+                'BEHAVIOR_DIFFS': t('up.vBehaviorDiffs'),
+                'NOTHING_TO_REPORT': t('up.vNothingToReport'),
+                'REFS_WOULD_BREAK': t('up.vRefsWouldBreak'),
+                'NO_REF_BREAKS': t('up.vNoRefBreaks'),
+                'UNDETERMINED': t('up.vUndetermined'),
+                "LIBRARY_ONLY": t('up.vLibraryOnly'),
+                'PANEL_DOES_NOT_USE': t('up.vPanelDoesNotUse'),
+                'NAMES_NOT_THEIRS': t('up.vNamesNotTheirs'),
+                "USES_NO_SPARE": t('up.vUsesNoSpare'),
+                'USES': t('up.vUses'),
+                'IN_USE_NOW': t('up.vInUseNow'),
+                'REQUIRED': t('up.vRequired'),
+                "COMMAND_IS_ITS": t('up.vCommandIsIts'),
+                'NOBODY_USES': t('up.vNobodyUses')
             })[v] || v;
         }
 
@@ -12509,12 +12509,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // "NOTA" e' diverso da "VERIFICA": VERIFICA chiede qualcosa a chi legge, NOTA
             // racconta soltanto cosa fara' la procedura. Messe sotto la stessa etichetta
             // gialla, una riga puramente descrittiva sembra una cosa rimasta da fare.
-            if (level === 'nota') return '<span class="badge upd-badge-info">' + escHtml(t('up.bNote')) + '</span>';
-            if (level === 'verifica') return '<span class="badge upd-badge-warn">' + escHtml(t('up.bCheck')) + '</span>';
+            if (level === 'note') return '<span class="badge upd-badge-info">' + escHtml(t('up.bNote')) + '</span>';
+            if (level === 'review') return '<span class="badge upd-badge-warn">' + escHtml(t('up.bCheck')) + '</span>';
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.bWait')) + '</span>';
         }
 
-""" + risorsa("pages/port465.js") + risorsa("pages/standards-watch.js") + risorsa("pages/web-diagnostics.js") + risorsa("pages/web443.js") + risorsa("pages/enable-mtasts.js") + risorsa("pages/cf-ranges.js") + """
+""" + resource("pages/port465.js") + resource("pages/standards-watch.js") + resource("pages/web-diagnostics.js") + resource("pages/web443.js") + resource("pages/enable-mtasts.js") + resource("pages/cf-ranges.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');
@@ -12554,16 +12554,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="table-responsive"><table class="table table-sm"><thead><tr>'
                    + '<th scope="col" style="width:30%">' + escHtml(t('up.colConstruct')) + '</th><th scope="col">' + escHtml(t('up.colWants24')) + '</th><th scope="col" style="width:30%">' + escHtml(t('up.colWhere')) + '</th></tr></thead><tbody>';
                 (d.issues || []).forEach(i => {
-                    h += '<tr class="upd-cell"><td><code>' + updEsc(i.costrutto) + '</code></td>'
-                       + '<td>' + updEsc(i.sostituto) + '</td>'
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(i.construct) + '</code></td>'
+                       + '<td>' + updEsc(i.replacement) + '</td>'
                        + '<td class="small text-muted">' + (i.files || []).map(f => updEsc(f)).join('<br>') + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
                 h += '<p class="small text-muted">' + t('up.dvBlock.html') + '</p>';
-                if (d.fonte) {
-                    h += '<p class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(d.fonte) + '</p>';
+                if (d.source) {
+                    h += '<p class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(d.source) + '</p>';
                 }
-                h += '<button class="btn btn-sm btn-outline-primary" onclick="dove24()">'
+                h += '<button class="btn btn-sm btn-outline-primary" onclick="where24()">'
                    + '<i class="fas fa-file-lines me-1" aria-hidden="true"></i>' + escHtml(t('up.see24')) + '</button>'
                    + '<div id="dove24-body" class="mt-2"></div>';
             }
@@ -12573,46 +12573,46 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += '<hr><h6 class="mb-1"><i class="fas fa-paper-plane me-1"></i>Postfix</h6>';
             if (!pf.present) {
                 h += '<div class="small text-muted">' + updEsc(pf.note || t('up.notInstalled')) + '</div>';
-            } else if (!pf.leggibile) {
+            } else if (!pf.readable) {
                 h += '<div class="alert alert-warning py-2 small mb-2">' + updEsc(pf.note) + '</div>';
             } else {
-                h += '<div class="small text-muted mb-1">' + escHtml(t('up.pfLine', { pkg: pf.package, version: pf.version, repo: pf.repoVersion || '?', level: pf.livello || '?' }))
-                   + ' ' + escHtml(pf.livelloEsplicito ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
-                   + '<div class="alert alert-' + (pf.verdict === 'ALLINEATO' ? 'success' : 'warning')
-                   + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(pf.verdict)) + '</strong> &mdash; '
+                h += '<div class="small text-muted mb-1">' + escHtml(t('up.pfLine', { pkg: pf.package, version: pf.version, repo: pf.repoVersion || '?', level: pf.level || '?' }))
+                   + ' ' + escHtml(pf.explicitLevel ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
+                   + '<div class="alert alert-' + (pf.verdict === 'ALIGNED' ? 'success' : 'warning')
+                   + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(pf.verdict)) + '</strong> &mdash; '
                    + updEsc(pf.explanation) + '</div>';
                 const cb = pf.changes || [];
                 if (cb.length) {
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                        + '<th scope="col">' + escHtml(t('up.colLevel')) + '</th><th scope="col">' + escHtml(t('up.colWouldChange')) + '</th></tr></thead><tbody>';
                     cb.forEach(x => {
-                        h += '<tr class="upd-cell"><td><code>' + updEsc(x.livello) + '</code></td>'
-                           + '<td class="small">' + updEsc(x.cambia)
-                           + '<div class="mt-1">' + (x.parametri || []).map(pp =>
-                                pp.giaDeciso
-                                  ? '<span class="badge upd-badge-ok me-1">' + updEsc(pp.nome)
-                                    + ' = ' + updEsc(pp.valore) + ' (' + escHtml(t('up.decidedByYou')) + ')</span>'
-                                  : (!pp.rilevante
-                                     ? '<span class="badge upd-badge-info me-1">' + updEsc(pp.nome)
-                                       + ' (' + escHtml(t('up.irrelevant', { gate: pp.gate, value: pp.gateValore || 'no' })) + ')</span>'
-                                     : '<span class="badge upd-badge-warn me-1">' + updEsc(pp.nome)
+                        h += '<tr class="upd-cell"><td><code>' + updEsc(x.level) + '</code></td>'
+                           + '<td class="small">' + updEsc(x.change)
+                           + '<div class="mt-1">' + (x.parameters || []).map(pp =>
+                                pp.alreadyDecided
+                                  ? '<span class="badge upd-badge-ok me-1">' + updEsc(pp.name)
+                                    + ' = ' + updEsc(pp.value) + ' (' + escHtml(t('up.decidedByYou')) + ')</span>'
+                                  : (!pp.relevant
+                                     ? '<span class="badge upd-badge-info me-1">' + updEsc(pp.name)
+                                       + ' (' + escHtml(t('up.irrelevant', { gate: pp.gate, value: pp.gateValue || 'no' })) + ')</span>'
+                                     : '<span class="badge upd-badge-warn me-1">' + updEsc(pp.name)
                                        + ' (' + escHtml(t('up.defaultDecides')) + ')</span>')).join(' ')
                            + '</div></td></tr>';
                     });
                     h += '</tbody></table></div>';
-                    if (pf.effettoQui) {
-                        h += '<div class="alert alert-' + (pf.apertiQui ? 'warning' : 'success')
-                           + ' py-2 small mb-2"><strong>' + escHtml(t('up.onThisServer')) + '</strong> ' + updEsc(pf.effettoQui) + '</div>';
+                    if (pf.effectHere) {
+                        h += '<div class="alert alert-' + (pf.openHere ? 'warning' : 'success')
+                           + ' py-2 small mb-2"><strong>' + escHtml(t('up.onThisServer')) + '</strong> ' + updEsc(pf.effectHere) + '</div>';
                     }
                 }
-                if (pf.indietro && pf.consigliato) {
-                    h += '<button class="btn btn-sm btn-outline-warning mb-1" data-level="' + escHtml(pf.consigliato) + '" data-open="' + Number(pf.apertiQui || 0) + '"'
-                       + ' onclick="pfAlza(this.dataset.level, Number(this.dataset.open))">'
-                       + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('up.raiseLevel', { level: pf.consigliato }))
+                if (pf.back && pf.recommended) {
+                    h += '<button class="btn btn-sm btn-outline-warning mb-1" data-level="' + escHtml(pf.recommended) + '" data-open="' + Number(pf.openHere || 0) + '"'
+                       + ' onclick="pfRaise(this.dataset.level, Number(this.dataset.open))">'
+                       + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('up.raiseLevel', { level: pf.recommended }))
                        + '</button><div id="pf-outcome" class="mt-1"></div>'
                        + '<div class="small text-muted mb-2">' + t('up.raiseNote.html') + '</div>';
                 }
-                const ap = pf.appoggi || [];
+                const ap = pf.supports || [];
                 if (ap.length) {
                     h += '<div class="small mb-1">' + escHtml(t('up.pfLegacy')) + '</div>'
                        + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
@@ -12621,13 +12621,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 // Doppia condizione di proposito: il campo puo' mancare (e' gia' successo),
                 // ma il contenuto vuoto e' un fatto che si vede sempre.
-                if (!pf.checkPulito && pf.check) {
+                if (!pf.cleanCheck && pf.check) {
                     h += '<div class="small mb-1"><strong>postfix check:</strong></div>'
                        + '<pre class="upd-log mb-2">' + updEsc(pf.check) + '</pre>';
                 } else {
                     h += '<div class="small text-muted mb-2">' + t('up.pfCheckClean.html') + '</div>';
                 }
-                h += '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(pf.fonte) + '</div>';
+                h += '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(pf.source) + '</div>';
             }
 
             // ---------- Rspamd: cambia il comportamento, non la sintassi ----------
@@ -12636,29 +12636,29 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!rs.present) {
                 h += '<div class="small text-muted">' + updEsc(rs.note || t('up.notInstalled')) + '</div>';
             } else {
-                const cls = rs.verdict === 'NIENTE DA SEGNALARE' ? 'success'
-                          : (rs.verdict === 'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE' ? 'info' : 'danger');
-                h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.fileLetti })) + '</div>'
-                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(rs.verdict))
+                const cls = rs.verdict === 'NOTHING_TO_REPORT' ? 'success'
+                          : (rs.verdict === 'BEHAVIOR_DIFFS' ? 'info' : 'danger');
+                h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.filesRead })) + '</div>'
+                   + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(rs.verdict))
                    + '</strong> &mdash; ' + updEsc(rs.explanation) + '</div>';
                 const is = rs.issues || [];
                 if (is.length) {
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                        + '<th scope="col">' + escHtml(t('up.colConstruct')) + '</th><th scope="col">' + escHtml(t('up.colChanges')) + '</th><th scope="col">' + escHtml(t('up.colWhere')) + '</th></tr></thead><tbody>';
                     is.forEach(x => {
-                        h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x.costrutto) + '</code><br>'
-                           + '<span class="badge ' + (x.tipo === 'rotto' ? 'upd-badge-stop'
-                                : (x.tipo === 'predefinito' ? 'upd-badge-info' : 'upd-badge-warn'))
-                           + '">' + escHtml(x.tipo === 'rotto' ? t('up.noLongerValid')
-                                : (x.tipo === 'predefinito' ? t('up.pkgDefaultOnly') : t('up.behaviour')))
+                        h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x.construct) + '</code><br>'
+                           + '<span class="badge ' + (x.type === 'broken' ? 'upd-badge-stop'
+                                : (x.type === 'default' ? 'upd-badge-info' : 'upd-badge-warn'))
+                           + '">' + escHtml(x.type === 'broken' ? t('up.noLongerValid')
+                                : (x.type === 'default' ? t('up.pkgDefaultOnly') : t('up.behaviour')))
                            + '</span></td>'
-                           + '<td class="small">' + updEsc(x.cosaCambia) + '</td>'
+                           + '<td class="small">' + updEsc(x.whatChanges) + '</td>'
                            + '<td class="small">'
                            + ((x.files || []).length
                               ? '<strong>' + escHtml(t('up.inYourFiles')) + '</strong><br>' + x.files.map(f => updEsc(f)).join('<br>')
                               : '<span class="text-muted">' + escHtml(t('up.inNoFile')) + '</span>')
-                           + ((x.filesPacchetto || []).length
-                              ? '<br><span class="text-muted">' + escHtml(t('up.pkgFilesOnly')) + '<br>' + x.filesPacchetto.map(f => updEsc(f)).join('<br>')
+                           + ((x.packageFiles || []).length
+                              ? '<br><span class="text-muted">' + escHtml(t('up.pkgFilesOnly')) + '<br>' + x.packageFiles.map(f => updEsc(f)).join('<br>')
                                 + '</span>'
                               : '')
                            + '</td></tr>';
@@ -12674,7 +12674,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       : '<span class="badge upd-badge-warn">' + escHtml(t('up.toLookAt')) + '</span>')
                    + '</div><pre class="upd-log mb-2">' + updEsc(rs.configtest) + '</pre>'
                    + '<div class="small text-muted mb-1"><strong>' + escHtml(t('up.bayes')) + '</strong> ' + updEsc(rs.bayes) + '</div>'
-                   + '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(rs.fonte) + '</div>';
+                   + '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(rs.source) + '</div>';
             }
 
             const m = r.mysql || {};
@@ -12689,7 +12689,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if ((m.issues || []).length) {
                     h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(tn('up.mycnfRemoved', m.issues.length)) + '</strong> '
                        + escHtml(t('up.mycnfOneEnough')) + '<ul class="mb-0 mt-1">';
-                    m.issues.forEach(i => { h += '<li><code>' + updEsc(i.opzione) + '</code> &rarr; ' + updEsc(i.sostituto) + '</li>'; });
+                    m.issues.forEach(i => { h += '<li><code>' + updEsc(i.option) + '</code> &rarr; ' + updEsc(i.replacement) + '</li>'; });
                     h += '</ul></div>';
                 } else if (m.mycnfPresent) {
                     h += '<div class="small text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.mycnfClean')) + '</div>';
@@ -12724,21 +12724,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updRegenDovecot() {
-            if (!updConferma(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
+            if (!updConfirm(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
+            const r = await updApi('dovecot_config_regen', { confirm: 'REGENERATE' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.regenRunning')) + '</span>';
             pre.style.display = 'block';
             updPoll(r.jobId, el, pre);
         }
 
-        async function cleanClient(estraneo, corretto) {
-            if (!updConferma('', t('up.wRemove'))) return;
+        async function cleanClient(foreign, correct) {
+            if (!updConfirm('', t('up.wRemove'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
-            const r = await updApi('clean_client', { confirm: 'RIMUOVI', estraneo: estraneo, corretto: corretto });
+            const r = await updApi('clean_client', { confirm: 'REMOVE', foreign: foreign, correct: correct });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.cleaning')) + '</span>';
             pre.style.display = 'block';
@@ -12757,26 +12757,26 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInEsecuzione) + '</code>'
-                  + (r.riavvioNecessario
+                  + updEsc(r.runningKernel) + '</code>'
+                  + (r.restartNeeded
                      ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.kernelMismatchReboot')) + '</span>'
                      : ' <span class="badge upd-badge-ok ms-2">' + escHtml(t('up.kernelMatchNoReboot')) + '</span>') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.servicesStopping')) + '</strong></td><td>'
-                  + (r.servizi || []).map(updEsc).join(', ') + '</td></tr>'
+                  + (r.services || []).map(updEsc).join(', ') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.commandRun')) + '</strong></td><td><code>'
-                  + updEsc(r.percorsoDaemon) + ' -f -o /var/db/mailpanel/reboot.log '
-                  + updEsc(r.percorsoShutdown) + ' -r +1</code></td></tr>' 
+                  + updEsc(r.daemonPath) + ' -f -o /var/db/mailpanel/reboot.log '
+                  + updEsc(r.shutdownPath) + ' -r +1</code></td></tr>' 
                   + '</tbody></table></div>'
-                  + '<div class="alert alert-warning py-2">' + updEsc(r.effetto) + '</div>';
+                  + '<div class="alert alert-warning py-2">' + updEsc(r.effect) + '</div>';
             if (r.noshutdown) {
-                h += '<div class="alert alert-danger py-2"><strong>' + updEsc(r.avvisoNoshutdown) + '</strong></div>';
+                h += '<div class="alert alert-danger py-2"><strong>' + updEsc(r.noshutdownWarning) + '</strong></div>';
             }
-            if (r.gaProgrammato) {
+            if (r.gaScheduled) {
                 h += '<div class="alert alert-danger py-2">' + escHtml(t('up.rebootScheduled')) + ' <code>'
-                   + updEsc(r.gaProgrammato) + '</code> '
-                   + '<button class="btn btn-sm btn-light ms-2" onclick="rebAnnulla()">' + escHtml(t('up.cancelReboot')) + '</button></div>';
+                   + updEsc(r.gaScheduled) + '</code> '
+                   + '<button class="btn btn-sm btn-light ms-2" onclick="rebCancel()">' + escHtml(t('up.cancelReboot')) + '</button></div>';
             }
             h += '<div class="alert alert-secondary py-2 small">' + t('up.rebootInfo.html') + '</div>'
                + '<button class="btn btn-danger" onclick="rebGo()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.scheduleReboot')) + '</button>';
@@ -12784,28 +12784,28 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rebGo() {
-            if (!updConferma('', t('up.wReboot'))) return;
+            if (!updConfirm('', t('up.wReboot'))) return;
             const el = document.getElementById('os-body');
-            const r = await updApi('reboot_now', { confirm: 'RIAVVIA IL SERVER', minuti: 1 });
+            const r = await updApi('reboot_now', { confirm: 'REBOOT THE SERVER', minutes: 1 });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.rebootNotScheduled')) + '</strong><br>'
                     + updEsc(r.error) + (r.output ? '<br><code>' + updEsc(r.output) + '</code>' : '') + '</div>';
                 return;
             }
-            el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.nota) + '</strong>'
+            el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.note) + '</strong>'
                 + ' (' + escHtml(t('up.process', { pid: r.pid })) + ')'
                 + '<br>' + escHtml(t('up.pageWillStop'))
-                + '<br><button class="btn btn-light mt-2" onclick="rebAnnulla()">'
+                + '<br><button class="btn btn-light mt-2" onclick="rebCancel()">'
                 + '<i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('up.cancelReboot')) + '</button></div>';
         }
 
         // Su FreeBSD non esiste un'opzione per annullare: il manuale di shutdown(8) dice di
         // terminare il processo. Attenzione, "shutdown -c" NON annulla: e' power cycle.
-        async function rebAnnulla() {
+        async function rebCancel() {
             const el = document.getElementById('os-body');
             const r = await updApi('reboot_cancel');
-            el.innerHTML = '<div class="alert alert-' + (r.success ? (r.cera ? 'success' : 'secondary') : 'danger')
-                + ' py-2 mb-0">' + updEsc(r.nota || r.error) + '</div>';
+            el.innerHTML = '<div class="alert alert-' + (r.success ? (r.existedBefore ? 'success' : 'secondary') : 'danger')
+                + ' py-2 mb-0">' + updEsc(r.note || r.error) + '</div>';
         }
 
         // ---------- avvio automatico del pannello (rc.d) ----------
@@ -12815,22 +12815,22 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('rc_preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             pre.style.display = 'block';
-            pre.textContent = r.testo;
-            let h = '<p class="small text-muted mb-2">' + t('up.rcdIntro.html', { path: updEsc(r.percorso) }) + '</p>'
+            pre.textContent = r.text;
+            let h = '<p class="small text-muted mb-2">' + t('up.rcdIntro.html', { path: updEsc(r.path) }) + '</p>'
                   + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:12rem"><strong>' + escHtml(t('up.workDir')) + '</strong></td><td><code>' + updEsc(r.dir) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>Java</strong></td><td><code>' + updEsc(r.java) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>Jar</strong></td><td><code>' + updEsc(r.jar) + '</code></td></tr>'
-                  + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.alreadyInstalled')) + '</strong></td><td>' + escHtml(r.esiste ? t('dns.yes') : t('acf.no'))
-                  + (r.abilitato ? '  &mdash; mailpanel_enable=' + updEsc(r.abilitato) : '') + '</td></tr>'
+                  + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.alreadyInstalled')) + '</strong></td><td>' + escHtml(r.exists ? t('dns.yes') : t('acf.no'))
+                  + (r.enabled ? '  &mdash; mailpanel_enable=' + updEsc(r.enabled) : '') + '</td></tr>'
                   + '</tbody></table></div>'
                   + '<div class="alert alert-info py-2">' + t('up.rcNotStarted.html') + '</div>'
                   + '<button class="btn btn-warning" onclick="rcGo()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.installEnable')) + '</button>'
                   // La via d'uscita si mostra solo quando c'e' qualcosa da togliere: un
                   // pulsante che, premuto, risponde "non c'e' niente da fare" e' un pulsante
                   // che non andava mostrato.
-                  + ((r.esiste || r.abilitato)
-                     ? ' <button class="btn btn-outline-danger ms-2" onclick="rcRimuoviPrev()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
+                  + ((r.exists || r.enabled)
+                     ? ' <button class="btn btn-outline-danger ms-2" onclick="rcRemovePrev()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
                      : '');
             el.innerHTML = h;
         }
@@ -12839,98 +12839,98 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // Esiste perche' un pulsante che si puo' solo premere in un verso non e' una scelta:
         // e' una porta a senso unico. Il pannello web ha la rimozione da stamattina, qui
         // mancava.
-        async function rcRimuoviPrev() {
+        async function rcRemovePrev() {
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingRemove')) + '';
             const r = await updApi('rc_remove_preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             pre.style.display = 'none';
             if (r.nothingToDo) {
-                el.innerHTML = '<div class="alert alert-info py-2 mb-0">' + updEsc(r.nota) + '</div>'
+                el.innerHTML = '<div class="alert alert-info py-2 mb-0">' + updEsc(r.note) + '</div>'
                              + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">' + escHtml(t('up.back')) + '</button>';
                 return;
             }
             el.innerHTML = '<div class="alert alert-warning py-2 mb-2"><strong>' + escHtml(t('up.whatHappens')) + '</strong> '
-                + updEsc(r.nota) + '</div>'
+                + updEsc(r.note) + '</div>'
                 + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                 + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.rcScript')) + '</strong></td><td>'
-                + (r.installato ? '<code>' + updEsc(r.percorso) + '</code> &mdash; ' + escHtml(t('up.willBeDeleted'))
+                + (r.installed ? '<code>' + updEsc(r.path) + '</code> &mdash; ' + escHtml(t('up.willBeDeleted'))
                                 : '<span class="text-muted">' + escHtml(t('up.notPresent')) + '</span>') + '</td></tr>'
                 + '<tr class="upd-cell"><td><strong>mailpanel_enable</strong></td><td>'
-                + (r.variabileEsiste ? '<code>' + updEsc((r.prima && r.prima.valoreSysrc) || '') + '</code> &mdash; ' + escHtml(t('up.willLeaveRcConf'))
+                + (r.variableExists ? '<code>' + updEsc((r.before && r.before.sysrcValue) || '') + '</code> &mdash; ' + escHtml(t('up.willLeaveRcConf'))
                                      : '<span class="text-muted">' + escHtml(t('up.notSetUntouched')) + '</span>') + '</td></tr>'
-                + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.backupCopy')) + '</strong></td><td><code>' + updEsc(r.copia) + '</code>'
+                + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.backupCopy')) + '</strong></td><td><code>' + updEsc(r.copy) + '</code>'
                 + '<div class="small text-muted">' + escHtml(t('up.noCopyNoDelete')) + '</div></td></tr>'
                 + '</tbody></table></div>'
                 + '<div class="alert alert-info py-2 mb-2"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>'
                 + t('up.rcRemoveInfo.html') + '</div>'
-                + '<button class="btn btn-danger" onclick="rcRimuoviGo()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
+                + '<button class="btn btn-danger" onclick="rcRemoveGo()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
                 + ' <button class="btn btn-outline-secondary ms-2" onclick="rcPrev()">' + escHtml(t('common.cancel')) + '</button>';
         }
 
-        async function rcRimuoviGo() {
-            if (!updConferma(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
+        async function rcRemoveGo() {
+            if (!updConfirm(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
             const el = document.getElementById('os-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingAutostart')) + '';
-            const r = await updApi('rc_remove', { confirm: 'RIMUOVI RC' });
+            const r = await updApi('rc_remove', { confirm: 'REMOVE RC' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mb-0">'
-                + updEsc(r.nota || r.error) + '</div>'
+                + updEsc(r.note || r.error) + '</div>'
                 + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">'
                 + '<i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('up.rereadState')) + '</button>';
         }
 
         async function rcGo() {
-            if (!updConferma('', t('up.wInstallRc'))) return;
+            if (!updConfirm('', t('up.wInstallRc'))) return;
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
-            const r = await updApi('rc_install', { confirm: 'INSTALLA RC' });
+            const r = await updApi('rc_install', { confirm: 'INSTALL RC' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pre.style.display = 'block';
             pre.textContent = 'service mailpanel rcvar:\\n' + (r.rcvar || '');
-            el.innerHTML = '<div class="alert alert-' + (r.caricato ? 'success' : 'warning') + ' py-2 mb-0">'
-                + (r.caricato
-                   ? '<strong>' + escHtml(t('up.installed')) + '</strong> ' + escHtml(t('up.rcLoaded', { value: r.abilitatoOra })) + ' '
+            el.innerHTML = '<div class="alert alert-' + (r.loaded ? 'success' : 'warning') + ' py-2 mb-0">'
+                + (r.loaded
+                   ? '<strong>' + escHtml(t('up.installed')) + '</strong> ' + escHtml(t('up.rcLoaded', { value: r.enabledNow })) + ' '
                    : '<strong>' + escHtml(t('up.installedNotRecognized')) + '</strong> ' + escHtml(t('up.lookBelow')) + ' ')
-                + updEsc(r.nota) + '</div>';
+                + updEsc(r.note) + '</div>';
         }
 
         // ---------- sistema operativo ----------
-        async function osStato() {
+        async function osState() {
             const el = document.getElementById('os-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingOs')) + '';
             const r = await updApi('os_status');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:16rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
-                  + updEsc(r.uname) + '</code>' + (r.riavvioNecessario
+                  + updEsc(r.uname) + '</code>' + (r.restartNeeded
                       ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.kernelMismatch')) + '</span>'
                       : ' <span class="badge upd-badge-ok ms-2">' + escHtml(t('up.kernelMatch')) + '</span>') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>Userland</strong></td><td><code>' + updEsc(r.userland) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.arch')) + '</strong></td><td><code>' + updEsc(r.arch) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.eos')) + '</strong></td><td>'
-                  + (r.fineSupporto
-                     ? '<strong>' + updEsc(r.fineSupporto) + '</strong> <span class="small text-muted">' + updEsc(r.noteSupporto) + '</span>'
-                     : '<span class="text-warning">' + escHtml(t('up.seriesUnknown', { series: r.serie })) + '</span>')
+                  + (r.endOfSupport
+                     ? '<strong>' + updEsc(r.endOfSupport) + '</strong> <span class="small text-muted">' + updEsc(r.supportNotes) + '</span>'
+                     : '<span class="text-warning">' + escHtml(t('up.seriesUnknown', { series: r.series })) + '</span>')
                   + '</td></tr></tbody></table></div>'
-                  + '<p class="small text-muted">' + escHtml(t('up.sourceIs', { source: r.fonteSupporto })) + '</p>';
-            if (r.aggiornabileConFreebsdUpdate) {
-                h += '<div class="alert alert-' + (r.cePronti ? 'warning' : 'secondary') + ' py-2">'
-                   + '<strong>' + escHtml(t('up.baseFetched')) + '</strong> ' + updEsc(r.giaPronti) + '</div>'
-                   + '<button class="btn btn-outline-primary" onclick="osCerca()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('up.fetchOs')) + '</button>'
+                  + '<p class="small text-muted">' + escHtml(t('up.sourceIs', { source: r.supportSource })) + '</p>';
+            if (r.updatableWithFreebsdUpdate) {
+                h += '<div class="alert alert-' + (r.readyExist ? 'warning' : 'secondary') + ' py-2">'
+                   + '<strong>' + escHtml(t('up.baseFetched')) + '</strong> ' + updEsc(r.alreadyReady) + '</div>'
+                   + '<button class="btn btn-outline-primary" onclick="osSearch()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('up.fetchOs')) + '</button>'
                    + '<span class="small text-muted ms-2">' + t('up.fetchOsNote.html') + '</span>';
             } else {
-                h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.notaAggiornamenti) + '</div>';
+                h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.updatesNote) + '</div>';
             }
             el.innerHTML = h;
         }
 
-        async function osCerca() {
-            if (!updConferma(t('up.fetchNote'), t('up.wFetch'))) return;
+        async function osSearch() {
+            if (!updConfirm(t('up.fetchNote'), t('up.wFetch'))) return;
             const pre = document.getElementById('os-log');
             pre.style.display = 'block';
             pre.textContent = t('up.fetchRunning');
-            const r = await updApi('os_fetch', { confirm: 'CERCA AGGIORNAMENTI' });
+            const r = await updApi('os_fetch', { confirm: 'FETCH UPDATES' });
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
             // Segue il lavoro con il polling: su un sistema indietro di mesi il download dura
             // minuti, e una richiesta HTTP tenuta aperta cosi' a lungo la chiude il browser.
@@ -12938,61 +12938,61 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- eliminazione di un ambiente di avvio ----------
-        async function beElimina(nome) {
-            if (!updConferma(t('up.confirmBeDelete', { name: nome }), t('up.wDelete'))) return;
+        async function beDelete(entryName) {
+            if (!updConfirm(t('up.confirmBeDelete', { name: entryName }), t('up.wDelete'))) return;
             const el = document.getElementById('up-body');
-            const r = await updApi('be_destroy', { confirm: 'ELIMINA', nome: nome });
+            const r = await updApi('be_destroy', { confirm: 'DELETE', name: entryName });
             const box = document.createElement('div');
             box.className = 'alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mt-2';
-            box.textContent = r.nota || r.error || t('shu.unknownResult');
+            box.textContent = r.note || r.error || t('shu.unknownResult');
             el.appendChild(box);
-            if (r.success) upVerifica();
+            if (r.success) upCheck();
         }
 
         // ---------- proseguimento del salto, che sopravvive ai riavvii ----------
-        async function saltoStato() {
+        async function jumpState() {
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingWhere')) + '';
-            const r = await updApi('salto_stato');
+            const r = await updApi('jump_state');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInEsecuzione) + '</code>'
-                  + (r.riavvioNecessario ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.needReboot')) + '</span>'
+                  + updEsc(r.runningKernel) + '</code>'
+                  + (r.restartNeeded ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.needReboot')) + '</span>'
                                          : ' <span class="badge upd-badge-ok ms-2">' + escHtml(t('up.kernelMatch')) + '</span>') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>Userland</strong></td><td><code>' + updEsc(r.userland) + '</code></td></tr>'
                   + '</tbody></table></div>';
-            if ((r.passi || []).length) {
+            if ((r.steps || []).length) {
                 h += '<h6 class="mt-2 mb-1">' + escHtml(t('up.alreadyDone')) + '</h6>'
                    + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colRound')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th><th scope="col">' + escHtml(t('up.colAsked')) + '</th><th scope="col">' + escHtml(t('up.colUserlandAfter')) + '</th>'
                    + '</tr></thead><tbody>';
-                (r.passi || []).forEach(p => {
-                    h += '<tr class="upd-cell"><td>' + updEsc(p.giro) + '</td><td>'
-                       + (p.codice === 0 ? 'ok' : escHtml(t('up.code', { code: p.codice }))) + '</td><td>'
-                       + updEsc(p.chiede) + '</td><td><code>' + updEsc(p.userland) + '</code></td></tr>';
+                (r.steps || []).forEach(p => {
+                    h += '<tr class="upd-cell"><td>' + updEsc(p.round) + '</td><td>'
+                       + (p.code === 0 ? 'ok' : escHtml(t('up.code', { code: p.code }))) + '</td><td>'
+                       + escHtml(({ restart: t('up.asks.restart'), finished: t('up.asks.finished'), again: t('up.asks.again'), rebuild: t('up.asks.rebuild') })[p.asks] || p.asks || '') + '</td><td><code>' + updEsc(p.userland) + '</code></td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
-            if (r.riavvioNecessario) {
+            if (r.restartNeeded) {
                 h += '<div class="alert alert-warning py-2">' + t('up.rebootFirst.html') + '</div>'
                    + '<button class="btn btn-danger" onclick="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.goReboot')) + '</button>';
-            } else if (r.fase === 'finito') {
+            } else if (r.phase === 'finished') {
                 h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.jumpDone')) + '</div>';
             } else {
                 h += '<div class="alert alert-info py-2">' + t('up.jumpInfo.html') + '</div>'
-                   + '<button class="btn btn-warning" onclick="saltoVai()"><i class="fas fa-forward me-1" aria-hidden="true"></i>' + escHtml(t('up.continue')) + '</button>';
+                   + '<button class="btn btn-warning" onclick="jumpGo()"><i class="fas fa-forward me-1" aria-hidden="true"></i>' + escHtml(t('up.continue')) + '</button>';
             }
             el.innerHTML = h;
             pre.style.display = 'none';
         }
 
-        async function saltoVai() {
-            if (!updConferma('', t('up.wContinue'))) return;
+        async function jumpGo() {
+            if (!updConfirm('', t('up.wContinue'))) return;
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
-            const r = await updApi('salto_prosegui', { confirm: 'PROSEGUI', target: upTarget() });
+            const r = await updApi('jump_continue', { confirm: 'CONTINUE', target: upTarget() });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -13014,23 +13014,23 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 return false;
             }
             sel.innerHTML = '';
-            (r.versioni || []).forEach(v => {
+            (r.versions || []).forEach(v => {
                 const o = document.createElement('option');
-                o.value = v.versione;
-                o.textContent = t('up.supportedUntil', { version: v.versione, date: v.fineSupporto });
+                o.value = v.version;
+                o.textContent = t('up.supportedUntil', { version: v.version, date: v.endOfSupport });
                 sel.appendChild(o);
             });
-            if (!(r.versioni || []).length) {
+            if (!(r.versions || []).length) {
                 const o = document.createElement('option');
                 o.value = ''; o.textContent = t('up.noneAvailable');
                 sel.appendChild(o);
                 document.getElementById('up-body').innerHTML =
-                    '<div class="alert alert-info py-2 mb-0">' + updEsc(r.nota) + '</div>';
+                    '<div class="alert alert-info py-2 mb-0">' + updEsc(r.note) + '</div>';
                 return false;
             }
             document.getElementById('up-body').innerHTML =
-                '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.youAreOn', { version: r.attuale })) + ' '
-              + updEsc(r.nota) + '<br>' + escHtml(t('up.sourceIs', { source: r.fonte })) + '</div>';
+                '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.youAreOn', { version: r.current })) + ' '
+              + updEsc(r.note) + '<br>' + escHtml(t('up.sourceIs', { source: r.source })) + '</div>';
             return true;
         }
 
@@ -13044,7 +13044,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
@@ -13053,37 +13053,37 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else {
                 h += '<div class="alert alert-warning py-2">' + t('up.prepInfo.html') + '</div>'
                    + '<button class="btn btn-warning me-2" onclick="upPrep()"><i class="fas fa-shield-halved me-1" aria-hidden="true"></i>' + escHtml(t('up.prepare')) + '</button>'
-                   + '<button class="btn btn-outline-secondary" onclick="upIstr()"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>' + escHtml(t('up.showCommands')) + '</button>';
+                   + '<button class="btn btn-outline-secondary" onclick="upInstr()"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>' + escHtml(t('up.showCommands')) + '</button>';
             }
             el.innerHTML = h;
         }
 
         async function upPrep() {
-            if (!updConferma('', t('up.wPrepare'))) return;
+            if (!updConfirm('', t('up.wPrepare'))) return;
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
-            const r = await updApi('os_upgrade_prepare', { confirm: 'PREPARA AGGIORNAMENTO', target: upTarget() });
+            const r = await updApi('os_upgrade_prepare', { confirm: 'PREPARE UPGRADE', target: upTarget() });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.preparingKeepOpen')) + '</span>';
             pre.style.display = 'block';
             planPoll(r.jobId, el, pre);
         }
 
-        async function upIstr() {
+        async function upInstr() {
             const pre = document.getElementById('up-log');
             pre.style.display = 'block';
             pre.textContent = t('up.genCommands');
             const r = await updApi('os_upgrade_instructions', { target: upTarget() });
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            let testo = t('up.jumpTitle', { version: r.bersaglio }) + '\\n'
-                  + t('up.sourceIs', { source: r.fonte }) + '\\n\\n';
-            (r.passi || []).forEach(p => {
-                testo += p.n + '. ' + p.titolo + '\\n     ' + p.cmd + '\\n     ' + p.nota + '\\n\\n';
+            let textValue = t('up.jumpTitle', { version: r.target }) + '\\n'
+                  + t('up.sourceIs', { source: r.source }) + '\\n\\n';
+            (r.steps || []).forEach(p => {
+                textValue += p.n + '. ' + p.title + '\\n     ' + p.cmd + '\\n     ' + p.note + '\\n\\n';
             });
-            testo += t('up.wayBack') + '\\n     ' + r.ritorno + '\\n';
-            pre.textContent = testo;
+            textValue += t('up.wayBack') + '\\n     ' + r.returnInfo + '\\n';
+            pre.textContent = textValue;
         }
 
-        async function upVerifica() {
+        async function upCheck() {
             const el = document.getElementById('up-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.comparingInventory')) + '';
             const r = await updApi('os_upgrade_verify');
@@ -13091,44 +13091,44 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>'
-               + (r.tuttoBene
+               + (r.allGood
                   ? '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.allStillThere')) + '</div>'
                   : '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('up.somethingOff')) + '</div>');
 
             // Gli ambienti di avvio meritano una tabella loro: "bectl list" e' illeggibile
             // per chi non sa gia' cosa sta guardando.
-            const be = r.ambienti;
+            const be = r.environments;
             if (be && be.success) {
                 h += '<h6 class="mt-4 mb-1">' + escHtml(t('up.yourWaysBack')) + '</h6>'
-                   + '<p class="small text-muted mb-2">' + updEsc(be.cosaSono) + '</p>'
+                   + '<p class="small text-muted mb-2">' + updEsc(be.whatTheyAre) + '</p>'
                    + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colEnv')) + '</th><th scope="col">' + escHtml(t('up.colWhatIs')) + '</th><th scope="col">' + escHtml(t('set.colState')) + '</th>'
                    + '<th scope="col" class="text-end">' + escHtml(t('up.colSpace')) + '</th><th scope="col">' + escHtml(t('adm.created')) + '</th></tr></thead><tbody>';
-                (be.ambienti || []).forEach(x => {
-                    const badge = x.inUso
+                (be.environments || []).forEach(x => {
+                    const badge = x.inUse
                         ? '<span class="badge upd-badge-ok">' + escHtml(t('up.inUseNow')) + '</span>'
-                        : (x.alRiavvio
+                        : (x.atRestart
                            ? '<span class="badge upd-badge-warn">' + escHtml(t('up.atReboot')) + '</span>'
                            : '<span class="badge upd-badge-info">' + escHtml(t('up.spare')) + '</span>');
-                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.nome) + '</code><br>'
-                       + '<span class="small text-muted">' + updEsc(x.origine) + '</span></td>'
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.name) + '</code><br>'
+                       + '<span class="small text-muted">' + updEsc(x.origin) + '</span></td>'
                        + '<td class="small">' + updEsc(x.explanation) + '</td>'
-                       + '<td>' + badge + '<br><span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
-                       + '<td class="text-end">' + updEsc(x.spazio) + '</td>'
-                       + '<td class="small">' + updEsc(x.creato)
-                       + (x.eliminabile
-                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" data-name="' + escHtml(x.nome) + '" onclick="beElimina(this.dataset.name)">'
+                       + '<td>' + badge + '<br><span class="small text-muted">' + updEsc(x.why) + '</span></td>'
+                       + '<td class="text-end">' + updEsc(x.space) + '</td>'
+                       + '<td class="small">' + updEsc(x.created)
+                       + (x.deletable
+                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" data-name="' + escHtml(x.name) + '" onclick="beDelete(this.dataset.name)">'
                             + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('common.delete')) + '</button>'
                           : '')
                        + '</td></tr>';
                 });
                 h += '</tbody></table></div>'
                    + '<div class="alert alert-secondary py-2 small mb-0"><strong>' + escHtml(t('up.toGoBack')) + '</strong> '
-                   + updEsc(be.comeTornare) + '<br><strong>' + escHtml(t('up.whenDelete')) + '</strong> ' + updEsc(be.quandoEliminare)
+                   + updEsc(be.howToGoBack) + '<br><strong>' + escHtml(t('up.whenDelete')) + '</strong> ' + updEsc(be.whenToDelete)
                    + '</div>';
             }
             el.innerHTML = h;
@@ -13138,29 +13138,29 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- rapporto del sistema ----------
         async function repGen() {
-            const st = document.getElementById('rep-stato'), pre = document.getElementById('rep-testo');
+            const st = document.getElementById('rep-state'), pre = document.getElementById('rep-text');
             st.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.collecting')) + '';
             const r = await updApi('system_report');
-            if (!r.success && !r.parziale) { st.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            if (!r.success && !r.partial) { st.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             pre.style.display = 'block';
-            pre.textContent = r.testo || r.parziale;
+            pre.textContent = r.text || r.partial;
             document.getElementById('rep-copy').style.display = '';
             st.innerHTML = r.success
-                ? '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.reportReady', { n: (r.testo || '').length })) + '</span>'
+                ? '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.reportReady', { n: (r.text || '').length })) + '</span>'
                 : '<span class="text-warning">' + escHtml(t('up.reportCut', { error: r.error })) + '</span>';
         }
 
-        async function repCopia() {
-            const testo = document.getElementById('rep-testo').textContent;
+        async function repCopy() {
+            const textValue = document.getElementById('rep-text').textContent;
             try {
-                await navigator.clipboard.writeText(testo);
-                document.getElementById('rep-stato').innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('fw.copied')) + '</span>';
+                await navigator.clipboard.writeText(textValue);
+                document.getElementById('rep-state').innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('fw.copied')) + '</span>';
             } catch (e) {
                 // Senza HTTPS o senza permesso la clipboard non c&#39;e&#39;: si seleziona a mano.
-                const el = document.getElementById('rep-testo');
+                const el = document.getElementById('rep-text');
                 const sel = window.getSelection(); const rg = document.createRange();
                 rg.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(rg);
-                document.getElementById('rep-stato').innerHTML = '<span class="text-warning">' + escHtml(t('up.clipboardBlocked')) + '</span>';
+                document.getElementById('rep-state').innerHTML = '<span class="text-warning">' + escHtml(t('up.clipboardBlocked')) + '</span>';
             }
         }
         """ + getUpdatesScript1b();
@@ -13169,9 +13169,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     private static String getUpdatesScript1b() {
         return """
         // L'esito arriva come codice del server; qui il nome nella lingua della pagina.
-        function updEsito(v) {
-            return ({ coerente: t('up.eConsistent'), DIVERGE: t('up.eDiverges'), MISTO: t('up.eMixed'), assente: t('up.eMissing'),
-                      'port installato accanto al sistema base': t('up.ePortBeside') })[v] || v;
+        function updOutcome(v) {
+            return ({ consistent: t('up.eConsistent'), DIVERGES: t('up.eDiverges'), MIXED: t('up.eMixed'), absent: t('up.eMissing'),
+                      'port-beside-base': t('up.ePortBeside') })[v] || v;
         }
 
         async function defCheck() {
@@ -13186,109 +13186,109 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + ' py-2"><strong>' + escHtml(t('up.branchIs', { branch: rm.branch })) + '</strong>'
                    + (rm.url ? ' &mdash; <code>' + updEsc(rm.url) + '</code>' : '')
                    + '<br><span class="small">' + updEsc(rm.explanation) + '</span>'
-                   + '<br><span class="small text-muted">' + updEsc(rm.dove) + '</span></div>';
+                   + '<br><span class="small text-muted">' + updEsc(rm.where) + '</span></div>';
             }
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col">' + escHtml(t('up.colComponent')) + '</th><th scope="col">' + escHtml(t('up.colFbsdDefault')) + '</th><th scope="col">' + escHtml(t('up.colInstalled')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
-            (r.righe || []).forEach(x => {
-                const cls = x.esito === 'coerente' ? 'upd-badge-ok'
-                          : (x.esito === 'DIVERGE' ? 'upd-badge-stop' : 'upd-badge-warn');
-                const fuori = x.fuoriPredefinito
+            (r.lines || []).forEach(x => {
+                const cls = x.outcome === 'consistent' ? 'upd-badge-ok'
+                          : (x.outcome === 'DIVERGES' ? 'upd-badge-stop' : 'upd-badge-warn');
+                const outside = x.outsideDefault
                     ? '<br><span class="small text-danger">' + escHtml(t('up.outsideDefault')) + ' <code>'
-                      + updEsc(x.fuoriPredefinito) + '</code></span>' : '';
-                let dip = '';
-                (x.dipendenti || []).forEach(d => {
-                    const q = d.richiestoDa || [];
+                      + updEsc(x.outsideDefault) + '</code></span>' : '';
+                let dependentsHtml = '';
+                (x.dependents || []).forEach(d => {
+                    const q = d.requiredBy || [];
                     // "si puo' togliere" era una conclusione, non una misura: %rn dice solo chi lo
                     // DICHIARA. Qui si dice esattamente questo, e per il port openssl si offre la
                     // misura vera, che guarda cosa i processi vivi hanno davvero aperto.
-                    dip += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-muted') + '">'
-                         + '<code>' + updEsc(d.pacchetto) + '</code> '
+                    dependentsHtml += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-muted') + '">'
+                         + '<code>' + updEsc(d.pkgName) + '</code> '
                          + (q.length
                             ? escHtml(t('up.declaredBy', { list: q.join(', ') }))
                             : escHtml(t('up.declaredByNone')))
                          + '</span>';
-                    if (d.pacchetto === 'openssl') {
-                        dip += '<br><button class="btn btn-sm btn-outline-primary mt-1" onclick="sslUso()">'
+                    if (d.pkgName === 'openssl') {
+                        dependentsHtml += '<br><button class="btn btn-sm btn-outline-primary mt-1" onclick="sslUsage()">'
                              + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.whoUses')) + '</button>';
                     }
                 });
-                h += '<tr class="upd-cell"><td><strong>' + updEsc(x.componente) + '</strong><br>'
-                   + '<span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
-                   + '<td><code>' + updEsc(x.predefinito) + '</code></td>'
-                   + '<td><code>' + updEsc(x.installato || '-') + '</code></td>'
-                   + '<td><span class="badge ' + cls + '">' + escHtml(updEsito(x.esito)) + '</span>' + fuori + dip + '</td></tr>';
+                h += '<tr class="upd-cell"><td><strong>' + updEsc(x.component) + '</strong><br>'
+                   + '<span class="small text-muted">' + updEsc(x.why) + '</span></td>'
+                   + '<td><code>' + updEsc(x.defaultValue) + '</code></td>'
+                   + '<td><code>' + updEsc(x.installed || '-') + '</code></td>'
+                   + '<td><span class="badge ' + cls + '">' + escHtml(updOutcome(x.outcome)) + '</span>' + outside + dependentsHtml + '</td></tr>';
             });
             h += '</tbody></table></div>'
-               + '<div id="ssl-uso" class="mb-2"></div>'
-               + '<div class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(r.fonte) + '<br>'
-               + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.avvertenza) + '</div>';
+               + '<div id="ssl-usage" class="mb-2"></div>'
+               + '<div class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(r.source) + '<br>'
+               + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.caveat) + '</div>';
             el.innerHTML = h;
         }
 
         // ---------- chi usa davvero il port openssl ----------
-        async function sslUso() {
-            const el = document.getElementById('ssl-uso');
+        async function sslUsage() {
+            const el = document.getElementById('ssl-usage');
             el.innerHTML = '<div class="alert alert-secondary py-2 mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + escHtml(t('up.lookingProcs')) + '</div>';
-            const r = await updApi('ssl_uso');
+            const r = await updApi('ssl_usage');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.verdict === 'NESSUNO LO USA' ? 'success'
-                      : (r.verdict === 'IN USO ADESSO' || r.verdict === 'RICHIESTO') ? 'danger' : 'warning';
-            // "IL COMANDO E' SUO" e "NON DETERMINABILE" restano gialli: non sono un divieto,
+            const cls = r.verdict === 'NOBODY_USES' ? 'success'
+                      : (r.verdict === 'IN_USE_NOW' || r.verdict === 'REQUIRED') ? 'danger' : 'warning';
+            // "COMMAND_IS_ITS" e "UNDETERMINED" restano gialli: non sono un divieto,
             // ma nemmeno un via libera.
             let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
-                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
-                  + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.nota) + '</div>'
-                  + (r.percheEQui
+                  + '<strong>' + updEsc(updVerdict(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
+                  + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.note) + '</div>'
+                  + (r.whyItIsHere
                      ? '<div class="alert alert-secondary py-2 small mb-2"><strong>' + escHtml(t('up.whyHere')) + '</strong> '
-                       + updEsc(r.percheEQui) + '</div>' : '');
+                       + updEsc(r.whyItIsHere) + '</div>' : '');
             // Le librerie sono meta' della domanda. L'altra meta' e' il comando: un "openssl x509"
             // dura millisecondi e procstat non lo coglie mai, ma gira lo stesso.
-            const bn = r.binari || [];
-            if (bn.length || r.comandoInPath) {
+            const bn = r.binaries || [];
+            if (bn.length || r.commandInPath) {
                 h += '<h6 class="mt-2 mb-1">' + t('up.opensslCommand.html') + '</h6>'
                    + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colExecutable')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
                 bn.forEach(b => {
-                    const vince = b.percorso === r.comandoInPath;
-                    h += '<tr class="upd-cell"><td><code>' + updEsc(b.percorso) + '</code></td>'
-                       + '<td class="small">' + updEsc(b.versione) + '</td>'
-                       + '<td class="small">' + updEsc(b.pacchetto || t('up.baseSystem')) + '</td>'
-                       + '<td>' + (vince
-                          ? '<span class="badge ' + (b.delPort ? 'upd-badge-warn' : 'upd-badge-ok') + '">'
+                    const wins = b.path === r.commandInPath;
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(b.path) + '</code></td>'
+                       + '<td class="small">' + updEsc(b.version) + '</td>'
+                       + '<td class="small">' + updEsc(b.pkgName || t('up.baseSystem')) + '</td>'
+                       + '<td>' + (wins
+                          ? '<span class="badge ' + (b.fromPort ? 'upd-badge-warn' : 'upd-badge-ok') + '">'
                             + escHtml(t('up.winsPath')) + '</span>'
                           : '<span class="badge upd-badge-info">' + escHtml(t('up.presentNotChosen')) + '</span>') + '</td></tr>';
                 });
                 h += '</tbody></table></div>'
-                   + '<div class="small text-muted mb-3">' + updEsc(r.chiLoInvoca) + '</div>';
+                   + '<div class="small text-muted mb-3">' + updEsc(r.whoInvokesIt) + '</div>';
             }
-            if (r.installato) {
+            if (r.installed) {
                 h += '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                    + '<tr><td class="small">' + escHtml(t('up.portVersion')) + '</td><td><code>'
-                   + updEsc(r.versione) + '</code></td></tr>'
+                   + updEsc(r.version) + '</code></td></tr>'
                    + '<tr><td class="small">' + escHtml(t('up.portLibs')) + '</td><td><code>'
-                   + updEsc((r.sonamePort || []).join(' ') || '-') + '</code></td></tr>'
+                   + updEsc((r.portSoname || []).join(' ') || '-') + '</code></td></tr>'
                    + '<tr><td class="small">' + escHtml(t('up.baseLibs')) + '</td><td><code>'
-                   + updEsc((r.sonameBase || []).join(' ') || '-') + '</code></td></tr>'
+                   + updEsc((r.baseSoname || []).join(' ') || '-') + '</code></td></tr>'
                    + '<tr><td class="small">' + escHtml(t('up.sameNames')) + '</td><td>'
-                   + (r.ambiguo
-                      ? '<span class="badge upd-badge-warn">' + escHtml(t('up.yesList', { list: (r.sonameInComune || []).join(' ') })) + '</span>'
+                   + (r.ambiguous
+                      ? '<span class="badge upd-badge-warn">' + escHtml(t('up.yesList', { list: (r.sharedSoname || []).join(' ') })) + '</span>'
                         + '<br><span class="small text-muted">' + escHtml(t('up.ambiguous')) + '</span>'
                       : '<span class="badge upd-badge-ok">' + escHtml(t('acf.no')) + '</span>') + '</td></tr>'
                    + '<tr><td class="small">' + escHtml(t('up.procsTls')) + '</td><td>'
-                   + '<strong>' + updEsc(r.processiConTls) + '</strong>'
-                   + '<br><span class="small text-muted">' + updEsc(r.comeHoMisurato) + '</span></td></tr>'
+                   + '<strong>' + updEsc(r.processesWithTls) + '</strong>'
+                   + '<br><span class="small text-muted">' + updEsc(r.howMeasured) + '</span></td></tr>'
                    + '</tbody></table></div>';
-                const pr = r.processi || [];
+                const pr = r.processes || [];
                 if (pr.length) {
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                        + '<th scope="col">PID</th><th scope="col">' + escHtml(t('up.colProcess')) + '</th><th scope="col">' + escHtml(t('up.colWhichOpenssl')) + '</th></tr></thead><tbody>';
                     pr.forEach(x => {
                         h += '<tr class="upd-cell"><td><code>' + updEsc(x.pid) + '</code></td>'
-                           + '<td>' + updEsc(x.comando) + '</td><td class="small">'
-                           + (x.librerie || []).map(l => '<code>' + updEsc(l) + '</code>').join('<br>')
-                           + (x.usaIlPort
+                           + '<td>' + updEsc(x.command) + '</td><td class="small">'
+                           + (x.libraries || []).map(l => '<code>' + updEsc(l) + '</code>').join('<br>')
+                           + (x.usesThePort
                               ? '<br><span class="badge upd-badge-stop">' + escHtml(t('up.usesPort')) + '</span>'
                               : '<br><span class="badge upd-badge-ok">' + escHtml(t('up.baseSystem')) + '</span>')
                            + '</td></tr>';
@@ -13296,12 +13296,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     h += '</tbody></table></div>';
                 }
             }
-            if (r.pannello && r.pannello.success) {
+            if (r.panel && r.panel.success) {
                 h += '<h6 class="mt-2 mb-1">' + escHtml(t('up.panelUses')) + '</h6>'
-                   + rimRiquadro(r.pannello);
+                   + rmBox(r.panel);
             }
             h += '<div class="alert alert-secondary py-2 small mb-0 mt-2"><strong>' + escHtml(t('up.ifRemoved')) + '</strong> '
-               + updEsc(r.comeSiToglie) + '</div>';
+               + updEsc(r.howToRemove) + '</div>';
             el.innerHTML = h;
         }
 
@@ -13313,29 +13313,31 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         const PROCEDURE = ['proc-release', 'proc-python', 'proc-jvm',
                            'proc-roundcube', 'proc-mysql', 'proc-protetto'];
 
-        function procApri(id, forza) {
+        function procOpen(id, forced) {
             const c = document.getElementById(id), tog = document.getElementById(id + '-tog');
             if (!c) return;
-            const chiusa = c.style.display === 'none';
-            const apri = forza === undefined ? chiusa : forza;
-            c.style.display = apri ? '' : 'none';
-            if (tog) { tog.innerHTML = '<i class="fas fa-chevron-' + (apri ? 'up' : 'down') + '" aria-hidden="true"></i>'; tog.setAttribute('aria-expanded', String(apri)); }
-            try { localStorage.setItem('mp-' + id, apri ? 'aperta' : 'chiusa'); } catch (e) { }
+            const closed = c.style.display === 'none';
+            const open = forced === undefined ? closed : forced;
+            c.style.display = open ? '' : 'none';
+            if (tog) { tog.innerHTML = '<i class="fas fa-chevron-' + (open ? 'up' : 'down') + '" aria-hidden="true"></i>'; tog.setAttribute('aria-expanded', String(open)); }
+            try { localStorage.setItem('mp-' + id, open ? 'open' : 'closed'); } catch (e) { }
         }
 
         function procInit() {
             PROCEDURE.forEach(id => {
                 const c = document.getElementById(id);
                 if (!c) return;
-                let voluta = null;
-                try { voluta = localStorage.getItem('mp-' + id); } catch (e) { }
+                let wanted = null;
+                try { wanted = localStorage.getItem('mp-' + id); } catch (e) { }
                 // Chiuse per impostazione predefinita: si aprono se le hai aperte tu.
-                procApri(id, voluta === 'aperta');
+                // 'aperta' e' come lo salvava la pagina fino al 24/10/2026: chi aveva lasciato una
+                // scheda aperta la ritrova aperta.
+                procOpen(id, wanted === 'open' || wanted === 'aperta');
                 // E si aprono DA SOLE quando hanno qualcosa da dire: premere un pulsante
                 // dell'intestazione scrive nel corpo, e un corpo nascosto non si vedrebbe.
                 try {
                     new MutationObserver(() => {
-                        if (c.style.display === 'none') procApri(id, true);
+                        if (c.style.display === 'none') procOpen(id, true);
                     }).observe(c, { childList: true, subtree: true, characterData: true });
                 } catch (e) { }
             });
@@ -13353,60 +13355,60 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingRspamdLog')) + '';
             const r = await updApi('rspamd_timeout');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.verdict === 'NESSUNA ANALISI INTERROTTA' ? 'success'
-                      : (r.verdict === 'CI SONO ANALISI INTERROTTE' ? 'danger'
-                      : (r.verdict === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
-            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(r.verdict))
+            const cls = r.verdict === 'NO_SCAN_INTERRUPTED' ? 'success'
+                      : (r.verdict === 'SCANS_INTERRUPTED' ? 'danger'
+                      : (r.verdict === "NO_TRACE_SHORT_LOG" ? 'info' : 'secondary'));
+            let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdict(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
-            if (r.avvisa) {
+            if (r.warns) {
                 h += '<div class="small text-muted mb-1">task_timeout <code>' + updEsc(r.taskTimeout)
-                   + '</code> &middot; ' + escHtml(t('up.cacheMax')) + ' <code>' + updEsc(r.massimoTeorico) + '</code></div>';
+                   + '</code> &middot; ' + escHtml(t('up.cacheMax')) + ' <code>' + updEsc(r.theoreticalMax) + '</code></div>';
             }
-            if (r.righeLog !== undefined) {
-                h += '<div class="small text-muted mb-1">' + escHtml(t('up.sample', { n: r.righeLog }))
-                   + (r.dal ? ' ' + escHtml(t('up.fromTo', { from: r.dal, to: r.al })) : '')
-                   + ' &middot; ' + escHtml(t('up.olderRotations', { n: r.rotazioni || 0 }))
-                   + ((r.rotazioniCompresse || 0) > 0
-                      ? ' (' + escHtml(t('up.compressedRead', { n: r.rotazioniCompresse })) + ')' : '') + '</div>';
+            if (r.logLines2 !== undefined) {
+                h += '<div class="small text-muted mb-1">' + escHtml(t('up.sample', { n: r.logLines2 }))
+                   + (r.since ? ' ' + escHtml(t('up.fromTo', { from: r.since, to: r.until })) : '')
+                   + ' &middot; ' + escHtml(t('up.olderRotations', { n: r.rotations || 0 }))
+                   + ((r.compressedRotations || 0) > 0
+                      ? ' (' + escHtml(t('up.compressedRead', { n: r.compressedRotations })) + ')' : '') + '</div>';
             }
-            const sy = r.simboli || [];
+            const sy = r.symbols || [];
             if (sy.length) {
                 h += '<div class="small mb-1">' + escHtml(t('up.symbolLimits')) + '</div>'
                    + '<div class="mb-2">' + sy.map(x => '<span class="badge upd-badge-info me-1">'
-                     + updEsc(x.nome) + ' ' + updEsc(x.secondi) + 's</span>').join(' ') + '</div>';
+                     + updEsc(x.name) + ' ' + updEsc(x.seconds) + 's</span>').join(' ') + '</div>';
             }
-            const g = r.nelLog || [];
+            const g = r.inLog || [];
             if (g.length) {
                 h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col" class="text-end">' + escHtml(t('up.colTimes')) + '</th><th scope="col">' + escHtml(t('up.colLogMessage')) + '</th></tr></thead><tbody>';
                 g.forEach(x => {
-                    h += '<tr class="upd-cell"><td class="text-end">' + updEsc(x.volte) + '</td>'
+                    h += '<tr class="upd-cell"><td class="text-end">' + updEsc(x.times) + '</td>'
                        + '<td class="small">'
-                       + '<span class="badge ' + (x.eAvviso ? 'upd-badge-info' : 'upd-badge-stop') + ' me-1">'
-                       + escHtml(x.eAvviso ? t('up.theWarning') : t('up.scanCut')) + '</span><br>'
-                       + '<code>' + updEsc(x.messaggio) + '</code></td></tr>';
+                       + '<span class="badge ' + (x.isWarning ? 'upd-badge-info' : 'upd-badge-stop') + ' me-1">'
+                       + escHtml(x.isWarning ? t('up.theWarning') : t('up.scanCut')) + '</span><br>'
+                       + '<code>' + updEsc(x.messageText) + '</code></td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
-            h += '<div class="alert alert-secondary py-2 small mb-1">' + updEsc(r.seServisse) + '</div>'
-               + '<div class="small text-muted">' + updEsc(r.fonte) + '</div>';
+            h += '<div class="alert alert-secondary py-2 small mb-1">' + updEsc(r.ifNeeded) + '</div>'
+               + '<div class="small text-muted">' + updEsc(r.source) + '</div>';
             el.innerHTML = h;
         }
 
         // ---------- alzare il livello di compatibilita' di Postfix ----------
-        async function pfAlza(livello, aperti) {
-            const avviso = aperti > 0 ? tn('up.paramsChange', aperti) : t('up.paramsSame');
-            if (!updConferma(t('up.confirmLevel', { level: livello, note: avviso }), t('up.wRaise'))) return;
+        async function pfRaise(levelValue, opened) {
+            const noticeText = opened > 0 ? tn('up.paramsChange', opened) : t('up.paramsSame');
+            if (!updConfirm(t('up.confirmLevel', { level: levelValue, note: noticeText }), t('up.wRaise'))) return;
             const el = document.getElementById('pf-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.raising')) + '';
-            const r = await updApi('postfix_level', { confirm: 'ALZA', livello: livello });
-            let h = '<div class="alert alert-' + (r.success ? (r.avvisoVia === false ? 'warning' : 'success') : 'danger')
-                  + ' py-2 small mb-1">' + updEsc(r.error || r.nota || t('shu.unknownResult')) + '</div>';
-            if (r.prima !== undefined) {
-                h += '<div class="small text-muted">compatibility_level: <code>' + updEsc(r.prima)
-                   + '</code> &rarr; <code>' + updEsc(r.dopo) + '</code>'
-                   + (r.attivo !== undefined
-                      ? ' &middot; Postfix ' + (r.attivo ? escHtml(t('up.running')) : '<span class="text-danger">' + escHtml(t('up.notRunning')) + '</span>')
+            const r = await updApi('postfix_level', { confirm: 'RAISE', level: levelValue });
+            let h = '<div class="alert alert-' + (r.success ? (r.warningVia === false ? 'warning' : 'success') : 'danger')
+                  + ' py-2 small mb-1">' + updEsc(r.error || r.note || t('shu.unknownResult')) + '</div>';
+            if (r.before !== undefined) {
+                h += '<div class="small text-muted">compatibility_level: <code>' + updEsc(r.before)
+                   + '</code> &rarr; <code>' + updEsc(r.after) + '</code>'
+                   + (r.active !== undefined
+                      ? ' &middot; Postfix ' + (r.active ? escHtml(t('up.running')) : '<span class="text-danger">' + escHtml(t('up.notRunning')) + '</span>')
                       : '') + '</div>';
             }
             if (r.log) h += '<pre class="upd-log mt-1">' + updEsc(r.log) + '</pre>';
@@ -13415,43 +13417,43 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // far leggere "il livello e' indietro, 3.6" sotto un esito che dice 3.11.
             // Si rilegge tutto, e l'esito appena mostrato si riattacca in fondo.
             if (r.success) {
-                const esito = h;
+                const outcomeValue = h;
                 await updCompat();
-                const nuovo = document.getElementById('pf-outcome');
-                if (nuovo) nuovo.innerHTML = esito;
+                const newOne = document.getElementById('pf-outcome');
+                if (newOne) newOne.innerHTML = outcomeValue;
             }
         }
 
         // ---------- anteprima della configurazione Dovecot 2.4 ----------
-        async function dove24() {
+        async function where24() {
             const el = document.getElementById('dove24-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.buildingPreview')) + '';
             const r = await updApi('dovecot24_preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="alert alert-info py-2 small">' + updEsc(r.avvertenza) + '</div>';
+            let h = '<div class="alert alert-info py-2 small">' + updEsc(r.caveat) + '</div>';
 
-            const v = r.verifiche || [];
-            const conf = v.filter(x => x.stato === 'confermato');
-            const dub = v.filter(x => x.stato !== 'confermato');
+            const v = r.checks || [];
+            const conf = v.filter(x => x.state === 'confirmed');
+            const doubtful = v.filter(x => x.state !== 'confirmed');
             h += '<h6 class="mb-1">' + escHtml(t('up.verifiedDocs')) + '</h6>'
                + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
             conf.forEach(x => {
                 h += '<tr class="upd-cell"><td style="width:12rem"><span class="badge upd-badge-ok">' + escHtml(t('up.sConfirmed')) + '</span></td>'
-                   + '<td><code class="small">' + updEsc(x.impostazione) + '</code><br>'
-                   + '<span class="small text-muted">' + updEsc(x.nota) + '</span></td></tr>';
+                   + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
-            dub.forEach(x => {
-                h += '<tr class="upd-cell"><td><span class="badge ' + (x.stato === 'criterio' ? 'upd-badge-info' : 'upd-badge-warn')
-                   + '">' + escHtml(({ criterio: t('up.sCriterion'), 'da verificare': t('up.sToCheck') })[x.stato] || x.stato) + '</span></td>'
-                   + '<td><code class="small">' + updEsc(x.impostazione) + '</code><br>'
-                   + '<span class="small text-muted">' + updEsc(x.nota) + '</span></td></tr>';
+            doubtful.forEach(x => {
+                h += '<tr class="upd-cell"><td><span class="badge ' + (x.state === 'criterion' ? 'upd-badge-info' : 'upd-badge-warn')
+                   + '">' + escHtml(({ criterion: t('up.sCriterion'), unconfirmed: t('up.sToCheck') })[x.state] || x.state) + '</span></td>'
+                   + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
             h += '</tbody></table></div>';
 
             h += '<h6 class="mb-1">' + escHtml(t('up.filesAsWritten')) + '</h6>';
             (r.file || []).forEach(f => {
-                h += '<div class="small text-muted mt-2"><code>' + updEsc(f.percorso) + '</code></div>'
-                   + '<pre class="upd-log mb-0">' + updEsc(f.contenuto) + '</pre>';
+                h += '<div class="small text-muted mt-2"><code>' + updEsc(f.path) + '</code></div>'
+                   + '<pre class="upd-log mb-0">' + updEsc(f.content) + '</pre>';
             });
             el.innerHTML = h;
         }
@@ -13462,66 +13464,66 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.checkingPath')) + '';
             const r = await updApi('panel_env');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.irraggiungibili ? 'danger' : (r.assenti ? 'warning' : 'success');
+            const cls = r.unreachable ? 'danger' : (r.absent ? 'warning' : 'success');
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + updEsc(r.explanation) + '</div>'
                   + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr><td class="small">' + escHtml(t('up.pathInherited')) + '</td>'
-                  + '<td><code class="small">' + updEsc(r.pathEreditato || t('up.empty')) + '</code></td></tr>'
+                  + '<td><code class="small">' + updEsc(r.inheritedPath || t('up.empty')) + '</code></td></tr>'
                   + '<tr><td class="small">' + escHtml(t('up.pathUsed')) + '</td>'
-                  + '<td><code class="small">' + updEsc(r.pathUsato) + '</code>'
-                  + (r.pathEreditato !== r.pathUsato
+                  + '<td><code class="small">' + updEsc(r.pathUsed) + '</code>'
+                  + (r.inheritedPath !== r.pathUsed
                      ? '<br><span class="small text-muted">' + escHtml(t('up.pathCompleted')) + '</span>' : '') + '</td></tr>'
                   + '</tbody></table></div>'
                   + '<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>'
                   + '<th scope="col">' + escHtml(t('up.colCommand')) + '</th><th scope="col">' + escHtml(t('up.colWhatFor')) + '</th><th scope="col">' + escHtml(t('up.colResolves')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th>'
                   + '</tr></thead><tbody>';
-            (r.strumenti || []).forEach(x => {
-                const b = x.stato === 'raggiungibile' ? 'upd-badge-ok'
-                        : (x.stato === 'non installato' ? 'upd-badge-warn' : 'upd-badge-stop');
-                h += '<tr class="upd-cell"><td><code>' + updEsc(x.comando) + '</code></td>'
-                   + '<td class="small text-muted">' + updEsc(x.aCosaServe) + '</td>'
-                   + '<td class="small"><code>' + updEsc(x.risolto || '-') + '</code>'
-                   + (!x.risolto && x.suDisco
-                      ? '<br><span class="small text-danger">' + escHtml(t('up.existsIn', { dir: x.attesoIn })) + '</span>' : '')
+            (r.tools || []).forEach(x => {
+                const b = x.state === 'reachable' ? 'upd-badge-ok'
+                        : (x.state === 'not-installed' ? 'upd-badge-warn' : 'upd-badge-stop');
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.command) + '</code></td>'
+                   + '<td class="small text-muted">' + updEsc(x.purpose) + '</td>'
+                   + '<td class="small"><code>' + updEsc(x.resolved || '-') + '</code>'
+                   + (!x.resolved && x.onDisk
+                      ? '<br><span class="small text-danger">' + escHtml(t('up.existsIn', { dir: x.expectedIn })) + '</span>' : '')
                    + '</td>'
-                   + '<td><span class="badge ' + b + '">' + escHtml(({ raggiungibile: t('up.sReachable'), 'non installato': t('up.notInstalled'),
-                                                                        "C'E' MA IL PATH NON LO RAGGIUNGE": t('up.sUnreachable') })[x.stato] || x.stato) + '</span></td></tr>';
+                   + '<td><span class="badge ' + b + '">' + escHtml(({ reachable: t('up.sReachable'), 'not-installed': t('up.notInstalled'),
+                                                                        "NOT_IN_PATH": t('up.sUnreachable') })[x.state] || x.state) + '</span></td></tr>';
             });
             h += '</tbody></table></div>';
             el.innerHTML = h;
         }
 
         // ---------- prima di togliere un pacchetto ----------
-        async function rimCandidati() {
+        async function rmCandidates() {
             const el = document.getElementById('rim-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingUndeclared')) + '';
             const r = await updApi('removal_candidates');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const c = r.candidati || [];
+            const c = r.candidates || [];
             let h = '<p class="small text-muted">' + updEsc(r.explanation) + '</p>';
             if (!c.length) {
                 h += '<div class="alert alert-info py-2 mb-0">' + escHtml(t('up.noCandidates')) + '</div>';
                 el.innerHTML = h; return;
             }
-            if (r.attenzione) {
+            if (r.caution) {
                 h += '<div class="alert alert-warning py-2 small"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>'
-                   + updEsc(r.attenzione) + '</div>';
+                   + updEsc(r.caution) + '</div>';
             }
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr>'
                + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col">' + escHtml(t('up.colRole')) + '</th><th scope="col">' + escHtml(t('up.colLocked')) + '</th>'
                + '<th scope="col">' + escHtml(t('up.colPanelUses')) + '</th></tr></thead><tbody>';
             c.forEach((x, i) => {
-                h += '<tr class="upd-cell"><td><code>' + updEsc(x.nome) + '</code></td>'
-                   + '<td class="small">' + updEsc(x.versione) + '</td>'
-                   + '<td class="small">' + (x.essenziale
-                      ? '<span class="badge upd-badge-stop">' + escHtml(t('up.doNotTouch')) + '</span><br>' + updEsc(x.avviso)
-                      : (x.ruolo
-                         ? '<span class="badge upd-badge-warn">' + updEsc(x.ruolo) + '</span>'
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.name) + '</code></td>'
+                   + '<td class="small">' + updEsc(x.version) + '</td>'
+                   + '<td class="small">' + (x.essential
+                      ? '<span class="badge upd-badge-stop">' + escHtml(t('up.doNotTouch')) + '</span><br>' + updEsc(x.warning)
+                      : (x.role
+                         ? '<span class="badge upd-badge-warn">' + updEsc(x.role) + '</span>'
                          : '<span class="text-muted">' + escHtml(t('up.noneKnown')) + '</span>')) + '</td>'
-                   + '<td>' + (x.protetto
+                   + '<td>' + (x.isProtected
                       ? '<span class="badge upd-badge-ok">' + escHtml(t('dns.yes')) + '</span>'
                       : '<span class="badge upd-badge-warn">' + escHtml(t('acf.no')) + '</span>') + '</td>'
-                   + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.nome) + '" data-i="' + i + '" onclick="rimUsa(this.dataset.name, Number(this.dataset.i))">'
+                   + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.name) + '" data-i="' + i + '" onclick="rmUse(this.dataset.name, Number(this.dataset.i))">'
                    + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.check')) + '</button>'
                    + '<div id="rim-outcome-' + i + '" class="mt-1"></div></td></tr>';
             });
@@ -13530,131 +13532,131 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // Il riquadro che spiega l'esito, riusato sia qui sia dentro la scheda di openssl.
-        function rimRiquadro(r) {
-            const cls = r.verdict === 'IL PANNELLO NON LO USA' ? 'success'
-                      : r.verdict === "LO USA, E NON C'E' RICAMBIO" ? 'danger'
-                      : r.verdict === 'LO USA' ? 'warning'
-                      : r.verdict === "NON NE USA I COMANDI, MA E' UNA LIBRERIA" ? 'info'
-                      : r.verdict === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
-            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdetto(r.verdict))
+        function rmBox(r) {
+            const cls = r.verdict === 'PANEL_DOES_NOT_USE' ? 'success'
+                      : r.verdict === "USES_NO_SPARE" ? 'danger'
+                      : r.verdict === 'USES' ? 'warning'
+                      : r.verdict === "LIBRARY_ONLY" ? 'info'
+                      : r.verdict === 'NAMES_NOT_THEIRS' ? 'success' : 'secondary';
+            let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdict(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
-            const lb = r.fornisceLibrerie || [];
+            const lb = r.providesLibraries || [];
             if (lb.length) {
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.sharedLibs')) + ' '
                    + lb.map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
             }
-            const u = r.comandiUsati || [];
+            const u = r.commandsUsed || [];
             if (u.length) {
                 h += '<div class="table-responsive"><table class="table table-sm mb-1"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colCommand')) + '</th><th scope="col">' + escHtml(t('up.colNamed')) + '</th><th scope="col">' + escHtml(t('up.colIfRemoved')) + '</th></tr></thead><tbody>';
                 u.forEach(x => {
-                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.percorso) + '</code></td>'
-                       + '<td class="small">' + escHtml(t('up.timesWord', { n: x.occorrenze }))
-                       + (x.conArgomenti ? '<br>' + escHtml(t('up.withArgs', { n: x.conArgomenti })) : '')
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.path) + '</code></td>'
+                       + '<td class="small">' + escHtml(t('up.timesWord', { n: x.occurrences }))
+                       + (x.withArguments ? '<br>' + escHtml(t('up.withArgs', { n: x.withArguments })) : '')
                        + '</td>'
                        + '<td class="small">'
-                       + (!x.eSuo
+                       + (!x.isItsOwn
                           ? '<span class="badge upd-badge-ok">' + escHtml(t('up.noEffect')) + '</span>'
-                          : (x.resterebbe ? '<span class="badge upd-badge-warn">' + escHtml(t('up.changesBinary')) + '</span>'
+                          : (x.wouldStay ? '<span class="badge upd-badge-warn">' + escHtml(t('up.changesBinary')) + '</span>'
                                           : '<span class="badge upd-badge-stop">' + escHtml(t('up.disappears')) + '</span>'))
-                       + '<br>' + updEsc(x.effetto || '')
-                       + (x.inUsoOra ? '<br>' + escHtml(t('up.inUseNowColon')) + ' <code>' + updEsc(x.inUsoOra) + '</code>' : '')
+                       + '<br>' + updEsc(x.effect || '')
+                       + (x.inUseNow ? '<br>' + escHtml(t('up.inUseNowColon')) + ' <code>' + updEsc(x.inUseNow) + '</code>' : '')
                        + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
             // Il pulsante compare SOLO dove la misura dice che si puo': non si offre un'azione
             // che il controllo appena fatto rifiuterebbe.
-            if (r.pacchetto && (r.verdict === 'IL PANNELLO NON LO USA'
-                             || r.verdict === 'LI NOMINA, MA NON SONO I SUOI')) {
+            if (r.pkgName && (r.verdict === 'PANEL_DOES_NOT_USE'
+                             || r.verdict === 'NAMES_NOT_THEIRS')) {
                 // L'analisi approfondita viene PRIMA del pulsante che toglie, ed e' l'unica che
                 // guarda gli script su disco: quelli girano dopo, e il jar non li contiene.
-                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pacchetto) + '" onclick="rimProfonda(this.dataset.pkg)">'
+                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rmDeep(this.dataset.pkg)">'
                    + '<i class="fas fa-microscope me-1" aria-hidden="true"></i>' + escHtml(t('up.deepScan')) + '</button>'
-                   + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pacchetto) + '" onclick="rimTogli(this.dataset.pkg)">'
-                   + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removePkg', { pkg: r.pacchetto })) + '</button>'
-                   + '<div id="rim-prof-' + updEsc(r.pacchetto) + '" class="mt-1"></div>'
-                   + '<div id="rim-esec-' + updEsc(r.pacchetto) + '" class="mt-1"></div>';
+                   + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rmRemove(this.dataset.pkg)">'
+                   + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removePkg', { pkg: r.pkgName })) + '</button>'
+                   + '<div id="rim-prof-' + updEsc(r.pkgName) + '" class="mt-1"></div>'
+                   + '<div id="rim-esec-' + updEsc(r.pkgName) + '" class="mt-1"></div>';
             }
-            h += '<div class="small text-muted">' + t('up.scanStats.html', { bytes: updEsc(r.byteLetti), jar: updEsc(r.jar || '?'), n: updEsc(r.eseguibiliTrovati), how: updEsc(r.comeElencato) }) + '</div>';
+            h += '<div class="small text-muted">' + t('up.scanStats.html', { bytes: updEsc(r.bytesRead), jar: updEsc(r.jar || '?'), n: updEsc(r.runnablesFound), how: updEsc(r.asListed) }) + '</div>';
             return h;
         }
 
-        async function rimUsa(nome, i) {
+        async function rmUse(entryName, i) {
             const el = document.getElementById('rim-outcome-' + i);
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
-            const r = await updApi('panel_uses', { nome: nome });
-            el.innerHTML = r.success ? rimRiquadro(r)
+            const r = await updApi('panel_uses', { name: entryName });
+            el.innerHTML = r.success ? rmBox(r)
                                      : '<span class="text-danger small">' + updEsc(r.error) + '</span>';
         }
 
         // ---------- analisi approfondita: dove si nominano davvero i suoi file ----------
-        async function rimProfonda(nome) {
-            const el = document.getElementById('rim-prof-' + nome);
+        async function rmDeep(entryName) {
+            const el = document.getElementById('rim-prof-' + entryName);
             el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                          + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.deepScanning')) + '</div>';
-            const r = await updApi('deep_scan', { nome: nome });
+            const r = await updApi('deep_scan', { name: entryName });
             if (!r.success) { el.innerHTML = '<span class="text-danger small">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="alert alert-' + (r.bloccante ? 'danger' : 'success') + ' py-2 small mb-1">'
-                  + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
+            let h = '<div class="alert alert-' + (r.blocking ? 'danger' : 'success') + ' py-2 small mb-1">'
+                  + '<strong>' + updEsc(updVerdict(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
                   + '<div class="small text-muted mb-1">' + escHtml(t('up.searchedRefs')) + ' '
-                  + (r.cercati || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
+                  + (r.searched || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
 
-            const ds = r.dichiaranoSoname || [];
+            const ds = r.declareSoname || [];
             h += '<div class="small mb-1"><strong>' + escHtml(t('up.pkgsDeclaringLibs')) + '</strong> '
                + (ds.length
-                  ? '<span class="text-danger">' + ds.map(x => updEsc(x.pacchetto) + ' (' + updEsc(x.libreria) + ')').join(', ') + '</span>'
+                  ? '<span class="text-danger">' + ds.map(x => updEsc(x.pkgName) + ' (' + updEsc(x.library) + ')').join(', ') + '</span>'
                   : '<span class="text-success">' + escHtml(t('up.none')) + '</span>') + '</div>';
             h += '<div class="small mb-1"><strong>' + escHtml(t('up.inRunningJar')) + '</strong> '
-               + (!r.jarLetto
+               + (!r.jarRead
                   ? '<span class="text-warning">' + escHtml(t('up.notRead')) + '</span>'
-                  : ((r.nelJar || []).length
-                     ? r.nelJar.map(x => (x.autoRiferimento
-                          ? '<span class="text-muted"><code>' + updEsc(x.classe)
+                  : ((r.inJar || []).length
+                     ? r.inJar.map(x => (x.selfReference
+                          ? '<span class="text-muted"><code>' + updEsc(x.className)
                             + '</code> (' + escHtml(t('up.selfRef')) + ')</span>'
-                          : '<span class="text-danger"><code>' + updEsc(x.classe) + '</code></span>')).join(', ')
+                          : '<span class="text-danger"><code>' + updEsc(x.className) + '</code></span>')).join(', ')
                      : '<span class="text-success">' + escHtml(t('up.noAbsRef')) + '</span>')
-                    + ' <span class="text-muted">(' + escHtml(t('up.classBytes', { n: r.byteJar })) + ')</span>') + '</div>';
+                    + ' <span class="text-muted">(' + escHtml(t('up.classBytes', { n: r.jarBytes })) + ')</span>') + '</div>';
 
             h += '<div class="table-responsive"><table class="table table-sm mb-1"><thead><tr>'
                + '<th scope="col">' + escHtml(t('up.colWhere')) + '</th><th scope="col" class="text-end">' + escHtml(t('up.colTextFiles')) + '</th>'
                + '<th scope="col" class="text-end">' + escHtml(t('up.colWouldBreak')) + '</th><th scope="col" class="text-end">' + escHtml(t('up.colHold')) + '</th></tr></thead><tbody>';
-            (r.luoghi || []).forEach(x => {
-                h += '<tr class="upd-cell"><td><code>' + updEsc(x.dove) + '</code><br>'
-                   + '<span class="small text-muted">' + updEsc(x.cosaContiene) + '</span></td>'
-                   + '<td class="text-end">' + updEsc(x.fileEsaminati) + '</td>'
-                   + '<td class="text-end">' + ((x.rompono || []).length
-                      ? '<span class="badge upd-badge-stop">' + updEsc(x.rompono.length) + '</span>'
+            (r.places || []).forEach(x => {
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.where) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.whatItContains) + '</span></td>'
+                   + '<td class="text-end">' + updEsc(x.filesReviewed) + '</td>'
+                   + '<td class="text-end">' + ((x.breakOnes || []).length
+                      ? '<span class="badge upd-badge-stop">' + updEsc(x.breakOnes.length) + '</span>'
                       : '<span class="badge upd-badge-ok">0</span>') + '</td>'
-                   + '<td class="text-end small text-muted">' + updEsc(x.reggono) + '</td></tr>';
-                (x.rompono || []).forEach(riga => {
+                   + '<td class="text-end small text-muted">' + updEsc(x.hold) + '</td></tr>';
+                (x.breakOnes || []).forEach(lineItem => {
                     h += '<tr class="upd-cell"><td colspan="4" class="small text-danger">'
-                       + '<code>' + updEsc(riga) + '</code></td></tr>';
+                       + '<code>' + updEsc(lineItem) + '</code></td></tr>';
                 });
             });
             h += '</tbody></table></div>'
                + '<div class="small text-muted">' + t('up.holdNote.html') + '<br>'
-               + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.avvertenza) + '</div>';
+               + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.caveat) + '</div>';
             el.innerHTML = h;
         }
 
         // ---------- togliere un pacchetto, dal pannello ----------
-        async function rimTogli(nome) {
-            if (!updConferma(t('up.confirmRemovePkg', { pkg: nome }), t('up.wRemove'))) return;
-            const el = document.getElementById('rim-esec-' + nome);
+        async function rmRemove(entryName) {
+            if (!updConfirm(t('up.confirmRemovePkg', { pkg: entryName }), t('up.wRemove'))) return;
+            const el = document.getElementById('rim-esec-' + entryName);
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingChecking')) + '';
-            const r = await updApi('pkg_remove', { confirm: 'RIMUOVI', nome: nome });
-            let h = '<div class="alert alert-' + (!r.success ? 'danger' : (r.guasto ? 'danger' : 'success'))
-                  + ' py-2 small mb-1">' + updEsc(r.error || r.nota || t('shu.unknownResult')) + '</div>';
-            if (r.prima !== undefined) {
-                h += '<div class="small text-muted">' + escHtml(t('up.pkgCount', { before: r.prima, after: r.dopo })) + '</div>';
+            const r = await updApi('pkg_remove', { confirm: 'REMOVE', name: entryName });
+            let h = '<div class="alert alert-' + (!r.success ? 'danger' : (r.fault ? 'danger' : 'success'))
+                  + ' py-2 small mb-1">' + updEsc(r.error || r.note || t('shu.unknownResult')) + '</div>';
+            if (r.before !== undefined) {
+                h += '<div class="small text-muted">' + escHtml(t('up.pkgCount', { before: r.before, after: r.after })) + '</div>';
             }
-            const sv = r.servizi || [];
+            const sv = r.services || [];
             if (sv.length) {
-                const giu = sv.filter(x => !x.attivo);
-                h += '<div class="small ' + (giu.length ? 'text-danger' : 'text-success') + '">'
-                   + (giu.length
-                      ? escHtml(t('up.servicesDown', { list: giu.map(x => x.nome).join(', ') }))
+                const down = sv.filter(x => !x.active);
+                h += '<div class="small ' + (down.length ? 'text-danger' : 'text-success') + '">'
+                   + (down.length
+                      ? escHtml(t('up.servicesDown', { list: down.map(x => x.name).join(', ') }))
                       : escHtml(tn('up.servicesUp', sv.length)))
                    + '</div>';
             }
@@ -13684,10 +13686,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function libsRelink() {
-            if (!updConferma('', t('up.wRelink'))) return;
+            if (!updConfirm('', t('up.wRelink'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
-            const r = await updApi('relink', { confirm: 'RICOLLEGA' });
+            const r = await updApi('relink', { confirm: 'RELINK' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.relinking')) + '</span>';
             pre.style.display = 'block';
@@ -13703,14 +13705,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             (r.mysqlPackages || []).forEach(p => { h += '<li><code>' + updEsc(p.name) + '</code> ' + updEsc(p.version) + '</li>'; });
             h += '</ul>';
             h += '<h6 class="small mt-2">' + escHtml(t('up.clientUsers')) + '</h6>';
-            (r.dipendenti || []).forEach(d => {
-                h += '<div class="small mb-2"><code>' + updEsc(d.name) + '</code> ' + updEsc(d.versione) + '<br>'
-                   + '<span class="text-muted">' + escHtml(t('up.depsInstalled')) + '</span> ' + updEsc(d.dipendenzeInstallato) + '<br>'
-                   + '<span class="text-muted">' + escHtml(t('up.depsRepo')) + '</span> ' + updEsc(d.dipendenzeRepository) + '<br>'
-                   + '<span class="text-muted">' + escHtml(t('up.libsRequired')) + '</span> ' + updEsc(d.librerieRichieste) + '</div>';
+            (r.dependents || []).forEach(d => {
+                h += '<div class="small mb-2"><code>' + updEsc(d.name) + '</code> ' + updEsc(d.version) + '<br>'
+                   + '<span class="text-muted">' + escHtml(t('up.depsInstalled')) + '</span> ' + updEsc(d.installedDependencies) + '<br>'
+                   + '<span class="text-muted">' + escHtml(t('up.depsRepo')) + '</span> ' + updEsc(d.repositoryDependencies) + '<br>'
+                   + '<span class="text-muted">' + escHtml(t('up.libsRequired')) + '</span> ' + updEsc(d.requiredLibraries) + '</div>';
             });
             h += '<h6 class="small mt-2">' + escHtml(t('up.contestedLib')) + '</h6><div class="small">'
-               + '<span class="text-muted">' + escHtml(t('up.belongsTo')) + '</span> ' + updEsc(r.fornisconoLib || t('fw.none')) + '<br>'
+               + '<span class="text-muted">' + escHtml(t('up.belongsTo')) + '</span> ' + updEsc(r.provideLib || t('fw.none')) + '<br>'
                + '<span class="text-muted">' + escHtml(t('up.fileColon')) + '</span> <code>' + updEsc(r.fileLib || t('up.absent')) + '</code></div>';
             if (r.hasConflicts) {
                 h += '<h6 class="small mt-2">' + escHtml(t('up.fileIntegrity')) + '</h6>'
@@ -13719,66 +13721,66 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // Se ci sono due client e uno non serve a nessuno, si puo' ripulire.
             const cl = (r.mysqlPackages || []).filter(p => /-client$/.test(p.name)).map(p => p.name);
             if (cl.length > 1) {
-                const corretto = cl.find(n => (r.dipendenti || []).some(d =>
-                    (d.dipendenzeRepository || '').indexOf(n) >= 0));
-                const estraneo = cl.find(n => n !== corretto);
-                if (corretto && estraneo) {
+                const correct = cl.find(n => (r.dependents || []).some(d =>
+                    (d.repositoryDependencies || '').indexOf(n) >= 0));
+                const foreign = cl.find(n => n !== correct);
+                if (correct && foreign) {
                     h += '<div class="alert alert-warning py-2 mt-2 small">'
-                       + t('up.twoClients.html', { good: updEsc(corretto), bad: updEsc(estraneo) }) + '</div>'
-                       + '<button class="btn btn-warning" data-bad="' + escHtml(estraneo) + '" data-good="' + escHtml(corretto) + '" onclick="cleanClient(this.dataset.bad, this.dataset.good)">'
-                       + '<i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(t('up.cleanClient', { bad: estraneo, good: corretto })) + '</button>';
+                       + t('up.twoClients.html', { good: updEsc(correct), bad: updEsc(foreign) }) + '</div>'
+                       + '<button class="btn btn-warning" data-bad="' + escHtml(foreign) + '" data-good="' + escHtml(correct) + '" onclick="cleanClient(this.dataset.bad, this.dataset.good)">'
+                       + '<i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(t('up.cleanClient', { bad: foreign, good: correct })) + '</button>';
                 }
             }
             el.innerHTML = h;
         }
 
         // ---------- piano di manutenzione ----------
-        function planBadge(stato) {
-            if (stato === 'fatto')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.pDone')) + '</span>';
-            if (stato === 'manuale') return '<span class="badge upd-badge-warn">' + escHtml(t('up.pManual')) + '</span>';
+        function planBadge(stateValue) {
+            if (stateValue === 'done')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.pDone')) + '</span>';
+            if (stateValue === 'manual') return '<span class="badge upd-badge-warn">' + escHtml(t('up.pManual')) + '</span>';
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.pTodo')) + '</span>';
         }
 
-        let planAzioni = [];
+        let planActions = [];
 
         async function planLoad() {
-            planAzioni = [];
+            planActions = [];
             const el = document.getElementById('plan-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingSystem')) + '';
             const r = await updApi('plan');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
 
-            let primoDaFare = true;
+            let firstToDo = true;
 
-            function riga(p, etichetta) {
-                const attivo = p.stato === 'dafare' && primoDaFare;
-                if (p.stato === 'dafare') primoDaFare = false;
-                let h = '<div class="border rounded p-2 mb-2' + (attivo ? ' border-primary' : '') + '">'
+            function lineItem(p, labelText) {
+                const activeNow = p.state === 'todo' && firstToDo;
+                if (p.state === 'todo') firstToDo = false;
+                let h = '<div class="border rounded p-2 mb-2' + (activeNow ? ' border-primary' : '') + '">'
                       + '<div class="d-flex justify-content-between align-items-center">'
-                      + '<span><strong>' + etichetta + updEsc(p.titolo) + '</strong> ' + planBadge(p.stato) + '</span>';
-                if (attivo && p.azione) {
-                    const idx = planAzioni.push(p.azione) - 1;
+                      + '<span><strong>' + labelText + updEsc(p.title) + '</strong> ' + planBadge(p.state) + '</span>';
+                if (activeNow && p.action) {
+                    const idx = planActions.push(p.action) - 1;
                     h += '<button class="btn btn-sm btn-primary" onclick="planRun(' + idx + ')">'
                        + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runStep')) + '</button>';
-                } else if (p.azioneRifai) {
+                } else if (p.redoAction) {
                     // Passo gia' fatto ma ripetibile: pulsante secondario, sempre disponibile,
                     // fuori dalla regola del "solo il primo" perche' non e' un passo da fare.
-                    const idx = planAzioni.push(p.azioneRifai) - 1;
+                    const idx = planActions.push(p.redoAction) - 1;
                     h += '<button class="btn btn-sm btn-outline-secondary" onclick="planRun(' + idx + ')" '
                        + 'title="' + escHtml(t('up.redoHint')) + '">'
                        + '<i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('up.redo')) + '</button>';
                 }
                 h += '</div>'
-                   + '<div class="small mt-1">' + updEsc(p.situazione) + '</div>'
-                   + '<div class="small text-muted mt-1">' + updEsc(p.perche) + '</div>'
+                   + '<div class="small mt-1">' + updEsc(p.situation) + '</div>'
+                   + '<div class="small text-muted mt-1">' + updEsc(p.why) + '</div>'
                    + '</div>';
                 return h;
             }
 
-            const passi = r.passi || [];
-            let h = '<div class="mb-2 small">' + (r.daFare === 0
+            const steps = r.steps || [];
+            let h = '<div class="mb-2 small">' + (r.toDo === 0
                 ? '<span class="text-success"><i class="fas fa-circle-check me-1" aria-hidden="true"></i><strong>' + escHtml(t('up.nothingToDo')) + '</strong></span>'
-                : '<strong>' + escHtml(tn('up.stepsToDo', r.daFare)) + '</strong> ' + escHtml(t('up.onlyFirst')))
+                : '<strong>' + escHtml(tn('up.stepsToDo', r.toDo)) + '</strong> ' + escHtml(t('up.onlyFirst')))
                 + '</div>';
 
             // I passi si presentano nell'ordine di esecuzione, ma con identita' stabili:
@@ -13788,34 +13790,34 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // esecuzione, e ripetere "Fasi" e "Pacchetti" a ogni cambio faceva sembrare sezioni
             // separate cio' che e' una sequenza sola. Ogni riga si presenta gia' da se': le fasi
             // con la loro lettera, i pacchetti col loro nome.
-            passi.forEach(p => {
+            steps.forEach(p => {
                 // La lettera arriva dal backend, legata alla chiave del passo: non si ricava
                 // dalla posizione, altrimenti una fase che compare farebbe scorrere le altre.
-                const etichetta = p.gruppo === 'fase' ? escHtml(t('up.phase', { letter: p.lettera })) + ' &mdash; ' : '';
-                h += riga(p, etichetta);
+                const labelText = p.group === 'phase' ? escHtml(t('up.phase', { letter: p.letter })) + ' &mdash; ' : '';
+                h += lineItem(p, labelText);
             });
 
-            if ((r.senzaRimedio || []).length) {
+            if ((r.withoutRemedy || []).length) {
                 h += '<div class="alert alert-secondary py-2 small mb-0"><strong>' + escHtml(t('up.noFix')) + '</strong> '
-                   + r.senzaRimedio.map(x => updEsc(x)).join(', ')
+                   + r.withoutRemedy.map(x => updEsc(x)).join(', ')
                    + '. ' + escHtml(t('up.noFixNote')) + '</div>';
             }
             el.innerHTML = h;
         }
 
         async function planRun(idx) {
-            const azione = planAzioni[idx];
-            if (!azione) { alert(t('up.stepStale')); return; }
+            const actionItem = planActions[idx];
+            if (!actionItem) { alert(t('up.stepStale')); return; }
             const el = document.getElementById('plan-body');
             const pre = document.getElementById('plan-log');
             let r;
-            if (azione.tipo === 'packages_lock_all') {
+            if (actionItem.type === 'packages_lock_all') {
                 r = await updApi('packages_lock', { lock: true, package: '' });
                 if (!r.success) { alert(r.error || t('common.failed')); return; }
                 planLoad();
                 return;
             }
-            if (azione.tipo === 'updates_apply') {
+            if (actionItem.type === 'updates_apply') {
                 /* Non si parte da qui: questo aggiornamento ha un piano e una firma, e si
                    approva nella scheda che li mostra. Come per il JDK del pannello, si va
                    dove la decisione si puo' prendere guardandola. */
@@ -13826,17 +13828,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 alert(t('up.applyFromCard'));
                 return;
-            } else if (azione.tipo === 'package_update') {
+            } else if (actionItem.type === 'package_update') {
                 // L'aggiornamento di un pacchetto passa sempre dalla sua finestra: piano esatto,
                 // conferma con il nome, avanzamento.
-                pkUpdOpen(azione.package);
+                pkUpdOpen(actionItem.package);
                 return;
-            } else if (azione.tipo === 'rspamd_clean_cache') {
-                if (!updConferma('', t('up.wDeleteCache'))) return;
-                r = await updApi('rspamd_clean_cache', { confirm: 'ELIMINA CACHE' });
-            } else if (azione.tipo === 'dovecot_config_regen') {
-                if (!updConferma('', t('up.wRegen'))) return;
-                r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
+            } else if (actionItem.type === 'rspamd_clean_cache') {
+                if (!updConfirm('', t('up.wDeleteCache'))) return;
+                r = await updApi('rspamd_clean_cache', { confirm: 'DELETE CACHE' });
+            } else if (actionItem.type === 'dovecot_config_regen') {
+                if (!updConfirm('', t('up.wRegen'))) return;
+                r = await updApi('dovecot_config_regen', { confirm: 'REGENERATE' });
             } else {
                 alert(t('up.noAutoAction'));
                 return;
@@ -13875,34 +13877,34 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- passaggio Python ----------
         // ---------- resti della vecchia famiglia Python ----------
-        async function pyResti() {
+        async function pyLeftovers() {
             const el = document.getElementById('py-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingLeftovers')) + '';
             const r = await updApi('python_leftovers');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            if (r.niente) { el.innerHTML = '<div class="alert alert-success py-2 mb-0">' + updEsc(r.nota) + '</div>'; return; }
+            if (r.nothing) { el.innerHTML = '<div class="alert alert-success py-2 mb-0">' + updEsc(r.note) + '</div>'; return; }
             let h = '<p class="small text-muted mb-2">' + t('up.pyLeftIntro.html') + '</p>'
                   + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col" class="text-end">KB</th><th scope="col">' + escHtml(t('set.colState')) + '</th></tr></thead><tbody>';
-            let liberi = 0;
-            (r.dettaglio || []).forEach(d => {
-                if (d.libero) liberi++;
-                h += '<tr class="upd-cell"><td><code>' + updEsc(d.nome) + '</code></td><td>' + updEsc(d.versione) + '</td>'
+            let free = 0;
+            (r.detail || []).forEach(d => {
+                if (d.free) free++;
+                h += '<tr class="upd-cell"><td><code>' + updEsc(d.name) + '</code></td><td>' + updEsc(d.version) + '</td>'
                    + '<td class="text-end">' + updEsc(d.kb) + '</td><td>'
-                   + (d.libero ? '<span class="badge upd-badge-ok">' + escHtml(t('up.canRemove')) + '</span>'
-                               : '<span class="badge upd-badge-warn">' + escHtml(t('up.requiredBy', { list: (d.trattenutoDa || []).join(', ') })) + '</span>')
+                   + (d.free ? '<span class="badge upd-badge-ok">' + escHtml(t('up.canRemove')) + '</span>'
+                               : '<span class="badge upd-badge-warn">' + escHtml(t('up.requiredBy', { list: (d.heldBackBy || []).join(', ') })) + '</span>')
                    + '</td></tr>';
             });
             h += '</tbody></table></div>';
             // Chi nomina il vecchio interprete fra cio' che RESTA: e' cio' che pkg non sa.
-            const rif = r.references || {};
-            const prob = rif.issues || [];
+            const refEl = r.references || {};
+            const prob = refEl.issues || [];
             h += '<h6 class="mt-3 mb-1">' + escHtml(t('up.whoRefsOld')) + '</h6>'
-               + '<p class="small text-muted mb-2">' + t('up.refsExamined.html', { n: updEsc(rif.esaminati || 0), gone: updEsc((rif.innocui || []).length) }) + '</p>';
-            const cit = rif.citazioni || [];
-            if (cit.length) {
-                h += '<div class="alert alert-secondary py-2 small mb-2">' + t('up.citations.html', { n: cit.length }) + ' '
-                   + cit.map(x => '<code>' + updEsc(x.file) + '</code>').join(' ') + '</div>';
+               + '<p class="small text-muted mb-2">' + t('up.refsExamined.html', { n: updEsc(refEl.reviewed || 0), gone: updEsc((refEl.harmless || []).length) }) + '</p>';
+            const quoteList = refEl.quotes || [];
+            if (quoteList.length) {
+                h += '<div class="alert alert-secondary py-2 small mb-2">' + t('up.citations.html', { n: quoteList.length }) + ' '
+                   + quoteList.map(x => '<code>' + updEsc(x.file) + '</code>').join(' ') + '</div>';
             }
             if (prob.length === 0) {
                 h += '<div class="alert alert-success py-2">' + t('up.noOldRefs.html') + '</div>';
@@ -13912,13 +13914,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colFileLine')) + '</th><th scope="col">' + escHtml(t('up.colBelongs')) + '</th></tr></thead><tbody>';
                 prob.forEach(x => { h += '<tr class="upd-cell"><td><code>' + updEsc(x.file) + '</code>'
-                   + (x.riga ? '<br><span class="small text-muted">' + updEsc(x.riga) + '</span>' : '')
-                   + '</td><td>' + updEsc(x.proprietario) + '</td></tr>'; });
+                   + (x.line ? '<br><span class="small text-muted">' + updEsc(x.line) + '</span>' : '')
+                   + '</td><td>' + updEsc(x.owner) + '</td></tr>'; });
                 h += '</tbody></table></div>';
             }
-            h += (liberi > 0 && prob.length === 0)
-               ? '<button class="btn btn-warning" onclick="pyRestiGo()"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(tn('up.removeFree', liberi)) + '</button>'
-               : (liberi === 0
+            h += (free > 0 && prob.length === 0)
+               ? '<button class="btn btn-warning" onclick="pyLeftoversGo()"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(tn('up.removeFree', free)) + '</button>'
+               : (free === 0
                   ? '<div class="alert alert-info py-2 mb-0">' + escHtml(t('up.noneFree')) + '</div>'
                   : '');
             el.innerHTML = h;
@@ -13929,18 +13931,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     private static String getUpdatesScript2() {
         return """
 
-        async function pyRestiGo() {
-            if (!updConferma('', t('up.wCleanPython'))) return;
+        async function pyLeftoversGo() {
+            if (!updConfirm('', t('up.wCleanPython'))) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removing')) + '';
-            const r = await updApi('python_leftovers_clean', { confirm: 'PULISCI PYTHON' });
+            const r = await updApi('python_leftovers_clean', { confirm: 'CLEAN PYTHON' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pre.style.display = 'block';
-            pre.textContent = t('up.removedList', { list: (r.tolti || []).join(', ') || t('fw.none') })
-                + '\\n' + t('up.failedList', { list: (r.falliti || []).join(', ') || t('fw.none') })
-                + '\\n' + t('up.stillPresent', { n: r.ancoraPresenti });
-            el.innerHTML = '<div class="alert alert-' + ((r.falliti || []).length ? 'warning' : 'success')
-                + ' py-2 mb-0">' + escHtml(tn('up.removedN', (r.tolti || []).length)) + ' ' + escHtml(t('up.pressLeftoversAgain')) + '</div>';
+            pre.textContent = t('up.removedList', { list: (r.removed || []).join(', ') || t('fw.none') })
+                + '\\n' + t('up.failedList', { list: (r.failed || []).join(', ') || t('fw.none') })
+                + '\\n' + t('up.stillPresent', { n: r.stillPresent });
+            el.innerHTML = '<div class="alert alert-' + ((r.failed || []).length ? 'warning' : 'success')
+                + ' py-2 mb-0">' + escHtml(tn('up.removedN', (r.removed || []).length)) + ' ' + escHtml(t('up.pressLeftoversAgain')) + '</div>';
         }
 
         async function pyPre() {
@@ -13951,20 +13953,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
-            if (r.gia) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.nothingToMove')) + '</div>';
+            if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.nothingToMove')) + '</div>';
             else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            else h += '<button class="btn btn-danger" onclick="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.nuovo })) + '</button>';
+            else h += '<button class="btn btn-danger" onclick="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.newVersion })) + '</button>';
             el.innerHTML = h;
         }
 
         async function pyRun() {
-            if (!updConferma('', t('up.wMovePython'))) return;
+            if (!updConfirm('', t('up.wMovePython'))) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
-            const r = await updApi('python_move', { confirm: 'SPOSTA PYTHON' });
+            const r = await updApi('python_move', { confirm: 'MOVE PYTHON' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -13980,11 +13982,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
-            if (r.gia) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.latestAlready')) + '</div>';
+            if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.latestAlready')) + '</div>';
             else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
             else h += '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.pageWillStopShort')) + '</strong> ' + escHtml(t('up.jvmStopNote')) + '</div>'
                    + '<button class="btn btn-danger" onclick="jvRun()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmRun')) + '</button>';
@@ -13992,22 +13994,22 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function jvRun() {
-            if (!updConferma(t('up.javaStops'), t('up.wUpgradeJava'))) return;
+            if (!updConfirm(t('up.javaStops'), t('up.wUpgradeJava'))) return;
             const el = document.getElementById('jv-pre');
-            const r = await updApi('java_update', { confirm: 'AGGIORNA JAVA' });
+            const r = await updApi('java_update', { confirm: 'UPGRADE JAVA' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<div class="alert alert-warning mb-0"><strong>' + escHtml(t('up.started')) + '</strong> ' + escHtml(t('up.panelStopping')) + ' '
-                + updEsc(r.nota || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';
+                + updEsc(r.note || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';
         }
 
-        async function jvStato() {
+        async function jvState() {
             const pre = document.getElementById('jv-log');
             pre.style.display = 'block';
             pre.textContent = t('up.reading');
             const r = await updApi('java_status');
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            if (!r.presente) { pre.textContent = t('up.noJvmRun'); return; }
-            pre.textContent = r.testo + (r.finito ? '' : '\\n\\n' + t('up.stillRunning'));
+            if (!r.present) { pre.textContent = t('up.noJvmRun'); return; }
+            pre.textContent = r.text + (r.finished ? '' : '\\n\\n' + t('up.stillRunning'));
         }
 
         // ---------- aggiornamento Roundcube ----------
@@ -14019,22 +14021,22 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = t('up.readingNginx');
             const r = await updApi('roundcube_nginx_preview');
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            if (r.giaOk) { pre.textContent = r.nota; return; }
+            if (r.alreadyOk) { pre.textContent = r.note; return; }
             pre.textContent =
-                t('up.fileLines', { file: r.file, from: r.da, to: r.a }) + '\\n'
-              + 'use_secure_urls in Roundcube: ' + (r.urlSicuri ? t('up.running') : t('adm.notActive')) + '\\n\\n'
-              + '=== ' + t('up.nowIs') + ' ===\\n' + r.attuale + '\\n\\n'
-              + '=== ' + t('up.wouldBe') + ' ===\\n' + r.proposto;
+                t('up.fileLines', { file: r.file, from: r.from, to: r.to }) + '\\n'
+              + 'use_secure_urls in Roundcube: ' + (r.safeUrls ? t('up.running') : t('adm.notActive')) + '\\n\\n'
+              + '=== ' + t('up.nowIs') + ' ===\\n' + r.current + '\\n\\n'
+              + '=== ' + t('up.wouldBe') + ' ===\\n' + r.proposed;
             el.innerHTML = '<div class="alert alert-info py-2">' + t('up.nginxChange.html') + '</div>'
               + '<button class="btn btn-warning" onclick="rcNginxGo()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>' + escHtml(t('up.apply')) + '</button>';
         }
 
         async function rcNginxGo() {
-            if (!updConferma('', t('up.wFixNginx'))) return;
+            if (!updConfirm('', t('up.wFixNginx'))) return;
             const pre = document.getElementById('rc-log');
             const el = document.getElementById('rc-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.inProgress')) + '';
-            const r = await updApi('roundcube_nginx_fix', { confirm: 'RIPARA NGINX' });
+            const r = await updApi('roundcube_nginx_fix', { confirm: 'FIX NGINX' });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>';
                 return;
@@ -14042,9 +14044,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const css = r.css || {};
             el.innerHTML = css.ok
               ? '<div class="alert alert-success py-2 mb-0"><strong>' + escHtml(t('up.doneShort')) + '</strong> ' + escHtml(t('up.cssOk')) + ' '
-                + updEsc(css.risposta) + '<br>' + escHtml(t('up.prevConfigCopy')) + ' <code>' + updEsc(r.backup) + '</code>'
+                + updEsc(css.answer) + '<br>' + escHtml(t('up.prevConfigCopy')) + ' <code>' + updEsc(r.backup) + '</code>'
                 + '<br>' + escHtml(t('up.reloadWebmail')) + '</div>'
-              : '<div class="alert alert-warning py-2 mb-0">' + updEsc(r.attenzione || t('up.cssNotOk'))
+              : '<div class="alert alert-warning py-2 mb-0">' + updEsc(r.caution || t('up.cssNotOk'))
                 + '</div>';
         }
 
@@ -14054,7 +14056,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = t('up.rcDiagRunning');
             const r = await updApi('roundcube_diag');
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            pre.textContent = (r.voci || []).map(v => '=== ' + v.titolo + ' ===\\n' + v.testo).join('\\n\\n');
+            pre.textContent = (r.entries || []).map(v => '=== ' + v.title + ' ===\\n' + v.text).join('\\n\\n');
         }
 
         async function rcPre() {
@@ -14065,13 +14067,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
-            if (r.gia) {
+            if (r.already) {
                 h += '<div class="alert alert-success py-2 mb-0"><strong>' + escHtml(t('up.nothingToDoTitle')) + '</strong> ' + escHtml(t('up.rcLatest')) + '</div>';
-            } else if (r.ignoto) {
+            } else if (r.unknown) {
                 h += '<div class="alert alert-warning py-2 mb-0">' + escHtml(t('up.repoUnknown')) + '</div>';
             } else if (r.blocked) {
                 h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
@@ -14083,10 +14085,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcRun() {
-            if (!updConferma('', t('up.wUpgradeRc'))) return;
+            if (!updConfirm('', t('up.wUpgradeRc'))) return;
             const el = document.getElementById('rc-pre');
             const pre = document.getElementById('rc-log');
-            const r = await updApi('roundcube_update', { confirm: 'AGGIORNA ROUNDCUBE' });
+            const r = await updApi('roundcube_update', { confirm: 'UPGRADE ROUNDCUBE' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -14102,15 +14104,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'attendi' : c.level) + '</td>'
+                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
             if ((r.dependents || []).length) {
                 h += '<div class="small mb-2"><strong>' + escHtml(t('up.linkedPkgs')) + '</strong><ul class="mb-0">';
                 r.dependents.forEach(d => {
-                    h += '<li>' + t('up.requires.html', { pkg: updEsc(d.name), lib: updEsc(d.richiede) }) + ' '
-                       + (d.compatibile ? '<span class="text-success">' + escHtml(t('up.compatible')) + '</span>'
+                    h += '<li>' + t('up.requires.html', { pkg: updEsc(d.name), lib: updEsc(d.requires) }) + ' '
+                       + (d.compatible ? '<span class="text-success">' + escHtml(t('up.compatible')) + '</span>'
                                         : '<span class="text-danger">' + escHtml(t('up.notCompatible84')) + '</span>') + '</li>';
                 });
                 h += '</ul></div>';
@@ -14127,13 +14129,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function my84Run() {
-            if (!updConferma('', t('up.wMigrate84'))) return;
+            if (!updConfirm('', t('up.wMigrate84'))) return;
             const el = document.getElementById('my84-pre');
             // Il log va nel riquadro DI QUESTA scheda: prima finiva in quello del piano, in
             // un'altra parte della pagina, e chi guardava sotto il messaggio di errore non
             // trovava niente. Un log che esiste ma non e' dove lo cerchi e' un log perduto.
             const pre = document.getElementById('my84-log');
-            const r = await updApi('mysql84_migrate', { confirm: 'MIGRA A 8.4' });
+            const r = await updApi('mysql84_migrate', { confirm: 'MIGRATE TO 8.4' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.migrating')) + '</span>';
             pre.style.display = 'block';
@@ -14141,30 +14143,30 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- aggiornamento guidato ----------
-        let updFirmaManutenzione = '';
+        let updMaintenanceSignature = '';
 
         /* Il piano esatto di pkg: ogni pacchetto che cambia, da quale versione a quale. */
-        function updPianoHtml(pn, signature) {
+        function updPlanHtml(pn, signature) {
             if (!pn) return '';
             if (!pn.measured) {
                 return '<div class="alert alert-danger py-2 small mb-2">' + escHtml(t('up.planUnavailable')) + ' '
-                     + updEsc(pn.error || pn.errore || '?') + '</div>';
+                     + updEsc(pn.error || pn.error || '?') + '</div>';
             }
-            const tipoNome = { aggiorna: t('up.tUpgrade'), installa: t('up.tInstall'), reinstalla: t('up.tReinstall'),
-                               rimuove: t('up.tRemove'), retrocede: t('up.tDowngrade') };
-            const tipoCls = { aggiorna: 'bg-primary', installa: 'bg-info text-dark', reinstalla: 'bg-secondary',
-                              rimuove: 'bg-danger', retrocede: 'bg-danger' };
+            const kindName = { upgrade: t('up.tUpgrade'), install: t('up.tInstall'), reinstall: t('up.tReinstall'),
+                               remove: t('up.tRemove'), downgrade: t('up.tDowngrade') };
+            const kindCls = { upgrade: 'bg-primary', install: 'bg-info text-dark', reinstall: 'bg-secondary',
+                              remove: 'bg-danger', downgrade: 'bg-danger' };
             let h = '';
             if ((pn.changes || []).length) {
                 h += '<div class="small fw-bold mb-1">' + escHtml(tn('up.exactPlanN', pn.changes.length)) + '</div>'
                    + '<div class="table-responsive" style="max-height:24rem;overflow:auto"><table class="table table-sm align-middle mb-1"><thead><tr>'
                    + '<th scope="col" style="width:8rem"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colNote')) + '</th></tr></thead><tbody>';
                 pn.changes.forEach(c => {
-                    h += '<tr class="upd-cell"><td><span class="badge ' + (tipoCls[c.tipo] || 'bg-secondary') + '">'
-                       + updEsc(tipoNome[c.tipo] || c.tipo) + '</span></td>'
-                       + '<td><code>' + updEsc(c.nome) + '</code></td>'
-                       + '<td class="small">' + updEsc(c.da || '-') + '</td>'
-                       + '<td class="small">' + updEsc(c.a || '-') + '</td>'
+                    h += '<tr class="upd-cell"><td><span class="badge ' + (kindCls[c.type] || 'bg-secondary') + '">'
+                       + updEsc(kindName[c.type] || c.type) + '</span></td>'
+                       + '<td><code>' + updEsc(c.name) + '</code></td>'
+                       + '<td class="small">' + updEsc(c.from || '-') + '</td>'
+                       + '<td class="small">' + updEsc(c.to || '-') + '</td>'
                        + '<td class="small">' + updEsc(c.reason || '')
                        + (c.stillVulnerable ? ' <span class="badge bg-danger">' + escHtml(t('up.stillVulnerable')) + '</span>' : '')
                        + (c.repo ? ' <span class="text-muted">[' + updEsc(c.repo) + ']</span>' : '') + '</td></tr>';
@@ -14174,10 +14176,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.planNoChange')) + '</div>';
             }
             (pn.blockers || []).forEach(x => {
-                h += '<div class="small text-warning-emphasis"><i class="fas fa-lock me-1" aria-hidden="true"></i><code>' + updEsc(x.nome)
+                h += '<div class="small text-warning-emphasis"><i class="fas fa-lock me-1" aria-hidden="true"></i><code>' + updEsc(x.name)
                    + '</code>: ' + updEsc(x.reason) + '</div>';
             });
-            h += '<div class="small text-muted mb-2">' + t('up.computedWith.html', { cmd: updEsc(pn.comando || '') })
+            h += '<div class="small text-muted mb-2">' + t('up.computedWith.html', { cmd: updEsc(pn.command || '') })
                + (pn.onBackup ? ' ' + escHtml(t('up.onCopy', { list: (pn.unlockedPackages || []).join(', ') })) : '.')
                + (signature ? ' ' + t('up.fingerprint.html', { sig: updEsc(signature) }) : '') + '</div>';
             return h;
@@ -14188,17 +14190,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // le protezioni rilegge quella.
         function updPackages() { pkOverview(); }
 
-        async function updLockOne(nome, blocca) {
-            const r = await updApi('packages_lock', { lock: blocca, package: nome });
+        async function updLockOne(entryName, doLock) {
+            const r = await updApi('packages_lock', { lock: doLock, package: entryName });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             updPackages();
         }
 
-        async function updLockAll(blocca) {
-            if (!blocca && !confirm(t('up.confirmUnlockAll'))) return;
+        async function updLockAll(doLock) {
+            if (!doLock && !confirm(t('up.confirmUnlockAll'))) return;
             const el = document.getElementById('upd-packages');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(blocca ? t('up.locking') : t('up.unlocking'));
-            const r = await updApi('packages_lock', { lock: blocca, package: '' });
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(doLock ? t('up.locking') : t('up.unlocking'));
+            const r = await updApi('packages_lock', { lock: doLock, package: '' });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             updPackages();
         }
@@ -14207,13 +14209,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         /* La firma del piano letto nella scheda: si manda al via, e il server esegue quello
            o niente. Senza, l'aggiornamento dei non protetti era l'unico che partiva alla
            cieca. Vuota finche' la scheda non e' stata letta: il pulsante lo dice. */
-        let updFirmaNonProtetti = '';
+        let updUnprotectedSignature = '';
         async function updStatus() {
             const el = document.getElementById('upd-status');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.simulating')) + '';
             const r = await updApi('updates_status');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            updFirmaNonProtetti = r.signature || '';
+            updUnprotectedSignature = r.signature || '';
             let h = '';
 
             if (r.rebootPending) {
@@ -14229,19 +14231,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     // con VuXML, sa se l'aggiornamento basta o no. Il blocco e' un'informazione a
                     // parte, non un verdict: il pulsante aggiorna anche un pacchetto bloccato.
                     const vc0 = v.fix;
-                    const aggiornabile = vc0 && (vc0.verdict === 'si-risolve-aggiornando' || vc0.verdict === 'aggiornamento-non-basta');
+                    const updatable = vc0 && (vc0.verdict === 'fixed-by-upgrade' || vc0.verdict === 'upgrade-not-enough');
                     h += '<li class="mb-2"><div class="d-flex flex-wrap align-items-center gap-1"><code>' + updEsc(v.name) + '</code>'
                        + (v.role ? ' <span class="text-muted">(' + updEsc(v.role) + ')</span>' : '')
                        + (vc0 && vc0.verdict
                             ? ' ' + pkVulnBadge(vc0)
                             : (v.locked
-                                ? (v.aggiornamentoDisponibile
+                                ? (v.updateAvailable
                                     ? ' &mdash; ' + t('up.lockedHasUpdate.html')
                                     : ' &mdash; ' + t('up.lockedNoUpdate.html'))
                                 : ' &mdash; ' + escHtml(v.fixedByUpgrade ? t('up.fixedByUpgrade') : t('up.noUpdateInCatalog'))))
                        + (v.locked && vc0 && vc0.verdict ? ' <span class="badge bg-secondary"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.locked')) + '</span>' : '')
-                       + (aggiornabile ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
-                            + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: vc0.catalogo || '' })) + '</button>' : '')
+                       + (updatable ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
+                            + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: vc0.catalog || '' })) + '</button>' : '')
                        + '</div>';
                     if ((v.cve || []).length) {
                         h += '<br><span class="badge bg-dark me-1">'
@@ -14261,13 +14263,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     h += '</li>';
                 });
                 h += '</ul>';
-                if (r.correzioniErrore) {
+                if (r.fixesError) {
                     h += '<div class="small text-muted">' + escHtml(t('up.fixUnknown')) + ' '
-                       + updEsc(r.correzioniErrore) + '</div>';
+                       + updEsc(r.fixesError) + '</div>';
                 }
-                if (r.notaRiavvio) {
+                if (r.restartNote) {
                     h += '<div class="mt-2 pt-2 border-top small"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>'
-                       + '<strong>' + updEsc(r.notaRiavvio) + '</strong></div>';
+                       + '<strong>' + updEsc(r.restartNote) + '</strong></div>';
                 }
                 h += '</div>';
             } else {
@@ -14301,7 +14303,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
             /* Il piano esatto con la sua firma, come nelle altre due schede. L'uscita grezza
                di pkg resta sotto, ripiegata: e' il dettaglio, non la decisione. */
-            if (r.piano) h += updPianoHtml(r.piano, r.signature);
+            if (r.plan) h += updPlanHtml(r.plan, r.signature);
             h += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('up.fullSim')) + '</summary>'
                + '<pre class="upd-log mt-2">' + updEsc(r.dryRun) + '</pre></details>';
             if (r.audit) {
@@ -14314,12 +14316,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function updApply() {
             /* Senza la firma non si parte: vuol dire che la scheda non e' stata letta, cioe'
                che nessuno ha visto il piano che si sta per eseguire. */
-            if (!updFirmaNonProtetti) { alert(t('up.readFirst')); return; }
+            if (!updUnprotectedSignature) { alert(t('up.readFirst')); return; }
             if (!confirm(t('up.confirmApply'))) return;
-            if (!updConferma('', t('up.wUpgrade'))) return;
+            if (!updConfirm('', t('up.wUpgrade'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('updates_apply', { confirm: 'AGGIORNA', signature: updFirmaNonProtetti });
+            const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updUnprotectedSignature });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -14358,9 +14360,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-warning py-2 small"><strong>' + escHtml(tn('up.staysLocked', r.waitCount)) + '</strong> '
                    + escHtml(t('up.staysLockedNote')) + '</div>';
             }
-            h += updPianoHtml(r.piano, r.signature);
-            updFirmaManutenzione = r.signature || '';
-            if (r.piano && r.piano.runnable) {
+            h += updPlanHtml(r.plan, r.signature);
+            updMaintenanceSignature = r.signature || '';
+            if (r.plan && r.plan.runnable) {
                 h += '<button class="btn btn-sm btn-danger" onclick="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
             } else {
                 h += '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.nothingToRun')) + '</div>';
@@ -14369,10 +14371,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updMaintRun() {
-            if (!updConferma(t('up.confirmMaint'), t('up.wMaint'))) return;
+            if (!updConfirm(t('up.confirmMaint'), t('up.wMaint'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('maintenance_run', { confirm: 'MANUTENZIONE', signature: updFirmaManutenzione });
+            const r = await updApi('maintenance_run', { confirm: 'MAINTENANCE', signature: updMaintenanceSignature });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.maintRunning')) + '</span>';
             pre.style.display = 'block';

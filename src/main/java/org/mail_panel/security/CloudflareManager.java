@@ -342,7 +342,7 @@ public class CloudflareManager {
             payload.put("proxied", false);
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
             payload.put("comment", "Creato dal pannello di posta");
-            return esito(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
+            return outcome(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
@@ -359,16 +359,16 @@ public class CloudflareManager {
     public RecordOp createSrvRecord(String token, String zoneId, String name, String target,
                                     int priority, int weight, int port, int ttl) {
         try {
-            JSONObject dati = new JSONObject()
+            JSONObject data = new JSONObject()
                     .put("priority", priority).put("weight", weight)
                     .put("port", port).put("target", target);
             JSONObject payload = new JSONObject();
             payload.put("type", "SRV");
             payload.put("name", name);
-            payload.put("data", dati);
+            payload.put("data", data);
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
             payload.put("comment", "Creato dal pannello di posta");
-            return esito(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
+            return outcome(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
@@ -391,7 +391,7 @@ public class CloudflareManager {
                     .put("name", name)
                     .put("content", formatTxtRecordContent(value))
                     .put("ttl", ttl <= 0 ? 1 : ttl);
-            return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
+            return outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
@@ -409,10 +409,10 @@ public class CloudflareManager {
      *
      * Si usa PATCH, che tocca il solo campo indicato e lascia stare nome, contenuto e TTL.
      */
-    public RecordOp impostaProxy(String token, String zoneId, String recordId, boolean proxato) {
+    public RecordOp setProxy(String token, String zoneId, String recordId, boolean proxied) {
         try {
-            JSONObject payload = new JSONObject().put("proxied", proxato);
-            return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
+            JSONObject payload = new JSONObject().put("proxied", proxied);
+            return outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
@@ -420,13 +420,13 @@ public class CloudflareManager {
     }
 
     /** Corregge un CNAME esistente: destinazione giusta e proxy spento. */
-    public RecordOp aggiornaCname(String token, String zoneId, String recordId,
+    public RecordOp updateCname(String token, String zoneId, String recordId,
                                   String name, String target) {
         try {
             JSONObject payload = new JSONObject()
                     .put("type", "CNAME").put("name", name)
                     .put("content", target).put("proxied", false);
-            return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
+            return outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
@@ -434,21 +434,21 @@ public class CloudflareManager {
     }
 
     /** Corregge un SRV esistente: destinazione e porta giuste. */
-    public RecordOp aggiornaSrv(String token, String zoneId, String recordId, String name,
+    public RecordOp updateSrv(String token, String zoneId, String recordId, String name,
                                 String target, int priority, int weight, int port) {
         try {
-            JSONObject dati = new JSONObject().put("priority", priority).put("weight", weight)
+            JSONObject data = new JSONObject().put("priority", priority).put("weight", weight)
                     .put("port", port).put("target", target);
             JSONObject payload = new JSONObject()
-                    .put("type", "SRV").put("name", name).put("data", dati);
-            return esito(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
+                    .put("type", "SRV").put("name", name).put("data", data);
+            return outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
-    private RecordOp esito(HttpResponse<String> resp) {
+    private RecordOp outcome(HttpResponse<String> resp) {
         JSONObject body = new JSONObject(resp.body());
         if (body.optBoolean("success", false))
             return new RecordOp(true, body.getJSONObject("result").getString("id"), null);
@@ -483,17 +483,17 @@ public class CloudflareManager {
                     info.content = r.optString("content", "");
                     info.proxied = r.optBoolean("proxied", false);
                     // I campi strutturati, quando ci sono, valgono piu' della stringa.
-                    JSONObject dati = r.optJSONObject("data");
-                    if (dati != null) {
-                        if (dati.has("priority")) info.srvPriorita = dati.optInt("priority");
-                        if (dati.has("weight"))   info.srvPeso     = dati.optInt("weight");
-                        if (dati.has("port"))     info.srvPorta    = dati.optInt("port");
-                        String bers = dati.optString("target", "");
-                        if (!bers.isEmpty()) info.srvDestinazione = bers;
+                    JSONObject data = r.optJSONObject("data");
+                    if (data != null) {
+                        if (data.has("priority")) info.srvPriority = data.optInt("priority");
+                        if (data.has("weight"))   info.srvWeight     = data.optInt("weight");
+                        if (data.has("port"))     info.srvPort    = data.optInt("port");
+                        String targetValue = data.optString("target", "");
+                        if (!targetValue.isEmpty()) info.srvDestination = targetValue;
                     }
                     // La priorita' Cloudflare la espone anche fuori da "data".
-                    if (info.srvPriorita == null && r.has("priority"))
-                        info.srvPriorita = r.optInt("priority");
+                    if (info.srvPriority == null && r.has("priority"))
+                        info.srvPriority = r.optInt("priority");
                     result.add(info);
                 }
                 JSONObject ri = body.optJSONObject("result_info");
@@ -521,10 +521,10 @@ public class CloudflareManager {
          * "record non riconosciuto". E' cosi' che il pannello ha riscritto a ogni esecuzione
          * due SRV che erano gia' giusti, annunciando ogni volta una differenza inesistente.
          */
-        public Integer srvPriorita;
-        public Integer srvPeso;
-        public Integer srvPorta;
-        public String srvDestinazione;
+        public Integer srvPriority;
+        public Integer srvWeight;
+        public Integer srvPort;
+        public String srvDestination;
     }
 
     public RecordOp deleteRecord(String token, String zoneId, String recordId) {

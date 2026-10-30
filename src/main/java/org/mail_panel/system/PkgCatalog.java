@@ -49,14 +49,14 @@ public final class PkgCatalog {
     private static final Pattern REPO_NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
 
     /** Legge davvero: cartella di pkg, repository accesi, date dei cataloghi. Nessuna rete. */
-    public static JSONObject leggi() {
+    public static JSONObject read() {
         String dir = "/var/db/pkg";
-        for (String riga : Shell.run(Duration.ofSeconds(15), "pkg", "config", "PKG_DBDIR").outputTrim().split("\n"))
-            if (riga.trim().matches("/[A-Za-z0-9._/+-]*")) dir = riga.trim();
+        for (String line : Shell.run(Duration.ofSeconds(15), "pkg", "config", "PKG_DBDIR").outputTrim().split("\n"))
+            if (line.trim().matches("/[A-Za-z0-9._/+-]*")) dir = line.trim();
         Shell.Result vv = Shell.run(Duration.ofSeconds(60), "pkg", "-vv");
-        List<String> accesi = vv.success() ? accesi(vv.output()) : null;
-        JSONObject c = data(dir, accesi, System.currentTimeMillis() / 1000).put("cartella", dir);
-        return c.put("nota", nota(c));
+        List<String> enabledOnes = vv.success() ? enabledOnes(vv.output()) : null;
+        JSONObject c = data(dir, enabledOnes, System.currentTimeMillis() / 1000).put("folder", dir);
+        return c.put("note", note(c));
     }
 
     /**
@@ -64,23 +64,23 @@ public final class PkgCatalog {
      * nel sorgente di pkg (src/utils.c): "  <nome>: { ", poi "enabled : yes," o "no,", e "}".
      * Restituisce null se non riconosce nessun repository: "non so" non e' "nessuno".
      */
-    static List<String> accesi(String output) {
-        List<String> tutti = new ArrayList<>(), accesi = new ArrayList<>();
-        String nome = null;
-        boolean dentro = false;
-        Pattern apre = Pattern.compile("^\\s+(\\S+):\\s*\\{");
-        Pattern acceso = Pattern.compile("^\\s*enabled\\s*:\\s*(\\w+)");
-        for (String riga : (output == null ? "" : output).split("\n")) {
-            if (riga.startsWith("Repositories:")) { dentro = true; continue; }
-            if (!dentro) continue;
-            Matcher m = apre.matcher(riga);
-            if (m.find()) { nome = m.group(1); tutti.add(nome); continue; }
-            if (nome == null) continue;
-            Matcher e = acceso.matcher(riga);
-            if (e.find() && "yes".equalsIgnoreCase(e.group(1))) accesi.add(nome);
-            if (riga.trim().startsWith("}")) nome = null;
+    static List<String> enabledOnes(String output) {
+        List<String> allItems = new ArrayList<>(), enabledOnes = new ArrayList<>();
+        String name = null;
+        boolean inside = false;
+        Pattern opens = Pattern.compile("^\\s+(\\S+):\\s*\\{");
+        Pattern enabled = Pattern.compile("^\\s*enabled\\s*:\\s*(\\w+)");
+        for (String line : (output == null ? "" : output).split("\n")) {
+            if (line.startsWith("Repositories:")) { inside = true; continue; }
+            if (!inside) continue;
+            Matcher m = opens.matcher(line);
+            if (m.find()) { name = m.group(1); allItems.add(name); continue; }
+            if (name == null) continue;
+            Matcher e = enabled.matcher(line);
+            if (e.find() && "yes".equalsIgnoreCase(e.group(1))) enabledOnes.add(name);
+            if (line.trim().startsWith("}")) name = null;
         }
-        return tutti.isEmpty() ? null : accesi;
+        return allItems.isEmpty() ? null : enabledOnes;
     }
 
     /**
@@ -92,107 +92,107 @@ public final class PkgCatalog {
      *               i cataloghi che ci sono
      * @param adesso l'ora attuale in secondi dal 1970, UTC
      */
-    static JSONObject data(String dir, List<String> accesi, long adesso) {
-        List<String> nomi = new ArrayList<>();
-        boolean daPkg = accesi != null;
-        if (daPkg) {
-            nomi.addAll(accesi);
+    static JSONObject data(String dir, List<String> enabledOnes, long now) {
+        List<String> names = new ArrayList<>();
+        boolean fromPkg = enabledOnes != null;
+        if (fromPkg) {
+            names.addAll(enabledOnes);
         } else {
             try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(dir, "repos"))) {
                 for (Path p : ds)
-                    if (Files.isRegularFile(p.resolve("db"))) nomi.add(p.getFileName().toString());
+                    if (Files.isRegularFile(p.resolve("db"))) names.add(p.getFileName().toString());
             } catch (Exception e) { /* nessuna cartella repos: si prova il nome vecchio */ }
             try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(dir), "repo-*.sqlite")) {
                 for (Path p : ds) {
                     String f = p.getFileName().toString();
                     String n = f.substring("repo-".length(), f.length() - ".sqlite".length());
-                    if (!nomi.contains(n)) nomi.add(n);
+                    if (!names.contains(n)) names.add(n);
                 }
             } catch (Exception e) { /* nemmeno quello */ }
-            Collections.sort(nomi);
+            Collections.sort(names);
         }
 
         JSONArray list = new JSONArray();
-        JSONArray mancanti = new JSONArray();
-        JSONObject piuVecchio = null;
-        for (String nome : nomi) {
-            JSONObject o = new JSONObject().put("nome", nome);
+        JSONArray missing = new JSONArray();
+        JSONObject oldest = null;
+        for (String name : names) {
+            JSONObject o = new JSONObject().put("name", name);
             list.put(o);
-            if (!REPO_NAME.matcher(nome).matches()) {
-                o.put("trovato", false).put("errore", I18n.tr("server.catalog.badRepoName"));
-                mancanti.put(nome);
+            if (!REPO_NAME.matcher(name).matches()) {
+                o.put("found", false).put("error", I18n.tr("server.catalog.badRepoName"));
+                missing.put(name);
                 continue;
             }
             // Prima il posto di adesso, poi quello delle versioni vecchie di pkg.
             Path file = null;
-            for (Path p : List.of(Paths.get(dir, "repos", nome, "db"), Paths.get(dir, "repo-" + nome + ".sqlite")))
+            for (Path p : List.of(Paths.get(dir, "repos", name, "db"), Paths.get(dir, "repo-" + name + ".sqlite")))
                 if (Files.isRegularFile(p)) { file = p; break; }
-            long pubblicato = -1;
+            long published = -1;
             try {
-                if (file != null) pubblicato = Files.getLastModifiedTime(file).to(TimeUnit.SECONDS);
+                if (file != null) published = Files.getLastModifiedTime(file).to(TimeUnit.SECONDS);
             } catch (Exception e) { /* resta -1 */ }
-            if (pubblicato < 0) {
-                o.put("trovato", false).put("cercato", Paths.get(dir, "repos", nome, "db").toString());
-                mancanti.put(nome);
+            if (published < 0) {
+                o.put("found", false).put("searched", Paths.get(dir, "repos", name, "db").toString());
+                missing.put(name);
                 continue;
             }
             // Un orologio un po' indietro rispetto al server darebbe un'eta' negativa: e' "oggi".
-            long secondi = Math.max(0, adesso - pubblicato);
-            o.put("trovato", true).put("file", file.toString()).put("pubblicato", pubblicato)
-             .put("data", DateTimeFormatter.ofPattern(I18n.tr("server.catalog.dateTime")).format(Instant.ofEpochSecond(pubblicato).atZone(ZoneId.systemDefault())))
-             .put("ore", secondi / 3600).put("giorni", secondi / 86400);
-            if (piuVecchio == null || secondi / 3600 > piuVecchio.getLong("ore")) piuVecchio = o;
+            long seconds = Math.max(0, now - published);
+            o.put("found", true).put("file", file.toString()).put("published", published)
+             .put("data", DateTimeFormatter.ofPattern(I18n.tr("server.catalog.dateTime")).format(Instant.ofEpochSecond(published).atZone(ZoneId.systemDefault())))
+             .put("hours", seconds / 3600).put("days", seconds / 86400);
+            if (oldest == null || seconds / 3600 > oldest.getLong("hours")) oldest = o;
         }
 
-        return new JSONObject().put("repository", list).put("mancanti", mancanti).put("daPkg", daPkg)
-                .put("datato", piuVecchio != null)
-                .put("ore", piuVecchio == null ? -1 : piuVecchio.getLong("ore"))
-                .put("giorni", piuVecchio == null ? -1 : piuVecchio.getLong("giorni"))
-                .put("data", piuVecchio == null ? "" : piuVecchio.getString("data"))
-                .put("file", piuVecchio == null ? "" : piuVecchio.getString("file"))
-                .put("piuVecchio", piuVecchio == null ? "" : piuVecchio.getString("nome"));
+        return new JSONObject().put("repository", list).put("missing", missing).put("fromPkg", fromPkg)
+                .put("dated", oldest != null)
+                .put("hours", oldest == null ? -1 : oldest.getLong("hours"))
+                .put("days", oldest == null ? -1 : oldest.getLong("days"))
+                .put("data", oldest == null ? "" : oldest.getString("data"))
+                .put("file", oldest == null ? "" : oldest.getString("file"))
+                .put("oldest", oldest == null ? "" : oldest.getString("name"));
     }
 
     /** "oggi", "ieri", "N giorni fa". */
-    static String quanto(long giorni) {
-        return giorni < 0 ? I18n.tr("server.catalog.unknownDate") : giorni == 0 ? I18n.tr("server.catalog.today")
-                : giorni == 1 ? I18n.tr("server.catalog.yesterday") : I18n.tr("server.catalog.daysAgo", java.util.Map.of("n", String.valueOf(giorni)));
+    static String howMuch(long days) {
+        return days < 0 ? I18n.tr("server.catalog.unknownDate") : days == 0 ? I18n.tr("server.catalog.today")
+                : days == 1 ? I18n.tr("server.catalog.yesterday") : I18n.tr("server.catalog.daysAgo", java.util.Map.of("n", String.valueOf(days)));
     }
 
     /** La frase sul catalogo, per la Home e per il rapporto: una sola, scritta qui. */
-    static String nota(JSONObject c) {
+    static String note(JSONObject c) {
         JSONArray el = c.optJSONArray("repository");
-        JSONArray manc = c.optJSONArray("mancanti");
+        JSONArray missing = c.optJSONArray("missing");
         StringBuilder t = new StringBuilder();
-        if (c.optBoolean("datato")) {
+        if (c.optBoolean("dated")) {
             List<String> date = new ArrayList<>();
             for (int i = 0; el != null && i < el.length(); i++) {
                 JSONObject o = el.getJSONObject(i);
-                if (o.optBoolean("trovato"))
-                    date.add(I18n.tr("server.catalog.repoOn", java.util.Map.of("name", String.valueOf(o.getString("nome")), "date", String.valueOf(o.getString("data")), "ago", String.valueOf(quanto(o.getLong("giorni"))))));
+                if (o.optBoolean("found"))
+                    date.add(I18n.tr("server.catalog.repoOn", java.util.Map.of("name", String.valueOf(o.getString("name")), "date", String.valueOf(o.getString("data")), "ago", String.valueOf(howMuch(o.getLong("days"))))));
             }
             t.append(date.size() == 1
                      ? I18n.tr("server.catalog.published.one", java.util.Map.of("list", String.valueOf(String.join("; ", date))))
                      : I18n.tr("server.catalog.published.other", java.util.Map.of("list", String.valueOf(String.join("; ", date)))));
             if (date.size() > 1)
-                t.append(" ").append(I18n.tr("server.catalog.oldest", java.util.Map.of("name", String.valueOf(c.optString("piuVecchio")))));
+                t.append(" ").append(I18n.tr("server.catalog.oldest", java.util.Map.of("name", String.valueOf(c.optString("oldest")))));
             t.append(" ").append(I18n.tr("server.catalog.serverDate"));
-            if (manc != null && manc.length() > 0) {
+            if (missing != null && missing.length() > 0) {
                 List<String> n = new ArrayList<>();
-                for (int i = 0; i < manc.length(); i++) n.add(manc.getString(i));
+                for (int i = 0; i < missing.length(); i++) n.add(missing.getString(i));
                 t.append(" ").append(n.size() == 1
                          ? I18n.tr("server.catalog.missing.one", java.util.Map.of("list", String.valueOf(n.get(0))))
                          : I18n.tr("server.catalog.missing.other", java.util.Map.of("list", String.valueOf(String.join(", ", n)))));
             }
-        } else if (c.optBoolean("daPkg") && (el == null || el.length() == 0)) {
+        } else if (c.optBoolean("fromPkg") && (el == null || el.length() == 0)) {
             t.append(I18n.tr("server.catalog.noRepo"));
         } else {
-            List<String> cercati = new ArrayList<>();
+            List<String> searched = new ArrayList<>();
             for (int i = 0; el != null && i < el.length(); i++)
-                cercati.add(el.getJSONObject(i).optString("cercato", el.getJSONObject(i).optString("nome")));
-            t.append(cercati.isEmpty()
-                     ? I18n.tr("server.catalog.unknownNoRepos", java.util.Map.of("dir", String.valueOf(c.optString("cartella", "/var/db/pkg"))))
-                     : I18n.tr("server.catalog.unknownMissing", java.util.Map.of("list", String.valueOf(String.join(", ", cercati)))));
+                searched.add(el.getJSONObject(i).optString("searched", el.getJSONObject(i).optString("name")));
+            t.append(searched.isEmpty()
+                     ? I18n.tr("server.catalog.unknownNoRepos", java.util.Map.of("dir", String.valueOf(c.optString("folder", "/var/db/pkg"))))
+                     : I18n.tr("server.catalog.unknownMissing", java.util.Map.of("list", String.valueOf(String.join(", ", searched)))));
         }
         return t.toString();
     }
