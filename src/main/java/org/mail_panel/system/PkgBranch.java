@@ -53,7 +53,7 @@ public final class PkgBranch {
     public static final Path FOLDER = Path.of("/usr/local/etc/pkg/repos");
     /** "zz": pkg legge i file in ordine alfabetico e l'ultimo vince. */
     public static final Path FILE = FOLDER.resolve("zz-panel-branch.conf");
-    static final String MARK = "# Scritto dal pannello";
+    static final String MARK = "# " + PanelMarker.WRITTEN;
     static final String PKG = "/usr/local/sbin/pkg";
     public static final List<String> BRANCHES = List.of("quarterly", "latest");
 
@@ -247,8 +247,9 @@ public final class PkgBranch {
     /** Il file del pannello per un ramo: solo l'indirizzo, piu' cio' che un blocco riscriverebbe di serie. */
     static String content(List<Repo> repos, String target, Instant when) {
         StringBuilder b = new StringBuilder();
-        b.append(MARK).append(" il ").append(DateTimeFormatter.ofPattern("dd/MM/yyyy 'alle' HH:mm").format(when.atZone(ZoneOffset.UTC)))
-         .append(" (UTC): ramo \"").append(target).append("\" dei pacchetti.\n")
+        b.append(MARK).append(" on ").append(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(when.atZone(ZoneOffset.UTC)))
+         .append(" (UTC).\n")
+         .append("# Ramo \"").append(target).append("\" dei pacchetti.\n")
          .append("# pkg legge i file di questa cartella in ordine alfabetico e per ogni campo vale\n")
          .append("# l'ultimo: per questo il nome comincia con \"zz\". Cambia solo l'indirizzo dei\n")
          .append("# repository ufficiali; il resto della configurazione resta quello di\n")

@@ -115,7 +115,7 @@ public class WebProtection {
     public static String configuration(String cert, String key) {
         return """
             # Superficie pubblica del pannello di posta sulla porta 443.
-            # Scritto dal pannello: non modificare a mano, verrebbe sovrascritto.
+            # Written by the mail panel: non modificare a mano, verrebbe sovrascritto.
             #
             # Qui si servono DUE file e nient'altro:
             #   /.well-known/mta-sts.txt   la politica MTA-STS, file statico
@@ -449,7 +449,7 @@ public class WebProtection {
      */
     public static String filter() {
         return """
-            # Scritto dal pannello di posta. Guarda il solo log della superficie pubblica 443.
+            # Written by the mail panel. Guarda il solo log della superficie pubblica 443.
             [Definition]
             failregex = ^<HOST> .* "(GET|HEAD|POST|PUT|DELETE|OPTIONS|PATCH|TRACE|CONNECT)[^"]*" (404|405|429) 
             ignoreregex =
@@ -458,7 +458,7 @@ public class WebProtection {
 
     public static String jail() {
         return """
-            # Scritto dal pannello di posta.
+            # Written by the mail panel.
             [%1$s]
             enabled  = true
             filter   = %1$s

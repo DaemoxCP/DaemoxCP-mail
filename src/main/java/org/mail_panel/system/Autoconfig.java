@@ -144,7 +144,17 @@ public class Autoconfig {
         return null;
     }
 
-    private static final String MARKER = "# --- autoconfig Thunderbird (pannello di posta) ---";
+    static final String MARKER = "# --- autoconfig Thunderbird (mail panel) ---";
+
+    /**
+     * Il blocco del pannello c'e' gia', col marcatore di adesso o con quello di prima
+     * (legacy-names.json). Il file e' di nginx, non del pannello: il marcatore di prima resta dov'e',
+     * e senza riconoscerlo si aggiungerebbe un secondo blocco, che nginx -t rifiuta.
+     */
+    static boolean hasBlock(String text) {
+        for (String m : PanelMarker.forms("autoconfigMarker", MARKER)) if (text.contains(m)) return true;
+        return false;
+    }
 
     /**
      * Cosa manca perche' Thunderbird trovi il file. Si LEGGE, non si tocca niente.
@@ -166,7 +176,7 @@ public class Autoconfig {
         String text = "";
         try { text = Files.readString(Path.of(conf)); } catch (Exception ignore) {}
         boolean coveredName = text.contains("autoconfig.") && text.contains("mta-sts.");
-        boolean brokenPresent = text.contains(MARKER);
+        boolean brokenPresent = hasBlock(text);
         r.put("coveredName", coveredName).put("brokenPresent", brokenPresent);
         r.put("serverName", firstLineWith(text, "server_name"));
         // Se la superficie pubblica sulla 443 e' installata, quei nomi sono suoi e questa
@@ -409,7 +419,7 @@ public class Autoconfig {
 
             // 2. la rotta: la richiesta va al pannello, che sa quali domini esistono e
             //    costruisce l'XML per quello giusto. Un file statico non potrebbe.
-            if (!fresh.contains(MARKER)) {
+            if (!hasBlock(fresh)) {
                 int i = fresh.indexOf("location /");
                 if (i < 0) return r.put("success", false)
                         .put("error", I18n.tr("server.autoconf.noLocation"));

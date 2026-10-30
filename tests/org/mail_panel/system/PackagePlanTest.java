@@ -242,10 +242,10 @@ public class PackagePlanTest {
         v = PackagePlan.assessFix("1.27.5", "1.28.0", issues("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
         real("due rami di versioni: la 1.28.0 non basta", "upgrade-not-enough".equals(v.getString("verdict")));
         v = PackagePlan.assessFix("3.0", "3.0", issues("< 2.0"), CMP);
-        real("versione fuori da ogni intervallo: non so, non invento", "non-so".equals(v.getString("verdict")));
+        real("versione fuori da ogni intervallo: non so, non invento", "unknown".equals(v.getString("verdict")));
         PackagePlan.VersionComparator broken = (x, y) -> { throw new IllegalStateException("pkg non risponde"); };
         v = PackagePlan.assessFix("1.30.4,3", "1.30.4,3", nginxProblems, broken);
-        real("confronto rotto: non so", "non-so".equals(v.getString("verdict")) && v.getString("explanation").contains("pkg non risponde"));
+        real("confronto rotto: non so", "unknown".equals(v.getString("verdict")) && v.getString("explanation").contains("pkg non risponde"));
 
         real("estremi: uno", PackagePlan.bounds("< 1.30.5,3").size() == 1);
         real("estremi: due", PackagePlan.bounds(">= 1.25.0 : < 1.30.5,3").size() == 2);

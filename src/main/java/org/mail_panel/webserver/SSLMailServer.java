@@ -512,6 +512,10 @@ public class SSLMailServer {
             // niente. Dopo Fail2banAutoSetup, che ricarica fail2ban per conto suo.
             org.mail_panel.system.PublicSurfaceRename.ensureAtBoot();
 
+            // Le firme dei file del pannello in inglese sui server installati prima: solo righe di
+            // commento, quindi niente reload. Dopo la rinomina, che porta i file ai nomi di adesso.
+            org.mail_panel.system.PanelMarker.ensureAtBoot();
+
             // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
             // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".
             // Idempotente: se è tutto OK non fa nulla.

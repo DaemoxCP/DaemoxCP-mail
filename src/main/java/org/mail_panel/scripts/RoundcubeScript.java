@@ -245,7 +245,7 @@ NGINXCONF
             # c'e': cosi' la stessa riga vale per la 1.6 e per la 1.7 senza doverle distinguere.
             if [ -d /usr/local/www/roundcube/public_html ]; then
                 sed -i '' 's#root /usr/local/www/roundcube;#root /usr/local/www/roundcube/public_html;#' /usr/local/etc/nginx/sites-enabled/roundcube.conf
-                echo "  Roundcube 1.7 o successiva: radice di nginx impostata su public_html"
+                echo "  Roundcube 1.7 or later: nginx root set to public_html"
             fi
 
             # Set permissions

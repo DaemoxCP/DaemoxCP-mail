@@ -328,6 +328,15 @@ public class CloudflareManager {
     }
 
     /**
+     * Il commento dei record che il pannello crea, per chi li guarda nella dashboard di
+     * Cloudflare. Il pannello non lo rilegge (legge solo i commenti dei record DKIM, vedi
+     * DkimManager). I record creati prima della fine di ottobre 2026 hanno ancora il testo
+     * italiano, e lo tengono: cambiarlo vorrebbe dire scrivere su Cloudflare all'avvio per un
+     * commento.
+     */
+    static final String RECORD_COMMENT = "Created by the mail panel";
+
+    /**
      * Crea un CNAME. Sempre con proxied=false, e non e' una preferenza: un CNAME
      * proxato non risponde piu' con il CNAME ma con gli indirizzi di Cloudflare, quindi
      * il client di posta non troverebbe piu' l'host che cerca e la verifica del pannello
@@ -341,7 +350,7 @@ public class CloudflareManager {
             payload.put("content", target);
             payload.put("proxied", false);
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
-            payload.put("comment", "Creato dal pannello di posta");
+            payload.put("comment", RECORD_COMMENT);
             return outcome(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
@@ -367,7 +376,7 @@ public class CloudflareManager {
             payload.put("name", name);
             payload.put("data", data);
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
-            payload.put("comment", "Creato dal pannello di posta");
+            payload.put("comment", RECORD_COMMENT);
             return outcome(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));

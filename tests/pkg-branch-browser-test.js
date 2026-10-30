@@ -70,7 +70,7 @@ async function served(route) {
             fingerprint: stateValue().fingerprint, file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf',
             changes: [{ name: 'FreeBSD-ports', from: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', to: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
             warnings: ['Non si aggiorna nessun pacchetto: cambia da dove pkg li prende.', 'Su latest il prossimo aggiornamento puo\' portare versioni maggiori nuove.'],
-            content: '# Scritto dal pannello\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', howToReturn: '' });
+            content: '# Written by the mail panel\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', howToReturn: '' });
         case 'branch_change':
             if (!changeSucceeds) return json(route, { success: false, error: 'C\'e\' gia\' un lavoro sui pacchetti in corso (aggiornamento di nginx).' });
             rounds = 0;

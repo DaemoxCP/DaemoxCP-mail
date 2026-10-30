@@ -944,7 +944,7 @@ public class DnsRecordsGenerator {
             // NON si scrive "non attivo" su una domanda rimasta senza risposta: sono due guasti
             // diversi e mandano a cercare in posti opposti (come per autoconfig, in verifyAllRecords).
             mtaStsCheck.passed = false;
-            mtaStsCheck.message = "Non so se il record c'e': " + txtSts.reason + ".";
+            mtaStsCheck.message = I18n.tr("server.dnsg.stsUnknown", java.util.Map.of("why", String.valueOf(txtSts.reason)));
         } else {
             mtaStsCheck.passed = false;
             mtaStsCheck.informational = true;
