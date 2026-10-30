@@ -2,7 +2,7 @@
         async function upd465() {
             const el = document.getElementById('upd-465');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('p465.reading')) + '';
-            const r = await updApi('porta465_status');
+            const r = await updApi('port465_status');
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
                 return;
@@ -40,7 +40,7 @@
             if (!updConferma(t('p465.confirm'), t('p465.wApply'))) return;
             const el = document.getElementById('upd-465-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('p465.applying')) + '';
-            const r = await updApi('porta465_apply', { confirm: 'APPLICA' });
+            const r = await updApi('port465_apply', { confirm: 'APPLY' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                   + updEsc(r.note || r.error) + '</div>';
             if (r.restored)

@@ -63,7 +63,7 @@
             if (!updConferma(t('w4.confirmInclude'), t('w4.wAdd'))) return;
             const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.changing')) + '';
-            const r = await updApi('web443_include', { confirm: 'AGGIUNGI' });
+            const r = await updApi('web443_include', { confirm: 'ADD' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                   + updEsc(r.note || r.error) + '</div>';
             if (r.restored)
@@ -76,7 +76,7 @@
             if (!updConferma(t('w4.confirmInstall'), t('w4.wOpen'))) return;
             const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.writing')) + '';
-            const r = await updApi('web443_install', { confirm: 'APRI' });
+            const r = await updApi('web443_install', { confirm: 'OPEN' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                   + updEsc(r.note || r.error) + '</div>';
             if (r.restored)
@@ -89,7 +89,7 @@
             if (!updConferma(t('w4.confirmJail'), t('w4.wEnable'))) return;
             const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.jailWriting')) + '';
-            const r = await updApi('web443_jail', { confirm: 'ATTIVA' });
+            const r = await updApi('web443_jail', { confirm: 'ENABLE' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + updEsc(r.note || r.error) + '</div>'
                          + (r.state ? '<pre class="small p-2 border rounded mt-1 mb-0">' + updEsc(r.state) + '</pre>' : '');

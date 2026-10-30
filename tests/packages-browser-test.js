@@ -43,7 +43,7 @@ function quadro() {
               majorJump: false, canUpdate: true, whyNot: '', vuln: VULN_NGINX },
             { name: 'dovecot-mysql', installed: '2.3.21.1_3', available: '2.4.2', update: true, locked: true, stack: true, role: 'Componente di Dovecot',
               majorJump: true, canUpdate: false, whyNot: 'Dovecot 2.4 riscrive la configurazione: aspetta la procedura dedicata.',
-              advisory: { level: 'attendi', text: 'Dovecot 2.4 riscrive la configurazione: aspetta la procedura dedicata.' } },
+              advisory: { level: 'wait', text: 'Dovecot 2.4 riscrive la configurazione: aspetta la procedura dedicata.' } },
             { name: 'openjdk25', installed: '25.0.3+9.f.1', available: '25.0.4+7.f.1_1', update: true, locked: true, stack: true, role: 'Runtime Java',
               inUse: 'il pannello gira su questo', panelRuntime: true, javaFlow: true, canUpdate: false,
               whyNot: 'Il pannello gira su questo Java: si aggiorna con la sua procedura.' },
@@ -80,9 +80,9 @@ async function servi(route) {
             signature: '0123456789abcdef', blocked: false, canProceed: true, cve: ['CVE-2026-90439'],
             services: [{ name: 'nginx', running: true }],
             checks: [{ level: 'ok', label: 'Pacchetto installato', detail: 'nginx 1.30.4,3' },
-                     { level: 'verifica', label: 'Avvertenza', detail: 'Ricontrolla i virtual host dopo il riavvio.' }],
+                     { level: 'review', label: 'Avvertenza', detail: 'Ricontrolla i virtual host dopo il riavvio.' }],
             plan: { measured: true, unlockedPackages: ['nginx'], command: 'pkg upgrade -n -U nginx', onBackup: true,
-                     changes: [{ type: 'aggiorna', name: 'nginx', from: '1.30.4,3', to: '1.30.5_1,3', reason: '', repo: 'FreeBSD-ports' }], blockers: [] } });
+                     changes: [{ type: 'upgrade', name: 'nginx', from: '1.30.4,3', to: '1.30.5_1,3', reason: '', repo: 'FreeBSD-ports' }], blockers: [] } });
         case 'package_update':
             giri = 0;
             return json(route, { success: true, jobId: 'guid-1', async: true });

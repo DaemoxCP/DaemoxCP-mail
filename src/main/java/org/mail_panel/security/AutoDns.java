@@ -462,7 +462,7 @@ public class AutoDns {
         try {
             for (MailDatabase.Mailbox m : database.getMailboxes(d.id))
                 if (m.email != null && m.email.equalsIgnoreCase(address))
-                    return o.put("exists", true).put("type", "casella");
+                    return o.put("exists", true).put("type", "mailbox");
             for (MailDatabase.Alias a : database.getAliases(d.id))
                 if (a.source != null && a.source.equalsIgnoreCase(address))
                     return o.put("exists", true).put("type", "alias")

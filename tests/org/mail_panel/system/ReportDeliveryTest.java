@@ -38,7 +38,7 @@ public class ReportDeliveryTest {
             "Sep 25 17:52:12 mail postfix/qmgr[1022]: 4hB2Kq3Xz9zB6: removed");
         JSONObject e = PeriodicReport.outcomeInLog(gmail, ID, A);
         real("gmail: trova il numero di coda dal Message-ID", "4hB2Kq3Xz9zB6".equals(e.optString("queue")));
-        real("gmail: consegnato", "consegnato".equals(e.optString("state")));
+        real("gmail: consegnato", "delivered".equals(e.optString("state")));
         real("gmail: relay giusto", "gmail-smtp-in.l.google.com[142.250.102.27]:25".equals(e.optString("relay")));
         real("gmail: risposta del server", e.optString("answer").startsWith("250 2.0.0 OK"));
         real("gmail: TLS letto dalla riga di smtp", "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(e.optString("tls")));
@@ -67,7 +67,7 @@ public class ReportDeliveryTest {
         real("tls: la prova contiene davvero un'apertura TLS verso lo stesso relay",
             otherProcess.get(1).contains("TLS connection established to " + R + ": "));
         e = PeriodicReport.outcomeInLog(otherProcess, ID, A);
-        real("tls di un altro processo: consegnato", "consegnato".equals(e.optString("state")));
+        real("tls di un altro processo: consegnato", "delivered".equals(e.optString("state")));
         real("tls di un altro processo: NON attribuito al rapporto", !e.has("tls"));
         v = PeriodicReport.verdict(e);
         real("tls di un altro processo: l'esito non dice TLS", !v.optString("outcome").contains("TLS"));
@@ -161,14 +161,14 @@ public class ReportDeliveryTest {
         real("dma: Postfix non l'ha visto", e.optString("state").isEmpty() && !e.has("queue"));
         v = PeriodicReport.verdict(e);
         real("dma: il verdict e' un avviso, non 'consegnato'",
-            v.optBoolean("warning") && !v.optString("outcome").startsWith("consegnato"));
+            v.optBoolean("warning") && !v.optString("outcome").startsWith("delivered"));
 
         // --- Rimandato: Postfix riprova da solo, il pannello non deve rimandarlo ---
         List<String> postponed = List.of(
             "Sep 25 18:00:00 mail postfix/cleanup[1]: 4ABCDEF123: message-id=<" + ID + ">",
             "Sep 25 18:00:30 mail postfix/smtp[2]: 4ABCDEF123: to=<owner@example.com>, relay=none, delay=30, delays=0.02/0.01/30/0, dsn=4.4.1, status=deferred (connect to gmail-smtp-in.l.google.com[142.250.102.27]:25: Connection timed out)");
         e = PeriodicReport.outcomeInLog(postponed, ID, A);
-        real("rimandato: stato", "rimandato".equals(e.optString("state")));
+        real("rimandato: stato", "deferred".equals(e.optString("state")));
         real("rimandato: motivo", e.optString("answer").contains("Connection timed out"));
         v = PeriodicReport.verdict(e);
         real("rimandato: riuscito con avviso, cosi' lo scheduler non lo rimanda",
@@ -178,7 +178,7 @@ public class ReportDeliveryTest {
         List<String> thenDelivered = new java.util.ArrayList<>(postponed);
         thenDelivered.add("Sep 25 18:05:00 mail postfix/smtp[3]: 4ABCDEF123: to=<owner@example.com>, relay=alt1.gmail-smtp-in.l.google.com[142.250.150.27]:25, delay=300, delays=299/0/0.4/0.6, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)");
         real("rimandato e poi consegnato: consegnato",
-            "consegnato".equals(PeriodicReport.outcomeInLog(thenDelivered, ID, A).optString("state")));
+            "delivered".equals(PeriodicReport.outcomeInLog(thenDelivered, ID, A).optString("state")));
 
         // --- Respinto da Gmail per DMARC: la risposta ha parentesi dentro le parentesi ---
         List<String> rejected = List.of(
@@ -186,12 +186,12 @@ public class ReportDeliveryTest {
             "Sep 25 18:10:01 mail postfix/smtp[2]: 4ABCDEF124: to=<owner@example.com>, relay=gmail-smtp-in.l.google.com[142.250.102.27]:25, delay=1.1, delays=0.05/0/0.4/0.6, dsn=5.7.26, status=bounced (host gmail-smtp-in.l.google.com[142.250.102.27] said: 550-5.7.26 Unauthenticated email from domain-b.test is not accepted due to domain's 550-5.7.26 DMARC policy. (in reply to end of DATA command))",
             "Sep 25 18:10:01 mail postfix/bounce[3]: 4ABCDEF124: sender non-delivery notification: 4ABCDEF125");
         e = PeriodicReport.outcomeInLog(rejected, ID, A);
-        real("respinto: stato", "respinto".equals(e.optString("state")));
+        real("respinto: stato", "rejected".equals(e.optString("state")));
         real("respinto: risposta intera, parentesi comprese", e.optString("answer").endsWith("(in reply to end of DATA command)"));
         v = PeriodicReport.verdict(e);
         real("respinto: NON riuscito", !v.optBoolean("success"));
         real("respinto: l'errore dice da chi", v.optString("error").startsWith("respinto da gmail-smtp-in.l.google.com"));
-        v = PeriodicReport.verdict(new JSONObject().put("state", "respinto").put("relay", "none").put("answer", "x"));
+        v = PeriodicReport.verdict(new JSONObject().put("state", "rejected").put("relay", "none").put("answer", "x"));
         real("respinto senza relay: niente 'da none'", "respinto: x".equals(v.optString("error")));
 
         // --- Rifiutato dal milter prima di partire; se il codice e' 4.x.x, e' solo rimandato ---
@@ -199,14 +199,14 @@ public class ReportDeliveryTest {
             "Sep 25 18:20:00 mail postfix/cleanup[1]: 4ABCDEF126: message-id=<" + ID + ">",
             "Sep 25 18:20:00 mail postfix/cleanup[1]: 4ABCDEF126: milter-reject: END-OF-MESSAGE from localhost[127.0.0.1]: 5.7.1 Spam message rejected; from=<noreply-mailserver@domain-b.test> to=<owner@example.com>");
         e = PeriodicReport.outcomeInLog(milter5, ID, A);
-        real("milter 5.7.1: rifiutato", "rifiutato".equals(e.optString("state")));
+        real("milter 5.7.1: rifiutato", "refused".equals(e.optString("state")));
         real("milter 5.7.1: NON riuscito", !PeriodicReport.verdict(e).optBoolean("success"));
         List<String> milter4 = List.of(milter5.get(0), milter5.get(1).replace("5.7.1 Spam message rejected", "4.7.1 Try again later"));
-        real("milter 4.7.1: rimandato", "rimandato".equals(PeriodicReport.outcomeInLog(milter4, ID, A).optString("state")));
+        real("milter 4.7.1: rimandato", "deferred".equals(PeriodicReport.outcomeInLog(milter4, ID, A).optString("state")));
 
         // --- Visto da Postfix, esito non ancora scritto ---
         e = PeriodicReport.outcomeInLog(gmail.subList(0, 3), ID, A);
-        real("in coda: stato", "in coda".equals(e.optString("state")));
+        real("in coda: stato", "queued".equals(e.optString("state")));
         v = PeriodicReport.verdict(e);
         real("in coda: riuscito con avviso e il comando per cercarlo",
             v.optBoolean("success") && v.optBoolean("warning") && v.optString("note").contains("grep 4hB2Kq3Xz9zB6"));
@@ -218,13 +218,13 @@ public class ReportDeliveryTest {
             "Sep 25 18:30:02 mail postfix/smtp[2]: 4ABCDEF127: to=<owner@example.com>, orig_to=<owner@domain-b.test>, relay=gmail-smtp-in.l.google.com[142.250.102.27]:25, delay=2, delays=0.1/0/1/0.9, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
             "Sep 25 18:30:02 mail postfix/lmtp[3]: 4ABCDEF127: to=<archivio@domain-b.test>, relay=127.0.0.1[127.0.0.1]:24, delay=2, delays=0.1/0/0/0.1, dsn=4.2.2, status=deferred (host 127.0.0.1[127.0.0.1] said: 452 4.2.2 Mailbox is full (in reply to end of DATA command))");
         e = PeriodicReport.outcomeInLog(alias, ID, mine);
-        real("alias: conta orig_to, non la copia per l'archivio", "consegnato".equals(e.optString("state")));
+        real("alias: conta orig_to, non la copia per l'archivio", "delivered".equals(e.optString("state")));
 
         // --- Formato RFC 5424, se syslogd lo usa ---
         List<String> rfc5424 = List.of(
             "<22>1 2026-09-25T17:52:10.123456+02:00 mail postfix/cleanup 81240 - - 4hB2Kq3Xz9zB6: message-id=<" + ID + ">",
             "<22>1 2026-09-25T17:52:12.654321+02:00 mail postfix/smtp 81242 - - 4hB2Kq3Xz9zB6: to=<owner@example.com>, relay=gmail-smtp-in.l.google.com[142.250.102.27]:25, delay=1.6, delays=0.1/0.01/0.52/0.97, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)");
-        real("rfc 5424: consegnato", "consegnato".equals(PeriodicReport.outcomeInLog(rfc5424, ID, A).optString("state")));
+        real("rfc 5424: consegnato", "delivered".equals(PeriodicReport.outcomeInLog(rfc5424, ID, A).optString("state")));
 
         // --- Confronti letterali, non espressioni regolari ---
         // Nel Message-ID il punto e' un punto: "rapportoX..." non e' il nostro messaggio.
@@ -237,7 +237,7 @@ public class ReportDeliveryTest {
             "Sep 25 18:50:00 mail postfix/cleanup[1]: 4ABC12: message-id=<" + ID + ">",
             "Sep 25 18:50:01 mail postfix/smtp[2]: X4ABC12: to=<owner@example.com>, relay=x[1.2.3.4]:25, delay=1, delays=0/0/0/1, dsn=5.0.0, status=bounced (no)");
         real("un numero di coda che finisce come il nostro non conta",
-            "in coda".equals(PeriodicReport.outcomeInLog(suffix, ID, A).optString("state")));
+            "queued".equals(PeriodicReport.outcomeInLog(suffix, ID, A).optString("state")));
 
         // --- Il Message-ID che il pannello genera ---
         String id1 = PeriodicReport.newMessageId("noreply-mailserver@domain-b.test");

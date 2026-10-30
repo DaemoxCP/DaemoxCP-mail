@@ -25,7 +25,7 @@
             const testa = branchEl('p', 'mb-1');
             if (r.branch === 'quarterly' || r.branch === 'latest') {
                 testa.append(...tNodes('up.branchFrom', { branch: branchEl('span', 'badge ' + (r.branch === 'latest' ? 'bg-info text-dark' : 'bg-secondary') + ' fs-6', r.branch) }));
-            } else if (r.branch === 'misti') {
+            } else if (r.branch === 'mixed') {
                 testa.appendChild(branchEl('span', 'badge bg-warning text-dark fs-6', t('up.mixedBranches')));
             } else {
                 testa.appendChild(branchEl('span', 'badge bg-secondary fs-6', t('up.noOfficialBranch')));

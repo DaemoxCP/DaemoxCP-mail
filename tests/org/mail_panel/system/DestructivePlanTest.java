@@ -33,9 +33,9 @@ public class DestructivePlanTest {
 
         // ===== Il caso misurato: il piano della manutenzione su quella macchina =====
         JSONObject real = plan(
-                change("installa", "lmdb0", "", "0.9.35"),
-                change("aggiorna", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"),
-                change("rimuove", "lmdb", "1.0.2,1", ""));
+                change("install", "lmdb0", "", "0.9.35"),
+                change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"),
+                change("remove", "lmdb", "1.0.2,1", ""));
         String reason = UpdateManager.destructivePlanReason(real);
         check("il piano misurato sulla VM non si esegue", reason != null);
         check("  e il motivo nomina il pacchetto e la versione",
@@ -48,7 +48,7 @@ public class DestructivePlanTest {
              && !d.getJSONArray("removes").toString().contains("postfix-mysql"));
 
         // ===== Una retrocessione =====
-        JSONObject downgrade = plan(change("retrocede", "redis", "8.10.2", "8.9.0"));
+        JSONObject downgrade = plan(change("downgrade", "redis", "8.10.2", "8.9.0"));
         String m2 = UpdateManager.destructivePlanReason(downgrade);
         check("una retrocessione non si esegue", m2 != null);
         check("  e il motivo dice da quale versione a quale",
@@ -56,17 +56,17 @@ public class DestructivePlanTest {
 
         // ===== Tutte e due insieme: si dicono entrambe =====
         String m3 = UpdateManager.destructivePlanReason(plan(
-                change("rimuove", "lmdb", "1.0.2,1", ""),
-                change("retrocede", "redis", "8.10.2", "8.9.0")));
+                change("remove", "lmdb", "1.0.2,1", ""),
+                change("downgrade", "redis", "8.10.2", "8.9.0")));
         check("rimozione e retrocessione insieme: il motivo le dice entrambe",
              m3 != null && m3.contains("lmdb") && m3.contains("redis"));
 
         // ===== Un piano che non tocca niente in quel modo: si esegue =====
         check("aggiornamenti, installazioni e reinstallazioni non fermano niente",
              UpdateManager.destructivePlanReason(plan(
-                 change("aggiorna", "nginx", "1.30.5_2,3", "1.30.6,3"),
-                 change("installa", "lmdb0", "", "0.9.35"),
-                 change("reinstalla", "cyrus-sasl", "2.1.28_5", "2.1.28_5"))) == null);
+                 change("upgrade", "nginx", "1.30.5_2,3", "1.30.6,3"),
+                 change("install", "lmdb0", "", "0.9.35"),
+                 change("reinstall", "cyrus-sasl", "2.1.28_5", "2.1.28_5"))) == null);
 
         // ===== Piani vuoti o assenti: nessun motivo inventato =====
         check("un piano senza cambiamenti non si ferma",
@@ -80,9 +80,9 @@ public class DestructivePlanTest {
 
         // ===== Molte rimozioni: si nominano tutte, non solo la prima =====
         String m4 = UpdateManager.destructivePlanReason(plan(
-                change("rimuove", "lmdb", "1.0.2,1", ""),
-                change("rimuove", "tinycdb", "0.81", ""),
-                change("rimuove", "libtlsrpt", "0.5.1", "")));
+                change("remove", "lmdb", "1.0.2,1", ""),
+                change("remove", "tinycdb", "0.81", ""),
+                change("remove", "libtlsrpt", "0.5.1", "")));
         check("tre rimozioni, tutte nominate",
              m4 != null && m4.contains("lmdb") && m4.contains("tinycdb") && m4.contains("libtlsrpt"));
 

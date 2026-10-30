@@ -26,7 +26,7 @@ public class JumpStateCompatTest {
                 }
                 """;
         JSONObject st = UpdateManager.upgradeOldJumpState(new JSONObject(old));
-        check("la fase si legge col nome nuovo", "attende-riavvio".equals(st.optString("phase")));
+        check("la fase si legge col nome nuovo", "awaiting-restart".equals(st.optString("phase")));
         check("  e la chiave vecchia non resta", !st.has("fase"));
         check("la versione di arrivo", "15.1-RELEASE".equals(st.optString("target")));
         check("la ricostruzione", "nessuna".equals(st.optString("rebuild")));

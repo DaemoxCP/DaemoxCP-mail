@@ -160,7 +160,7 @@ public class PkgBranchTest {
         real("FreeBSD 15 di serie: ramo quarterly", st.getBoolean("success") && st.getString("branch").equals("quarterly"));
         JSONArray rep = st.getJSONArray("repository");
         real("tre repository: pacchetti, moduli del kernel, sistema base (spento)", rep.length() == 3
-                && rep.getJSONObject(0).getString("type").equals("pacchetti") && rep.getJSONObject(1).getString("type").equals("moduli")
+                && rep.getJSONObject(0).getString("type").equals("packages") && rep.getJSONObject(1).getString("type").equals("modules")
                 && rep.getJSONObject(2).getString("type").equals("base") && !rep.getJSONObject(2).getBoolean("enabled"));
         real("si puo' cambiare, verso latest", st.getBoolean("changeable") && st.getJSONArray("destination").toList().equals(List.of("latest")));
         real("nessun file del pannello", !st.getBoolean("panelOwnedFile"));
@@ -171,23 +171,23 @@ public class PkgBranchTest {
         real("su -STABLE i moduli senza versione minore: kmods_latest",
                 PkgBranch.address(ks, "latest").equals("pkg+https://pkg.FreeBSD.org/${ABI}/kmods_latest"));
         PkgBranch.Repo old = PkgBranch.classify("FreeBSD", "pkg+http://pkg.FreeBSD.org/FreeBSD:14:amd64/latest", true, 0, null);
-        real("FreeBSD 14 (repository \"FreeBSD\", http): pacchetti, ramo latest", old.type().equals("pacchetti") && old.branch().equals("latest"));
+        real("FreeBSD 14 (repository \"FreeBSD\", http): pacchetti, ramo latest", old.type().equals("packages") && old.branch().equals("latest"));
         real("un mirror o un repository proprio non e' ufficiale",
-                PkgBranch.classify("poudriere", "file:///usr/local/poudriere/data/packages/15amd64-default", true, 0, null).type().equals("esterno")
-                && PkgBranch.classify("FreeBSD-ports", "pkg+https://mirror.example.org/FreeBSD:15:amd64/quarterly", true, 0, null).type().equals("esterno"));
+                PkgBranch.classify("poudriere", "file:///usr/local/poudriere/data/packages/15amd64-default", true, 0, null).type().equals("external")
+                && PkgBranch.classify("FreeBSD-ports", "pkg+https://mirror.example.org/FreeBSD:15:amd64/quarterly", true, 0, null).type().equals("external"));
 
         FakeSystem own = new FakeSystem();
         own.folder.put("FreeBSD.conf", "FreeBSD-ports: { enabled: no }\nFreeBSD-ports-kmods: { enabled: no }\n");
         own.folder.put("poudriere.conf", "poudriere: { url: \"file:///usr/local/poudriere/data/packages/15amd64-default\" }\n");
         st = PkgBranch.state(own);
-        real("pacchetti da un repository proprio: non si cambia, e si dice perche'", st.getString("branch").equals("nessuno")
+        real("pacchetti da un repository proprio: non si cambia, e si dice perche'", st.getString("branch").equals("none")
                 && !st.getBoolean("changeable") && st.getString("reason").contains("repository che usi"));
 
         FakeSystem mixed = new FakeSystem();
         mixed.folder.put("FreeBSD.conf", "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/latest\" }\n");
         st = PkgBranch.state(mixed);
         real("pacchetti latest e moduli quarterly: \"misti\", e si puo' allineare a tutti e due",
-                st.getString("branch").equals("misti") && st.getJSONArray("destination").length() == 2);
+                st.getString("branch").equals("mixed") && st.getJSONArray("destination").length() == 2);
 
         FakeSystem base = new FakeSystem();
         base.folder.put("FreeBSD.conf", "FreeBSD-base: { enabled: yes }\n");

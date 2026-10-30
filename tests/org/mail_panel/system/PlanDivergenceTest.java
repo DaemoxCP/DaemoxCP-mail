@@ -40,9 +40,9 @@ public class PlanDivergenceTest {
               + "nginx\t1.30.5_4,3\t1\n"
               + "cyrus-sasl\t2.1.28_5\t0\n"));
         JSONObject plan = plan(
-                change("installa", "lmdb0", "", "0.9.35"),
-                change("aggiorna", "nginx", "1.30.5_1,3", "1.30.5_4,3"),
-                change("reinstalla", "cyrus-sasl", "2.1.28_5", "2.1.28_5"));
+                change("install", "lmdb0", "", "0.9.35"),
+                change("upgrade", "nginx", "1.30.5_1,3", "1.30.5_4,3"),
+                change("reinstall", "cyrus-sasl", "2.1.28_5", "2.1.28_5"));
 
         JSONArray d = PackagePlan.divergences(before, after, plan);
         check("il reperto 14: la rimozione fuori dal piano viene vista", d.length() == 1);
@@ -63,7 +63,7 @@ public class PlanDivergenceTest {
              PackagePlan.divergences(
                  PackagePlan.versionsOnly(PackagePlan.installed("nginx\t1.30.5_1,3\t1\nredis\t8.10.2\t1\n")),
                  PackagePlan.versionsOnly(PackagePlan.installed("nginx\t1.30.6,3\t1\nredis\t8.10.2\t1\n")),
-                 plan(change("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3"))).isEmpty());
+                 plan(change("upgrade", "nginx", "1.30.5_1,3", "1.30.6,3"))).isEmpty());
 
         // ===== 3. Un pacchetto installato che nel piano non c'era =====
         JSONArray inst = PackagePlan.divergences(
@@ -79,7 +79,7 @@ public class PlanDivergenceTest {
         JSONArray other = PackagePlan.divergences(
                 PackagePlan.versionsOnly(PackagePlan.installed("nginx\t1.30.5_1,3\t1\n")),
                 PackagePlan.versionsOnly(PackagePlan.installed("nginx\t1.31.0,3\t1\n")),
-                plan(change("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3")));
+                plan(change("upgrade", "nginx", "1.30.5_1,3", "1.30.6,3")));
         check("una versione di arrivo diversa da quella approvata viene vista", other.length() == 1);
         check("  e il motivo dice che cosa diceva il piano", field(other, "why").contains("1.30.6,3"));
 
@@ -88,7 +88,7 @@ public class PlanDivergenceTest {
              PackagePlan.divergences(
                  PackagePlan.versionsOnly(PackagePlan.installed("lmdb\t1.0.2,1\t0\n")),
                  PackagePlan.versionsOnly(PackagePlan.installed("")),
-                 plan(change("rimuove", "lmdb", "1.0.2,1", ""))).isEmpty());
+                 plan(change("remove", "lmdb", "1.0.2,1", ""))).isEmpty());
 
         // ===== 6. Una reinstallazione non lascia traccia nell'inventario =====
         // Stessa versione prima e dopo: da qui non si vede, e non si DEVE vedere. Che la
@@ -99,7 +99,7 @@ public class PlanDivergenceTest {
              PackagePlan.divergences(
                  PackagePlan.versionsOnly(PackagePlan.installed("cyrus-sasl\t2.1.28_5\t0\n")),
                  PackagePlan.versionsOnly(PackagePlan.installed("cyrus-sasl\t2.1.28_5\t0\n")),
-                 plan(change("reinstalla", "cyrus-sasl", "2.1.28_5", "2.1.28_5"))).isEmpty());
+                 plan(change("reinstall", "cyrus-sasl", "2.1.28_5", "2.1.28_5"))).isEmpty());
 
         // ===== 7. Un aggiornamento promesso e non avvenuto NON e' una divergenza =====
         // Non e' una dimenticanza: nell'inventario non e' cambiato niente, e quel caso lo
@@ -110,19 +110,19 @@ public class PlanDivergenceTest {
              PackagePlan.divergences(
                  PackagePlan.versionsOnly(PackagePlan.installed("nginx\t1.30.5_1,3\t1\n")),
                  PackagePlan.versionsOnly(PackagePlan.installed("nginx\t1.30.5_1,3\t1\n")),
-                 plan(change("aggiorna", "nginx", "1.30.5_1,3", "1.30.6,3"))).isEmpty());
+                 plan(change("upgrade", "nginx", "1.30.5_1,3", "1.30.6,3"))).isEmpty());
 
         // ===== 8. Una retrocessione prevista, e il pkg che aggiorna se stesso =====
         check("una retrocessione prevista non e' una divergenza",
              PackagePlan.divergences(
                  PackagePlan.versionsOnly(PackagePlan.installed("redis\t8.10.2\t1\n")),
                  PackagePlan.versionsOnly(PackagePlan.installed("redis\t8.9.0\t1\n")),
-                 plan(change("retrocede", "redis", "8.10.2", "8.9.0"))).isEmpty());
+                 plan(change("downgrade", "redis", "8.10.2", "8.9.0"))).isEmpty());
         check("il pkg che aggiorna se stesso, se il piano lo dichiara, non e' una divergenza",
              PackagePlan.divergences(
                  PackagePlan.versionsOnly(PackagePlan.installed("pkg\t2.1.0\t0\n")),
                  PackagePlan.versionsOnly(PackagePlan.installed("pkg\t2.2.0\t0\n")),
-                 plan(change("aggiorna", "pkg", "2.1.0", "2.2.0"))).isEmpty());
+                 plan(change("upgrade", "pkg", "2.1.0", "2.2.0"))).isEmpty());
         check("e se il piano NON lo dichiara, si', e' una divergenza",
              PackagePlan.divergences(
                  PackagePlan.versionsOnly(PackagePlan.installed("pkg\t2.1.0\t0\n")),

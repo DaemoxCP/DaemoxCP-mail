@@ -5,7 +5,7 @@
         async function amsPiano() {
             const el = document.getElementById('upd-ams');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.reading')) + '';
-            const r = await updApi('mtasts_piano');
+            const r = await updApi('mtasts_plan');
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
                 return;
@@ -16,8 +16,8 @@
 
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>';
             (r.steps || []).forEach((p, i) => {
-                const fatto = p.state === 'fatto';
-                const incerto = p.state === 'incerto';
+                const fatto = p.state === 'done';
+                const incerto = p.state === 'uncertain';
                 // "incerto" non e' verde: il pannello non ha potuto verificare, e mostrarlo
                 // come fatto sarebbe la bugia che stiamo cercando di togliere dal pannello.
                 h += '<tr class="upd-cell"><td style="width:2rem">'
@@ -43,7 +43,7 @@
             if (!updConferma(t('ams.confirm'), t('w4.wEnable'))) return;
             const el = document.getElementById('amsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.running')) + '';
-            const r = await updApi('mtasts_attiva', { confirm: 'ATTIVA' });
+            const r = await updApi('mtasts_enable', { confirm: 'ENABLE' });
             if (!r.success || !r.jobId) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">'
                              + updEsc(r.error || t('ams.startFailed')) + '</div>';

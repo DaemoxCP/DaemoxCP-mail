@@ -32,6 +32,12 @@ PAGINA = os.path.join(radice, "src/main/java/org/mail_panel/content/MailPanelCon
 ROTTE = os.path.join(radice, "src/main/java/org/mail_panel/webserver/SSLMailServer.java")
 
 pagina = open(PAGINA, encoding="utf-8", errors="replace").read()
+# Anche le pagine scritte come file a parte (Home, DNS, rapporti, standard): chiamano le stesse
+# rotte con le loro funzioni (autoDnsApi, repApi, stsApi...). Prima la rete guardava solo
+# MailPanelContent, e una rotta rinominata chiamata da standards-watch.js non la vedeva.
+import glob as _glob
+for _f in sorted(_glob.glob(os.path.join(radice, "src/main/resources/pages/*.js"))):
+    pagina += "\n" + open(_f, encoding="utf-8", errors="replace").read()
 rotte = open(ROTTE, encoding="utf-8", errors="replace").read()
 
 
@@ -54,7 +60,7 @@ def oggetto_dopo(testo, i):
 
 
 # --- la pagina: azione -> chiavi mandate ---
-CHIAMATA = re.compile(r"updApi\(\s*'([a-z0-9_]+)'\s*(,)?")
+CHIAMATA = re.compile(r"\b[a-zA-Z]+Api\(\s*'([a-z0-9_]+)'\s*(,)?")
 CHIAVE = re.compile(r"[{,]\s*([A-Za-z_][A-Za-z0-9_]*)\s*:")
 mandate = {}
 for m in CHIAMATA.finditer(pagina):
@@ -66,11 +72,11 @@ for m in CHIAMATA.finditer(pagina):
     for k in CHIAVE.findall(obj):
         chiavi.add(k)
 # Le chiamate con il nome dell'azione calcolato non si possono attribuire: si contano e si dicono.
-non_letterali = len(re.findall(r"updApi\(\s*[^'\s]", pagina))
+non_letterali = len(re.findall(r"\b[a-zA-Z]+Api\(\s*[^'\s)]", pagina))
 
 # --- le rotte: azione -> chiavi lette, piu' tutte le chiavi lette nel file ---
 CASO = re.compile(r'case\s+"([a-z0-9_]+)"\s*->')
-LETTURA = re.compile(r'req\.(?:opt|get)[A-Za-z]*\(\s*"([A-Za-z_][A-Za-z0-9_]*)"')
+LETTURA = re.compile(r'(?:req|json|body|request)\.(?:opt|get)[A-Za-z]*\(\s*"([A-Za-z_][A-Za-z0-9_]*)"')
 casi = [(m.group(1), m.start()) for m in CASO.finditer(rotte)]
 lette = {}
 for n, (azione, inizio) in enumerate(casi):

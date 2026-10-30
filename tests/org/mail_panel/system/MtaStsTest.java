@@ -185,7 +185,7 @@ public class MtaStsTest {
         MtaStsSetup.TxtReading one = MtaStsSetup.parseTxt(0, domainD);
         MtaStsSetup.Step p = txtStep(List.of(
                 new MtaStsSetup.TxtReview("domain-d.test", true, one)), expected);
-        require("un record giusto e la politica che risponde: fatto (" + p.detail + ")", "fatto".equals(p.state));
+        require("un record giusto e la politica che risponde: fatto (" + p.detail + ")", "done".equals(p.state));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", true, l2)), expected);
         require("due record, anche col primo giusto: NON fatto -> " + p.state + " (" + p.detail + ")",
                 "da fare".equals(p.state));
@@ -201,7 +201,7 @@ public class MtaStsTest {
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", true,
                 MtaStsSetup.parseTxt(0, servfail))), expected);
         require("un SERVFAIL resta incerto, col motivo (" + p.detail + ")",
-                "incerto".equals(p.state) && p.detail.contains("SERVFAIL"));
+                "uncertain".equals(p.state) && p.detail.contains("SERVFAIL"));
 
         System.out.println("\n== leggiTxt(): il DNS vero, sui domini veri ==");
         if (digAnswers()) {

@@ -71,7 +71,7 @@
 
             // --- impostazioni ---
             // I valori restano quelli del server; il nome si mostra nella lingua della pagina.
-            const freq = [['giornaliero', t('rep.daily')], ['settimanale', t('rep.weekly')], ['mensile', t('rep.monthly')]];
+            const freq = [['daily', t('rep.daily')], ['weekly', t('rep.weekly')], ['monthly', t('rep.monthly')]];
             h += '<div id="rep-outcome-identity"></div>'
                + '<hr><h6 class="mb-2">' + escHtml(t('rep.whenWho')) + '</h6>'
                + '<div class="row g-2 align-items-end">'
@@ -106,7 +106,7 @@
             if (!repConferma(t('rep.confirmCreate', { address: indirizzo }), t('ad.wordCreate'))) return;
             const el = document.getElementById('rep-outcome-identity');
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
-            const r = await repApi('identity_create', { confirm: 'CREA', address: indirizzo });
+            const r = await repApi('identity_create', { confirm: 'CREATE', address: indirizzo });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small">'
                          + repEsc(r.note || r.error) + '</div>';
             if (r.success) repCarica();

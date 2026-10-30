@@ -106,7 +106,7 @@
             if (!adConferma(t('acf.confirmInstall'), t('acf.wordInstall'))) return;
             const el = document.getElementById('acOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.installing'));
-            const r = await acApi('install', { confirm: 'INSTALLA' });
+            const r = await acApi('install', { confirm: 'INSTALL' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + acEsc(r.note || r.error) + '</div>'
                          + (r.restored ? '<div class="small text-muted mt-1">' + escHtml(t('acf.restored')) + '</div>' : '');

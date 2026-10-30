@@ -123,7 +123,7 @@ async function servi(route) {
     await page.waitForSelector('#aCasellaModal', { state: 'hidden' });
     const post = richieste.find(r => r.body && r.body.action === 'trasforma_in_casella');
     vero('la richiesta: password, scelta "archivia", fingerprint, CSRF, inoltri non tenuti', post && post.body.password === 'Proposta-Dal-Generatore-42'
-        && post.body.old_mail === 'archivia' && post.body.fingerprint === 'imp-alias' && post.body.csrf_token === 'csrf-prova'
+        && post.body.old_mail === 'archive' && post.body.fingerprint === 'imp-alias' && post.body.csrf_token === 'csrf-prova'
         && post.body.keep_forwards === false && post.body.name === 'DMARC' && post.body.quota_mb === 1024);
     vero('e il messaggio del server', (await page.textContent('#aliasMsg')).includes('ora e\' una casella'));
 

@@ -60,7 +60,7 @@ public class LockMarksTest {
 
         // --- 3. La macchina della misura: 39 bloccati, il cartello su uno ---
         Set<String> thirtyNine = new TreeSet<>();
-        for (int i = 0; i < 38; i++) thirtyNine.add("pacchetto" + i);
+        for (int i = 0; i < 38; i++) thirtyNine.add("package" + i);
         thirtyNine.add("redis");
         check("39 bloccati e un cartello solo: 38 da mettere, niente da togliere",
              UpdateManager.lockMarkCommands(thirtyNine, Set.of("redis")).size() == 38);

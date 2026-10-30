@@ -120,14 +120,14 @@ public final class PkgBranch {
 
     static Repo classify(String name, String url, boolean enabled, int priority, String ip) {
         Matcher u = OFFICIAL.matcher(url);
-        if (!u.matches()) return new Repo(name, url, enabled, priority, ip, "esterno", "", false);
+        if (!u.matches()) return new Repo(name, url, enabled, priority, ip, "external", "", false);
         String piece = u.group(1);
-        if (BRANCHES.contains(piece)) return new Repo(name, url, enabled, priority, ip, "pacchetti", piece, false);
+        if (BRANCHES.contains(piece)) return new Repo(name, url, enabled, priority, ip, "packages", piece, false);
         Matcher k = MODULES.matcher(piece);
-        if (k.matches()) return new Repo(name, url, enabled, priority, ip, "moduli", k.group(1), k.group(2) != null);
+        if (k.matches()) return new Repo(name, url, enabled, priority, ip, "modules", k.group(1), k.group(2) != null);
         Matcher b = BASE.matcher(piece);
         if (b.matches()) return new Repo(name, url, enabled, priority, ip, "base", b.group(1), b.group(2) != null);
-        return new Repo(name, url, enabled, priority, ip, "altro", piece, false);
+        return new Repo(name, url, enabled, priority, ip, "other", piece, false);
     }
 
     /** L'unico repository acceso di quel tipo, o null (anche se ce n'e' piu' d'uno). */
@@ -147,9 +147,9 @@ public final class PkgBranch {
 
     /** Il ramo che vale: quello dei pacchetti, "misti" se i moduli del kernel vanno per conto loro. */
     static String branch(List<Repo> repos) {
-        Repo p = enabled(repos, "pacchetti"), k = enabled(repos, "moduli");
-        if (p == null) return "nessuno";
-        if (k != null && !k.branch().equals(p.branch())) return "misti";
+        Repo p = enabled(repos, "packages"), k = enabled(repos, "modules");
+        if (p == null) return "none";
+        if (k != null && !k.branch().equals(p.branch())) return "mixed";
         return p.branch();
     }
 
@@ -157,7 +157,7 @@ public final class PkgBranch {
         return switch (branch) {
             case "quarterly" -> I18n.tr("server.branch.quarterly");
             case "latest" -> I18n.tr("server.branch.latest");
-            case "misti" -> I18n.tr("server.branch.mixed");
+            case "mixed" -> I18n.tr("server.branch.mixed");
             default -> I18n.tr("server.branch.unofficial");
         };
     }
@@ -194,7 +194,7 @@ public final class PkgBranch {
 
     /** Perche' non si puo' cambiare ramo da qui, o null se si puo'. */
     static String reasonNo(List<Repo> repos) {
-        long p = enabledOnes(repos, "pacchetti"), k = enabledOnes(repos, "moduli");
+        long p = enabledOnes(repos, "packages"), k = enabledOnes(repos, "modules");
         if (p == 0) return I18n.tr("server.branch.officialOff");
         if (p > 1 || k > 1) return I18n.tr("server.branch.manyOfficial");
         return null;
@@ -204,12 +204,12 @@ public final class PkgBranch {
         JSONArray a = new JSONArray();
         for (Repo r : repos) {
             a.put(new JSONObject().put("name", r.name()).put("url", r.url()).put("enabled", r.enabled())
-                    .put("type", r.type()).put("branch", r.branch()).put("official", !r.type().equals("esterno"))
+                    .put("type", r.type()).put("branch", r.branch()).put("official", !r.type().equals("external"))
                     .put("role", switch (r.type()) {
-                        case "pacchetti" -> I18n.tr("server.branch.kindPackages");
-                        case "moduli" -> I18n.tr("server.branch.kindKmods");
+                        case "packages" -> I18n.tr("server.branch.kindPackages");
+                        case "modules" -> I18n.tr("server.branch.kindKmods");
                         case "base" -> I18n.tr("server.branch.kindBase");
-                        case "esterno" -> I18n.tr("server.branch.kindExternal");
+                        case "external" -> I18n.tr("server.branch.kindExternal");
                         default -> I18n.tr("server.branch.kindOfficial");
                     }));
         }
@@ -239,7 +239,7 @@ public final class PkgBranch {
 
     /** L'indirizzo di un repository ufficiale sul ramo voluto, con le variabili di pkg come nel file di serie. */
     static String address(Repo r, String target) {
-        if (r.type().equals("moduli"))
+        if (r.type().equals("modules"))
             return "pkg+https://pkg.FreeBSD.org/${ABI}/kmods_" + target + (r.withMinor() ? "_${VERSION_MINOR}" : "");
         return "pkg+https://pkg.FreeBSD.org/${ABI}/" + target;
     }
@@ -254,7 +254,7 @@ public final class PkgBranch {
          .append("# repository ufficiali; il resto della configurazione resta quello di\n")
          .append("# /etc/pkg/FreeBSD.conf e degli altri file. Si cambia dal pannello\n")
          .append("# (Ramo dei pacchetti); cancellando questo file si torna al ramo di serie.\n");
-        for (String type : List.of("pacchetti", "moduli")) {
+        for (String type : List.of("packages", "modules")) {
             Repo r = enabled(repos, type);
             if (r == null) continue;
             b.append(r.name()).append(": { url: \"").append(address(r, target)).append('"');
@@ -276,7 +276,7 @@ public final class PkgBranch {
         if (target.equals(st.getString("branch"))) return r.put("possible", false).put("reason", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(target))));
         List<Repo> repos = repository(s.pkgVv());
         JSONArray changes = new JSONArray();
-        for (String type : List.of("pacchetti", "moduli")) {
+        for (String type : List.of("packages", "modules")) {
             Repo x = enabled(repos, type);
             if (x != null) changes.put(new JSONObject().put("name", x.name()).put("from", x.url()).put("to", address(x, target)));
         }
@@ -305,7 +305,7 @@ public final class PkgBranch {
     /** Il ramo che pkg vede adesso, rileggendo pkg -vv. */
     private static String effective(SystemAccess s) {
         List<Repo> repos = repository(s.pkgVv());
-        return repos.isEmpty() ? "illeggibile" : branch(repos);
+        return repos.isEmpty() ? "unreadable" : branch(repos);
     }
 
     /**

@@ -542,13 +542,13 @@
         // una rotazione era gia' in corso. Due risposte alla stessa domanda divergono sempre:
         // quella che si guarda meno resta indietro.
         //
-        // Ritorna: 'in_corso' | 'dovuta' | 'programmata' | 'disattivata' | 'mai'
+        // Ritorna: 'in_progress' | 'dovuta' | 'programmata' | 'disattivata' | 'mai'
         function nextRotationStatus(data) {
-            if (data.rotation_state) return 'in_corso';
-            if (!(data.interval_days > 0)) return 'disattivata';
+            if (data.rotation_state) return 'in_progress';
+            if (!(data.interval_days > 0)) return 'disabled';
             const ts = pickTs(data, 'next_rotation_at');
-            if (!ts) return 'mai';
-            return ts.getTime() <= Date.now() ? 'dovuta' : 'programmata';
+            if (!ts) return 'never';
+            return ts.getTime() <= Date.now() ? 'due' : 'scheduled';
         }
 
         function renderRotationTimeline(data, hasDkim) {
@@ -612,7 +612,7 @@
             // questo riquadro faceva. La data prossima tornera' ad avere senso a rotazione
             // conclusa, quando "ultima rotazione" sara' quella nuova.
             const quando = nextRotationStatus(data);
-            if (quando === 'in_corso') {
+            if (quando === 'in_progress') {
                 const passi = {
                     'pending_dns': t('dns.stepPendingDns'),
                     'propagated': t('dns.stepPropagated'),
@@ -625,11 +625,11 @@
                     + (data.rotation_pending_selector
                         ? ' &mdash; ' + escHtml(t('dns.newSelector')) + ' <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>' : '')
                     + '. ' + escHtml(t('dns.stepsBelow')) + '</div>';
-            } else if (quando === 'disattivata') {
+            } else if (quando === 'disabled') {
                 nextEl.innerHTML = '<span class="text-muted"><i class="fas fa-pause-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.notScheduled')) + '</span>' +
                     '<div class="small text-muted">' + escHtml(t('dns.autoOff')) + '</div>';
             } else if (nextTs) {
-                if (quando === 'dovuta') {
+                if (quando === 'due') {
                     // Una data passata sotto l'etichetta "Prossima rotazione", con un bollino
                     // rosso e nient'altro, si legge come "il pannello sa di essere in ritardo e
                     // non fa niente". Non e' cosi': lo scheduler confronta (adesso - ultima)
@@ -712,12 +712,12 @@
                     }
                     // Stessa domanda, stessa risposta del riquadro qui sopra.
                     const quandoQui = nextRotationStatus(data);
-                    if (quandoQui === 'in_corso') {
+                    if (quandoQui === 'in_progress') {
                         html += escHtml(t('dns.alreadyRunning'))
                              + (data.rotation_pending_selector
                                  ? ' (' + escHtml(t('dns.newSelector')) + ' <code>' + escapeHtmlBl(data.rotation_pending_selector) + '</code>)' : '')
                              + ': ' + escHtml(t('dns.nextAfter'));
-                    } else if (quandoQui === 'dovuta') {
+                    } else if (quandoQui === 'due') {
                         html += escHtml(t('dns.dueAt', { date: nextQui ? formatPanelDate(nextQui) : data.next_rotation_at }));
                     } else if (data.next_rotation_at) {
                         html += escHtml(t('dns.nextAt', { date: nextQui ? formatPanelDate(nextQui) : data.next_rotation_at }));
@@ -849,7 +849,7 @@
                + '<th scope="col">' + escHtml(t('dns.colKeyAge')) + '</th><th scope="col">' + escHtml(t('dns.colRotation')) + '</th></tr></thead><tbody>';
             lines.forEach(d => {
                 let state;
-                if (d.state === 'assente')
+                if (d.state === 'absent')
                     state = '<span class="badge bg-danger">' + escHtml(t('dns.noKey')) + '</span>';
                 else if (d.state === 'ok')
                     state = '<span class="badge bg-success">' + escHtml(t('dns.yes')) + '</span>';
@@ -870,7 +870,7 @@
                 }
 
                 let rot;
-                if (d.state === 'assente') rot = '<span class="text-muted">&mdash;</span>';
+                if (d.state === 'absent') rot = '<span class="text-muted">&mdash;</span>';
                 else if (d.intervalDays && d.intervalDays > 0)
                     rot = escHtml(tn('dns.every', d.intervalDays))
                         + (d.nextRotation ? '<div class="small text-muted">' + escHtml(t('dns.nextShort', { date: String(d.nextRotation).substring(0, 10) })) + '</div>' : '');

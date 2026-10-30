@@ -3163,6 +3163,8 @@
   "server.rp.todo.other": "{n} things to do",
   "server.rp.whereSurveillance": "Updates -> Surveillance",
   "server.rp.withTls": "with {tls}",
+  "server.rp.lastSucceeded": "succeeded",
+  "server.rp.lastFailed": "failed: {error}",
   "server.runs": "Runs: {command}",
   "server.scanFailed": "The scan failed.",
   "server.service.cmdOk": "Service {svc} {cmd} OK",

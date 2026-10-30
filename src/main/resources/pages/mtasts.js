@@ -94,7 +94,7 @@
             const el = document.getElementById('stsOutcome');
             if (!adConferma(t('sts.confirmPublish'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sts.publishing'));
-            const r = await stsApi('mtasts_txt', { confirm: 'CREA' });
+            const r = await stsApi('mtasts_txt', { confirm: 'CREATE' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + stsEsc(r.note || r.error) + '</div>';
             if (r.success) setTimeout(stsCarica, 1200);
