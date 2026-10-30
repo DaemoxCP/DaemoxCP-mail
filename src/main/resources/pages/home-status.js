@@ -29,7 +29,7 @@
         // rinnovo dei certificati e il rapporto periodico: se il pannello non riparte, quelli
         // si fermano dove sono e nessuno lo segnala.
         async function homeState() {
-            const el = document.getElementById('home-avvio');
+            const el = document.getElementById('home-startup');
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + homeEsc(t('hs.reading')) + '</span>';
             const r = await homeApi('rc_state');
             if (!r || r.success === false) {
@@ -56,7 +56,7 @@
         // Questa NO: fa due scaricamenti da cloudflare.com e caricare la Home non deve
         // dipendere da una rete esterna. Si preme quando serve.
         async function homeTrust() {
-            const el = document.getElementById('home-fiducia');
+            const el = document.getElementById('home-trust');
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + homeEsc(t('hs.comparingCf')) + '</span>';
             const r = await homeApi('cf_intervals');
@@ -74,9 +74,9 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            if (document.getElementById('home-avvio')) {
+            if (document.getElementById('home-startup')) {
                 homeState();
-                const f = document.getElementById('home-fiducia');
+                const f = document.getElementById('home-trust');
                 if (f) f.innerHTML = '<button class="btn btn-sm btn-outline-secondary" onclick="homeTrust()">'
                     + '<i class="fas fa-user-shield me-1" aria-hidden="true"></i>' + homeEsc(t('hs.checkCf')) + '</button>'
                     + '<div class="small text-muted mt-1">' + homeEsc(t('hs.checkCfHint')) + '</div>';
@@ -120,7 +120,7 @@
         // c'e' l'eta' del catalogo. Un numero preciso ricavato da dati di tre settimane fa
         // sembra una misura e non lo e'.
         async function homeSystem() {
-            const el = document.getElementById('home-sistema');
+            const el = document.getElementById('home-system');
             if (!el) return;
             el.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + homeEsc(t('hs.readingSystem')) + '</span>';

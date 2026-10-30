@@ -808,7 +808,7 @@
         // tenere a mente i numeri. Le cose che contano — un dominio senza chiave, uno fermo
         // da mesi mentre gli altri ruotano — si vedono solo mettendoli in fila.
         async function dkSummary() {
-            const el = document.getElementById('dkRiepilogoBody');
+            const el = document.getElementById('dkSummaryBody');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('dns.sumAsking'));
             let r;
             try {

@@ -106,7 +106,7 @@ async function served(route) {
         && await page.evaluate(() => window.injectedRan) === undefined);
     real('di serie: "nessun file del pannello"', textValue.includes('Nessun file del pannello'));
     real('il pulsante per passare a latest', await page.locator('#branch-body button', { hasText: 'Passa al ramo latest' }).count() === 1);
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'ramo-scheda.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-card.png') });
 
     console.log('\n== Anteprima e conferma ==');
     await page.click('#branch-body button:has-text("Passa al ramo latest")');
@@ -120,7 +120,7 @@ async function served(route) {
     real('scritto diverso (Latest): resta spento', await page.isDisabled('#branch-go'));
     await page.fill('#branch-confirm', 'latest');
     real('scritto giusto: si accende', await page.isEnabled('#branch-go'));
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'ramo-anteprima.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-preview-shot.png') });
 
     console.log('\n== Il cambio, seguito fino all\'esito ==');
     await page.click('#branch-go');
@@ -133,7 +133,7 @@ async function served(route) {
     await page.waitForFunction(() => document.getElementById('branch-body').textContent.includes('dal ramo latest'));
     real('la scheda si rilegge da sola: ora latest, con il file del pannello', readings === 2
         && (await page.textContent('#branch-body')).includes('Il ramo lo decide il file del pannello'));
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'ramo-dopo.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-after.png') });
 
     console.log('\n== Un cambio che non parte ==');
     changeSucceeds = false;
@@ -148,13 +148,13 @@ async function served(route) {
     console.log('\n== Tema scuro e telefono ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     await page.waitForTimeout(600);   // il cambio di tema ha una transizione
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'ramo-scuro.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-dark.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
     await page.waitForTimeout(300);
     const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     real('sul telefono la pagina non scorre di lato: ' + pageWidth + 'px', pageWidth <= 390);
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'ramo-telefono.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-phone.png') });
 
     real('nessun errore nella pagina' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();

@@ -68,7 +68,7 @@
                 } else {
                     proposal = '<code class="small" style="word-break:break-all">' + adEsc(x.proposed) + '</code>';
                     if (x.which === 'dmarc' && !x.exists)
-                        proposal += '<div class="mt-1"><select class="form-select form-select-sm" id="adPolitica" style="max-width:22rem" aria-label="' + escHtml(t('ad.policy')) + '">'
+                        proposal += '<div class="mt-1"><select class="form-select form-select-sm" id="adPolicy" style="max-width:22rem" aria-label="' + escHtml(t('ad.policy')) + '">'
                                   + '<option value="none" selected>p=none &mdash; ' + escHtml(t('ad.pNone')) + '</option>'
                                   + '<option value="quarantine">p=quarantine &mdash; ' + escHtml(t('ad.pQuarantine')) + '</option>'
                                   + '<option value="reject">p=reject &mdash; ' + escHtml(t('ad.pReject')) + '</option>'
@@ -83,7 +83,7 @@
                     const option = ['none', 'quarantine', 'reject'].map(v =>
                         '<option value="' + v + '"' + (v === x.currentPolicy ? ' selected' : '') + '>p='
                         + v + '</option>').join('');
-                    actionItem = '<select class="form-select form-select-sm mb-1" id="adPoliticaNuova" aria-label="' + escHtml(t('ad.policy')) + '">' + option + '</select>'
+                    actionItem = '<select class="form-select form-select-sm mb-1" id="adPolicyNew" aria-label="' + escHtml(t('ad.policy')) + '">' + option + '</select>'
                            + '<button class="btn btn-sm btn-outline-warning" onclick="autoDnsChangePolicy()">'
                            + '<i class="fas fa-pen me-1" aria-hidden="true"></i>' + escHtml(t('ad.changePolicy')) + '</button>';
                 } else if (x.exists || x.locked) {
@@ -135,12 +135,12 @@
                  + '<div class="col-lg-6"><div class="border rounded p-3 h-100">'
                  + '<div class="fw-bold mb-1"><i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.fwdTitle')) + '</div>'
                  + '<div class="small text-muted mb-3">' + escHtml(t('ad.fwdHint', { address: reportList.address })) + ' <strong>' + escHtml(t('ad.recommended')) + '</strong></div>'
-                 + '<label class="form-label small mb-1" for="adVerso">' + escHtml(t('ad.fwdTo', { address: reportList.address })) + '</label>'
-                 + '<select class="form-select form-select-sm mb-2" id="adVerso" onchange="adDestinationChange()">'
+                 + '<label class="form-label small mb-1" for="adDestination">' + escHtml(t('ad.fwdTo', { address: reportList.address })) + '</label>'
+                 + '<select class="form-select form-select-sm mb-2" id="adDestination" onchange="adDestinationChange()">'
                  + '<option value="">' + escHtml(t('ad.loadingAddresses')) + '</option></select>'
-                 + '<input type="email" class="form-control form-control-sm mb-2 d-none" id="adVersoAltro" '
+                 + '<input type="email" class="form-control form-control-sm mb-2 d-none" id="adDestinationOther" '
                  + 'placeholder="' + escHtml(t('al.destPh')) + '" aria-label="' + escHtml(t('ad.otherAddress')) + '" autocomplete="off">'
-                 + '<div class="small text-muted mb-2 d-none" id="adVersoAltroNota">' + escHtml(t('ad.otherAddressNote')) + '</div>'
+                 + '<div class="small text-muted mb-2 d-none" id="adDestinationOtherNote">' + escHtml(t('ad.otherAddressNote')) + '</div>'
                  + '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreateAlias()">'
                  + '<i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.createFwd')) + '</button>'
                  + '</div></div>'
@@ -157,9 +157,9 @@
         }
 
         function adDestinationChange() {
-            const sel = document.getElementById('adVerso');
-            const field = document.getElementById('adVersoAltro');
-            const noteText = document.getElementById('adVersoAltroNota');
+            const sel = document.getElementById('adDestination');
+            const field = document.getElementById('adDestinationOther');
+            const noteText = document.getElementById('adDestinationOtherNote');
             if (!sel || !field) return;
             const otherOne = sel.value === '__other__';
             field.classList.toggle('d-none', !otherOne);
@@ -171,7 +171,7 @@
         // deve chiederlo apposta: un campo libero come prima scelta e' il modo piu' rapido
         // per scrivere un indirizzo che non esiste e accorgersene fra sei mesi.
         async function adLoadMailboxes() {
-            const sel = document.getElementById('adVerso');
+            const sel = document.getElementById('adDestination');
             if (!sel) return;
             const r = await autoDnsApi('mailboxes');
             const mailboxes = (r.success && r.mailboxes) ? r.mailboxes : [];
@@ -181,10 +181,10 @@
         }
 
         function adDestinationChosen() {
-            const sel = document.getElementById('adVerso');
+            const sel = document.getElementById('adDestination');
             if (!sel) return '';
             if (sel.value === '__other__') {
-                const field = document.getElementById('adVersoAltro');
+                const field = document.getElementById('adDestinationOther');
                 return field ? field.value.trim() : '';
             }
             return sel.value;
@@ -327,7 +327,7 @@
         // Cambia la politica di un DMARC gia' pubblicato. Prima si guarda il prima/dopo:
         // una conferma che non fa vedere cosa cambia non e' una conferma.
         async function autoDnsChangePolicy() {
-            const sel = document.getElementById('adPoliticaNuova');
+            const sel = document.getElementById('adPolicyNew');
             if (!sel) return;
             const fresh = sel.value;
             const el = document.getElementById('autoDnsOutcome');
@@ -366,7 +366,7 @@
         }
 
         async function autoDnsCreate(which) {
-            const sel = document.getElementById('adPolitica');
+            const sel = document.getElementById('adPolicy');
             const policy = (sel && sel.value) ? sel.value : 'none';
             const whichLabel = which === 'spf' ? 'SPF' : 'DMARC (p=' + policy + ')';
             if (!adConfirm(t('ad.confirmCreate', { record: whichLabel }), t('ad.wordCreate'))) return;

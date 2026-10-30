@@ -5438,7 +5438,7 @@ public final class UpdateManager {
         // --- Passo 1: tutto lo stack protetto ---
         int installed = state.getInt("installedCount"), protectedNames = state.getInt("lockedCount");
         boolean allLocked = installed > 0 && protectedNames == installed;
-        steps.put(repeatable(step("fase-protezione", "phase", I18n.tr("server.um.x.stepProtect"),
+        steps.put(repeatable(step("phase-protection", "phase", I18n.tr("server.um.x.stepProtect"),
                 allLocked ? "done" : "todo",
                 I18n.tr("server.um.maintenancePlan.1", java.util.Map.of("lockedNames", String.valueOf(protectedNames), "installedNames", String.valueOf(installed))),
                 I18n.tr("server.um.maintenancePlan.2"),
@@ -5451,7 +5451,7 @@ public final class UpdateManager {
         Matcher mIn = Pattern.compile("Number of packages to be installed:\\s*([0-9]+)").matcher(dry);
         int toInstall = mIn.find() ? Integer.parseInt(mIn.group(1)) : 0;
         boolean updatedContext = (toUpdate + toInstall) == 0;
-        steps.put(step("fase-nonprotetti", "phase", I18n.tr("server.um.maintenancePlan.3"),
+        steps.put(step("phase-unprotected", "phase", I18n.tr("server.um.maintenancePlan.3"),
                 updatedContext ? "done" : "todo",
                 updatedContext ? I18n.tr("server.um.maintenancePlan.4")
                         : I18n.tr("server.um.maintenancePlan.5", java.util.Map.of("toUpdate", String.valueOf(toUpdate), "toInstall", String.valueOf(toInstall))),
@@ -5515,11 +5515,11 @@ public final class UpdateManager {
             boolean already84 = srvMysql.startsWith("mysql84");
             String available84 = already84 ? "" : sh("pkg rquery -U %v mysql84-server 2>/dev/null", 30);
             if (already84) {
-                steps.put(step("fase-mysql84", "phase", I18n.tr("server.um.maintenancePlan.10"), "done",
+                steps.put(step("phase-mysql84", "phase", I18n.tr("server.um.maintenancePlan.10"), "done",
                         I18n.tr("server.um.maintenancePlan.11", java.util.Map.of("srvMysql", String.valueOf(srvMysql))),
                         I18n.tr("server.um.maintenancePlan.12"), null));
             } else if (!available84.isEmpty()) {
-                steps.put(step("fase-mysql84", "phase", I18n.tr("server.um.maintenancePlan.10"), "manual",
+                steps.put(step("phase-mysql84", "phase", I18n.tr("server.um.maintenancePlan.10"), "manual",
                         I18n.tr("server.um.maintenancePlan.13", java.util.Map.of("srvMysql", String.valueOf(srvMysql), "available84", String.valueOf(available84))),
                         I18n.tr("server.um.maintenancePlan.14"), null));
             }
@@ -5584,16 +5584,16 @@ public final class UpdateManager {
         long unser = rspamdFolder
                 ? number(sh("find /var/db/rspamd -type f -name '*.unser' 2>/dev/null | wc -l", 60)) : 0;
         if (rspamdPresent && !rspamdFolder) {
-            steps.put(step("fase-rspamd-cache", "phase", I18n.tr("server.um.maintenancePlan.20"), "manual",
+            steps.put(step("phase-rspamd-cache", "phase", I18n.tr("server.um.maintenancePlan.20"), "manual",
                     I18n.tr("server.um.maintenancePlan.21"),
                     I18n.tr("server.um.maintenancePlan.22"), null));
         } else if (unser > 0) {
-            steps.put(step("fase-rspamd-cache", "phase", I18n.tr("server.um.maintenancePlan.23"), "todo",
+            steps.put(step("phase-rspamd-cache", "phase", I18n.tr("server.um.maintenancePlan.23"), "todo",
                     I18n.tr("server.um.maintenancePlan.24", java.util.Map.of("unser", String.valueOf(unser))),
                     I18n.tr("server.um.maintenancePlan.25"),
                     new JSONObject().put("type", "rspamd_clean_cache")));
         } else if (rspamdPresent && rspamdFolder) {
-            steps.put(step("fase-rspamd-cache", "phase", I18n.tr("server.um.maintenancePlan.26"), "done",
+            steps.put(step("phase-rspamd-cache", "phase", I18n.tr("server.um.maintenancePlan.26"), "done",
                     I18n.tr("server.um.maintenancePlan.27", java.util.Map.of("rspamdFile", String.valueOf(fileRspamd))),
                     I18n.tr("server.um.maintenancePlan.28"), null));
         }
@@ -5603,7 +5603,7 @@ public final class UpdateManager {
         boolean regenerated = ok("grep -q 'generato dal FreeBSD Mail Panel' "
                 + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
         boolean sieveActive = ok("grep -qE '^protocols.*sieve' " + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
-        steps.put(repeatable(step("fase-dovecot", "phase", I18n.tr("server.um.maintenancePlan.30"),
+        steps.put(repeatable(step("phase-dovecot", "phase", I18n.tr("server.um.maintenancePlan.30"),
                 regenerated ? "done" : "todo",
                 regenerated ? (sieveActive
                         ? I18n.tr("server.um.x.dcSingleSieve")
@@ -5636,7 +5636,7 @@ public final class UpdateManager {
             }
             if (crookedRoot != null) { toDoRc = true; rcUnknown = false; }
             int cveRc = vulnerabilityDetail(audit, rcPkg).getJSONArray("cve").length();
-            steps.put(step("fase-roundcube", "phase", I18n.tr("server.um.x.stepRoundcube")
+            steps.put(step("phase-roundcube", "phase", I18n.tr("server.um.x.stepRoundcube")
                         + (cveRc > 0 ? " (" + cveRc + " CVE)" : ""),
                     (toDoRc || rcUnknown) ? "manual" : "done",
                     rcUnknown ? I18n.tr("server.um.x.rcRepoUnknown", java.util.Map.of("pkg", String.valueOf(rcPkg), "cur", String.valueOf(cur.isEmpty() ? I18n.tr("server.um.x.unknownF") : cur)))
@@ -5658,13 +5658,13 @@ public final class UpdateManager {
         }
         if (!pyOld.isEmpty()) {
             String list = String.join(", ", pythonToMove(pyOld.iterator().next()));
-            steps.put(step("fase-python", "phase", I18n.tr("server.um.maintenancePlan.37"),
+            steps.put(step("phase-python", "phase", I18n.tr("server.um.maintenancePlan.37"),
                     "manual",
                     I18n.tr("server.um.x.pyInstalled", java.util.Map.of("oldOnes", String.valueOf(String.join("/py", pyOld)), "newer", String.valueOf(pyNew)))
                     + (list.isEmpty() ? "." : ": " + list),
                     I18n.tr("server.um.maintenancePlan.38", java.util.Map.of("p", String.valueOf(pyOld.iterator().next()), "pyNew", String.valueOf(pyNew))), null));
         } else {
-            steps.put(step("fase-python", "phase", I18n.tr("server.um.maintenancePlan.37"),
+            steps.put(step("phase-python", "phase", I18n.tr("server.um.maintenancePlan.37"),
                     "done", I18n.tr("server.um.maintenancePlan.39", java.util.Map.of("pyNew", String.valueOf(pyNew))),
                     I18n.tr("server.um.runPythonTransition.2"), null));
         }
@@ -5678,7 +5678,7 @@ public final class UpdateManager {
             boolean unknownJv = cur.isEmpty() || av.isEmpty();
             boolean toDoJv = !unknownJv && !av.equals(cur);
             int cveJv = vulnerabilityDetail(audit, jvmPkg).getJSONArray("cve").length();
-            steps.put(step("fase-jvm", "phase", I18n.tr("server.um.x.stepJvm")
+            steps.put(step("phase-jvm", "phase", I18n.tr("server.um.x.stepJvm")
                         + (cveJv > 0 ? " (" + cveJv + " CVE)" : ""),
                     (toDoJv || unknownJv) ? "manual" : "done",
                     unknownJv ? I18n.tr("server.um.x.jvRepoUnknown", java.util.Map.of("pkg", String.valueOf(jvmPkg), "cur", String.valueOf(cur.isEmpty() ? I18n.tr("server.um.x.unknownF") : cur)))
@@ -5724,14 +5724,14 @@ public final class UpdateManager {
      * vedere.
      */
     private static final java.util.Map<String, String> PHASE_LETTER = java.util.Map.of(
-        "fase-protezione",   "A",
-        "fase-nonprotetti",  "B",
-        "fase-mysql84",      "C",
-        "fase-dovecot",      "D",
-        "fase-rspamd-cache", "E",
-        "fase-roundcube",    "F",
-        "fase-python",       "G",
-        "fase-jvm",          "H"
+        "phase-protection",   "A",
+        "phase-unprotected",  "B",
+        "phase-mysql84",      "C",
+        "phase-dovecot",      "D",
+        "phase-rspamd-cache", "E",
+        "phase-roundcube",    "F",
+        "phase-python",       "G",
+        "phase-jvm",          "H"
     );
 
     /**

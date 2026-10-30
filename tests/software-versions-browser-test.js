@@ -91,7 +91,7 @@ async function served(route) {
 
     console.log('\n== Servizi Mail: la colonna Versione ==');
     await page.goto(BASE + '/');
-    await page.waitForFunction(() => document.getElementById('versioniStato').textContent.startsWith('Lette'));
+    await page.waitForFunction(() => document.getElementById('versionsState').textContent.startsWith('Lette'));
     const lineItems = await page.$$eval('table[aria-label^="Servizi mail"] tbody tr', tr => tr.map(r => r.cells[0].textContent.trim()));
     real('sette righe, con MySQL e Redis: ' + lineItems.join(' | '), lineItems.length === 7 && lineItems[2] === 'MySQL (Database)' && lineItems[4] === 'Redis (dati di Rspamd)');
     const pf = await page.textContent('#ver-postfix');
@@ -107,22 +107,22 @@ async function served(route) {
     const injected = await page.evaluate(() => ({ img: document.querySelectorAll('#ver-rspamd img').length, flag: window.injectedRan }));
     real('una versione con dentro HTML resta testo: nessun <img>, nessuno script', injected.img === 0 && injected.flag === undefined
         && (await page.textContent('#ver-rspamd strong')).startsWith('<img'));
-    const stateValue = await page.textContent('#versioniStato');
+    const stateValue = await page.textContent('#versionsState');
     real('riepilogo: ora della lettura e quanti da riavviare — ' + stateValue, stateValue.startsWith('Lette dal server alle 14:00:05.') && stateValue.includes('3 programmi vanno riavviati'));
     real('e il ramo dei pacchetti, con il collegamento alla scheda per cambiarlo', stateValue.includes('Pacchetti dal ramo quarterly.')
-        && await page.getAttribute('#versioniStato a', 'href') === '/updates#branch');
+        && await page.getAttribute('#versionsState a', 'href') === '/updates#branch');
 
     console.log('\n== Altro software ==');
-    const otherOne = await page.$$eval('#altroSoftware tr', tr => tr.map(r => [...r.cells].map(c => c.textContent.trim())));
+    const otherOne = await page.$$eval('#otherSoftware tr', tr => tr.map(r => [...r.cells].map(c => c.textContent.trim())));
     real('una riga per programma: ' + otherOne.map(r => r[0]).join(', '), otherOne.length === 7 && otherOne[0][0] === 'FreeBSD' && otherOne[5][0] === 'Java');
     real('FreeBSD: userland, kernel in esecuzione, riavvio del server', otherOne[0][2].includes('15.0-RELEASE-p3') && otherOne[0][2].includes('kernel in esecuzione 15.0-RELEASE-p2')
         && otherOne[0][2].includes('serve un riavvio del server'));
     real('a cosa serve: nginx', otherOne[2][1].startsWith('Web server'));
     real('Pigeonhole non installato', otherOne[4][2] === 'non installato');
-    real("l'avviso e' rosso, la nota sul riavvio gialla", await page.locator('#altroSoftware .testo-rischio').count() === 1
-        && await page.locator('#altroSoftware .testo-avviso').count() === 1);
-    real('ogni cella ha la sua etichetta per il telefono', await page.locator('#altroSoftware td:not([data-label])').count() === 0);
-    if (photos) await page.screenshot({ path: path.join(photos, 'home-versioni.png'), fullPage: true });
+    real("l'avviso e' rosso, la nota sul riavvio gialla", await page.locator('#otherSoftware .text-risk').count() === 1
+        && await page.locator('#otherSoftware .testo-avviso').count() === 1);
+    real('ogni cella ha la sua etichetta per il telefono', await page.locator('#otherSoftware td:not([data-label])').count() === 0);
+    if (photos) await page.screenshot({ path: path.join(photos, 'home-versions.png'), fullPage: true });
 
     console.log('\n== Comandi: nomi, conferme, CSRF ==');
     real('i pulsanti hanno un nome: Avvia/Riavvia/Ferma Postfix, Ferma la webmail',
@@ -155,7 +155,7 @@ async function served(route) {
     const mysql = requests.filter(r => r.path === '/api/service').pop();
     real('e manda mysql-server', mysql.body.service === 'mysql-server' && mysql.body.action === 'restart');
     const n = requests.filter(r => r.path === '/api/versions?fresh=1').length;
-    await page.click('#versioniRileggi');
+    await page.click('#versionsReread');
     await page.waitForFunction(k => true, n);
     await page.waitForTimeout(300);
     real('"Rileggi le versioni" chiede una lettura fresca', requests.filter(r => r.path === '/api/versions?fresh=1').length === n + 1);
@@ -163,7 +163,7 @@ async function served(route) {
     console.log('\n== Tema scuro e telefono ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     await page.waitForTimeout(600);   // il cambio di tema ha una transizione
-    if (photos) await page.screenshot({ path: path.join(photos, 'home-versioni-scuro.png'), fullPage: true });
+    if (photos) await page.screenshot({ path: path.join(photos, 'home-versions-dark.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
     await page.waitForTimeout(300);
@@ -173,7 +173,7 @@ async function served(route) {
         await page.$eval('table[aria-label^="Servizi mail"] thead', t => getComputedStyle(t).display) === 'none');
     if (photos) {
         await page.locator('table[aria-label^="Servizi mail"]').scrollIntoViewIfNeeded();
-        await page.screenshot({ path: path.join(photos, 'home-versioni-telefono.png') });
+        await page.screenshot({ path: path.join(photos, 'home-versions-phone.png') });
     }
 
     real('nessun errore nella pagina' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);

@@ -205,7 +205,7 @@ public class MailPanelContent {
         .sidebar-link:hover { background: rgba(255, 255, 255, .08); color: #fff; }
         .sidebar-link:focus-visible { outline: 2px solid #fff; outline-offset: -2px; color: #fff; }
         .sidebar-link.active { background: rgba(233, 69, 96, .22); border-left-color: #e94560; color: #fff; font-weight: 600; }
-        .icona-cloudflare { color: #f6821f; }
+        .icon-cloudflare { color: #f6821f; }
         @media (min-width: 992px) {
             body:has(> #sidebar) { padding-left: var(--sidebar-width); }
             .sidebar { position: fixed; top: 0; bottom: 0; left: 0; width: var(--sidebar-width); overflow-y: auto; z-index: 1030; }
@@ -225,23 +225,23 @@ public class MailPanelContent {
         .table-responsive { overflow: visible; }
         .dropdown-menu { z-index: 1050; }
         #nav-placeholder, #footer-placeholder { display: contents; }
-        /* Celle con "parole" lunghissime: indirizzi, domini, host, errori di consegna (classe testo-lungo).
+        /* Celle con "parole" lunghissime: indirizzi, domini, host, errori di consegna (classe text-long).
            Vanno a capo anche a meta' parola, quando serve, invece di allargare la tabella e con lei la
            pagina: su computer le tabelle non scorrono nel loro riquadro, perche' i menu a tendina delle
            righe devono poter uscire. Solo su queste celle: una regola su tutte spezzava anche le parole
            corte nelle colonne strette ("deferre-d", le date a meta' numero). */
-        .table td.testo-lungo { overflow-wrap: anywhere; }
+        .table td.text-long { overflow-wrap: anywhere; }
         /* Fuori dalle tabelle (finestre, messaggi): un indirizzo lungo va a capo invece di allargare. */
-        .modal .testo-lungo, .alert.testo-lungo, code.testo-lungo { overflow-wrap: anywhere; }
+        .modal .text-long, .alert.text-long, code.text-long { overflow-wrap: anywhere; }
         /* Testo che dice com'e' andata: verde, giallo, rosso leggibili in tutti e due i temi.
            text-success, text-warning e text-danger di Bootstrap sul fondo scuro stanno sotto
            il contrasto minimo di 4.5:1 (gli stessi colori del pannello web). */
-        .testo-ok { color: #146c43; }
+        .text-ok { color: #146c43; }
         .testo-avviso { color: #7a4e00; }
-        .testo-rischio { color: #b02a37; }
-        [data-theme="dark"] .testo-ok { color: #75d9a3; }
+        .text-risk { color: #b02a37; }
+        [data-theme="dark"] .text-ok { color: #75d9a3; }
         [data-theme="dark"] .testo-avviso { color: #ffcf5c; }
-        [data-theme="dark"] .testo-rischio { color: #f1aeb5; }
+        [data-theme="dark"] .text-risk { color: #f1aeb5; }
         /* ===== Telefono e tablet: sotto i 992px niente deve allargare la pagina =====
            Una pagina piu' larga della finestra scorre tutta in orizzontale. Regole per i casi che si
            ripetono, invece di una pezza per pagina (agiscono solo quando il contenuto non ci sta):
@@ -254,7 +254,7 @@ public class MailPanelContent {
              innodb_flush_log_at_trx_commit nelle etichette) vanno a capo. */
         @media (max-width: 991.98px) {
             .table-responsive { overflow-x: auto; }
-            .table-responsive:has(> .tabella-schede) { overflow-x: visible; }
+            .table-responsive:has(> .table-cards) { overflow-x: visible; }
             /* Tabelle senza riquadro che scorre: un indirizzo o un dominio lungo va a capo nella cella. */
             table.table:not(.table-responsive table) td { overflow-wrap: anywhere; }
             .d-flex.justify-content-between { flex-wrap: wrap; gap: .5rem; }
@@ -264,20 +264,20 @@ public class MailPanelContent {
             code, .form-label { overflow-wrap: anywhere; }
         }
         /* Tabelle che su telefono e tablet (sotto i 992px, come la barra laterale che si chiude) diventano schede:
-           classe tabella-schede sulla <table> e data-label su ogni cella. Cinque colonne in 375px non
+           classe table-cards sulla <table> e data-label su ogni cella. Cinque colonne in 375px non
            ci stanno, e una tabella piu' larga della pagina la faceva scorrere tutta in orizzontale; il
            suo riquadro non scorre, perche' i menu a tendina nelle righe non vengano tagliati. */
         @media (max-width: 991.98px) {
-            .tabella-schede thead { display: none; }
-            .tabella-schede, .tabella-schede tbody, .tabella-schede tr, .tabella-schede td { display: block; width: 100%; }
-            .tabella-schede tr { border: 1px solid var(--border-color); border-radius: 8px; padding: .5rem .75rem; margin-bottom: .75rem; }
-            .tabella-schede td { border: 0; padding: .2rem 0; overflow-wrap: anywhere; }
-            .tabella-schede td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--text-secondary); }
-            .tabella-schede td:empty { display: none; }
+            .table-cards thead { display: none; }
+            .table-cards, .table-cards tbody, .table-cards tr, .table-cards td { display: block; width: 100%; }
+            .table-cards tr { border: 1px solid var(--border-color); border-radius: 8px; padding: .5rem .75rem; margin-bottom: .75rem; }
+            .table-cards td { border: 0; padding: .2rem 0; overflow-wrap: anywhere; }
+            .table-cards td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--text-secondary); }
+            .table-cards td:empty { display: none; }
         }
         /* Campo password (campoPassword): su un telefono, accanto ai tre pulsanti, una password di
            20 caratteri deve vedersi tutta. */
-        @media (max-width: 575.98px) { .campo-password { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
+        @media (max-width: 575.98px) { .password-field { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
         /* I ruoli, con lo stesso colore ovunque: barra in alto, pagina Amministratori. */
         .role-badge { color: #fff; font-weight: 500; }
         .role-badge.superadmin { background-color: #dc3545; }
@@ -996,11 +996,11 @@ public class MailPanelContent {
 
             <div class="d-flex justify-content-between align-items-center mt-4 mb-1">
                 <h3 class="mb-0"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:home.services}}</h3>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="versioniRileggi" onclick="loadVersions(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.rereadVersions}}</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="versionsReread" onclick="loadVersions(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.rereadVersions}}</button>
             </div>
-            <p class="small text-muted mb-2" id="versioniStato" role="status">{{t:home.readingVersions}}</p>
+            <p class="small text-muted mb-2" id="versionsState" role="status">{{t:home.readingVersions}}</p>
             <div class="table-responsive">
-                <table class="table table-hover tabella-schede" aria-label="{{t:home.servicesTable}}">
+                <table class="table table-hover table-cards" aria-label="{{t:home.servicesTable}}">
                     <thead class="table-light"><tr><th scope="col">{{t:home.colService}}</th><th scope="col">{{t:home.colVersion}}</th><th scope="col">{{t:home.colState}}</th><th scope="col">{{t:home.colActions}}</th></tr></thead>
                     <tbody>
 """ + serviceLine("postfix", "postfix", "fa-paper-plane", "Postfix (SMTP)", "Postfix")
@@ -1016,9 +1016,9 @@ public class MailPanelContent {
 
             <h3 class="mt-4"><i class="fas fa-cubes me-2" aria-hidden="true"></i>{{t:home.otherSoftware}}</h3>
             <div class="table-responsive">
-                <table class="table table-hover tabella-schede" aria-label="{{t:home.otherTable}}">
+                <table class="table table-hover table-cards" aria-label="{{t:home.otherTable}}">
                     <thead class="table-light"><tr><th scope="col">Software</th><th scope="col">{{t:home.colPurpose}}</th><th scope="col">{{t:home.colVersion}}</th></tr></thead>
-                    <tbody id="altroSoftware"><tr><td colspan="3" class="text-muted small">{{t:home.readingVersions}}</td></tr></tbody>
+                    <tbody id="otherSoftware"><tr><td colspan="3" class="text-muted small">{{t:home.readingVersions}}</td></tr></tbody>
                 </table>
             </div>
 """ + resource("pages/home-status-card.html") + """
@@ -1362,7 +1362,7 @@ public class MailPanelContent {
             }
             cell.appendChild(lineItem);
             [[v.detail, 'small text-muted'], [v.pkgName ? t('ver.package', { name: v.pkgName }) : '', 'small text-muted'],
-             [v.restartNote, 'small testo-avviso'], [v.warning, 'small testo-rischio']].forEach(([textValue, cssClass]) => {
+             [v.restartNote, 'small testo-avviso'], [v.warning, 'small text-risk']].forEach(([textValue, cssClass]) => {
                 if (!textValue) return;
                 const d = document.createElement('div');
                 d.className = cssClass;
@@ -1372,8 +1372,8 @@ public class MailPanelContent {
         }
 
         function loadVersions(freshRead) {
-            const stateValue = document.getElementById('versioniStato');
-            const btn = document.getElementById('versioniRileggi');
+            const stateValue = document.getElementById('versionsState');
+            const btn = document.getElementById('versionsReread');
             btn.disabled = true;
             stateValue.textContent = t('home.readingVersions');
             fetch('/api/versions' + (freshRead ? '?fresh=1' : '')).then(r => r.json()).then(d => {
@@ -1386,7 +1386,7 @@ public class MailPanelContent {
                     const cell = document.getElementById('ver-' + k);
                     if (cell) verCell(cell, d.services[k]);
                 });
-                const bodyText = document.getElementById('altroSoftware');
+                const bodyText = document.getElementById('otherSoftware');
                 bodyText.textContent = '';
                 d.other.forEach(v => {
                     const tr = document.createElement('tr');
@@ -1436,7 +1436,7 @@ public class MailPanelContent {
             </div>
 
             <div class="table-responsive">
-                <table class="table table-hover tabella-schede">
+                <table class="table table-hover table-cards">
                     <thead class="table-light">
                         <tr><th>{{t:dom.colDomain}}</th><th>{{t:dom.colDesc}}</th><th>{{t:nav.mailboxes}}</th><th>{{t:nav.aliases}}</th><th>DKIM</th><th>{{t:home.colActions}}</th></tr>
                     </thead>
@@ -1513,7 +1513,7 @@ public class MailPanelContent {
                 currentDomains = data.domains;
                 tbody.innerHTML = data.domains.map(d => `
                     <tr>
-                        <td data-label="${escDom(t('dom.colDomain'))}" class="testo-lungo"><strong>${escDom(d.domain)}</strong></td>
+                        <td data-label="${escDom(t('dom.colDomain'))}" class="text-long"><strong>${escDom(d.domain)}</strong></td>
                         <td data-label="${escDom(t('dom.colDesc'))}">${escDom(d.description || '-')}</td>
                         <td data-label="${escDom(t('nav.mailboxes'))}"><span class="badge bg-info">${d.mailbox_count || 0}</span></td>
                         <td data-label="${escDom(t('nav.aliases'))}"><span class="badge bg-info">${d.alias_count || 0}</span></td>
@@ -1891,11 +1891,11 @@ public class MailPanelContent {
     private static String passwordField(String id, String placeholder) {
         return """
                         <div class="input-group has-validation">
-                            <input type="password" class="form-control font-monospace campo-password" id="%1$s" placeholder="%2$s" maxlength="128"
+                            <input type="password" class="form-control font-monospace password-field" id="%1$s" placeholder="%2$s" maxlength="128"
                                    autocomplete="new-password" autocapitalize="off" spellcheck="false" oninput="pwCheck('%1$s')" aria-describedby="%1$sErr">
-                            <button class="btn btn-outline-secondary" type="button" id="%1$sMostra" onclick="pwShow('%1$s')" title="{{t:pw.showHide}}" aria-label="{{t:pw.show}}"><i class="fas fa-eye" aria-hidden="true"></i></button>
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sShow" onclick="pwShow('%1$s')" title="{{t:pw.showHide}}" aria-label="{{t:pw.show}}"><i class="fas fa-eye" aria-hidden="true"></i></button>
                             <button class="btn btn-outline-primary" type="button" onclick="pwGenerate('%1$s')" title="{{t:pw.generateSafe}}" aria-label="{{t:pw.generateSafe}}"><i class="fas fa-magic" aria-hidden="true"></i><span class="d-none d-sm-inline ms-1">{{t:pw.generate}}</span></button>
-                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopia" onclick="pwDoCopy('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopy" onclick="pwDoCopy('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                             <div class="invalid-feedback" id="%1$sErr" role="alert"></div>
                         </div>
 """.formatted(id, placeholder);
@@ -1918,7 +1918,7 @@ public class MailPanelContent {
 
         function pwShow(id, showIt) {
             const input = document.getElementById(id);
-            const btn = document.getElementById(id + 'Mostra');
+            const btn = document.getElementById(id + 'Show');
             const isVisible = showIt === undefined ? input.type === 'password' : showIt;
             input.type = isVisible ? 'text' : 'password';
             btn.innerHTML = isVisible ? '<i class="fas fa-eye-slash" aria-hidden="true"></i>' : '<i class="fas fa-eye" aria-hidden="true"></i>';
@@ -1980,7 +1980,7 @@ public class MailPanelContent {
             const input = document.getElementById(id);
             if (!input.value) { document.getElementById(id + 'Err').textContent = t('pw.empty'); input.classList.add('is-invalid'); return; }
             const done = () => {
-                const btn = document.getElementById(id + 'Copia');
+                const btn = document.getElementById(id + 'Copy');
                 btn.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i>';
                 btn.setAttribute('aria-label', t('pw.copied'));
                 setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy" aria-hidden="true"></i>'; btn.setAttribute('aria-label', t('pw.copy')); }, 1500);
@@ -2008,35 +2008,35 @@ public class MailPanelContent {
     /** Finestra "Trasforma in casella" della pagina Alias (AddressTransform sul server). */
     private static String getAliasToMailboxModal() {
         return """
-    <div class="modal fade" id="aCasellaModal" tabindex="-1" aria-labelledby="aCasellaTitolo" aria-hidden="true">
+    <div class="modal fade" id="aMailboxModal" tabindex="-1" aria-labelledby="aMailboxTitle" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title testo-lungo" id="aCasellaTitolo">{{t:ac.title}}</h5>
+                    <h5 class="modal-title text-long" id="aMailboxTitle">{{t:ac.title}}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
                 </div>
                 <div class="modal-body">
-                    <p id="acCaricamento" class="mb-0" role="status">{{t:conv.checking}}</p>
-                    <div id="acNo" class="alert alert-warning d-none mb-0 testo-lungo" role="alert"></div>
+                    <p id="acLoading" class="mb-0" role="status">{{t:conv.checking}}</p>
+                    <div id="acNo" class="alert alert-warning d-none mb-0 text-long" role="alert"></div>
                     <div id="acSi" class="d-none">
-                        <p><strong id="acIndirizzo" class="testo-lungo"></strong></p>
+                        <p><strong id="acAddress" class="text-long"></strong></p>
                         <p>{{t:ac.intro}}</p>
-                        <p id="acDestinazioni" class="mb-2 testo-lungo"></p>
+                        <p id="acDestinations" class="mb-2 text-long"></p>
                         <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" id="acTieni">
-                            <label class="form-check-label" for="acTieni">{{t:ac.keep}}</label>
+                            <input class="form-check-input" type="checkbox" id="acKeep">
+                            <label class="form-check-label" for="acKeep">{{t:ac.keep}}</label>
                         </div>
-                        <p id="acVersoQui" class="small text-muted testo-lungo"></p>
-                        <fieldset id="acPostaBlocco" class="border rounded p-2 mb-3 d-none">
+                        <p id="acToHere" class="small text-muted text-long"></p>
+                        <fieldset id="acMailBlock" class="border rounded p-2 mb-3 d-none">
                             <legend class="fs-6 float-none w-auto px-1 mb-0">{{t:ac.oldMail}}</legend>
-                            <p class="small mb-2" id="acPostaInfo"></p>
+                            <p class="small mb-2" id="acMailInfo"></p>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acPosta" id="acRitrova" value="recover">
-                                <label class="form-check-label" for="acRitrova">{{t:ac.recover}}</label>
+                                <input class="form-check-input" type="radio" name="acPosta" id="acRecover" value="recover">
+                                <label class="form-check-label" for="acRecover">{{t:ac.recover}}</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acPosta" id="acArchivia" value="archive">
-                                <label class="form-check-label" for="acArchivia">{{t:ac.archive}}</label>
+                                <input class="form-check-input" type="radio" name="acPosta" id="acArchive" value="archive">
+                                <label class="form-check-label" for="acArchive">{{t:ac.archive}}</label>
                             </div>
                         </fieldset>
                         <div class="mb-3">
@@ -2046,16 +2046,16 @@ public class MailPanelContent {
                         </div>
                         <div class="row g-2">
                             <div class="col-sm-8">
-                                <label class="form-label" for="acNome">{{t:mbx.colName}} <span class="text-muted small">{{t:ac.nameHint}}</span></label>
-                                <input type="text" class="form-control" id="acNome" maxlength="100" autocomplete="off">
+                                <label class="form-label" for="acName">{{t:mbx.colName}} <span class="text-muted small">{{t:ac.nameHint}}</span></label>
+                                <input type="text" class="form-control" id="acName" maxlength="100" autocomplete="off">
                             </div>
                             <div class="col-sm-4">
                                 <label class="form-label" for="acQuota">{{t:ac.quota}}</label>
-                                <input type="number" class="form-control" id="acQuota" min="0" max="1048576" value="1024" aria-describedby="acQuotaAiuto">
-                                <small class="text-muted" id="acQuotaAiuto">{{t:ac.quotaHint}}</small>
+                                <input type="number" class="form-control" id="acQuota" min="0" max="1048576" value="1024" aria-describedby="acQuotaHelp">
+                                <small class="text-muted" id="acQuotaHelp">{{t:ac.quotaHint}}</small>
                             </div>
                         </div>
-                        <div id="acErr" class="text-danger small mt-2 testo-lungo" role="alert"></div>
+                        <div id="acErr" class="text-danger small mt-2 text-long" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -2080,23 +2080,23 @@ public class MailPanelContent {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
             acInfo = { address: a.source, fingerprint: '', mail: false };
-            document.getElementById('aCasellaTitolo').textContent = t('ac.titleFor', { address: a.source });
+            document.getElementById('aMailboxTitle').textContent = t('ac.titleFor', { address: a.source });
             document.getElementById('acErr').textContent = '';
-            acShow('acCaricamento', true);
+            acShow('acLoading', true);
             acShow('acNo', false);
             acShow('acSi', false);
             document.getElementById('acVia').disabled = true;
-            document.getElementById('acTieni').checked = false;
-            document.getElementById('acRitrova').checked = false;
-            document.getElementById('acArchivia').checked = false;
+            document.getElementById('acKeep').checked = false;
+            document.getElementById('acRecover').checked = false;
+            document.getElementById('acArchive').checked = false;
             document.getElementById('acPass').value = '';
             pwShow('acPass', false);
             pwCheck('acPass');
-            document.getElementById('acNome').value = '';
+            document.getElementById('acName').value = '';
             document.getElementById('acQuota').value = '1024';
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('aCasellaModal')).show();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('aMailboxModal')).show();
             fetch('/api/aliases?transform=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
-                acShow('acCaricamento', false);
+                acShow('acLoading', false);
                 if (!d.success || !d.possible) {
                     document.getElementById('acNo').textContent = d.reason || d.error || t('conv.notPossible');
                     acShow('acNo', true);
@@ -2104,8 +2104,8 @@ public class MailPanelContent {
                 }
                 acInfo.fingerprint = d.fingerprint;
                 acInfo.mail = !!(d.mail && d.mail.present);
-                document.getElementById('acIndirizzo').textContent = d.address;
-                const box = document.getElementById('acDestinazioni');
+                document.getElementById('acAddress').textContent = d.address;
+                const box = document.getElementById('acDestinations');
                 box.textContent = '';
                 if (d.destinations.length) {
                     box.appendChild(document.createTextNode(t('ac.nowGoesTo') + ' '));
@@ -2119,21 +2119,21 @@ public class MailPanelContent {
                     box.appendChild(document.createTextNode('. ' + t('ac.withoutTick')));
                 }
                 const vq = (d.towardsHere || []).filter(x => x.active).map(x => x.source);
-                document.getElementById('acVersoQui').textContent = vq.length
+                document.getElementById('acToHere').textContent = vq.length
                     ? t('ac.alsoFrom', { list: vq.join(', ') }) : '';
                 if (acInfo.mail) {
                     const p = d.mail;
-                    document.getElementById('acPostaInfo').textContent = t('ac.oldMailInfo', {
+                    document.getElementById('acMailInfo').textContent = t('ac.oldMailInfo', {
                             messages: (p.atLeast ? t('ac.atLeast') + ' ' : '') + tn('conv.messages', p.messages), size: p.size })
                         + (p.last ? ' ' + t('ac.lastOne', { date: acData(p.last) }) : '')
                         + (p.filters ? ' ' + t('ac.oldFilters') : '');
                 }
-                acShow('acPostaBlocco', acInfo.mail);
+                acShow('acMailBlock', acInfo.mail);
                 acShow('acSi', true);
                 document.getElementById('acVia').disabled = false;
                 pwPropose('acPass');
             }).catch(() => {
-                acShow('acCaricamento', false);
+                acShow('acLoading', false);
                 document.getElementById('acNo').textContent = t('common.noAnswer');
                 acShow('acNo', true);
             });
@@ -2163,14 +2163,14 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'transform_to_mailbox', source: acInfo.address, password: pass.value,
-                    name: document.getElementById('acNome').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
-                    keep_forwards: document.getElementById('acTieni').checked, old_mail: mail,
+                    name: document.getElementById('acName').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
+                    keep_forwards: document.getElementById('acKeep').checked, old_mail: mail,
                     fingerprint: acInfo.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 btn.disabled = false;
                 if (d.success) {
-                    bootstrap.Modal.getInstance(document.getElementById('aCasellaModal')).hide();
+                    bootstrap.Modal.getInstance(document.getElementById('aMailboxModal')).hide();
                     aliasMsg(d.message, 'success');
                     loadAliases();
                 } else {
@@ -2191,33 +2191,33 @@ public class MailPanelContent {
     /** Finestra "Trasforma in alias" della pagina Caselle (AddressTransform sul server). */
     private static String getMailboxToAliasModal() {
         return """
-    <div class="modal fade" id="aAliasModal" tabindex="-1" aria-labelledby="aAliasTitolo" aria-hidden="true">
+    <div class="modal fade" id="aAliasModal" tabindex="-1" aria-labelledby="aAliasTitle" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title testo-lungo" id="aAliasTitolo">{{t:mbx.toAlias}}</h5>
+                    <h5 class="modal-title text-long" id="aAliasTitle">{{t:mbx.toAlias}}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
                 </div>
                 <div class="modal-body">
-                    <p id="aaCaricamento" class="mb-0" role="status">{{t:conv.checking}}</p>
-                    <div id="aaNo" class="alert alert-warning d-none mb-0 testo-lungo" role="alert"></div>
+                    <p id="aaLoading" class="mb-0" role="status">{{t:conv.checking}}</p>
+                    <div id="aaNo" class="alert alert-warning d-none mb-0 text-long" role="alert"></div>
                     <div id="aaSi" class="d-none">
-                        <p><strong id="aaIndirizzo" class="testo-lungo"></strong></p>
+                        <p><strong id="aaAddress" class="text-long"></strong></p>
                         <p>{{t:aa.intro}}</p>
-                        <h6 class="testo-rischio"><i class="fas fa-minus-circle me-1" aria-hidden="true"></i>{{t:conv.lost}}</h6>
-                        <ul id="aaPerdite" class="small testo-lungo"></ul>
-                        <h6 class="testo-ok"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>{{t:conv.kept}}</h6>
-                        <ul id="aaResta" class="small testo-lungo"></ul>
+                        <h6 class="text-risk"><i class="fas fa-minus-circle me-1" aria-hidden="true"></i>{{t:conv.lost}}</h6>
+                        <ul id="aaLosses" class="small text-long"></ul>
+                        <h6 class="text-ok"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>{{t:conv.kept}}</h6>
+                        <ul id="aaStays" class="small text-long"></ul>
                         <div class="mb-3">
                             <label class="form-label" for="aaDest">{{t:aa.dest}}</label>
-                            <textarea class="form-control font-monospace" id="aaDest" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="aaDestAiuto"></textarea>
-                            <small class="text-muted" id="aaDestAiuto">{{t:aa.destHint}}</small>
+                            <textarea class="form-control font-monospace" id="aaDest" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="aaDestHelp"></textarea>
+                            <small class="text-muted" id="aaDestHelp">{{t:aa.destHint}}</small>
                         </div>
                         <div class="mb-1">
-                            <label class="form-label" for="aaConferma">{{t:conv.typeAddress}} <code id="aaIndirizzoConferma" class="testo-lungo"></code></label>
-                            <input type="text" class="form-control" id="aaConferma" autocomplete="off" autocapitalize="off" spellcheck="false">
+                            <label class="form-label" for="aaConfirm">{{t:conv.typeAddress}} <code id="aaAddressConfirm" class="text-long"></code></label>
+                            <input type="text" class="form-control" id="aaConfirm" autocomplete="off" autocapitalize="off" spellcheck="false">
                         </div>
-                        <div id="aaErr" class="text-danger small mt-2 testo-lungo" role="alert"></div>
+                        <div id="aaErr" class="text-danger small mt-2 text-long" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -2247,7 +2247,7 @@ public class MailPanelContent {
             box.textContent = '';
             if (!textValue) return;
             const div = document.createElement('div');
-            div.className = 'alert alert-' + kindValue + ' py-2 small testo-lungo';
+            div.className = 'alert alert-' + kindValue + ' py-2 small text-long';
             div.textContent = textValue;
             box.appendChild(div);
         }
@@ -2256,16 +2256,16 @@ public class MailPanelContent {
             aaInfo = { id: id, address: '', fingerprint: '' };
             document.getElementById('aaErr').textContent = '';
             document.getElementById('aaDest').value = '';
-            document.getElementById('aaConferma').value = '';
-            document.getElementById('aaPerdite').textContent = '';
-            document.getElementById('aaResta').textContent = '';
-            aaShow('aaCaricamento', true);
+            document.getElementById('aaConfirm').value = '';
+            document.getElementById('aaLosses').textContent = '';
+            document.getElementById('aaStays').textContent = '';
+            aaShow('aaLoading', true);
             aaShow('aaNo', false);
             aaShow('aaSi', false);
             document.getElementById('aaVia').disabled = true;
             bootstrap.Modal.getOrCreateInstance(document.getElementById('aAliasModal')).show();
             fetch('/api/mailboxes?transform=' + id).then(r => r.json()).then(d => {
-                aaShow('aaCaricamento', false);
+                aaShow('aaLoading', false);
                 if (!d.success || !d.possible) {
                     document.getElementById('aaNo').textContent = d.reason || d.error || t('conv.notPossible');
                     aaShow('aaNo', true);
@@ -2273,30 +2273,30 @@ public class MailPanelContent {
                 }
                 aaInfo.address = d.address;
                 aaInfo.fingerprint = d.fingerprint;
-                document.getElementById('aAliasTitolo').textContent = t('aa.titleFor', { address: d.address });
-                document.getElementById('aaIndirizzo').textContent = d.address;
-                document.getElementById('aaIndirizzoConferma').textContent = d.address;
+                document.getElementById('aAliasTitle').textContent = t('aa.titleFor', { address: d.address });
+                document.getElementById('aaAddress').textContent = d.address;
+                document.getElementById('aaAddressConfirm').textContent = d.address;
                 const p = d.losses;
-                aaEntry('aaPerdite', t('aa.lostLogin') + ' '
+                aaEntry('aaLosses', t('aa.lostLogin') + ' '
                     + (p.lastAccess ? t('aa.lastLogin', { date: aaData(p.lastAccess) }) : t('aa.neverUsed')));
-                if (p.sendOnly) aaEntry('aaPerdite', t('aa.lostSendOnly'));
-                if (p.autoReply) aaEntry('aaPerdite', t('aa.lostAutoReply'));
-                if (p.filters) aaEntry('aaPerdite', tn('aa.lostFilters', p.filters));
-                if (p.forwards.length) aaEntry('aaPerdite', t('aa.lostForwards', { list: p.forwards.join(', ') }));
-                if (d.copy) aaEntry('aaPerdite', t('aa.lostSelfAlias', { address: d.address }));
+                if (p.sendOnly) aaEntry('aaLosses', t('aa.lostSendOnly'));
+                if (p.autoReply) aaEntry('aaLosses', t('aa.lostAutoReply'));
+                if (p.filters) aaEntry('aaLosses', tn('aa.lostFilters', p.filters));
+                if (p.forwards.length) aaEntry('aaLosses', t('aa.lostForwards', { list: p.forwards.join(', ') }));
+                if (d.copy) aaEntry('aaLosses', t('aa.lostSelfAlias', { address: d.address }));
                 const mail = d.mail;
-                aaEntry('aaResta', mail.present
+                aaEntry('aaStays', mail.present
                     ? (mail.atLeast ? t('aa.keptMailAtLeast', { messages: tn('conv.messages', mail.messages), size: mail.size, folder: d.folder }) : t('aa.keptMail', { messages: tn('conv.messages', mail.messages), size: mail.size, folder: d.folder }))
                     : t('aa.noMail'));
                 const already = (d.alreadyForwarded || []).filter(x => x.active).map(x => x.destination);
-                if (already.length) aaEntry('aaResta', t('aa.keptAliases', { list: already.join(', ') }));
+                if (already.length) aaEntry('aaStays', t('aa.keptAliases', { list: already.join(', ') }));
                 const vq = (d.towardsHere || []).filter(x => x.active).map(x => x.source);
-                if (vq.length) aaEntry('aaResta', t('aa.keptIncoming', { list: vq.join(', ') }));
+                if (vq.length) aaEntry('aaStays', t('aa.keptIncoming', { list: vq.join(', ') }));
                 document.getElementById('aaDest').value = (d.proposals || []).join(String.fromCharCode(10));
                 aaShow('aaSi', true);
                 aaCheck();
             }).catch(() => {
-                aaShow('aaCaricamento', false);
+                aaShow('aaLoading', false);
                 document.getElementById('aaNo').textContent = t('common.noAnswer');
                 aaShow('aaNo', true);
             });
@@ -2304,7 +2304,7 @@ public class MailPanelContent {
 
         function aaCheck() {
             document.getElementById('aaVia').disabled = !aaInfo || !aaInfo.fingerprint
-                || document.getElementById('aaConferma').value.trim().toLowerCase() !== aaInfo.address;
+                || document.getElementById('aaConfirm').value.trim().toLowerCase() !== aaInfo.address;
         }
 
         function transformToAlias() {
@@ -2319,7 +2319,7 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'transform_to_alias', id: aaInfo.id, destinations: dest,
-                    confirmation: document.getElementById('aaConferma').value.trim(), fingerprint: aaInfo.fingerprint, csrf_token: csrfToken
+                    confirmation: document.getElementById('aaConfirm').value.trim(), fingerprint: aaInfo.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 if (d.success) {
@@ -2335,7 +2335,7 @@ public class MailPanelContent {
                 aaCheck();
             });
         }
-        document.getElementById('aaConferma').addEventListener('input', aaCheck);
+        document.getElementById('aaConfirm').addEventListener('input', aaCheck);
 """;
     }
 
@@ -2843,7 +2843,7 @@ public class MailPanelContent {
 
             <div id="mbMsg" role="status" aria-live="polite"></div>
             <div class="table-responsive">
-                <table class="table table-hover tabella-schede">
+                <table class="table table-hover table-cards">
                     <thead class="table-light">
                         <tr><th>Email</th><th>{{t:mbx.colName}}</th><th>Quota</th><th>{{t:mbx.colFeatures}}</th><th>{{t:home.colActions}}</th></tr>
                     </thead>
@@ -3182,7 +3182,7 @@ public class MailPanelContent {
                 }
                 tbody.innerHTML = currentMailboxes.map(m => `
                     <tr>
-                        <td data-label="Email" class="testo-lungo">
+                        <td data-label="Email" class="text-long">
                             <strong>${escMbx(m.email)}</strong>
                             ${!m.receive_enabled ? '<span class="badge bg-secondary ms-1" title="' + escMbx(t('mbx.sendOnly')) + '"><i class="fas fa-ban" aria-hidden="true"></i> No-Reply</span>' : ''}
                             ${!m.active ? '<span class="badge bg-danger ms-1">' + escMbx(t('mbx.inactive')) + '</span>' : ''}
@@ -3969,7 +3969,7 @@ public class MailPanelContent {
                 tbody.innerHTML = currentAliases.map(a => {
                     const id = parseInt(a.id);
                     const whoText = escAl(t('al.who', { source: a.source, dest: a.destination }));
-                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="testo-lungo">' + escAl(a.source) + '</td><td class="testo-lungo">' + escAl(a.destination)
+                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="text-long">' + escAl(a.source) + '</td><td class="text-long">' + escAl(a.destination)
                         + (a.active ? '' : ' <span class="badge bg-secondary ms-1">' + escAl(t('mbx.inactive')) + '</span>') + '</td>'
                         + '<td class="text-nowrap">'
                         + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + whoText + '">' + escAl(t('common.edit')) + '</button>'
@@ -5053,7 +5053,7 @@ public class MailPanelContent {
                         <div class="card-header"><i class="fas fa-envelope me-2" aria-hidden="true"></i>{{t:acc.emailTitle}}</div>
                         <div class="card-body">
                             <p class="text-muted small">{{t:acc.intro}}</p>
-                            <p class="mb-2">{{t:acc.emailCurrent}} <strong id="accEmailCurrent" class="testo-lungo">…</strong></p>
+                            <p class="mb-2">{{t:acc.emailCurrent}} <strong id="accEmailCurrent" class="text-long">…</strong></p>
                             <label class="form-label" for="accEmailNew">{{t:acc.emailNew}}</label>
                             <div class="input-group mb-2">
                                 <input type="email" class="form-control" id="accEmailNew" maxlength="254" autocomplete="email"
@@ -5810,7 +5810,7 @@ public class MailPanelContent {
             const row = document.createElement('div');
             row.className = 'd-flex justify-content-between align-items-center gap-2 p-2 bg-light rounded mb-2';
             const info = document.createElement('div');
-            info.className = 'testo-lungo';
+            info.className = 'text-long';
             const strong = document.createElement('strong');
             strong.textContent = title;
             info.append(strong);
@@ -8628,7 +8628,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover tabella-schede" id="queueTable" aria-labelledby="queueTableTitle">
+                        <table class="table table-hover table-cards" id="queueTable" aria-labelledby="queueTableTitle">
                             <thead>
                                 <tr>
                                     <th scope="col">{{t:que.colId}}</th>
@@ -8738,11 +8738,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         return `<tr>
                             <td data-label="${escHtml(t('que.colId'))}"><code>${id}</code></td>
                             <td data-label="${escHtml(t('que.colState'))}"><span class="queue-state state-${state.toLowerCase()}">${escHtml(QUEUE_STATES[state])}</span></td>
-                            <td data-label="${escHtml(t('que.colFrom'))}" class="testo-lungo">${escHtml(msg.sender || t('que.nullSender'))}</td>
-                            <td data-label="${escHtml(t('que.colTo'))}" class="testo-lungo">${escHtml(to || '-')}</td>
+                            <td data-label="${escHtml(t('que.colFrom'))}" class="text-long">${escHtml(msg.sender || t('que.nullSender'))}</td>
+                            <td data-label="${escHtml(t('que.colTo'))}" class="text-long">${escHtml(to || '-')}</td>
                             <td data-label="${escHtml(t('que.colSize'))}">${escHtml(formatSize(msg.size))}</td>
                             <td data-label="${escHtml(t('que.colArrival'))}">${escHtml(formatDate(msg.arrival))}</td>
-                            <td data-label="${escHtml(t('que.colError'))}" class="text-danger testo-lungo">${escHtml(msg.error || '')}</td>
+                            <td data-label="${escHtml(t('que.colError'))}" class="text-danger text-long">${escHtml(msg.error || '')}</td>
                             <td data-label="${escHtml(t('home.colActions'))}" class="text-nowrap">
                                 <button type="button" class="btn btn-sm btn-outline-info" data-queue-view="${id}" title="${escHtml(t('que.viewOf', { id: msg.id }))}" aria-label="${escHtml(t('que.viewOf', { id: msg.id }))}">
                                     <i class="fas fa-eye" aria-hidden="true"></i>
@@ -9231,7 +9231,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <div class="mt-1">
                                     <button class="btn btn-sm btn-outline-secondary py-0" data-jail="${escHtml(jail.name)}" onclick="checkJailFilter(this.dataset.jail)" title="${escHtml(t('sec.seesHint'))}">
                                         <i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>${escHtml(t('sec.sees'))}</button>
-                                    <div id="filtro-${escapeHtml(jail.name)}" class="small mt-1"></div>
+                                    <div id="filter-${escapeHtml(jail.name)}" class="small mt-1"></div>
                                 </div>
                                 <div class="small text-muted">
                                     ${escHtml(t('sec.port'))} ${jail.declared_port
@@ -9574,7 +9574,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header" id="domainStatsTitle"><i class="fas fa-globe me-2" aria-hidden="true"></i>{{t:st.perDomain}}</div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover tabella-schede" aria-labelledby="domainStatsTitle">
+                        <table class="table table-hover table-cards" aria-labelledby="domainStatsTitle">
                             <thead>
                                 <tr>
                                     <th scope="col">{{t:st.colDomain}}</th>
@@ -9685,7 +9685,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             tbody.innerHTML = domains.map(d => `
                 <tr>
-                    <td data-label="${escHtml(t('st.colDomain'))}" class="testo-lungo"><i class="fas fa-globe me-1" aria-hidden="true"></i>${escHtml(d.domain)}</td>
+                    <td data-label="${escHtml(t('st.colDomain'))}" class="text-long"><i class="fas fa-globe me-1" aria-hidden="true"></i>${escHtml(d.domain)}</td>
                     <td data-label="${escHtml(t('st.sent'))}" class="text-end">${escHtml(formatNumber(d.sent))}</td>
                     <td data-label="${escHtml(t('st.received'))}" class="text-end">${escHtml(formatNumber(d.received))}</td>
                     <td data-label="${escHtml(t('st.spam'))}" class="text-end text-danger">${escHtml(formatNumber(d.spam))}</td>
@@ -9858,7 +9858,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="card">
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover tabella-schede">
+                        <table class="table table-hover table-cards">
                             <thead class="table-light">
                                 <tr>
                                     <th scope="col">{{t:adm.username}}</th>
@@ -9999,12 +9999,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     // passa da escHtml, e i pulsanti portano solo l'id (data-id), mai il testo.
                     tbody.innerHTML = admList.map(admin => `
                         <tr>
-                            <td data-label="${escHtml(t('adm.username'))}" class="testo-lungo">
+                            <td data-label="${escHtml(t('adm.username'))}" class="text-long">
                                 <i class="fas fa-user me-1" aria-hidden="true"></i>${escHtml(admin.username)}
                                 ${admin.is_current ? '<span class="badge bg-info ms-1">' + escHtml(t('adm.you')) + '</span>' : ''}
                             </td>
                             <td data-label="${escHtml(t('adm.role'))}"><span class="badge role-badge ${escHtml(admin.role)}">${escHtml(admRoleLabel(admin.role))}</span></td>
-                            <td data-label="${escHtml(t('adm.email'))}" class="testo-lungo"><small>${admin.email ? escHtml(admin.email) : '<span class="text-warning">' + escHtml(t('acc.noEmail')) + '</span>'}</small></td>
+                            <td data-label="${escHtml(t('adm.email'))}" class="text-long"><small>${admin.email ? escHtml(admin.email) : '<span class="text-warning">' + escHtml(t('acc.noEmail')) + '</span>'}</small></td>
                             <td data-label="${escHtml(t('set.passkeys'))}"><small>${Number(admin.passkeys) || 0}</small></td>
                             <td data-label="${escHtml(t('adm.lastLogin'))}"><small>${escHtml(admDate(admin.last_login) || t('adm.never'))}</small></td>
                             <td data-label="${escHtml(t('adm.created'))}"><small>${escHtml(admDate(admin.created_at))}</small></td>
@@ -10148,7 +10148,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover tabella-schede" aria-labelledby="limitsTitle">
+                        <table class="table table-hover table-cards" aria-labelledby="limitsTitle">
                             <thead>
                                 <tr>
                                     <th scope="col">{{t:rl.colMailbox}}</th>
@@ -10256,7 +10256,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     tbody.innerHTML = currentLimits.map(limit => {
                         const who = escHtml(limit.email);
                         return `<tr class="${limit.enabled ? '' : 'limit-disabled'}">
-                            <td data-label="${escHtml(t('rl.colMailbox'))}" class="testo-lungo"><i class="fas fa-envelope me-1" aria-hidden="true"></i>${who}</td>
+                            <td data-label="${escHtml(t('rl.colMailbox'))}" class="text-long"><i class="fas fa-envelope me-1" aria-hidden="true"></i>${who}</td>
                             <td data-label="${escHtml(t('rl.colHourly'))}" class="text-center">${escHtml(limit.hourly_limit)}</td>
                             <td data-label="${escHtml(t('rl.colDaily'))}" class="text-center">${escHtml(limit.daily_limit)}</td>
                             <td data-label="${escHtml(t('rl.colRecipients'))}" class="text-center">${escHtml(limit.max_recipients)}</td>
@@ -11874,7 +11874,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4" id="pacchetti">
+            <div class="card mb-4" id="packages">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span><i class="fas fa-cubes me-2" aria-hidden="true"></i><strong>{{t:pkgs.title}}</strong></span>
                     <button type="button" class="btn btn-sm btn-outline-primary" onclick="pkOverview()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
@@ -11889,7 +11889,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div class="d-flex flex-wrap gap-1">
                         <button type="button" class="btn btn-sm btn-outline-success" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:pkgs.bulk.lockAll}}</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updLockAll(false)"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>{{t:pkgs.bulk.unlockAll}}</button>
-                        <a class="btn btn-sm btn-outline-primary" href="#aggiornamenti"><i class="fas fa-arrow-down me-1" aria-hidden="true"></i>{{t:pkgs.bulk.goUpdates}}</a>
+                        <a class="btn btn-sm btn-outline-primary" href="#updates"><i class="fas fa-arrow-down me-1" aria-hidden="true"></i>{{t:pkgs.bulk.goUpdates}}</a>
                     </div>
                 </div>
             </div>
@@ -11954,8 +11954,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.reportIntro.html}}</p>
-                    <div id="rep-stato"><span class="text-muted">{{t:up.phReport}}</span></div>
-                    <pre id="rep-testo" class="upd-log mt-2" style="display:none"></pre>
+                    <div id="rep-state"><span class="text-muted">{{t:up.phReport}}</span></div>
+                    <pre id="rep-text" class="upd-log mt-2" style="display:none"></pre>
                 </div>
             </div>
 
@@ -12109,7 +12109,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
 
 
-            <div class="card mb-4" id="aggiornamenti">
+            <div class="card mb-4" id="updates">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-download me-2" aria-hidden="true"></i><strong>{{t:up.updates}}</strong>
                         <span class="small text-muted ms-2">{{t:up.updatesSub}}</span></span>
@@ -12271,7 +12271,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + escHtml(tn('pkgs.stackUnlocked', s.stackUnlocked)) + '</span>'
                    + '<button type="button" class="btn btn-sm btn-success" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.bulk.lockAll')) + '</button></div>';
             }
-            h += '<div class="table-responsive"><table class="table tabella-schede table-sm align-middle mb-2"><thead><tr>'
+            h += '<div class="table-responsive"><table class="table table-cards table-sm align-middle mb-2"><thead><tr>'
                + '<th scope="col">' + escHtml(t('pkgs.colPackage')) + '</th><th scope="col">' + escHtml(t('pkgs.colInstalled')) + '</th><th scope="col">' + escHtml(t('pkgs.colAvailable')) + '</th>'
                + '<th scope="col">' + escHtml(t('pkgs.colSecurity')) + '</th><th scope="col">' + escHtml(t('pkgs.colLock')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th></tr></thead><tbody>';
             (r.packages || []).forEach((p, i) => {
@@ -13138,7 +13138,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- rapporto del sistema ----------
         async function repGen() {
-            const st = document.getElementById('rep-stato'), pre = document.getElementById('rep-testo');
+            const st = document.getElementById('rep-state'), pre = document.getElementById('rep-text');
             st.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.collecting')) + '';
             const r = await updApi('system_report');
             if (!r.success && !r.partial) { st.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
@@ -13151,16 +13151,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function repCopy() {
-            const textValue = document.getElementById('rep-testo').textContent;
+            const textValue = document.getElementById('rep-text').textContent;
             try {
                 await navigator.clipboard.writeText(textValue);
-                document.getElementById('rep-stato').innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('fw.copied')) + '</span>';
+                document.getElementById('rep-state').innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('fw.copied')) + '</span>';
             } catch (e) {
                 // Senza HTTPS o senza permesso la clipboard non c&#39;e&#39;: si seleziona a mano.
-                const el = document.getElementById('rep-testo');
+                const el = document.getElementById('rep-text');
                 const sel = window.getSelection(); const rg = document.createRange();
                 rg.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(rg);
-                document.getElementById('rep-stato').innerHTML = '<span class="text-warning">' + escHtml(t('up.clipboardBlocked')) + '</span>';
+                document.getElementById('rep-state').innerHTML = '<span class="text-warning">' + escHtml(t('up.clipboardBlocked')) + '</span>';
             }
         }
         """ + getUpdatesScript1b();
@@ -13220,7 +13220,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><span class="badge ' + cls + '">' + escHtml(updOutcome(x.outcome)) + '</span>' + outside + dependentsHtml + '</td></tr>';
             });
             h += '</tbody></table></div>'
-               + '<div id="ssl-uso" class="mb-2"></div>'
+               + '<div id="ssl-usage" class="mb-2"></div>'
                + '<div class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(r.source) + '<br>'
                + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.caveat) + '</div>';
             el.innerHTML = h;
@@ -13228,7 +13228,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- chi usa davvero il port openssl ----------
         async function sslUsage() {
-            const el = document.getElementById('ssl-uso');
+            const el = document.getElementById('ssl-usage');
             el.innerHTML = '<div class="alert alert-secondary py-2 mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
                          + escHtml(t('up.lookingProcs')) + '</div>';
             const r = await updApi('ssl_usage');

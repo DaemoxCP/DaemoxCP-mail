@@ -496,7 +496,7 @@
         // Distingue "nessuno ha attaccato" da "la jail non vede niente": a schermo sono lo
         // stesso zero, ma vogliono dire il contrario. Legge e basta.
         async function checkJailFilter(entryName) {
-            const box = document.getElementById('filtro-' + entryName);
+            const box = document.getElementById('filter-' + entryName);
             if (!box) return;
             box.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.regexRunning')) + '</span>';
             try {

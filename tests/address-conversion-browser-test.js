@@ -106,21 +106,21 @@ async function served(route) {
         && await page.locator('button[aria-label="Trasforma in casella @domain-d.test"]').count() === 0);
     await page.click('button[aria-label="Trasforma in casella dmarc@domain-d.test"]');
     await page.waitForSelector('#acSi:not(.d-none)');
-    real('anteprima: destinazione di adesso e chi arriva qui', (await page.textContent('#acDestinazioni')).includes('owner@example.net')
-        && (await page.textContent('#acVersoQui')).includes('postmaster@domain-d.test'));
+    real('anteprima: destinazione di adesso e chi arriva qui', (await page.textContent('#acDestinations')).includes('owner@example.net')
+        && (await page.textContent('#acToHere')).includes('postmaster@domain-d.test'));
     real('la posta di prima: 1234 messaggi, 50,0 MB, ultimo del 12/05/2025, e i filtri',
-        (await page.textContent('#acPostaInfo')).includes('1234 messaggi, 50,0 MB. L\'ultimo è del 12/05/2025') && await page.isVisible('#acPostaBlocco'));
+        (await page.textContent('#acMailInfo')).includes('1234 messaggi, 50,0 MB. L\'ultimo è del 12/05/2025') && await page.isVisible('#acMailBlock'));
     await page.waitForFunction(() => document.getElementById('acPass').value === 'Proposta-Dal-Generatore-42');
     real('la password e\' gia\' proposta dal generatore', true);
     await page.click('#acVia');
     real('senza scegliere cosa fare della posta di prima: si ferma e lo chiede', (await page.textContent('#acErr')).includes('Scegli cosa fare'));
-    await page.check('#acArchivia');
+    await page.check('#acArchive');
     real('fatta la scelta, l\'avviso sparisce', (await page.textContent('#acErr')) === '');
-    await page.fill('#acNome', 'DMARC');
-    await stop(page, 'aCasellaModal');
-    if (photos) await page.screenshot({ path: path.join(photos, 'trasforma-in-casella.png') });
+    await page.fill('#acName', 'DMARC');
+    await stop(page, 'aMailboxModal');
+    if (photos) await page.screenshot({ path: path.join(photos, 'transform-to-mailbox.png') });
     await page.click('#acVia');
-    await page.waitForSelector('#aCasellaModal', { state: 'hidden' });
+    await page.waitForSelector('#aMailboxModal', { state: 'hidden' });
     const post = requests.find(r => r.body && r.body.action === 'transform_to_mailbox');
     real('la richiesta: password, scelta "archivia", fingerprint, CSRF, inoltri non tenuti', post && post.body.password === 'Proposta-Dal-Generatore-42'
         && post.body.old_mail === 'archive' && post.body.fingerprint === 'imp-alias' && post.body.csrf_token === 'csrf-prova'
@@ -133,20 +133,20 @@ async function served(route) {
     await page.click('#mailboxesTable .dropdown-toggle');
     await page.click('text=Trasforma in alias');
     await page.waitForSelector('#aaSi:not(.d-none)');
-    const losses = await page.textContent('#aaPerdite');
+    const losses = await page.textContent('#aaLosses');
     real('cosa si perde: login (con l\'ultimo accesso), risposta automatica, 2 filtri, inoltri, la copia su se stessa',
         losses.includes('Ultimo accesso: 30/09/2026') && losses.includes('risposta automatica') && losses.includes('2 filtri')
         && losses.includes('Gli inoltri della casella') && losses.includes('info@domain-d.test → info@domain-d.test'));
-    const stays = await page.textContent('#aaResta');
+    const stays = await page.textContent('#aaStays');
     real('cosa resta: la posta (87 messaggi, nella sua cartella), gli alias che ha, chi porta qui',
         stays.includes('87 messaggi, 1,0 MB, in /var/vmail/domain-d.test/info') && stays.includes('capo@esterno.it') && stays.includes('vendite@domain-d.test'));
     real('le destinazioni proposte sono gli inoltri', (await page.inputValue('#aaDest')) === 'owner@example.net');
     real('il pulsante resta spento finche\' non si scrive l\'indirizzo', await page.isDisabled('#aaVia'));
-    await page.fill('#aaConferma', 'INFO@domain-d.test ');
+    await page.fill('#aaConfirm', 'INFO@domain-d.test ');
     real('scritto (maiuscole e spazi non contano): si accende', await page.isEnabled('#aaVia'));
     await page.fill('#aaDest', 'owner@example.net\npostmaster@domain-c.test\n');
     await stop(page, 'aAliasModal');
-    if (photos) await page.screenshot({ path: path.join(photos, 'trasforma-in-alias.png') });
+    if (photos) await page.screenshot({ path: path.join(photos, 'transform-to-alias.png') });
     await page.click('#aaVia');
     await page.waitForSelector('#aAliasModal', { state: 'hidden' });
     const pa = requests.find(r => r.body && r.body.action === 'transform_to_alias');
@@ -171,12 +171,12 @@ async function served(route) {
     await page.waitForSelector('#aaSi:not(.d-none)');
     await stop(page, 'aAliasModal');
     await page.waitForTimeout(400);   // il cambio di tema ha una transizione
-    if (photos) await page.screenshot({ path: path.join(photos, 'trasforma-in-alias-scuro.png') });
+    if (photos) await page.screenshot({ path: path.join(photos, 'transform-to-alias-dark.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
     const pageWidth = await page.evaluate(() => document.querySelector('#aAliasModal .modal-dialog').getBoundingClientRect().right);
     real('sul telefono la finestra sta nello schermo: ' + Math.round(pageWidth) + 'px', pageWidth <= 390);
-    if (photos) await page.screenshot({ path: path.join(photos, 'trasforma-in-alias-telefono.png') });
+    if (photos) await page.screenshot({ path: path.join(photos, 'transform-to-alias-phone.png') });
 
     real('nessun errore nella pagina' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();

@@ -140,7 +140,7 @@ async function served(route) {
         && await page.getAttribute('#pk-det-0 a', 'href') === 'https://vuxml.FreeBSD.org/freebsd/7dc8fd4b.html');
     real('la descrizione con dentro HTML resta testo', await page.locator('#pk-body img').count() === 0 && await page.evaluate(() => window.injectedRan) === undefined);
     real('ogni cella ha la sua etichetta per il telefono', await page.locator('#pk-body tbody tr:not([id]) td:not([data-label]):not(.text-end)').count() === 0);
-    if (photos) await page.locator('#pacchetti').screenshot({ path: path.join(photos, 'pacchetti-scheda.png') });
+    if (photos) await page.locator('#packages').screenshot({ path: path.join(photos, 'packages-card.png') });
 
     console.log('\n== Blocca e sblocca un pacchetto ==');
     let beforeValue = requests.length;
@@ -172,12 +172,12 @@ async function served(route) {
         && upd.body.signature === '0123456789abcdef' && upd.body.csrf_token === 'csrf-prova');
     real('il registro del lavoro e l\'esito', (await page.textContent('#pkUpdLog')).includes('in servizio')
         && (await page.textContent('#pkUpdResult')).includes('nginx è aggiornato'));
-    if (photos) await page.locator('#pkUpdModal .modal-content').screenshot({ path: path.join(photos, 'pacchetti-finestra.png') });
+    if (photos) await page.locator('#pkUpdModal .modal-content').screenshot({ path: path.join(photos, 'packages-window.png') });
     await page.click('#pkUpdModal .btn-close');
     await page.waitForSelector('#pkUpdModal', { state: 'hidden' });
 
     console.log('\n== Vulnerabilita\': l\'intestazione dice il verdict ==');
-    await page.click('#aggiornamenti button:has-text("Verifica")');
+    await page.click('#updates button:has-text("Verifica")');
     await page.waitForSelector('#upd-status li');
     const lis = await page.$$eval('#upd-status li', l => l.map(x => x.textContent));
     real('expat: "non basta" nell\'intestazione, non "la corregge"', lis[0].includes("l'aggiornamento non basta") && !lis[0].includes("l'aggiornamento la corregge"));
