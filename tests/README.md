@@ -339,8 +339,14 @@ gestori che toccherebbero il sistema. Senza sessione 401; con la sessione le ver
 letto dal server vero; la lettura tenuta trenta secondi e "fresh" che non rilegge prima di tre;
 parametri e metodi sbagliati rifiutati. /api/service senza token CSRF, o con un token sbagliato,
 e' 403 e finisce nel registro di audit; con il token giusto la richiesta passa; un'azione su un
-servizio (redis, che qui non c'e': il comando fallisce senza toccare niente) va nel registro e fa
-rileggere le versioni.
+servizio va nel registro, con lo stesso esito della risposta, e fa rileggere le versioni. L'azione
+e' `service redis restart` vero: dove il server di posta e' installato, redis riparte davvero.
+
+Per questo, sulla VM, **mai sotto `timeout` senza `-f`**: il `timeout(1)` di FreeBSD fa da reaper
+del comando e dei suoi discendenti, e aspetta anche il redis appena riavviato. Misurato il
+30/10/2026: la prova scrive «TUTTO VERDE» e la sua JVM esce, ma `timeout 60` resta li' fino allo
+scadere, esce con 124 e uccide redis (`redis is not running`). Con `timeout -f 60`: uscita 0 in 4
+secondi, redis acceso.
 
 **PkgBranchTest** — il ramo dei pacchetti, quarterly o latest (PkgBranch). Il sistema finto fa
 quello che fa pkg (libpkg/pkg_config.c, letto il 03/10/2026): parte dal /etc/pkg/FreeBSD.conf di
