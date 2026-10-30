@@ -137,10 +137,10 @@ public class WebDiagnostics {
 
         RunResult dump = run("nginx", "-T");
         if (dump.code != 0) {
-            r.put("nginxLeggibile", false)
-             .put("nginxProblema", I18n.tr("server.webdiag.dumpFailed", java.util.Map.of("out", String.valueOf(firstLines(dump.output, 3)))));
+            r.put("nginxReadable", false)
+             .put("nginxProblem", I18n.tr("server.webdiag.dumpFailed", java.util.Map.of("out", String.valueOf(firstLines(dump.output, 3)))));
         } else {
-            r.put("nginxLeggibile", true);
+            r.put("nginxReadable", true);
             List<Block> bl = blocks(dump.output);
             JSONArray sites = new JSONArray();
             boolean inPlain = false, eighty = false;
@@ -151,20 +151,20 @@ public class WebDiagnostics {
                 boolean dangerous = su80 && !b.encrypted && (b.serveFile || b.servePhp);
                 if (dangerous) inPlain = true;
                 sites.put(new JSONObject()
-                        .put("ascolta", String.join(", ", b.listens))
-                        .put("nomi", b.names)
-                        .put("radice", b.root)
-                        .put("cifrato", b.encrypted)
+                        .put("listens", String.join(", ", b.listens))
+                        .put("names", b.names)
+                        .put("root", b.root)
+                        .put("encrypted", b.encrypted)
                         .put("servePhp", b.servePhp)
                         .put("serveFile", b.serveFile)
                         .put("soloRedirect", b.soloRedirect)
                         .put("su80", su80).put("su443", su443)
-                        .put("inChiaro", dangerous));
+                        .put("inPlain", dangerous));
             }
             boolean four43 = false;
             for (Block b : bl) if (listensOn(b, 443)) four43 = true;
-            r.put("siti", sites).put("porta80Presente", eighty).put("contenutiInChiaro", inPlain)
-             .put("porta443Presente", four43);
+            r.put("sites", sites).put("port80Present", eighty).put("plainContents", inPlain)
+             .put("port443Present", four43);
 
             boolean limReq = dump.output.contains("limit_req"), limConn = dump.output.contains("limit_conn");
             r.put("limitReq", limReq).put("limitConn", limConn);
@@ -174,17 +174,17 @@ public class WebDiagnostics {
 
         // Chi e' davvero in ascolto sulla macchina, indipendentemente da nginx.
         RunResult sock = run("sh", "-c", "sockstat -4 -6 -l 2>/dev/null | awk 'NR==1 || $6 ~ /:(80|443)$/'");
-        r.put("inAscolto", sock.code == 0 ? sock.output.trim() : "")
-         .put("inAscoltoLetto", sock.code == 0);
+        r.put("listening", sock.code == 0 ? sock.output.trim() : "")
+         .put("listeningRead", sock.code == 0);
 
         // Il firewall: le porte web sono filtrate?
         RunResult pf = run("sh", "-c", "pfctl -sr 2>/dev/null");
         if (pf.code == 0 && !pf.output.isBlank()) {
-            r.put("pfLetto", true).put("pfRegole", pf.output.trim().split("\n").length);
-            r.put("pfCita80", pf.output.contains(" 80") || pf.output.contains("{ 80"));
-            r.put("pfCita443", pf.output.contains("443"));
+            r.put("pfRead", true).put("pfRules", pf.output.trim().split("\n").length);
+            r.put("pfMentions80", pf.output.contains(" 80") || pf.output.contains("{ 80"));
+            r.put("pfMentions443", pf.output.contains("443"));
         } else {
-            r.put("pfLetto", false);
+            r.put("pfRead", false);
         }
 
         // fail2ban: c'e' una jail che guarda un log di nginx?
@@ -199,7 +199,7 @@ public class WebDiagnostics {
         // ogni jail sorveglia.
         RunResult f2b = run("sh", "-c", "fail2ban-client status 2>/dev/null");
         if (f2b.code == 0) {
-            r.put("fail2banLetto", true).put("jail", f2b.output.trim());
+            r.put("fail2banRead", true).put("jail", f2b.output.trim());
 
             List<String> names = new ArrayList<>();
             for (String line : f2b.output.split("\n")) {
@@ -241,19 +241,19 @@ public class WebDiagnostics {
                 }
                 watch.put(new JSONObject().put("jail", name)
                         .put("log", lp.output.trim()).put("suNginx", suNginx)
-                        .put("azioni", actions)
-                        .put("porte", String.join(", ", ports))
+                        .put("actions", actions)
+                        .put("ports", String.join(", ", ports))
                         // "Non dichiarata" non e' "nessuna": con l'azione predefinita di pf il
                         // ban vale per l'indirizzo, non per una porta sola. Dirlo invece di
                         // lasciare la casella vuota, che si legge come "non protegge niente".
-                        .put("portaDichiarata", readPorts));
+                        .put("declaredPort", readPorts));
             }
-            r.put("jailSorveglianza", watch);
+            r.put("jailWatch", watch);
             r.put("jailNginx", watchNginx);
             // "Non sono riuscito a chiedere a tutte" non e' "nessuna guarda nginx".
-            r.put("jailTutteLette", allRead);
+            r.put("allJailsRead", allRead);
         } else {
-            r.put("fail2banLetto", false);
+            r.put("fail2banRead", false);
         }
 
         r.put("verdict", verdict(r));
@@ -269,27 +269,27 @@ public class WebDiagnostics {
     /** Il riassunto, costruito solo su cio' che si e' potuto misurare. */
     private static String verdict(JSONObject r) {
         List<String> p = new ArrayList<>();
-        if (!r.optBoolean("nginxLeggibile", false))
+        if (!r.optBoolean("nginxReadable", false))
             p.add(I18n.tr("server.webdiag.nginxUnreadable"));
         else {
-            if (r.optBoolean("contenutiInChiaro", false))
+            if (r.optBoolean("plainContents", false))
                 p.add(I18n.tr("server.webdiag.plain80"));
-            else if (r.optBoolean("porta80Presente", false))
+            else if (r.optBoolean("port80Present", false))
                 p.add(I18n.tr("server.webdiag.port80NoContent"));
             else
                 p.add(I18n.tr("server.webdiag.httpsOnly"));
 
-            if (!r.optBoolean("porta443Presente", false))
+            if (!r.optBoolean("port443Present", false))
                 p.add(I18n.tr("server.webdiag.no443"));
 
             if (!r.optBoolean("limitReq", false) && !r.optBoolean("limitConn", false))
                 p.add(I18n.tr("server.webdiag.noLimits"));
         }
-        if (r.optBoolean("fail2banLetto", false)) {
+        if (r.optBoolean("fail2banRead", false)) {
             if (r.optBoolean("jailNginx", false)) {
                 // Si dice QUALE, cosi' l'affermazione e' verificabile da chi legge.
                 StringBuilder which = new StringBuilder();
-                JSONArray sv = r.optJSONArray("jailSorveglianza");
+                JSONArray sv = r.optJSONArray("jailWatch");
                 for (int i = 0; sv != null && i < sv.length(); i++) {
                     JSONObject j = sv.optJSONObject(i);
                     if (j == null || !j.optBoolean("suNginx", false)) continue;
@@ -297,13 +297,13 @@ public class WebDiagnostics {
                     which.append(j.optString("jail", "?"));
                 }
                 p.add(I18n.tr("server.webdiag.jailWatches", java.util.Map.of("which", String.valueOf(which))));
-            } else if (!r.optBoolean("jailTutteLette", true)) {
+            } else if (!r.optBoolean("allJailsRead", true)) {
                 p.add(I18n.tr("server.webdiag.jailsUnknown"));
             } else {
                 p.add(I18n.tr("server.webdiag.noNginxJail"));
             }
         }
-        if (!r.optBoolean("pfLetto", false))
+        if (!r.optBoolean("pfRead", false))
             p.add(I18n.tr("server.webdiag.pfUnread"));
         return String.join(" ", p);
     }

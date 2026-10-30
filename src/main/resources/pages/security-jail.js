@@ -388,22 +388,22 @@
                 // Una riparazione che scrive file e poi si verifica ha un racconto da fare:
                 // ricaricare la diagnosi e basta butterebbe via il passo che conta, cioe' cosa
                 // ha risposto fail2ban DOPO il reload.
-                if (data.passi) {
+                if (data.steps) {
                     const rep = document.getElementById('fhcFixAllReport');
                     const el = document.getElementById('fhcFixAllSteps');
                     let hh = '';
-                    (data.passi || []).forEach(pz => {
+                    (data.steps || []).forEach(pz => {
                         hh += '<div class="d-flex align-items-start gap-2 mb-2">' +
                               (pz.ok ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i>'
                                      : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i>') +
-                              '<div class="flex-grow-1"><strong>' + escapeHtml(pz.passo) + '</strong>' +
-                              '<div class="small text-muted">' + escapeHtml(pz.testo) + '</div></div></div>';
+                              '<div class="flex-grow-1"><strong>' + escapeHtml(pz.step) + '</strong>' +
+                              '<div class="small text-muted">' + escapeHtml(pz.text) + '</div></div></div>';
                     });
-                    (data.verifica || []).forEach(v => {
+                    (data.verification || []).forEach(v => {
                         hh += '<div class="small ' + (v.ok ? 'text-success' : 'text-danger') + '">' +
                               '<i class="fas fa-' + (v.ok ? 'check' : 'times') + ' me-1" aria-hidden="true"></i>' +
                               escapeHtml(v.jail) + ': ' +
-                              escapeHtml(v.comando || v.nota || '') + '</div>';
+                              escapeHtml(v.command || v.note || '') + '</div>';
                         if (v.log) hh += '<pre class="small mb-2 mt-1" style="white-space:pre-wrap;max-height:220px;overflow:auto">' + escapeHtml(v.log) + '</pre>';
                     });
                     if (data.message) hh += '<div class="mt-2">' + escapeHtml(data.message) + '</div>';
@@ -414,7 +414,7 @@
                     // ricarica la diagnosi
                     loadFail2banHealth();
                     loadStatus();
-                } else if (data.passi) {
+                } else if (data.steps) {
                     loadFail2banHealth();
                 } else {
                     alert(t('common.error', { message: data.message || data.error || t('common.unknownError') }) +
@@ -508,11 +508,11 @@
                 });
                 const r = await res.json();
                 // Non verificato NON e' verde e non e' rosso: e' "non lo so".
-                const cls = !r.verificato ? 'secondary' : (r.agganci > 0 ? 'success' : 'danger');
+                const cls = !r.verified ? 'secondary' : (r.hooks > 0 ? 'success' : 'danger');
                 box.innerHTML = '<div class="alert alert-' + cls + ' py-1 px-2 mb-0 small">'
-                    + escapeHtml(r.messaggio || '')
+                    + escapeHtml(r.messageText || '')
                     + (r.log ? '<div class="text-muted mt-1">Log: <code>' + escapeHtml(r.log) + '</code>'
-                        + (r.righe_log ? ' &middot; ' + escHtml(tn('sj.lines', r.righe_log)) : '') + '</div>' : '')
+                        + (r.log_lines ? ' &middot; ' + escHtml(tn('sj.lines', r.log_lines)) : '') + '</div>' : '')
                     + '</div>';
             } catch (e) {
                 box.innerHTML = '<div class="alert alert-secondary py-1 px-2 mb-0 small">'

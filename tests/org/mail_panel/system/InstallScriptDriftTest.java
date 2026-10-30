@@ -276,7 +276,7 @@ public class InstallScriptDriftTest {
         switch (flow) {
             case "guided" -> {
                 JSONObject pf = UpdateManager.packagePreflight(PKG);
-                plan = pf.optJSONObject("piano");
+                plan = pf.optJSONObject("plan");
                 signature = pf.optString("signature");
                 if (!pf.optBoolean("canProceed")) {
                     check(flow + " " + version + ": il preflight lascia partire", false);
@@ -286,18 +286,18 @@ public class InstallScriptDriftTest {
             }
             case "unprotected" -> {
                 JSONObject st = UpdateManager.updatesStatus();
-                plan = st.optJSONObject("piano");
+                plan = st.optJSONObject("plan");
                 signature = st.optString("signature");
             }
             default -> {
                 JSONObject pv = UpdateManager.maintenancePreview();
-                plan = pv.optJSONObject("piano");
+                plan = pv.optJSONObject("plan");
                 signature = pv.optString("signature");
             }
         }
         Set<String> inPlan = new TreeSet<>();
         JSONArray ch = plan == null ? new JSONArray() : plan.optJSONArray("changes");
-        for (int i = 0; ch != null && i < ch.length(); i++) inPlan.add(ch.getJSONObject(i).optString("nome"));
+        for (int i = 0; ch != null && i < ch.length(); i++) inPlan.add(ch.getJSONObject(i).optString("name"));
         if (!inPlan.equals(Set.of(PKG))) {
             // Un piano con altri pacchetti cambierebbe la macchina per davvero: non si parte.
             check(flow + " " + version + ": il piano contiene solo " + PKG + " (trovato " + inPlan + ")", false);

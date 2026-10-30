@@ -172,19 +172,19 @@ public class WebProtection {
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         JSONObject incBefore = activeInclude();
-        String folder = incBefore.optString("cartella", "");
+        String folder = incBefore.optString("folder", "");
         String file = folder.isEmpty() ? "" : folder + "/" + FILE_NAME;
-        r.put("file", file).put("filePolitica", POLICY_FILE);
+        r.put("file", file).put("policyFile", POLICY_FILE);
         try {
-            r.put("installato", !file.isEmpty() && Files.exists(Path.of(file)));
-            r.put("politicaScritta", Files.exists(Path.of(POLICY_FILE)));
+            r.put("installed", !file.isEmpty() && Files.exists(Path.of(file)));
+            r.put("policyWritten", Files.exists(Path.of(POLICY_FILE)));
             if (Files.exists(Path.of(POLICY_FILE)))
-                r.put("politica", Files.readString(Path.of(POLICY_FILE)));
+                r.put("policy", Files.readString(Path.of(POLICY_FILE)));
         } catch (Exception e) {
-            r.put("installato", false);
+            r.put("installed", false);
         }
         r.put("include", incBefore);
-        r.put("pronto", r.optBoolean("installato", false) && incBefore.optBoolean("ok", false));
+        r.put("ready", r.optBoolean("installed", false) && incBefore.optBoolean("ok", false));
         return r;
     }
 
@@ -203,12 +203,12 @@ public class WebProtection {
                     .put("reason", I18n.tr("server.pubweb.dumpFailed", java.util.Map.of("out", String.valueOf(dump.output.trim()))));
 
         java.util.List<String> incluse = includedFolders(dump.output);
-        r.put("cartelle", new org.json.JSONArray(incluse));
+        r.put("folders", new org.json.JSONArray(incluse));
         String choice = chosenFolder(incluse);
         if (choice == null)
             return r.put("ok", false)
                     .put("reason", I18n.tr("server.pubweb.noInclude"));
-        r.put("cartella", choice);
+        r.put("folder", choice);
         return r.put("ok", true)
                 .put("reason", I18n.tr("server.pubweb.includes", java.util.Map.of("dir", String.valueOf(choice))));
     }
@@ -223,21 +223,21 @@ public class WebProtection {
             JSONObject inclusion = activeInclude();
             if (!inclusion.optBoolean("ok", false))
                 return r.put("success", false).put("error", inclusion.optString("reason"));
-            String folder = inclusion.getString("cartella");
+            String folder = inclusion.getString("folder");
             final String FILE = folder + "/" + FILE_NAME;
-            r.put("file", FILE).put("cartella", folder);
+            r.put("file", FILE).put("folder", folder);
 
             if (cert == null || cert.isBlank()) cert = "/usr/local/etc/ssl/mail/fullchain.pem";
             if (key == null || key.isBlank()) key = "/usr/local/etc/ssl/mail/privkey.pem";
             if (!Files.isReadable(Path.of(cert)) || !Files.isReadable(Path.of(key)))
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.noCert", java.util.Map.of("cert", String.valueOf(cert), "key", String.valueOf(key))));
-            r.put("certificato", cert);
+            r.put("certificate", cert);
 
             // 1. La politica, prima della configurazione: se nginx partisse puntando a un file
             //    che non c'e', servirebbe un 404 sul percorso che deve funzionare.
             JSONObject pol = writePolicy();
-            r.put("politica", pol);
+            r.put("policy", pol);
             if (!pol.optBoolean("success", false))
                 return r.put("success", false).put("error", pol.optString("error"));
 
@@ -247,7 +247,7 @@ public class WebProtection {
             if (before != null) {
                 Files.createDirectories(Path.of(COPY).getParent());
                 Files.writeString(Path.of(COPY), before);
-                r.put("copia", COPY);
+                r.put("copy", COPY);
             }
 
             Files.createDirectories(Path.of(folder));
@@ -257,7 +257,7 @@ public class WebProtection {
             RunResult test = run("nginx", "-t");
             if (test.code != 0) {
                 if (before != null) Files.writeString(f, before); else Files.deleteIfExists(f);
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.pubweb.nginxRejectedRemoved", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
@@ -265,19 +265,19 @@ public class WebProtection {
             if (ric.code != 0) {
                 if (before != null) Files.writeString(f, before); else Files.deleteIfExists(f);
                 run("service", "nginx", "reload");
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.pubweb.reloadFailedRemoved", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
             }
 
             // 4. Non basta che i comandi non abbiano protestato: si prova la porta.
             JSONObject test443 = localTest();
-            r.put("prova", test443);
+            r.put("test", test443);
             if (!test443.optBoolean("ok", false))
                 return r.put("success", false)
-                        .put("error", I18n.tr("server.pubweb.443wrong", java.util.Map.of("err", String.valueOf(test443.optString("errore")), "file", String.valueOf(FILE))));
+                        .put("error", I18n.tr("server.pubweb.443wrong", java.util.Map.of("err", String.valueOf(test443.optString("error")), "file", String.valueOf(FILE))));
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.pubweb.installed"));
+                    .put("note", I18n.tr("server.pubweb.installed"));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.pubweb.installError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
@@ -296,7 +296,7 @@ public class WebProtection {
         try {
             Files.createDirectories(Path.of(PUBLIC_DIR));
             Files.writeString(Path.of(POLICY_FILE), text);
-            return r.put("success", true).put("modo", mode).put("testo", text)
+            return r.put("success", true).put("mode", mode).put("text", text)
                     .put("id", MtaSts.id(text));
         } catch (Exception e) {
             return r.put("success", false).put("error", I18n.tr("server.pubweb.cannotWrite", java.util.Map.of("file", String.valueOf(POLICY_FILE), "err", String.valueOf(e.getMessage()))));
@@ -374,7 +374,7 @@ public class WebProtection {
             if (main == null || !Files.isReadable(Path.of(main)))
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.noMainFile"));
-            r.put("file", main).put("cartella", PROPOSED_FOLDER);
+            r.put("file", main).put("folder", PROPOSED_FOLDER);
 
             String before = Files.readString(Path.of(main));
             String after = conInclude(before, PROPOSED_FOLDER);
@@ -385,14 +385,14 @@ public class WebProtection {
             Files.createDirectories(Path.of(PROPOSED_FOLDER));
             Files.createDirectories(Path.of(MAIN_COPY).getParent());
             Files.writeString(Path.of(MAIN_COPY), before);
-            r.put("copia", MAIN_COPY);
+            r.put("copy", MAIN_COPY);
 
             Files.writeString(Path.of(main), after);
 
             RunResult test = run("nginx", "-t");
             if (test.code != 0) {
                 Files.writeString(Path.of(main), before);
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.pubweb.nginxRejectedRestored", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
@@ -400,7 +400,7 @@ public class WebProtection {
             if (ric.code != 0) {
                 Files.writeString(Path.of(main), before);
                 run("service", "nginx", "reload");
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.pubweb.reloadFailedRestored", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
             }
 
@@ -413,7 +413,7 @@ public class WebProtection {
                         .put("error", I18n.tr("server.pubweb.includeNotSeen", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(main))));
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.pubweb.includeAdded", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(main), "copy", String.valueOf(MAIN_COPY))));
+                    .put("note", I18n.tr("server.pubweb.includeAdded", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(main), "copy", String.valueOf(MAIN_COPY))));
         } catch (Exception e) {
             return r.put("success", false).put("error", I18n.tr("server.pubweb.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
@@ -503,7 +503,7 @@ public class WebProtection {
             if (rel.code != 0) {
                 Files.deleteIfExists(Path.of(JAIL));
                 run("fail2ban-client", "reload");
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.pubweb.f2bRejected", java.util.Map.of("out", String.valueOf(rel.output.trim()))));
             }
 
@@ -513,8 +513,8 @@ public class WebProtection {
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.jailNotActive", java.util.Map.of("out", String.valueOf(st.output.trim()))));
 
-            return r.put("success", true).put("stato", st.output.trim())
-                    .put("nota", I18n.tr("server.pubweb.jailActive"));
+            return r.put("success", true).put("state", st.output.trim())
+                    .put("note", I18n.tr("server.pubweb.jailActive"));
         } catch (Exception e) {
             return r.put("success", false).put("error", I18n.tr("server.pubweb.jailError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
@@ -528,10 +528,10 @@ public class WebProtection {
               + "https://127.0.0.1/.well-known/mta-sts.txt 2>/dev/null "
               + "|| curl -sk --max-time 5 https://127.0.0.1/.well-known/mta-sts.txt");
         boolean policy = a.output != null && a.output.contains("version: STSv1");
-        r.put("politica", policy);
+        r.put("policy", policy);
         if (!policy)
             return r.put("ok", false)
-                    .put("errore", I18n.tr("server.pubweb.policyNotBack", java.util.Map.of("out", String.valueOf(a.output == null ? "" : a.output.trim()))));
+                    .put("error", I18n.tr("server.pubweb.policyNotBack", java.util.Map.of("out", String.valueOf(a.output == null ? "" : a.output.trim()))));
         return r.put("ok", true);
     }
 

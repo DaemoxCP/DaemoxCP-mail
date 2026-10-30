@@ -135,8 +135,8 @@ public class MtaSts {
                     .put("error", I18n.tr("server.mtasts.badMode"));
         try {
             Main.mailDatabase.setSetting("mta_sts_mode", mode.toLowerCase(Locale.ROOT));
-            return new JSONObject().put("success", true).put("modo", mode.toLowerCase(Locale.ROOT))
-                    .put("nota", "enforce".equalsIgnoreCase(mode)
+            return new JSONObject().put("success", true).put("mode", mode.toLowerCase(Locale.ROOT))
+                    .put("note", "enforce".equalsIgnoreCase(mode)
                         ? I18n.tr("server.mtasts.modeEnforce")
                         : "none".equalsIgnoreCase(mode)
                         ? I18n.tr("server.mtasts.modeNone")
@@ -154,25 +154,25 @@ public class MtaSts {
         JSONObject r = new JSONObject().put("success", true);
         String host = mailHost();
         String mode = currentMode();
-        r.put("hostDiPosta", host).put("modo", mode).put("percorso", PATH);
+        r.put("mailHost", host).put("mode", mode).put("path", PATH);
         if (host == null || host.isBlank())
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.mtasts.noHostname"));
 
         String pol = policy(host, mode, recommendedMaxAge(mode));
-        r.put("politica", pol).put("id", id(pol)).put("recordTxt", recordTxt(pol));
+        r.put("policy", pol).put("id", id(pol)).put("recordTxt", recordTxt(pol));
 
         JSONArray domains = new JSONArray();
         try {
             for (var d : Main.mailDatabase.getDomains()) {
-                JSONObject j = new JSONObject().put("dominio", d.domain)
-                        .put("nomeWeb", "mta-sts." + d.domain)
-                        .put("nomeTxt", "_mta-sts." + d.domain);
-                j.put("politicaRaggiungibile", testPolicy("mta-sts." + d.domain, host, mode));
+                JSONObject j = new JSONObject().put("domain", d.domain)
+                        .put("webName", "mta-sts." + d.domain)
+                        .put("txtName", "_mta-sts." + d.domain);
+                j.put("policyReachable", testPolicy("mta-sts." + d.domain, host, mode));
                 domains.put(j);
             }
         } catch (Exception ignore) {}
-        r.put("domini", domains);
+        r.put("domains", domains);
         return r;
     }
 
@@ -241,7 +241,7 @@ public class MtaSts {
                     .uri(java.net.URI.create(url))
                     .timeout(java.time.Duration.ofSeconds(8)).GET().build();
             var resp = http.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-            r.put("codice", resp.statusCode());
+            r.put("code", resp.statusCode());
             String body = resp.body() == null ? "" : resp.body();
             boolean ok = resp.statusCode() == 200
                     && body.contains("version: STSv1")
@@ -249,22 +249,22 @@ public class MtaSts {
             r.put("ok", ok);
             if (!ok) {
                 if (resp.statusCode() != 200)
-                    r.put("errore", I18n.tr("server.mtasts.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))) + explainCode(resp.statusCode()));
+                    r.put("error", I18n.tr("server.mtasts.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))) + explainCode(resp.statusCode()));
                 else if (!body.contains("version: STSv1"))
-                    r.put("errore", I18n.tr("server.mtasts.notPolicy"));
+                    r.put("error", I18n.tr("server.mtasts.notPolicy"));
                 else
-                    r.put("errore", I18n.tr("server.mtasts.noMx", java.util.Map.of("host", String.valueOf(mailHost))));
+                    r.put("error", I18n.tr("server.mtasts.noMx", java.util.Map.of("host", String.valueOf(mailHost))));
             }
             return r;
         } catch (javax.net.ssl.SSLException e) {
             return r.put("ok", false).put("tls", true)
-                    .put("errore", I18n.tr("server.mtasts.certInvalid", java.util.Map.of("name", String.valueOf(webName))));
+                    .put("error", I18n.tr("server.mtasts.certInvalid", java.util.Map.of("name", String.valueOf(webName))));
         } catch (java.net.UnknownHostException e) {
             return r.put("ok", false).put("dns", true)
-                    .put("errore", I18n.tr("server.mtasts.noCname", java.util.Map.of("name", String.valueOf(webName))));
+                    .put("error", I18n.tr("server.mtasts.noCname", java.util.Map.of("name", String.valueOf(webName))));
         } catch (Exception e) {
             return r.put("ok", false)
-                    .put("errore", I18n.tr("server.mtasts.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
+                    .put("error", I18n.tr("server.mtasts.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
         }
     }
 
@@ -278,12 +278,12 @@ public class MtaSts {
         String host = mailHost();
         String mode = currentMode();
         JSONObject test = testPolicy("mta-sts." + domain, host, mode);
-        JSONObject r = new JSONObject().put("dominio", domain).put("prova", test);
+        JSONObject r = new JSONObject().put("domain", domain).put("test", test);
         if (test.optBoolean("ok", false))
-            return r.put("pubblicabile", true)
-                    .put("valore", recordTxt(policy(host, mode, recommendedMaxAge(mode))));
-        return r.put("pubblicabile", false)
-                .put("reason", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + domain + PATH), "err", String.valueOf(test.optString("errore", I18n.tr("server.mtasts.unknownReason"))))));
+            return r.put("publishable", true)
+                    .put("value", recordTxt(policy(host, mode, recommendedMaxAge(mode))));
+        return r.put("publishable", false)
+                .put("reason", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + domain + PATH), "err", String.valueOf(test.optString("error", I18n.tr("server.mtasts.unknownReason"))))));
     }
 
     /** I domini gestiti, per l'interfaccia. */

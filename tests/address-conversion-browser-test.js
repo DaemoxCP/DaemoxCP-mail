@@ -57,28 +57,28 @@ async function servi(route) {
         return route.fulfill({ status: 200, contentType: tipo, body: fs.readFileSync(f) });
     }
     const corpo = req.postData() ? JSON.parse(req.postData()) : null;
-    richieste.push({ metodo: req.method(), percorso: p + url.search, corpo });
+    richieste.push({ metodo: req.method(), path: p + url.search, body: corpo });
     if (p === '/api/domains') return json(route, { success: true, domains: [{ id: 1, domain: 'domain-d.test' }] });
     if (p === '/api/aliases' && req.method() === 'GET') {
-        if (url.searchParams.get('trasforma') === 'dmarc@domain-d.test') return json(route, { success: true, possibile: true,
-            indirizzo: 'dmarc@domain-d.test', fingerprint: 'imp-alias',
-            destinazioni: [{ destinazione: 'owner@example.net', attivo: true }], copia: false,
-            versoQui: [{ sorgente: 'postmaster@domain-d.test', attivo: true }],
-            posta: { presente: true, messaggi: 1234, almeno: false, byte: 52428800, dimensione: '50,0 MB', filtri: true, ultimo: '2025-05-12T09:30:00+02:00' } });
-        if (url.searchParams.get('trasforma')) return json(route, { success: true, possibile: false, reason: 'Non si puo\' in questa prova.' });
+        if (url.searchParams.get('trasforma') === 'dmarc@domain-d.test') return json(route, { success: true, possible: true,
+            address: 'dmarc@domain-d.test', fingerprint: 'imp-alias',
+            destinations: [{ destination: 'owner@example.net', active: true }], copy: false,
+            towardsHere: [{ source: 'postmaster@domain-d.test', active: true }],
+            mail: { present: true, messages: 1234, atLeast: false, bytes: 52428800, size: '50,0 MB', filters: true, last: '2025-05-12T09:30:00+02:00' } });
+        if (url.searchParams.get('trasforma')) return json(route, { success: true, possible: false, reason: 'Non si puo\' in questa prova.' });
         return json(route, { success: true, aliases: ALIAS });
     }
     if (p === '/api/aliases' && req.method() === 'POST' && corpo.action === 'trasforma_in_casella')
         return json(route, { success: true, id: 99, message: 'dmarc@domain-d.test ora e\' una casella. La posta di prima e\' in /var/vmail/.archivio-pannello/domain-d.test/dmarc-20261003T120000Z.' });
     if (p === '/api/mailboxes' && req.method() === 'GET') {
-        if (url.searchParams.get('trasforma') === '7') return json(route, { success: true, possibile: true, id: 7,
-            indirizzo: 'info@domain-d.test', fingerprint: 'imp-casella',
-            perdite: { ultimoAccesso: '2026-09-30T10:00:00+02:00', soloInvio: false, attiva: true, rispostaAutomatica: true,
-                inoltri: ['owner@example.net'], filtri: 2 },
-            proposte: ['owner@example.net'], giaInoltrata: [{ destinazione: 'capo@esterno.it', attivo: true }], copia: true,
-            versoQui: [{ sorgente: 'vendite@domain-d.test', attivo: true }],
-            posta: { presente: true, messaggi: 87, almeno: false, byte: 1048576, dimensione: '1,0 MB', filtri: true },
-            cartella: '/var/vmail/domain-d.test/info' });
+        if (url.searchParams.get('trasforma') === '7') return json(route, { success: true, possible: true, id: 7,
+            address: 'info@domain-d.test', fingerprint: 'imp-casella',
+            losses: { lastAccess: '2026-09-30T10:00:00+02:00', sendOnly: false, active: true, autoReply: true,
+                forwards: ['owner@example.net'], filters: 2 },
+            proposals: ['owner@example.net'], alreadyForwarded: [{ destination: 'capo@esterno.it', active: true }], copy: true,
+            towardsHere: [{ source: 'vendite@domain-d.test', active: true }],
+            mail: { present: true, messages: 87, atLeast: false, bytes: 1048576, size: '1,0 MB', filters: true },
+            folder: '/var/vmail/domain-d.test/info' });
         return json(route, { success: true, mailboxes: CASELLE });
     }
     if (p === '/api/mailboxes' && req.method() === 'POST' && corpo.action === 'generate_password')
@@ -121,10 +121,10 @@ async function servi(route) {
     if (foto) await page.screenshot({ path: path.join(foto, 'trasforma-in-casella.png') });
     await page.click('#acVia');
     await page.waitForSelector('#aCasellaModal', { state: 'hidden' });
-    const post = richieste.find(r => r.corpo && r.corpo.action === 'trasforma_in_casella');
-    vero('la richiesta: password, scelta "archivia", fingerprint, CSRF, inoltri non tenuti', post && post.corpo.password === 'Proposta-Dal-Generatore-42'
-        && post.corpo.posta_vecchia === 'archivia' && post.corpo.fingerprint === 'imp-alias' && post.corpo.csrf_token === 'csrf-prova'
-        && post.corpo.tieni_inoltri === false && post.corpo.name === 'DMARC' && post.corpo.quota_mb === 1024);
+    const post = richieste.find(r => r.body && r.body.action === 'trasforma_in_casella');
+    vero('la richiesta: password, scelta "archivia", fingerprint, CSRF, inoltri non tenuti', post && post.body.password === 'Proposta-Dal-Generatore-42'
+        && post.body.old_mail === 'archivia' && post.body.fingerprint === 'imp-alias' && post.body.csrf_token === 'csrf-prova'
+        && post.body.keep_forwards === false && post.body.name === 'DMARC' && post.body.quota_mb === 1024);
     vero('e il messaggio del server', (await page.textContent('#aliasMsg')).includes('ora e\' una casella'));
 
     console.log('\n== Pagina Caselle: "Trasforma in alias" ==');
@@ -149,10 +149,10 @@ async function servi(route) {
     if (foto) await page.screenshot({ path: path.join(foto, 'trasforma-in-alias.png') });
     await page.click('#aaVia');
     await page.waitForSelector('#aAliasModal', { state: 'hidden' });
-    const pa = richieste.find(r => r.corpo && r.corpo.action === 'trasforma_in_alias');
-    vero('la richiesta: due destinazioni, la conferma, l\'fingerprint, il CSRF', pa && pa.corpo.destinazioni.length === 2
-        && pa.corpo.destinazioni[1] === 'postmaster@domain-c.test' && pa.corpo.conferma === 'INFO@domain-d.test'
-        && pa.corpo.fingerprint === 'imp-casella' && pa.corpo.csrf_token === 'csrf-prova' && pa.corpo.id === 7);
+    const pa = richieste.find(r => r.body && r.body.action === 'trasforma_in_alias');
+    vero('la richiesta: due destinazioni, la conferma, l\'fingerprint, il CSRF', pa && pa.body.destinations.length === 2
+        && pa.body.destinations[1] === 'postmaster@domain-c.test' && pa.body.confirmation === 'INFO@domain-d.test'
+        && pa.body.fingerprint === 'imp-casella' && pa.body.csrf_token === 'csrf-prova' && pa.body.id === 7);
     vero('e il messaggio del server sopra la tabella', (await page.textContent('#mbMsg')).includes('ora e\' un alias'));
 
     console.log('\n== Elimina casella: ora con il token CSRF ==');
@@ -162,7 +162,7 @@ async function servi(route) {
     await page.waitForFunction(() => true);
     await page.waitForTimeout(300);
     const del = richieste.find(r => r.metodo === 'DELETE');
-    vero('DELETE con il token CSRF nel corpo', del && del.corpo && del.corpo.csrf_token === 'csrf-prova');
+    vero('DELETE con il token CSRF nel corpo', del && del.body && del.body.csrf_token === 'csrf-prova');
 
     console.log('\n== Tema scuro e telefono ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));

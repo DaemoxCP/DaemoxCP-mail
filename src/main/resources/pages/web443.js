@@ -12,24 +12,24 @@
             }
             const c = await updApi('web443_config');
             const inc = s.include || {};
-            let h = '<div class="alert alert-' + (s.pronto ? 'success' : 'secondary') + ' py-2 small mb-2">'
-                  + '<i class="fas fa-' + (s.pronto ? 'check-circle' : 'circle-info') + ' me-1" aria-hidden="true"></i>'
-                  + escHtml(s.pronto ? t('w4.ready') : t('w4.notReady')) + '</div>';
+            let h = '<div class="alert alert-' + (s.ready ? 'success' : 'secondary') + ' py-2 small mb-2">'
+                  + '<i class="fas fa-' + (s.ready ? 'check-circle' : 'circle-info') + ' me-1" aria-hidden="true"></i>'
+                  + escHtml(s.ready ? t('w4.ready') : t('w4.notReady')) + '</div>';
 
             h += '<table class="table table-sm mb-2"><tbody>'
                + w443Riga(escHtml(t('w4.nginxReads')), inc.ok, updEsc(inc.reason || ''))
-               + w443Riga(escHtml(t('w4.installed')), s.installato,
+               + w443Riga(escHtml(t('w4.installed')), s.installed,
                           '<code>' + updEsc(s.file) + '</code>')
-               + w443Riga(escHtml(t('w4.policyWritten')), s.politicaScritta,
-                          '<code>' + updEsc(s.filePolitica) + '</code> &mdash; ' + escHtml(t('w4.policyStatic')))
+               + w443Riga(escHtml(t('w4.policyWritten')), s.policyWritten,
+                          '<code>' + updEsc(s.policyFile) + '</code> &mdash; ' + escHtml(t('w4.policyStatic')))
                + '</tbody></table>';
 
             // E se l'anteprima non arriva si DICE perche', invece di mostrare un riquadro
             // vuoto che sembra un difetto grafico.
             h += '<div class="small text-muted mb-2">' + escHtml(t('w4.whatInstalled')) + '</div>';
-            if (c && c.success && c.configurazione)
+            if (c && c.success && c.configuration)
                 h += '<pre class="small p-2 border rounded mb-2" style="max-height:22rem;overflow:auto">'
-                   + updEsc(c.configurazione) + '</pre>';
+                   + updEsc(c.configuration) + '</pre>';
             else
                 h += '<div class="alert alert-warning py-2 small mb-2">' + escHtml(t('w4.noPreview', { reason: (c && c.error) || t('w4.unknownReason') })) + '</div>';
 
@@ -39,7 +39,7 @@
                + '<button class="btn btn-sm btn-outline-warning"'
                + (inc.ok ? '' : ' disabled title="' + escHtml(t('w4.includeFirst')) + '"')
                + ' onclick="w443Installa()">'
-               + '<i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>' + escHtml(s.installato ? t('w4.reinstall') : t('w4.open'))
+               + '<i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>' + escHtml(s.installed ? t('w4.reinstall') : t('w4.open'))
                + '</button>'
                + '<button class="btn btn-sm btn-outline-secondary" onclick="w443Jail()">'
                + '<i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('w4.enableJail')) + '</button>'
@@ -65,8 +65,8 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.changing')) + '';
             const r = await updApi('web443_include', { confirm: 'AGGIUNGI' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
-                  + updEsc(r.nota || r.error) + '</div>';
-            if (r.ripristinato)
+                  + updEsc(r.note || r.error) + '</div>';
+            if (r.restored)
                 h += '<div class="small text-muted mt-1">' + escHtml(t('w4.restored')) + '</div>';
             el.innerHTML = h;
             if (r.success) setTimeout(w443Carica, 1200);
@@ -78,8 +78,8 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.writing')) + '';
             const r = await updApi('web443_install', { confirm: 'APRI' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
-                  + updEsc(r.nota || r.error) + '</div>';
-            if (r.ripristinato)
+                  + updEsc(r.note || r.error) + '</div>';
+            if (r.restored)
                 h += '<div class="small text-muted mt-1">' + escHtml(t('w4.restored')) + '</div>';
             el.innerHTML = h;
             if (r.success) setTimeout(w443Carica, 1200);
@@ -91,6 +91,6 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.jailWriting')) + '';
             const r = await updApi('web443_jail', { confirm: 'ATTIVA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
-                         + updEsc(r.nota || r.error) + '</div>'
+                         + updEsc(r.note || r.error) + '</div>'
                          + (r.state ? '<pre class="small p-2 border rounded mt-1 mb-0">' + updEsc(r.state) + '</pre>' : '');
         }

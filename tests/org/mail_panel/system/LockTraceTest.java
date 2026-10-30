@@ -107,9 +107,9 @@ public class LockTraceTest {
                 // domanda "e i blocchi?" si pone da se'. In sola lettura (esegui = false).
                 JSONObject rc = UpdateManager.removePanelRcScript(false);
                 check("la rimozione dell'avvio automatico avvisa dei blocchi",
-                     rc.optString("nota").contains(UpdateManager.UNLOCK_ALL_COMMAND)
+                     rc.optString("note").contains(UpdateManager.UNLOCK_ALL_COMMAND)
                      || rc.optString("locksStay").contains(UpdateManager.UNLOCK_ALL_COMMAND));
-                check("  e non ha eseguito niente", !rc.optBoolean("eseguito", false));
+                check("  e non ha eseguito niente", !rc.optBoolean("executed", false));
             }
         }
 

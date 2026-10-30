@@ -41,33 +41,33 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.askingCf'));
             const r = await autoDnsApi('status');
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + adEsc(r.error) + '</div>'; return; }
-            if (!r.cloudflare || !r.zona) {
-                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + adEsc(r.nota) + '</div>';
+            if (!r.cloudflare || !r.zone) {
+                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + adEsc(r.note) + '</div>';
                 return;
             }
-            let h = '<div class="small text-muted mb-2">' + escHtml(t('ad.accountZone', { account: r.account, zone: r.dominio })) + '</div>'
+            let h = '<div class="small text-muted mb-2">' + escHtml(t('ad.accountZone', { account: r.account, zone: r.domain })) + '</div>'
                   + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col">Record</th><th scope="col">' + escHtml(t('ad.colInCf')) + '</th><th scope="col">' + escHtml(t('ad.colWouldWrite')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('home.colActions')) + '</span></th>'
                   + '</tr></thead><tbody>';
             (r.record || []).forEach(x => {
-                const nome = x.quale === 'spf' ? 'SPF' : 'DMARC';
-                const troppi = (x.quanti || 0) > 1;
+                const nome = x.which === 'spf' ? 'SPF' : 'DMARC';
+                const troppi = (x.howMany || 0) > 1;
 
                 let state;
-                if (troppi) state = '<span class="badge bg-danger">' + escHtml(t('ad.cancelOut', { n: x.quanti })) + '</span>';
-                else if (x.esiste) state = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
+                if (troppi) state = '<span class="badge bg-danger">' + escHtml(t('ad.cancelOut', { n: x.howMany })) + '</span>';
+                else if (x.exists) state = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
                 else state = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
-                if (x.altriTxt > 0)
-                    state += '<div class="small text-muted mt-1">' + escHtml(tn('ad.otherTxt', x.altriTxt)) + '</div>';
-                if (x.contenuto)
-                    state += '<div class="small mt-1" style="word-break:break-all"><code>' + adEsc(x.contenuto) + '</code></div>';
+                if (x.otherTxt > 0)
+                    state += '<div class="small text-muted mt-1">' + escHtml(tn('ad.otherTxt', x.otherTxt)) + '</div>';
+                if (x.content)
+                    state += '<div class="small mt-1" style="word-break:break-all"><code>' + adEsc(x.content) + '</code></div>';
 
                 let proposta;
-                if (x.bloccato) {
-                    proposta = '<div class="small text-danger">' + adEsc(x.bloccato) + '</div>';
+                if (x.locked) {
+                    proposta = '<div class="small text-danger">' + adEsc(x.locked) + '</div>';
                 } else {
-                    proposta = '<code class="small" style="word-break:break-all">' + adEsc(x.proposto) + '</code>';
-                    if (x.quale === 'dmarc' && !x.esiste)
+                    proposta = '<code class="small" style="word-break:break-all">' + adEsc(x.proposed) + '</code>';
+                    if (x.which === 'dmarc' && !x.exists)
                         proposta += '<div class="mt-1"><select class="form-select form-select-sm" id="adPolitica" style="max-width:22rem" aria-label="' + escHtml(t('ad.policy')) + '">'
                                   + '<option value="none" selected>p=none &mdash; ' + escHtml(t('ad.pNone')) + '</option>'
                                   + '<option value="quarantine">p=quarantine &mdash; ' + escHtml(t('ad.pQuarantine')) + '</option>'
@@ -77,24 +77,24 @@
                 }
 
                 let azione;
-                if (x.quale === 'dmarc' && x.esiste && x.politicaAttuale) {
+                if (x.which === 'dmarc' && x.exists && x.currentPolicy) {
                     // Il percorso e' none -> quarantine -> reject: il pannello deve rendere
                     // facile anche i due passi dopo il primo, non solo il primo.
                     const opz = ['none', 'quarantine', 'reject'].map(v =>
-                        '<option value="' + v + '"' + (v === x.politicaAttuale ? ' selected' : '') + '>p='
+                        '<option value="' + v + '"' + (v === x.currentPolicy ? ' selected' : '') + '>p='
                         + v + '</option>').join('');
                     azione = '<select class="form-select form-select-sm mb-1" id="adPoliticaNuova" aria-label="' + escHtml(t('ad.policy')) + '">' + opz + '</select>'
                            + '<button class="btn btn-sm btn-outline-warning" onclick="autoDnsCambiaPolitica()">'
                            + '<i class="fas fa-pen me-1" aria-hidden="true"></i>' + escHtml(t('ad.changePolicy')) + '</button>';
-                } else if (x.esiste || x.bloccato) {
-                    azione = '<span class="small text-muted">' + escHtml(x.esiste ? t('ad.nothingToDo') : t('ad.cannotCreate')) + '</span>';
+                } else if (x.exists || x.locked) {
+                    azione = '<span class="small text-muted">' + escHtml(x.exists ? t('ad.nothingToDo') : t('ad.cannotCreate')) + '</span>';
                 } else {
-                    azione = '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCrea(\'' + adEsc(x.quale) + '\')">'
+                    azione = '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCrea(\'' + adEsc(x.which) + '\')">'
                            + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('ad.create')) + '</button>';
                 }
 
                 h += '<tr class="upd-cell"><td><strong>' + escHtml(nome) + '</strong><br>'
-                   + '<code class="small">' + adEsc(x.nome) + '</code></td>'
+                   + '<code class="small">' + adEsc(x.name) + '</code></td>'
                    + '<td>' + state + '</td><td>' + proposta + '</td>'
                    + '<td class="text-end">' + azione + '</td></tr>';
 
@@ -103,12 +103,12 @@
             });
             h += '</tbody></table></div><div id="autoDnsOutcome"></div>';
 
-            h += adRapporti(r.rapporti);
-            h += adOpzionali(r.opzionali);
+            h += adRapporti(r.reports);
+            h += adOpzionali(r.optionalItems);
 
             h += '<div class="small text-muted mt-3">' + escHtml(t('ad.noRotation')) + '</div>';
             el.innerHTML = h;
-            if (r.rapporti && !r.rapporti.esiste) adCaricaCaselle();
+            if (r.reports && !r.reports.exists) adCaricaCaselle();
         }
 
         // La cassetta a cui arrivano i rapporti DMARC. Va predisposta PRIMA di pubblicare il
@@ -119,23 +119,23 @@
         // un indirizzo che gia' si legge, oppure tenere i rapporti in una casella loro.
         function adRapporti(rap) {
             if (!rap) return '';
-            if (rap.esiste) {
+            if (rap.exists) {
                 return '<div class="alert alert-success py-2 small mb-0 mt-2">'
                      + '<i class="fas fa-inbox me-1" aria-hidden="true"></i>'
-                     + escHtml(rap.verso ? t('ad.reportsToFwd', { address: rap.indirizzo, kind: rap.tipo, to: rap.verso }) : t('ad.reportsTo', { address: rap.indirizzo, kind: rap.tipo })) + '</div>';
+                     + escHtml(rap.destination ? t('ad.reportsToFwd', { address: rap.address, kind: rap.type, to: rap.destination }) : t('ad.reportsTo', { address: rap.address, kind: rap.type })) + '</div>';
             }
             return '<div class="card mt-2"><div class="card-body py-3">'
                  + '<div class="small mb-3"><i class="fas fa-inbox me-1" aria-hidden="true"></i>'
-                 + '<strong>' + escHtml(t('ad.noReportBox')) + '</strong> ' + escHtml(t('ad.noReportBoxWhy', { address: rap.indirizzo })) + ' '
-                 + adEsc(rap.nota || '') + ' <strong>' + escHtml(t('ad.pickOne')) + '</strong></div>'
+                 + '<strong>' + escHtml(t('ad.noReportBox')) + '</strong> ' + escHtml(t('ad.noReportBoxWhy', { address: rap.address })) + ' '
+                 + adEsc(rap.note || '') + ' <strong>' + escHtml(t('ad.pickOne')) + '</strong></div>'
 
                  + '<div class="row g-3">'
 
                  // --- A: inoltro ---
                  + '<div class="col-lg-6"><div class="border rounded p-3 h-100">'
                  + '<div class="fw-bold mb-1"><i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.fwdTitle')) + '</div>'
-                 + '<div class="small text-muted mb-3">' + escHtml(t('ad.fwdHint', { address: rap.indirizzo })) + ' <strong>' + escHtml(t('ad.recommended')) + '</strong></div>'
-                 + '<label class="form-label small mb-1" for="adVerso">' + escHtml(t('ad.fwdTo', { address: rap.indirizzo })) + '</label>'
+                 + '<div class="small text-muted mb-3">' + escHtml(t('ad.fwdHint', { address: rap.address })) + ' <strong>' + escHtml(t('ad.recommended')) + '</strong></div>'
+                 + '<label class="form-label small mb-1" for="adVerso">' + escHtml(t('ad.fwdTo', { address: rap.address })) + '</label>'
                  + '<select class="form-select form-select-sm mb-2" id="adVerso" onchange="adVersoCambia()">'
                  + '<option value="">' + escHtml(t('ad.loadingAddresses')) + '</option></select>'
                  + '<input type="email" class="form-control form-control-sm mb-2 d-none" id="adVersoAltro" '
@@ -147,7 +147,7 @@
 
                  // --- B: casella vera ---
                  + '<div class="col-lg-6"><div class="border rounded p-3 h-100">'
-                 + '<div class="fw-bold mb-1"><i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.boxTitle', { address: rap.indirizzo })) + '</div>'
+                 + '<div class="fw-bold mb-1"><i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.boxTitle', { address: rap.address })) + '</div>'
                  + '<div class="small text-muted mb-3">' + escHtml(t('ad.boxHint')) + '</div>'
                  + '<button class="btn btn-sm btn-outline-secondary" onclick="autoDnsCreaCasella()">'
                  + '<i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.createBox')) + '</button>'
@@ -174,7 +174,7 @@
             const sel = document.getElementById('adVerso');
             if (!sel) return;
             const r = await autoDnsApi('mailboxes');
-            const caselle = (r.success && r.caselle) ? r.caselle : [];
+            const caselle = (r.success && r.mailboxes) ? r.mailboxes : [];
             sel.innerHTML = '<option value="">&mdash; ' + escHtml(t('ad.chooseAddress')) + ' &mdash;</option>'
                 + caselle.map(c => '<option value="' + adEsc(c) + '">' + adEsc(c) + '</option>').join('')
                 + '<option value="__altro__">&mdash; ' + escHtml(t('ad.anotherAddress')) + ' &mdash;</option>';
@@ -199,9 +199,9 @@
             }
             if (!adConferma(t('ad.confirmFwd', { to: verso }), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingFwd'));
-            const r = await autoDnsApi('alias_create', { confirm: 'CREA', verso: verso });
+            const r = await autoDnsApi('alias_create', { confirm: 'CREA', destination: verso });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
-                         + adEsc(r.nota || r.error) + '</div>';
+                         + adEsc(r.note || r.error) + '</div>';
             // Si ricarica anche quando il pannello si RIFIUTA: il rifiuto "esiste gia'" vuol
             // dire che lo stato a schermo era vecchio, ed e' proprio quello da rileggere.
             // Lasciare l'invito dov'e' inviterebbe a premere di nuovo.
@@ -214,10 +214,10 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingBox'));
             const r = await autoDnsApi('mailbox_create', { confirm: 'CREA' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
-                  + adEsc(r.nota || r.error) + '</div>';
+                  + adEsc(r.note || r.error) + '</div>';
             if (r.success && r.password)
                 h += '<div class="alert alert-warning py-2 small mb-0 mt-2">'
-                   + '<i class="fas fa-key me-1" aria-hidden="true"></i><strong>' + escHtml(t('ad.passwordOf', { address: r.indirizzo })) + '</strong> '
+                   + '<i class="fas fa-key me-1" aria-hidden="true"></i><strong>' + escHtml(t('ad.passwordOf', { address: r.address })) + '</strong> '
                    + '<code style="font-size:1.05em">' + adEsc(r.password) + '</code><br>'
                    + escHtml(t('ad.passwordKept')) + '</div>';
             el.innerHTML = h;
@@ -235,7 +235,7 @@
         // stesso hostname sono due hostname che un giorno divergono.
         function adOpzionali(lista) {
             if (!lista || !lista.length) return '';
-            const mancanti = lista.filter(x => !x.esiste && !x.conflitto).length;
+            const mancanti = lista.filter(x => !x.exists && !x.conflict).length;
 
             let h = '<div class="card mt-3"><div class="card-header d-flex justify-content-between '
                   + 'align-items-center flex-wrap gap-2"><span><i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i>'
@@ -252,32 +252,32 @@
 
             lista.forEach(x => {
                 let state;
-                if (x.conflitto) state = '<span class="badge bg-danger">' + escHtml(t('ad.conflict')) + '</span>';
-                else if (x.esiste) state = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
+                if (x.conflict) state = '<span class="badge bg-danger">' + escHtml(t('ad.conflict')) + '</span>';
+                else if (x.exists) state = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
                 else state = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
-                if (x.contenuto)
+                if (x.content)
                     state += '<div class="small mt-1" style="word-break:break-all"><code>'
-                           + adEsc(x.contenuto) + '</code></div>';
+                           + adEsc(x.content) + '</code></div>';
 
-                const azione = (x.esiste || x.conflitto)
-                    ? '<span class="small text-muted">' + escHtml(x.esiste ? t('ad.nothingToDo') : t('ad.byHand')) + '</span>'
-                    : '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreaOpzionale(\'' + adEsc(x.quale) + '\')">'
+                const azione = (x.exists || x.conflict)
+                    ? '<span class="small text-muted">' + escHtml(x.exists ? t('ad.nothingToDo') : t('ad.byHand')) + '</span>'
+                    : '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreaOpzionale(\'' + adEsc(x.which) + '\')">'
                       + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('ad.create')) + '</button>';
 
-                h += '<tr class="upd-cell"><td><strong>' + adEsc(x.tipo) + '</strong><br>'
-                   + '<code class="small">' + adEsc(x.nome) + '</code>'
-                   + '<div class="small text-muted mt-1">' + adEsc(x.aCosaServe) + '</div>'
-                   + (x.premessa
+                h += '<tr class="upd-cell"><td><strong>' + adEsc(x.type) + '</strong><br>'
+                   + '<code class="small">' + adEsc(x.name) + '</code>'
+                   + '<div class="small text-muted mt-1">' + adEsc(x.purpose) + '</div>'
+                   + (x.premise
                       ? '<div class="small mt-1"><i class="fas fa-circle-info me-1 text-secondary" aria-hidden="true"></i>'
-                        + '<span class="text-secondary">' + adEsc(x.premessa) + '</span></div>'
+                        + '<span class="text-secondary">' + adEsc(x.premise) + '</span></div>'
                       : '') + '</td>'
                    + '<td>' + state + '</td>'
-                   + '<td><code class="small" style="word-break:break-all">' + adEsc(x.proposto) + '</code></td>'
+                   + '<td><code class="small" style="word-break:break-all">' + adEsc(x.proposed) + '</code></td>'
                    + '<td class="text-end">' + azione + '</td></tr>';
 
-                if (x.warning || x.conflitto)
+                if (x.warning || x.conflict)
                     h += '<tr><td colspan="4" class="pt-0">'
-                       + adAvvisi([x.warning || x.conflitto]) + '</td></tr>';
+                       + adAvvisi([x.warning || x.conflict]) + '</td></tr>';
             });
 
             h += '</tbody></table></div><div id="adOpzOutcome"></div>';
@@ -295,9 +295,9 @@
             const el = document.getElementById('adOpzOutcome');
             if (!adConferma(t('ad.confirmOpt'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
-            const r = await autoDnsApi('create_optional', { confirm: 'CREA', quale: quale });
+            const r = await autoDnsApi('create_optional', { confirm: 'CREA', which: quale });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
-                         + adEsc(r.nota || r.error) + '</div>';
+                         + adEsc(r.note || r.error) + '</div>';
             if (r.success) setTimeout(autoDnsCarica, 1200);
         }
 
@@ -306,19 +306,19 @@
         async function autoDnsCreaTuttiOpzionali() {
             const el = document.getElementById('adOpzOutcome');
             const r0 = await autoDnsApi('status');
-            const mancanti = (r0.opzionali || []).filter(x => !x.esiste && !x.conflitto);
+            const mancanti = (r0.optionalItems || []).filter(x => !x.exists && !x.conflict);
             if (!mancanti.length) { el.innerHTML = '<div class="alert alert-info py-2 small mb-0">' + escHtml(t('ad.nothingMissing')) + '</div>'; return; }
             if (!adConferma(tn('ad.confirmMany', mancanti.length) + '\n\n'
-                     + mancanti.map(x => '• ' + x.tipo + ' ' + x.nome).join('\n') + '\n\n'
+                     + mancanti.map(x => '• ' + x.type + ' ' + x.name).join('\n') + '\n\n'
                      + t('ad.noneTouched'), t('ad.wordCreate'))) return;
 
             let esiti = '';
             for (const x of mancanti) {
                 el.innerHTML = esiti + '<div class="small text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
-                             + escHtml(t('ad.creatingName', { name: x.nome })) + '</div>';
-                const r = await autoDnsApi('create_optional', { confirm: 'CREA', quale: x.quale });
+                             + escHtml(t('ad.creatingName', { name: x.name })) + '</div>';
+                const r = await autoDnsApi('create_optional', { confirm: 'CREA', which: x.which });
                 esiti += '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
-                       + '<code>' + adEsc(x.nome) + '</code> &mdash; ' + adEsc(r.nota || r.error) + '</div>';
+                       + '<code>' + adEsc(x.name) + '</code> &mdash; ' + adEsc(r.note || r.error) + '</div>';
             }
             el.innerHTML = esiti;
             setTimeout(autoDnsCarica, 1500);
@@ -333,35 +333,35 @@
             const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.readingCurrent'));
 
-            const a = await autoDnsApi('change_policy', { politica: nuova });
+            const a = await autoDnsApi('change_policy', { policy: nuova });
             if (!a.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + adEsc(a.error) + '</div>';
                 return;
             }
-            if (a.invariato) {
-                el.innerHTML = '<div class="alert alert-info py-2 small mb-0">' + adEsc(a.nota) + '</div>';
+            if (a.unchanged) {
+                el.innerHTML = '<div class="alert alert-info py-2 small mb-0">' + adEsc(a.note) + '</div>';
                 return;
             }
 
             el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
-                         + '<div class="mb-1">' + adEsc(a.nota) + '</div>'
+                         + '<div class="mb-1">' + adEsc(a.note) + '</div>'
                          + '<div><span class="text-muted">' + escHtml(t('ad.before')) + '</span> <code style="word-break:break-all">'
-                         + adEsc(a.prima) + '</code></div>'
+                         + adEsc(a.before) + '</code></div>'
                          + '<div><span class="text-muted">' + escHtml(t('ad.after')) + '</span> <code style="word-break:break-all">'
-                         + adEsc(a.dopo) + '</code></div></div>';
+                         + adEsc(a.after) + '</code></div></div>';
 
             const warning = nuova === 'reject' ? '\n\n' + t('ad.warnReject')
                 : nuova === 'quarantine' ? '\n\n' + t('ad.warnQuarantine') : '';
             if (!adConferma(t('ad.confirmPolicy', { policy: nuova }) + '\n\n'
-                     + t('ad.before') + '  ' + a.prima + '\n'
-                     + t('ad.after') + '  ' + a.dopo + '\n\n'
+                     + t('ad.before') + '  ' + a.before + '\n'
+                     + t('ad.after') + '  ' + a.after + '\n\n'
                      + t('ad.onlyP')
                      + warning, t('ad.wordChange'))) return;
 
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.editingCf'));
-            const r = await autoDnsApi('change_policy', { politica: nuova, confirm: 'CAMBIA' });
+            const r = await autoDnsApi('change_policy', { policy: nuova, confirm: 'CAMBIA' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
-                         + adEsc(r.nota || r.error) + '</div>';
+                         + adEsc(r.note || r.error) + '</div>';
             if (r.success) setTimeout(autoDnsCarica, 1500);
         }
 
@@ -372,18 +372,18 @@
             if (!adConferma(t('ad.confirmCreate', { record: che }), t('ad.wordCreate'))) return;
             const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
-            const r = await autoDnsApi('create', { confirm: 'CREA', quale: quale, politica: politica });
+            const r = await autoDnsApi('create', { confirm: 'CREA', which: quale, policy: politica });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
-                  + adEsc(r.nota || r.error) + '</div>';
-            if (r.contenuto)
+                  + adEsc(r.note || r.error) + '</div>';
+            if (r.content)
                 h += '<div class="small text-muted mb-1">' + escHtml(t('ad.alreadyThere')) + ' <code style="word-break:break-all">'
-                   + adEsc(r.contenuto) + '</code></div>';
-            if (r.nome && r.valore)
-                h += '<div class="small text-muted"><code>' + adEsc(r.nome) + '</code> &rarr; <code '
-                   + 'style="word-break:break-all">' + adEsc(r.valore) + '</code></div>';
+                   + adEsc(r.content) + '</code></div>';
+            if (r.name && r.value)
+                h += '<div class="small text-muted"><code>' + adEsc(r.name) + '</code> &rarr; <code '
+                   + 'style="word-break:break-all">' + adEsc(r.value) + '</code></div>';
             el.innerHTML = h;
             if (r.success) setTimeout(autoDnsCarica, 1200);
-            else if (r.mancaCasella) setTimeout(autoDnsCarica, 300);
+            else if (r.mailboxMissing) setTimeout(autoDnsCarica, 300);
         }
 
         // Tutto quello che serve a un dominio, in una volta. Ogni passo non sovrascrive

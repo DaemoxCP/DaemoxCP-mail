@@ -64,9 +64,9 @@ public class MtaStsSetup {
     public static class Step {
         public String key, title, detail, state, reason;
         public JSONObject json() {
-            return new JSONObject().put("chiave", key).put("titolo", title)
-                    .put("dettaglio", detail == null ? "" : detail)
-                    .put("stato", state).put("reason", reason == null ? "" : reason);
+            return new JSONObject().put("key", key).put("title", title)
+                    .put("detail", detail == null ? "" : detail)
+                    .put("state", state).put("reason", reason == null ? "" : reason);
         }
     }
 
@@ -93,7 +93,7 @@ public class MtaStsSetup {
                 includeOk ? "fatto" : "da fare", null));
         steps.add(step("config443", I18n.tr("server.sts.step443"),
                 web.optString("file", ""),
-                web.optBoolean("installato", false) ? "fatto" : "da fare", null));
+                web.optBoolean("installed", false) ? "fatto" : "da fare", null));
         steps.add(step("jail", I18n.tr("server.sts.stepJail"), "",
                 jailActive() ? "fatto" : "da fare", null));
 
@@ -170,15 +170,15 @@ public class MtaStsSetup {
             if ("da fare".equals(p.state)) daFare++;
             else if ("incerto".equals(p.state)) uncertain++;
         }
-        r.put("passi", a).put("daFare", daFare).put("incerti", uncertain);
+        r.put("steps", a).put("daFare", daFare).put("uncertain", uncertain);
         // "completo" accende la spunta verde e fa sparire il pulsante, quindi non puo' bastare
         // che non ci sia niente DA FARE: serve anche che non sia rimasto niente da VERIFICARE.
         // Con la sola condizione daFare==0, un passo "incerto" — cioe' uno che il pannello non
         // ha potuto controllare — sarebbe bastato da solo a dichiarare "attivo su tutti i domini".
         boolean complete = daFare == 0 && uncertain == 0;
-        r.put("completo", complete);
+        r.put("complete", complete);
         String uncertainCount = uncertain == 1 ? I18n.tr("server.sts.steps.one") : I18n.tr("server.sts.steps.other", java.util.Map.of("n", String.valueOf(uncertain)));
-        r.put("nota", complete
+        r.put("note", complete
                 ? I18n.tr("server.sts.complete")
                 : daFare == 0
                   ? I18n.tr("server.sts.onlyUncertain", java.util.Map.of("passi", String.valueOf(uncertainCount)))
@@ -213,16 +213,16 @@ public class MtaStsSetup {
                 notAnswering.add(d);
                 // Anche con piu' record: se uno e' scritto male, i mittenti che lo scartano
                 // contano solo l'altro, e quello li manda contro la politica che non risponde.
-                if (txt.outcome == TxtOutcome.PRESENTE || txt.outcome == TxtOutcome.TROPPI)
+                if (txt.outcome == TxtOutcome.PRESENT || txt.outcome == TxtOutcome.TOO_MANY)
                     unmaintained.add(d + " -> " + String.join("  ||  ", txt.values));
                 continue;
             }
             switch (txt.outcome) {
-                case NON_CHIESTO -> unknownTxt.add(d + " (" + txt.reason + ")");
-                case ASSENTE -> withoutTxt.add(d);
-                case TROPPI -> tooMany.add(d + " (" + txt.values.size() + " record: "
+                case NOT_ASKED -> unknownTxt.add(d + " (" + txt.reason + ")");
+                case ABSENT -> withoutTxt.add(d);
+                case TOO_MANY -> tooMany.add(d + " (" + txt.values.size() + " record: "
                         + String.join("  ||  ", txt.values) + ")");
-                case PRESENTE -> {
+                case PRESENT -> {
                     if (!expected.equals(txt.content)) withoutTxt.add(d + " " + I18n.tr("server.sts.idToUpdate"));
                 }
             }
@@ -286,18 +286,18 @@ public class MtaStsSetup {
             // sbagliato E proxato, e i due fatti devono comparire tutti e due, nei due passi
             // a cui appartengono.
             if (e.goesThroughProxy) {
-                boolean daJolly = e.state == NameState.ASSENTE;
+                boolean daJolly = e.state == NameState.ABSENT;
                 if (daJolly) r.proxyDaJolly = true;
                 r.proxied.add(e.domain + (daJolly
                         ? " " + I18n.tr("server.sts.wildcardAnswers", java.util.Map.of("d", String.valueOf(e.domain))) : ""));
             }
             switch (e.state) {
-                case ASSENTE -> r.absent.add(e.domain + " (" + e.reason + ")");
-                case CIECO -> r.blind.add(e.domain + " (" + e.reason + ")");
-                case DA_CORREGGERE -> {
+                case ABSENT -> r.absent.add(e.domain + " (" + e.reason + ")");
+                case BLIND -> r.blind.add(e.domain + " (" + e.reason + ")");
+                case TO_FIX -> {
                     if (e.wrongContent) r.crooked.add(e.domain + " (" + e.reason + ")");
                 }
-                case GIUSTO -> { if (!e.resolves) r.propagating.add(e.domain); }
+                case RIGHT -> { if (!e.resolves) r.propagating.add(e.domain); }
             }
         }
         return r;
@@ -428,7 +428,7 @@ public class MtaStsSetup {
         } else doneOnes.put(already("include", I18n.tr("server.sts.includeTitle")));
 
         // 2. la 443
-        if (!WebProtection.state().optBoolean("installato", false)) {
+        if (!WebProtection.state().optBoolean("installed", false)) {
             JSONObject e = WebProtection.install("", "");
             doneOnes.put(outcome("config443", I18n.tr("server.sts.config443Title"), e));
             if (job != null) job.write("[2/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.c443Ok") : I18n.tr("server.sts.c443Fail")));
@@ -460,7 +460,7 @@ public class MtaStsSetup {
                 // createOptional guarda il record col nome ESATTO dentro la zona, corregge quelli
                 // sbagliati o dietro proxy e crea quelli mancanti: e' lui che deve decidere.
                 JSONObject e = auto.createOptional(d.id, "mta_sts");
-                if (e.optBoolean("nonGestito", false)) {
+                if (e.optBoolean("unmanaged", false)) {
                     // Dominio non su Cloudflare: non e' un errore, ma nemmeno una conferma.
                     boolean answers = resolves("mta-sts." + d.domain);
                     cname.put(note(d.domain, answers,
@@ -468,16 +468,16 @@ public class MtaStsSetup {
                                      : I18n.tr("server.sts.noAnswerNoCf")));
                     continue;
                 }
-                if (e.optBoolean("success", false) && !e.optBoolean("invariato", false))
+                if (e.optBoolean("success", false) && !e.optBoolean("unchanged", false))
                     justChanged.add(d.domain);
                 cname.put(note(d.domain, e.optBoolean("success", false),
-                        e.optString("nota", e.optString("error", ""))));
+                        e.optString("note", e.optString("error", ""))));
             }
         } catch (Exception e) {
             cname.put(note("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
-        doneOnes.put(new JSONObject().put("chiave", "cname").put("titolo", "CNAME mta-sts")
-                .put("dettaglio", cname));
+        doneOnes.put(new JSONObject().put("key", "cname").put("title", "CNAME mta-sts")
+                .put("detail", cname));
         if (job != null) { job.advance(4, 8); job.write("[4/8] " + I18n.tr("server.sts.cnameExamined", java.util.Map.of("n", String.valueOf(cname.length())))); }
 
         // 4-bis. I nomi mta-sts devono puntare dritti al server.
@@ -536,9 +536,9 @@ public class MtaStsSetup {
             blind++;
             proxy.put(note("", false, I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
-        doneOnes.put(new JSONObject().put("chiave", "proxy")
-                .put("titolo", I18n.tr("server.sts.stepProxy"))
-                .put("dettaglio", proxy));
+        doneOnes.put(new JSONObject().put("key", "proxy")
+                .put("title", I18n.tr("server.sts.stepProxy"))
+                .put("detail", proxy));
         if (job != null) job.write("[5/8] " + I18n.tr("server.sts.proxySummary", java.util.Map.of("d", String.valueOf(straight), "s", String.valueOf(fixed), "c", String.valueOf(blind))));
 
         // 5. il certificato
@@ -567,9 +567,9 @@ public class MtaStsSetup {
             String detail = cr.output == null ? "" : cr.output.trim();
             if (detail.length() > 4000) detail = detail.substring(detail.length() - 4000);
             JSONObject e = new JSONObject().put("success", cr.success)
-                    .put("nota", cr.message).put("error", cr.message);
+                    .put("note", cr.message).put("error", cr.message);
             JSONObject line = outcome("certificato", I18n.tr("server.sts.certTitle"), e);
-            line.put("nomi", new JSONArray(names));
+            line.put("names", new JSONArray(names));
             // L'uscita si mostra SEMPRE, non solo quando fallisce. Buttarla via quando il
             // comando "riesce" toglie la prova proprio nel caso peggiore: quello in cui
             // riesce ma non ha fatto quello che credevamo.
@@ -616,7 +616,7 @@ public class MtaStsSetup {
             for (MailDatabase.Domain d : domainsToTouch(domainOnly)) {
                 JSONObject test = MtaSts.publicTest(d.domain);
                 if (!test.optBoolean("ok", false)) {
-                    finals.put(note(d.domain, false, I18n.tr("server.sts.policyNotYet", java.util.Map.of("e", String.valueOf(test.optString("errore", ""))))));
+                    finals.put(note(d.domain, false, I18n.tr("server.sts.policyNotYet", java.util.Map.of("e", String.valueOf(test.optString("error", ""))))));
                     continue;
                 }
                 // Non si salta piu' quando il record c'e': va controllato che l'id corrisponda
@@ -624,17 +624,17 @@ public class MtaStsSetup {
                 // che non cambierebbe mai.
                 JSONObject e = auto.creaTxtMtaSts(d.id);
                 finals.put(note(d.domain, e.optBoolean("success", false),
-                        e.optString("nota", e.optString("error", ""))));
+                        e.optString("note", e.optString("error", ""))));
             }
         } catch (Exception e) {
             finals.put(note("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
         }
         if (job != null) { job.advance(8, 8); job.write("[7-8/8] " + I18n.tr("server.sts.finalExamined", java.util.Map.of("n", String.valueOf(finals.length())))); }
-        doneOnes.put(new JSONObject().put("chiave", "txt").put("titolo", I18n.tr("server.sts.finalTitle"))
-                .put("dettaglio", finals));
+        doneOnes.put(new JSONObject().put("key", "txt").put("title", I18n.tr("server.sts.finalTitle"))
+                .put("detail", finals));
 
-        return r.put("success", true).put("passi", doneOnes)
-                .put("nota", I18n.tr("server.sts.sequenceDone"));
+        return r.put("success", true).put("steps", doneOnes)
+                .put("note", I18n.tr("server.sts.sequenceDone"));
     }
 
     /**
@@ -651,16 +651,16 @@ public class MtaStsSetup {
      */
     public static JSONArray asEntries(JSONObject outcome) {
         JSONArray entries = new JSONArray();
-        JSONArray steps = outcome.optJSONArray("passi");
+        JSONArray steps = outcome.optJSONArray("steps");
         for (int i = 0; steps != null && i < steps.length(); i++) {
             JSONObject p = steps.optJSONObject(i);
             if (p == null) continue;
-            String title = p.optString("titolo", p.optString("chiave", "passo"));
-            JSONArray detail = p.optJSONArray("dettaglio");
+            String title = p.optString("title", p.optString("key", "passo"));
+            JSONArray detail = p.optJSONArray("detail");
             if (detail == null) {
-                entries.put(new JSONObject().put("titolo", title)
+                entries.put(new JSONObject().put("title", title)
                         .put("ok", p.optBoolean("ok", false))
-                        .put("messaggio", p.optString("messaggio", "")));
+                        .put("messageText", p.optString("messageText", "")));
                 continue;
             }
             // Un passo per dominio: riuscito solo se lo sono tutte le righe, e il messaggio
@@ -671,35 +671,35 @@ public class MtaStsSetup {
                 JSONObject x = detail.optJSONObject(j);
                 if (x == null) continue;
                 if (!x.optBoolean("ok", false)) all = false;
-                String dom = x.optString("dominio", "");
-                lines.add((dom.isEmpty() ? "" : dom + ": ") + x.optString("messaggio", ""));
+                String dom = x.optString("domain", "");
+                lines.add((dom.isEmpty() ? "" : dom + ": ") + x.optString("messageText", ""));
             }
-            entries.put(new JSONObject().put("titolo", title).put("ok", all)
-                    .put("messaggio", String.join(" | ", lines)));
+            entries.put(new JSONObject().put("title", title).put("ok", all)
+                    .put("messageText", String.join(" | ", lines)));
         }
         if (!outcome.optBoolean("success", false) && !outcome.optString("error", "").isEmpty())
-            entries.put(new JSONObject().put("titolo", I18n.tr("server.sts.interrupted")).put("ok", false)
-                    .put("messaggio", outcome.getString("error")));
+            entries.put(new JSONObject().put("title", I18n.tr("server.sts.interrupted")).put("ok", false)
+                    .put("messageText", outcome.getString("error")));
         return entries;
     }
 
     private static JSONObject stopped(JSONObject r, JSONArray done, String why) {
-        return r.put("success", false).put("passi", done).put("error", why);
+        return r.put("success", false).put("steps", done).put("error", why);
     }
 
     private static JSONObject outcome(String key, String title, JSONObject e) {
-        return new JSONObject().put("chiave", key).put("titolo", title)
+        return new JSONObject().put("key", key).put("title", title)
                 .put("ok", e.optBoolean("success", false))
-                .put("messaggio", e.optString("nota", e.optString("error", "")));
+                .put("messageText", e.optString("note", e.optString("error", "")));
     }
 
     private static JSONObject already(String key, String title) {
-        return new JSONObject().put("chiave", key).put("titolo", title)
-                .put("ok", true).put("messaggio", I18n.tr("server.sts.alreadyOk"));
+        return new JSONObject().put("key", key).put("title", title)
+                .put("ok", true).put("messageText", I18n.tr("server.sts.alreadyOk"));
     }
 
     private static JSONObject note(String domain, boolean ok, String message) {
-        return new JSONObject().put("dominio", domain).put("ok", ok).put("messaggio", message);
+        return new JSONObject().put("domain", domain).put("ok", ok).put("messageText", message);
     }
 
     /* ===================================================================
@@ -773,7 +773,7 @@ public class MtaStsSetup {
      * rispondeva (grazie a un jolly della zona), mentre nella zona non esisteva alcun record
      * con quel nome. Una sola domanda, una sola risposta, e un valore apposta per "non lo so".
      */
-    public enum NameState { GIUSTO, DA_CORREGGERE, ASSENTE, CIECO }
+    public enum NameState { RIGHT, TO_FIX, ABSENT, BLIND }
 
     public static final class NameReview {
         public final String domain; public final NameState state;
@@ -817,19 +817,19 @@ public class MtaStsSetup {
             try {
                 MailDatabase.CloudflareAccount a = cf.getAccountForDomain(d.id);
                 if (a == null) {
-                    out.add(new NameReview(d.domain, NameState.CIECO,
+                    out.add(new NameReview(d.domain, NameState.BLIND,
                             I18n.tr("server.sts.blindNoAccount"), resolves));
                     continue;
                 }
                 CloudflareManager.ZoneLookup zl = cf.findZone(a.apiToken, d.domain);
                 if (!zl.found) {
-                    out.add(new NameReview(d.domain, NameState.CIECO,
+                    out.add(new NameReview(d.domain, NameState.BLIND,
                             I18n.tr("server.sts.blindZone"), resolves));
                     continue;
                 }
                 List<CloudflareManager.DnsRecordInfo> tutti = cf.listRecords(a.apiToken, zl.zoneId);
                 if (tutti.isEmpty()) {
-                    out.add(new NameReview(d.domain, NameState.CIECO,
+                    out.add(new NameReview(d.domain, NameState.BLIND,
                             I18n.tr("server.sts.blindEmpty"), resolves));
                     continue;
                 }
@@ -861,7 +861,7 @@ public class MtaStsSetup {
                     else if (resolves)
                         why = ", " + I18n.tr("server.sts.answersFromOutside", java.util.Map.of("d", String.valueOf(d.domain)));
                     else why = "";
-                    out.add(new NameReview(d.domain, NameState.ASSENTE,
+                    out.add(new NameReview(d.domain, NameState.ABSENT,
                             I18n.tr("server.sts.noRecordInZone") + why, resolves,
                             jolly != null && jolly.proxied, false));
                     continue;
@@ -879,11 +879,11 @@ public class MtaStsSetup {
                 if (found.proxied)
                     male.add(I18n.tr("server.sts.viaCfInstead"));
                 out.add(male.isEmpty()
-                        ? new NameReview(d.domain, NameState.GIUSTO, I18n.tr("server.sts.pointsStraightTo", java.util.Map.of("b", String.valueOf(target))), resolves)
-                        : new NameReview(d.domain, NameState.DA_CORREGGERE, String.join("; ", male),
+                        ? new NameReview(d.domain, NameState.RIGHT, I18n.tr("server.sts.pointsStraightTo", java.util.Map.of("b", String.valueOf(target))), resolves)
+                        : new NameReview(d.domain, NameState.TO_FIX, String.join("; ", male),
                                         resolves, found.proxied, crooked));
             } catch (Exception e) {
-                out.add(new NameReview(d.domain, NameState.CIECO,
+                out.add(new NameReview(d.domain, NameState.BLIND,
                         I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage()))), resolves));
             }
         }
@@ -924,7 +924,7 @@ public class MtaStsSetup {
      * E' pubblica perche' la stessa lettura serve alla pagina DNS: due letture dello stesso
      * record sono due letture che un giorno rispondono in modo diverso.
      */
-    public enum TxtOutcome { PRESENTE, ASSENTE, TROPPI, NON_CHIESTO }
+    public enum TxtOutcome { PRESENT, ABSENT, TOO_MANY, NOT_ASKED }
 
     public static final class TxtReading {
         public final TxtOutcome outcome;
@@ -941,20 +941,20 @@ public class MtaStsSetup {
         private TxtReading(TxtOutcome outcome, List<String> values, String reason) {
             this.outcome = outcome;
             this.values = List.copyOf(values);
-            this.content = outcome == TxtOutcome.PRESENTE ? values.get(0) : "";
+            this.content = outcome == TxtOutcome.PRESENT ? values.get(0) : "";
             this.reason = reason;
         }
     }
 
     /** Dai record v=STSv1 del nome: nessuno, uno solo, o troppi. */
     private static TxtReading found(List<String> sts) {
-        TxtOutcome e = sts.isEmpty() ? TxtOutcome.ASSENTE
-                   : sts.size() == 1 ? TxtOutcome.PRESENTE : TxtOutcome.TROPPI;
+        TxtOutcome e = sts.isEmpty() ? TxtOutcome.ABSENT
+                   : sts.size() == 1 ? TxtOutcome.PRESENT : TxtOutcome.TOO_MANY;
         return new TxtReading(e, sts, "");
     }
 
     private static TxtReading unknown(String reason) {
-        return new TxtReading(TxtOutcome.NON_CHIESTO, List.of(), reason);
+        return new TxtReading(TxtOutcome.NOT_ASKED, List.of(), reason);
     }
 
     public static TxtReading readTxt(String domain) {

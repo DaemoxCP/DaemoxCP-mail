@@ -178,16 +178,16 @@ public final class PkgBranch {
                 .put("fingerprint", fingerprint(repos, ours));
         if (ours != null) r.put("fileContent", ours.length() > 4000 ? ours.substring(0, 4000) : ours);
         List<String> after = fileAfter(s);
-        if (!after.isEmpty()) r.put("fileDopo", new JSONArray(after));
+        if (!after.isEmpty()) r.put("fileAfter", new JSONArray(after));
         Repo base = enabled(repos, "base");
         if (base != null) r.put("base", I18n.tr("server.branch.baseFromPkg", java.util.Map.of("r", String.valueOf(base.branch()))));
         String reason = reasonNo(repos);
         r.put("changeable", reason == null);
         if (reason != null) r.put("reason", reason);
         else {
-            JSONArray verso = new JSONArray();
-            for (String x : BRANCHES) if (!x.equals(branch)) verso.put(x);
-            r.put("verso", verso);
+            JSONArray target = new JSONArray();
+            for (String x : BRANCHES) if (!x.equals(branch)) target.put(x);
+            r.put("destination", target);
         }
         return r;
     }
@@ -203,9 +203,9 @@ public final class PkgBranch {
     private static JSONArray json(List<Repo> repos) {
         JSONArray a = new JSONArray();
         for (Repo r : repos) {
-            a.put(new JSONObject().put("nome", r.name()).put("url", r.url()).put("acceso", r.enabled())
-                    .put("tipo", r.type()).put("branch", r.branch()).put("ufficiale", !r.type().equals("esterno"))
-                    .put("ruolo", switch (r.type()) {
+            a.put(new JSONObject().put("name", r.name()).put("url", r.url()).put("enabled", r.enabled())
+                    .put("type", r.type()).put("branch", r.branch()).put("official", !r.type().equals("esterno"))
+                    .put("role", switch (r.type()) {
                         case "pacchetti" -> I18n.tr("server.branch.kindPackages");
                         case "moduli" -> I18n.tr("server.branch.kindKmods");
                         case "base" -> I18n.tr("server.branch.kindBase");
@@ -238,17 +238,17 @@ public final class PkgBranch {
     }
 
     /** L'indirizzo di un repository ufficiale sul ramo voluto, con le variabili di pkg come nel file di serie. */
-    static String address(Repo r, String verso) {
+    static String address(Repo r, String target) {
         if (r.type().equals("moduli"))
-            return "pkg+https://pkg.FreeBSD.org/${ABI}/kmods_" + verso + (r.withMinor() ? "_${VERSION_MINOR}" : "");
-        return "pkg+https://pkg.FreeBSD.org/${ABI}/" + verso;
+            return "pkg+https://pkg.FreeBSD.org/${ABI}/kmods_" + target + (r.withMinor() ? "_${VERSION_MINOR}" : "");
+        return "pkg+https://pkg.FreeBSD.org/${ABI}/" + target;
     }
 
     /** Il file del pannello per un ramo: solo l'indirizzo, piu' cio' che un blocco riscriverebbe di serie. */
-    static String content(List<Repo> repos, String verso, Instant when) {
+    static String content(List<Repo> repos, String target, Instant when) {
         StringBuilder b = new StringBuilder();
         b.append(MARK).append(" il ").append(DateTimeFormatter.ofPattern("dd/MM/yyyy 'alle' HH:mm").format(when.atZone(ZoneOffset.UTC)))
-         .append(" (UTC): ramo \"").append(verso).append("\" dei pacchetti.\n")
+         .append(" (UTC): ramo \"").append(target).append("\" dei pacchetti.\n")
          .append("# pkg legge i file di questa cartella in ordine alfabetico e per ogni campo vale\n")
          .append("# l'ultimo: per questo il nome comincia con \"zz\". Cambia solo l'indirizzo dei\n")
          .append("# repository ufficiali; il resto della configurazione resta quello di\n")
@@ -257,7 +257,7 @@ public final class PkgBranch {
         for (String type : List.of("pacchetti", "moduli")) {
             Repo r = enabled(repos, type);
             if (r == null) continue;
-            b.append(r.name()).append(": { url: \"").append(address(r, verso)).append('"');
+            b.append(r.name()).append(": { url: \"").append(address(r, target)).append('"');
             if (r.priority() != 0) b.append(", priority: ").append(r.priority());
             if (r.ipVersion() != null) b.append(", ip_version: ").append(r.ipVersion());
             b.append(" }\n");
@@ -266,33 +266,33 @@ public final class PkgBranch {
     }
 
     /** Cosa farebbe il cambio di ramo, senza farlo. */
-    public static JSONObject preview(SystemAccess s, String verso) {
+    public static JSONObject preview(SystemAccess s, String target) {
         JSONObject st = state(s);
         if (!st.optBoolean("success")) return st;
-        if (!BRANCHES.contains(verso)) return new JSONObject().put("success", false).put("error", I18n.tr("server.branch.badBranch"));
-        JSONObject r = new JSONObject().put("success", true).put("da", st.getString("branch")).put("verso", verso)
+        if (!BRANCHES.contains(target)) return new JSONObject().put("success", false).put("error", I18n.tr("server.branch.badBranch"));
+        JSONObject r = new JSONObject().put("success", true).put("from", st.getString("branch")).put("destination", target)
                 .put("fingerprint", st.getString("fingerprint"));
-        if (!st.optBoolean("changeable")) return r.put("possibile", false).put("reason", st.getString("reason"));
-        if (verso.equals(st.getString("branch"))) return r.put("possibile", false).put("reason", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
+        if (!st.optBoolean("changeable")) return r.put("possible", false).put("reason", st.getString("reason"));
+        if (target.equals(st.getString("branch"))) return r.put("possible", false).put("reason", I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(target))));
         List<Repo> repos = repository(s.pkgVv());
         JSONArray changes = new JSONArray();
         for (String type : List.of("pacchetti", "moduli")) {
             Repo x = enabled(repos, type);
-            if (x != null) changes.put(new JSONObject().put("nome", x.name()).put("da", x.url()).put("a", address(x, verso)));
+            if (x != null) changes.put(new JSONObject().put("name", x.name()).put("from", x.url()).put("to", address(x, target)));
         }
         JSONArray warnings = new JSONArray();
-        warnings.put(I18n.tr("server.branch.noUpdate", java.util.Map.of("r", String.valueOf(verso))));
-        if (verso.equals("quarterly"))
+        warnings.put(I18n.tr("server.branch.noUpdate", java.util.Map.of("r", String.valueOf(target))));
+        if (target.equals("quarterly"))
             warnings.put(I18n.tr("server.branch.backToQuarterly"));
         else
             warnings.put(I18n.tr("server.branch.onLatest"));
-        JSONArray after = st.optJSONArray("fileDopo");
+        JSONArray after = st.optJSONArray("fileAfter");
         if (after != null && !after.isEmpty())
             warnings.put(I18n.tr("server.branch.laterFiles", java.util.Map.of("dir", String.valueOf(FOLDER), "elenco", String.valueOf(String.join(", ", strings(after))))));
-        return r.put("possibile", true).put("changes", changes).put("warnings", warnings).put("file", FILE.toString())
-                .put("contenuto", content(repos, verso, s.now()))
-                .put("comeTorna", st.optBoolean("panelOwnedFile")
-                        ? I18n.tr("server.branch.removeInstead", java.util.Map.of("r", String.valueOf(verso)))
+        return r.put("possible", true).put("changes", changes).put("warnings", warnings).put("file", FILE.toString())
+                .put("content", content(repos, target, s.now()))
+                .put("howToReturn", st.optBoolean("panelOwnedFile")
+                        ? I18n.tr("server.branch.removeInstead", java.util.Map.of("r", String.valueOf(target)))
                         : "");
     }
 
@@ -312,18 +312,18 @@ public final class PkgBranch {
      * Cambia ramo. Va chiamato sul turno dei lavori sui pacchetti (PackageQueue). Ogni passo
      * finisce nel registro; se un passo non riesce, il file del pannello torna com'era.
      */
-    public static JSONObject change(SystemAccess s, LineSink log, String verso, String fingerprint) {
+    public static JSONObject change(SystemAccess s, LineSink log, String target, String fingerprint) {
         JSONObject st = state(s);
         if (!st.optBoolean("success")) return st;
-        if (!BRANCHES.contains(verso)) return error(log, I18n.tr("server.branch.badBranch"));
+        if (!BRANCHES.contains(target)) return error(log, I18n.tr("server.branch.badBranch"));
         if (!st.optBoolean("changeable")) return error(log, st.getString("reason"));
         if (!st.getString("fingerprint").equals(fingerprint))
             return error(log, I18n.tr("server.branch.changedSincePreview"));
-        String da = st.getString("branch");
-        if (verso.equals(da)) return error(log, I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(verso))));
+        String from = st.getString("branch");
+        if (target.equals(from)) return error(log, I18n.tr("server.branch.alreadyOn", java.util.Map.of("r", String.valueOf(target))));
         List<Repo> repos = repository(s.pkgVv());
         String before = s.read(FILE);
-        log.line(I18n.tr("server.branch.nowAsked", java.util.Map.of("da", String.valueOf(da), "verso", String.valueOf(verso))));
+        log.line(I18n.tr("server.branch.nowAsked", java.util.Map.of("da", String.valueOf(from), "verso", String.valueOf(target))));
         try {
             boolean done = false;
             if (before != null) {
@@ -331,31 +331,31 @@ public final class PkgBranch {
                 s.delete(FILE);
                 String without = effective(s);
                 log.line("      " + I18n.tr("server.branch.withoutFile", java.util.Map.of("r", String.valueOf(without))));
-                done = verso.equals(without);
+                done = target.equals(without);
                 if (done) log.line("      " + I18n.tr("server.branch.isAsked"));
             }
             if (!done) {
                 log.line("[1/3] " + I18n.tr("server.branch.writing", java.util.Map.of("f", String.valueOf(FILE))));
-                String fresh = content(repos, verso, s.now());
+                String fresh = content(repos, target, s.now());
                 for (String line : fresh.split("\n")) if (!line.startsWith("#")) log.line("      " + line);
                 s.write(FILE, fresh);
             }
             log.line("[2/3] " + I18n.tr("server.branch.checking"));
             String now = effective(s);
             log.line("      " + I18n.tr("server.branch.pkgSees", java.util.Map.of("r", String.valueOf(now))));
-            if (!verso.equals(now)) {
+            if (!target.equals(now)) {
                 restore(s, before);
                 List<String> after = fileAfter(s);
-                return error(log, I18n.tr("server.branch.wrongAfter", java.util.Map.of("ora", String.valueOf(now), "verso", String.valueOf(verso))) + " "
+                return error(log, I18n.tr("server.branch.wrongAfter", java.util.Map.of("ora", String.valueOf(now), "verso", String.valueOf(target))) + " "
                         + (after.isEmpty() ? "" : I18n.tr("server.branch.decidedByLater", java.util.Map.of("elenco", String.valueOf(String.join(", ", after)))) + " ")
                         + I18n.tr("server.branch.restored"));
             }
-            log.line("[3/3] " + I18n.tr("server.branch.downloading", java.util.Map.of("r", String.valueOf(verso))));
+            log.line("[3/3] " + I18n.tr("server.branch.downloading", java.util.Map.of("r", String.valueOf(target))));
             Outcome u = s.pkgUpdate(log);
             if (u.code() != 0) {
                 restore(s, before);
                 String matches = effective(s);
-                return error(log, I18n.tr("server.branch.catalogFails", java.util.Map.of("r", String.valueOf(verso), "c", String.valueOf(u.code()), "torna", String.valueOf(matches))));
+                return error(log, I18n.tr("server.branch.catalogFails", java.util.Map.of("r", String.valueOf(target), "c", String.valueOf(u.code()), "torna", String.valueOf(matches))));
             }
         } catch (IOException e) {
             try { restore(s, before); } catch (IOException ignored) { /* detto sotto */ }
@@ -372,7 +372,7 @@ public final class PkgBranch {
                 else if (m.group(2).equals(">")) mostRecent.add(m.group(1));
             }
         }
-        StringBuilder msg = new StringBuilder(I18n.tr("server.branch.done", java.util.Map.of("r", String.valueOf(verso))));
+        StringBuilder msg = new StringBuilder(I18n.tr("server.branch.done", java.util.Map.of("r", String.valueOf(target))));
         if (v == null) msg.append(" ").append(I18n.tr("server.branch.cannotCount"));
         else {
             msg.append(" ").append(updatable == 0 ? I18n.tr("server.branch.noneNewer")
@@ -380,14 +380,14 @@ public final class PkgBranch {
                     : I18n.tr("server.branch.updatable.other", java.util.Map.of("n", String.valueOf(updatable))));
             if (!mostRecent.isEmpty())
                 msg.append(" ").append(mostRecent.size() == 1
-                        ? I18n.tr("server.branch.newer.one", java.util.Map.of("r", String.valueOf(verso)))
-                        : I18n.tr("server.branch.newer.other", java.util.Map.of("n", String.valueOf(mostRecent.size()), "r", String.valueOf(verso))));
+                        ? I18n.tr("server.branch.newer.one", java.util.Map.of("r", String.valueOf(target)))
+                        : I18n.tr("server.branch.newer.other", java.util.Map.of("n", String.valueOf(mostRecent.size()), "r", String.valueOf(target))));
         }
         log.line("");
         log.line(msg.toString());
-        JSONObject r = new JSONObject().put("success", true).put("branch", verso).put("messaggio", msg.toString());
+        JSONObject r = new JSONObject().put("success", true).put("branch", target).put("messageText", msg.toString());
         if (v != null) {
-            r.put("aggiornabili", updatable).put("piuRecenti", new JSONArray(mostRecent.size() > 30 ? mostRecent.subList(0, 30) : mostRecent));
+            r.put("updatable", updatable).put("mostRecent", new JSONArray(mostRecent.size() > 30 ? mostRecent.subList(0, 30) : mostRecent));
             if (!mostRecent.isEmpty()) log.line(I18n.tr("server.branch.newerList", java.util.Map.of("elenco", String.valueOf(String.join(", ", mostRecent.size() > 30 ? mostRecent.subList(0, 30) : mostRecent)))));
         }
         return r;

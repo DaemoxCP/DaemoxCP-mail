@@ -68,6 +68,10 @@ public class AppleProfile {
         String profileId = "org.mail-panel." + email.toLowerCase(Locale.ROOT);
         String profileUuid = deterministic("profilo:" + email.toLowerCase(Locale.ROOT));
         String mailUuid = deterministic("posta:" + email.toLowerCase(Locale.ROOT));
+        // "posta" nell'identificatore e nel seme dell'UUID resta in italiano apposta: iOS e macOS
+        // riconoscono un profilo dal suo PayloadIdentifier e dal suo UUID, e un profilo con un
+        // identificatore nuovo si installerebbe ACCANTO a quello vecchio invece di sostituirlo.
+        // E' un nome che vive gia' sui dispositivi di chi l'ha installato, non un nome del codice.
 
         return """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -162,8 +166,8 @@ public class AppleProfile {
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         String host = mailHost();
-        r.put("hostDiPosta", host);
-        r.put("portaImap", IMAP_PORT).put("portaSmtp", SMTP_PORT);
+        r.put("mailHost", host);
+        r.put("imapPort", IMAP_PORT).put("smtpPort", SMTP_PORT);
         if (host == null || host.isBlank())
             return r.put("success", false)
                     .put("error", I18n.tr("server.appleprof.noHostnameProfile"));
@@ -176,7 +180,7 @@ public class AppleProfile {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.mailboxesUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
-        return r.put("caselle", mailboxes);
+        return r.put("mailboxes", mailboxes);
     }
 
     /** L'anteprima del profilo, per guardarlo prima di scaricarlo. */
@@ -190,7 +194,7 @@ public class AppleProfile {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.noHostname"));
         return new JSONObject().put("success", true).put("email", c.email())
-                .put("profilo", mobileconfig(c.email(), c.name(), host, host));
+                .put("profile", mobileconfig(c.email(), c.name(), host, host));
     }
 
     /**

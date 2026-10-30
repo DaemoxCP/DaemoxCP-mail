@@ -139,8 +139,8 @@ public class SoftwareVersionsTest {
     }
 
     static JSONObject other(JSONObject r, String key) {
-        JSONArray a = r.getJSONArray("altro");
-        for (int i = 0; i < a.length(); i++) if (a.getJSONObject(i).getString("chiave").equals(key)) return a.getJSONObject(i);
+        JSONArray a = r.getJSONArray("other");
+        for (int i = 0; i < a.length(); i++) if (a.getJSONObject(i).getString("key").equals(key)) return a.getJSONObject(i);
         return null;
     }
 
@@ -180,58 +180,58 @@ public class SoftwareVersionsTest {
         System.out.println("\n== Server completo, con qualcosa da riavviare ==");
         FakeSystem f = complete();
         JSONObject r = SoftwareVersions.read(f);
-        JSONObject s = r.getJSONObject("servizi");
-        real("letteAlle con i secondi anche quando sono zero, nell'ora del server: " + r.getString("letteAlle"),
-                r.getString("letteAlle").equals("2026-10-03T14:00:00+02:00"));
+        JSONObject s = r.getJSONObject("services");
+        real("letteAlle con i secondi anche quando sono zero, nell'ora del server: " + r.getString("readAt"),
+                r.getString("readAt").equals("2026-10-03T14:00:00+02:00"));
         long pkgCalls = f.launched.stream().filter(x -> x.startsWith(SoftwareVersions.PKG)).count();
         real("pkg si chiama due volte in tutto (which e query), non una per programma: " + pkgCalls, pkgCalls == 2);
         JSONObject pf = s.getJSONObject("postfix");
-        real("Postfix: 3.10.4 da postconf, pacchetto postfix-mysql (non \"postfix\")", pf.getString("versione").equals("3.10.4")
-                && pf.getString("pacchetto").equals("postfix-mysql-3.10.4,1") && pf.getString("fonte").contains("mail_version"));
-        real("Postfix partito il 28/09, pacchetto installato il 02/10: da riavviare, con le due date: " + pf.optString("notaRiavvio"),
-                pf.optBoolean("riavvio") && pf.getString("notaRiavvio").contains("28/09/2026 08:15")
-                && pf.getString("notaRiavvio").contains("02/10/2026 09:00"));
+        real("Postfix: 3.10.4 da postconf, pacchetto postfix-mysql (non \"postfix\")", pf.getString("version").equals("3.10.4")
+                && pf.getString("pkgName").equals("postfix-mysql-3.10.4,1") && pf.getString("source").contains("mail_version"));
+        real("Postfix partito il 28/09, pacchetto installato il 02/10: da riavviare, con le due date: " + pf.optString("restartNote"),
+                pf.optBoolean("restart") && pf.getString("restartNote").contains("28/09/2026 08:15")
+                && pf.getString("restartNote").contains("02/10/2026 09:00"));
         JSONObject dv = s.getJSONObject("dovecot");
-        real("Dovecot: 2.3.21.1, partito dopo l'installazione: niente da riavviare", dv.getString("versione").equals("2.3.21.1")
-                && !dv.optBoolean("riavvio") && dv.getString("pacchetto").equals("dovecot-mysql-2.3.21.1_8"));
+        real("Dovecot: 2.3.21.1, partito dopo l'installazione: niente da riavviare", dv.getString("version").equals("2.3.21.1")
+                && !dv.optBoolean("restart") && dv.getString("pkgName").equals("dovecot-mysql-2.3.21.1_8"));
         JSONObject my = s.getJSONObject("mysql");
-        real("MySQL: la versione in esecuzione (8.0.42), non quella del pacchetto", my.getString("versione").equals("8.0.42")
-                && my.optBoolean("inEsecuzione") && my.getString("fonte").startsWith("SELECT VERSION()"));
-        real("MySQL: il pacchetto e' la 8.0.43, quindi da riavviare: " + my.optString("notaRiavvio"), my.optBoolean("riavvio")
-                && my.getString("installata").equals("8.0.43") && my.getString("notaRiavvio").contains("riavvia MySQL"));
+        real("MySQL: la versione in esecuzione (8.0.42), non quella del pacchetto", my.getString("version").equals("8.0.42")
+                && my.optBoolean("running") && my.getString("source").startsWith("SELECT VERSION()"));
+        real("MySQL: il pacchetto e' la 8.0.43, quindi da riavviare: " + my.optString("restartNote"), my.optBoolean("restart")
+                && my.getString("installedVersion").equals("8.0.43") && my.getString("restartNote").contains("riavvia MySQL"));
         JSONObject rs = s.getJSONObject("rspamd");
-        real("Rspamd: 3.12.1; senza pidfile non si dice niente sul riavvio", rs.getString("versione").equals("3.12.1") && !rs.has("riavvio"));
+        real("Rspamd: 3.12.1; senza pidfile non si dice niente sul riavvio", rs.getString("version").equals("3.12.1") && !rs.has("restart"));
         JSONObject rd = s.getJSONObject("redis");
-        real("Redis: 7.4.2; pidfile di un processo che non c'e' piu': niente sul riavvio", rd.getString("versione").equals("7.4.2") && !rd.has("riavvio"));
+        real("Redis: 7.4.2; pidfile di un processo che non c'e' piu': niente sul riavvio", rd.getString("version").equals("7.4.2") && !rd.has("restart"));
         JSONObject cl = s.getJSONObject("clamav");
-        real("ClamAV: dal demone, motore 1.4.3, firme 27780 del 02/10/2026 08:24: " + cl.optString("dettaglio"),
-                cl.getString("versione").equals("1.4.3") && cl.optBoolean("inEsecuzione")
-                && cl.getString("dettaglio").equals("firme 27780 del 02/10/2026 08:24") && !cl.has("avviso") && !cl.has("riavvio"));
+        real("ClamAV: dal demone, motore 1.4.3, firme 27780 del 02/10/2026 08:24: " + cl.optString("detail"),
+                cl.getString("version").equals("1.4.3") && cl.optBoolean("running")
+                && cl.getString("detail").equals("firme 27780 del 02/10/2026 08:24") && !cl.has("warning") && !cl.has("restart"));
         JSONObject rc = s.getJSONObject("roundcube");
-        real("Roundcube: 1.6.11 da RCMAIL_VERSION, pacchetto roundcube-php84", rc.getString("versione").equals("1.6.11")
-                && rc.getString("fonte").contains("RCMAIL_VERSION") && rc.getString("pacchetto").equals("roundcube-php84-1.6.11,1"));
+        real("Roundcube: 1.6.11 da RCMAIL_VERSION, pacchetto roundcube-php84", rc.getString("version").equals("1.6.11")
+                && rc.getString("source").contains("RCMAIL_VERSION") && rc.getString("pkgName").equals("roundcube-php84-1.6.11,1"));
 
         JSONObject fb = other(r, "freebsd");
         real("FreeBSD: userland 15.0-RELEASE-p3, kernel in esecuzione p2 ma installato p3: riavvio del server",
-                fb.getString("versione").equals("15.0-RELEASE-p3") && fb.getString("dettaglio").equals("kernel in esecuzione 15.0-RELEASE-p2")
-                && fb.optBoolean("riavvio") && fb.getString("notaRiavvio").contains("riavvio del server"));
+                fb.getString("version").equals("15.0-RELEASE-p3") && fb.getString("detail").equals("kernel in esecuzione 15.0-RELEASE-p2")
+                && fb.optBoolean("restart") && fb.getString("restartNote").contains("riavvio del server"));
         JSONObject os = other(r, "openssl");
-        real("OpenSSL del sistema base: 3.5.1, rilasciata il 01/07/2025", os.getString("versione").equals("3.5.1")
-                && os.getString("dettaglio").equals("rilasciata il 01/07/2025"));
+        real("OpenSSL del sistema base: 3.5.1, rilasciata il 01/07/2025", os.getString("version").equals("3.5.1")
+                && os.getString("detail").equals("rilasciata il 01/07/2025"));
         real("nessuna OpenSSL da pacchetto, nessun Unbound da pacchetto: non compaiono", other(r, "openssl_pkg") == null && other(r, "unbound") == null);
-        real("nginx 1.28.0", other(r, "nginx").getString("versione").equals("1.28.0"));
+        real("nginx 1.28.0", other(r, "nginx").getString("version").equals("1.28.0"));
         JSONObject php = other(r, "php");
         real("PHP-FPM 8.4.13; partito prima del pacchetto ma per lui l'ora non vale (reload): niente sul riavvio",
-                php.getString("versione").equals("8.4.13") && !php.has("riavvio"));
+                php.getString("version").equals("8.4.13") && !php.has("restart"));
         JSONObject ph = other(r, "pigeonhole");
-        real("Pigeonhole dal pacchetto: 0.5.21.1", ph.getString("versione").equals("0.5.21.1") && ph.getString("fonte").startsWith("pkg which"));
+        real("Pigeonhole dal pacchetto: 0.5.21.1", ph.getString("version").equals("0.5.21.1") && ph.getString("source").startsWith("pkg which"));
         JSONObject jv = other(r, "java");
-        real("Java del pannello: 25.0.1+8-1 in esecuzione, uguale al pacchetto openjdk25", jv.getString("versione").equals("25.0.1+8-1")
-                && jv.optBoolean("inEsecuzione") && jv.getString("pacchetto").equals("openjdk25-25.0.1+8.1") && !jv.has("riavvio"));
+        real("Java del pannello: 25.0.1+8-1 in esecuzione, uguale al pacchetto openjdk25", jv.getString("version").equals("25.0.1+8-1")
+                && jv.optBoolean("running") && jv.getString("pkgName").equals("openjdk25-25.0.1+8.1") && !jv.has("restart"));
         JSONObject f2b = other(r, "fail2ban");
-        real("fail2ban dal pacchetto: 1.1.0, partito dopo l'installazione", f2b != null && f2b.getString("versione").equals("1.1.0") && !f2b.has("riavvio"));
+        real("fail2ban dal pacchetto: 1.1.0, partito dopo l'installazione", f2b != null && f2b.getString("version").equals("1.1.0") && !f2b.has("restart"));
         JSONObject lu = other(r, "local_unbound");
-        real("Unbound del sistema base, perche' gira: 1.22.0, senza pacchetto", lu != null && lu.getString("versione").equals("1.22.0") && !lu.has("pacchetto"));
+        real("Unbound del sistema base, perche' gira: 1.22.0, senza pacchetto", lu != null && lu.getString("version").equals("1.22.0") && !lu.has("pkgName"));
         boolean noHtml = !r.toString().contains("<");
         real("niente HTML nella risposta", noHtml);
 
@@ -239,12 +239,12 @@ public class SoftwareVersionsTest {
         FakeSystem empty = new FakeSystem();
         empty.javaFolder = "/usr/local/openjdk25";
         r = SoftwareVersions.read(empty);
-        s = r.getJSONObject("servizi");
+        s = r.getJSONObject("services");
         boolean allAbsent = true;
-        for (String k : s.keySet()) allAbsent &= !s.getJSONObject(k).getBoolean("installato");
+        for (String k : s.keySet()) allAbsent &= !s.getJSONObject(k).getBoolean("installed");
         real("i sette servizi ci sono tutti, come non installati: " + s.keySet(), s.length() == 7 && allAbsent);
         real("senza pkg non si chiama pkg", empty.launched.stream().noneMatch(x -> x.startsWith(SoftwareVersions.PKG)));
-        real("Java c'e' sempre (e' quella che fa girare il pannello)", other(r, "java").getBoolean("installato"));
+        real("Java c'e' sempre (e' quella che fa girare il pannello)", other(r, "java").getBoolean("installed"));
         real("fail2ban e Unbound non installati: non compaiono", other(r, "fail2ban") == null && other(r, "local_unbound") == null);
 
         System.out.println("\n== Casi storti ==");
@@ -258,25 +258,25 @@ public class SoftwareVersionsTest {
         st.outputs.put("pkg which", st.outputs.get("pkg which").replace("openjdk25-25.0.1+8.1", "openjdk25-25.0.2+10.1"));
         st.contents.put("/usr/local/www/roundcube/program/include/iniset.php", "<?php // senza costante\n");
         r = SoftwareVersions.read(st);
-        s = r.getJSONObject("servizi");
+        s = r.getJSONObject("services");
         cl = s.getJSONObject("clamav");
-        real("clamd non risponde: versione dal binario, non \"in esecuzione\"", cl.getString("versione").equals("1.4.3")
-                && !cl.has("inEsecuzione") && cl.getString("fonte").endsWith("--version"));
-        real("firme del 14/09 (19 giorni): avviso — " + cl.optString("avviso"), cl.optString("avviso").contains("19 giorni"));
-        real("e senza demone non si confronta con il pacchetto", !cl.has("riavvio"));
+        real("clamd non risponde: versione dal binario, non \"in esecuzione\"", cl.getString("version").equals("1.4.3")
+                && !cl.has("running") && cl.getString("source").endsWith("--version"));
+        real("firme del 14/09 (19 giorni): avviso — " + cl.optString("warning"), cl.optString("warning").contains("19 giorni"));
+        real("e senza demone non si confronta con il pacchetto", !cl.has("restart"));
         my = s.getJSONObject("mysql");
         real("MySQL non risponde: versione da mysqld --version, con l'avviso che non e' quella in esecuzione",
-                my.getString("versione").equals("8.0.43") && !my.has("inEsecuzione") && my.optString("avviso").contains("non risponde"));
+                my.getString("version").equals("8.0.43") && !my.has("running") && my.optString("warning").contains("non risponde"));
         pf = s.getJSONObject("postfix");
-        real("postconf risponde con un errore: versione dal pacchetto (3.10.4)", pf.getString("versione").equals("3.10.4")
-                && pf.getString("fonte").startsWith("pkg which"));
+        real("postconf risponde con un errore: versione dal pacchetto (3.10.4)", pf.getString("version").equals("3.10.4")
+                && pf.getString("source").startsWith("pkg which"));
         dv = s.getJSONObject("dovecot");
-        real("una risposta che non e' una versione non passa: si usa il pacchetto", dv.getString("versione").equals("2.3.21.1")
+        real("una risposta che non e' una versione non passa: si usa il pacchetto", dv.getString("version").equals("2.3.21.1")
                 && !r.toString().contains("script"));
-        real("iniset.php senza la costante: Roundcube dal pacchetto", s.getJSONObject("roundcube").getString("versione").equals("1.6.11"));
+        real("iniset.php senza la costante: Roundcube dal pacchetto", s.getJSONObject("roundcube").getString("version").equals("1.6.11"));
         jv = other(r, "java");
-        real("Java aggiornata (pacchetto 25.0.2) ma il pannello gira sulla 25.0.1: riavvia il pannello — " + jv.optString("notaRiavvio"),
-                jv.optBoolean("riavvio") && jv.getString("notaRiavvio").contains("riavvia il pannello"));
+        real("Java aggiornata (pacchetto 25.0.2) ma il pannello gira sulla 25.0.1: riavvia il pannello — " + jv.optString("restartNote"),
+                jv.optBoolean("restart") && jv.getString("restartNote").contains("riavvia il pannello"));
         FakeSystem odd = complete();
         odd.javaFolder = "/usr/local/openjdk25/../../etc";
         r = SoftwareVersions.read(odd);
@@ -339,10 +339,10 @@ public class SoftwareVersionsTest {
             String v = db.serverVersion();
             real("versioneServer(): " + v, v != null && SoftwareVersions.numbers(v).matches("\\d+\\.\\d+\\.\\d+"));
             JSONObject everything = SoftwareVersions.read(SoftwareVersions.real(db::serverVersion));
-            JSONObject line = everything.getJSONObject("servizi").getJSONObject("mysql");
-            real("la riga MySQL la mostra in esecuzione: " + line.optString("versione"), v != null && v.equals(line.optString("versione"))
-                    && line.optBoolean("inEsecuzione") && line.getBoolean("installato"));
-            real("e la Java del pannello c'e': " + other(everything, "java").optString("versione"), other(everything, "java").optBoolean("inEsecuzione"));
+            JSONObject line = everything.getJSONObject("services").getJSONObject("mysql");
+            real("la riga MySQL la mostra in esecuzione: " + line.optString("version"), v != null && v.equals(line.optString("version"))
+                    && line.optBoolean("running") && line.getBoolean("installed"));
+            real("e la Java del pannello c'e': " + other(everything, "java").optString("version"), other(everything, "java").optBoolean("running"));
             db.close();
         }
 

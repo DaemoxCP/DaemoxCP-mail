@@ -171,8 +171,8 @@ public final class SoftwareVersions {
         if (s.exists(UNBOUND.binary())) other.put(l.fromBinary(UNBOUND));
         if (s.exists(LOCAL_UNBOUND.binary()) && l.alive(PIDFILE_LOCAL_UNBOUND)) other.put(l.fromBinary(LOCAL_UNBOUND));
 
-        return new JSONObject().put("success", true).put("servizi", services).put("altro", other)
-                .put("letteAlle", s.now().atZone(s.zone()).format(INSTANT));
+        return new JSONObject().put("success", true).put("services", services).put("other", other)
+                .put("readAt", s.now().atZone(s.zone()).format(INSTANT));
     }
 
     /** Il binario della Java che esegue il pannello, se il percorso e' di quelli che ci si aspetta. */
@@ -191,12 +191,12 @@ public final class SoftwareVersions {
         JSONObject fromBinary(Entry v) {
             JSONObject r = entry(v.key(), v.name(), v.role());
             if (!s.exists(v.binary())) return r;
-            r.put("installato", true);
+            r.put("installed", true);
             String pkg = pkgName(v.binary());
-            if (!pkg.isEmpty()) r.put("pacchetto", pkg);
+            if (!pkg.isEmpty()) r.put("pkgName", pkg);
             String ver = v.command() == null ? null : extract(v.version(), s.run(v.command()));
-            if (ver != null) r.put("versione", ver).put("fonte", String.join(" ", v.command()));
-            else if (!pkg.isEmpty()) r.put("versione", upstream(pkg)).put("fonte", "pkg which " + v.binary());
+            if (ver != null) r.put("version", ver).put("source", String.join(" ", v.command()));
+            else if (!pkg.isEmpty()) r.put("version", upstream(pkg)).put("source", "pkg which " + v.binary());
             if (v.pidfile() != null && !pkg.isEmpty()) startupAndInstall(r, v.pidfile(), name(pkg), I18n.tr(v.name()));
             return r;
         }
@@ -208,7 +208,7 @@ public final class SoftwareVersions {
             Long installed = installedOn.get(packageName);
             if (startup == null || installed == null) return;
             if (startup.getEpochSecond() < installed) {
-                r.put("riavvio", true).put("notaRiavvio", I18n.tr("server.ver.startedBefore", java.util.Map.of("who", String.valueOf(chi), "start", String.valueOf(data(startup)), "inst", String.valueOf(data(Instant.ofEpochSecond(installed))))));
+                r.put("restart", true).put("restartNote", I18n.tr("server.ver.startedBefore", java.util.Map.of("who", String.valueOf(chi), "start", String.valueOf(data(startup)), "inst", String.valueOf(data(Instant.ofEpochSecond(installed))))));
             }
         }
 
@@ -221,8 +221,8 @@ public final class SoftwareVersions {
         void compare(JSONObject r, String running, String installed, String chi, String remedy) {
             String a = numbers(running), b = numbers(installed);
             if (a.isEmpty() || b.isEmpty() || a.equals(b)) return;
-            r.put("riavvio", true).put("installata", installed)
-             .put("notaRiavvio", I18n.tr("server.ver.runningVsInstalled", java.util.Map.of("who", String.valueOf(chi), "run", String.valueOf(running), "inst", String.valueOf(installed), "fix", String.valueOf(remedy))));
+            r.put("restart", true).put("installedVersion", installed)
+             .put("restartNote", I18n.tr("server.ver.runningVsInstalled", java.util.Map.of("who", String.valueOf(chi), "run", String.valueOf(running), "inst", String.valueOf(installed), "fix", String.valueOf(remedy))));
         }
 
         JSONObject mysql() {
@@ -230,43 +230,43 @@ public final class SoftwareVersions {
             String pkg = pkgName(MYSQLD);
             String alive = validate(s.mysqlVersion());
             if (alive == null && !s.exists(MYSQLD)) return r;
-            r.put("installato", true);
-            if (!pkg.isEmpty()) r.put("pacchetto", pkg);
+            r.put("installed", true);
+            if (!pkg.isEmpty()) r.put("pkgName", pkg);
             if (alive != null) {
-                r.put("versione", alive).put("fonte", I18n.tr("server.ver.srcMysql")).put("inEsecuzione", true);
+                r.put("version", alive).put("source", I18n.tr("server.ver.srcMysql")).put("running", true);
                 if (!pkg.isEmpty()) compare(r, alive, upstream(pkg), "MySQL", I18n.tr("server.ver.fixMysql"));
                 return r;
             }
             String ver = extract(line("\\bVer\\s+" + V), s.run(MYSQLD, "--version"));
-            if (ver != null) r.put("versione", ver).put("fonte", MYSQLD + " --version");
-            else if (!pkg.isEmpty()) r.put("versione", upstream(pkg)).put("fonte", "pkg which " + MYSQLD);
-            return r.put("avviso", I18n.tr("server.ver.mysqlDown"));
+            if (ver != null) r.put("version", ver).put("source", MYSQLD + " --version");
+            else if (!pkg.isEmpty()) r.put("version", upstream(pkg)).put("source", "pkg which " + MYSQLD);
+            return r.put("warning", I18n.tr("server.ver.mysqlDown"));
         }
 
         JSONObject clamav() {
             JSONObject r = entry("clamav", "ClamAV", "server.ver.role.clamav");
             if (!s.exists(CLAMD)) return r;
-            r.put("installato", true);
+            r.put("installed", true);
             String pkg = pkgName(CLAMD);
-            if (!pkg.isEmpty()) r.put("pacchetto", pkg);
+            if (!pkg.isEmpty()) r.put("pkgName", pkg);
             Clamd c = clamd(s.askClamd2(), s.zone());
             boolean fromDaemon = c != null;
             if (!fromDaemon) c = clamd(s.run(CLAMD, "--version"), s.zone());
             if (c == null) {
-                if (!pkg.isEmpty()) r.put("versione", upstream(pkg)).put("fonte", "pkg which " + CLAMD);
+                if (!pkg.isEmpty()) r.put("version", upstream(pkg)).put("source", "pkg which " + CLAMD);
                 return r;
             }
-            r.put("versione", c.engine()).put("fonte", fromDaemon ? I18n.tr("server.ver.srcClamd", java.util.Map.of("sock", String.valueOf(SOCKET_CLAMD))) : CLAMD + " --version");
-            if (fromDaemon) r.put("inEsecuzione", true);
+            r.put("version", c.engine()).put("source", fromDaemon ? I18n.tr("server.ver.srcClamd", java.util.Map.of("sock", String.valueOf(SOCKET_CLAMD))) : CLAMD + " --version");
+            if (fromDaemon) r.put("running", true);
             if (c.signatures() != null) {
-                r.put("firme", c.signatures());
-                r.put("dettaglio", c.del() != null
+                r.put("signatures", c.signatures());
+                r.put("detail", c.del() != null
                         ? I18n.tr("server.ver.sigsOf", java.util.Map.of("n", String.valueOf(c.signatures()), "date", String.valueOf(data(c.del()))))
                         : I18n.tr("server.ver.sigs", java.util.Map.of("n", String.valueOf(c.signatures()))));
                 if (c.del() != null) {
                     long days = ChronoUnit.DAYS.between(c.del(), s.now());
                     if (days > SIGNATURE_DAYS)
-                        r.put("avviso", I18n.tr("server.ver.sigsOld", java.util.Map.of("d", String.valueOf(days))));
+                        r.put("warning", I18n.tr("server.ver.sigsOld", java.util.Map.of("d", String.valueOf(days))));
                 }
             }
             if (fromDaemon && !pkg.isEmpty())
@@ -278,23 +278,23 @@ public final class SoftwareVersions {
             JSONObject r = entry("roundcube", "Roundcube", "server.ver.role.roundcube");
             String index = ROUNDCUBE + "/index.php";
             if (!s.exists(index)) return r;
-            r.put("installato", true);
+            r.put("installed", true);
             String pkg = pkgName(index);
-            if (!pkg.isEmpty()) r.put("pacchetto", pkg);
+            if (!pkg.isEmpty()) r.put("pkgName", pkg);
             String ver = extract(Pattern.compile("RCMAIL_VERSION'\\s*,\\s*'" + V + "'"), s.read(ROUNDCUBE + "/program/include/iniset.php"));
-            if (ver != null) r.put("versione", ver).put("fonte", "RCMAIL_VERSION in " + ROUNDCUBE + "/program/include/iniset.php");
-            else if (!pkg.isEmpty()) r.put("versione", upstream(pkg)).put("fonte", "pkg which " + index);
+            if (ver != null) r.put("version", ver).put("source", "RCMAIL_VERSION in " + ROUNDCUBE + "/program/include/iniset.php");
+            else if (!pkg.isEmpty()) r.put("version", upstream(pkg)).put("source", "pkg which " + index);
             return r;
         }
 
         JSONObject java(String javaBin) {
-            JSONObject r = entry("java", "Java", "server.ver.role.java").put("installato", true);
+            JSONObject r = entry("java", "Java", "server.ver.role.java").put("installed", true);
             String ver = validate(s.javaVersion());
             if (ver == null) return r;
-            r.put("versione", ver).put("fonte", I18n.tr("server.ver.srcJava")).put("inEsecuzione", true);
+            r.put("version", ver).put("source", I18n.tr("server.ver.srcJava")).put("running", true);
             String pkg = pkgName(javaBin);
             if (!pkg.isEmpty()) {
-                r.put("pacchetto", pkg);
+                r.put("pkgName", pkg);
                 compare(r, ver, upstream(pkg), I18n.tr("server.ver.panelJava"), I18n.tr("server.ver.fixPanel"));
             }
             return r;
@@ -307,13 +307,13 @@ public final class SoftwareVersions {
             if (userland == null) return r;
             String running = validate(before(s.run(FREEBSD_VERSION, "-r")));
             String installed = validate(before(s.run(FREEBSD_VERSION, "-k")));
-            r.put("installato", true).put("versione", userland).put("fonte", "freebsd-version -u");
+            r.put("installed", true).put("version", userland).put("source", "freebsd-version -u");
             // Kernel e userland possono avere patch diverse per buone ragioni (una fix che
             // tocca solo l'una o l'altro): si dice, ma non e' un problema.
-            if (running != null && !running.equals(userland)) r.put("dettaglio", I18n.tr("server.ver.kernelRunning", java.util.Map.of("v", String.valueOf(running))));
+            if (running != null && !running.equals(userland)) r.put("detail", I18n.tr("server.ver.kernelRunning", java.util.Map.of("v", String.valueOf(running))));
             // L'Handbook: kernel installato diverso da quello in esecuzione vuol dire riavvio mancante.
             if (installed != null && running != null && !installed.equals(running)) {
-                r.put("riavvio", true).put("installata", installed).put("notaRiavvio", I18n.tr("server.ver.kernelReboot", java.util.Map.of("inst", String.valueOf(installed), "run", String.valueOf(running))));
+                r.put("restart", true).put("installedVersion", installed).put("restartNote", I18n.tr("server.ver.kernelReboot", java.util.Map.of("inst", String.valueOf(installed), "run", String.valueOf(running))));
             }
             return r;
         }
@@ -321,22 +321,22 @@ public final class SoftwareVersions {
         JSONObject openssl(String binary, String key, String name, String role) {
             JSONObject r = entry(key, name, role);
             if (!s.exists(binary)) return r;
-            r.put("installato", true);
+            r.put("installed", true);
             String pkg = pkgName(binary);
-            if (!pkg.isEmpty()) r.put("pacchetto", pkg);
+            if (!pkg.isEmpty()) r.put("pkgName", pkg);
             String out = s.run(binary, "version");
             Matcher m = Pattern.compile("^(?:OpenSSL|LibreSSL)\\s+" + V + "(?:\\s+(\\d{1,2} [A-Z][a-z]{2} \\d{4}))?", Pattern.MULTILINE)
                     .matcher(out == null ? "" : out);
             if (m.find() && validate(m.group(1)) != null) {
-                r.put("versione", m.group(1)).put("fonte", binary + " version");
+                r.put("version", m.group(1)).put("source", binary + " version");
                 if (m.group(2) != null) {
                     try {
                         LocalDate d = LocalDate.parse(m.group(2), DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH));
-                        r.put("dettaglio", I18n.tr("server.ver.released", java.util.Map.of("date", String.valueOf(d.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))))));
+                        r.put("detail", I18n.tr("server.ver.released", java.util.Map.of("date", String.valueOf(d.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))))));
                     } catch (Exception ignored) { /* la data e' un di piu' */ }
                 }
             } else if (!pkg.isEmpty()) {
-                r.put("versione", upstream(pkg)).put("fonte", "pkg which " + binary);
+                r.put("version", upstream(pkg)).put("source", "pkg which " + binary);
             }
             return r;
         }
@@ -345,7 +345,7 @@ public final class SoftwareVersions {
     }
 
     private static JSONObject entry(String key, String name, String role) {
-        return new JSONObject().put("chiave", key).put("nome", I18n.tr(name)).put("ruolo", I18n.tr(role)).put("installato", false);
+        return new JSONObject().put("key", key).put("name", I18n.tr(name)).put("role", I18n.tr(role)).put("installed", false);
     }
 
     /** Il primo gruppo del modello nell'uscita, se e' una versione; altrimenti null. */

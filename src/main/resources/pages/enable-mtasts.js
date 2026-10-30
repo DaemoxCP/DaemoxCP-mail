@@ -10,12 +10,12 @@
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(r.error) + '</div>';
                 return;
             }
-            let h = '<div class="alert alert-' + (r.completo ? 'success' : 'info') + ' py-2 small mb-2">'
-                  + '<i class="fas fa-' + (r.completo ? 'check-circle' : 'circle-info') + ' me-1" aria-hidden="true"></i>'
-                  + updEsc(r.nota) + '</div>';
+            let h = '<div class="alert alert-' + (r.complete ? 'success' : 'info') + ' py-2 small mb-2">'
+                  + '<i class="fas fa-' + (r.complete ? 'check-circle' : 'circle-info') + ' me-1" aria-hidden="true"></i>'
+                  + updEsc(r.note) + '</div>';
 
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>';
-            (r.passi || []).forEach((p, i) => {
+            (r.steps || []).forEach((p, i) => {
                 const fatto = p.state === 'fatto';
                 const incerto = p.state === 'incerto';
                 // "incerto" non e' verde: il pannello non ha potuto verificare, e mostrarlo
@@ -25,14 +25,14 @@
                             : incerto
                               ? '<i class="fas fa-question-circle text-secondary" aria-hidden="true" title="' + escHtml(t('ams.unverifiable')) + '"></i><span class="visually-hidden">' + escHtml(t('ams.unverifiable')) + '</span>'
                               : '<i class="fas fa-circle text-warning" style="font-size:.6rem" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('up.pTodo')) + '</span>')
-                   + '</td><td class="small"><strong>' + (i + 1) + '. ' + updEsc(p.titolo) + '</strong>'
-                   + (p.dettaglio ? '<div class="text-muted">' + updEsc(p.dettaglio) + '</div>' : '')
+                   + '</td><td class="small"><strong>' + (i + 1) + '. ' + updEsc(p.title) + '</strong>'
+                   + (p.detail ? '<div class="text-muted">' + updEsc(p.detail) + '</div>' : '')
                    + (p.reason ? '<div class="text-warning">' + updEsc(p.reason) + '</div>' : '')
                    + '</td></tr>';
             });
             h += '</tbody></table></div>';
 
-            if (!r.completo)
+            if (!r.complete)
                 h += '<button class="btn btn-sm btn-success" onclick="amsAttiva()">'
                    + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('ams.run')) + '</button>';
             h += '<div id="amsOutcome" class="mt-2"></div>';

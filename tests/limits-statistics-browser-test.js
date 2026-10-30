@@ -54,7 +54,7 @@ async function serve(route) {
         return route.fulfill({ status: 200, contentType: type, body: fs.readFileSync(f) });
     }
     if (p === '/api/ratelimits' && req.method() === 'GET') {
-        return json({ success: true, limits, globale: { hourly: 30, daily: 300, max_recipients: 50, max_size_mb: 25 } });
+        return json({ success: true, limits, global: { hourly: 30, daily: 300, max_recipients: 50, max_size_mb: 25 } });
     }
     if (p === '/api/ratelimits' && req.method() === 'POST') {
         const body = JSON.parse(req.postData() || '{}');

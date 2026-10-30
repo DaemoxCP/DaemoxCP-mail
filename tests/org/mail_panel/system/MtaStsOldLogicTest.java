@@ -11,9 +11,9 @@ import java.util.List;
 public class MtaStsOldLogicTest {
     public static void main(String[] a) {
         List<MtaStsSetup.NameReview> cases = List.of(
-            new MtaStsSetup.NameReview("domain-d.test", MtaStsSetup.NameState.ASSENTE,
+            new MtaStsSetup.NameReview("domain-d.test", MtaStsSetup.NameState.ABSENT,
                 "nella zona non c'e' nessun record con questo nome", true),
-            new MtaStsSetup.NameReview("x.it", MtaStsSetup.NameState.DA_CORREGGERE,
+            new MtaStsSetup.NameReview("x.it", MtaStsSetup.NameState.TO_FIX,
                 "punta a \"altro.host\" invece che a \"mail.domain-b.test\"; passa da Cloudflare", true));
 
         List<String> absent = new ArrayList<>(), crooked = new ArrayList<>(),
@@ -21,13 +21,13 @@ public class MtaStsOldLogicTest {
                      propagating = new ArrayList<>();
         for (MtaStsSetup.NameReview e : cases) {
             switch (e.state) {
-                case ASSENTE -> absent.add(e.domain + " (" + e.reason + ")");
-                case CIECO -> blind.add(e.domain + " (" + e.reason + ")");
-                case DA_CORREGGERE -> {
+                case ABSENT -> absent.add(e.domain + " (" + e.reason + ")");
+                case BLIND -> blind.add(e.domain + " (" + e.reason + ")");
+                case TO_FIX -> {
                     if (e.reason.contains("Cloudflare")) proxied.add(e.domain);
                     else crooked.add(e.domain + " (" + e.reason + ")");
                 }
-                case GIUSTO -> { if (!e.resolves) propagating.add(e.domain); }
+                case RIGHT -> { if (!e.resolves) propagating.add(e.domain); }
             }
         }
         System.out.println("LOGICA VECCHIA, stessi due casi:");

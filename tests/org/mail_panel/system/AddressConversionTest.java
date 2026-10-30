@@ -59,8 +59,8 @@ public class AddressConversionTest {
     }
 
     static AddressTransform.AddressState state(String address, boolean ofPanel, MailDatabase.Mailbox m,
-                                          List<MailDatabase.Alias> source, List<MailDatabase.Alias> verso) {
-        return new AddressTransform.AddressState(address, ofPanel, m, source, verso, AddressTransform.MailContent.NONE,
+                                          List<MailDatabase.Alias> source, List<MailDatabase.Alias> target) {
+        return new AddressTransform.AddressState(address, ofPanel, m, source, target, AddressTransform.MailContent.NONE,
                 m == null ? null : new AddressTransform.Losses(false, List.of(), 0));
     }
 
@@ -70,7 +70,7 @@ public class AddressConversionTest {
         final Set<String> mailboxes;
         final Map<String, List<String>> alias = new HashMap<>();
         FakeNetwork(Set<String> domains, Set<String> mailboxes) { this.domains = domains; this.mailboxes = mailboxes; }
-        FakeNetwork con(String da, String a) { alias.computeIfAbsent(da, k -> new ArrayList<>()).add(a); return this; }
+        FakeNetwork con(String from, String to) { alias.computeIfAbsent(from, k -> new ArrayList<>()).add(to); return this; }
         @Override public boolean panelDomain(String d) { return domains.contains(d); }
         @Override public boolean receives(String a) { return mailboxes.contains(a); }
         @Override public List<String> activeDestinations(String s) { return alias.getOrDefault(s, List.of()); }
@@ -121,8 +121,8 @@ public class AddressConversionTest {
                 List.of(alias(3, "postmaster@domain-d.test", "dmarc@domain-d.test", true)));
         real("dmarc@domain-d.test -> owner@example.net: si puo'", AddressTransform.noMailboxReason(ok) == null);
         JSONObject ant = AddressTransform.previewToMailbox(ok, ZoneId.of("Europe/Rome"));
-        real("l'anteprima elenca le destinazioni (anche quella disattiva) e chi arriva qui", ant.getBoolean("possibile")
-                && ant.getJSONArray("destinazioni").length() == 2 && ant.getJSONArray("versoQui").getJSONObject(0).getString("sorgente").equals("postmaster@domain-d.test"));
+        real("l'anteprima elenca le destinazioni (anche quella disattiva) e chi arriva qui", ant.getBoolean("possible")
+                && ant.getJSONArray("destinations").length() == 2 && ant.getJSONArray("towardsHere").getJSONObject(0).getString("source").equals("postmaster@domain-d.test"));
         String before = AddressTransform.fingerprint(ok);
         AddressTransform.AddressState changed = state("dmarc@domain-d.test", true, null,
                 List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "vecchio@x.it", true)),
@@ -138,14 +138,14 @@ public class AddressConversionTest {
                 List.of(), AddressTransform.MailContent.NONE,
                 new AddressTransform.Losses(true, List.of("owner@example.net", "info@domain-d.test"), 3));
         JSONObject aa = AddressTransform.previewToAlias(c, ZoneId.of("Europe/Rome"));
-        JSONObject per = aa.getJSONObject("perdite");
-        real("risposta automatica, 3 filtri, inoltri e solo invio", per.getBoolean("rispostaAutomatica") && per.getInt("filtri") == 3
-                && per.getJSONArray("inoltri").length() == 2 && per.getBoolean("soloInvio"));
+        JSONObject per = aa.getJSONObject("losses");
+        real("risposta automatica, 3 filtri, inoltri e solo invio", per.getBoolean("autoReply") && per.getInt("filters") == 3
+                && per.getJSONArray("forwards").length() == 2 && per.getBoolean("sendOnly"));
         real("le destinazioni proposte sono gli inoltri della casella, senza se stessa",
-                aa.getJSONArray("proposte").toList().equals(List.of("owner@example.net")));
-        real("l'alias su se stessa e' segnalato (se ne andra'), gli altri restano", aa.getBoolean("copia")
-                && aa.getJSONArray("giaInoltrata").getJSONObject(0).getString("destinazione").equals("capo@x.it"));
-        real("su un alias (non casella): non si puo'", !AddressTransform.previewToAlias(ok, ZoneId.of("Europe/Rome")).getBoolean("possibile"));
+                aa.getJSONArray("proposals").toList().equals(List.of("owner@example.net")));
+        real("l'alias su se stessa e' segnalato (se ne andra'), gli altri restano", aa.getBoolean("copy")
+                && aa.getJSONArray("alreadyForwarded").getJSONObject(0).getString("destination").equals("capo@x.it"));
+        real("su un alias (non casella): non si puo'", !AddressTransform.previewToAlias(ok, ZoneId.of("Europe/Rome")).getBoolean("possible"));
     }
 
     static void destinations() {
@@ -199,7 +199,7 @@ public class AddressConversionTest {
                 + p.messages() + ", " + p.totalBytes(), p.present() && p.messages() == 4 && p.totalBytes() == 400 && p.filters());
         real("un indirizzo senza cartella: niente", !AddressTransform.mail("nessuno@domain-d.test").present());
         real("\"..@domain-d.test\" non diventa un percorso", AddressTransform.folder(AddressTransform.vmail, "..@domain-d.test") == null
-                && AddressTransform.folder(AddressTransform.vmail, ".a@domain-d.test") == null);
+                && AddressTransform.folder(AddressTransform.vmail, ".to@domain-d.test") == null);
         List<Path[]> moved = AddressTransform.archive("dmarc@domain-d.test", 1_790_000_000_000L);
         real("messa da parte: posta e filtri in .archivio-pannello, con la data", moved.size() == 2 && !Files.exists(dir)
                 && moved.get(0)[1].toString().contains(".archivio-pannello/domain-d.test/dmarc-20260921T")

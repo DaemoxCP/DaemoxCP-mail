@@ -25,7 +25,7 @@
                 el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + paEsc(r.error) + '</div>';
                 return;
             }
-            const caselle = r.caselle || [];
+            const caselle = r.mailboxes || [];
             if (!caselle.length) {
                 el.innerHTML = '<div class="alert alert-info py-2 small mb-0">' + paEsc(t('pa.none')) + '</div>';
                 return;
@@ -42,7 +42,7 @@
                 + '<button class="btn btn-sm btn-outline-secondary" onclick="paAnteprima()">'
                 + '<i class="fas fa-eye me-1" aria-hidden="true"></i>' + paEsc(t('pa.look')) + '</button>'
                 + '</div>'
-                + '<div class="small text-muted mb-2">' + t('pa.sets.html', { imap: paEsc(r.hostDiPosta + ':' + r.portaImap), smtp: paEsc(r.hostDiPosta + ':' + r.portaSmtp) }) + '</div>'
+                + '<div class="small text-muted mb-2">' + t('pa.sets.html', { imap: paEsc(r.mailHost + ':' + r.imapPort), smtp: paEsc(r.mailHost + ':' + r.smtpPort) }) + '</div>'
                 + '<div class="alert alert-secondary py-2 small mb-0">'
                 + '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>' + t('pa.after.html') + '</div>'
                 + '<div id="paOutcome" class="mt-2"></div>';
@@ -65,5 +65,5 @@
                 return;
             }
             el.innerHTML = '<pre class="small p-2 border rounded" style="max-height:24rem;overflow:auto">'
-                         + paEsc(r.profilo) + '</pre>';
+                         + paEsc(r.profile) + '</pre>';
         }

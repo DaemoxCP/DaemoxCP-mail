@@ -152,27 +152,27 @@ public class Autoconfig {
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         String host = mailHost();
-        r.put("hostDiPosta", host);
+        r.put("mailHost", host);
         if (host == null || host.isBlank())
-            return r.put("pronto", false)
+            return r.put("ready", false)
                     .put("error", I18n.tr("server.autoconf.noHostnameFile"));
 
         String conf = confNginx();
         r.put("conf", conf == null ? JSONObject.NULL : conf);
         if (conf == null)
-            return r.put("pronto", false)
+            return r.put("ready", false)
                     .put("error", I18n.tr("server.autoconf.noNginx443"));
 
         String text = "";
         try { text = Files.readString(Path.of(conf)); } catch (Exception ignore) {}
         boolean coveredName = text.contains("autoconfig.") && text.contains("mta-sts.");
         boolean brokenPresent = text.contains(MARKER);
-        r.put("nomeCoperto", coveredName).put("rottaPresente", brokenPresent);
+        r.put("coveredName", coveredName).put("brokenPresent", brokenPresent);
         r.put("serverName", firstLineWith(text, "server_name"));
         // Se la superficie pubblica sulla 443 e' installata, quei nomi sono suoi e questa
         // scheda non deve nemmeno offrire di toccare nginx: un pulsante che, premuto, si
         // rifiuta, e' un pulsante che non andava mostrato.
-        r.put("superficie443", WebProtection.state().optBoolean("installato", false));
+        r.put("surface443", WebProtection.state().optBoolean("installed", false));
 
         // Il certificato: se non copre autoconfig.<dominio>, Thunderbird sbatte su un errore
         // TLS prima ancora di leggere il file.
@@ -185,24 +185,24 @@ public class Autoconfig {
             readList = true;
             for (var d : tutti) {
                 String name = "autoconfig." + d.domain;
-                JSONObject j = new JSONObject().put("dominio", d.domain).put("nome", name);
+                JSONObject j = new JSONObject().put("domain", d.domain).put("name", name);
                 j.put("dns", resolves(name));
-                j.put("certificato", certificateCovers(name));
+                j.put("certificate", certificateCovers(name));
                 // La prova che conta: si CHIEDE il file come lo chiederebbe Thunderbird.
                 // Leggere la configurazione di nginx dice cosa dovrebbe succedere; questa
                 // dice cosa succede. Non sono la stessa cosa, e quando divergono e' sempre
                 // la seconda ad avere ragione.
                 JSONObject test = testDownload(name, d.domain);
-                j.put("prova", test);
+                j.put("test", test);
                 reviewed++;
                 if (test.optBoolean("ok", false)) working++;
-                else troubles.add(d.domain + " (" + test.optString("errore", I18n.tr("server.autoconf.failed")) + ")");
+                else troubles.add(d.domain + " (" + test.optString("error", I18n.tr("server.autoconf.failed")) + ")");
                 domains.put(j);
             }
         } catch (Exception e) {
             troubles.add(I18n.tr("server.autoconf.domainsUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
-        r.put("domini", domains).put("esaminati", reviewed).put("funzionanti", working);
+        r.put("domains", domains).put("reviewed", reviewed).put("working", working);
 
         // Il verdict viene dalla PROVA, non dal testo della configurazione.
         //
@@ -215,8 +215,8 @@ public class Autoconfig {
         // configurarsi a mano. Il commento qui sopra diceva gia' quale delle due misure ha
         // ragione; il verdict usava l'altra.
         boolean ready = ready(readList, reviewed, working);
-        r.put("pronto", ready);
-        r.put("perche", ready
+        r.put("ready", ready);
+        r.put("why", ready
                 ? I18n.tr("server.autoconf.arrivesAll", java.util.Map.of("n", String.valueOf(reviewed))) + " " + (brokenPresent
                         ? I18n.tr("server.autoconf.routeIn", java.util.Map.of("conf", String.valueOf(conf)))
                         : I18n.tr("server.autoconf.routeElsewhere", java.util.Map.of("conf", String.valueOf(conf))))
@@ -266,29 +266,29 @@ public class Autoconfig {
                     .GET().build();
             java.net.http.HttpResponse<String> resp =
                     http.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-            r.put("codice", resp.statusCode());
+            r.put("code", resp.statusCode());
             String body = resp.body() == null ? "" : resp.body();
             boolean right = resp.statusCode() == 200 && body.contains("<clientConfig")
                     && body.contains("<domain>" + domain + "</domain>");
             r.put("ok", right);
             if (!right) {
                 if (resp.statusCode() != 200)
-                    r.put("errore", I18n.tr("server.autoconf.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
+                    r.put("error", I18n.tr("server.autoconf.status", java.util.Map.of("c", String.valueOf(resp.statusCode()))));
                 else if (!body.contains("<clientConfig"))
-                    r.put("errore", I18n.tr("server.autoconf.notConfigFile"));
+                    r.put("error", I18n.tr("server.autoconf.notConfigFile"));
                 else
-                    r.put("errore", I18n.tr("server.autoconf.otherDomain", java.util.Map.of("d", String.valueOf(domain))));
+                    r.put("error", I18n.tr("server.autoconf.otherDomain", java.util.Map.of("d", String.valueOf(domain))));
             }
             return r;
         } catch (javax.net.ssl.SSLException e) {
             return r.put("ok", false).put("tls", true)
-                    .put("errore", I18n.tr("server.autoconf.certInvalid", java.util.Map.of("name", String.valueOf(name))));
+                    .put("error", I18n.tr("server.autoconf.certInvalid", java.util.Map.of("name", String.valueOf(name))));
         } catch (java.net.UnknownHostException e) {
             return r.put("ok", false)
-                    .put("errore", I18n.tr("server.autoconf.noCname", java.util.Map.of("name", String.valueOf(name))));
+                    .put("error", I18n.tr("server.autoconf.noCname", java.util.Map.of("name", String.valueOf(name))));
         } catch (Exception e) {
             return r.put("ok", false)
-                    .put("errore", I18n.tr("server.autoconf.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName() + (e.getMessage() == null ? "" : " - " + e.getMessage())))));
+                    .put("error", I18n.tr("server.autoconf.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName() + (e.getMessage() == null ? "" : " - " + e.getMessage())))));
         }
     }
 
@@ -356,9 +356,9 @@ public class Autoconfig {
             JSONObject st = state();
             if (!st.optBoolean("success", false) || st.has("error"))
                 return r.put("success", false).put("error", st.optString("error", I18n.tr("server.autoconf.stateUnreadable")));
-            if (st.optBoolean("pronto", false))
-                return r.put("success", true).put("giaFatto", true)
-                        .put("nota", I18n.tr("server.autoconf.alreadyAll") + " " + st.optString("perche", ""));
+            if (st.optBoolean("ready", false))
+                return r.put("success", true).put("alreadyDone", true)
+                        .put("note", I18n.tr("server.autoconf.alreadyAll") + " " + st.optString("why", ""));
 
             // La guardia che conta, e vale anche quando il file NON arriva.
             //
@@ -375,14 +375,14 @@ public class Autoconfig {
             //
             // "nginx -t" non se ne accorgerebbe: e' una rottura di significato, non di
             // sintassi. Quindi la decisione va presa qui, prima di scrivere.
-            if (WebProtection.state().optBoolean("installato", false))
-                return r.put("success", false).put("giaAltrove", true)
-                        .put("error", I18n.tr("server.autoconf.publicSurface") + " " + st.optString("perche", ""));
+            if (WebProtection.state().optBoolean("installed", false))
+                return r.put("success", false).put("alreadyElsewhere", true)
+                        .put("error", I18n.tr("server.autoconf.publicSurface") + " " + st.optString("why", ""));
 
             // Quali politiche MTA-STS rispondono PRIMA di toccare qualcosa. Senza questa
             // fotografia, dopo non c'e' modo di sapere se una l'ho rotta io.
             List<String> policiesBefore = answeringPolicies();
-            r.put("politichePrima", new JSONArray(policiesBefore));
+            r.put("policiesBefore", new JSONArray(policiesBefore));
 
             String conf = st.getString("conf");
             Path p = Path.of(conf);
@@ -392,7 +392,7 @@ public class Autoconfig {
             Path copy = Path.of("/var/db/mailpanel/nginx-before-autoconfig.conf");
             Files.createDirectories(copy.getParent());
             Files.writeString(copy, text);
-            r.put("copia", copy.toString());
+            r.put("copy", copy.toString());
 
             String fresh = text;
 
@@ -434,7 +434,7 @@ public class Autoconfig {
             Outcome test = run("nginx", "-t");
             if (test.code != 0) {
                 Files.writeString(p, text);
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.autoconf.nginxRejected", java.util.Map.of("out", String.valueOf(test.output.trim()))));
             }
 
@@ -442,7 +442,7 @@ public class Autoconfig {
             if (ric.code != 0) {
                 Files.writeString(p, text);
                 run("service", "nginx", "reload");
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.autoconf.reloadFailed", java.util.Map.of("out", String.valueOf(ric.output.trim()))));
             }
 
@@ -457,21 +457,21 @@ public class Autoconfig {
             if (!perse.isEmpty()) {
                 Files.writeString(p, text);
                 run("service", "nginx", "reload");
-                return r.put("success", false).put("ripristinato", true)
+                return r.put("success", false).put("restored", true)
                         .put("error", I18n.tr("server.autoconf.stsLost", java.util.Map.of("list", String.valueOf(String.join(", ", perse)))));
             }
 
             JSONObject after = state();
-            r.put("statoDopo", after);
-            if (!after.optBoolean("pronto", false)) {
+            r.put("stateAfter", after);
+            if (!after.optBoolean("ready", false)) {
                 Files.writeString(p, text);
                 run("service", "nginx", "reload");
-                return r.put("success", false).put("ripristinato", true)
-                        .put("error", I18n.tr("server.autoconf.stillNotArriving", java.util.Map.of("why", String.valueOf(after.optString("perche", "")), "copy", String.valueOf(copy))));
+                return r.put("success", false).put("restored", true)
+                        .put("error", I18n.tr("server.autoconf.stillNotArriving", java.util.Map.of("why", String.valueOf(after.optString("why", "")), "copy", String.valueOf(copy))));
             }
 
             return r.put("success", true)
-                    .put("nota", I18n.tr("server.autoconf.done", java.util.Map.of("copy", String.valueOf(copy))));
+                    .put("note", I18n.tr("server.autoconf.done", java.util.Map.of("copy", String.valueOf(copy))));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.autoconf.installError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
@@ -521,7 +521,7 @@ public class Autoconfig {
         try { for (var d : Main.mailDatabase.getDomains()) names.add(d.domain); } catch (Exception ignore) {}
         if (names.isEmpty())
             return new JSONObject().put("success", false).put("error", I18n.tr("server.autoconf.noDomains"));
-        return r.put("dominio", names.get(0)).put("hostDiPosta", host)
-                .put("xml", xml(names.get(0), host)).put("quantiDomini", names.size());
+        return r.put("domain", names.get(0)).put("mailHost", host)
+                .put("xml", xml(names.get(0), host)).put("domainCount", names.size());
     }
 }

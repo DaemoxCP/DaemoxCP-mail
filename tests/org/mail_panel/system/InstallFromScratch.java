@@ -30,8 +30,8 @@ import java.util.Map;
 public class InstallFromScratch {
 
     public static void main(String[] args) throws Exception {
-        String mailHostname = args.length > 0 ? args[0] : "mail.prova.local";
-        String roundcubeDomain = args.length > 1 ? args[1] : "webmail.prova.local";
+        String mailHostname = args.length > 0 ? args[0] : "mail.test.local";
+        String roundcubeDomain = args.length > 1 ? args[1] : "webmail.test.local";
         String roundcubePort = args.length > 2 ? args[2] : "8443";
 
         // Gli stessi preparativi che fa Main all'avvio (Main.java, intorno a riga 350 e 374):

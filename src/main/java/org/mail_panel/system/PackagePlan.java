@@ -119,8 +119,8 @@ public final class PackagePlan {
             Matcher ev = PROTECTED_EVENT.matcher(t);
             if (ev.find()) {
                 if (alreadyLocked.add(ev.group(1)))
-                    lockedPackages.put(new JSONObject().put("nome", ev.group(1)).put("versione", ev.group(2))
-                            .put("azione", "modified").put("verso", ""));
+                    lockedPackages.put(new JSONObject().put("name", ev.group(1)).put("version", ev.group(2))
+                            .put("action", "modified").put("destination", ""));
                 continue;
             }
             boolean total = false;
@@ -142,13 +142,13 @@ public final class PackagePlan {
         }
 
         JSONObject r = new JSONObject().put("changes", changes).put("lockedPackages", lockedPackages)
-                .put("erroriPkg", errors).put("avvisiPkg", warnings)
+                .put("pkgErrors", errors).put("pkgWarnings", warnings)
                 .put("nothingToDo", updated || (changes.isEmpty() && lockedPackages.isEmpty() && errors.isEmpty()))
                 .put("hasConflicts", hasConflicts);
 
         if (unreadable.length() > 0)
-            return r.put("measured", false).put("illeggibili", unreadable)
-                    .put("errore", I18n.tr("server.plan.unreadableLines", java.util.Map.of("n", String.valueOf(unreadable.length()), "first", String.valueOf(unreadable.getString(0)))));
+            return r.put("measured", false).put("unreadable", unreadable)
+                    .put("error", I18n.tr("server.plan.unreadableLines", java.util.Map.of("n", String.valueOf(unreadable.length()), "first", String.valueOf(unreadable.getString(0)))));
         // pkg stampa un totale per ogni tipo che compare: i due conti devono coincidere, in
         // entrambe le direzioni. Un tipo contato senza totale e' un totale che non ho letto.
         Set<String> kinds = new LinkedHashSet<>(counted.keySet());
@@ -157,7 +157,7 @@ public final class PackagePlan {
             int a = counted.getOrDefault(type, 0), b = declared.getOrDefault(type, -1);
             if (a != b)
                 return r.put("measured", false)
-                        .put("errore", I18n.tr("server.plan.countMismatch", java.util.Map.of("b", String.valueOf(b < 0 ? I18n.tr("server.plan.noTotal") : String.valueOf(b)), "kind", String.valueOf(type), "a", String.valueOf(a))));
+                        .put("error", I18n.tr("server.plan.countMismatch", java.util.Map.of("b", String.valueOf(b < 0 ? I18n.tr("server.plan.noTotal") : String.valueOf(b)), "kind", String.valueOf(type), "a", String.valueOf(a))));
         }
         return r.put("measured", true);
     }
@@ -192,8 +192,8 @@ public final class PackagePlan {
                 m = PROTECTED_IN_PLAN.matcher(s);
                 if (!m.find()) return false;
                 if (alreadyLocked.add(m.group(1)))
-                    lockedPackages.put(new JSONObject().put("nome", m.group(1)).put("versione", m.group(2))
-                            .put("azione", m.group(3)).put("verso", m.group(4) == null ? "" : m.group(4)));
+                    lockedPackages.put(new JSONObject().put("name", m.group(1)).put("version", m.group(2))
+                            .put("action", m.group(3)).put("destination", m.group(4) == null ? "" : m.group(4)));
             }
             case "scarica", "gruppo" -> { /* non cambiano pacchetti installati */ }
             default -> { return false; }
@@ -201,9 +201,9 @@ public final class PackagePlan {
         return true;
     }
 
-    private static JSONObject entry(String type, String name, String da, String a, String reason,
+    private static JSONObject entry(String type, String name, String from, String to, String reason,
                                    String repo, boolean vulnerable) {
-        return new JSONObject().put("tipo", type).put("nome", name).put("da", da).put("a", a)
+        return new JSONObject().put("type", type).put("name", name).put("from", from).put("to", to)
                 .put("reason", reason == null ? "" : reason).put("repo", repo == null ? "" : repo)
                 .put("stillVulnerable", vulnerable);
     }
@@ -223,7 +223,7 @@ public final class PackagePlan {
         JSONArray c = plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            lines.add(x.optString("tipo") + " " + x.optString("nome") + " " + x.optString("da") + " " + x.optString("a"));
+            lines.add(x.optString("type") + " " + x.optString("name") + " " + x.optString("from") + " " + x.optString("to"));
         }
         java.util.Collections.sort(lines);
         try {
@@ -249,7 +249,7 @@ public final class PackagePlan {
         JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            lines.add(x.optString("tipo") + " " + x.optString("nome") + " " + x.optString("da") + " " + x.optString("a"));
+            lines.add(x.optString("type") + " " + x.optString("name") + " " + x.optString("from") + " " + x.optString("to"));
         }
         java.util.Collections.sort(lines);
         try {
@@ -267,10 +267,10 @@ public final class PackagePlan {
         JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            String a = x.optString("a");
-            lines.add(typeName(x.optString("tipo")) + " " + x.optString("nome")
-                    + (x.optString("da").isEmpty() ? "" : " " + x.optString("da"))
-                    + (a.isEmpty() || a.equals(x.optString("da")) ? "" : " -> " + a));
+            String a = x.optString("to");
+            lines.add(typeName(x.optString("type")) + " " + x.optString("name")
+                    + (x.optString("from").isEmpty() ? "" : " " + x.optString("from"))
+                    + (a.isEmpty() || a.equals(x.optString("from")) ? "" : " -> " + a));
         }
         java.util.Collections.sort(lines);
         return lines;
@@ -347,9 +347,9 @@ public final class PackagePlan {
             }
             Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefix + " upgrade -n -U" + list + " 2>&1");
             JSONObject plan = readPlan(r.output());
-            return plan.put("success", true).put("codice", r.exitCode()).put("output", r.outputTrim())
+            return plan.put("success", true).put("code", r.exitCode()).put("output", r.outputTrim())
                     .put("onBackup", copy != null)
-                    .put("comando", "pkg upgrade -n -U" + list);
+                    .put("command", "pkg upgrade -n -U" + list);
         } finally {
             // La copia se ne va sempre. Il percorso e' quello creato da mktemp e verificato sopra.
             if (copy != null) Shell.runShell(Duration.ofSeconds(300), "rm -rf " + copy);
@@ -421,12 +421,12 @@ public final class PackagePlan {
             JSONArray bl = plan.getJSONArray("lockedPackages");
             for (int i = 0; i < bl.length(); i++) {
                 JSONObject block = bl.getJSONObject(i);
-                String n = block.getString("nome");
+                String n = block.getString("name");
                 if (unlock.contains(n)) continue;
                 String no = !protectedNames.contains(n)
                         ? I18n.tr("server.plan.lockedUnknown")
                         : reasonNotToUnlock.apply(block);
-                if (no != null) { blockers.put(new JSONObject().put("nome", n).put("reason", no)); continue; }
+                if (no != null) { blockers.put(new JSONObject().put("name", n).put("reason", no)); continue; }
                 unlock.add(n);
                 added = true;
             }
@@ -443,7 +443,7 @@ public final class PackagePlan {
         for (String p : packages) {
             boolean change = false;
             for (int i = 0; changes != null && i < changes.length(); i++)
-                if (p.equals(changes.getJSONObject(i).optString("nome"))) change = true;
+                if (p.equals(changes.getJSONObject(i).optString("name"))) change = true;
             if (!change) stopped.put(p);
         }
         plan.put("unchangedPackages", stopped);
@@ -455,9 +455,9 @@ public final class PackagePlan {
         JSONObject before = plan.optBoolean("measured") ? pkgToUpdate() : null;
         if (before != null && changes != null) {
             boolean already = false;
-            for (int i = 0; i < changes.length(); i++) if ("pkg".equals(changes.getJSONObject(i).optString("nome"))) already = true;
+            for (int i = 0; i < changes.length(); i++) if ("pkg".equals(changes.getJSONObject(i).optString("name"))) already = true;
             if (!already) {
-                JSONArray conPkg = new JSONArray().put(entry("aggiorna", "pkg", before.getString("da"), before.getString("a"),
+                JSONArray conPkg = new JSONArray().put(entry("aggiorna", "pkg", before.getString("from"), before.getString("to"),
                         I18n.tr("server.plan.pkgFirst"), "", false));
                 for (int i = 0; i < changes.length(); i++) conPkg.put(changes.get(i));
                 plan.put("changes", conPkg);
@@ -468,7 +468,7 @@ public final class PackagePlan {
         boolean runnable = plan.optBoolean("success") && plan.optBoolean("measured")
                 && (!blockersBlock || (blockers.isEmpty() && plan.optJSONArray("lockedPackages") != null
                                              && plan.getJSONArray("lockedPackages").length() == 0))
-                && plan.getJSONArray("erroriPkg").length() == 0 && !plan.optBoolean("hasConflicts")
+                && plan.getJSONArray("pkgErrors").length() == 0 && !plan.optBoolean("hasConflicts")
                 && changes != null && changes.length() > 0
                 // Se nessuno dei pacchetti chiesti cambia, non c'e' niente da eseguire: nemmeno
                 // se nel piano c'e' pkg che aggiornerebbe se stesso.
@@ -509,14 +509,14 @@ public final class PackagePlan {
         JSONArray changes = plan.optJSONArray("changes");
         for (int i = 0; changes != null && i < changes.length(); i++) {
             JSONObject c = changes.getJSONObject(i);
-            if (!"installa".equals(c.optString("tipo"))) continue;
-            String newName = c.optString("nome");
+            if (!"installa".equals(c.optString("type"))) continue;
+            String newName = c.optString("name");
             String twin = installedTwin == null ? null : installedTwin.apply(newName);
             if (twin == null || twin.equals(newName) || unlock.contains(twin)
                     || !isValidName(twin)) continue;
             if (alreadyBlocked(blockers, twin)) continue;
             if (!protectedNames.contains(twin)) {
-                blockers.put(new JSONObject().put("nome", newName)
+                blockers.put(new JSONObject().put("name", newName)
                         .put("reason", I18n.tr("server.plan.familyConflict",
                                 java.util.Map.of("nuovo", String.valueOf(newName), "gemello", String.valueOf(twin)))));
                 continue;
@@ -528,7 +528,7 @@ public final class PackagePlan {
                 if (validVersion(x)) { catalog = x; break; }
             }
             if (!validVersion(installed) || !installed.equals(catalog)) {
-                blockers.put(new JSONObject().put("nome", twin)
+                blockers.put(new JSONObject().put("name", twin)
                         .put("reason", I18n.tr("server.plan.familyLockedNewer",
                                 java.util.Map.of("nuovo", String.valueOf(newName), "gemello", String.valueOf(twin),
                                         "installata", String.valueOf(installed.isEmpty() ? "?" : installed),
@@ -545,18 +545,18 @@ public final class PackagePlan {
 
     private static boolean alreadyBlocked(JSONArray blockers, String name) {
         for (int i = 0; i < blockers.length(); i++)
-            if (name.equals(blockers.getJSONObject(i).optString("nome"))) return true;
+            if (name.equals(blockers.getJSONObject(i).optString("name"))) return true;
         return false;
     }
 
     /** Il pkg installato e quello del catalogo, se il catalogo ne ha uno piu' recente; altrimenti null. */
     static JSONObject pkgToUpdate() {
-        String da = sh("pkg query %v pkg 2>/dev/null", 30), a = "";
+        String from = sh("pkg query %v pkg 2>/dev/null", 30), to = "";
         for (String line : sh("pkg rquery -U %v pkg 2>/dev/null", 60).split("\n"))
-            if (validVersion(line.trim())) { a = line.trim(); break; }
-        if (!validVersion(da) || !validVersion(a)) return null;
+            if (validVersion(line.trim())) { to = line.trim(); break; }
+        if (!validVersion(from) || !validVersion(to)) return null;
         try {
-            return pkgComparison().compare(a, da) > 0 ? new JSONObject().put("da", da).put("a", a) : null;
+            return pkgComparison().compare(to, from) > 0 ? new JSONObject().put("from", from).put("to", to) : null;
         } catch (RuntimeException e) {
             return null;
         }
@@ -607,7 +607,7 @@ public final class PackagePlan {
         JSONArray c = plan == null ? null : plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            planned.putIfAbsent(x.optString("nome"), x);
+            planned.putIfAbsent(x.optString("name"), x);
         }
 
         Set<String> names = new java.util.TreeSet<>(a.keySet());
@@ -626,7 +626,7 @@ public final class PackagePlan {
                 continue;
             }
             // Nel piano c'era: il tipo e la versione di arrivo devono combaciare.
-            String type = p.optString("tipo"), expected = p.optString("a");
+            String type = p.optString("type"), expected = p.optString("to");
             boolean matches = switch (happened) {
                 case "removed" -> "rimuove".equals(type);
                 case "installed" -> "installa".equals(type) && expected.equals(versionB);
@@ -668,13 +668,13 @@ public final class PackagePlan {
         JSONArray c = plan.optJSONArray("changes");
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
-            String name = x.optString("nome");
+            String name = x.optString("name");
             if (!isValidName(name)) continue;
             String now = sh("pkg query %v " + name + " 2>/dev/null", 30);
-            String expected = "rimuove".equals(x.optString("tipo")) ? "" : x.optString("a");
-            outcome.put(new JSONObject().put("nome", name).put("tipo", x.optString("tipo"))
-                    .put("atteso", expected.isEmpty() ? I18n.tr("server.plan.removed") : expected)
-                    .put("trovato", now.isEmpty() ? I18n.tr("server.plan.notInstalled") : now)
+            String expected = "rimuove".equals(x.optString("type")) ? "" : x.optString("to");
+            outcome.put(new JSONObject().put("name", name).put("type", x.optString("type"))
+                    .put("expected", expected.isEmpty() ? I18n.tr("server.plan.removed") : expected)
+                    .put("found", now.isEmpty() ? I18n.tr("server.plan.notInstalled") : now)
                     .put("ok", expected.equals(now)));
         }
         return outcome;
@@ -778,7 +778,7 @@ public final class PackagePlan {
                         .put("cve", x.optJSONArray("cve") == null ? new JSONArray() : x.getJSONArray("cve"))
                         .put("url", x.optString("url", "")));
             }
-            outside.put(name, new JSONObject().put("versione", p.optString("version", "")).put("issues", issues));
+            outside.put(name, new JSONObject().put("version", p.optString("version", "")).put("issues", issues));
         }
         return outside;
     }
@@ -801,7 +801,7 @@ public final class PackagePlan {
      *  - "non-so": un intervallo non si lascia leggere o il confronto non ha risposto.
      */
     static JSONObject assessFix(String installed, String catalog, JSONArray issues, VersionComparator c) {
-        JSONObject r = new JSONObject().put("installata", installed).put("catalogo", catalog == null ? "" : catalog);
+        JSONObject r = new JSONObject().put("installedVersion", installed).put("catalog", catalog == null ? "" : catalog);
         try {
             boolean newerCatalog = catalog != null && !catalog.isEmpty() && c.compare(catalog, installed) > 0;
             JSONArray details = new JSONArray();
@@ -822,7 +822,7 @@ public final class PackagePlan {
                         .put("ranges", ranges);
                 if (its == null) {
                     unreadable = true;
-                    d.put("tipo", "non-so");
+                    d.put("type", "non-so");
                 } else {
                     Bound sup = null;
                     boolean exact = false;
@@ -832,15 +832,15 @@ public final class PackagePlan {
                     }
                     if (exact) {
                         onlyThis = true;
-                        d.put("tipo", "solo-questa-versione");
+                        d.put("type", "solo-questa-versione");
                     } else if (sup == null) {
                         withoutLimit = true;
-                        d.put("tipo", "senza-limite");
+                        d.put("type", "senza-limite");
                     } else if (sup.op().equals("<")) {
-                        d.put("tipo", "corretta-da").put("firstFixed", sup.version());
+                        d.put("type", "corretta-da").put("firstFixed", sup.version());
                         if (firstFixed == null || c.compare(sup.version(), firstFixed) > 0) firstFixed = sup.version();
                     } else {
-                        d.put("tipo", "vulnerabile-fino-a").put("finoA", sup.version());
+                        d.put("type", "vulnerabile-fino-a").put("upTo", sup.version());
                         upTo = sup.version();
                     }
                 }
@@ -919,9 +919,9 @@ public final class PackagePlan {
                 try { if (catalog.isEmpty() || c.compare(x, catalog) > 0) catalog = x; }
                 catch (RuntimeException ignore) { /* resta quella che c'era */ }
             }
-            per.put(name, assessFix(v.getString("versione"), catalog, v.getJSONArray("issues"), c));
+            per.put(name, assessFix(v.getString("version"), catalog, v.getJSONArray("issues"), c));
         }
-        return new JSONObject().put("success", true).put("pacchetti", per);
+        return new JSONObject().put("success", true).put("packages", per);
     }
 
     // ===================== utilita' =====================
@@ -967,7 +967,7 @@ public final class PackagePlan {
 
     private static JSONObject failed(String error) {
         return new JSONObject().put("success", false).put("measured", false).put("error", error)
-                .put("changes", new JSONArray()).put("lockedPackages", new JSONArray()).put("erroriPkg", new JSONArray());
+                .put("changes", new JSONArray()).put("lockedPackages", new JSONArray()).put("pkgErrors", new JSONArray());
     }
 
     private static long number(String s) {

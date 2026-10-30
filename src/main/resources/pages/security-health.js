@@ -395,7 +395,7 @@
                     tbody.innerHTML = list.map(item => `
                         <tr>
                             <td><span class="ip-badge">${escapeHtmlPermaban(item.ip)}</span></td>
-                            <td>${item.in_runtime ? '<span class="badge bg-success">' + escHtml(t('shu.inPf')) + '</span>' : '<span class="badge bg-warning text-dark">' + escHtml(t('shu.notInPf')) + '</span>'}</td>
+                            <td>${item.at_runtime ? '<span class="badge bg-success">' + escHtml(t('shu.inPf')) + '</span>' : '<span class="badge bg-warning text-dark">' + escHtml(t('shu.notInPf')) + '</span>'}</td>
                             <td>
                                 <button class="btn btn-sm btn-outline-success" data-ip="${escHtml(item.ip)}" onclick="permabanRemove(this.dataset.ip)" title="${escHtml(t('shu.unban'))}" aria-label="${escHtml(t('shu.unban'))}">
                                     <i class="fas fa-unlock" aria-hidden="true"></i>

@@ -1336,7 +1336,7 @@ public class MailPanelContent {
         // ===== Versioni del software (SoftwareVersions sul server) =====
         function verCella(cella, v) {
             cella.textContent = '';
-            if (!v || !v.installato) {
+            if (!v || !v.installed) {
                 const n = document.createElement('span');
                 n.className = 'text-muted';
                 n.textContent = t('ver.notInstalled');
@@ -1345,24 +1345,24 @@ public class MailPanelContent {
             }
             const riga = document.createElement('div');
             const num = document.createElement('strong');
-            num.textContent = v.versione || t('ver.notRead');
-            if (v.fonte) num.title = t('ver.readWith', { source: v.fonte });
+            num.textContent = v.version || t('ver.notRead');
+            if (v.source) num.title = t('ver.readWith', { source: v.source });
             riga.appendChild(num);
-            if (v.inEsecuzione) {
+            if (v.running) {
                 const e = document.createElement('span');
                 e.className = 'small text-muted ms-1';
                 e.textContent = t('ver.running');
                 riga.appendChild(e);
             }
-            if (v.riavvio) {
+            if (v.restart) {
                 const b = document.createElement('span');
                 b.className = 'badge bg-warning text-dark ms-1';
                 b.textContent = t('ver.restartNeeded');
                 riga.appendChild(b);
             }
             cella.appendChild(riga);
-            [[v.dettaglio, 'small text-muted'], [v.pacchetto ? t('ver.package', { name: v.pacchetto }) : '', 'small text-muted'],
-             [v.notaRiavvio, 'small testo-avviso'], [v.avviso, 'small testo-rischio']].forEach(([testo, classe]) => {
+            [[v.detail, 'small text-muted'], [v.pkgName ? t('ver.package', { name: v.pkgName }) : '', 'small text-muted'],
+             [v.restartNote, 'small testo-avviso'], [v.warning, 'small testo-rischio']].forEach(([testo, classe]) => {
                 if (!testo) return;
                 const d = document.createElement('div');
                 d.className = classe;
@@ -1382,30 +1382,30 @@ public class MailPanelContent {
                     stato.textContent = t('ver.readFailed', { error: d.error || t('common.unknownError') });
                     return;
                 }
-                Object.keys(d.servizi).forEach(k => {
+                Object.keys(d.services).forEach(k => {
                     const cella = document.getElementById('ver-' + k);
-                    if (cella) verCella(cella, d.servizi[k]);
+                    if (cella) verCella(cella, d.services[k]);
                 });
                 const corpo = document.getElementById('altroSoftware');
                 corpo.textContent = '';
-                d.altro.forEach(v => {
+                d.other.forEach(v => {
                     const tr = document.createElement('tr');
                     const nome = document.createElement('td');
                     nome.setAttribute('data-label', 'Software');
                     const forte = document.createElement('strong');
-                    forte.textContent = v.nome;
+                    forte.textContent = v.name;
                     nome.appendChild(forte);
                     const ruolo = document.createElement('td');
                     ruolo.setAttribute('data-label', t('home.colPurpose'));
-                    ruolo.textContent = v.ruolo;
+                    ruolo.textContent = v.role;
                     const ver = document.createElement('td');
                     ver.setAttribute('data-label', t('home.colVersion'));
                     verCella(ver, v);
                     tr.append(nome, ruolo, ver);
                     corpo.appendChild(tr);
                 });
-                const daRiavviare = Object.values(d.servizi).concat(d.altro).filter(v => v.riavvio).length;
-                stato.textContent = t('ver.readAt', { time: d.letteAlle.substring(11, 19) })
+                const daRiavviare = Object.values(d.services).concat(d.other).filter(v => v.restart).length;
+                stato.textContent = t('ver.readAt', { time: d.readAt.substring(11, 19) })
                     + (daRiavviare > 0 ? ' ' + tn('ver.toRestart', daRiavviare) : '');
                 if (d.branch) {
                     // Da quale ramo arrivano i pacchetti: lo si cambia in Aggiornamenti.
@@ -2079,7 +2079,7 @@ public class MailPanelContent {
         function apriACasella(id) {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
-            acDati = { indirizzo: a.source, fingerprint: '', posta: false };
+            acDati = { address: a.source, fingerprint: '', mail: false };
             document.getElementById('aCasellaTitolo').textContent = t('ac.titleFor', { address: a.source });
             document.getElementById('acErr').textContent = '';
             acMostra('acCaricamento', true);
@@ -2097,38 +2097,38 @@ public class MailPanelContent {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('aCasellaModal')).show();
             fetch('/api/aliases?trasforma=' + encodeURIComponent(a.source)).then(r => r.json()).then(d => {
                 acMostra('acCaricamento', false);
-                if (!d.success || !d.possibile) {
+                if (!d.success || !d.possible) {
                     document.getElementById('acNo').textContent = d.reason || d.error || t('conv.notPossible');
                     acMostra('acNo', true);
                     return;
                 }
                 acDati.fingerprint = d.fingerprint;
-                acDati.posta = !!(d.posta && d.posta.presente);
-                document.getElementById('acIndirizzo').textContent = d.indirizzo;
+                acDati.mail = !!(d.mail && d.mail.present);
+                document.getElementById('acIndirizzo').textContent = d.address;
                 const box = document.getElementById('acDestinazioni');
                 box.textContent = '';
-                if (d.destinazioni.length) {
+                if (d.destinations.length) {
                     box.appendChild(document.createTextNode(t('ac.nowGoesTo') + ' '));
-                    d.destinazioni.forEach((x, k) => {
+                    d.destinations.forEach((x, k) => {
                         if (k) box.appendChild(document.createTextNode(', '));
                         const c = document.createElement('code');
-                        c.textContent = x.destinazione;
+                        c.textContent = x.destination;
                         box.appendChild(c);
-                        if (!x.attivo) box.appendChild(document.createTextNode(' ' + t('ac.inactive')));
+                        if (!x.active) box.appendChild(document.createTextNode(' ' + t('ac.inactive')));
                     });
                     box.appendChild(document.createTextNode('. ' + t('ac.withoutTick')));
                 }
-                const vq = (d.versoQui || []).filter(x => x.attivo).map(x => x.sorgente);
+                const vq = (d.towardsHere || []).filter(x => x.active).map(x => x.source);
                 document.getElementById('acVersoQui').textContent = vq.length
                     ? t('ac.alsoFrom', { list: vq.join(', ') }) : '';
-                if (acDati.posta) {
-                    const p = d.posta;
+                if (acDati.mail) {
+                    const p = d.mail;
                     document.getElementById('acPostaInfo').textContent = t('ac.oldMailInfo', {
-                            messages: (p.almeno ? t('ac.atLeast') + ' ' : '') + tn('conv.messages', p.messaggi), size: p.dimensione })
-                        + (p.ultimo ? ' ' + t('ac.lastOne', { date: acData(p.ultimo) }) : '')
-                        + (p.filtri ? ' ' + t('ac.oldFilters') : '');
+                            messages: (p.atLeast ? t('ac.atLeast') + ' ' : '') + tn('conv.messages', p.messages), size: p.size })
+                        + (p.last ? ' ' + t('ac.lastOne', { date: acData(p.last) }) : '')
+                        + (p.filters ? ' ' + t('ac.oldFilters') : '');
                 }
-                acMostra('acPostaBlocco', acDati.posta);
+                acMostra('acPostaBlocco', acDati.mail);
                 acMostra('acSi', true);
                 document.getElementById('acVia').disabled = false;
                 pwProponi('acPass');
@@ -2150,7 +2150,7 @@ public class MailPanelContent {
             }
             if (!pwControlla('acPass')) return;
             let posta = '';
-            if (acDati.posta) {
+            if (acDati.mail) {
                 const scelta = document.querySelector('input[name="acPosta"]:checked');
                 if (!scelta) { err.textContent = t('ac.chooseMail'); return; }
                 posta = scelta.value;
@@ -2162,9 +2162,9 @@ public class MailPanelContent {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'trasforma_in_casella', source: acDati.indirizzo, password: pass.value,
+                    action: 'trasforma_in_casella', source: acDati.address, password: pass.value,
                     name: document.getElementById('acNome').value.trim(), quota_mb: isNaN(quota) ? 1024 : quota,
-                    tieni_inoltri: document.getElementById('acTieni').checked, posta_vecchia: posta,
+                    keep_forwards: document.getElementById('acTieni').checked, old_mail: posta,
                     fingerprint: acDati.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
@@ -2253,7 +2253,7 @@ public class MailPanelContent {
         }
 
         function apriAAlias(id) {
-            aaDati = { id: id, indirizzo: '', fingerprint: '' };
+            aaDati = { id: id, address: '', fingerprint: '' };
             document.getElementById('aaErr').textContent = '';
             document.getElementById('aaDest').value = '';
             document.getElementById('aaConferma').value = '';
@@ -2266,33 +2266,33 @@ public class MailPanelContent {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('aAliasModal')).show();
             fetch('/api/mailboxes?trasforma=' + id).then(r => r.json()).then(d => {
                 aaMostra('aaCaricamento', false);
-                if (!d.success || !d.possibile) {
+                if (!d.success || !d.possible) {
                     document.getElementById('aaNo').textContent = d.reason || d.error || t('conv.notPossible');
                     aaMostra('aaNo', true);
                     return;
                 }
-                aaDati.indirizzo = d.indirizzo;
+                aaDati.address = d.address;
                 aaDati.fingerprint = d.fingerprint;
-                document.getElementById('aAliasTitolo').textContent = t('aa.titleFor', { address: d.indirizzo });
-                document.getElementById('aaIndirizzo').textContent = d.indirizzo;
-                document.getElementById('aaIndirizzoConferma').textContent = d.indirizzo;
-                const p = d.perdite;
+                document.getElementById('aAliasTitolo').textContent = t('aa.titleFor', { address: d.address });
+                document.getElementById('aaIndirizzo').textContent = d.address;
+                document.getElementById('aaIndirizzoConferma').textContent = d.address;
+                const p = d.losses;
                 aaVoce('aaPerdite', t('aa.lostLogin') + ' '
-                    + (p.ultimoAccesso ? t('aa.lastLogin', { date: aaData(p.ultimoAccesso) }) : t('aa.neverUsed')));
-                if (p.soloInvio) aaVoce('aaPerdite', t('aa.lostSendOnly'));
-                if (p.rispostaAutomatica) aaVoce('aaPerdite', t('aa.lostAutoReply'));
-                if (p.filtri) aaVoce('aaPerdite', tn('aa.lostFilters', p.filtri));
-                if (p.inoltri.length) aaVoce('aaPerdite', t('aa.lostForwards', { list: p.inoltri.join(', ') }));
-                if (d.copia) aaVoce('aaPerdite', t('aa.lostSelfAlias', { address: d.indirizzo }));
-                const posta = d.posta;
-                aaVoce('aaResta', posta.presente
-                    ? (posta.almeno ? t('aa.keptMailAtLeast', { messages: tn('conv.messages', posta.messaggi), size: posta.dimensione, folder: d.cartella }) : t('aa.keptMail', { messages: tn('conv.messages', posta.messaggi), size: posta.dimensione, folder: d.cartella }))
+                    + (p.lastAccess ? t('aa.lastLogin', { date: aaData(p.lastAccess) }) : t('aa.neverUsed')));
+                if (p.sendOnly) aaVoce('aaPerdite', t('aa.lostSendOnly'));
+                if (p.autoReply) aaVoce('aaPerdite', t('aa.lostAutoReply'));
+                if (p.filters) aaVoce('aaPerdite', tn('aa.lostFilters', p.filters));
+                if (p.forwards.length) aaVoce('aaPerdite', t('aa.lostForwards', { list: p.forwards.join(', ') }));
+                if (d.copy) aaVoce('aaPerdite', t('aa.lostSelfAlias', { address: d.address }));
+                const posta = d.mail;
+                aaVoce('aaResta', posta.present
+                    ? (posta.atLeast ? t('aa.keptMailAtLeast', { messages: tn('conv.messages', posta.messages), size: posta.size, folder: d.folder }) : t('aa.keptMail', { messages: tn('conv.messages', posta.messages), size: posta.size, folder: d.folder }))
                     : t('aa.noMail'));
-                const gia = (d.giaInoltrata || []).filter(x => x.attivo).map(x => x.destinazione);
+                const gia = (d.alreadyForwarded || []).filter(x => x.active).map(x => x.destination);
                 if (gia.length) aaVoce('aaResta', t('aa.keptAliases', { list: gia.join(', ') }));
-                const vq = (d.versoQui || []).filter(x => x.attivo).map(x => x.sorgente);
+                const vq = (d.towardsHere || []).filter(x => x.active).map(x => x.source);
                 if (vq.length) aaVoce('aaResta', t('aa.keptIncoming', { list: vq.join(', ') }));
-                document.getElementById('aaDest').value = (d.proposte || []).join(String.fromCharCode(10));
+                document.getElementById('aaDest').value = (d.proposals || []).join(String.fromCharCode(10));
                 aaMostra('aaSi', true);
                 aaControlla();
             }).catch(() => {
@@ -2304,7 +2304,7 @@ public class MailPanelContent {
 
         function aaControlla() {
             document.getElementById('aaVia').disabled = !aaDati || !aaDati.fingerprint
-                || document.getElementById('aaConferma').value.trim().toLowerCase() !== aaDati.indirizzo;
+                || document.getElementById('aaConferma').value.trim().toLowerCase() !== aaDati.address;
         }
 
         function trasformaAAlias() {
@@ -2318,8 +2318,8 @@ public class MailPanelContent {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'trasforma_in_alias', id: aaDati.id, destinazioni: dest,
-                    conferma: document.getElementById('aaConferma').value.trim(), fingerprint: aaDati.fingerprint, csrf_token: csrfToken
+                    action: 'trasforma_in_alias', id: aaDati.id, destinations: dest,
+                    confirmation: document.getElementById('aaConferma').value.trim(), fingerprint: aaDati.fingerprint, csrf_token: csrfToken
                 })
             }).then(r => r.json()).then(d => {
                 if (d.success) {
@@ -4007,7 +4007,7 @@ public class MailPanelContent {
             }).then(r => r.json()).then(data => {
                 if (data.success) {
                     bootstrap.Modal.getInstance(document.getElementById('editAliasModal')).hide();
-                    aliasMsg(data.nota || t('al.updated', { source: source, dest: dest }), data.nota ? 'warning' : 'success');
+                    aliasMsg(data.note || t('al.updated', { source: source, dest: dest }), data.note ? 'warning' : 'success');
                     loadAliases();
                 } else {
                     err.textContent = data.error || t('common.unknownErrorCap');
@@ -4024,7 +4024,7 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: id, active: attiva, csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
-                if (data.success) aliasMsg(data.nota || (attiva ? t('al.enabled', { source: a.source, dest: a.destination }) : t('al.disabled', { source: a.source, dest: a.destination })), data.nota ? 'warning' : 'success');
+                if (data.success) aliasMsg(data.note || (attiva ? t('al.enabled', { source: a.source, dest: a.destination }) : t('al.disabled', { source: a.source, dest: a.destination })), data.note ? 'warning' : 'success');
                 else aliasMsg(data.error || t('common.failed'), 'danger');
                 loadAliases();
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
@@ -4049,7 +4049,7 @@ public class MailPanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('addAliasModal')).hide();
                     document.getElementById('alLocal').value = '';
                     document.getElementById('alDest').value = '';
-                    aliasMsg(data.nota || t('al.created', { source: source, dest: dest }), data.nota ? 'warning' : 'success');
+                    aliasMsg(data.note || t('al.created', { source: source, dest: dest }), data.note ? 'warning' : 'success');
                     loadAliases();
                 } else {
                     err.textContent = data.error || t('common.unknownErrorCap');
@@ -4064,7 +4064,7 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ csrf_token: csrfToken })
             }).then(r => r.json()).then(data => {
-                if (data.success) aliasMsg(data.nota || t('al.deleted'), data.nota ? 'warning' : 'success');
+                if (data.success) aliasMsg(data.note || t('al.deleted'), data.note ? 'warning' : 'success');
                 else aliasMsg(data.error || t('mbx.deleteFailed'), 'danger');
                 loadAliases();
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
@@ -9234,8 +9234,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     <div id="filtro-${escapeHtml(jail.name)}" class="small mt-1"></div>
                                 </div>
                                 <div class="small text-muted">
-                                    ${escHtml(t('sec.port'))} ${jail.porta_dichiarata
-                                        ? '<code>' + escapeHtml(jail.porte) + '</code>' + (jail.ban_usa_la_porta
+                                    ${escHtml(t('sec.port'))} ${jail.declared_port
+                                        ? '<code>' + escapeHtml(jail.ports) + '</code>' + (jail.ban_uses_port
                                             ? ' <span class="badge bg-warning text-dark" title="' + escHtml(t('sec.portBanHint')) + '">' + escHtml(t('sec.portBan')) + '</span>'
                                             : ' <span class="text-muted" title="' + escHtml(t('sec.portIndicativeHint')) + '">' + escHtml(t('sec.portIndicative')) + '</span>')
                                         : '<span title="' + escHtml(t('sec.portNoneHint')) + '">' + escHtml(t('sec.portNone')) + '</span>'}
@@ -10240,11 +10240,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + escHtml(data.error || t('common.unknownErrorCap')) + '</td></tr>';
                         return;
                     }
-                    const g = data.globale || {};
+                    const g = data.global || {};
                     document.getElementById('globalHourly').value = g.hourly || 50;
                     document.getElementById('globalDaily').value = g.daily || 500;
                     if (g.max_size_mb !== null && g.max_size_mb !== undefined) document.getElementById('globalMaxSize').value = g.max_size_mb;
-                    if (g.max_size_nota) rlMsg(g.max_size_nota, 'warning');
+                    if (g.max_size_note) rlMsg(g.max_size_note, 'warning');
                     currentLimits = data.limits || [];
                     if (!currentLimits.length) {
                         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">' + escHtml(t('rl.none')) + '</td></tr>';
@@ -12366,13 +12366,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(t('pkgs.m.blocked')) + '</strong><ul class="mb-0">'
                    + blocchi.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul></div>';
             }
-            const sbl = (r.piano && r.piano.unlockedPackages) || [];
+            const sbl = (r.plan && r.plan.unlockedPackages) || [];
             h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.steps')) + '</h6><ol class="small">'
                + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepUnlock', { list: sbl.join(', ') }) : t('pkgs.m.stepNoUnlock')) + '</li>'
                + '<li>' + escHtml(t('pkgs.m.stepUpgrade')) + '</li>'
                + '<li>' + escHtml(servizi.length ? t('pkgs.m.stepRestart', { list: servizi.join(', ') }) : t('pkgs.m.stepNoRestart')) + '</li>'
                + '<li>' + escHtml(sbl.length ? t('pkgs.m.stepRelock') : t('pkgs.m.stepCheck')) + '</li></ol>'
-               + updPianoHtml(r.piano, r.signature);
+               + updPianoHtml(r.plan, r.signature);
             if (warnings.length) {
                 h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.warnings')) + '</h6><ul class="small">'
                    + warnings.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul>';
@@ -12554,14 +12554,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="table-responsive"><table class="table table-sm"><thead><tr>'
                    + '<th scope="col" style="width:30%">' + escHtml(t('up.colConstruct')) + '</th><th scope="col">' + escHtml(t('up.colWants24')) + '</th><th scope="col" style="width:30%">' + escHtml(t('up.colWhere')) + '</th></tr></thead><tbody>';
                 (d.issues || []).forEach(i => {
-                    h += '<tr class="upd-cell"><td><code>' + updEsc(i.costrutto) + '</code></td>'
-                       + '<td>' + updEsc(i.sostituto) + '</td>'
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(i.construct) + '</code></td>'
+                       + '<td>' + updEsc(i.replacement) + '</td>'
                        + '<td class="small text-muted">' + (i.files || []).map(f => updEsc(f)).join('<br>') + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
                 h += '<p class="small text-muted">' + t('up.dvBlock.html') + '</p>';
-                if (d.fonte) {
-                    h += '<p class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(d.fonte) + '</p>';
+                if (d.source) {
+                    h += '<p class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(d.source) + '</p>';
                 }
                 h += '<button class="btn btn-sm btn-outline-primary" onclick="dove24()">'
                    + '<i class="fas fa-file-lines me-1" aria-hidden="true"></i>' + escHtml(t('up.see24')) + '</button>'
@@ -12573,11 +12573,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += '<hr><h6 class="mb-1"><i class="fas fa-paper-plane me-1"></i>Postfix</h6>';
             if (!pf.present) {
                 h += '<div class="small text-muted">' + updEsc(pf.note || t('up.notInstalled')) + '</div>';
-            } else if (!pf.leggibile) {
+            } else if (!pf.readable) {
                 h += '<div class="alert alert-warning py-2 small mb-2">' + updEsc(pf.note) + '</div>';
             } else {
-                h += '<div class="small text-muted mb-1">' + escHtml(t('up.pfLine', { pkg: pf.package, version: pf.version, repo: pf.repoVersion || '?', level: pf.livello || '?' }))
-                   + ' ' + escHtml(pf.livelloEsplicito ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
+                h += '<div class="small text-muted mb-1">' + escHtml(t('up.pfLine', { pkg: pf.package, version: pf.version, repo: pf.repoVersion || '?', level: pf.level || '?' }))
+                   + ' ' + escHtml(pf.explicitLevel ? t('up.inMainCf') : t('up.defaultValue')) + '</div>'
                    + '<div class="alert alert-' + (pf.verdict === 'ALLINEATO' ? 'success' : 'warning')
                    + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(pf.verdict)) + '</strong> &mdash; '
                    + updEsc(pf.explanation) + '</div>';
@@ -12586,33 +12586,33 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                        + '<th scope="col">' + escHtml(t('up.colLevel')) + '</th><th scope="col">' + escHtml(t('up.colWouldChange')) + '</th></tr></thead><tbody>';
                     cb.forEach(x => {
-                        h += '<tr class="upd-cell"><td><code>' + updEsc(x.livello) + '</code></td>'
-                           + '<td class="small">' + updEsc(x.cambia)
-                           + '<div class="mt-1">' + (x.parametri || []).map(pp =>
-                                pp.giaDeciso
-                                  ? '<span class="badge upd-badge-ok me-1">' + updEsc(pp.nome)
-                                    + ' = ' + updEsc(pp.valore) + ' (' + escHtml(t('up.decidedByYou')) + ')</span>'
-                                  : (!pp.rilevante
-                                     ? '<span class="badge upd-badge-info me-1">' + updEsc(pp.nome)
-                                       + ' (' + escHtml(t('up.irrelevant', { gate: pp.gate, value: pp.gateValore || 'no' })) + ')</span>'
-                                     : '<span class="badge upd-badge-warn me-1">' + updEsc(pp.nome)
+                        h += '<tr class="upd-cell"><td><code>' + updEsc(x.level) + '</code></td>'
+                           + '<td class="small">' + updEsc(x.change)
+                           + '<div class="mt-1">' + (x.parameters || []).map(pp =>
+                                pp.alreadyDecided
+                                  ? '<span class="badge upd-badge-ok me-1">' + updEsc(pp.name)
+                                    + ' = ' + updEsc(pp.value) + ' (' + escHtml(t('up.decidedByYou')) + ')</span>'
+                                  : (!pp.relevant
+                                     ? '<span class="badge upd-badge-info me-1">' + updEsc(pp.name)
+                                       + ' (' + escHtml(t('up.irrelevant', { gate: pp.gate, value: pp.gateValue || 'no' })) + ')</span>'
+                                     : '<span class="badge upd-badge-warn me-1">' + updEsc(pp.name)
                                        + ' (' + escHtml(t('up.defaultDecides')) + ')</span>')).join(' ')
                            + '</div></td></tr>';
                     });
                     h += '</tbody></table></div>';
-                    if (pf.effettoQui) {
-                        h += '<div class="alert alert-' + (pf.apertiQui ? 'warning' : 'success')
-                           + ' py-2 small mb-2"><strong>' + escHtml(t('up.onThisServer')) + '</strong> ' + updEsc(pf.effettoQui) + '</div>';
+                    if (pf.effectHere) {
+                        h += '<div class="alert alert-' + (pf.openHere ? 'warning' : 'success')
+                           + ' py-2 small mb-2"><strong>' + escHtml(t('up.onThisServer')) + '</strong> ' + updEsc(pf.effectHere) + '</div>';
                     }
                 }
-                if (pf.indietro && pf.consigliato) {
-                    h += '<button class="btn btn-sm btn-outline-warning mb-1" data-level="' + escHtml(pf.consigliato) + '" data-open="' + Number(pf.apertiQui || 0) + '"'
+                if (pf.back && pf.recommended) {
+                    h += '<button class="btn btn-sm btn-outline-warning mb-1" data-level="' + escHtml(pf.recommended) + '" data-open="' + Number(pf.openHere || 0) + '"'
                        + ' onclick="pfAlza(this.dataset.level, Number(this.dataset.open))">'
-                       + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('up.raiseLevel', { level: pf.consigliato }))
+                       + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('up.raiseLevel', { level: pf.recommended }))
                        + '</button><div id="pf-outcome" class="mt-1"></div>'
                        + '<div class="small text-muted mb-2">' + t('up.raiseNote.html') + '</div>';
                 }
-                const ap = pf.appoggi || [];
+                const ap = pf.supports || [];
                 if (ap.length) {
                     h += '<div class="small mb-1">' + escHtml(t('up.pfLegacy')) + '</div>'
                        + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
@@ -12621,13 +12621,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 // Doppia condizione di proposito: il campo puo' mancare (e' gia' successo),
                 // ma il contenuto vuoto e' un fatto che si vede sempre.
-                if (!pf.checkPulito && pf.check) {
+                if (!pf.cleanCheck && pf.check) {
                     h += '<div class="small mb-1"><strong>postfix check:</strong></div>'
                        + '<pre class="upd-log mb-2">' + updEsc(pf.check) + '</pre>';
                 } else {
                     h += '<div class="small text-muted mb-2">' + t('up.pfCheckClean.html') + '</div>';
                 }
-                h += '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(pf.fonte) + '</div>';
+                h += '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(pf.source) + '</div>';
             }
 
             // ---------- Rspamd: cambia il comportamento, non la sintassi ----------
@@ -12638,7 +12638,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else {
                 const cls = rs.verdict === 'NIENTE DA SEGNALARE' ? 'success'
                           : (rs.verdict === 'DIFFERENZE DI COMPORTAMENTO NELLA TUA CONFIGURAZIONE' ? 'info' : 'danger');
-                h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.fileLetti })) + '</div>'
+                h += '<div class="small text-muted mb-1">' + escHtml(t('up.rsLine', { version: rs.version, repo: rs.repoVersion || '?', n: rs.filesRead })) + '</div>'
                    + '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(rs.verdict))
                    + '</strong> &mdash; ' + updEsc(rs.explanation) + '</div>';
                 const is = rs.issues || [];
@@ -12646,19 +12646,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                        + '<th scope="col">' + escHtml(t('up.colConstruct')) + '</th><th scope="col">' + escHtml(t('up.colChanges')) + '</th><th scope="col">' + escHtml(t('up.colWhere')) + '</th></tr></thead><tbody>';
                     is.forEach(x => {
-                        h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x.costrutto) + '</code><br>'
-                           + '<span class="badge ' + (x.tipo === 'rotto' ? 'upd-badge-stop'
-                                : (x.tipo === 'predefinito' ? 'upd-badge-info' : 'upd-badge-warn'))
-                           + '">' + escHtml(x.tipo === 'rotto' ? t('up.noLongerValid')
-                                : (x.tipo === 'predefinito' ? t('up.pkgDefaultOnly') : t('up.behaviour')))
+                        h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x.construct) + '</code><br>'
+                           + '<span class="badge ' + (x.type === 'rotto' ? 'upd-badge-stop'
+                                : (x.type === 'predefinito' ? 'upd-badge-info' : 'upd-badge-warn'))
+                           + '">' + escHtml(x.type === 'rotto' ? t('up.noLongerValid')
+                                : (x.type === 'predefinito' ? t('up.pkgDefaultOnly') : t('up.behaviour')))
                            + '</span></td>'
-                           + '<td class="small">' + updEsc(x.cosaCambia) + '</td>'
+                           + '<td class="small">' + updEsc(x.whatChanges) + '</td>'
                            + '<td class="small">'
                            + ((x.files || []).length
                               ? '<strong>' + escHtml(t('up.inYourFiles')) + '</strong><br>' + x.files.map(f => updEsc(f)).join('<br>')
                               : '<span class="text-muted">' + escHtml(t('up.inNoFile')) + '</span>')
-                           + ((x.filesPacchetto || []).length
-                              ? '<br><span class="text-muted">' + escHtml(t('up.pkgFilesOnly')) + '<br>' + x.filesPacchetto.map(f => updEsc(f)).join('<br>')
+                           + ((x.packageFiles || []).length
+                              ? '<br><span class="text-muted">' + escHtml(t('up.pkgFilesOnly')) + '<br>' + x.packageFiles.map(f => updEsc(f)).join('<br>')
                                 + '</span>'
                               : '')
                            + '</td></tr>';
@@ -12674,7 +12674,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       : '<span class="badge upd-badge-warn">' + escHtml(t('up.toLookAt')) + '</span>')
                    + '</div><pre class="upd-log mb-2">' + updEsc(rs.configtest) + '</pre>'
                    + '<div class="small text-muted mb-1"><strong>' + escHtml(t('up.bayes')) + '</strong> ' + updEsc(rs.bayes) + '</div>'
-                   + '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(rs.fonte) + '</div>';
+                   + '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(rs.source) + '</div>';
             }
 
             const m = r.mysql || {};
@@ -12689,7 +12689,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if ((m.issues || []).length) {
                     h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(tn('up.mycnfRemoved', m.issues.length)) + '</strong> '
                        + escHtml(t('up.mycnfOneEnough')) + '<ul class="mb-0 mt-1">';
-                    m.issues.forEach(i => { h += '<li><code>' + updEsc(i.opzione) + '</code> &rarr; ' + updEsc(i.sostituto) + '</li>'; });
+                    m.issues.forEach(i => { h += '<li><code>' + updEsc(i.option) + '</code> &rarr; ' + updEsc(i.replacement) + '</li>'; });
                     h += '</ul></div>';
                 } else if (m.mycnfPresent) {
                     h += '<div class="small text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.mycnfClean')) + '</div>';
@@ -12738,7 +12738,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConferma('', t('up.wRemove'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
-            const r = await updApi('clean_client', { confirm: 'RIMUOVI', estraneo: estraneo, corretto: corretto });
+            const r = await updApi('clean_client', { confirm: 'RIMUOVI', foreign: estraneo, correct: corretto });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.cleaning')) + '</span>';
             pre.style.display = 'block';
@@ -12757,25 +12757,25 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInEsecuzione) + '</code>'
-                  + (r.riavvioNecessario
+                  + updEsc(r.runningKernel) + '</code>'
+                  + (r.restartNeeded
                      ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.kernelMismatchReboot')) + '</span>'
                      : ' <span class="badge upd-badge-ok ms-2">' + escHtml(t('up.kernelMatchNoReboot')) + '</span>') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.servicesStopping')) + '</strong></td><td>'
-                  + (r.servizi || []).map(updEsc).join(', ') + '</td></tr>'
+                  + (r.services || []).map(updEsc).join(', ') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.commandRun')) + '</strong></td><td><code>'
-                  + updEsc(r.percorsoDaemon) + ' -f -o /var/db/mailpanel/reboot.log '
-                  + updEsc(r.percorsoShutdown) + ' -r +1</code></td></tr>' 
+                  + updEsc(r.daemonPath) + ' -f -o /var/db/mailpanel/reboot.log '
+                  + updEsc(r.shutdownPath) + ' -r +1</code></td></tr>' 
                   + '</tbody></table></div>'
-                  + '<div class="alert alert-warning py-2">' + updEsc(r.effetto) + '</div>';
+                  + '<div class="alert alert-warning py-2">' + updEsc(r.effect) + '</div>';
             if (r.noshutdown) {
-                h += '<div class="alert alert-danger py-2"><strong>' + updEsc(r.avvisoNoshutdown) + '</strong></div>';
+                h += '<div class="alert alert-danger py-2"><strong>' + updEsc(r.noshutdownWarning) + '</strong></div>';
             }
-            if (r.gaProgrammato) {
+            if (r.gaScheduled) {
                 h += '<div class="alert alert-danger py-2">' + escHtml(t('up.rebootScheduled')) + ' <code>'
-                   + updEsc(r.gaProgrammato) + '</code> '
+                   + updEsc(r.gaScheduled) + '</code> '
                    + '<button class="btn btn-sm btn-light ms-2" onclick="rebAnnulla()">' + escHtml(t('up.cancelReboot')) + '</button></div>';
             }
             h += '<div class="alert alert-secondary py-2 small">' + t('up.rebootInfo.html') + '</div>'
@@ -12786,13 +12786,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function rebGo() {
             if (!updConferma('', t('up.wReboot'))) return;
             const el = document.getElementById('os-body');
-            const r = await updApi('reboot_now', { confirm: 'RIAVVIA IL SERVER', minuti: 1 });
+            const r = await updApi('reboot_now', { confirm: 'RIAVVIA IL SERVER', minutes: 1 });
             if (!r.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.rebootNotScheduled')) + '</strong><br>'
                     + updEsc(r.error) + (r.output ? '<br><code>' + updEsc(r.output) + '</code>' : '') + '</div>';
                 return;
             }
-            el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.nota) + '</strong>'
+            el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.note) + '</strong>'
                 + ' (' + escHtml(t('up.process', { pid: r.pid })) + ')'
                 + '<br>' + escHtml(t('up.pageWillStop'))
                 + '<br><button class="btn btn-light mt-2" onclick="rebAnnulla()">'
@@ -12804,8 +12804,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function rebAnnulla() {
             const el = document.getElementById('os-body');
             const r = await updApi('reboot_cancel');
-            el.innerHTML = '<div class="alert alert-' + (r.success ? (r.cera ? 'success' : 'secondary') : 'danger')
-                + ' py-2 mb-0">' + updEsc(r.nota || r.error) + '</div>';
+            el.innerHTML = '<div class="alert alert-' + (r.success ? (r.existedBefore ? 'success' : 'secondary') : 'danger')
+                + ' py-2 mb-0">' + updEsc(r.note || r.error) + '</div>';
         }
 
         // ---------- avvio automatico del pannello (rc.d) ----------
@@ -12815,21 +12815,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('rc_preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             pre.style.display = 'block';
-            pre.textContent = r.testo;
-            let h = '<p class="small text-muted mb-2">' + t('up.rcdIntro.html', { path: updEsc(r.percorso) }) + '</p>'
+            pre.textContent = r.text;
+            let h = '<p class="small text-muted mb-2">' + t('up.rcdIntro.html', { path: updEsc(r.path) }) + '</p>'
                   + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:12rem"><strong>' + escHtml(t('up.workDir')) + '</strong></td><td><code>' + updEsc(r.dir) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>Java</strong></td><td><code>' + updEsc(r.java) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>Jar</strong></td><td><code>' + updEsc(r.jar) + '</code></td></tr>'
-                  + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.alreadyInstalled')) + '</strong></td><td>' + escHtml(r.esiste ? t('dns.yes') : t('acf.no'))
-                  + (r.abilitato ? '  &mdash; mailpanel_enable=' + updEsc(r.abilitato) : '') + '</td></tr>'
+                  + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.alreadyInstalled')) + '</strong></td><td>' + escHtml(r.exists ? t('dns.yes') : t('acf.no'))
+                  + (r.enabled ? '  &mdash; mailpanel_enable=' + updEsc(r.enabled) : '') + '</td></tr>'
                   + '</tbody></table></div>'
                   + '<div class="alert alert-info py-2">' + t('up.rcNotStarted.html') + '</div>'
                   + '<button class="btn btn-warning" onclick="rcGo()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.installEnable')) + '</button>'
                   // La via d'uscita si mostra solo quando c'e' qualcosa da togliere: un
                   // pulsante che, premuto, risponde "non c'e' niente da fare" e' un pulsante
                   // che non andava mostrato.
-                  + ((r.esiste || r.abilitato)
+                  + ((r.exists || r.enabled)
                      ? ' <button class="btn btn-outline-danger ms-2" onclick="rcRimuoviPrev()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
                      : '');
             el.innerHTML = h;
@@ -12846,20 +12846,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             pre.style.display = 'none';
             if (r.nothingToDo) {
-                el.innerHTML = '<div class="alert alert-info py-2 mb-0">' + updEsc(r.nota) + '</div>'
+                el.innerHTML = '<div class="alert alert-info py-2 mb-0">' + updEsc(r.note) + '</div>'
                              + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">' + escHtml(t('up.back')) + '</button>';
                 return;
             }
             el.innerHTML = '<div class="alert alert-warning py-2 mb-2"><strong>' + escHtml(t('up.whatHappens')) + '</strong> '
-                + updEsc(r.nota) + '</div>'
+                + updEsc(r.note) + '</div>'
                 + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                 + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.rcScript')) + '</strong></td><td>'
-                + (r.installato ? '<code>' + updEsc(r.percorso) + '</code> &mdash; ' + escHtml(t('up.willBeDeleted'))
+                + (r.installed ? '<code>' + updEsc(r.path) + '</code> &mdash; ' + escHtml(t('up.willBeDeleted'))
                                 : '<span class="text-muted">' + escHtml(t('up.notPresent')) + '</span>') + '</td></tr>'
                 + '<tr class="upd-cell"><td><strong>mailpanel_enable</strong></td><td>'
-                + (r.variabileEsiste ? '<code>' + updEsc((r.prima && r.prima.valoreSysrc) || '') + '</code> &mdash; ' + escHtml(t('up.willLeaveRcConf'))
+                + (r.variableExists ? '<code>' + updEsc((r.before && r.before.sysrcValue) || '') + '</code> &mdash; ' + escHtml(t('up.willLeaveRcConf'))
                                      : '<span class="text-muted">' + escHtml(t('up.notSetUntouched')) + '</span>') + '</td></tr>'
-                + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.backupCopy')) + '</strong></td><td><code>' + updEsc(r.copia) + '</code>'
+                + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.backupCopy')) + '</strong></td><td><code>' + updEsc(r.copy) + '</code>'
                 + '<div class="small text-muted">' + escHtml(t('up.noCopyNoDelete')) + '</div></td></tr>'
                 + '</tbody></table></div>'
                 + '<div class="alert alert-info py-2 mb-2"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>'
@@ -12874,7 +12874,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingAutostart')) + '';
             const r = await updApi('rc_remove', { confirm: 'RIMUOVI RC' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mb-0">'
-                + updEsc(r.nota || r.error) + '</div>'
+                + updEsc(r.note || r.error) + '</div>'
                 + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">'
                 + '<i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('up.rereadState')) + '</button>';
         }
@@ -12886,11 +12886,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pre.style.display = 'block';
             pre.textContent = 'service mailpanel rcvar:\\n' + (r.rcvar || '');
-            el.innerHTML = '<div class="alert alert-' + (r.caricato ? 'success' : 'warning') + ' py-2 mb-0">'
-                + (r.caricato
-                   ? '<strong>' + escHtml(t('up.installed')) + '</strong> ' + escHtml(t('up.rcLoaded', { value: r.abilitatoOra })) + ' '
+            el.innerHTML = '<div class="alert alert-' + (r.loaded ? 'success' : 'warning') + ' py-2 mb-0">'
+                + (r.loaded
+                   ? '<strong>' + escHtml(t('up.installed')) + '</strong> ' + escHtml(t('up.rcLoaded', { value: r.enabledNow })) + ' '
                    : '<strong>' + escHtml(t('up.installedNotRecognized')) + '</strong> ' + escHtml(t('up.lookBelow')) + ' ')
-                + updEsc(r.nota) + '</div>';
+                + updEsc(r.note) + '</div>';
         }
 
         // ---------- sistema operativo ----------
@@ -12901,26 +12901,26 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:16rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
-                  + updEsc(r.uname) + '</code>' + (r.riavvioNecessario
+                  + updEsc(r.uname) + '</code>' + (r.restartNeeded
                       ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.kernelMismatch')) + '</span>'
                       : ' <span class="badge upd-badge-ok ms-2">' + escHtml(t('up.kernelMatch')) + '</span>') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>Userland</strong></td><td><code>' + updEsc(r.userland) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.arch')) + '</strong></td><td><code>' + updEsc(r.arch) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.eos')) + '</strong></td><td>'
-                  + (r.fineSupporto
-                     ? '<strong>' + updEsc(r.fineSupporto) + '</strong> <span class="small text-muted">' + updEsc(r.noteSupporto) + '</span>'
-                     : '<span class="text-warning">' + escHtml(t('up.seriesUnknown', { series: r.serie })) + '</span>')
+                  + (r.endOfSupport
+                     ? '<strong>' + updEsc(r.endOfSupport) + '</strong> <span class="small text-muted">' + updEsc(r.supportNotes) + '</span>'
+                     : '<span class="text-warning">' + escHtml(t('up.seriesUnknown', { series: r.series })) + '</span>')
                   + '</td></tr></tbody></table></div>'
-                  + '<p class="small text-muted">' + escHtml(t('up.sourceIs', { source: r.fonteSupporto })) + '</p>';
-            if (r.aggiornabileConFreebsdUpdate) {
-                h += '<div class="alert alert-' + (r.cePronti ? 'warning' : 'secondary') + ' py-2">'
-                   + '<strong>' + escHtml(t('up.baseFetched')) + '</strong> ' + updEsc(r.giaPronti) + '</div>'
+                  + '<p class="small text-muted">' + escHtml(t('up.sourceIs', { source: r.supportSource })) + '</p>';
+            if (r.updatableWithFreebsdUpdate) {
+                h += '<div class="alert alert-' + (r.readyExist ? 'warning' : 'secondary') + ' py-2">'
+                   + '<strong>' + escHtml(t('up.baseFetched')) + '</strong> ' + updEsc(r.alreadyReady) + '</div>'
                    + '<button class="btn btn-outline-primary" onclick="osCerca()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('up.fetchOs')) + '</button>'
                    + '<span class="small text-muted ms-2">' + t('up.fetchOsNote.html') + '</span>';
             } else {
-                h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.notaAggiornamenti) + '</div>';
+                h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.updatesNote) + '</div>';
             }
             el.innerHTML = h;
         }
@@ -12941,10 +12941,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function beElimina(nome) {
             if (!updConferma(t('up.confirmBeDelete', { name: nome }), t('up.wDelete'))) return;
             const el = document.getElementById('up-body');
-            const r = await updApi('be_destroy', { confirm: 'ELIMINA', nome: nome });
+            const r = await updApi('be_destroy', { confirm: 'ELIMINA', name: nome });
             const box = document.createElement('div');
             box.className = 'alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mt-2';
-            box.textContent = r.nota || r.error || t('shu.unknownResult');
+            box.textContent = r.note || r.error || t('shu.unknownResult');
             el.appendChild(box);
             if (r.success) upVerifica();
         }
@@ -12957,29 +12957,29 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInstallato) + '</code></td></tr>'
+                  + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
-                  + updEsc(r.kernelInEsecuzione) + '</code>'
-                  + (r.riavvioNecessario ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.needReboot')) + '</span>'
+                  + updEsc(r.runningKernel) + '</code>'
+                  + (r.restartNeeded ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.needReboot')) + '</span>'
                                          : ' <span class="badge upd-badge-ok ms-2">' + escHtml(t('up.kernelMatch')) + '</span>') + '</td></tr>'
                   + '<tr class="upd-cell"><td><strong>Userland</strong></td><td><code>' + updEsc(r.userland) + '</code></td></tr>'
                   + '</tbody></table></div>';
-            if ((r.passi || []).length) {
+            if ((r.steps || []).length) {
                 h += '<h6 class="mt-2 mb-1">' + escHtml(t('up.alreadyDone')) + '</h6>'
                    + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colRound')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th><th scope="col">' + escHtml(t('up.colAsked')) + '</th><th scope="col">' + escHtml(t('up.colUserlandAfter')) + '</th>'
                    + '</tr></thead><tbody>';
-                (r.passi || []).forEach(p => {
-                    h += '<tr class="upd-cell"><td>' + updEsc(p.giro) + '</td><td>'
-                       + (p.codice === 0 ? 'ok' : escHtml(t('up.code', { code: p.codice }))) + '</td><td>'
-                       + updEsc(p.chiede) + '</td><td><code>' + updEsc(p.userland) + '</code></td></tr>';
+                (r.steps || []).forEach(p => {
+                    h += '<tr class="upd-cell"><td>' + updEsc(p.round) + '</td><td>'
+                       + (p.code === 0 ? 'ok' : escHtml(t('up.code', { code: p.code }))) + '</td><td>'
+                       + updEsc(p.asks) + '</td><td><code>' + updEsc(p.userland) + '</code></td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
-            if (r.riavvioNecessario) {
+            if (r.restartNeeded) {
                 h += '<div class="alert alert-warning py-2">' + t('up.rebootFirst.html') + '</div>'
                    + '<button class="btn btn-danger" onclick="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.goReboot')) + '</button>';
-            } else if (r.fase === 'finito') {
+            } else if (r.phase === 'finito') {
                 h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.jumpDone')) + '</div>';
             } else {
                 h += '<div class="alert alert-info py-2">' + t('up.jumpInfo.html') + '</div>'
@@ -13014,23 +13014,23 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 return false;
             }
             sel.innerHTML = '';
-            (r.versioni || []).forEach(v => {
+            (r.versions || []).forEach(v => {
                 const o = document.createElement('option');
-                o.value = v.versione;
-                o.textContent = t('up.supportedUntil', { version: v.versione, date: v.fineSupporto });
+                o.value = v.version;
+                o.textContent = t('up.supportedUntil', { version: v.version, date: v.endOfSupport });
                 sel.appendChild(o);
             });
-            if (!(r.versioni || []).length) {
+            if (!(r.versions || []).length) {
                 const o = document.createElement('option');
                 o.value = ''; o.textContent = t('up.noneAvailable');
                 sel.appendChild(o);
                 document.getElementById('up-body').innerHTML =
-                    '<div class="alert alert-info py-2 mb-0">' + updEsc(r.nota) + '</div>';
+                    '<div class="alert alert-info py-2 mb-0">' + updEsc(r.note) + '</div>';
                 return false;
             }
             document.getElementById('up-body').innerHTML =
-                '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.youAreOn', { version: r.attuale })) + ' '
-              + updEsc(r.nota) + '<br>' + escHtml(t('up.sourceIs', { source: r.fonte })) + '</div>';
+                '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.youAreOn', { version: r.current })) + ' '
+              + updEsc(r.note) + '<br>' + escHtml(t('up.sourceIs', { source: r.source })) + '</div>';
             return true;
         }
 
@@ -13074,12 +13074,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = t('up.genCommands');
             const r = await updApi('os_upgrade_instructions', { target: upTarget() });
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            let testo = t('up.jumpTitle', { version: r.bersaglio }) + '\\n'
-                  + t('up.sourceIs', { source: r.fonte }) + '\\n\\n';
-            (r.passi || []).forEach(p => {
-                testo += p.n + '. ' + p.titolo + '\\n     ' + p.cmd + '\\n     ' + p.nota + '\\n\\n';
+            let testo = t('up.jumpTitle', { version: r.target }) + '\\n'
+                  + t('up.sourceIs', { source: r.source }) + '\\n\\n';
+            (r.steps || []).forEach(p => {
+                testo += p.n + '. ' + p.title + '\\n     ' + p.cmd + '\\n     ' + p.note + '\\n\\n';
             });
-            testo += t('up.wayBack') + '\\n     ' + r.ritorno + '\\n';
+            testo += t('up.wayBack') + '\\n     ' + r.returnInfo + '\\n';
             pre.textContent = testo;
         }
 
@@ -13095,40 +13095,40 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>'
-               + (r.tuttoBene
+               + (r.allGood
                   ? '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.allStillThere')) + '</div>'
                   : '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('up.somethingOff')) + '</div>');
 
             // Gli ambienti di avvio meritano una tabella loro: "bectl list" e' illeggibile
             // per chi non sa gia' cosa sta guardando.
-            const be = r.ambienti;
+            const be = r.environments;
             if (be && be.success) {
                 h += '<h6 class="mt-4 mb-1">' + escHtml(t('up.yourWaysBack')) + '</h6>'
-                   + '<p class="small text-muted mb-2">' + updEsc(be.cosaSono) + '</p>'
+                   + '<p class="small text-muted mb-2">' + updEsc(be.whatTheyAre) + '</p>'
                    + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colEnv')) + '</th><th scope="col">' + escHtml(t('up.colWhatIs')) + '</th><th scope="col">' + escHtml(t('set.colState')) + '</th>'
                    + '<th scope="col" class="text-end">' + escHtml(t('up.colSpace')) + '</th><th scope="col">' + escHtml(t('adm.created')) + '</th></tr></thead><tbody>';
-                (be.ambienti || []).forEach(x => {
-                    const badge = x.inUso
+                (be.environments || []).forEach(x => {
+                    const badge = x.inUse
                         ? '<span class="badge upd-badge-ok">' + escHtml(t('up.inUseNow')) + '</span>'
-                        : (x.alRiavvio
+                        : (x.atRestart
                            ? '<span class="badge upd-badge-warn">' + escHtml(t('up.atReboot')) + '</span>'
                            : '<span class="badge upd-badge-info">' + escHtml(t('up.spare')) + '</span>');
-                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.nome) + '</code><br>'
-                       + '<span class="small text-muted">' + updEsc(x.origine) + '</span></td>'
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.name) + '</code><br>'
+                       + '<span class="small text-muted">' + updEsc(x.origin) + '</span></td>'
                        + '<td class="small">' + updEsc(x.explanation) + '</td>'
-                       + '<td>' + badge + '<br><span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
-                       + '<td class="text-end">' + updEsc(x.spazio) + '</td>'
-                       + '<td class="small">' + updEsc(x.creato)
-                       + (x.eliminabile
-                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" data-name="' + escHtml(x.nome) + '" onclick="beElimina(this.dataset.name)">'
+                       + '<td>' + badge + '<br><span class="small text-muted">' + updEsc(x.why) + '</span></td>'
+                       + '<td class="text-end">' + updEsc(x.space) + '</td>'
+                       + '<td class="small">' + updEsc(x.created)
+                       + (x.deletable
+                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" data-name="' + escHtml(x.name) + '" onclick="beElimina(this.dataset.name)">'
                             + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('common.delete')) + '</button>'
                           : '')
                        + '</td></tr>';
                 });
                 h += '</tbody></table></div>'
                    + '<div class="alert alert-secondary py-2 small mb-0"><strong>' + escHtml(t('up.toGoBack')) + '</strong> '
-                   + updEsc(be.comeTornare) + '<br><strong>' + escHtml(t('up.whenDelete')) + '</strong> ' + updEsc(be.quandoEliminare)
+                   + updEsc(be.howToGoBack) + '<br><strong>' + escHtml(t('up.whenDelete')) + '</strong> ' + updEsc(be.whenToDelete)
                    + '</div>';
             }
             el.innerHTML = h;
@@ -13141,12 +13141,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const st = document.getElementById('rep-stato'), pre = document.getElementById('rep-testo');
             st.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.collecting')) + '';
             const r = await updApi('system_report');
-            if (!r.success && !r.parziale) { st.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            if (!r.success && !r.partial) { st.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             pre.style.display = 'block';
-            pre.textContent = r.testo || r.parziale;
+            pre.textContent = r.text || r.partial;
             document.getElementById('rep-copy').style.display = '';
             st.innerHTML = r.success
-                ? '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.reportReady', { n: (r.testo || '').length })) + '</span>'
+                ? '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.reportReady', { n: (r.text || '').length })) + '</span>'
                 : '<span class="text-warning">' + escHtml(t('up.reportCut', { error: r.error })) + '</span>';
         }
 
@@ -13186,43 +13186,43 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + ' py-2"><strong>' + escHtml(t('up.branchIs', { branch: rm.branch })) + '</strong>'
                    + (rm.url ? ' &mdash; <code>' + updEsc(rm.url) + '</code>' : '')
                    + '<br><span class="small">' + updEsc(rm.explanation) + '</span>'
-                   + '<br><span class="small text-muted">' + updEsc(rm.dove) + '</span></div>';
+                   + '<br><span class="small text-muted">' + updEsc(rm.where) + '</span></div>';
             }
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col">' + escHtml(t('up.colComponent')) + '</th><th scope="col">' + escHtml(t('up.colFbsdDefault')) + '</th><th scope="col">' + escHtml(t('up.colInstalled')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
-            (r.righe || []).forEach(x => {
-                const cls = x.esito === 'coerente' ? 'upd-badge-ok'
-                          : (x.esito === 'DIVERGE' ? 'upd-badge-stop' : 'upd-badge-warn');
-                const fuori = x.fuoriPredefinito
+            (r.lines || []).forEach(x => {
+                const cls = x.outcome === 'coerente' ? 'upd-badge-ok'
+                          : (x.outcome === 'DIVERGE' ? 'upd-badge-stop' : 'upd-badge-warn');
+                const fuori = x.outsideDefault
                     ? '<br><span class="small text-danger">' + escHtml(t('up.outsideDefault')) + ' <code>'
-                      + updEsc(x.fuoriPredefinito) + '</code></span>' : '';
+                      + updEsc(x.outsideDefault) + '</code></span>' : '';
                 let dip = '';
-                (x.dipendenti || []).forEach(d => {
-                    const q = d.richiestoDa || [];
+                (x.dependents || []).forEach(d => {
+                    const q = d.requiredBy || [];
                     // "si puo' togliere" era una conclusione, non una misura: %rn dice solo chi lo
                     // DICHIARA. Qui si dice esattamente questo, e per il port openssl si offre la
                     // misura vera, che guarda cosa i processi vivi hanno davvero aperto.
                     dip += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-muted') + '">'
-                         + '<code>' + updEsc(d.pacchetto) + '</code> '
+                         + '<code>' + updEsc(d.pkgName) + '</code> '
                          + (q.length
                             ? escHtml(t('up.declaredBy', { list: q.join(', ') }))
                             : escHtml(t('up.declaredByNone')))
                          + '</span>';
-                    if (d.pacchetto === 'openssl') {
+                    if (d.pkgName === 'openssl') {
                         dip += '<br><button class="btn btn-sm btn-outline-primary mt-1" onclick="sslUso()">'
                              + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.whoUses')) + '</button>';
                     }
                 });
-                h += '<tr class="upd-cell"><td><strong>' + updEsc(x.componente) + '</strong><br>'
-                   + '<span class="small text-muted">' + updEsc(x.perche) + '</span></td>'
-                   + '<td><code>' + updEsc(x.predefinito) + '</code></td>'
-                   + '<td><code>' + updEsc(x.installato || '-') + '</code></td>'
-                   + '<td><span class="badge ' + cls + '">' + escHtml(updEsito(x.esito)) + '</span>' + fuori + dip + '</td></tr>';
+                h += '<tr class="upd-cell"><td><strong>' + updEsc(x.component) + '</strong><br>'
+                   + '<span class="small text-muted">' + updEsc(x.why) + '</span></td>'
+                   + '<td><code>' + updEsc(x.defaultValue) + '</code></td>'
+                   + '<td><code>' + updEsc(x.installed || '-') + '</code></td>'
+                   + '<td><span class="badge ' + cls + '">' + escHtml(updEsito(x.outcome)) + '</span>' + fuori + dip + '</td></tr>';
             });
             h += '</tbody></table></div>'
                + '<div id="ssl-uso" class="mb-2"></div>'
-               + '<div class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(r.fonte) + '<br>'
-               + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.avvertenza) + '</div>';
+               + '<div class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(r.source) + '<br>'
+               + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.caveat) + '</div>';
             el.innerHTML = h;
         }
 
@@ -13239,56 +13239,56 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // ma nemmeno un via libera.
             let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
                   + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
-                  + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.nota) + '</div>'
-                  + (r.percheEQui
+                  + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.note) + '</div>'
+                  + (r.whyItIsHere
                      ? '<div class="alert alert-secondary py-2 small mb-2"><strong>' + escHtml(t('up.whyHere')) + '</strong> '
-                       + updEsc(r.percheEQui) + '</div>' : '');
+                       + updEsc(r.whyItIsHere) + '</div>' : '');
             // Le librerie sono meta' della domanda. L'altra meta' e' il comando: un "openssl x509"
             // dura millisecondi e procstat non lo coglie mai, ma gira lo stesso.
-            const bn = r.binari || [];
-            if (bn.length || r.comandoInPath) {
+            const bn = r.binaries || [];
+            if (bn.length || r.commandInPath) {
                 h += '<h6 class="mt-2 mb-1">' + t('up.opensslCommand.html') + '</h6>'
                    + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colExecutable')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
                 bn.forEach(b => {
-                    const vince = b.percorso === r.comandoInPath;
-                    h += '<tr class="upd-cell"><td><code>' + updEsc(b.percorso) + '</code></td>'
-                       + '<td class="small">' + updEsc(b.versione) + '</td>'
-                       + '<td class="small">' + updEsc(b.pacchetto || t('up.baseSystem')) + '</td>'
+                    const vince = b.path === r.commandInPath;
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(b.path) + '</code></td>'
+                       + '<td class="small">' + updEsc(b.version) + '</td>'
+                       + '<td class="small">' + updEsc(b.pkgName || t('up.baseSystem')) + '</td>'
                        + '<td>' + (vince
                           ? '<span class="badge ' + (b.delPort ? 'upd-badge-warn' : 'upd-badge-ok') + '">'
                             + escHtml(t('up.winsPath')) + '</span>'
                           : '<span class="badge upd-badge-info">' + escHtml(t('up.presentNotChosen')) + '</span>') + '</td></tr>';
                 });
                 h += '</tbody></table></div>'
-                   + '<div class="small text-muted mb-3">' + updEsc(r.chiLoInvoca) + '</div>';
+                   + '<div class="small text-muted mb-3">' + updEsc(r.whoInvokesIt) + '</div>';
             }
-            if (r.installato) {
+            if (r.installed) {
                 h += '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                    + '<tr><td class="small">' + escHtml(t('up.portVersion')) + '</td><td><code>'
-                   + updEsc(r.versione) + '</code></td></tr>'
+                   + updEsc(r.version) + '</code></td></tr>'
                    + '<tr><td class="small">' + escHtml(t('up.portLibs')) + '</td><td><code>'
-                   + updEsc((r.sonamePort || []).join(' ') || '-') + '</code></td></tr>'
+                   + updEsc((r.portSoname || []).join(' ') || '-') + '</code></td></tr>'
                    + '<tr><td class="small">' + escHtml(t('up.baseLibs')) + '</td><td><code>'
-                   + updEsc((r.sonameBase || []).join(' ') || '-') + '</code></td></tr>'
+                   + updEsc((r.baseSoname || []).join(' ') || '-') + '</code></td></tr>'
                    + '<tr><td class="small">' + escHtml(t('up.sameNames')) + '</td><td>'
-                   + (r.ambiguo
-                      ? '<span class="badge upd-badge-warn">' + escHtml(t('up.yesList', { list: (r.sonameInComune || []).join(' ') })) + '</span>'
+                   + (r.ambiguous
+                      ? '<span class="badge upd-badge-warn">' + escHtml(t('up.yesList', { list: (r.sharedSoname || []).join(' ') })) + '</span>'
                         + '<br><span class="small text-muted">' + escHtml(t('up.ambiguous')) + '</span>'
                       : '<span class="badge upd-badge-ok">' + escHtml(t('acf.no')) + '</span>') + '</td></tr>'
                    + '<tr><td class="small">' + escHtml(t('up.procsTls')) + '</td><td>'
-                   + '<strong>' + updEsc(r.processiConTls) + '</strong>'
-                   + '<br><span class="small text-muted">' + updEsc(r.comeHoMisurato) + '</span></td></tr>'
+                   + '<strong>' + updEsc(r.processesWithTls) + '</strong>'
+                   + '<br><span class="small text-muted">' + updEsc(r.howMeasured) + '</span></td></tr>'
                    + '</tbody></table></div>';
-                const pr = r.processi || [];
+                const pr = r.processes || [];
                 if (pr.length) {
                     h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                        + '<th scope="col">PID</th><th scope="col">' + escHtml(t('up.colProcess')) + '</th><th scope="col">' + escHtml(t('up.colWhichOpenssl')) + '</th></tr></thead><tbody>';
                     pr.forEach(x => {
                         h += '<tr class="upd-cell"><td><code>' + updEsc(x.pid) + '</code></td>'
-                           + '<td>' + updEsc(x.comando) + '</td><td class="small">'
-                           + (x.librerie || []).map(l => '<code>' + updEsc(l) + '</code>').join('<br>')
-                           + (x.usaIlPort
+                           + '<td>' + updEsc(x.command) + '</td><td class="small">'
+                           + (x.libraries || []).map(l => '<code>' + updEsc(l) + '</code>').join('<br>')
+                           + (x.usesThePort
                               ? '<br><span class="badge upd-badge-stop">' + escHtml(t('up.usesPort')) + '</span>'
                               : '<br><span class="badge upd-badge-ok">' + escHtml(t('up.baseSystem')) + '</span>')
                            + '</td></tr>';
@@ -13296,12 +13296,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     h += '</tbody></table></div>';
                 }
             }
-            if (r.pannello && r.pannello.success) {
+            if (r.panel && r.panel.success) {
                 h += '<h6 class="mt-2 mb-1">' + escHtml(t('up.panelUses')) + '</h6>'
-                   + rimRiquadro(r.pannello);
+                   + rimRiquadro(r.panel);
             }
             h += '<div class="alert alert-secondary py-2 small mb-0 mt-2"><strong>' + escHtml(t('up.ifRemoved')) + '</strong> '
-               + updEsc(r.comeSiToglie) + '</div>';
+               + updEsc(r.howToRemove) + '</div>';
             el.innerHTML = h;
         }
 
@@ -13358,38 +13358,38 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       : (r.verdict === "NESSUNA TRACCIA, MA IL LOG E' CORTO" ? 'info' : 'secondary'));
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2"><strong>' + updEsc(updVerdetto(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
-            if (r.avvisa) {
+            if (r.warns) {
                 h += '<div class="small text-muted mb-1">task_timeout <code>' + updEsc(r.taskTimeout)
-                   + '</code> &middot; ' + escHtml(t('up.cacheMax')) + ' <code>' + updEsc(r.massimoTeorico) + '</code></div>';
+                   + '</code> &middot; ' + escHtml(t('up.cacheMax')) + ' <code>' + updEsc(r.theoreticalMax) + '</code></div>';
             }
-            if (r.righeLog !== undefined) {
-                h += '<div class="small text-muted mb-1">' + escHtml(t('up.sample', { n: r.righeLog }))
-                   + (r.dal ? ' ' + escHtml(t('up.fromTo', { from: r.dal, to: r.al })) : '')
-                   + ' &middot; ' + escHtml(t('up.olderRotations', { n: r.rotazioni || 0 }))
-                   + ((r.rotazioniCompresse || 0) > 0
-                      ? ' (' + escHtml(t('up.compressedRead', { n: r.rotazioniCompresse })) + ')' : '') + '</div>';
+            if (r.logLines2 !== undefined) {
+                h += '<div class="small text-muted mb-1">' + escHtml(t('up.sample', { n: r.logLines2 }))
+                   + (r.since ? ' ' + escHtml(t('up.fromTo', { from: r.since, to: r.until })) : '')
+                   + ' &middot; ' + escHtml(t('up.olderRotations', { n: r.rotations || 0 }))
+                   + ((r.compressedRotations || 0) > 0
+                      ? ' (' + escHtml(t('up.compressedRead', { n: r.compressedRotations })) + ')' : '') + '</div>';
             }
-            const sy = r.simboli || [];
+            const sy = r.symbols || [];
             if (sy.length) {
                 h += '<div class="small mb-1">' + escHtml(t('up.symbolLimits')) + '</div>'
                    + '<div class="mb-2">' + sy.map(x => '<span class="badge upd-badge-info me-1">'
-                     + updEsc(x.nome) + ' ' + updEsc(x.secondi) + 's</span>').join(' ') + '</div>';
+                     + updEsc(x.name) + ' ' + updEsc(x.seconds) + 's</span>').join(' ') + '</div>';
             }
-            const g = r.nelLog || [];
+            const g = r.inLog || [];
             if (g.length) {
                 h += '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col" class="text-end">' + escHtml(t('up.colTimes')) + '</th><th scope="col">' + escHtml(t('up.colLogMessage')) + '</th></tr></thead><tbody>';
                 g.forEach(x => {
-                    h += '<tr class="upd-cell"><td class="text-end">' + updEsc(x.volte) + '</td>'
+                    h += '<tr class="upd-cell"><td class="text-end">' + updEsc(x.times) + '</td>'
                        + '<td class="small">'
-                       + '<span class="badge ' + (x.eAvviso ? 'upd-badge-info' : 'upd-badge-stop') + ' me-1">'
-                       + escHtml(x.eAvviso ? t('up.theWarning') : t('up.scanCut')) + '</span><br>'
-                       + '<code>' + updEsc(x.messaggio) + '</code></td></tr>';
+                       + '<span class="badge ' + (x.isWarning ? 'upd-badge-info' : 'upd-badge-stop') + ' me-1">'
+                       + escHtml(x.isWarning ? t('up.theWarning') : t('up.scanCut')) + '</span><br>'
+                       + '<code>' + updEsc(x.messageText) + '</code></td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
-            h += '<div class="alert alert-secondary py-2 small mb-1">' + updEsc(r.seServisse) + '</div>'
-               + '<div class="small text-muted">' + updEsc(r.fonte) + '</div>';
+            h += '<div class="alert alert-secondary py-2 small mb-1">' + updEsc(r.ifNeeded) + '</div>'
+               + '<div class="small text-muted">' + updEsc(r.source) + '</div>';
             el.innerHTML = h;
         }
 
@@ -13399,14 +13399,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConferma(t('up.confirmLevel', { level: livello, note: avviso }), t('up.wRaise'))) return;
             const el = document.getElementById('pf-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.raising')) + '';
-            const r = await updApi('postfix_level', { confirm: 'ALZA', livello: livello });
-            let h = '<div class="alert alert-' + (r.success ? (r.avvisoVia === false ? 'warning' : 'success') : 'danger')
-                  + ' py-2 small mb-1">' + updEsc(r.error || r.nota || t('shu.unknownResult')) + '</div>';
-            if (r.prima !== undefined) {
-                h += '<div class="small text-muted">compatibility_level: <code>' + updEsc(r.prima)
-                   + '</code> &rarr; <code>' + updEsc(r.dopo) + '</code>'
-                   + (r.attivo !== undefined
-                      ? ' &middot; Postfix ' + (r.attivo ? escHtml(t('up.running')) : '<span class="text-danger">' + escHtml(t('up.notRunning')) + '</span>')
+            const r = await updApi('postfix_level', { confirm: 'ALZA', level: livello });
+            let h = '<div class="alert alert-' + (r.success ? (r.warningVia === false ? 'warning' : 'success') : 'danger')
+                  + ' py-2 small mb-1">' + updEsc(r.error || r.note || t('shu.unknownResult')) + '</div>';
+            if (r.before !== undefined) {
+                h += '<div class="small text-muted">compatibility_level: <code>' + updEsc(r.before)
+                   + '</code> &rarr; <code>' + updEsc(r.after) + '</code>'
+                   + (r.active !== undefined
+                      ? ' &middot; Postfix ' + (r.active ? escHtml(t('up.running')) : '<span class="text-danger">' + escHtml(t('up.notRunning')) + '</span>')
                       : '') + '</div>';
             }
             if (r.log) h += '<pre class="upd-log mt-1">' + updEsc(r.log) + '</pre>';
@@ -13428,30 +13428,30 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.buildingPreview')) + '';
             const r = await updApi('dovecot24_preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="alert alert-info py-2 small">' + updEsc(r.avvertenza) + '</div>';
+            let h = '<div class="alert alert-info py-2 small">' + updEsc(r.caveat) + '</div>';
 
-            const v = r.verifiche || [];
-            const conf = v.filter(x => x.stato === 'confermato');
-            const dub = v.filter(x => x.stato !== 'confermato');
+            const v = r.checks || [];
+            const conf = v.filter(x => x.state === 'confermato');
+            const dub = v.filter(x => x.state !== 'confermato');
             h += '<h6 class="mb-1">' + escHtml(t('up.verifiedDocs')) + '</h6>'
                + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
             conf.forEach(x => {
                 h += '<tr class="upd-cell"><td style="width:12rem"><span class="badge upd-badge-ok">' + escHtml(t('up.sConfirmed')) + '</span></td>'
-                   + '<td><code class="small">' + updEsc(x.impostazione) + '</code><br>'
-                   + '<span class="small text-muted">' + updEsc(x.nota) + '</span></td></tr>';
+                   + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
             dub.forEach(x => {
-                h += '<tr class="upd-cell"><td><span class="badge ' + (x.stato === 'criterio' ? 'upd-badge-info' : 'upd-badge-warn')
-                   + '">' + escHtml(({ criterio: t('up.sCriterion'), 'da verificare': t('up.sToCheck') })[x.stato] || x.stato) + '</span></td>'
-                   + '<td><code class="small">' + updEsc(x.impostazione) + '</code><br>'
-                   + '<span class="small text-muted">' + updEsc(x.nota) + '</span></td></tr>';
+                h += '<tr class="upd-cell"><td><span class="badge ' + (x.state === 'criterio' ? 'upd-badge-info' : 'upd-badge-warn')
+                   + '">' + escHtml(({ criterio: t('up.sCriterion'), 'da verificare': t('up.sToCheck') })[x.state] || x.state) + '</span></td>'
+                   + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
             h += '</tbody></table></div>';
 
             h += '<h6 class="mb-1">' + escHtml(t('up.filesAsWritten')) + '</h6>';
             (r.file || []).forEach(f => {
-                h += '<div class="small text-muted mt-2"><code>' + updEsc(f.percorso) + '</code></div>'
-                   + '<pre class="upd-log mb-0">' + updEsc(f.contenuto) + '</pre>';
+                h += '<div class="small text-muted mt-2"><code>' + updEsc(f.path) + '</code></div>'
+                   + '<pre class="upd-log mb-0">' + updEsc(f.content) + '</pre>';
             });
             el.innerHTML = h;
         }
@@ -13462,30 +13462,30 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.checkingPath')) + '';
             const r = await updApi('panel_env');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const cls = r.irraggiungibili ? 'danger' : (r.assenti ? 'warning' : 'success');
+            const cls = r.unreachable ? 'danger' : (r.absent ? 'warning' : 'success');
             let h = '<div class="alert alert-' + cls + ' py-2 small mb-2">' + updEsc(r.explanation) + '</div>'
                   + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
                   + '<tr><td class="small">' + escHtml(t('up.pathInherited')) + '</td>'
-                  + '<td><code class="small">' + updEsc(r.pathEreditato || t('up.empty')) + '</code></td></tr>'
+                  + '<td><code class="small">' + updEsc(r.inheritedPath || t('up.empty')) + '</code></td></tr>'
                   + '<tr><td class="small">' + escHtml(t('up.pathUsed')) + '</td>'
-                  + '<td><code class="small">' + updEsc(r.pathUsato) + '</code>'
-                  + (r.pathEreditato !== r.pathUsato
+                  + '<td><code class="small">' + updEsc(r.pathUsed) + '</code>'
+                  + (r.inheritedPath !== r.pathUsed
                      ? '<br><span class="small text-muted">' + escHtml(t('up.pathCompleted')) + '</span>' : '') + '</td></tr>'
                   + '</tbody></table></div>'
                   + '<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>'
                   + '<th scope="col">' + escHtml(t('up.colCommand')) + '</th><th scope="col">' + escHtml(t('up.colWhatFor')) + '</th><th scope="col">' + escHtml(t('up.colResolves')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th>'
                   + '</tr></thead><tbody>';
-            (r.strumenti || []).forEach(x => {
-                const b = x.stato === 'raggiungibile' ? 'upd-badge-ok'
-                        : (x.stato === 'non installato' ? 'upd-badge-warn' : 'upd-badge-stop');
-                h += '<tr class="upd-cell"><td><code>' + updEsc(x.comando) + '</code></td>'
-                   + '<td class="small text-muted">' + updEsc(x.aCosaServe) + '</td>'
-                   + '<td class="small"><code>' + updEsc(x.risolto || '-') + '</code>'
-                   + (!x.risolto && x.suDisco
-                      ? '<br><span class="small text-danger">' + escHtml(t('up.existsIn', { dir: x.attesoIn })) + '</span>' : '')
+            (r.tools || []).forEach(x => {
+                const b = x.state === 'raggiungibile' ? 'upd-badge-ok'
+                        : (x.state === 'non installato' ? 'upd-badge-warn' : 'upd-badge-stop');
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.command) + '</code></td>'
+                   + '<td class="small text-muted">' + updEsc(x.purpose) + '</td>'
+                   + '<td class="small"><code>' + updEsc(x.resolved || '-') + '</code>'
+                   + (!x.resolved && x.onDisk
+                      ? '<br><span class="small text-danger">' + escHtml(t('up.existsIn', { dir: x.expectedIn })) + '</span>' : '')
                    + '</td>'
                    + '<td><span class="badge ' + b + '">' + escHtml(({ raggiungibile: t('up.sReachable'), 'non installato': t('up.notInstalled'),
-                                                                        "C'E' MA IL PATH NON LO RAGGIUNGE": t('up.sUnreachable') })[x.stato] || x.stato) + '</span></td></tr>';
+                                                                        "C'E' MA IL PATH NON LO RAGGIUNGE": t('up.sUnreachable') })[x.state] || x.state) + '</span></td></tr>';
             });
             h += '</tbody></table></div>';
             el.innerHTML = h;
@@ -13497,31 +13497,31 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingUndeclared')) + '';
             const r = await updApi('removal_candidates');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            const c = r.candidati || [];
+            const c = r.candidates || [];
             let h = '<p class="small text-muted">' + updEsc(r.explanation) + '</p>';
             if (!c.length) {
                 h += '<div class="alert alert-info py-2 mb-0">' + escHtml(t('up.noCandidates')) + '</div>';
                 el.innerHTML = h; return;
             }
-            if (r.attenzione) {
+            if (r.caution) {
                 h += '<div class="alert alert-warning py-2 small"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>'
-                   + updEsc(r.attenzione) + '</div>';
+                   + updEsc(r.caution) + '</div>';
             }
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr>'
                + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col">' + escHtml(t('up.colRole')) + '</th><th scope="col">' + escHtml(t('up.colLocked')) + '</th>'
                + '<th scope="col">' + escHtml(t('up.colPanelUses')) + '</th></tr></thead><tbody>';
             c.forEach((x, i) => {
-                h += '<tr class="upd-cell"><td><code>' + updEsc(x.nome) + '</code></td>'
-                   + '<td class="small">' + updEsc(x.versione) + '</td>'
-                   + '<td class="small">' + (x.essenziale
-                      ? '<span class="badge upd-badge-stop">' + escHtml(t('up.doNotTouch')) + '</span><br>' + updEsc(x.avviso)
-                      : (x.ruolo
-                         ? '<span class="badge upd-badge-warn">' + updEsc(x.ruolo) + '</span>'
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.name) + '</code></td>'
+                   + '<td class="small">' + updEsc(x.version) + '</td>'
+                   + '<td class="small">' + (x.essential
+                      ? '<span class="badge upd-badge-stop">' + escHtml(t('up.doNotTouch')) + '</span><br>' + updEsc(x.warning)
+                      : (x.role
+                         ? '<span class="badge upd-badge-warn">' + updEsc(x.role) + '</span>'
                          : '<span class="text-muted">' + escHtml(t('up.noneKnown')) + '</span>')) + '</td>'
-                   + '<td>' + (x.protetto
+                   + '<td>' + (x.isProtected
                       ? '<span class="badge upd-badge-ok">' + escHtml(t('dns.yes')) + '</span>'
                       : '<span class="badge upd-badge-warn">' + escHtml(t('acf.no')) + '</span>') + '</td>'
-                   + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.nome) + '" data-i="' + i + '" onclick="rimUsa(this.dataset.name, Number(this.dataset.i))">'
+                   + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.name) + '" data-i="' + i + '" onclick="rimUsa(this.dataset.name, Number(this.dataset.i))">'
                    + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.check')) + '</button>'
                    + '<div id="rim-outcome-' + i + '" class="mt-1"></div></td></tr>';
             });
@@ -13538,52 +13538,52 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       : r.verdict === 'LI NOMINA, MA NON SONO I SUOI' ? 'success' : 'secondary';
             let h = '<div class="alert alert-' + cls + ' py-2 mb-1 small"><strong>' + updEsc(updVerdetto(r.verdict))
                   + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>';
-            const lb = r.fornisceLibrerie || [];
+            const lb = r.providesLibraries || [];
             if (lb.length) {
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.sharedLibs')) + ' '
                    + lb.map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
             }
-            const u = r.comandiUsati || [];
+            const u = r.commandsUsed || [];
             if (u.length) {
                 h += '<div class="table-responsive"><table class="table table-sm mb-1"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colCommand')) + '</th><th scope="col">' + escHtml(t('up.colNamed')) + '</th><th scope="col">' + escHtml(t('up.colIfRemoved')) + '</th></tr></thead><tbody>';
                 u.forEach(x => {
-                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.percorso) + '</code></td>'
-                       + '<td class="small">' + escHtml(t('up.timesWord', { n: x.occorrenze }))
-                       + (x.conArgomenti ? '<br>' + escHtml(t('up.withArgs', { n: x.conArgomenti })) : '')
+                    h += '<tr class="upd-cell"><td><code>' + updEsc(x.path) + '</code></td>'
+                       + '<td class="small">' + escHtml(t('up.timesWord', { n: x.occurrences }))
+                       + (x.withArguments ? '<br>' + escHtml(t('up.withArgs', { n: x.withArguments })) : '')
                        + '</td>'
                        + '<td class="small">'
-                       + (!x.eSuo
+                       + (!x.isItsOwn
                           ? '<span class="badge upd-badge-ok">' + escHtml(t('up.noEffect')) + '</span>'
-                          : (x.resterebbe ? '<span class="badge upd-badge-warn">' + escHtml(t('up.changesBinary')) + '</span>'
+                          : (x.wouldStay ? '<span class="badge upd-badge-warn">' + escHtml(t('up.changesBinary')) + '</span>'
                                           : '<span class="badge upd-badge-stop">' + escHtml(t('up.disappears')) + '</span>'))
-                       + '<br>' + updEsc(x.effetto || '')
-                       + (x.inUsoOra ? '<br>' + escHtml(t('up.inUseNowColon')) + ' <code>' + updEsc(x.inUsoOra) + '</code>' : '')
+                       + '<br>' + updEsc(x.effect || '')
+                       + (x.inUseNow ? '<br>' + escHtml(t('up.inUseNowColon')) + ' <code>' + updEsc(x.inUseNow) + '</code>' : '')
                        + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
             // Il pulsante compare SOLO dove la misura dice che si puo': non si offre un'azione
             // che il controllo appena fatto rifiuterebbe.
-            if (r.pacchetto && (r.verdict === 'IL PANNELLO NON LO USA'
+            if (r.pkgName && (r.verdict === 'IL PANNELLO NON LO USA'
                              || r.verdict === 'LI NOMINA, MA NON SONO I SUOI')) {
                 // L'analisi approfondita viene PRIMA del pulsante che toglie, ed e' l'unica che
                 // guarda gli script su disco: quelli girano dopo, e il jar non li contiene.
-                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pacchetto) + '" onclick="rimProfonda(this.dataset.pkg)">'
+                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rimProfonda(this.dataset.pkg)">'
                    + '<i class="fas fa-microscope me-1" aria-hidden="true"></i>' + escHtml(t('up.deepScan')) + '</button>'
-                   + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pacchetto) + '" onclick="rimTogli(this.dataset.pkg)">'
-                   + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removePkg', { pkg: r.pacchetto })) + '</button>'
-                   + '<div id="rim-prof-' + updEsc(r.pacchetto) + '" class="mt-1"></div>'
-                   + '<div id="rim-esec-' + updEsc(r.pacchetto) + '" class="mt-1"></div>';
+                   + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rimTogli(this.dataset.pkg)">'
+                   + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removePkg', { pkg: r.pkgName })) + '</button>'
+                   + '<div id="rim-prof-' + updEsc(r.pkgName) + '" class="mt-1"></div>'
+                   + '<div id="rim-esec-' + updEsc(r.pkgName) + '" class="mt-1"></div>';
             }
-            h += '<div class="small text-muted">' + t('up.scanStats.html', { bytes: updEsc(r.byteLetti), jar: updEsc(r.jar || '?'), n: updEsc(r.eseguibiliTrovati), how: updEsc(r.comeElencato) }) + '</div>';
+            h += '<div class="small text-muted">' + t('up.scanStats.html', { bytes: updEsc(r.bytesRead), jar: updEsc(r.jar || '?'), n: updEsc(r.runnablesFound), how: updEsc(r.asListed) }) + '</div>';
             return h;
         }
 
         async function rimUsa(nome, i) {
             const el = document.getElementById('rim-outcome-' + i);
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
-            const r = await updApi('panel_uses', { nome: nome });
+            const r = await updApi('panel_uses', { name: nome });
             el.innerHTML = r.success ? rimRiquadro(r)
                                      : '<span class="text-danger small">' + updEsc(r.error) + '</span>';
         }
@@ -13593,48 +13593,48 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const el = document.getElementById('rim-prof-' + nome);
             el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                          + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.deepScanning')) + '</div>';
-            const r = await updApi('deep_scan', { nome: nome });
+            const r = await updApi('deep_scan', { name: nome });
             if (!r.success) { el.innerHTML = '<span class="text-danger small">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="alert alert-' + (r.bloccante ? 'danger' : 'success') + ' py-2 small mb-1">'
+            let h = '<div class="alert alert-' + (r.blocking ? 'danger' : 'success') + ' py-2 small mb-1">'
                   + '<strong>' + updEsc(updVerdetto(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
                   + '<div class="small text-muted mb-1">' + escHtml(t('up.searchedRefs')) + ' '
-                  + (r.cercati || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
+                  + (r.searched || []).map(x => '<code>' + updEsc(x) + '</code>').join(' ') + '</div>';
 
-            const ds = r.dichiaranoSoname || [];
+            const ds = r.declareSoname || [];
             h += '<div class="small mb-1"><strong>' + escHtml(t('up.pkgsDeclaringLibs')) + '</strong> '
                + (ds.length
-                  ? '<span class="text-danger">' + ds.map(x => updEsc(x.pacchetto) + ' (' + updEsc(x.libreria) + ')').join(', ') + '</span>'
+                  ? '<span class="text-danger">' + ds.map(x => updEsc(x.pkgName) + ' (' + updEsc(x.library) + ')').join(', ') + '</span>'
                   : '<span class="text-success">' + escHtml(t('up.none')) + '</span>') + '</div>';
             h += '<div class="small mb-1"><strong>' + escHtml(t('up.inRunningJar')) + '</strong> '
-               + (!r.jarLetto
+               + (!r.jarRead
                   ? '<span class="text-warning">' + escHtml(t('up.notRead')) + '</span>'
-                  : ((r.nelJar || []).length
-                     ? r.nelJar.map(x => (x.autoRiferimento
-                          ? '<span class="text-muted"><code>' + updEsc(x.classe)
+                  : ((r.inJar || []).length
+                     ? r.inJar.map(x => (x.selfReference
+                          ? '<span class="text-muted"><code>' + updEsc(x.className)
                             + '</code> (' + escHtml(t('up.selfRef')) + ')</span>'
-                          : '<span class="text-danger"><code>' + updEsc(x.classe) + '</code></span>')).join(', ')
+                          : '<span class="text-danger"><code>' + updEsc(x.className) + '</code></span>')).join(', ')
                      : '<span class="text-success">' + escHtml(t('up.noAbsRef')) + '</span>')
-                    + ' <span class="text-muted">(' + escHtml(t('up.classBytes', { n: r.byteJar })) + ')</span>') + '</div>';
+                    + ' <span class="text-muted">(' + escHtml(t('up.classBytes', { n: r.jarBytes })) + ')</span>') + '</div>';
 
             h += '<div class="table-responsive"><table class="table table-sm mb-1"><thead><tr>'
                + '<th scope="col">' + escHtml(t('up.colWhere')) + '</th><th scope="col" class="text-end">' + escHtml(t('up.colTextFiles')) + '</th>'
                + '<th scope="col" class="text-end">' + escHtml(t('up.colWouldBreak')) + '</th><th scope="col" class="text-end">' + escHtml(t('up.colHold')) + '</th></tr></thead><tbody>';
-            (r.luoghi || []).forEach(x => {
-                h += '<tr class="upd-cell"><td><code>' + updEsc(x.dove) + '</code><br>'
-                   + '<span class="small text-muted">' + updEsc(x.cosaContiene) + '</span></td>'
-                   + '<td class="text-end">' + updEsc(x.fileEsaminati) + '</td>'
-                   + '<td class="text-end">' + ((x.rompono || []).length
-                      ? '<span class="badge upd-badge-stop">' + updEsc(x.rompono.length) + '</span>'
+            (r.places || []).forEach(x => {
+                h += '<tr class="upd-cell"><td><code>' + updEsc(x.where) + '</code><br>'
+                   + '<span class="small text-muted">' + updEsc(x.whatItContains) + '</span></td>'
+                   + '<td class="text-end">' + updEsc(x.filesReviewed) + '</td>'
+                   + '<td class="text-end">' + ((x.breakOnes || []).length
+                      ? '<span class="badge upd-badge-stop">' + updEsc(x.breakOnes.length) + '</span>'
                       : '<span class="badge upd-badge-ok">0</span>') + '</td>'
-                   + '<td class="text-end small text-muted">' + updEsc(x.reggono) + '</td></tr>';
-                (x.rompono || []).forEach(riga => {
+                   + '<td class="text-end small text-muted">' + updEsc(x.hold) + '</td></tr>';
+                (x.breakOnes || []).forEach(riga => {
                     h += '<tr class="upd-cell"><td colspan="4" class="small text-danger">'
                        + '<code>' + updEsc(riga) + '</code></td></tr>';
                 });
             });
             h += '</tbody></table></div>'
                + '<div class="small text-muted">' + t('up.holdNote.html') + '<br>'
-               + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.avvertenza) + '</div>';
+               + '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + updEsc(r.caveat) + '</div>';
             el.innerHTML = h;
         }
 
@@ -13643,18 +13643,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConferma(t('up.confirmRemovePkg', { pkg: nome }), t('up.wRemove'))) return;
             const el = document.getElementById('rim-esec-' + nome);
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingChecking')) + '';
-            const r = await updApi('pkg_remove', { confirm: 'RIMUOVI', nome: nome });
-            let h = '<div class="alert alert-' + (!r.success ? 'danger' : (r.guasto ? 'danger' : 'success'))
-                  + ' py-2 small mb-1">' + updEsc(r.error || r.nota || t('shu.unknownResult')) + '</div>';
-            if (r.prima !== undefined) {
-                h += '<div class="small text-muted">' + escHtml(t('up.pkgCount', { before: r.prima, after: r.dopo })) + '</div>';
+            const r = await updApi('pkg_remove', { confirm: 'RIMUOVI', name: nome });
+            let h = '<div class="alert alert-' + (!r.success ? 'danger' : (r.fault ? 'danger' : 'success'))
+                  + ' py-2 small mb-1">' + updEsc(r.error || r.note || t('shu.unknownResult')) + '</div>';
+            if (r.before !== undefined) {
+                h += '<div class="small text-muted">' + escHtml(t('up.pkgCount', { before: r.before, after: r.after })) + '</div>';
             }
-            const sv = r.servizi || [];
+            const sv = r.services || [];
             if (sv.length) {
-                const giu = sv.filter(x => !x.attivo);
+                const giu = sv.filter(x => !x.active);
                 h += '<div class="small ' + (giu.length ? 'text-danger' : 'text-success') + '">'
                    + (giu.length
-                      ? escHtml(t('up.servicesDown', { list: giu.map(x => x.nome).join(', ') }))
+                      ? escHtml(t('up.servicesDown', { list: giu.map(x => x.name).join(', ') }))
                       : escHtml(tn('up.servicesUp', sv.length)))
                    + '</div>';
             }
@@ -13703,14 +13703,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             (r.mysqlPackages || []).forEach(p => { h += '<li><code>' + updEsc(p.name) + '</code> ' + updEsc(p.version) + '</li>'; });
             h += '</ul>';
             h += '<h6 class="small mt-2">' + escHtml(t('up.clientUsers')) + '</h6>';
-            (r.dipendenti || []).forEach(d => {
-                h += '<div class="small mb-2"><code>' + updEsc(d.name) + '</code> ' + updEsc(d.versione) + '<br>'
-                   + '<span class="text-muted">' + escHtml(t('up.depsInstalled')) + '</span> ' + updEsc(d.dipendenzeInstallato) + '<br>'
-                   + '<span class="text-muted">' + escHtml(t('up.depsRepo')) + '</span> ' + updEsc(d.dipendenzeRepository) + '<br>'
-                   + '<span class="text-muted">' + escHtml(t('up.libsRequired')) + '</span> ' + updEsc(d.librerieRichieste) + '</div>';
+            (r.dependents || []).forEach(d => {
+                h += '<div class="small mb-2"><code>' + updEsc(d.name) + '</code> ' + updEsc(d.version) + '<br>'
+                   + '<span class="text-muted">' + escHtml(t('up.depsInstalled')) + '</span> ' + updEsc(d.installedDependencies) + '<br>'
+                   + '<span class="text-muted">' + escHtml(t('up.depsRepo')) + '</span> ' + updEsc(d.repositoryDependencies) + '<br>'
+                   + '<span class="text-muted">' + escHtml(t('up.libsRequired')) + '</span> ' + updEsc(d.requiredLibraries) + '</div>';
             });
             h += '<h6 class="small mt-2">' + escHtml(t('up.contestedLib')) + '</h6><div class="small">'
-               + '<span class="text-muted">' + escHtml(t('up.belongsTo')) + '</span> ' + updEsc(r.fornisconoLib || t('fw.none')) + '<br>'
+               + '<span class="text-muted">' + escHtml(t('up.belongsTo')) + '</span> ' + updEsc(r.provideLib || t('fw.none')) + '<br>'
                + '<span class="text-muted">' + escHtml(t('up.fileColon')) + '</span> <code>' + updEsc(r.fileLib || t('up.absent')) + '</code></div>';
             if (r.hasConflicts) {
                 h += '<h6 class="small mt-2">' + escHtml(t('up.fileIntegrity')) + '</h6>'
@@ -13719,8 +13719,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // Se ci sono due client e uno non serve a nessuno, si puo' ripulire.
             const cl = (r.mysqlPackages || []).filter(p => /-client$/.test(p.name)).map(p => p.name);
             if (cl.length > 1) {
-                const corretto = cl.find(n => (r.dipendenti || []).some(d =>
-                    (d.dipendenzeRepository || '').indexOf(n) >= 0));
+                const corretto = cl.find(n => (r.dependents || []).some(d =>
+                    (d.repositoryDependencies || '').indexOf(n) >= 0));
                 const estraneo = cl.find(n => n !== corretto);
                 if (corretto && estraneo) {
                     h += '<div class="alert alert-warning py-2 mt-2 small">'
@@ -13751,31 +13751,31 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let primoDaFare = true;
 
             function riga(p, etichetta) {
-                const attivo = p.stato === 'dafare' && primoDaFare;
-                if (p.stato === 'dafare') primoDaFare = false;
+                const attivo = p.state === 'dafare' && primoDaFare;
+                if (p.state === 'dafare') primoDaFare = false;
                 let h = '<div class="border rounded p-2 mb-2' + (attivo ? ' border-primary' : '') + '">'
                       + '<div class="d-flex justify-content-between align-items-center">'
-                      + '<span><strong>' + etichetta + updEsc(p.titolo) + '</strong> ' + planBadge(p.stato) + '</span>';
-                if (attivo && p.azione) {
-                    const idx = planAzioni.push(p.azione) - 1;
+                      + '<span><strong>' + etichetta + updEsc(p.title) + '</strong> ' + planBadge(p.state) + '</span>';
+                if (attivo && p.action) {
+                    const idx = planAzioni.push(p.action) - 1;
                     h += '<button class="btn btn-sm btn-primary" onclick="planRun(' + idx + ')">'
                        + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runStep')) + '</button>';
-                } else if (p.azioneRifai) {
+                } else if (p.redoAction) {
                     // Passo gia' fatto ma ripetibile: pulsante secondario, sempre disponibile,
                     // fuori dalla regola del "solo il primo" perche' non e' un passo da fare.
-                    const idx = planAzioni.push(p.azioneRifai) - 1;
+                    const idx = planAzioni.push(p.redoAction) - 1;
                     h += '<button class="btn btn-sm btn-outline-secondary" onclick="planRun(' + idx + ')" '
                        + 'title="' + escHtml(t('up.redoHint')) + '">'
                        + '<i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('up.redo')) + '</button>';
                 }
                 h += '</div>'
-                   + '<div class="small mt-1">' + updEsc(p.situazione) + '</div>'
-                   + '<div class="small text-muted mt-1">' + updEsc(p.perche) + '</div>'
+                   + '<div class="small mt-1">' + updEsc(p.situation) + '</div>'
+                   + '<div class="small text-muted mt-1">' + updEsc(p.why) + '</div>'
                    + '</div>';
                 return h;
             }
 
-            const passi = r.passi || [];
+            const passi = r.steps || [];
             let h = '<div class="mb-2 small">' + (r.daFare === 0
                 ? '<span class="text-success"><i class="fas fa-circle-check me-1" aria-hidden="true"></i><strong>' + escHtml(t('up.nothingToDo')) + '</strong></span>'
                 : '<strong>' + escHtml(tn('up.stepsToDo', r.daFare)) + '</strong> ' + escHtml(t('up.onlyFirst')))
@@ -13791,13 +13791,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             passi.forEach(p => {
                 // La lettera arriva dal backend, legata alla chiave del passo: non si ricava
                 // dalla posizione, altrimenti una fase che compare farebbe scorrere le altre.
-                const etichetta = p.gruppo === 'fase' ? escHtml(t('up.phase', { letter: p.lettera })) + ' &mdash; ' : '';
+                const etichetta = p.group === 'fase' ? escHtml(t('up.phase', { letter: p.letter })) + ' &mdash; ' : '';
                 h += riga(p, etichetta);
             });
 
-            if ((r.senzaRimedio || []).length) {
+            if ((r.withoutRemedy || []).length) {
                 h += '<div class="alert alert-secondary py-2 small mb-0"><strong>' + escHtml(t('up.noFix')) + '</strong> '
-                   + r.senzaRimedio.map(x => updEsc(x)).join(', ')
+                   + r.withoutRemedy.map(x => updEsc(x)).join(', ')
                    + '. ' + escHtml(t('up.noFixNote')) + '</div>';
             }
             el.innerHTML = h;
@@ -13809,13 +13809,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const el = document.getElementById('plan-body');
             const pre = document.getElementById('plan-log');
             let r;
-            if (azione.tipo === 'packages_lock_all') {
+            if (azione.type === 'packages_lock_all') {
                 r = await updApi('packages_lock', { lock: true, package: '' });
                 if (!r.success) { alert(r.error || t('common.failed')); return; }
                 planLoad();
                 return;
             }
-            if (azione.tipo === 'updates_apply') {
+            if (azione.type === 'updates_apply') {
                 /* Non si parte da qui: questo aggiornamento ha un piano e una firma, e si
                    approva nella scheda che li mostra. Come per il JDK del pannello, si va
                    dove la decisione si puo' prendere guardandola. */
@@ -13826,15 +13826,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 alert(t('up.applyFromCard'));
                 return;
-            } else if (azione.tipo === 'package_update') {
+            } else if (azione.type === 'package_update') {
                 // L'aggiornamento di un pacchetto passa sempre dalla sua finestra: piano esatto,
                 // conferma con il nome, avanzamento.
                 pkUpdOpen(azione.package);
                 return;
-            } else if (azione.tipo === 'rspamd_clean_cache') {
+            } else if (azione.type === 'rspamd_clean_cache') {
                 if (!updConferma('', t('up.wDeleteCache'))) return;
                 r = await updApi('rspamd_clean_cache', { confirm: 'ELIMINA CACHE' });
-            } else if (azione.tipo === 'dovecot_config_regen') {
+            } else if (azione.type === 'dovecot_config_regen') {
                 if (!updConferma('', t('up.wRegen'))) return;
                 r = await updApi('dovecot_config_regen', { confirm: 'RIGENERA' });
             } else {
@@ -13880,17 +13880,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingLeftovers')) + '';
             const r = await updApi('python_leftovers');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            if (r.niente) { el.innerHTML = '<div class="alert alert-success py-2 mb-0">' + updEsc(r.nota) + '</div>'; return; }
+            if (r.nothing) { el.innerHTML = '<div class="alert alert-success py-2 mb-0">' + updEsc(r.note) + '</div>'; return; }
             let h = '<p class="small text-muted mb-2">' + t('up.pyLeftIntro.html') + '</p>'
                   + '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col" class="text-end">KB</th><th scope="col">' + escHtml(t('set.colState')) + '</th></tr></thead><tbody>';
             let liberi = 0;
-            (r.dettaglio || []).forEach(d => {
-                if (d.libero) liberi++;
-                h += '<tr class="upd-cell"><td><code>' + updEsc(d.nome) + '</code></td><td>' + updEsc(d.versione) + '</td>'
+            (r.detail || []).forEach(d => {
+                if (d.free) liberi++;
+                h += '<tr class="upd-cell"><td><code>' + updEsc(d.name) + '</code></td><td>' + updEsc(d.version) + '</td>'
                    + '<td class="text-end">' + updEsc(d.kb) + '</td><td>'
-                   + (d.libero ? '<span class="badge upd-badge-ok">' + escHtml(t('up.canRemove')) + '</span>'
-                               : '<span class="badge upd-badge-warn">' + escHtml(t('up.requiredBy', { list: (d.trattenutoDa || []).join(', ') })) + '</span>')
+                   + (d.free ? '<span class="badge upd-badge-ok">' + escHtml(t('up.canRemove')) + '</span>'
+                               : '<span class="badge upd-badge-warn">' + escHtml(t('up.requiredBy', { list: (d.heldBackBy || []).join(', ') })) + '</span>')
                    + '</td></tr>';
             });
             h += '</tbody></table></div>';
@@ -13898,8 +13898,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const rif = r.references || {};
             const prob = rif.issues || [];
             h += '<h6 class="mt-3 mb-1">' + escHtml(t('up.whoRefsOld')) + '</h6>'
-               + '<p class="small text-muted mb-2">' + t('up.refsExamined.html', { n: updEsc(rif.esaminati || 0), gone: updEsc((rif.innocui || []).length) }) + '</p>';
-            const cit = rif.citazioni || [];
+               + '<p class="small text-muted mb-2">' + t('up.refsExamined.html', { n: updEsc(rif.reviewed || 0), gone: updEsc((rif.harmless || []).length) }) + '</p>';
+            const cit = rif.quotes || [];
             if (cit.length) {
                 h += '<div class="alert alert-secondary py-2 small mb-2">' + t('up.citations.html', { n: cit.length }) + ' '
                    + cit.map(x => '<code>' + updEsc(x.file) + '</code>').join(' ') + '</div>';
@@ -13912,8 +13912,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
                    + '<th scope="col">' + escHtml(t('up.colFileLine')) + '</th><th scope="col">' + escHtml(t('up.colBelongs')) + '</th></tr></thead><tbody>';
                 prob.forEach(x => { h += '<tr class="upd-cell"><td><code>' + updEsc(x.file) + '</code>'
-                   + (x.riga ? '<br><span class="small text-muted">' + updEsc(x.riga) + '</span>' : '')
-                   + '</td><td>' + updEsc(x.proprietario) + '</td></tr>'; });
+                   + (x.line ? '<br><span class="small text-muted">' + updEsc(x.line) + '</span>' : '')
+                   + '</td><td>' + updEsc(x.owner) + '</td></tr>'; });
                 h += '</tbody></table></div>';
             }
             h += (liberi > 0 && prob.length === 0)
@@ -13936,11 +13936,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('python_leftovers_clean', { confirm: 'PULISCI PYTHON' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pre.style.display = 'block';
-            pre.textContent = t('up.removedList', { list: (r.tolti || []).join(', ') || t('fw.none') })
-                + '\\n' + t('up.failedList', { list: (r.falliti || []).join(', ') || t('fw.none') })
-                + '\\n' + t('up.stillPresent', { n: r.ancoraPresenti });
-            el.innerHTML = '<div class="alert alert-' + ((r.falliti || []).length ? 'warning' : 'success')
-                + ' py-2 mb-0">' + escHtml(tn('up.removedN', (r.tolti || []).length)) + ' ' + escHtml(t('up.pressLeftoversAgain')) + '</div>';
+            pre.textContent = t('up.removedList', { list: (r.removed || []).join(', ') || t('fw.none') })
+                + '\\n' + t('up.failedList', { list: (r.failed || []).join(', ') || t('fw.none') })
+                + '\\n' + t('up.stillPresent', { n: r.stillPresent });
+            el.innerHTML = '<div class="alert alert-' + ((r.failed || []).length ? 'warning' : 'success')
+                + ' py-2 mb-0">' + escHtml(tn('up.removedN', (r.removed || []).length)) + ' ' + escHtml(t('up.pressLeftoversAgain')) + '</div>';
         }
 
         async function pyPre() {
@@ -13955,9 +13955,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
-            if (r.gia) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.nothingToMove')) + '</div>';
+            if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.nothingToMove')) + '</div>';
             else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            else h += '<button class="btn btn-danger" onclick="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.nuovo })) + '</button>';
+            else h += '<button class="btn btn-danger" onclick="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.newVersion })) + '</button>';
             el.innerHTML = h;
         }
 
@@ -13984,7 +13984,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
-            if (r.gia) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.latestAlready')) + '</div>';
+            if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.latestAlready')) + '</div>';
             else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
             else h += '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.pageWillStopShort')) + '</strong> ' + escHtml(t('up.jvmStopNote')) + '</div>'
                    + '<button class="btn btn-danger" onclick="jvRun()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmRun')) + '</button>';
@@ -13997,7 +13997,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('java_update', { confirm: 'AGGIORNA JAVA' });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<div class="alert alert-warning mb-0"><strong>' + escHtml(t('up.started')) + '</strong> ' + escHtml(t('up.panelStopping')) + ' '
-                + updEsc(r.nota || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';
+                + updEsc(r.note || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';
         }
 
         async function jvStato() {
@@ -14006,8 +14006,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = t('up.reading');
             const r = await updApi('java_status');
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            if (!r.presente) { pre.textContent = t('up.noJvmRun'); return; }
-            pre.textContent = r.testo + (r.finito ? '' : '\\n\\n' + t('up.stillRunning'));
+            if (!r.present) { pre.textContent = t('up.noJvmRun'); return; }
+            pre.textContent = r.text + (r.finished ? '' : '\\n\\n' + t('up.stillRunning'));
         }
 
         // ---------- aggiornamento Roundcube ----------
@@ -14019,12 +14019,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = t('up.readingNginx');
             const r = await updApi('roundcube_nginx_preview');
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            if (r.giaOk) { pre.textContent = r.nota; return; }
+            if (r.alreadyOk) { pre.textContent = r.note; return; }
             pre.textContent =
-                t('up.fileLines', { file: r.file, from: r.da, to: r.a }) + '\\n'
-              + 'use_secure_urls in Roundcube: ' + (r.urlSicuri ? t('up.running') : t('adm.notActive')) + '\\n\\n'
-              + '=== ' + t('up.nowIs') + ' ===\\n' + r.attuale + '\\n\\n'
-              + '=== ' + t('up.wouldBe') + ' ===\\n' + r.proposto;
+                t('up.fileLines', { file: r.file, from: r.from, to: r.to }) + '\\n'
+              + 'use_secure_urls in Roundcube: ' + (r.safeUrls ? t('up.running') : t('adm.notActive')) + '\\n\\n'
+              + '=== ' + t('up.nowIs') + ' ===\\n' + r.current + '\\n\\n'
+              + '=== ' + t('up.wouldBe') + ' ===\\n' + r.proposed;
             el.innerHTML = '<div class="alert alert-info py-2">' + t('up.nginxChange.html') + '</div>'
               + '<button class="btn btn-warning" onclick="rcNginxGo()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>' + escHtml(t('up.apply')) + '</button>';
         }
@@ -14042,9 +14042,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const css = r.css || {};
             el.innerHTML = css.ok
               ? '<div class="alert alert-success py-2 mb-0"><strong>' + escHtml(t('up.doneShort')) + '</strong> ' + escHtml(t('up.cssOk')) + ' '
-                + updEsc(css.risposta) + '<br>' + escHtml(t('up.prevConfigCopy')) + ' <code>' + updEsc(r.backup) + '</code>'
+                + updEsc(css.answer) + '<br>' + escHtml(t('up.prevConfigCopy')) + ' <code>' + updEsc(r.backup) + '</code>'
                 + '<br>' + escHtml(t('up.reloadWebmail')) + '</div>'
-              : '<div class="alert alert-warning py-2 mb-0">' + updEsc(r.attenzione || t('up.cssNotOk'))
+              : '<div class="alert alert-warning py-2 mb-0">' + updEsc(r.caution || t('up.cssNotOk'))
                 + '</div>';
         }
 
@@ -14054,7 +14054,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = t('up.rcDiagRunning');
             const r = await updApi('roundcube_diag');
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            pre.textContent = (r.voci || []).map(v => '=== ' + v.titolo + ' ===\\n' + v.testo).join('\\n\\n');
+            pre.textContent = (r.entries || []).map(v => '=== ' + v.title + ' ===\\n' + v.text).join('\\n\\n');
         }
 
         async function rcPre() {
@@ -14069,9 +14069,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
-            if (r.gia) {
+            if (r.already) {
                 h += '<div class="alert alert-success py-2 mb-0"><strong>' + escHtml(t('up.nothingToDoTitle')) + '</strong> ' + escHtml(t('up.rcLatest')) + '</div>';
-            } else if (r.ignoto) {
+            } else if (r.unknown) {
                 h += '<div class="alert alert-warning py-2 mb-0">' + escHtml(t('up.repoUnknown')) + '</div>';
             } else if (r.blocked) {
                 h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
@@ -14109,8 +14109,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if ((r.dependents || []).length) {
                 h += '<div class="small mb-2"><strong>' + escHtml(t('up.linkedPkgs')) + '</strong><ul class="mb-0">';
                 r.dependents.forEach(d => {
-                    h += '<li>' + t('up.requires.html', { pkg: updEsc(d.name), lib: updEsc(d.richiede) }) + ' '
-                       + (d.compatibile ? '<span class="text-success">' + escHtml(t('up.compatible')) + '</span>'
+                    h += '<li>' + t('up.requires.html', { pkg: updEsc(d.name), lib: updEsc(d.requires) }) + ' '
+                       + (d.compatible ? '<span class="text-success">' + escHtml(t('up.compatible')) + '</span>'
                                         : '<span class="text-danger">' + escHtml(t('up.notCompatible84')) + '</span>') + '</li>';
                 });
                 h += '</ul></div>';
@@ -14148,7 +14148,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!pn) return '';
             if (!pn.measured) {
                 return '<div class="alert alert-danger py-2 small mb-2">' + escHtml(t('up.planUnavailable')) + ' '
-                     + updEsc(pn.error || pn.errore || '?') + '</div>';
+                     + updEsc(pn.error || pn.error || '?') + '</div>';
             }
             const tipoNome = { aggiorna: t('up.tUpgrade'), installa: t('up.tInstall'), reinstalla: t('up.tReinstall'),
                                rimuove: t('up.tRemove'), retrocede: t('up.tDowngrade') };
@@ -14160,11 +14160,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<div class="table-responsive" style="max-height:24rem;overflow:auto"><table class="table table-sm align-middle mb-1"><thead><tr>'
                    + '<th scope="col" style="width:8rem"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colNote')) + '</th></tr></thead><tbody>';
                 pn.changes.forEach(c => {
-                    h += '<tr class="upd-cell"><td><span class="badge ' + (tipoCls[c.tipo] || 'bg-secondary') + '">'
-                       + updEsc(tipoNome[c.tipo] || c.tipo) + '</span></td>'
-                       + '<td><code>' + updEsc(c.nome) + '</code></td>'
-                       + '<td class="small">' + updEsc(c.da || '-') + '</td>'
-                       + '<td class="small">' + updEsc(c.a || '-') + '</td>'
+                    h += '<tr class="upd-cell"><td><span class="badge ' + (tipoCls[c.type] || 'bg-secondary') + '">'
+                       + updEsc(tipoNome[c.type] || c.type) + '</span></td>'
+                       + '<td><code>' + updEsc(c.name) + '</code></td>'
+                       + '<td class="small">' + updEsc(c.from || '-') + '</td>'
+                       + '<td class="small">' + updEsc(c.to || '-') + '</td>'
                        + '<td class="small">' + updEsc(c.reason || '')
                        + (c.stillVulnerable ? ' <span class="badge bg-danger">' + escHtml(t('up.stillVulnerable')) + '</span>' : '')
                        + (c.repo ? ' <span class="text-muted">[' + updEsc(c.repo) + ']</span>' : '') + '</td></tr>';
@@ -14174,10 +14174,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.planNoChange')) + '</div>';
             }
             (pn.blockers || []).forEach(x => {
-                h += '<div class="small text-warning-emphasis"><i class="fas fa-lock me-1" aria-hidden="true"></i><code>' + updEsc(x.nome)
+                h += '<div class="small text-warning-emphasis"><i class="fas fa-lock me-1" aria-hidden="true"></i><code>' + updEsc(x.name)
                    + '</code>: ' + updEsc(x.reason) + '</div>';
             });
-            h += '<div class="small text-muted mb-2">' + t('up.computedWith.html', { cmd: updEsc(pn.comando || '') })
+            h += '<div class="small text-muted mb-2">' + t('up.computedWith.html', { cmd: updEsc(pn.command || '') })
                + (pn.onBackup ? ' ' + escHtml(t('up.onCopy', { list: (pn.unlockedPackages || []).join(', ') })) : '.')
                + (signature ? ' ' + t('up.fingerprint.html', { sig: updEsc(signature) }) : '') + '</div>';
             return h;
@@ -14235,13 +14235,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                        + (vc0 && vc0.verdict
                             ? ' ' + pkVulnBadge(vc0)
                             : (v.locked
-                                ? (v.aggiornamentoDisponibile
+                                ? (v.updateAvailable
                                     ? ' &mdash; ' + t('up.lockedHasUpdate.html')
                                     : ' &mdash; ' + t('up.lockedNoUpdate.html'))
                                 : ' &mdash; ' + escHtml(v.fixedByUpgrade ? t('up.fixedByUpgrade') : t('up.noUpdateInCatalog'))))
                        + (v.locked && vc0 && vc0.verdict ? ' <span class="badge bg-secondary"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.locked')) + '</span>' : '')
                        + (aggiornabile ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
-                            + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: vc0.catalogo || '' })) + '</button>' : '')
+                            + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: vc0.catalog || '' })) + '</button>' : '')
                        + '</div>';
                     if ((v.cve || []).length) {
                         h += '<br><span class="badge bg-dark me-1">'
@@ -14261,13 +14261,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     h += '</li>';
                 });
                 h += '</ul>';
-                if (r.correzioniErrore) {
+                if (r.fixesError) {
                     h += '<div class="small text-muted">' + escHtml(t('up.fixUnknown')) + ' '
-                       + updEsc(r.correzioniErrore) + '</div>';
+                       + updEsc(r.fixesError) + '</div>';
                 }
-                if (r.notaRiavvio) {
+                if (r.restartNote) {
                     h += '<div class="mt-2 pt-2 border-top small"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>'
-                       + '<strong>' + updEsc(r.notaRiavvio) + '</strong></div>';
+                       + '<strong>' + updEsc(r.restartNote) + '</strong></div>';
                 }
                 h += '</div>';
             } else {
@@ -14301,7 +14301,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
             /* Il piano esatto con la sua firma, come nelle altre due schede. L'uscita grezza
                di pkg resta sotto, ripiegata: e' il dettaglio, non la decisione. */
-            if (r.piano) h += updPianoHtml(r.piano, r.signature);
+            if (r.plan) h += updPianoHtml(r.plan, r.signature);
             h += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('up.fullSim')) + '</summary>'
                + '<pre class="upd-log mt-2">' + updEsc(r.dryRun) + '</pre></details>';
             if (r.audit) {
@@ -14358,9 +14358,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-warning py-2 small"><strong>' + escHtml(tn('up.staysLocked', r.waitCount)) + '</strong> '
                    + escHtml(t('up.staysLockedNote')) + '</div>';
             }
-            h += updPianoHtml(r.piano, r.signature);
+            h += updPianoHtml(r.plan, r.signature);
             updFirmaManutenzione = r.signature || '';
-            if (r.piano && r.piano.runnable) {
+            if (r.plan && r.plan.runnable) {
                 h += '<button class="btn btn-sm btn-danger" onclick="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
             } else {
                 h += '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.nothingToRun')) + '</div>';

@@ -291,42 +291,42 @@ public final class AddressTransform {
     }
 
     public static JSONObject previewToMailbox(AddressState s, ZoneId zone) {
-        JSONObject o = new JSONObject().put("indirizzo", s.address());
+        JSONObject o = new JSONObject().put("address", s.address());
         String no = noMailboxReason(s);
-        if (no != null) return o.put("possibile", false).put("reason", no);
+        if (no != null) return o.put("possible", false).put("reason", no);
         JSONArray dest = new JSONArray();
         boolean copy = false;
         for (MailDatabase.Alias a : s.withThisSource()) {
             if (a.destination.equals(s.address())) { copy = true; continue; }
-            dest.put(new JSONObject().put("destinazione", a.destination).put("attivo", a.active));
+            dest.put(new JSONObject().put("destination", a.destination).put("active", a.active));
         }
-        return o.put("possibile", true).put("destinazioni", dest).put("copia", copy)
-                .put("versoQui", towardsHere(s)).put("posta", mail(s.mail(), zone)).put("fingerprint", fingerprint(s));
+        return o.put("possible", true).put("destinations", dest).put("copy", copy)
+                .put("towardsHere", towardsHere(s)).put("mail", mail(s.mail(), zone)).put("fingerprint", fingerprint(s));
     }
 
     // ===================== Casella -> alias =====================
 
     public static JSONObject previewToAlias(AddressState s, ZoneId zone) {
-        JSONObject o = new JSONObject().put("indirizzo", s.address());
+        JSONObject o = new JSONObject().put("address", s.address());
         MailDatabase.Mailbox m = s.mailbox();
-        if (m == null) return o.put("possibile", false).put("reason", I18n.tr("server.convert.notMailbox", java.util.Map.of("a", String.valueOf(s.address()))));
+        if (m == null) return o.put("possible", false).put("reason", I18n.tr("server.convert.notMailbox", java.util.Map.of("a", String.valueOf(s.address()))));
         Losses p = s.losses() == null ? new Losses(false, List.of(), 0) : s.losses();
         JSONArray already = new JSONArray();
         boolean copy = false;
         for (MailDatabase.Alias a : s.withThisSource()) {
             if (a.destination.equals(s.address())) { copy = true; continue; }
-            already.put(new JSONObject().put("destinazione", a.destination).put("attivo", a.active));
+            already.put(new JSONObject().put("destination", a.destination).put("active", a.active));
         }
         JSONObject losses = new JSONObject()
-                .put("ultimoAccesso", m.lastLogin == null ? "" : ISO.format(m.lastLogin.toInstant().atZone(zone)))
-                .put("soloInvio", !m.receiveEnabled).put("attiva", m.active)
-                .put("rispostaAutomatica", p.autoReply()).put("inoltri", new JSONArray(p.forwards())).put("filtri", p.filters());
+                .put("lastAccess", m.lastLogin == null ? "" : ISO.format(m.lastLogin.toInstant().atZone(zone)))
+                .put("sendOnly", !m.receiveEnabled).put("active", m.active)
+                .put("autoReply", p.autoReply()).put("forwards", new JSONArray(p.forwards())).put("filters", p.filters());
         // Gli inoltri della casella fanno gia' quello che fara' l'alias: sono le destinazioni proposte.
         List<String> proposals = new ArrayList<>(new LinkedHashSet<>(p.forwards()));
         proposals.removeIf(x -> x.equals(s.address()));
-        return o.put("possibile", true).put("perdite", losses).put("proposte", new JSONArray(proposals))
-                .put("giaInoltrata", already).put("copia", copy).put("versoQui", towardsHere(s))
-                .put("posta", mail(s.mail(), zone)).put("cartella", mailFolder(s.address()))
+        return o.put("possible", true).put("losses", losses).put("proposals", new JSONArray(proposals))
+                .put("alreadyForwarded", already).put("copy", copy).put("towardsHere", towardsHere(s))
+                .put("mail", mail(s.mail(), zone)).put("folder", mailFolder(s.address()))
                 .put("fingerprint", fingerprint(s));
     }
 
@@ -366,17 +366,17 @@ public final class AddressTransform {
     }
 
     /** La strada da un indirizzo all'altro seguendo gli alias attivi, o null se non c'e'. */
-    static String round(String da, String a, Network network) throws SQLException {
+    static String round(String from, String to, Network network) throws SQLException {
         Deque<List<String>> queue = new ArrayDeque<>();
         Set<String> seen = new HashSet<>();
-        queue.add(List.of(da));
-        seen.add(da);
+        queue.add(List.of(from));
+        seen.add(from);
         while (!queue.isEmpty() && seen.size() < 1000) {
             List<String> route = queue.poll();
             for (String next : network.activeDestinations(route.get(route.size() - 1))) {
                 List<String> s = new ArrayList<>(route);
                 s.add(next);
-                if (next.equals(a)) return String.join(" -> ", s);
+                if (next.equals(to)) return String.join(" -> ", s);
                 if (seen.add(next)) queue.add(s);
             }
         }
@@ -388,14 +388,14 @@ public final class AddressTransform {
     private static JSONArray towardsHere(AddressState s) {
         JSONArray v = new JSONArray();
         for (MailDatabase.Alias a : s.towardsHere())
-            if (!a.source.equals(s.address())) v.put(new JSONObject().put("sorgente", a.source).put("attivo", a.active));
+            if (!a.source.equals(s.address())) v.put(new JSONObject().put("source", a.source).put("active", a.active));
         return v;
     }
 
     private static JSONObject mail(MailContent p, ZoneId zone) {
-        JSONObject o = new JSONObject().put("presente", p.present()).put("messaggi", p.messages()).put("almeno", p.atLeast())
-                .put("byte", p.totalBytes()).put("dimensione", size(p.totalBytes())).put("filtri", p.filters());
-        if (p.lastMs() > 0) o.put("ultimo", ISO.format(Instant.ofEpochMilli(p.lastMs()).atZone(zone)));
+        JSONObject o = new JSONObject().put("present", p.present()).put("messages", p.messages()).put("atLeast", p.atLeast())
+                .put("bytes", p.totalBytes()).put("size", size(p.totalBytes())).put("filters", p.filters());
+        if (p.lastMs() > 0) o.put("last", ISO.format(Instant.ofEpochMilli(p.lastMs()).atZone(zone)));
         return o;
     }
 

@@ -102,36 +102,36 @@ public class ResetDatabaseTest {
             st.execute("INSERT INTO virtual_users VALUES (1, 1)");
             st.execute("INSERT INTO virtual_aliases VALUES (1, 1)");
             // Una tabella che non e' del pannello: il reset non la deve toccare.
-            st.execute("CREATE TABLE estranea_prova (id INT PRIMARY KEY, nota VARCHAR(40) NOT NULL) ENGINE=InnoDB");
+            st.execute("CREATE TABLE foreign_test (id INT PRIMARY KEY, note VARCHAR(40) NOT NULL) ENGINE=InnoDB");
         }
-        insert(c, "INSERT INTO estranea_prova (id, nota) VALUES (?, ?)", 1, "non e' del pannello");
+        insert(c, "INSERT INTO foreign_test (id, note) VALUES (?, ?)", 1, "non e' del pannello");
         List<String> before = tables(c);
-        before.remove("estranea_prova");
+        before.remove("foreign_test");
         List<String> empty = before.stream().filter(t -> lines(c, t) == 0).toList();
         real("una riga in ognuna delle " + before.size() + " tabelle del pannello" + (empty.isEmpty() ? "" : " (vuote: " + empty + ")"),
                 empty.isEmpty() && before.size() == n + 3);
         List<String> cancellate = db.dropAllTables();
         real("restituisce le tabelle che ha cancellato: " + cancellate.size(), new HashSet<>(cancellate).equals(new HashSet<>(before)));
-        real("non resta nessuna tabella del pannello, nemmeno le virtual_*: " + tables(c), tables(c).equals(List.of("estranea_prova")));
-        real("la tabella d'altri resta, con la sua riga", lines(c, "estranea_prova") == 1);
+        real("non resta nessuna tabella del pannello, nemmeno le virtual_*: " + tables(c), tables(c).equals(List.of("foreign_test")));
+        real("la tabella d'altri resta, con la sua riga", lines(c, "foreign_test") == 1);
         db.createSchema();
-        List<String> full = tables(c).stream().filter(t -> !t.equals("estranea_prova") && lines(c, t) > 0).toList();
+        List<String> full = tables(c).stream().filter(t -> !t.equals("foreign_test") && lines(c, t) > 0).toList();
         real("ricreate da createSchema, le tabelle sono vuote: nessun dato di prima" + (full.isEmpty() ? "" : " (piene: " + full + ")"),
                 full.isEmpty() && tables(c).size() == n + 1);
 
         System.out.println("\n== Il reset sul database gia' vuoto ==");
-        real("con le tabelle vuote: le cancella tutte", db.dropAllTables().size() == n && tables(c).equals(List.of("estranea_prova")));
+        real("con le tabelle vuote: le cancella tutte", db.dropAllTables().size() == n && tables(c).equals(List.of("foreign_test")));
         List<String> nothing = db.dropAllTables();
-        real("senza tabelle: nessun errore, nessuna tabella cancellata", nothing.isEmpty() && tables(c).equals(List.of("estranea_prova")));
+        real("senza tabelle: nessun errore, nessuna tabella cancellata", nothing.isEmpty() && tables(c).equals(List.of("foreign_test")));
 
         System.out.println("\n== Una tabella d'altri punta a domains: MySQL rifiuta, e non si cancella niente ==");
         schema(db);
         int domain = populate(c);
         try (Statement st = c.createStatement()) {
-            st.execute("CREATE TABLE estranea_figlia (id INT PRIMARY KEY, dominio INT NOT NULL, "
-                    + "FOREIGN KEY (dominio) REFERENCES domains(id)) ENGINE=InnoDB");
+            st.execute("CREATE TABLE foreign_child (id INT PRIMARY KEY, domain_id INT NOT NULL, "
+                    + "FOREIGN KEY (domain_id) REFERENCES domains(id)) ENGINE=InnoDB");
         }
-        insert(c, "INSERT INTO estranea_figlia (id, dominio) VALUES (?, ?)", 1, domain);
+        insert(c, "INSERT INTO foreign_child (id, domain_id) VALUES (?, ?)", 1, domain);
         try {
             db.dropAllTables();
             real("un'eccezione", false);
@@ -139,18 +139,18 @@ public class ResetDatabaseTest {
             String m = e.getMessage();
             System.out.println("  " + m);
             real("un'eccezione che dice perche' e che cosa resta", m.startsWith("Reset failed")
-                    && m.contains("estranea_figlia") && m.contains("still present: admin_passkeys, aliases"));
+                    && m.contains("foreign_child") && m.contains("still present: admin_passkeys, aliases"));
         }
         real("tutto com'era: le " + n + " tabelle, con i loro dati", tables(c).size() == n + 2
                 && lines(c, "domains") == 1 && lines(c, "mailboxes") == 1 && lines(c, "admin_passkeys") == 1);
         try (Statement st = c.createStatement()) {
-            st.execute("DROP TABLE estranea_figlia");
+            st.execute("DROP TABLE foreign_child");
         }
         db.dropAllTables();
-        real("tolta la tabella che puntava a domains, il reset passa", tables(c).equals(List.of("estranea_prova")));
+        real("tolta la tabella che puntava a domains, il reset passa", tables(c).equals(List.of("foreign_test")));
 
         try (Statement st = c.createStatement()) {
-            st.execute("DROP TABLE estranea_prova");
+            st.execute("DROP TABLE foreign_test");
         }
         db.close();
     }
@@ -246,9 +246,9 @@ public class ResetDatabaseTest {
         return t;
     }
 
-    static int lines(Connection c, String tabella) {
+    static int lines(Connection c, String table) {
         try (Statement st = c.createStatement();
-             ResultSet r = st.executeQuery("SELECT COUNT(*) FROM `" + tabella.replace("`", "") + "`")) {
+             ResultSet r = st.executeQuery("SELECT COUNT(*) FROM `" + table.replace("`", "") + "`")) {
             r.next();
             return r.getInt(1);
         } catch (SQLException e) {

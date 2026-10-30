@@ -113,7 +113,7 @@ public class AuditReportTest {
                 skip("il confronto con pkg vero: " + fixes.optString("error")
                     + " (serve il database delle vulnerabilita': pkg audit -F)");
             } else {
-                JSONObject byPackage = fixes.getJSONObject("pacchetti");
+                JSONObject byPackage = fixes.getJSONObject("packages");
                 java.util.Map<String, String[]> inst = PackagePlan.installed();
                 int checked = 0, agreeing = 0;
                 StringBuilder disagreeing = new StringBuilder();
