@@ -791,7 +791,7 @@ public class AcmeManager {
             if (d == null) return null;
             return database.getCloudflareAccountForDomain(d.id);
         } catch (Exception e) {
-            System.err.println("[ACME] Lookup account Cloudflare fallito: " + e.getMessage());
+            System.err.println("[ACME] Cloudflare account lookup failed: " + e.getMessage());
             return null;
         }
     }

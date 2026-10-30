@@ -16,11 +16,12 @@ import java.util.stream.Stream;
  * li scrive mai.
  *
  * Prima parte: il file si legge dal jar, ha tutte le sezioni che il codice chiede, e ogni coppia
- * va da un nome a un altro. Seconda parte: nessun nome vecchio compare nei sorgenti (codice Java,
- * pagine, prove), fuori dai commenti. Un nome a forma di nome (con trattini, punti, barre, due
- * punti o spazi: "mailpanel-pubblico", "servizi.txt") non deve comparire in nessuna riga di
- * codice, blocchi di testo compresi; una parola semplice ("attivo") non deve essere una stringa
- * intera.
+ * va da un nome a un altro. Seconda parte: nessun nome vecchio compare nei sorgenti, fuori dai
+ * commenti. Un nome a forma di nome (con trattini, punti, barre, due punti o spazi:
+ * "mailpanel-pubblico", "servizi.txt") non deve comparire in nessuna riga di codice, blocchi di
+ * testo compresi, ne' del pannello ne' delle prove. Una parola semplice ("attivo") non deve
+ * essere una stringa intera nel codice del pannello: nelle prove la stessa parola puo' servire ad
+ * altro (english-pages-browser-test.js ha un elenco di parole italiane apposta, per scovarle).
  *
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LegacyNamesTest &lt;radice dei sorgenti&gt;
  */
@@ -98,11 +99,12 @@ public class LegacyNamesTest {
                 if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) continue;
                 int cut = line.indexOf(" // ");
                 String code = cut >= 0 ? line.substring(0, cut) : line;
+                boolean panel = !root.relativize(f).toString().startsWith("tests");
                 for (String old : oldNames) {
                     boolean shaped = old.matches(".*[-._/:= ].*");
                     boolean hit = false;
                     if (shaped) hit = code.contains(old);
-                    else {
+                    else if (panel) {
                         Matcher m = literal.matcher(code);
                         while (m.find() && !hit) hit = old.equals(m.group(1) != null ? m.group(1) : m.group(2));
                     }

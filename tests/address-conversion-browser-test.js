@@ -69,7 +69,7 @@ async function served(route) {
         return json(route, { success: true, aliases: ALIAS });
     }
     if (p === '/api/aliases' && req.method() === 'POST' && bodyText.action === 'transform_to_mailbox')
-        return json(route, { success: true, id: 99, message: 'dmarc@domain-d.test ora e\' una casella. La posta di prima e\' in /var/vmail/.archivio-pannello/domain-d.test/dmarc-20261003T120000Z.' });
+        return json(route, { success: true, id: 99, message: 'dmarc@domain-d.test ora e\' una casella. La posta di prima e\' in /var/vmail/.panel-archive/domain-d.test/dmarc-20261003T120000Z.' });
     if (p === '/api/mailboxes' && req.method() === 'GET') {
         if (url.searchParams.get('transform') === '7') return json(route, { success: true, possible: true, id: 7,
             address: 'info@domain-d.test', fingerprint: 'imp-casella',

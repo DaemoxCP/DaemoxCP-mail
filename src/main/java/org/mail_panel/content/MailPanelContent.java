@@ -30,13 +30,13 @@ public class MailPanelContent {
     private static String resource(String path) {
         try (java.io.InputStream in = MailPanelContent.class.getResourceAsStream("/" + path)) {
             if (in == null) {
-                System.err.println("[Contenuto] risorsa mancante nel jar: " + path);
-                return "<!-- risorsa mancante: " + path + " -->";
+                System.err.println("[Content] resource missing from the jar: " + path);
+                return "<!-- missing resource: " + path + " -->";
             }
             return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception e) {
-            System.err.println("[Contenuto] non riesco a leggere " + path + ": " + e.getMessage());
-            return "<!-- risorsa illeggibile: " + path + " -->";
+            System.err.println("[Content] cannot read " + path + ": " + e.getMessage());
+            return "<!-- unreadable resource: " + path + " -->";
         }
     }
 
