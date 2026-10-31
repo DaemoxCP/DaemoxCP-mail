@@ -106,11 +106,13 @@ public class PackageReplacementTest {
                 !v.safe() && !v.confirmable() && says(v, "py312-lmdb") && says(v, "liblmdb.so.1"));
 
         v = PackageReplacement.judge(lmdb("lmdb0", one("postfix-mysql", AWAY), lib("liblmdb.so.1", one("postfix-mysql", AWAY)),
-                List.of("/usr/local/etc/postfix/main.cf (lmdb:)"), ""));
-        check("Postfix usa mappe lmdb e nient'altro: confermabile, scrivendo il nome (niente sparisce, le mappe si rigenerano)",
-                !v.safe() && v.confirmable() && says(v, "main.cf"));
-        v = PackageReplacement.judge(lmdb("lmdb0", one("p5-LMDB", STAYS), Map.of(), List.of("/usr/local/etc/postfix/main.cf (lmdb:)"), ""));
-        check("  ma col formato in uso E un dipendente che resta: mai confermabile", !v.safe() && !v.confirmable());
+                List.of(), ""));
+        check("Postfix ha mappe lmdb, tutte col loro testo: innocua, le rigenera il pannello dopo",
+                v.safe() && v.evidence().stream().anyMatch(e -> e.contains("lmdb")));
+        v = PackageReplacement.judge(lmdb("lmdb0", one("postfix-mysql", AWAY), lib("liblmdb.so.1", one("postfix-mysql", AWAY)),
+                List.of("lmdb:/usr/local/etc/postfix/transport (transport_maps)"), ""));
+        check("una mappa lmdb senza il suo testo: mai, si perderebbe (non piu' confermabile scrivendo il nome)",
+                !v.safe() && !v.confirmable() && says(v, "transport_maps"));
 
         v = PackageReplacement.judge(lmdb("lmdb0", Map.of(), Map.of(), List.of(), "pkg query: database locked"));
         check("se non si e' potuto misurare non e' innocua, e non si conferma", !v.safe() && !v.confirmable() && says(v, "database locked"));
@@ -118,35 +120,6 @@ public class PackageReplacementTest {
         v = PackageReplacement.judge(new PackageReplacement.Facts("fakelib", "1.0", "fakelib0", "/usr/local/bin/fake-tool",
                 Map.of(), Map.of(), "", List.of(), ""));
         check("una libreria che non e' un formato di dati non chiede niente sui dati", v.safe() && v.evidence().size() == 3);
-
-        System.out.println("\n== Il formato dei dati, su una cartella di Postfix finta ==");
-        try {
-            java.nio.file.Path conf = java.nio.file.Files.createTempDirectory("postfix-conf");
-            java.nio.file.Files.writeString(conf.resolve("main.cf"), "alias_maps = hash:/etc/aliases\nmyorigin = localhost\n");
-            java.nio.file.Files.writeString(conf.resolve("master.cf"), "smtp inet n - n - - smtpd\n");
-            check("nessuna mappa lmdb e nessun file .lmdb: nessun uso", PackageReplacement.postfixUses(conf, "lmdb", ".lmdb").isEmpty());
-            check("  ma le mappe hash ci sono (alias_maps): Berkeley DB in uso",
-                    PackageReplacement.postfixUses(conf, "hash", ".db").size() == 1);
-            java.nio.file.Files.writeString(conf.resolve("main.cf"), "alias_maps = lmdb:/etc/aliases\n"
-                    + "transport_maps = proxy:mysql:/x.cf, lmdb:/usr/local/etc/postfix/transport\n");
-            java.nio.file.Files.writeString(conf.resolve("transport.lmdb"), "x");
-            List<String> uses = PackageReplacement.postfixUses(conf, "lmdb", ".lmdb");
-            check("una mappa lmdb in main.cf e un file .lmdb: tutti e due trovati " + uses,
-                    uses.size() == 2 && uses.get(0).endsWith("main.cf (lmdb:)") && uses.get(1).endsWith("transport.lmdb"));
-            java.nio.file.Files.writeString(conf.resolve("main.cf"), "# lmdbx:/no\nsmtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache\n");
-            java.nio.file.Files.delete(conf.resolve("transport.lmdb"));
-            check("lmdbx: non e' lmdb:, e btree: si' (la cache TLS)",
-                    PackageReplacement.postfixUses(conf, "lmdb", ".lmdb").isEmpty()
-                            && PackageReplacement.postfixUses(conf, "btree", ".db").size() == 1);
-        } catch (java.io.IOException e) {
-            check("cartella temporanea per la prova: " + e, false);
-        }
-        String postconf = "alias_maps = hash:/etc/mail/aliases\nmydestination = localhost\n"
-                + "smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache\nvirtual_alias_maps = proxy:mysql:/x.cf\n";
-        check("dai parametri in vigore (predefiniti compresi): alias_maps usa hash, nessuno lmdb",
-                PackageReplacement.parametersUsing(postconf, "hash").equals(List.of("postconf alias_maps"))
-                        && PackageReplacement.parametersUsing(postconf, "lmdb").isEmpty()
-                        && PackageReplacement.parametersUsing(postconf, "btree").equals(List.of("postconf smtpd_tls_session_cache_database")));
 
         System.out.println("\n== La regola ==");
         JSONObject safe = plan(change("install", "lmdb0", "", "0.9.35"), change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"),

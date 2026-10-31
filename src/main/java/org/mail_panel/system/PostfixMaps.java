@@ -40,6 +40,11 @@ import java.util.stream.Stream;
  * testo non si puo' rigenerare: se l'aggiornamento puo' cambiarne la libreria, il pannello si
  * ferma PRIMA.
  *
+ * <p>La mappa si costruisce ACCANTO, da una copia del testo, e poi si rinomina sopra quella vecchia.
+ * Misurato sulla VM il 31/10/2026: postmap sopra un file che la sua libreria non sa leggere si
+ * ferma («MDB_INVALID: File is not an LMDB file»), che e' proprio il caso di un file della 0.9
+ * davanti a LMDB 1.0. E cancellare prima lascerebbe Postfix senza la mappa finche' non e' pronta.
+ *
  * <p>Su FreeBSD hash e btree li fornisce Berkeley DB 1.85 dentro la libc del sistema base
  * (libpostfix-util non e' collegata a nessun libdb di pacchetto, misurato sulla VM il 31/10/2026):
  * un aggiornamento dei pacchetti non li tocca. Se Postfix fosse costruito con un Berkeley DB di
@@ -65,6 +70,7 @@ final class PostfixMaps {
     /** I parametri le cui tabelle si costruiscono con postalias. */
     static final Set<String> ALIASES = Set.of("alias_database", "alias_maps");
 
+    /** In ordine di precedenza: se due parametri nominano la stessa tabella, vince l'ultimo. */
     enum Kind { PUBLIC, ALIAS, CACHE }
 
     /** Una tabella in uso: il parametro che la nomina, il tipo, il percorso senza estensione. */
@@ -88,26 +94,44 @@ final class PostfixMaps {
      * La lettura, come funzioni pure
      * =================================================================== */
 
+    // "{" per le tabelle dentro unionmap:{...} e pipemap:{...}.
     private static final Pattern TABLE = Pattern.compile(
-            "(?:^|[\\s,])(?:proxy:)?(btree|cdb|dbm|hash|lmdb|sdbm):(/[A-Za-z0-9._/+-]+)");
+            "(?:^|[\\s,{])(?:proxy:)?(btree|cdb|dbm|hash|lmdb|sdbm):(/[A-Za-z0-9._/+-]+)");
 
     /**
-     * Le tabelle di tipo file in uso, da "postconf -x" (nome = valore) e "postconf -Px"
-     * (servizio/tipo/nome = valore, cioe' master.cf). Una tabella nominata da piu' parametri
-     * conta una volta, col primo che la nomina.
+     * Gli elenchi di proxymap: ripetono le tabelle nominate dagli altri parametri, cache comprese
+     * (sulla VM proxy_write_maps elenca verify_cache e postscreen_cache). Non dicono che cosa sia una
+     * tabella, e presi per primi farebbero di una cache una mappa da rigenerare.
      */
-    static List<Table> tablesIn(String postconf, String postconfP) {
+    static final Set<String> PROXY_LISTS = Set.of("proxy_read_maps", "proxy_write_maps");
+
+    /**
+     * Le tabelle di tipo file in uso, dalle uscite di postconf nell'ordine dato: "postconf -nx"
+     * (i parametri scritti in main.cf), "postconf -Px" (servizio/tipo/nome = valore, cioe'
+     * master.cf), "postconf -x" (tutti, predefiniti compresi). Una tabella nominata da piu'
+     * parametri conta una volta, col nome del primo che la nomina: cosi' una mappa di
+     * transport_maps non risulta di address_verify_transport_maps, che la eredita. Che cosa sia
+     * lo decide invece qualunque parametro la nomini: cache prima di tutto (non ha testo), poi
+     * alias (si costruisce con postalias), se no mappa pubblica. Cosi' hash:/etc/aliases resta un
+     * alias anche se main.cf la scrive in local_recipient_maps.
+     */
+    static List<Table> tablesIn(String... postconfOutputs) {
         Map<String, Table> out = new LinkedHashMap<>();
-        for (String text : new String[]{postconf, postconfP}) {
+        for (String text : postconfOutputs) {
             for (String line : (text == null ? "" : text).split("\n")) {
                 int eq = line.indexOf(" = ");
                 if (eq <= 0) continue;
                 String param = line.substring(0, eq).trim();
                 param = param.substring(param.lastIndexOf('/') + 1);
+                if (PROXY_LISTS.contains(param)) continue;
+                Kind kind = CACHES.contains(param) ? Kind.CACHE : ALIASES.contains(param) ? Kind.ALIAS : Kind.PUBLIC;
                 Matcher m = TABLE.matcher(line.substring(eq + 3));
                 while (m.find()) {
-                    Kind kind = CACHES.contains(param) ? Kind.CACHE : ALIASES.contains(param) ? Kind.ALIAS : Kind.PUBLIC;
-                    out.putIfAbsent(m.group(1) + ":" + m.group(2), new Table(param, m.group(1), m.group(2), kind));
+                    String name = m.group(1) + ":" + m.group(2);
+                    Table seen = out.get(name);
+                    if (seen == null) out.put(name, new Table(param, m.group(1), m.group(2), kind));
+                    else if (kind.ordinal() > seen.kind().ordinal())
+                        out.put(name, new Table(seen.parameter(), seen.type(), seen.path(), kind));
                 }
             }
         }
@@ -153,16 +177,31 @@ final class PostfixMaps {
         return out;
     }
 
-    /** La prima chiave del testo di una tabella: la prima riga che non e' commento ne' continuazione. */
+    /**
+     * La prima chiave che postmap o postalias mettono davvero nella tabella. Si leggono le righe
+     * logiche come loro (postmap(1)): i commenti e le righe vuote si saltano, una riga che comincia
+     * con uno spazio continua quella prima. Una voce senza valore postmap la salta con un avviso e
+     * finisce bene (misurato sulla VM: «expected format: key whitespace value», uscita 0): cercarla
+     * darebbe un falso allarme, quindi si salta anche qui.
+     */
     static String firstKey(String source, boolean alias) {
+        List<String> logical = new ArrayList<>();
         for (String line : (source == null ? "" : source).split("\n")) {
-            if (line.isBlank() || line.trim().startsWith("#") || Character.isWhitespace(line.charAt(0))) continue;
-            String t = line.trim();
-            if (alias) {
-                int c = t.indexOf(':');
-                return c > 0 ? t.substring(0, c).trim() : "";
+            if (line.isBlank() || line.trim().startsWith("#")) continue;
+            if (Character.isWhitespace(line.charAt(0))) {
+                if (!logical.isEmpty()) logical.set(logical.size() - 1, logical.getLast() + " " + line.trim());
+                continue;
             }
-            return t.split("\\s+")[0];
+            logical.add(line.trim());
+        }
+        for (String l : logical) {
+            if (alias) {
+                int c = l.indexOf(':');
+                if (c > 0 && !l.substring(c + 1).isBlank()) return l.substring(0, c).trim();
+            } else {
+                String[] f = l.split("\\s+", 2);
+                if (f.length == 2 && !f[1].isBlank()) return f[0];
+            }
         }
         return "";
     }
@@ -212,7 +251,7 @@ final class PostfixMaps {
     /** Le tabelle di tipo file che Postfix usa adesso (parametri in vigore, predefiniti compresi, e master.cf). */
     static List<Table> tablesInUse() {
         if (!postfixInstalled()) return List.of();
-        return tablesIn(run("postconf", "-x").output(), run("postconf", "-Px").output());
+        return tablesIn(run("postconf", "-nx").output(), run("postconf", "-Px").output(), run("postconf", "-x").output());
     }
 
     /** Chi legge ogni tipo di file, adesso. */
@@ -231,10 +270,14 @@ final class PostfixMaps {
                     dm.append(Files.readString(p)).append('\n');
             }
         } catch (Exception ignored) { }
-        Map<String, String> plugins = pluginsFrom(dm.toString());
-        // I tipi interni: la libreria di database a cui e' collegata libpostfix-util (o smtpd).
+        Map<String, String> plugins = new TreeMap<>(pluginsFrom(dm.toString()));
+        // dynamicmaps.cf.d scrive il nome del modulo relativo a shlib_directory ("postfix-lmdb.so"):
+        // misurato sulla VM, dove il percorso preso cosi' com'era non esisteva e lmdb restava fuori.
         String shlib = postconf("shlib_directory");
-        String util = !shlib.isEmpty() && !"no".equals(shlib) && Files.exists(Path.of(shlib, "libpostfix-util.so"))
+        boolean shared = !shlib.isEmpty() && !"no".equals(shlib);
+        plugins.replaceAll((type, so) -> so.startsWith("/") || !shared ? so : Path.of(shlib, so).toString());
+        // I tipi interni: la libreria di database a cui e' collegata libpostfix-util (o smtpd).
+        String util = shared && Files.exists(Path.of(shlib, "libpostfix-util.so"))
                 ? Path.of(shlib, "libpostfix-util.so").toString()
                 : Path.of(postconf("daemon_directory"), "smtpd").toString();
         for (String type : new TreeSet<>(SUFFIXES.keySet())) {
@@ -306,6 +349,34 @@ final class PostfixMaps {
     }
 
     /**
+     * Costruisce la tabella da una copia del suo testo, accanto, e la rinomina sopra quella vecchia
+     * (per dbm e sdbm, i due file). null se e' andata, altrimenti cosa e' andato storto; i file della
+     * copia se ne vanno in ogni caso.
+     */
+    private static String rebuildBeside(Table t, String tool) {
+        String temp = t.path() + ".panel-rebuild";
+        String[] suffixes = SUFFIXES.get(t.type());
+        try {
+            // cp -p: la copia ha proprietario e permessi del testo, e postmap lavora come il suo proprietario.
+            Shell.Result cp = run("cp", "-p", t.path(), temp);
+            if (!cp.success()) return "cp: " + cp.outputTrim();
+            Shell.Result r = run(tool, t.type() + ":" + temp);
+            if (!r.success()) return r.outputTrim();
+            for (String suffix : suffixes)
+                Files.move(Path.of(temp + suffix), Path.of(t.path() + suffix), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            return null;
+        } catch (Exception e) {
+            return String.valueOf(e.getMessage());
+        } finally {
+            try {
+                Files.deleteIfExists(Path.of(temp));
+                for (String suffix : suffixes) Files.deleteIfExists(Path.of(temp + suffix));
+            } catch (Exception ignored) { }
+        }
+    }
+
+    /**
      * Dopo pkg upgrade: se la libreria di un tipo e' cambiata, le sue mappe si rigenerano dal testo,
      * le sue cache si cancellano, ogni mappa rigenerata deve rispondere per la sua prima chiave, e
      * Postfix si ricarica. Va chiamata anche se pkg e' uscito con un errore: e' proprio quando la
@@ -340,10 +411,10 @@ final class PostfixMaps {
                 continue;
             }
             String tool = t.kind() == Kind.ALIAS ? "postalias" : "postmap";
-            Shell.Result r = run(tool, t.name());
             touched = true;
-            if (!r.success()) {
-                String p = I18n.tr("server.maps.rebuildFailed", Map.of("table", label, "cmd", tool + " " + t.name(), "out", r.outputTrim()));
+            String side = rebuildBeside(t, tool);
+            if (side != null) {
+                String p = I18n.tr("server.maps.rebuildFailed", Map.of("table", label, "cmd", tool + " " + t.name(), "out", side));
                 log.accept(p);
                 problems.add(p);
                 continue;
