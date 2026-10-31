@@ -55,8 +55,15 @@ import java.util.stream.Stream;
  * senza rilanciare postmap non ci e' ancora: rigenerare cambierebbe quello che Postfix usa. Quindi,
  * PRIMA di pkg upgrade e con la libreria di adesso (dopo il database puo' non leggersi piu'), ogni
  * mappa si confronta col suo testo: il testo si costruisce in una copia accanto, con lo stesso
- * programma, e si confrontano i due contenuti come li legge Postfix. Una mappa che non coincide
- * conta come una mappa senza testo: il pannello si ferma prima, o dopo non la tocca e lo dice.
+ * programma, e si confrontano i due contenuti come li legge Postfix.
+ *
+ * <p>Una mappa che non coincide col testo, o che il testo non ce l'ha, si ricostruisce dal suo
+ * contenuto: prima di pkg upgrade lo si legge (postmap -s) e lo si tiene in memoria, dopo lo si da'
+ * a postmap -i sullo stdin, e la mappa nuova deve avere la stessa impronta di prima. Misurato sulla
+ * VM il 31/10/2026: lmdb e hash con voci aggiunte con -i, continuazioni e doppioni, gli alias veri e
+ * alias con liste, "|comando", :include: e nomi fra virgolette tornano identici. Resta senza rimedio
+ * solo una mappa che non si legge gia' prima, o il cui contenuto supera maxSavedBytes: per quella il
+ * pannello si ferma prima, o dopo non la tocca e lo dice.
  *
  * <p>Su FreeBSD hash e btree li fornisce Berkeley DB 1.85 dentro la libc del sistema base
  * (libpostfix-util non e' collegata a nessun libdb di pacchetto, misurato sulla VM il 31/10/2026):
@@ -329,16 +336,16 @@ final class PostfixMaps {
     private static String label(Table t) { return t.name() + " (" + t.parameter() + ")"; }
 
     /**
-     * Le tabelle di quei tipi che non si potrebbero rigenerare dal testo senza cambiare quello che
-     * Postfix usa, col perche': senza testo, o col database che non coincide col testo.
+     * Le tabelle di quei tipi che dopo un cambio di libreria non si potrebbero rigenerare uguali a
+     * prima, col perche': il database non si legge, o il testo non coincide (o non c'e') e il
+     * contenuto e' troppo grande da tenere da parte.
      */
     static Map<String, String> unrebuildable(Set<String> types) {
         Map<String, String> out = new LinkedHashMap<>();
         for (Table t : tablesInUse()) {
             if (!types.contains(t.type()) || t.kind() == Kind.CACHE) continue;
-            if (!Files.isRegularFile(Path.of(t.path()))) { out.put(label(t), I18n.tr("server.maps.reasonNoSource")); continue; }
-            String why = outOfSync(t);
-            if (why != null) out.put(label(t), why);
+            String lost = way(t, false).lost();
+            if (lost != null) out.put(label(t), lost);
         }
         return out;
     }
@@ -395,13 +402,19 @@ final class PostfixMaps {
     /**
      * Costruisce la tabella da una copia del suo testo, accanto, e la rinomina sopra quella vecchia
      * (per dbm e sdbm, i due file). null se e' andata, altrimenti cosa e' andato storto; i file della
-     * copia se ne vanno in ogni caso.
+     * copia se ne vanno in ogni caso. Il database nuovo prende proprietario e permessi del vecchio:
+     * misurato sulla VM, postmap sul posto li lascia com'erano (640 root:mail), ma costruito accanto
+     * nasce coi permessi del testo e il gruppo wheel (644 root:wheel), e rinominato sopra li cambiava.
      */
     private static String rebuildBeside(Table t, String tool) {
         String temp = t.path() + ".panel-rebuild";
         try {
             String fail = buildBeside(t, tool, temp);
             if (fail != null) return fail;
+            for (String suffix : SUFFIXES.get(t.type())) {
+                Path old = Path.of(t.path() + suffix), fresh = Path.of(temp + suffix);
+                if (Files.exists(old) && Files.exists(fresh)) sameOwnerAndMode(old, fresh);
+            }
             for (String suffix : SUFFIXES.get(t.type()))
                 Files.move(Path.of(temp + suffix), Path.of(t.path() + suffix), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
                         java.nio.file.StandardCopyOption.ATOMIC_MOVE);
@@ -415,18 +428,31 @@ final class PostfixMaps {
 
     /**
      * Il contenuto di una tabella come la legge Postfix ("postmap -s", "postalias -s"): quante voci,
-     * e un'impronta che non dipende dall'ordine, la somma degli SHA-256 delle righe. L'ordine conta
-     * poco per lmdb, ma per hash dipende dall'ordine in cui le voci sono state scritte (misurato
-     * sulla VM: le stesse cinque voci in due ordini escono in due ordini). Si legge a flusso: le voci
-     * non restano in memoria e non finiscono su disco ne' nel registro, perche' una mappa puo' tenere
-     * password (sasl_passwd).
+     * quanti byte, e un'impronta che non dipende dall'ordine, la somma degli SHA-256 delle righe.
+     * L'ordine conta poco per lmdb, ma per hash dipende dall'ordine in cui le voci sono state scritte
+     * (misurato sulla VM: le stesse cinque voci in due ordini escono in due ordini). Non finisce mai
+     * su disco ne' nel registro, perche' una mappa puo' tenere password (sasl_passwd).
      */
-    record Digest(long entries, BigInteger sum) {}
+    record Digest(long entries, long bytes, BigInteger sum) {}
 
     private static final Duration DUMP_TIMEOUT = Duration.ofSeconds(300);
 
-    /** L'impronta di una tabella, o null se non si legge. */
-    static Digest digest(String tool, String table) {
+    /**
+     * Quanto puo' pesare, al massimo, il contenuto di una mappa tenuto in memoria durante un
+     * aggiornamento. Non e' final: le prove lo abbassano per provare una mappa che non ci sta.
+     */
+    static long maxSavedBytes = 32L * 1024 * 1024;
+
+    /** Lo scarico di una tabella: l'impronta, e il contenuto se e' stato chiesto e se ci sta. */
+    private record Read(Digest digest, byte[] content) {
+        void forget() { if (content != null) java.util.Arrays.fill(content, (byte) 0); }
+    }
+
+    /**
+     * Legge una tabella con tool -s, a flusso; il contenuto lo tiene solo se keepUpTo >= 0 e finche'
+     * non supera keepUpTo byte. null se non si legge.
+     */
+    private static Read read(String tool, String table, long keepUpTo) {
         ProcessBuilder pb = new ProcessBuilder(tool, "-s", table);
         Shell.applyPath(pb);
         pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
@@ -436,35 +462,47 @@ final class PostfixMaps {
             p = pb.start();
             final Process proc = p;
             // Si legge mentre postmap scrive: una mappa grande riempirebbe la pipe e lo fermerebbe.
-            java.util.concurrent.FutureTask<Digest> read = new java.util.concurrent.FutureTask<>(() -> {
+            java.util.concurrent.FutureTask<Read> reading = new java.util.concurrent.FutureTask<>(() -> {
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.ISO_8859_1))) {
                     MessageDigest sha = MessageDigest.getInstance("SHA-256");
+                    java.io.ByteArrayOutputStream kept = keepUpTo >= 0 ? new java.io.ByteArrayOutputStream() : null;
                     BigInteger sum = BigInteger.ZERO;
-                    long n = 0;
-                    for (String line; (line = r.readLine()) != null; n++)
-                        sum = sum.add(new BigInteger(1, sha.digest(line.getBytes(StandardCharsets.ISO_8859_1))));
-                    return new Digest(n, sum);
+                    long n = 0, size = 0;
+                    for (String line; (line = r.readLine()) != null; n++) {
+                        byte[] b = line.getBytes(StandardCharsets.ISO_8859_1);
+                        sum = sum.add(new BigInteger(1, sha.digest(b)));
+                        size += b.length + 1;
+                        if (kept != null && size > keepUpTo) kept = null;
+                        if (kept != null) { kept.write(b); kept.write('\n'); }
+                    }
+                    return new Read(new Digest(n, size, sum), kept == null ? null : kept.toByteArray());
                 }
             });
-            Thread.ofVirtual().start(read);
+            Thread.ofVirtual().start(reading);
             if (!p.waitFor(DUMP_TIMEOUT.toSeconds(), java.util.concurrent.TimeUnit.SECONDS)) {
                 p.destroyForcibly();
                 return null;
             }
-            Digest d = read.get(30, java.util.concurrent.TimeUnit.SECONDS);
-            return p.exitValue() == 0 ? d : null;
+            Read d = reading.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (p.exitValue() == 0) return d;
+            d.forget();
+            return null;
         } catch (Exception e) {
             if (p != null) p.destroyForcibly();
             return null;
         }
     }
 
+    /** L'impronta di una tabella, o null se non si legge. */
+    static Digest digest(String tool, String table) {
+        Read r = read(tool, table, -1);
+        return r == null ? null : r.digest();
+    }
+
     /**
      * Se il database di una tabella e il suo testo dicono cose diverse, perche'; null se dicono la
-     * stessa cosa, o se il database non c'e' ancora (non c'e' niente da perdere). Si confronta quello
-     * che Postfix legge, non come e' scritto il file: il testo si costruisce in una copia accanto con
-     * lo stesso programma, cosi' righe di continuazione, voci senza valore e doppioni contano come
-     * per postmap. Va chiamata prima di pkg upgrade: dopo, il database puo' non leggersi piu'.
+     * stessa cosa, o se il database non c'e' ancora (non c'e' niente da perdere). Va chiamata prima
+     * di pkg upgrade: dopo, il database puo' non leggersi piu'.
      */
     static String outOfSync(Table t) {
         boolean exists = false;
@@ -472,13 +510,21 @@ final class PostfixMaps {
         if (!exists) return null;
         String tool = toolFor(t);
         Digest db = digest(tool, t.name());
-        if (db == null) return I18n.tr("server.maps.dbUnreadable");
+        return db == null ? I18n.tr("server.maps.dbUnreadable") : compareWithText(t, tool, db);
+    }
+
+    /**
+     * Il testo di t costruito in una copia accanto, con lo stesso programma, confrontato con
+     * l'impronta del database: cosi' righe di continuazione, voci senza valore e doppioni contano
+     * come per postmap. null se coincidono, altrimenti perche' no.
+     */
+    private static String compareWithText(Table t, String tool, Digest db) {
         String temp = t.path() + ".panel-check";
         try {
             String fail = buildBeside(t, tool, temp);
             Digest text = fail == null ? digest(tool, t.type() + ":" + temp) : null;
             if (text == null) return I18n.tr("server.maps.textUnbuildable", Map.of("out", fail == null ? tool + " -s" : fail));
-            if (text.equals(db)) return null;
+            if (text.entries() == db.entries() && text.sum().equals(db.sum())) return null;
             return db.entries() != text.entries()
                     ? I18n.tr("server.maps.diffCounts", Map.of("db", String.valueOf(db.entries()), "text", String.valueOf(text.entries())))
                     : I18n.tr("server.maps.diffValues", Map.of("n", String.valueOf(db.entries())));
@@ -488,30 +534,171 @@ final class PostfixMaps {
     }
 
     /**
-     * Quello che serve sapere prima di pkg upgrade: chi legge ogni tipo, e quali mappe col loro testo
-     * non coincidono col database (nome -> perche').
+     * Il contenuto di una tabella letto prima di pkg upgrade, come lo scarica postmap -s: da qui la si
+     * ricostruisce dopo, uguale, anche senza testo o con un testo diverso. Sta solo in memoria e
+     * l'array si azzera dopo l'uso. textDiffers: perche' il testo non coincide, o null se non c'e'.
      */
-    record Before(Map<String, String> signatures, Map<String, String> outOfSync) {}
+    static final class Saved {
+        private byte[] content;
+        final Digest digest;
+        final String textDiffers;
 
-    /** Da prendere prima di pkg upgrade, nei tre lavori. */
-    static Before before() {
-        Map<String, String> diff = new TreeMap<>();
-        for (Table t : tablesInUse()) {
-            if (t.kind() == Kind.CACHE || !Files.isRegularFile(Path.of(t.path()))) continue;
-            String why = outOfSync(t);
-            if (why != null) diff.put(t.name(), why);
+        Saved(byte[] content, Digest digest, String textDiffers) {
+            this.content = content;
+            this.digest = digest;
+            this.textDiffers = textDiffers;
         }
-        return new Before(librarySignature(), diff);
+
+        byte[] content() { return content; }
+
+        void forget() {
+            if (content != null) java.util.Arrays.fill(content, (byte) 0);
+            content = null;
+        }
+
+        /** Mai il contenuto: un Before puo' finire in un messaggio. */
+        @Override public String toString() { return "Saved[" + digest.entries() + "]"; }
     }
 
     /**
-     * Dopo pkg upgrade: se la libreria di un tipo e' cambiata, le sue mappe si rigenerano dal testo,
-     * le sue cache si cancellano, ogni mappa rigenerata deve rispondere per la sua prima chiave, e
-     * Postfix si ricarica. Una mappa che prima non coincideva col suo testo non si tocca, e conta come
-     * problema. Va chiamata anche se pkg e' uscito con un errore: e' proprio quando la macchina puo'
-     * essere rimasta a meta'.
+     * Come si rigenera una tabella dopo un cambio di libreria: saved, dal contenuto letto prima; lost,
+     * non si puo' (il perche'). Tutti e due null: dal testo, che coincide col database, o non c'e'
+     * ancora nessun database (e allora non c'e' niente da perdere).
+     */
+    record Way(Saved saved, String lost) {}
+
+    private static String megabytes(long bytes) { return ((bytes + 1048575) / 1048576) + " MB"; }
+
+    /**
+     * Come si potrebbe rigenerare t dopo un cambio di libreria, con la libreria di adesso. keep: tiene
+     * il contenuto, se serve (before); senza, dice solo se si potrebbe (la scheda, il giudizio).
+     */
+    static Way way(Table t, boolean keep) {
+        boolean dbExists = false;
+        for (String suffix : SUFFIXES.get(t.type())) dbExists |= Files.exists(Path.of(t.path() + suffix));
+        boolean hasText = Files.isRegularFile(Path.of(t.path()));
+        if (!dbExists) return new Way(null, null);
+        String tool = toolFor(t);
+        Read db = read(tool, t.name(), keep ? maxSavedBytes : -1);
+        if (db == null) return new Way(null, I18n.tr("server.maps.dbUnreadable"));
+        String why = hasText ? compareWithText(t, tool, db.digest()) : I18n.tr("server.maps.reasonNoSource");
+        if (why == null) {
+            db.forget();
+            return new Way(null, null);
+        }
+        if (db.digest().bytes() > maxSavedBytes) {
+            db.forget();
+            return new Way(null, I18n.tr("server.maps.tooLarge", Map.of("why", why,
+                    "size", megabytes(db.digest().bytes()), "max", megabytes(maxSavedBytes))));
+        }
+        return new Way(keep ? new Saved(db.content(), db.digest(), hasText ? why : null) : null, null);
+    }
+
+    /**
+     * Quello che serve sapere prima di pkg upgrade: chi legge ogni tipo; il contenuto delle mappe che
+     * non si rigenerano dal testo (nome -> Saved); quelle che non si rigenerano affatto (nome -> perche').
+     */
+    record Before(Map<String, String> signatures, Map<String, Saved> saved, Map<String, String> lost) {
+        Before(Map<String, String> signatures) { this(signatures, Map.of(), Map.of()); }
+
+        /** Il contenuto tenuto da parte non serve piu': si azzera. */
+        void forget() { saved.values().forEach(Saved::forget); }
+    }
+
+    /** Da prendere prima di pkg upgrade, nei tre lavori. */
+    static Before before() {
+        Map<String, Saved> saved = new TreeMap<>();
+        Map<String, String> lost = new TreeMap<>();
+        for (Table t : tablesInUse()) {
+            if (t.kind() == Kind.CACHE) continue;
+            Way w = way(t, true);
+            if (w.saved() != null) saved.put(t.name(), w.saved());
+            else if (w.lost() != null) lost.put(t.name(), w.lost());
+        }
+        return new Before(librarySignature(), saved, lost);
+    }
+
+    /** tool -i tabella, col contenuto sullo stdin: nessun file in mezzo. null se e' andata. */
+    private static String feed(String tool, String table, byte[] content) {
+        ProcessBuilder pb = new ProcessBuilder(tool, "-i", table);
+        Shell.applyPath(pb);
+        pb.redirectErrorStream(true);
+        Process p = null;
+        try {
+            p = pb.start();
+            final Process proc = p;
+            java.util.concurrent.FutureTask<String> out = new java.util.concurrent.FutureTask<>(
+                    () -> new String(proc.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+            Thread.ofVirtual().start(out);
+            try (java.io.OutputStream in = p.getOutputStream()) { in.write(content); }
+            if (!p.waitFor(DUMP_TIMEOUT.toSeconds(), java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                return tool + " -i: timeout";
+            }
+            String o = out.get(30, java.util.concurrent.TimeUnit.SECONDS).trim();
+            return p.exitValue() == 0 ? null : o;
+        } catch (Exception e) {
+            if (p != null) p.destroyForcibly();
+            return String.valueOf(e.getMessage());
+        }
+    }
+
+    private static void sameOwnerAndMode(Path from, Path to) throws java.io.IOException {
+        java.nio.file.attribute.PosixFileAttributes a = Files.readAttributes(from, java.nio.file.attribute.PosixFileAttributes.class);
+        java.nio.file.attribute.PosixFileAttributeView v = Files.getFileAttributeView(to, java.nio.file.attribute.PosixFileAttributeView.class);
+        v.setOwner(a.owner());
+        v.setGroup(a.group());
+        v.setPermissions(a.permissions());
+    }
+
+    /**
+     * Ricostruisce t dal contenuto tenuto da parte, accanto, e la rinomina sopra la vecchia. La mappa
+     * nuova deve avere la stessa impronta di quella di prima, e prende proprietario e permessi della
+     * vecchia. Misurato sulla VM: postmap -i crea il database se non c'e', sempre root:wheel 644
+     * qualunque fosse il vecchio, e su un database che c'e' AGGIUNGE: si parte da vuoto.
+     */
+    private static String rebuildFromSaved(Table t, Saved s) {
+        String tool = toolFor(t), temp = t.path() + ".panel-rebuild";
+        try {
+            dropBeside(t, temp);
+            String fail = feed(tool, t.type() + ":" + temp, s.content());
+            if (fail != null) return fail;
+            Digest now = digest(tool, t.type() + ":" + temp);
+            if (!s.digest.equals(now))
+                return I18n.tr("server.maps.savedMismatch", Map.of("before", String.valueOf(s.digest.entries()),
+                        "now", now == null ? "?" : String.valueOf(now.entries())));
+            for (String suffix : SUFFIXES.get(t.type())) {
+                Path old = Path.of(t.path() + suffix), fresh = Path.of(temp + suffix);
+                if (Files.exists(old) && Files.exists(fresh)) sameOwnerAndMode(old, fresh);
+            }
+            for (String suffix : SUFFIXES.get(t.type()))
+                Files.move(Path.of(temp + suffix), Path.of(t.path() + suffix), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            return null;
+        } catch (Exception e) {
+            return String.valueOf(e.getMessage());
+        } finally {
+            dropBeside(t, temp);
+        }
+    }
+
+    /**
+     * Dopo pkg upgrade: se la libreria di un tipo e' cambiata, le sue mappe si rigenerano (dal
+     * contenuto letto prima, se il testo non coincide o non c'e'; altrimenti dal testo), le sue cache
+     * si cancellano, ogni mappa rigenerata si controlla, e Postfix si ricarica. Una mappa che non si
+     * poteva rigenerare non si tocca, e conta come problema. Va chiamata anche se pkg e' uscito con un
+     * errore: e' proprio quando la macchina puo' essere rimasta a meta'. Alla fine il contenuto tenuto
+     * da parte si azzera.
      */
     static Outcome afterUpgrade(Before state, Consumer<String> log) {
+        try {
+            return rebuildChanged(state, log);
+        } finally {
+            state.forget();
+        }
+    }
+
+    private static Outcome rebuildChanged(Before state, Consumer<String> log) {
         Map<String, String> before = state.signatures();
         Map<String, String> after = librarySignature();
         Set<String> types = changed(before, after);
@@ -534,21 +721,42 @@ final class PostfixMaps {
                 touched = true;
                 continue;
             }
+            String tool = toolFor(t);
+            Saved saved = state.saved().get(t.name());
+            if (saved != null) {
+                touched = true;
+                String side = rebuildFromSaved(t, saved);
+                if (side != null) {
+                    String p = I18n.tr("server.maps.rebuildFailed", Map.of("table", label, "cmd", tool + " -i " + t.name(), "out", side));
+                    log.accept(p);
+                    problems.add(p);
+                    continue;
+                }
+                log.accept(I18n.tr("server.maps.rebuiltFromSaved", Map.of("table", label, "n", String.valueOf(saved.digest.entries()))));
+                log.accept(saved.textDiffers == null ? I18n.tr("server.maps.textMissing", Map.of("table", label))
+                        : I18n.tr("server.maps.textDiffers", Map.of("table", label, "why", saved.textDiffers)));
+                continue;
+            }
+            String lost = state.lost().get(t.name());
+            if (lost != null) {
+                String p = I18n.tr("server.maps.notRebuilt", Map.of("table", label, "reason", lost));
+                log.accept(p);
+                problems.add(p);
+                continue;
+            }
             Path source = Path.of(t.path());
             if (!Files.isRegularFile(source)) {
+                boolean dbExists = false;
+                for (String suffix : SUFFIXES.get(t.type())) dbExists |= Files.exists(Path.of(t.path() + suffix));
+                if (!dbExists) {
+                    log.accept(I18n.tr("server.maps.nothing", Map.of("table", label)));
+                    continue;
+                }
                 String p = I18n.tr("server.maps.noSource", Map.of("table", label, "path", t.path()));
                 log.accept(p);
                 problems.add(p);
                 continue;
             }
-            String diff = state.outOfSync().get(t.name());
-            if (diff != null) {
-                String p = I18n.tr("server.maps.notRebuilt", Map.of("table", label, "reason", diff));
-                log.accept(p);
-                problems.add(p);
-                continue;
-            }
-            String tool = toolFor(t);
             touched = true;
             String side = rebuildBeside(t, tool);
             if (side != null) {
@@ -573,7 +781,7 @@ final class PostfixMaps {
             }
         }
         if (!touched) {
-            // «Nessuna mappa» solo se davvero non ce n'e': una senza testo o diversa dal testo c'e', ed e' gia' nei problemi.
+            // «Nessuna mappa» solo se davvero non ce n'e': una che non si poteva rigenerare c'e', ed e' gia' nei problemi.
             if (!any) log.accept(I18n.tr("server.maps.none", Map.of("types", String.join(", ", types))));
             return new Outcome(problems);
         }

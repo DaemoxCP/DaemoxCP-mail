@@ -2,6 +2,7 @@ package org.mail_panel.system;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.mail_panel.i18n.I18n;
 import org.mail_panel.util.Shell;
 
 import java.nio.file.Files;
@@ -24,9 +25,11 @@ import java.util.TreeMap;
  * libreria che non sa leggerlo. Cosi' si prova tutto il resto sul sistema vero: postmap, postalias,
  * la verifica, la cache, il ricaricamento di Postfix, e la previsione dal piano col catalogo vero.
  * Con una firma finta di hash si rigenera anche /etc/aliases, con postalias (e alla fine si rimette
- * il file di prima). Il confronto fra database e testo si prova con una voce aggiunta con
- * postmap -i, e con una mappa hash fuori dalla configurazione (l'ordine delle voci, un valore
- * cambiato, una riga in piu'). I tre lavori veri dell'updater li prova PostfixMapsJobsE2ETest.
+ * il file di prima). Il confronto fra database e testo si prova con una mappa hash fuori dalla
+ * configurazione (l'ordine delle voci, un valore cambiato, una riga in piu'). La ricostruzione dal
+ * contenuto letto prima si prova senza il testo, con una voce aggiunta con postmap -i, con un
+ * contenuto alterato (non deve andare in uso) e con un tetto alla memoria piu' basso (la mappa non
+ * si tiene, e il piano si ferma). I tre lavori veri dell'updater li prova PostfixMapsJobsE2ETest.
  *
  * Tocca la configurazione di Postfix e la rimette com'era, e lo controlla: si accende solo con
  * -De2e.vm=yes, da root, su FreeBSD.
@@ -61,6 +64,8 @@ public class PostfixMapsE2ETest {
         String aliasesOwner = sh("stat -f '%Su:%Sg %Lp' /etc/aliases.db").trim();
         sh("cp -p /etc/aliases.db " + ALIASES_BACKUP);
         List<String> log = new ArrayList<>();
+        long budget = PostfixMaps.maxSavedBytes;
+        String name = "lmdb:" + SOURCE, label = name + " (transport_maps)";
         try {
             Files.writeString(Path.of(SOURCE), TEXT);
             sh("postmap lmdb:" + SOURCE + " 2>/dev/null");
@@ -77,15 +82,16 @@ public class PostfixMapsE2ETest {
                     String.valueOf(real.get("lmdb")).contains("liblmdb.so.0") && String.valueOf(real.get("lmdb")).contains("(lmdb0)")
                             && "base".equals(real.get("hash")));
             PostfixMaps.Before snap = PostfixMaps.before();
+            System.out.println("     tenute da parte: " + snap.saved() + ", da non rigenerare: " + snap.lost());
+            check("ogni mappa della VM coincide col suo testo: niente da tenere da parte, niente di perso",
+                    snap.saved().isEmpty() && snap.lost().isEmpty());
+            check("  e il confronto non lascia file accanto",
+                    sh("ls " + SOURCE + ".panel-check* /etc/aliases.panel-check* 2>/dev/null").isBlank());
             PostfixMaps.Outcome o = PostfixMaps.afterUpgrade(snap, log::add);
             check("stessa libreria: niente da fare, niente scritto", o.ok() && log.isEmpty());
             check("  e la cache resta dov'e'", Files.exists(Path.of(CACHE + ".lmdb")));
 
-            System.out.println("\n== Il database e il testo, confrontati prima ==");
-            System.out.println("     diverse dal testo: " + snap.outOfSync());
-            check("nessuna mappa della VM risulta diversa dal suo testo (gli alias, la mappa della prova)", snap.outOfSync().isEmpty());
-            check("  e il confronto non lascia file accanto",
-                    sh("ls " + SOURCE + ".panel-check* /etc/aliases.panel-check* 2>/dev/null").isBlank());
+            System.out.println("\n== Il database e il testo, confrontati ==");
             PostfixMaps.Table order = new PostfixMaps.Table("transport_maps", "hash", ORDER, PostfixMaps.Kind.PUBLIC);
             Files.writeString(Path.of(ORDER), "k1 v1\nk2 v2\nk3 v3\nk4 v4\nk5 v5\n");
             sh("postmap hash:" + ORDER);
@@ -104,20 +110,22 @@ public class PostfixMapsE2ETest {
             check("senza database c'e' solo il testo: niente da perdere, coincide", PostfixMaps.outOfSync(order) == null);
             sh("rm -f " + ORDER + " " + ORDER + ".db");
 
-            System.out.println("\n== La libreria di lmdb cambiata, e il file non piu' leggibile ==");
-            String mapOwner = sh("stat -f '%Su:%Sg %Lp' " + SOURCE + ".lmdb").trim();
+            System.out.println("\n== La libreria di lmdb cambiata: dal testo, che coincide ==");
+            // Il database con un gruppo e dei permessi suoi: la mappa nuova deve averli uguali, non quelli del testo.
+            sh("chown root:mail " + SOURCE + ".lmdb; chmod 640 " + SOURCE + ".lmdb");
+            String mapOwner = stat(SOURCE + ".lmdb");
+            PostfixMaps.Before fromText = PostfixMaps.before();
             Files.writeString(Path.of(SOURCE + ".lmdb"), "questo non e' un database lmdb");
             check("rovinato il file: la mappa non risponde piu'", !lookup().equals(ANSWER));
             Map<String, String> before = new TreeMap<>(real);
             before.put("lmdb", "liblmdb.so.0=/usr/local/lib/liblmdb.so.0(lmdb-di-prima)");
             int reloads = reloads();
-            // Il confronto e' quello di prima della rovina: prima di pkg upgrade il file si leggeva.
-            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before, snap.outOfSync()), log::add);
+            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before, fromText.saved(), fromText.lost()), log::add);
             log.forEach(l -> System.out.println("       | " + l));
             check("la rigenerazione va a buon fine", o.ok());
             check("la mappa rigenerata risponde come prima", lookup().equals(ANSWER));
-            check("  con proprietario e permessi di prima (" + mapOwner + ")",
-                    sh("stat -f '%Su:%Sg %Lp' " + SOURCE + ".lmdb").trim().equals(mapOwner));
+            check("  col proprietario e i permessi del database di prima (" + mapOwner + "), non quelli del testo",
+                    mapOwner.equals("root:mail 640") && stat(SOURCE + ".lmdb").equals(mapOwner));
             check("  e nessun file della costruzione accanto", sh("ls " + SOURCE + ".panel-rebuild* 2>/dev/null").isBlank());
             check("Postfix e' stato ricaricato davvero (maillog: «refreshing the Postfix mail system»)", reloads() > reloads);
             check("la cache lmdb e' cancellata (Postfix la ricrea)", !Files.exists(Path.of(CACHE + ".lmdb")));
@@ -131,62 +139,110 @@ public class PostfixMapsE2ETest {
             System.out.println("\n== La libreria di hash cambiata: gli alias, con postalias ==");
             Map<String, String> hashBefore = new TreeMap<>(real);
             hashBefore.put("hash", "libdb.so.5=/usr/local/lib/db5/libdb.so.5(db5)");
+            PostfixMaps.Before aliases = PostfixMaps.before();
             log.clear();
-            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(hashBefore, snap.outOfSync()), log::add);
+            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(hashBefore, aliases.saved(), aliases.lost()), log::add);
             log.forEach(l -> System.out.println("       | " + l));
             check("la rigenerazione degli alias va a buon fine", o.ok());
             check("  e il registro dice hash:/etc/aliases, provata con una sua chiave",
                     String.join("\n", log).contains("hash:/etc/aliases (alias_") && String.join("\n", log).contains("«MAILER-DAEMON»"));
             check("gli alias rispondono (postalias -q MAILER-DAEMON)",
                     sh("postalias -q MAILER-DAEMON hash:/etc/aliases").trim().equals("postmaster"));
-            check("  con proprietario e permessi di prima (" + aliasesOwner + ")",
-                    sh("stat -f '%Su:%Sg %Lp' /etc/aliases.db").trim().equals(aliasesOwner));
+            check("  con proprietario e permessi di prima (" + aliasesOwner + ")", stat("/etc/aliases.db").equals(aliasesOwner));
             check("  e le mappe lmdb non toccate questa volta", !String.join("\n", log).contains("e2e-transport"));
 
-            System.out.println("\n== Una mappa senza il suo testo ==");
+            System.out.println("\n== Una mappa senza il suo testo: dal contenuto letto prima ==");
             Files.delete(Path.of(SOURCE));
+            PostfixMaps.Before noText = PostfixMaps.before();
+            PostfixMaps.Saved saved = noText.saved().get(name);
+            check("prima dell'aggiornamento il suo contenuto si tiene da parte: 1 voce", saved != null && saved.digest.entries() == 1);
+            check("  e non finisce in nessun messaggio", !noText.toString().contains(ANSWER) && !noText.toString().contains("example.invalid"));
+            check("la scheda non si ferma: la mappa si potrebbe rigenerare uguale", PostfixMaps.planBlocker(plan("remove lmdb0")) == null);
+            Files.writeString(Path.of(SOURCE + ".lmdb"), "questo non e' un database lmdb");
             log.clear();
-            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before, Map.of()), log::add);
-            check("non si puo' rigenerare: errore, e dice quale", !o.ok() && o.problem().contains("e2e-transport"));
+            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before, noText.saved(), noText.lost()), log::add);
+            log.forEach(l -> System.out.println("       | " + l));
+            check("dopo il cambio di libreria si ricostruisce dal contenuto di prima, e risponde", o.ok() && lookup().equals(ANSWER));
+            check("  col proprietario e i permessi di prima (" + mapOwner + ")", stat(SOURCE + ".lmdb").equals(mapOwner));
+            check("  e il registro lo dice, e dice che il testo manca", String.join("\n", log).contains(
+                    I18n.tr("server.maps.textMissing", Map.of("table", label))) && String.join("\n", log).contains(
+                    I18n.tr("server.maps.rebuiltFromSaved", Map.of("table", label, "n", "1"))));
+            check("  e il contenuto tenuto da parte si e' azzerato", saved.content() == null);
+            check("  e nessun file della costruzione accanto", sh("ls " + SOURCE + ".panel-rebuild* 2>/dev/null").isBlank());
+            log.clear();
+            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before), log::add);
+            check("senza il contenuto letto prima (e senza testo): errore che la nomina", !o.ok() && o.problem().contains("e2e-transport"));
 
-            System.out.println("\n== La previsione dal piano, col catalogo vero ==");
+            System.out.println("\n== Quelle che non si potrebbero rigenerare, viste dal piano ==");
+            PostfixMaps.maxSavedBytes = 1;
             String blocked = PostfixMaps.planBlocker(plan("remove lmdb0"));
-            check("un piano che toglie lmdb0, con la mappa senza testo: si ferma prima, e nomina la mappa",
-                    blocked != null && blocked.contains("e2e-transport"));
-            check("un piano che aggiorna Postfix ma la versione nuova chiede ancora liblmdb.so.0: non si ferma",
-                    PostfixMaps.planBlocker(plan("upgrade postfix-mysql")) == null);
+            System.out.println("     " + blocked);
+            check("senza testo e col contenuto piu' grande di quello che si tiene: si ferma prima, e nomina la mappa",
+                    blocked != null && blocked.contains("e2e-transport") && blocked.contains(I18n.tr("server.maps.reasonNoSource")));
             JSONObject replacement = PackageReplacement.judge(PackageReplacement.facts("lmdb0", "0.9.35",
                     Map.of("lmdb0", "remove"), List.of())).toJson();
             check("il giudizio su lmdb0 tolto dice la mappa che si perderebbe",
                     replacement.getJSONArray("problems").toString().contains("e2e-transport") && !replacement.optBoolean("safe"));
+            PostfixMaps.Before tight = PostfixMaps.before();
+            check("  e before() non la tiene: la da' per persa", tight.saved().isEmpty() && tight.lost().containsKey(name));
+            PostfixMaps.maxSavedBytes = budget;
+            Files.writeString(Path.of(SOURCE + ".lmdb"), "questo non e' un database lmdb");
+            String unreadable = PostfixMaps.planBlocker(plan("remove lmdb0"));
+            check("un database che non si legge gia' adesso: si ferma prima",
+                    unreadable != null && unreadable.contains("e2e-transport") && unreadable.contains(I18n.tr("server.maps.dbUnreadable")));
+            check("un piano che aggiorna Postfix ma la versione nuova chiede ancora liblmdb.so.0: non si ferma",
+                    PostfixMaps.planBlocker(plan("upgrade postfix-mysql")) == null);
+            // postmap non riscrive un file che non sa leggere (misurato, vedi PostfixMaps): prima lo si toglie.
             Files.writeString(Path.of(SOURCE), TEXT);
-            check("col testo rimesso: lo stesso piano non si ferma piu'", PostfixMaps.planBlocker(plan("remove lmdb0")) == null);
+            sh("rm -f " + SOURCE + ".lmdb; postmap lmdb:" + SOURCE + " 2>/dev/null");
+            check("col testo rimesso e la mappa rigenerata: il piano non si ferma piu'", PostfixMaps.planBlocker(plan("remove lmdb0")) == null);
 
             System.out.println("\n== Una voce aggiunta con postmap -i, che il testo non ha ==");
             sh("echo 'extra.invalid " + EXTRA + "' | postmap -i lmdb:" + SOURCE);
             check("la voce aggiunta risponde", lookup("extra.invalid").equals(EXTRA));
             PostfixMaps.Before withExtra = PostfixMaps.before();
-            String why = withExtra.outOfSync().get("lmdb:" + SOURCE);
-            System.out.println("     " + why);
-            check("il confronto la vede: il database ha 2 voci, il testo ne darebbe 1", why != null && why.contains("2") && why.contains("1"));
+            PostfixMaps.Saved extra = withExtra.saved().get(name);
+            System.out.println("     " + (extra == null ? "non tenuta" : extra.textDiffers));
+            check("il confronto la vede, e il contenuto si tiene da parte: 2 voci, il testo ne darebbe 1",
+                    extra != null && extra.digest.entries() == 2 && extra.textDiffers != null
+                            && extra.textDiffers.contains("2") && extra.textDiffers.contains("1"));
             check("  e non tocca il database: la voce aggiunta risponde ancora", lookup("extra.invalid").equals(EXTRA));
-            check("  e gli alias coincidono ancora", !withExtra.outOfSync().containsKey("hash:/etc/aliases"));
-            String extraBlocked = PostfixMaps.planBlocker(plan("remove lmdb0"));
-            check("un piano che toglie lmdb0: si ferma prima, nomina la mappa e dice perche'",
-                    extraBlocked != null && extraBlocked.contains("e2e-transport") && extraBlocked.contains(why));
-            check("il giudizio su lmdb0 tolto dice la mappa che si perderebbe",
-                    PackageReplacement.judge(PackageReplacement.facts("lmdb0", "0.9.35", Map.of("lmdb0", "remove"), List.of()))
-                            .toJson().getJSONArray("problems").toString().contains("e2e-transport"));
+            check("  e gli alias coincidono ancora", !withExtra.saved().containsKey("hash:/etc/aliases") && withExtra.lost().isEmpty());
+            check("la scheda non si ferma", PostfixMaps.planBlocker(plan("remove lmdb0")) == null);
+            Files.writeString(Path.of(SOURCE + ".lmdb"), "questo non e' un database lmdb");
             log.clear();
-            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before, withExtra.outOfSync()), log::add);
+            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before, withExtra.saved(), withExtra.lost()), log::add);
             log.forEach(l -> System.out.println("       | " + l));
-            check("se la libreria cambia lo stesso: non la rigenera, ed e' un errore che la nomina",
-                    !o.ok() && o.problem().contains("e2e-transport") && !String.join("\n", log).contains("«example.invalid»"));
-            check("  e la voce aggiunta c'e' ancora", lookup("extra.invalid").equals(EXTRA));
-            sh("postmap lmdb:" + SOURCE + " 2>/dev/null");
-            check("rigenerata a mano dal testo: coincide, e il piano non si ferma piu'",
-                    !PostfixMaps.before().outOfSync().containsKey("lmdb:" + SOURCE) && PostfixMaps.planBlocker(plan("remove lmdb0")) == null);
+            check("dopo il cambio: ricostruita dal contenuto di prima, con la voce aggiunta",
+                    o.ok() && lookup("extra.invalid").equals(EXTRA) && lookup().equals(ANSWER));
+            check("  e il registro dice che il testo e' diverso; il testo e' rimasto com'era",
+                    String.join("\n", log).contains(I18n.tr("server.maps.textDiffers", Map.of("table", label, "why", String.valueOf(extra.textDiffers))))
+                            && Files.readString(Path.of(SOURCE)).equals(TEXT));
+
+            System.out.println("\n== Un contenuto tenuto da parte che non coincide piu' ==");
+            PostfixMaps.Before tampered = PostfixMaps.before();
+            byte[] content = tampered.saved().get(name).content();
+            content[0] = (byte) (content[0] == 'e' ? 'f' : 'e');
+            log.clear();
+            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before, tampered.saved(), tampered.lost()), log::add);
+            log.forEach(l -> System.out.println("       | " + l));
+            check("non la mette in uso: errore che la nomina", !o.ok() && o.problem().contains("e2e-transport"));
+            check("  e la mappa e' quella di prima: rispondono tutte e due le voci", lookup().equals(ANSWER) && lookup("extra.invalid").equals(EXTRA));
+            check("  e nessun file della costruzione accanto", sh("ls " + SOURCE + ".panel-rebuild* 2>/dev/null").isBlank());
+
+            System.out.println("\n== Una voce aggiunta, e il contenuto troppo grande da tenere ==");
+            PostfixMaps.maxSavedBytes = 1;
+            PostfixMaps.Before big = PostfixMaps.before();
+            check("non si tiene: data per persa, col perche' (2 voci contro 1)", big.saved().isEmpty()
+                    && big.lost().getOrDefault(name, "").contains("2") && big.lost().getOrDefault(name, "").contains("1"));
+            check("la scheda si ferma", PostfixMaps.planBlocker(plan("remove lmdb0")) != null);
+            log.clear();
+            o = PostfixMaps.afterUpgrade(new PostfixMaps.Before(before, big.saved(), big.lost()), log::add);
+            check("se la libreria cambia lo stesso: non la rigenera, errore che la nomina, e la voce resta",
+                    !o.ok() && o.problem().contains("e2e-transport") && lookup("extra.invalid").equals(EXTRA));
+            PostfixMaps.maxSavedBytes = budget;
         } finally {
+            PostfixMaps.maxSavedBytes = budget;
             if (transportSet.isEmpty()) sh("postconf -X transport_maps"); else sh("postconf -e '" + transportSet + "'");
             if (verifySet.isEmpty()) sh("postconf -X address_verify_map"); else sh("postconf -e '" + verifySet + "'");
             sh("rm -f " + SOURCE + " " + SOURCE + ".lmdb " + CACHE + ".lmdb " + CACHE + ".lmdb-lock");
@@ -208,6 +264,10 @@ public class PostfixMapsE2ETest {
     /** Quante volte Postfix e' stato ricaricato, secondo il maillog (syslog scrive con un attimo di ritardo). */
     static int reloads() {
         return Integer.parseInt(sh("sleep 1; grep -c 'refreshing the Postfix mail system' /var/log/maillog").trim());
+    }
+
+    static String stat(String file) {
+        return sh("stat -f '%Su:%Sg %Lp' " + file).trim();
     }
 
     static String lookup() {

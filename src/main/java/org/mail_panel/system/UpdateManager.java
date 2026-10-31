@@ -2685,7 +2685,7 @@ public final class UpdateManager {
         String removals = removalsReason(plan);
         if (removals != null) reasons.add(removals);
         // Un piano che puo' cambiare la libreria di un tipo di mappa di Postfix, se una mappa di quel
-        // tipo non ha il suo testo: dopo non si potrebbe rigenerare (PostfixMaps).
+        // tipo non si potrebbe rigenerare uguale a prima (PostfixMaps).
         String maps = PostfixMaps.planBlocker(plan);
         if (maps != null) reasons.add(maps);
         if (!d.getJSONArray("downgrades").isEmpty())
@@ -6719,8 +6719,8 @@ public final class UpdateManager {
             // E la configurazione con gli indirizzi in ascolto, nello stesso istante: il piano
             // dice quali pacchetti cambiano, non che cosa i loro script riscrivono.
             sideEffects.takeBefore();
-            // Chi legge ogni tipo di mappa di Postfix, e quali mappe non coincidono col loro testo,
-            // prima: se dopo la libreria e' cambiata, si rigenerano le altre.
+            // Chi legge ogni tipo di mappa di Postfix, e il contenuto delle mappe che non si rigenerano
+            // dal testo, prima: se dopo la libreria e' cambiata, le mappe si rigenerano uguali a prima.
             PostfixMaps.Before mapsBefore = PostfixMaps.before();
             // -U: stesso catalogo su cui e' stato calcolato il piano. Riscaricarlo adesso potrebbe
             // portare versioni diverse da quelle approvate.
@@ -10612,8 +10612,8 @@ public final class UpdateManager {
             job.write("");
             // L'uscita si tiene anche qui, per ripescare alla fine i messaggi degli script.
             StringBuilder captured = new StringBuilder();
-            // Chi legge ogni tipo di mappa di Postfix, e quali mappe non coincidono col loro testo,
-            // prima: se dopo la libreria e' cambiata, si rigenerano le altre.
+            // Chi legge ogni tipo di mappa di Postfix, e il contenuto delle mappe che non si rigenerano
+            // dal testo, prima: se dopo la libreria e' cambiata, le mappe si rigenerano uguali a prima.
             PostfixMaps.Before mapsBefore = PostfixMaps.before();
             // -U: lo stesso catalogo su cui e' stato calcolato il piano. Prima era senza, cioe'
             // riscaricava il catalogo e poteva installare versioni diverse da quelle mostrate.
@@ -10624,7 +10624,6 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runUpdateJob.3"));
                 code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
             }
-            String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
 
             job.write("");
             job.write(I18n.tr("server.um.runMaintenanceJob.13"));
@@ -10640,6 +10639,11 @@ public final class UpdateManager {
             // Questo lavoro non riavvia niente: quello che uno script ha scritto entra in
             // vigore al prossimo riavvio del servizio, e va detto prima.
             sideEffects.checkConfig(job, plan, outsidePlan, false);
+            // Le mappe DOPO il controllo della configurazione, come nell'aggiornamento guidato: una mappa
+            // che il pannello ricostruisce dal contenuto, senza il suo testo accanto, il controllo la
+            // prenderebbe per un file cambiato da uno script (misurato sulla VM il 31/10/2026). E anche
+            // se pkg e' uscito con un errore: e' proprio quando la macchina puo' essere rimasta a meta'.
+            String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
             writeActionMessages(job, captured.toString());
 
             job.advance(4, TOTAL_STEPS);
@@ -10836,8 +10840,8 @@ public final class UpdateManager {
             sideEffects.takeBefore();
             // L'uscita si tiene anche qui, per ripescare alla fine i messaggi degli script.
             StringBuilder captured = new StringBuilder();
-            // Chi legge ogni tipo di mappa di Postfix, e quali mappe non coincidono col loro testo,
-            // prima: se dopo la libreria e' cambiata, si rigenerano le altre.
+            // Chi legge ogni tipo di mappa di Postfix, e il contenuto delle mappe che non si rigenerano
+            // dal testo, prima: se dopo la libreria e' cambiata, le mappe si rigenerano uguali a prima.
             PostfixMaps.Before mapsBefore = PostfixMaps.before();
             // -U: lo stesso catalogo su cui e' stato calcolato il piano.
             int code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
@@ -10847,7 +10851,6 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runUpdateJob.3"));
                 code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
             }
-            String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
             job.write(I18n.tr("server.um.runUpdateJob.4", java.util.Map.of("code", String.valueOf(code))));
             if (code != 0) { job.status = "error"; job.errorMessage = I18n.tr("server.um.runUpdateJob.5", java.util.Map.of("code", String.valueOf(code))); }
             else job.status = "completed";
@@ -10868,6 +10871,11 @@ public final class UpdateManager {
             // La manutenzione non riavvia niente: cio' che uno script ha scritto entra in vigore
             // al prossimo riavvio, ed e' quello che chi legge la lista qui sotto sta per fare.
             sideEffects.checkConfig(job, plan, outsidePlan, false);
+            // Le mappe DOPO il controllo della configurazione, come nell'aggiornamento guidato: una mappa
+            // che il pannello ricostruisce dal contenuto, senza il suo testo accanto, il controllo la
+            // prenderebbe per un file cambiato da uno script (misurato sulla VM il 31/10/2026). E anche
+            // se pkg e' uscito con un errore: e' proprio quando la macchina puo' essere rimasta a meta'.
+            String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
 
             // I problemi si sommano al messaggio che c'e' gia' (per esempio l'uscita di pkg
             // diversa da zero): nessuno dei tre deve coprire gli altri.

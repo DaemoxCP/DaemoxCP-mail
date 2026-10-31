@@ -2,6 +2,7 @@ package org.mail_panel.system;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.mail_panel.i18n.I18n;
 import org.mail_panel.util.Shell;
 
 import java.nio.file.Files;
@@ -25,14 +26,19 @@ import java.util.TreeSet;
  *
  *   rigenerata      fakeshadow 1.0 -> 1.1, la mappa ha il testo: ognuno dei tre lavori finisce, la
  *                   mappa e' rigenerata e risponde, la cache e' cancellata, Postfix ricaricato;
+ *   senza testo     lo stesso, ma la mappa il testo non ce l'ha: il lavoro ne legge il contenuto
+ *                   prima di pkg upgrade, la ricostruisce da li', e finisce;
+ *   solo nel db     lo stesso, ma la mappa ha il testo e in piu' una voce aggiunta con postmap -i:
+ *                   ricostruita dal contenuto di prima, la voce c'e' ancora, il testo resta com'era.
+ *
+ * Poi col tetto della memoria abbassato (PostfixMaps.maxSavedBytes), cosi' che il contenuto non si
+ * possa tenere da parte:
  *   prevista        fakeshadow 1.1 -> 1.2 (la copia se ne va), la mappa senza testo: la scheda non
  *                   lascia partire, il lavoro lanciato lo stesso si rifiuta, niente cambia;
  *   dopo il fatto   fakeshadow 1.0 -> 1.1, la mappa senza testo: la previsione non lo puo' vedere
  *                   (la libreria era di lmdb0, che il piano non tocca), il lavoro aggiorna e poi
  *                   finisce in errore nominando la mappa;
- *   solo nel db     come «dopo il fatto», ma la mappa ha il testo e in piu' una voce aggiunta con
- *                   postmap -i: il lavoro la confronta prima, non la rigenera (perderebbe la voce),
- *                   e finisce in errore nominandola; e con fakeshadow 1.1 -> 1.2 la scheda non
+ *   solo nel db     con fakeshadow 1.1 -> 1.2 e una voce aggiunta con postmap -i: la scheda non
  *                   lascia partire.
  *
  * Durante la prova FreeBSD-ports e FreeBSD-ports-kmods sono spenti, e prima di ogni lavoro si
@@ -55,6 +61,7 @@ public class PostfixMapsJobsE2ETest {
     static final String CACHE = "/var/db/postfix/e2e-jobs-verify";
     static final String ANSWER = "smtp:[127.0.0.1]:2526";
     static final String EXTRA = "smtp:[127.0.0.1]:2528";
+    static final String TEXT = "# prova dei lavori\nexample.invalid " + ANSWER + "\n";
     static boolean createdReposDir;
 
     public static void main(String[] args) throws Exception {
@@ -85,10 +92,17 @@ public class PostfixMapsJobsE2ETest {
             sh("postconf -e 'address_verify_map = lmdb:" + CACHE + "'");
             sh("postfix reload");
             for (String flow : new String[]{"guided", "unprotected", "maintenance"}) rebuilt(flow);
-            for (String flow : new String[]{"guided", "unprotected", "maintenance"}) predicted(flow);
-            for (String flow : new String[]{"guided", "unprotected", "maintenance"}) afterTheFact(flow);
-            for (String flow : new String[]{"guided", "unprotected", "maintenance"}) onlyInDatabase(flow);
-            onlyInDatabasePredicted();
+            for (String flow : new String[]{"guided", "unprotected", "maintenance"}) fromSaved(flow, false);
+            for (String flow : new String[]{"guided", "unprotected", "maintenance"}) fromSaved(flow, true);
+            long budget = PostfixMaps.maxSavedBytes;
+            PostfixMaps.maxSavedBytes = 1;
+            try {
+                for (String flow : new String[]{"guided", "unprotected", "maintenance"}) predicted(flow);
+                for (String flow : new String[]{"guided", "unprotected", "maintenance"}) afterTheFact(flow);
+                onlyInDatabasePredicted();
+            } finally {
+                PostfixMaps.maxSavedBytes = budget;
+            }
         } finally {
             removeFake();
             sh("rm -f " + REPO_CONF + "; rm -rf /var/db/pkg/repos/" + REPO + "; rm -f /var/cache/pkg/" + FAKE + "*; rm -rf " + WORK);
@@ -142,7 +156,7 @@ public class PostfixMapsJobsE2ETest {
     }
 
     static void predicted(String flow) throws Exception {
-        System.out.println("\n  --- " + flow + ": il piano toglie la copia di liblmdb, la mappa non ha il testo ---");
+        System.out.println("\n  --- " + flow + ": il piano toglie la copia di liblmdb, la mappa non ha il testo, e non ci sta in memoria ---");
         setUp(flow, "repo11", "1.1", "repo12");
         maps(false);
         String label = flow + " prevista: ";
@@ -184,7 +198,7 @@ public class PostfixMapsJobsE2ETest {
     }
 
     static void afterTheFact(String flow) throws Exception {
-        System.out.println("\n  --- " + flow + ": la libreria cambia senza che il piano lo dica, la mappa non ha il testo ---");
+        System.out.println("\n  --- " + flow + ": la libreria cambia senza che il piano lo dica, la mappa non ha il testo, e non ci sta in memoria ---");
         setUp(flow, "v10", "1.0", "repo11");
         maps(false);
         JSONObject r = runFlow(flow);
@@ -197,25 +211,37 @@ public class PostfixMapsJobsE2ETest {
         check(label + "fakeshadow di nuovo protetto come prima", flow.equals("unprotected") || locked().contains(FAKE));
     }
 
-    /** La mappa ha il testo, ma anche una voce che il testo non ha: rigenerarla la perderebbe. */
-    static void onlyInDatabase(String flow) throws Exception {
-        System.out.println("\n  --- " + flow + ": la libreria cambia, la mappa ha una voce aggiunta con postmap -i ---");
+    /**
+     * La mappa senza testo (withExtra false), o col testo e una voce che il testo non ha (true): il
+     * lavoro ne legge il contenuto prima di pkg upgrade e la ricostruisce da li'.
+     */
+    static void fromSaved(String flow, boolean withExtra) throws Exception {
+        System.out.println("\n  --- " + flow + ": la libreria cambia, " + (withExtra
+                ? "la mappa ha una voce aggiunta con postmap -i ---" : "la mappa non ha il testo ---"));
         setUp(flow, "v10", "1.0", "repo11");
-        maps(true);
-        sh("echo 'extra.invalid " + EXTRA + "' | postmap -i lmdb:" + SOURCE);
-        String label = flow + " solo nel db: ";
-        check(label + "prima del lavoro la voce aggiunta risponde", lookup("extra.invalid").equals(EXTRA));
+        maps(withExtra);
+        if (withExtra) sh("echo 'extra.invalid " + EXTRA + "' | postmap -i lmdb:" + SOURCE);
+        String label = flow + (withExtra ? " solo nel db: " : " senza testo: ");
+        String table = "lmdb:" + SOURCE + " (transport_maps)";
+        if (withExtra) check(label + "prima del lavoro la voce aggiunta risponde", lookup("extra.invalid").equals(EXTRA));
         JSONObject r = runFlow(flow);
         if (r == null) return;
+        String log = r.optString("consoleLog");
+        check(label + "il lavoro finisce (" + r.optString("status") + ")", "completed".equals(r.optString("status")));
         check(label + "l'aggiornamento c'e' stato (fakeshadow 1.1)", sh("pkg query %v " + FAKE).trim().equals("1.1"));
-        check(label + "il lavoro finisce in errore (" + r.optString("status") + ")", "error".equals(r.optString("status")));
-        check(label + "e l'errore nomina la mappa", r.optString("errorMessage").contains(SOURCE));
-        check(label + "la mappa non e' stata rigenerata: la voce aggiunta risponde ancora", lookup("extra.invalid").equals(EXTRA));
+        check(label + "il registro dice che l'ha ricostruita dal contenuto di prima, con le sue voci",
+                log.contains(I18n.tr("server.maps.rebuiltFromSaved", Map.of("table", table, "n", withExtra ? "2" : "1"))));
+        check(label + "la mappa risponde" + (withExtra ? ", anche la voce aggiunta" : ""),
+                lookup().equals(ANSWER) && (!withExtra || lookup("extra.invalid").equals(EXTRA)));
+        check(label + "il testo e' com'era" + (withExtra ? "" : " (cioe' non c'e')"),
+                withExtra ? Files.readString(Path.of(SOURCE)).equals(TEXT) : !Files.exists(Path.of(SOURCE)));
+        check(label + "la cache e' cancellata", !Files.exists(Path.of(CACHE + ".lmdb")));
         check(label + "Postfix gira", sh("postfix status; echo $?").trim().endsWith("0"));
+        check(label + "fakeshadow di nuovo protetto come prima", flow.equals("unprotected") || locked().contains(FAKE));
     }
 
     static void onlyInDatabasePredicted() throws Exception {
-        System.out.println("\n  --- guided: il piano toglie la copia di liblmdb, la mappa ha una voce aggiunta con postmap -i ---");
+        System.out.println("\n  --- guided: il piano toglie la copia di liblmdb, la mappa ha una voce aggiunta con postmap -i, e non ci sta in memoria ---");
         setUp("guided", "repo11", "1.1", "repo12");
         maps(true);
         sh("echo 'extra.invalid " + EXTRA + "' | postmap -i lmdb:" + SOURCE);
@@ -258,7 +284,7 @@ public class PostfixMapsJobsE2ETest {
 
     /** La mappa della prova costruita dal suo testo (che poi resta o se ne va), e una cache da cancellare. */
     static void maps(boolean keepText) throws Exception {
-        Files.writeString(Path.of(SOURCE), "# prova dei lavori\nexample.invalid " + ANSWER + "\n");
+        Files.writeString(Path.of(SOURCE), TEXT);
         sh("postmap lmdb:" + SOURCE);
         if (!keepText) Files.delete(Path.of(SOURCE));
         Files.writeString(Path.of(CACHE + ".lmdb"), "cache della prova");
