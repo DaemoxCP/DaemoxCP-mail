@@ -54,7 +54,7 @@ import java.util.stream.Stream;
  * automatica, i filtri e gli inoltri della casella, e l'anteprima li elenca. La posta gia' arrivata
  * resta dov'e'.
  *
- * L'anteprima consegna un'fingerprint dello stato: se fra anteprima e conferma qualcosa cambia (un
+ * L'anteprima consegna un'impronta dello stato: se fra anteprima e conferma qualcosa cambia (un
  * alias, la casella, la posta che compare sul disco), la trasformazione non parte.
  */
 public final class AddressTransform {

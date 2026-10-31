@@ -137,7 +137,7 @@ public class DomainSetup {
                 return entry("DKIM", false, I18n.tr("server.cfgdom.dkimGenFailed", java.util.Map.of("err", String.valueOf(res.error))));
 
             // La chiave senza il record in DNS non serve a niente: chi riceve non puo'
-            // verificare la signature, e la posta parte firmata da nessuno.
+            // verificare la firma, e la posta parte firmata da nessuno.
             MailDatabase.CloudflareAccount acct = cf.getAccountForDomain(d.id);
             if (acct == null)
                 return entry("DKIM", false, I18n.tr("server.cfgdom.dkimNoCf", java.util.Map.of("d", String.valueOf(d.domain))));

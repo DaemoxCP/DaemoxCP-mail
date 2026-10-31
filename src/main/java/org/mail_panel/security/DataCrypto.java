@@ -78,7 +78,7 @@ public final class DataCrypto {
         return hmacHex(PanelSecrets.key(PanelSecrets.INDEX_KEY), "email:" + email.trim().toLowerCase(Locale.ROOT));
     }
 
-    /** L'fingerprint di un codice monouso: nel database c'e' solo questa, mai il codice. */
+    /** L'impronta di un codice monouso: nel database c'e' solo questa, mai il codice. */
     public static String codeHash(String purpose, long adminId, String code) {
         return hmacHex(PanelSecrets.key(PanelSecrets.CODE_KEY), purpose + ":" + adminId + ":" + code);
     }
@@ -95,7 +95,7 @@ public final class DataCrypto {
         }
     }
 
-    /** SHA-256 in esadecimale: l'fingerprint del token di sessione (che ha gia' 256 bit casuali). */
+    /** SHA-256 in esadecimale: l'impronta del token di sessione (che ha gia' 256 bit casuali). */
     public static String sha256Hex(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));

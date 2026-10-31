@@ -354,7 +354,7 @@ public class MailQueueManager {
     public static class QueuedMessage {
         public String id;
         public QueueState state = QueueState.UNKNOWN;
-        /** Vuoto per gli warnings di mancata consegna (mittente nullo). */
+        /** Vuoto per gli avvisi di mancata consegna (mittente nullo). */
         public String sender;
         public final List<Recipient> recipients = new ArrayList<>();
         public long size;

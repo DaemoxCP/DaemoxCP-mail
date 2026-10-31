@@ -47,7 +47,7 @@ import java.util.concurrent.Executors;
  *    go away, the panel block is written once, and the file is not readable by other users.
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.MailboxPasswordTest
  */
 public class MailboxPasswordTest {
@@ -105,9 +105,9 @@ public class MailboxPasswordTest {
     }
 
     public static void main(String[] args) throws Exception {
-        String mysqlPort = System.getProperty("mysql.porta");
+        String mysqlPort = System.getProperty("mysql.port");
         if (mysqlPort == null) {
-            System.out.println("No MySQL given (-Dmysql.porta=...): this test needs the test MySQL, skipped.");
+            System.out.println("No MySQL given (-Dmysql.port=...): this test needs the test MySQL, skipped.");
             return;
         }
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
@@ -116,7 +116,7 @@ public class MailboxPasswordTest {
         Path audit = dir.resolve("audit.log");
 
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
+        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_prova"));
         check("connected to MySQL", db.connect());
         // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.

@@ -576,8 +576,8 @@ public class MailDatabase {
     /**
      * Le tabelle dell'accesso senza password: le sessioni e i codici monouso, una tabella per
      * flusso (accesso via email, accesso dalla console, cambio dell'email, conferma di
-     * un'operazione delicata). Nei codici c'e' solo l'fingerprint HMAC, mai il codice; della sessione
-     * c'e' solo l'fingerprint SHA-256 del token. Date in UTC, colonne DATETIME.
+     * un'operazione delicata). Nei codici c'e' solo l'impronta HMAC, mai il codice; della sessione
+     * c'e' solo l'impronta SHA-256 del token. Date in UTC, colonne DATETIME.
      */
     private static final List<String> AUTH_TABLES = List.of(
         """
@@ -2119,7 +2119,7 @@ public class MailDatabase {
      * che legge le tabelle a ogni messaggio, si passa da "alias" a "casella" senza un istante in
      * mezzo in cui l'indirizzo non esiste o vale in tutti e due i modi.
      *
-     * @param tieniInoltri false: le righe con questa sorgente se ne vanno e la posta resta nella
+     * @param keepForwards false: le righe con questa sorgente se ne vanno e la posta resta nella
      *                     casella; true: restano, e un alias "indirizzo -> se stesso" attivo fa
      *                     arrivare una copia anche nella casella
      * @return l'id della casella nuova

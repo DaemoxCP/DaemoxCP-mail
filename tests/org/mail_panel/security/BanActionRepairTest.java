@@ -6,7 +6,7 @@ package org.mail_panel.security;
  * Va provata perche' scrive su un file di configurazione vivo che decide chi viene bloccato, e
  * perche' i suoi errori non si vedono: una riga inserita nella sezione sbagliata, o una coda di
  * azione rimasta attaccata, producono un file che fail2ban puo' anche accettare mentre banna
- * con il comando di un'altra jail. Qui si controlla non solo che la riga giusta changes, ma che
+ * con il comando di un'altra jail. Qui si controlla non solo che la riga giusta cambi, ma che
  * tutto il resto del file resti identico.
  */
 public class BanActionRepairTest {
@@ -33,7 +33,7 @@ public class BanActionRepairTest {
         // "any port $port", e con la porta vuota pf rifiuta la regola lasciando la tabella senza
         // nessuno che la legga — e' cio' che e' successo a recidive. La porta si dichiara.
         //
-        // La prima fix usava "actiontype", che e' la forma mostrata dalla documentazione
+        // La prima correzione usava "actiontype", che e' la forma mostrata dalla documentazione
         // dell'azione: su questo sistema fail2ban non l'accetta come parametro di jail e carica
         // la jail SENZA nessuna azione ("No actions for jail ..."), cioe' senza bannare affatto.
         // Qui si prova la forma dichiarata con la porta, che e' quella con cui le quattro jail

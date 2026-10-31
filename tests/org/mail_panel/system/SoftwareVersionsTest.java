@@ -33,7 +33,7 @@ import java.util.Set;
  *
  * Uso: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
  * Con un MySQL di prova legge anche la versione dal server vero (solo letture):
- *   -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
+ *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
  */
 public class SoftwareVersionsTest {
 
@@ -327,13 +327,13 @@ public class SoftwareVersionsTest {
 
         // Il percorso intero, su un MySQL vero: MailDatabase.serverVersion() e la riga MySQL che ne
         // esce, con real() che lancia i comandi veri di questa macchina. Solo letture.
-        String port = System.getProperty("mysql.porta");
+        String port = System.getProperty("mysql.port");
         if (port == null) {
-            System.out.println("\n== MySQL non indicato (-Dmysql.porta=...): salto la versione dal server vero ==");
+            System.out.println("\n== MySQL non indicato (-Dmysql.port=...): salto la versione dal server vero ==");
         } else {
             System.out.println("\n== MySQL vero sulla porta " + port + " ==");
             org.mail_panel.database.MailDatabase db = new org.mail_panel.database.MailDatabase();
-            db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
+            db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
             db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
             real("connessione", db.connect());
             String v = db.serverVersion();

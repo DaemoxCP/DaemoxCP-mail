@@ -201,7 +201,7 @@ public class CloudflareManager {
             payload.put("name", name);
             // Pre-formatta il content secondo RFC 1035: stringhe TXT max 255 char ciascuna,
             // ognuna racchiusa tra virgolette, separate da spazio. Così Cloudflare non
-            // mostra warnings di quoting e il record è esplicitamente conforme.
+            // mostra avvisi di quoting e il record è esplicitamente conforme.
             payload.put("content", formatTxtRecordContent(value));
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
             payload.put("comment", "DKIM rotation - auto-managed by FreeBSD Mail Panel");

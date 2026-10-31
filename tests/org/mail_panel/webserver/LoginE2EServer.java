@@ -24,7 +24,7 @@ import java.util.concurrent.Executors;
  * to the test MySQL, so that "java ... Main --access-code" run there finds the same database.
  *
  * Usage (from an empty working directory with the jar inside; prints READY on stderr):
- *   java -Dmysql.port=... -Dmysql.utente=... -Dmysql.password=... -Dmysql.database=... \
+ *   java -Dmysql.port=... -Dmysql.user=... -Dmysql.password=... -Dmysql.database=... \
  *        -Dmailpanel.secrets.dir=$D/secrets -Dmailpanel.vault.key=$D/master.key \
  *        -cp "tests:$D/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.LoginE2EServer PORT
  */
@@ -33,8 +33,8 @@ public class LoginE2EServer {
     public static void main(String[] args) throws Exception {
         int port = Integer.parseInt(args[0]);
         Path dir = Path.of("").toAbsolutePath();
-        String mysqlPort = System.getProperty("mysql.porta");
-        String user = System.getProperty("mysql.utente", "mailpanel");
+        String mysqlPort = System.getProperty("mysql.port");
+        String user = System.getProperty("mysql.user", "mailpanel");
         String password = System.getProperty("mysql.password", "");
         String database = System.getProperty("mysql.database", "mailpanel_prova");
 

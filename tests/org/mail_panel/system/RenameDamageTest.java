@@ -18,7 +18,9 @@ import java.util.stream.*;
  * Il 30/10/2026 (punto 88 dei reperti) si e' visto il danno nei commenti: le rinomine del 16/10 e
  * del 24/10 avevano cambiato "che" in whichLabel, "riga" in lineItem, "gia'" in already', "uno
  * script" in "one script", "gli intervalli" in "gli ranges" anche nei commenti italiani dei file
- * che gli script scrivono sul server e delle pagine. Il punto 5 li cerca.
+ * che gli script scrivono sul server e delle pagine. Il punto 5 li cerca; il punto 6, dal 31/10
+ * (punto 90 dei reperti), fa lo stesso nei commenti del codice e delle prove, dove la #21 ne aveva
+ * rovinati 110 ("la correzione c'e'?" era diventato "la fix c'e'?").
  */
 public class RenameDamageTest {
 
@@ -79,7 +81,10 @@ public class RenameDamageTest {
         //    dell'accento (already'), una parola grammaticale inglese in una frase italiana (where,
         //    stays, one), un articolo che davanti a quella iniziale non si usa (l'fingerprint, gli
         //    ranges). Non si vede un sostantivo dopo un articolo giusto ("il verdict", "la fix",
-        //    "della mail"): non si distingue da un prestito come "il port" o "il log".
+        //    "della mail"): non si distingue da un prestito come "il port" o "il log". E dal 31/10
+        //    un camelCase che nel codice, tolti i commenti, non c'e' da nessuna parte: il nome
+        //    italiano che una rinomina ha cambiato dappertutto tranne che nel commento
+        //    (@param tieniInoltri sopra un parametro che si chiama keepForwards).
         Map<String, Set<String>> renamed = new TreeMap<>();
         try (Stream<Path> s = Files.list(root.resolve("tools/renames"))) {
             for (Path f : s.filter(p -> p.toString().endsWith(".txt")).sorted().toList()) {
@@ -94,6 +99,7 @@ public class RenameDamageTest {
         try (Stream<Path> s = Files.walk(root.resolve("src/main/resources/pages"))) {
             pages = s.filter(p -> p.toString().endsWith(".js") || p.toString().endsWith(".html")).sorted().toList();
         }
+        Set<String> codeWords = codeWords(root);
         int examined = 0;
         List<String> damaged = new ArrayList<>();
         for (Path f : Stream.concat(java.stream(), pages.stream()).toList()) {
@@ -103,7 +109,7 @@ public class RenameDamageTest {
                 String c = commentOf(t.getValue());
                 if (c == null) continue;
                 examined++;
-                for (String why : damageIn(c, renamed))
+                for (String why : damageIn(c, renamed, codeWords))
                     damaged.add(root.relativize(f) + ":" + t.getKey() + "  " + why + "  | " + c.strip());
             }
         }
@@ -112,19 +118,51 @@ public class RenameDamageTest {
                 + " righe di commento nei testi generati: nessuna parola italiana rinominata",
                 renamed.size() > 100 && examined > 2000 && damaged.isEmpty());
 
+        // 6. Gli stessi segnali nei commenti del codice: i commenti del Java (pannello, prove,
+        //    attrezzi), quelli dei .js e dei .py delle prove e degli attrezzi, i due README. Questa
+        //    classe no: i suoi commenti citano apposta le forme rovinate.
+        List<Path> code = new ArrayList<>(java);
+        for (String dir : new String[]{"tests", "tools"}) {
+            try (Stream<Path> s = Files.walk(root.resolve(dir))) {
+                s.filter(p -> p.toString().matches(".*\\.(java|js|py)$") && !p.toString().contains("/renames/"))
+                        .filter(p -> !p.getFileName().toString().equals("RenameDamageTest.java"))
+                        .sorted().forEach(code::add);
+            }
+        }
+        code.add(root.resolve("tests/README.md"));
+        code.add(root.resolve("README.md"));
+        int examinedCode = 0;
+        List<String> damagedCode = new ArrayList<>();
+        for (Path f : code) {
+            if (!Files.isRegularFile(f)) continue;
+            String name = f.getFileName().toString(), src = Files.readString(f);
+            List<Map.Entry<Integer, String>> lines = name.endsWith(".java") ? javaComments(src) : numbered(src);
+            for (Map.Entry<Integer, String> t : lines) {
+                String c = name.endsWith(".md") || name.endsWith(".java") ? t.getValue() : commentOf(t.getValue());
+                if (c == null || c.isBlank()) continue;
+                examinedCode++;
+                for (String why : damageIn(c, renamed, codeWords))
+                    damagedCode.add(root.relativize(f) + ":" + t.getKey() + "  " + why + "  | " + c.strip());
+            }
+        }
+        damagedCode.stream().limit(40).forEach(b -> System.out.println("  " + b));
+        check(examinedCode + " righe di commento del codice e dei README: nessuna parola italiana rinominata",
+                examinedCode > 10000 && damagedCode.isEmpty());
+
         System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
         if (failures > 0) System.exit(1);
     }
 
     // ---------------- il punto 5 ----------------
 
-    private static final Pattern WORD = Pattern.compile("[A-Za-z][A-Za-z0-9]*");
+    /** Una parola intera: non un pezzo di rotate_start, mail-panel-auth, chiave.one o real(). */
+    private static final Pattern WORD = Pattern.compile("(?<![A-Za-z0-9_.-])[A-Za-z][A-Za-z0-9]*(?![A-Za-z0-9_(-])");
     private static final Pattern CAMEL = Pattern.compile("[a-z]+[A-Z][A-Za-z0-9]*");
     /** Parole che bastano a dire che una frase e' italiana: due in una riga. */
     private static final Pattern ITALIAN = Pattern.compile(
             "(?<![A-Za-z])(di|che|il|la|non|per|del|della|un|una|si|con|sono|gli|nel|e'|c'e'|perche'|anche|come|solo|piu'|cosi'|gia')(?![A-Za-z])");
     /** Parole grammaticali inglesi: in una frase italiana non ci stanno mai. */
-    private static final Set<String> FUNCTION = Set.of("where", "when", "which", "while", "still", "already",
+    private static final Set<String> FUNCTION = Set.of("where", "when", "while", "still", "already",
             "stays", "one", "real", "only", "also");
     /** Un articolo eliso (l', un', dell'...) e' italiano solo davanti a una vocale (o a una h). */
     private static final Pattern ELISION = Pattern.compile("(?<![A-Za-z])(?:[lL]|[uU]n|[dDnNsS][aeu]ll|[aA]ll|[cC]oll|[qQ]uell|[qQ]uest)'$");
@@ -132,9 +170,12 @@ public class RenameDamageTest {
     private static final Pattern GLI = Pattern.compile("(?<![A-Za-z])(?:[gG]li|[lL]o|[uU]no)\\s+$");
 
     /** Le parole sospette di una riga di commento: tipo, nome inglese e parola italiana di prima. */
-    static List<String> damageIn(String comment, Map<String, Set<String>> renamed) {
-        // Fra virgolette doppie ci sono comandi e valori ("which dig"), non frasi.
-        String c = comment.replaceAll("\"[^\"]*\"", "\"\"");
+    static List<String> damageIn(String comment, Map<String, Set<String>> renamed, Set<String> codeWords) {
+        // Fra virgolette, doppie o singole, ci sono comandi e valori ("which dig", '--restart'), e
+        // fra apici inversi o in {@code} nomi del codice: non frasi.
+        String c = comment.replaceAll("\"[^\"]*\"", "\"\"")
+                .replaceAll("(?<![A-Za-z])'[^'\\n]*'(?![A-Za-z])", "''")
+                .replaceAll("`[^`]*`|\\{@(?:code|link) [^}]*\\}", "");
         boolean italian = ITALIAN.matcher(c.toLowerCase(Locale.ROOT)).results().count() >= 2;
         List<String> out = new ArrayList<>();
         Matcher m = WORD.matcher(c);
@@ -155,6 +196,45 @@ public class RenameDamageTest {
                 why = "articolo";
             if (why != null) out.add(why + " " + w + " (era " + String.join("/", old) + ")");
         }
+        if (italian) {
+            Matcher d = DEAD.matcher(c);
+            while (d.find()) if (!codeWords.contains(d.group()) && !renamed.containsKey(d.group()))
+                out.add("nome che nel codice non c'e' " + d.group());
+        }
+        return out;
+    }
+
+    /**
+     * Un camelCase con almeno due minuscole davanti (jBCrypt e' il nome di una libreria), che non
+     * sia un esempio di codice: seguito da ".metodo" o da "(" lo e' (autoDns.create(...)).
+     */
+    private static final Pattern DEAD = Pattern.compile("(?<![A-Za-z0-9_.$-])[a-z]{2,}[A-Z][A-Za-z0-9]*(?![A-Za-z0-9_(-])(?!\\.[A-Za-z])");
+    /** Un letterale su una riga, un commento // o un commento a blocco. */
+    private static final Pattern STRING_OR_COMMENT = Pattern.compile("\"(?:[^\"\\\\\\n]|\\\\.)*\"|//[^\\n]*|/\\*.*?\\*/", Pattern.DOTALL);
+
+    /**
+     * Tutti i nomi che compaiono nel codice, commenti tolti: Java, JavaScript, HTML, JSON e Python
+     * del pannello, delle prove e degli attrezzi. Anche i commenti dentro i text block (le pagine)
+     * si tolgono: un nome che c'e' solo li' non esiste.
+     */
+    static Set<String> codeWords(Path root) throws java.io.IOException {
+        Set<String> out = new HashSet<>();
+        Pattern word = Pattern.compile("[A-Za-z_$][A-Za-z0-9_$]*");
+        for (String dir : new String[]{"src", "tests", "tools"}) {
+            try (Stream<Path> s = Files.walk(root.resolve(dir))) {
+                for (Path f : s.filter(p -> p.toString().matches(".*\\.(java|js|html|json|py|sh)$"))
+                        .filter(p -> !p.toString().contains("/vendor/")).toList()) {
+                    String text = Files.readString(f);
+                    String n = f.toString();
+                    if (n.endsWith(".java") || n.endsWith(".js"))
+                        text = STRING_OR_COMMENT.matcher(text).replaceAll(m -> m.group().startsWith("\"") ? Matcher.quoteReplacement(m.group()) : " ");
+                    else if (n.endsWith(".py") || n.endsWith(".sh"))
+                        text = text.replaceAll("(?m)^\\s*#.*$", " ");
+                    Matcher m = word.matcher(text);
+                    while (m.find()) out.add(m.group());
+                }
+            }
+        }
         return out;
     }
 
@@ -165,6 +245,45 @@ public class RenameDamageTest {
                 || s.startsWith("*") || s.startsWith("<!--") || s.startsWith("-- ")) return s;
         Matcher m = Pattern.compile("(?<![:\\\\])//\\s").matcher(line);
         return m.find() ? line.substring(m.start()) : null;
+    }
+
+    /**
+     * I commenti del Java (// e i blocchi /* ... *\/, Javadoc compresi), riga per riga, con la riga
+     * del sorgente. I letterali e i text block si saltano: sono il punto 5.
+     */
+    static List<Map.Entry<Integer, String>> javaComments(String src) {
+        List<Map.Entry<Integer, String>> out = new ArrayList<>();
+        int i = 0, n = src.length(), line = 1;
+        while (i < n) {
+            char c = src.charAt(i);
+            if (c == '\n') { line++; i++; }
+            else if (src.startsWith("//", i)) {
+                int j = src.indexOf('\n', i);
+                if (j < 0) j = n;
+                out.add(Map.entry(line, src.substring(i, j)));
+                i = j;
+            } else if (src.startsWith("/*", i)) {
+                int j = src.indexOf("*/", i + 2) + 2;
+                String[] l = src.substring(i, j).split("\n", -1);
+                for (int k = 0; k < l.length; k++) out.add(Map.entry(line + k, l[k]));
+                line += l.length - 1;
+                i = j;
+            } else if (src.startsWith("\"\"\"", i)) {
+                int j = src.indexOf('\n', i);
+                while (true) {
+                    j = src.indexOf("\"\"\"", j);
+                    if (src.charAt(j - 1) == '\\') { j += 3; continue; }
+                    break;
+                }
+                for (int k = i; k < j; k++) if (src.charAt(k) == '\n') line++;
+                i = j + 3;
+            } else if (c == '"' || c == '\'') {
+                int j = i + 1;
+                while (src.charAt(j) != c) j += src.charAt(j) == '\\' ? 2 : 1;
+                i = j + 1;
+            } else i++;
+        }
+        return out;
     }
 
     /** Le righe di un file di testo, numerate da 1. */

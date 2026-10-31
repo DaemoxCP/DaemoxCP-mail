@@ -52,7 +52,7 @@ public class RoundcubeSsoManager {
     private SecretKey secretKey;
     private String roundcubeUrl = "https://mail.example.com";
     private String masterPassword = null;
-    /** La porta HTTPS del pannello: la webmail ci manda i changes password e le password di chi entra. */
+    /** La porta HTTPS del pannello: la webmail ci manda i cambi password e le password di chi entra. */
     private int panelPort = 0;
 
     public RoundcubeSsoManager(MailDatabase database) {

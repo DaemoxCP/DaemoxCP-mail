@@ -27,7 +27,7 @@ import java.util.List;
  * finche' non si guarda il firewall.
  *
  * Perche' non basta correggere il codice. Il file della superficie pubblica lo riscrive il pannello
- * a ogni installazione, quindi li' la fix arriva da sola. La sezione [mail-panel-auth] no:
+ * a ogni installazione, quindi li' la correzione arriva da sola. La sezione [mail-panel-auth] no:
  * viene aggiunta a jail.local una volta sola e poi mai piu' toccata, per non calpestare le
  * modifiche di chi la personalizza. Ottima regola, che pero' significa che su un'installazione
  * gia' fatta quella sezione resterebbe con iptables per sempre. Serve un intervento che la

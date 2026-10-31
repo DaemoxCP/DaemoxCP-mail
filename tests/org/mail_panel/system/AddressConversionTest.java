@@ -24,12 +24,12 @@ import java.util.stream.Stream;
  * Prima parte, senza database: quando si puo' e quando no (raccolte, nomi che uscirebbero da
  * /var/vmail, domini non del pannello, indirizzi che sono gia' caselle), le destinazioni (valide,
  * esistenti se sono sui domini del pannello, senza giri che tornano all'indirizzo), la posta sul
- * disco (contata, messa da parte, rimessa a posto), l'fingerprint dell'anteprima.
+ * disco (contata, messa da parte, rimessa a posto), l'impronta dell'anteprima.
  *
  * Seconda parte, su un MySQL vero (lo stesso del pannello: mysql80-server): le due transazioni,
  * guardate con le stesse query che usa Postfix. Che una trasformazione a meta' non resti mai:
  * se l'ultimo passo fallisce, il database torna com'era. Si salta se MySQL non e' indicato:
- *   -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
+ *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
  */
 public class AddressConversionTest {
 
@@ -244,14 +244,14 @@ public class AddressConversionTest {
     }
 
     static void database() throws Exception {
-        String port = System.getProperty("mysql.porta");
+        String port = System.getProperty("mysql.port");
         if (port == null) {
-            System.out.println("\n== MySQL non indicato (-Dmysql.porta=...): salto la parte sul database ==");
+            System.out.println("\n== MySQL non indicato (-Dmysql.port=...): salto la parte sul database ==");
             return;
         }
         System.out.println("\n== Su MySQL " + port + ": le due trasformazioni, come le vede Postfix ==");
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
+        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
         if (!db.connect()) { real("connessione a MySQL", false); return; }
         db.dropAllTables();

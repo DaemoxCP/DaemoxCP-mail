@@ -230,7 +230,7 @@ public class DkimManager {
      *
      * Per ogni dominio viene scritto SOLO il selector attualmente attivo (dkim_*).
      * La chiave "pending" non è ancora usata per firmare: viene solo pubblicata in DNS.
-     * La chiave "previous" non signature più (le mail in transito vengono validate dai destinatari
+     * La chiave "previous" non firma più (le mail in transito vengono validate dai destinatari
      * con il record TXT che lasciamo in DNS durante il grace period).
      */
     public void updateRspamdConfig() throws Exception {
@@ -385,7 +385,7 @@ public class DkimManager {
                     j.put("selector", info == null || info.selector == null ? "" : info.selector);
                     if (!hasKey) {
                         withoutKey++;
-                        // Niente chiave vuol dire niente signature: e' il caso piu' grave e non
+                        // Niente chiave vuol dire niente firma: e' il caso piu' grave e non
                         // deve nascondersi in mezzo a righe che parlano di rotazioni.
                         j.put("state", "absent");
                         j.put("note", I18n.tr("server.dkimm.noPanelKey"));

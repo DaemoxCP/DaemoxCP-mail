@@ -275,7 +275,7 @@ public class MailPanelContent {
             .table-cards td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--text-secondary); }
             .table-cards td:empty { display: none; }
         }
-        /* Campo password (campoPassword): su un telefono, accanto ai tre pulsanti, una password di
+        /* Campo password (passwordField): su un telefono, accanto ai tre pulsanti, una password di
            20 caratteri deve vedersi tutta. */
         @media (max-width: 575.98px) { .password-field { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
         /* I ruoli, con lo stesso colore ovunque: barra in alto, pagina Amministratori. */
@@ -1307,7 +1307,7 @@ public class MailPanelContent {
     }
 
     /**
-     * Una riga di "Servizi Mail" nella Home: il nome, la versione (la scrive caricaVersioni), lo
+     * Una riga di "Servizi Mail" nella Home: il nome, la versione (la scrive loadVersions), lo
      * stato (checkStatus) e i tre comandi, con il loro nome per chi usa un lettore di schermo.
      * Una definizione sola per tutte le righe.
      */
@@ -1913,7 +1913,7 @@ public class MailPanelContent {
                 + "        const PW_SYMBOLS = '" + org.mail_panel.webserver.SecurityUtils.PASSWORD_SYMBOLS
                         .replace("\\", "\\\\").replace("'", "\\'") + "';\n";
         return """
-        // ===== Campo password (componente condiviso, vedi campoPassword) =====
+        // ===== Campo password (componente condiviso, vedi passwordField) =====
 """ + rule + """
 
         function pwShow(id, showIt) {
@@ -2068,7 +2068,7 @@ public class MailPanelContent {
 """;
     }
 
-    /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua fingerprint. */
+    /** Lo script di "Trasforma in casella": anteprima dal server, poi la richiesta con la sua impronta. */
     private static String getAliasToMailboxJs() {
         return """
         // ===== Trasforma in casella (decide il server: AddressTransform) =====
@@ -3317,7 +3317,7 @@ public class MailPanelContent {
         }
 
 """ + getPasswordFieldJs() + """
-        // Una casella nuova parte con una password gia' proposta, in chiaro (vedi pwProponi).
+        // Una casella nuova parte con una password gia' proposta, in chiaro (vedi pwPropose).
         document.getElementById('addMailboxModal').addEventListener('show.bs.modal', function () {
             if (!document.getElementById('mbPass').value) pwPropose('mbPass');
         });

@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
  *
  * Perche' esiste: le schede del pannello dicono tutto, ma solo a chi le apre. Un server che
  * funziona non si apre quasi mai, e le cose da fare — una vulnerabilita' che finalmente ha una
- * fix, un certificato in scadenza, una release che esce dal supporto — arrivano senza
+ * correzione, un certificato in scadenza, una release che esce dal supporto — arrivano senza
  * che nessuno le stia guardando.
  *
  * Tre principi:
@@ -632,7 +632,7 @@ public final class PeriodicReport {
      * Si trovava /usr/sbin/sendmail, che su FreeBSD e' mailwrapper(8): passa il messaggio a chi
      * dice mailer.conf, e se nessuno l'ha cambiato — il pacchetto di Postfix non lo cambia da
      * solo — da FreeBSD 14 e' dma(8). dma accettava, restituiva 0, e consegnava da solo
-     * all'MX del destinatario: senza passare dal milter, quindi senza signature DKIM, e senza
+     * all'MX del destinatario: senza passare dal milter, quindi senza firma DKIM, e senza
      * STARTTLS. Il pannello scriveva "riuscito"; Gmail riceveva un messaggio in chiaro e non
      * firmato, altri destinatari non lo mostravano affatto.
      *
@@ -888,7 +888,7 @@ public final class PeriodicReport {
     }
 
     /**
-     * Dal log al verdict: cosa si registra come esito e cosa si dice a chi ha premuto il
+     * Dal log al verdetto: cosa si registra come esito e cosa si dice a chi ha premuto il
      * pulsante.
      *
      * "success" vuol dire che il pannello non deve rimandarlo. Vale anche per un messaggio che

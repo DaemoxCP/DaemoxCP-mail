@@ -21,7 +21,7 @@ import java.util.List;
  * elenco; un reset sul database gia' vuoto; uno che MySQL deve rifiutare (una tabella d'altri
  * punta a domains), che non cancella niente e lo dice. Senza MySQL si prova solo che senza
  * collegamento il reset non parte. Il MySQL si indica cosi':
- *   -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
+ *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
  */
 public class ResetDatabaseTest {
 
@@ -41,9 +41,9 @@ public class ResetDatabaseTest {
             real("un'eccezione: " + e.getMessage(), e.getMessage().contains("Not connected"));
         }
 
-        String port = System.getProperty("mysql.porta");
+        String port = System.getProperty("mysql.port");
         if (port == null) {
-            System.out.println("\n== MySQL non indicato (-Dmysql.porta=...): salto la parte sul database ==");
+            System.out.println("\n== MySQL non indicato (-Dmysql.port=...): salto la parte sul database ==");
         } else {
             database(port);
         }
@@ -53,7 +53,7 @@ public class ResetDatabaseTest {
 
     static void database(String port) throws Exception {
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
+        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
         if (!db.connect()) { real("connessione a MySQL", false); return; }
         Connection c = db.getConnection();

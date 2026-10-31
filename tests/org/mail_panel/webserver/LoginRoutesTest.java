@@ -45,7 +45,7 @@ import java.util.regex.Pattern;
  * password and TOTP routes are gone.
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.LoginRoutesTest
  */
 public class LoginRoutesTest {
@@ -103,9 +103,9 @@ public class LoginRoutesTest {
     }
 
     public static void main(String[] args) throws Exception {
-        String mysqlPort = System.getProperty("mysql.porta");
+        String mysqlPort = System.getProperty("mysql.port");
         if (mysqlPort == null) {
-            System.out.println("No MySQL given (-Dmysql.porta=...): this test needs the test MySQL, skipped.");
+            System.out.println("No MySQL given (-Dmysql.port=...): this test needs the test MySQL, skipped.");
             return;
         }
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
@@ -121,7 +121,7 @@ public class LoginRoutesTest {
         System.setProperty("mailpanel.secrets.dir", dir.resolve("secrets").toString());
 
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
+        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_prova"));
         check("connected to MySQL", db.connect());
         // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.

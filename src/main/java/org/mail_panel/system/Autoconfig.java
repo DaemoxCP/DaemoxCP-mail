@@ -214,7 +214,7 @@ public class Autoconfig {
         }
         r.put("domains", domains).put("reviewed", reviewed).put("working", working);
 
-        // Il verdict viene dalla PROVA, non dal testo della configurazione.
+        // Il verdetto viene dalla PROVA, non dal testo della configurazione.
         //
         // Prima era "nomeCoperto && rottaPresente", cioe' il risultato di una ricerca dentro
         // nginx.conf del marcatore che questa classe stessa scrive. Ma la rotta puo' stare
@@ -223,7 +223,7 @@ public class Autoconfig {
         // MTA-STS e questo XML. Risultato: il pannello scaricava il file davvero, lo otteneva,
         // e un attimo dopo dichiarava che nginx non lo serve e che i client devono
         // configurarsi a mano. Il commento qui sopra diceva gia' quale delle due misure ha
-        // ragione; il verdict usava l'altra.
+        // ragione; il verdetto usava l'altra.
         boolean ready = ready(readList, reviewed, working);
         r.put("ready", ready);
         r.put("why", ready

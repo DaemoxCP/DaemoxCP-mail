@@ -124,7 +124,7 @@ senza le opzioni `-Dmysql.*` la saltano dicendolo. Serve il MySQL ufficiale 8.0,
     mysql -uroot -S $M/m.sock -e "CREATE DATABASE mailpanel_prova;
         CREATE USER 'mailpanel'@'127.0.0.1' IDENTIFIED BY 'password-di-prova';
         GRANT ALL ON mailpanel_prova.* TO 'mailpanel'@'127.0.0.1';"
-    P="-Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=password-di-prova -Dmysql.database=mailpanel_prova"
+    P="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=password-di-prova -Dmysql.database=mailpanel_prova"
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AddressConversionTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.VersionsApiTest
@@ -227,7 +227,7 @@ per dominio (confronto esatto e senza maiuscole: "ake.net" non deve pescare "dom
 un dominio inesistente deve dare lista vuota, che e' la guardia contro il falso successo), e
 `asEntries()`, che traduce l'esito nelle righe della pagina DNS senza perdere le righe rosse.
 
-**AutoconfigTest** — il verdict della scheda Autoconfig. Il caso che conta e' `pronto(true, 0, 0)`:
+**AutoconfigTest** — il verdetto della scheda Autoconfig. Il caso che conta e' `pronto(true, 0, 0)`:
 zero domini provati, zero riusciti, e senza la condizione `esaminati > 0` il conteggio direbbe
 verde proprio quando non e' stato guardato niente.
 
@@ -241,7 +241,7 @@ niente.
 
 **ReportDeliveryTest** — da quale sendmail parte il rapporto periodico e come il pannello
 capisce com'e' andata. Il 25/09/2026 il rapporto partiva da /usr/sbin/sendmail, cioe'
-mailwrapper, cioe' dma: arrivava in chiaro e senza signature DKIM, e il pannello scriveva
+mailwrapper, cioe' dma: arrivava in chiaro e senza firma DKIM, e il pannello scriveva
 "riuscito". La prova verifica che mailwrapper non venga mai scelto (collegamento simbolico o
 hard link che sia), e legge righe vere del log: consegnato con TLS, rimandato, respinto per
 DMARC, rifiutato dal milter, formato RFC 5424, e le righe di dma, con le quali l'esito NON
@@ -263,10 +263,10 @@ il sistema.
 
 **PackagePlanTest** — il piano esatto di un aggiornamento e la risposta a "la patch c'e'?".
 Legge uscite di `pkg upgrade -n` e di `pkg audit -Rjson` con la forma che il sorgente di pkg
-stampa (sezioni, totali in fondo, `(vulnerable!)`, ranges di VuXML come ">= a : < b"), e
+stampa (sezioni, totali in fondo, `(vulnerable!)`, intervalli di VuXML come ">= a : < b"), e
 rifiuta di chiamare completo un piano con una riga che non capisce o con i conti che non tornano.
 Dentro c'e' il caso che l'ha motivata: nginx 1.30.4,3 con il catalogo fermo alla stessa e VuXML
-"< 1.30.5,3" — la fix esiste, il ramo non ce l'ha, e il lock non c'entra.
+"< 1.30.5,3" — la correzione esiste, il ramo non ce l'ha, e il lock non c'entra.
 In fondo le letture della scheda Pacchetti: le righe "<" di `pkg version -U -vRL=` (con righe vere
 di FreeBSD 15.1: i "?" e i ">" non sono aggiornamenti, una versione con caratteri strani resta
 fuori), `pkg query '%n\t%v\t%k'` con versione e blocco, il tipo di cambiamento nella lingua di
@@ -304,7 +304,7 @@ indirizzo che e' gia' una casella, dominio che non e' del pannello, nomi che usc
 /var/vmail, come "..@dominio"), le destinazioni (valide, esistenti se sono sui domini del pannello, al
 massimo venti, nessun giro che torna all'indirizzo), la posta di una casella di prima trovata sul
 disco (contata, messa da parte senza cancellarla, rimessa a posto se la trasformazione fallisce) e
-l'fingerprint dell'anteprima, che cambia quando cambia lo stato. Su MySQL: le due transazioni,
+l'impronta dell'anteprima, che cambia quando cambia lo stato. Su MySQL: le due transazioni,
 guardate con le stesse query che usa Postfix; se l'ultimo passo fallisce il database torna
 com'era; il vincolo UNIQUE rifiuta una seconda casella con lo stesso indirizzo; con la casella se
 ne vanno risposta automatica, filtri, inoltri e limiti, e l'alias "se stessa -> se stessa"; andata
@@ -365,23 +365,23 @@ rimasto, i .conf elencati come li legge pkg.
 
 **pkg-branch-browser-test.js** — la scheda "Ramo dei pacchetti" della pagina Aggiornamenti: si legge da
 sola, nomi e indirizzi solo come testo, l'anteprima, il nome del ramo scritto a mano per
-confermare, fingerprint e token CSRF nella richiesta, il lavoro seguito fino all'esito, l'errore di
+confermare, impronta e token CSRF nella richiesta, il lavoro seguito fino all'esito, l'errore di
 un cambio che non parte; tema scuro e telefono.
 
 **packages-browser-test.js** — la scheda Pacchetti della pagina Aggiornamenti, con il server
-simulato: si legge da sola; il riepilogo; l'avviso sui pacchetti dello stack non lockedPackages con il
-pulsante per bloccarli; per ogni riga versione installata e del catalogo, verdict sulla
+simulato: si legge da sola; il riepilogo; l'avviso sui pacchetti dello stack non bloccati con il
+pulsante per bloccarli; per ogni riga versione installata e del catalogo, verdetto sulla
 vulnerabilita' (testo, mai HTML), blocco; "Aggiorna" anche su un pacchetto bloccato, "trattenuto"
 dove l'avvertenza dice di aspettare, il JDK del pannello che rimanda alla procedura di Java;
 Blocca/Sblocca con nome e token CSRF. La finestra di aggiornamento: piano esatto, i passi in
 chiaro, il pulsante spento finche' il nome del pacchetto non e' scritto giusto, la richiesta con
-conferma e fingerprint, il lavoro seguito fino all'esito. E nella scheda Aggiornamenti l'intestazione
-di una vulnerabilita' che dice lo stesso verdict del dettaglio (era "l'aggiornamento la corregge"
+conferma e impronta, il lavoro seguito fino all'esito. E nella scheda Aggiornamenti l'intestazione
+di una vulnerabilita' che dice lo stesso verdetto del dettaglio (era "l'aggiornamento la corregge"
 sopra un "l'aggiornamento non basta"), con il pulsante Aggiorna accanto.
 
 **address-conversion-browser-test.js** — le finestre "Trasforma in casella" (pagina Alias) e "Trasforma
 in alias" (pagina Caselle): l'anteprima, la password proposta dal generatore, la scelta
-obbligatoria sulla posta di prima, l'indirizzo scritto per conferma, l'fingerprint e il token CSRF
+obbligatoria sulla posta di prima, l'indirizzo scritto per conferma, l'impronta e il token CSRF
 nelle richieste, il token anche in "Elimina casella"; tema scuro e telefono.
 
 **software-versions-browser-test.js** — la Home: la colonna Versione di "Servizi Mail" (con le righe
@@ -411,12 +411,12 @@ fuori dal database. La cifratura AES-256-GCM (nonce casuale, un carattere cambia
 decifra, un'altra chiave non decifra) e l'indice cieco. Le passkey firmate da un autenticatore
 software (SoftAuthenticator): registrazione e login validi, e rifiutati con un'altra sessione,
 un'altra origine, un altro rpId, senza verifica dell'utente, con il contatore all'indietro, con la
-signature rovinata, con la sfida riusata o scaduta, con una chiave di nessuno o di un amministratore
+firma rovinata, con la sfida riusata o scaduta, con una chiave di nessuno o di un amministratore
 disattivato; la conferma di un'operazione solo con la propria passkey e la propria sessione. I
 codici monouso: solo l'HMAC nel database, una volta sola, cinque tentativi, dieci minuti, i limiti
 per indirizzo, IP e sottorete, il codice della console, quello di conferma, il cambio dell'email
 che vale solo quando torna il codice, e nel log mai un codice o un indirizzo. Le sessioni: solo
-l'fingerprint del token, IP e browser cifrati, lo stesso browser, 30 minuti senza richieste e 12 ore
+l'impronta del token, IP e browser cifrati, lo stesso browser, 30 minuti senza richieste e 12 ore
 al massimo, la revoca (una, le altre, all'uscita, con l'amministratore), il token CSRF derivato.
 
 **LoginRoutesTest** — le rotte dell'accesso sul server vero, via HTTPS: la pagina di accesso non
@@ -535,7 +535,7 @@ tiene i "lock" come file. Dimostra che lo sblocco avviene nella copia e non nel 
 che le dipendenze protette nominate da pkg vengono aggiunte solo se si possono sbloccare, e che
 la copia sparisce alla fine.
 
-**MtaStsOldLogicTest** — la logica di classificazione com'era prima della fix, messa
+**MtaStsOldLogicTest** — la logica di classificazione com'era prima della correzione, messa
 davanti agli stessi due casi. Serve a dimostrare che i controlli di MtaStsTest non sono
 decorativi: qui devono fallire. Se un giorno passa anche questa, vuol dire che la prova
 non sta piu' verificando niente.

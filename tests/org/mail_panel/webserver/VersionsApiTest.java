@@ -36,7 +36,7 @@ import java.util.concurrent.Executors;
  * cosa che deve valere sempre: che la risposta e il registro di audit dicano lo stesso esito.
  *
  * Uso (con il MySQL di prova del README.md; lo schema se lo prepara da sola):
- *   java -Dmysql.port=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.VersionsApiTest
  */
 public class VersionsApiTest {
@@ -98,9 +98,9 @@ public class VersionsApiTest {
     }
 
     public static void main(String[] args) throws Exception {
-        String port = System.getProperty("mysql.porta");
+        String port = System.getProperty("mysql.port");
         if (port == null) {
-            System.out.println("MySQL non indicato (-Dmysql.porta=...): questa prova ha bisogno del MySQL di prova, la salto.");
+            System.out.println("MySQL non indicato (-Dmysql.port=...): questa prova ha bisogno del MySQL di prova, la salto.");
             return;
         }
         // Prima di creare il client: il certificato di prova e' per localhost, si chiama 127.0.0.1.
@@ -109,7 +109,7 @@ public class VersionsApiTest {
         Path log = folder.resolve("audit.log");
 
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.utente", "mailpanel"), System.getProperty("mysql.password", ""));
+        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
         real("connessione a MySQL", db.connect());
         // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.

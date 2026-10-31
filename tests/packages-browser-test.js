@@ -3,7 +3,7 @@
 // si legga da sola, che ogni riga dica versione, vulnerabilita' e blocco come testo, che il pulsante
 // Aggiorna apra la finestra con il piano esatto e chieda il nome del pacchetto prima di partire, che
 // segua il lavoro fino all'esito, che Blocca/Sblocca mandino il nome giusto, che il JDK del pannello
-// rimandi alla sua procedura e che l'intestazione di una vulnerabilita' dica lo stesso verdict del
+// rimandi alla sua procedura e che l'intestazione di una vulnerabilita' dica lo stesso verdetto del
 // dettaglio (era "l'aggiornamento la corregge" sopra un "l'aggiornamento non basta").
 //
 // Uso (dalla radice del progetto, dopo mvn package):
