@@ -5,8 +5,6 @@ import org.json.JSONObject;
 import org.mail_panel.i18n.I18n;
 import org.mail_panel.util.Shell;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -16,7 +14,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 /**
  * Un aggiornamento che toglie un pacchetto: e' una sostituzione innocua, o no?
@@ -35,9 +32,9 @@ import java.util.stream.Stream;
  *   <li>nessun pacchetto installato che dipende da lui resta: o il piano lo aggiorna a una
  *       versione che non ne ha piu' bisogno (lo dice il catalogo), o non c'e';</li>
  *   <li>lo stesso per chi usa le sue librerie (pkg shlib);</li>
- *   <li>se e' una libreria che e' anche un formato di dati (lmdb, Berkeley DB, cdb), nessuna
- *       configurazione e nessun file di Postfix usa quel formato: la libreria nuova potrebbe non
- *       leggere i file scritti dalla vecchia.</li>
+ *   <li>se legge un tipo di mappa di Postfix (lmdb, cdb, e Berkeley DB se fosse di pacchetto),
+ *       ogni mappa di quel tipo ha il suo testo: dopo l'aggiornamento PostfixMaps la rigenera,
+ *       perche' la libreria nuova potrebbe non leggere i file della vecchia.</li>
  * </ol>
  *
  * <p>Misurato sulla VM il 31/10/2026 con pacchetti finti e librerie ELF vere: nel caso innocuo
@@ -45,11 +42,12 @@ import java.util.stream.Stream;
  * dichiara come dipendenza, pkg toglie IN SILENZIO anche quel programma; se la usa senza
  * dichiararla, pkg toglie la libreria e lascia il programma ROTTO («Shared object not found»).
  *
- * <p>Confermabile, da chi guarda e scrivendo il nome del pacchetto, e' solo una rimozione il cui
- * unico problema e' il formato dei dati in uso: li' non sparisce e non si rompe niente, e le
- * mappe si possono rigenerare. Se invece qualcosa che resta installato sparirebbe o smetterebbe
- * di funzionare, o se non si e' potuto misurare, il pannello non la esegue mai, nemmeno
- * confermata (il committente, 31/10/2026: «questa cosa e' molto pericolosa»).
+ * <p>Se qualcosa che resta installato sparirebbe o smetterebbe di funzionare, se una mappa di
+ * Postfix senza testo diventerebbe illeggibile, o se non si e' potuto misurare, il pannello non la
+ * esegue mai, nemmeno confermata (il committente, 31/10/2026: «questa cosa e' molto
+ * pericolosa»). Il caso che prima si confermava scrivendo il nome, il formato dei dati in uso,
+ * adesso lo sistema il pannello da solo rigenerando le mappe: oggi nessuna rimozione e'
+ * confermabile, e "confirmable" resta per la pagina, che sa gia' mostrarla.
  */
 final class PackageReplacement {
 
@@ -106,16 +104,15 @@ final class PackageReplacement {
                     case REMOVED_TOO -> "server.replace.libraryRemoved";
                     case STAYS -> "server.replace.libraryStays";
                 }, Map.of("p", p, "lib", lib)))));
-        // Fin qui ogni problema vuol dire che qualcosa sparisce o smette di funzionare.
-        boolean somethingBreaks = !no.isEmpty();
-        // 4. il formato dei dati
+        // 4. le mappe di Postfix che legge: si rigenerano dal loro testo, o si perderebbero
         if (f.dataFormat() != null && !f.dataFormat().isEmpty()) {
             if (f.dataUses().isEmpty())
                 ok.add(I18n.tr("server.replace.dataUnused", Map.of("fmt", f.dataFormat())));
             else
                 no.add(I18n.tr("server.replace.dataUsed", Map.of("fmt", f.dataFormat(), "uses", String.join(", ", f.dataUses()))));
         }
-        return new Verdict(f.name(), f.version(), no.isEmpty(), !no.isEmpty() && !somethingBreaks,
+        // Ogni problema qui vuol dire che qualcosa sparisce, si rompe o si perde: mai confermabile.
+        return new Verdict(f.name(), f.version(), no.isEmpty(), false,
                 f.replacedBy() == null ? "" : f.replacedBy(), ok, no);
     }
 
@@ -148,13 +145,6 @@ final class PackageReplacement {
         int i = nameVersion.lastIndexOf('-');
         return i > 0 ? nameVersion.substring(0, i) : nameVersion;
     }
-
-    /**
-     * Le librerie che sono anche un formato di dati per Postfix: lo scheletro del nome del pacchetto
-     * (senza le cifre in fondo: lmdb0 -> lmdb, db18 -> db), il tipo di mappa e l'estensione dei file.
-     */
-    private static final String[][] DATA_FORMATS = {
-            {"lmdb", "lmdb", ".lmdb"}, {"db", "hash", ".db"}, {"db", "btree", ".db"}, {"tinycdb", "cdb", ".cdb"}};
 
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9._+-]{1,100}");
 
@@ -206,16 +196,11 @@ final class PackageReplacement {
             libraryUsers.put(lib, users);
         }
 
-        String format = "";
-        List<String> uses = new ArrayList<>();
-        String skeleton = name.replaceAll("[0-9]+$", "");
-        for (String[] f : DATA_FORMATS) {
-            if (!f[0].equals(skeleton)) continue;
-            format = format.isEmpty() ? f[1] : format + "/" + f[1];
-            uses.addAll(postfixUses(f[1], f[2]));
-        }
-        return new Facts(name, version, by, file, dependents, libraryUsers, format,
-                new ArrayList<>(new LinkedHashSet<>(uses)), "");
+        // Le mappe di Postfix che le sue librerie leggono: senza testo non si rigenerano.
+        Set<String> types = PostfixMaps.typesReadBy(name);
+        List<String> lost = new ArrayList<>();
+        for (PostfixMaps.Table t : PostfixMaps.unrebuildable(types)) lost.add(t.name() + " (" + t.parameter() + ")");
+        return new Facts(name, version, by, file, dependents, libraryUsers, String.join("/", types), lost, "");
     }
 
     /** Il pacchetto p, che usava quello da togliere: lo aggiorna il piano a una versione che non ne ha bisogno? */
@@ -224,48 +209,6 @@ final class PackageReplacement {
         if ("remove".equals(t)) return Use.REMOVED_TOO;
         if (t == null) return Use.STAYS;
         return newStillNeeds.getAsBoolean() ? Use.STAYS : Use.UPGRADED_AWAY;
-    }
-
-    /** Dove Postfix usa il tipo di mappa (main.cf, master.cf) e i file con quell'estensione. */
-    static List<String> postfixUses(String mapType, String extension) {
-        Shell.Result dir = Shell.run(Duration.ofSeconds(20), "postconf", "-h", "config_directory");
-        if (!dir.success()) return new ArrayList<>();   // senza Postfix nessuno legge quelle mappe
-        List<String> uses = new ArrayList<>();
-        // I parametri in vigore, predefiniti compresi: main.cf non dice tutto (alias_maps, per
-        // esempio, ha un valore predefinito che nel file non compare).
-        Shell.Result all = Shell.run(Duration.ofSeconds(20), "postconf");
-        if (all.success()) uses.addAll(parametersUsing(all.output(), mapType));
-        uses.addAll(postfixUses(Path.of(dir.outputTrim()), mapType, extension));
-        return uses;
-    }
-
-    /** I parametri di "postconf" (nome = valore) il cui valore usa il tipo di mappa. */
-    static List<String> parametersUsing(String postconf, String mapType) {
-        List<String> out = new ArrayList<>();
-        Pattern use = Pattern.compile("(^|[\\s,=])" + Pattern.quote(mapType) + ":");
-        for (String line : (postconf == null ? "" : postconf).split("\n")) {
-            int eq = line.indexOf(" = ");
-            if (eq > 0 && use.matcher(line.substring(eq + 3)).find()) out.add("postconf " + line.substring(0, eq).trim());
-        }
-        return out;
-    }
-
-    /** Lo stesso su una cartella di configurazione data: separato per provarlo senza Postfix. */
-    static List<String> postfixUses(Path conf, String mapType, String extension) {
-        List<String> uses = new ArrayList<>();
-        for (String f : new String[]{"main.cf", "master.cf"}) {
-            try {
-                Path p = conf.resolve(f);
-                if (Files.isReadable(p) && Pattern.compile("(^|[\\s,=])" + Pattern.quote(mapType) + ":", Pattern.MULTILINE)
-                        .matcher(Files.readString(p)).find())
-                    uses.add(p + " (" + mapType + ":)");
-            } catch (Exception ignored) { }
-        }
-        try (Stream<Path> s = Files.walk(conf, 3)) {
-            s.filter(p -> p.getFileName().toString().endsWith(extension) && Files.isRegularFile(p))
-             .limit(10).forEach(p -> uses.add(p.toString()));
-        } catch (Exception ignored) { }
-        return uses;
     }
 
     private static Shell.Result pkg(String... args) {
