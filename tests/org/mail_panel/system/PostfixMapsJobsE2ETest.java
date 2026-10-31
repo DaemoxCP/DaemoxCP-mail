@@ -29,7 +29,11 @@ import java.util.TreeSet;
  *                   lascia partire, il lavoro lanciato lo stesso si rifiuta, niente cambia;
  *   dopo il fatto   fakeshadow 1.0 -> 1.1, la mappa senza testo: la previsione non lo puo' vedere
  *                   (la libreria era di lmdb0, che il piano non tocca), il lavoro aggiorna e poi
- *                   finisce in errore nominando la mappa.
+ *                   finisce in errore nominando la mappa;
+ *   solo nel db     come «dopo il fatto», ma la mappa ha il testo e in piu' una voce aggiunta con
+ *                   postmap -i: il lavoro la confronta prima, non la rigenera (perderebbe la voce),
+ *                   e finisce in errore nominandola; e con fakeshadow 1.1 -> 1.2 la scheda non
+ *                   lascia partire.
  *
  * Durante la prova FreeBSD-ports e FreeBSD-ports-kmods sono spenti, e prima di ogni lavoro si
  * controlla che il piano tocchi solo fakeshadow. Alla fine la macchina e' com'era, e lo si
@@ -50,6 +54,7 @@ public class PostfixMapsJobsE2ETest {
     static final String SOURCE = "/usr/local/etc/postfix/e2e-jobs-transport";
     static final String CACHE = "/var/db/postfix/e2e-jobs-verify";
     static final String ANSWER = "smtp:[127.0.0.1]:2526";
+    static final String EXTRA = "smtp:[127.0.0.1]:2528";
     static boolean createdReposDir;
 
     public static void main(String[] args) throws Exception {
@@ -82,6 +87,8 @@ public class PostfixMapsJobsE2ETest {
             for (String flow : new String[]{"guided", "unprotected", "maintenance"}) rebuilt(flow);
             for (String flow : new String[]{"guided", "unprotected", "maintenance"}) predicted(flow);
             for (String flow : new String[]{"guided", "unprotected", "maintenance"}) afterTheFact(flow);
+            for (String flow : new String[]{"guided", "unprotected", "maintenance"}) onlyInDatabase(flow);
+            onlyInDatabasePredicted();
         } finally {
             removeFake();
             sh("rm -f " + REPO_CONF + "; rm -rf /var/db/pkg/repos/" + REPO + "; rm -f /var/cache/pkg/" + FAKE + "*; rm -rf " + WORK);
@@ -188,6 +195,48 @@ public class PostfixMapsJobsE2ETest {
         check(label + "e l'errore nomina la mappa senza testo", r.optString("errorMessage").contains(SOURCE));
         check(label + "Postfix gira", sh("postfix status; echo $?").trim().endsWith("0"));
         check(label + "fakeshadow di nuovo protetto come prima", flow.equals("unprotected") || locked().contains(FAKE));
+    }
+
+    /** La mappa ha il testo, ma anche una voce che il testo non ha: rigenerarla la perderebbe. */
+    static void onlyInDatabase(String flow) throws Exception {
+        System.out.println("\n  --- " + flow + ": la libreria cambia, la mappa ha una voce aggiunta con postmap -i ---");
+        setUp(flow, "v10", "1.0", "repo11");
+        maps(true);
+        sh("echo 'extra.invalid " + EXTRA + "' | postmap -i lmdb:" + SOURCE);
+        String label = flow + " solo nel db: ";
+        check(label + "prima del lavoro la voce aggiunta risponde", lookup("extra.invalid").equals(EXTRA));
+        JSONObject r = runFlow(flow);
+        if (r == null) return;
+        check(label + "l'aggiornamento c'e' stato (fakeshadow 1.1)", sh("pkg query %v " + FAKE).trim().equals("1.1"));
+        check(label + "il lavoro finisce in errore (" + r.optString("status") + ")", "error".equals(r.optString("status")));
+        check(label + "e l'errore nomina la mappa", r.optString("errorMessage").contains(SOURCE));
+        check(label + "la mappa non e' stata rigenerata: la voce aggiunta risponde ancora", lookup("extra.invalid").equals(EXTRA));
+        check(label + "Postfix gira", sh("postfix status; echo $?").trim().endsWith("0"));
+    }
+
+    static void onlyInDatabasePredicted() throws Exception {
+        System.out.println("\n  --- guided: il piano toglie la copia di liblmdb, la mappa ha una voce aggiunta con postmap -i ---");
+        setUp("guided", "repo11", "1.1", "repo12");
+        maps(true);
+        sh("echo 'extra.invalid " + EXTRA + "' | postmap -i lmdb:" + SOURCE);
+        String before = sh("pkg query %n-%v | sort");
+        JSONObject pv = preview("guided");
+        String m = "";
+        JSONArray ck = pv.optJSONArray("checks");
+        for (int i = 0; ck != null && i < ck.length(); i++)
+            if ("plan-maps".equals(ck.getJSONObject(i).optString("id")) && "block".equals(ck.getJSONObject(i).optString("level")))
+                m = ck.getJSONObject(i).optString("detail");
+        System.out.println("     motivo: " + m);
+        check("solo nel db, prevista: la scheda non lascia partire", !pv.optBoolean("canProceed"));
+        check("solo nel db, prevista: e il motivo nomina la mappa", m.contains(SOURCE));
+        JSONObject start = UpdateManager.startGuidedUpdate(FAKE, pv.optString("signature"), Set.of());
+        String id = start.optString("jobId");
+        long deadline = System.currentTimeMillis() + 600_000;
+        while (!id.isEmpty() && PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
+        JSONObject job = id.isEmpty() ? new JSONObject() : UpdateManager.jobStatus(id).getJSONObject("job");
+        check("solo nel db, prevista: il lavoro lanciato lo stesso si rifiuta", id.isEmpty() || "error".equals(job.optString("status")));
+        check("solo nel db, prevista: nessun pacchetto cambiato", sh("pkg query %n-%v | sort").equals(before));
+        check("solo nel db, prevista: la voce aggiunta risponde ancora", lookup("extra.invalid").equals(EXTRA));
     }
 
     /* ===================================================================
@@ -302,7 +351,11 @@ public class PostfixMapsJobsE2ETest {
     }
 
     static String lookup() {
-        return sh("postmap -q example.invalid lmdb:" + SOURCE + " 2>/dev/null").trim();
+        return lookup("example.invalid");
+    }
+
+    static String lookup(String key) {
+        return sh("postmap -q " + key + " lmdb:" + SOURCE + " 2>/dev/null").trim();
     }
 
     static Set<String> locked() {

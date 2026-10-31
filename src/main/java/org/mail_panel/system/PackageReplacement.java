@@ -196,10 +196,11 @@ final class PackageReplacement {
             libraryUsers.put(lib, users);
         }
 
-        // Le mappe di Postfix che le sue librerie leggono: senza testo non si rigenerano.
+        // Le mappe di Postfix che le sue librerie leggono: senza testo, o con un database che non
+        // coincide col testo, non si rigenerano.
         Set<String> types = PostfixMaps.typesReadBy(name);
         List<String> lost = new ArrayList<>();
-        for (PostfixMaps.Table t : PostfixMaps.unrebuildable(types)) lost.add(t.name() + " (" + t.parameter() + ")");
+        PostfixMaps.unrebuildable(types).forEach((table, why) -> lost.add(table + ": " + why));
         return new Facts(name, version, by, file, dependents, libraryUsers, String.join("/", types), lost, "");
     }
 
