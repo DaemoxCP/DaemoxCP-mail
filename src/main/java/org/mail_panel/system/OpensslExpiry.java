@@ -20,7 +20,7 @@ import java.time.temporal.ChronoUnit;
  * Non sono calcolate: sono trascritte, perche' inventare una regola ("ogni LTS dura 5 anni")
  * produrrebbe date plausibili e sbagliate.
  *
- * Attenzione a una distinzione che cambia il verdict: **OpenSSL della base non e' il port.**
+ * Attenzione a una distinzione che cambia il verdetto: **OpenSSL della base non e' il port.**
  * Quello della base lo mantiene il progetto FreeBSD, che pubblica correzioni per le release
  * supportate; il port segue il calendario di upstream. Confonderli fa suonare un allarme che
  * non c'e', o tacere uno che c'e'.
@@ -136,7 +136,7 @@ public class OpensslExpiry {
         RunResult fv = run("freebsd-version", "-k");
         if (fv.code == 0) r.put("freebsd", fv.output.trim());
 
-        // Il verdict guarda solo cio' che c'e' davvero.
+        // Il verdetto guarda solo cio' che c'e' davvero.
         int worst = 0;
         boolean something = false;
         for (int i = 0; i < found.length(); i++) {

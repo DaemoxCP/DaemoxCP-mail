@@ -9,13 +9,13 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Il piano esatto di un aggiornamento e la risposta a "la fix c'e'?".
+ * Il piano esatto di un aggiornamento e la risposta a "la correzione c'e'?".
  *
  * Le uscite qui sotto hanno la forma che il sorgente di pkg stampa (src/utils.c per il piano,
  * src/audit.c per il JSON): sezioni con le voci rientrate da un tab, i totali in fondo, " (vulnerable!)"
- * accanto alle versioni di arrivo ancora vulnerabili, gli ranges di VuXML come "&gt;= a : &lt; b".
+ * accanto alle versioni di arrivo ancora vulnerabili, gli intervalli di VuXML come "&gt;= a : &lt; b".
  *
- * Il caso che ha motivato la classe e' in fondo al gruppo della fix: nginx 1.30.4,3,
+ * Il caso che ha motivato la classe e' in fondo al gruppo della correzione: nginx 1.30.4,3,
  * catalogo fermo alla stessa, VuXML che dice "&lt; 1.30.5,3". La scheda diceva insieme "protetto: la
  * patch non verra' applicata" e "nessun aggiornamento nel tuo ramo", e non si capiva se la
  * patch ci fosse.
@@ -159,7 +159,7 @@ public class PackagePlanTest {
             "\tkafka: 4.3.0 -> 4.3.1"));
         real("totale mancante: non measured", !p.getBoolean("measured"));
 
-        // ---------------- l'fingerprint ----------------
+        // ---------------- l'impronta ----------------
 
         JSONObject a1 = PackagePlan.readPlan(large).put("unlockedPackages", new JSONArray().put("nginx"));
         String g2 = large.replace("\tnginx: 1.30.4,3 -> 1.30.5,3\n\topenssl35: 3.5.2 -> 3.5.3 (vulnerable!)",
@@ -171,7 +171,7 @@ public class PackagePlanTest {
         JSONObject a4 = PackagePlan.readPlan(large).put("unlockedPackages", new JSONArray().put("nginx").put("php84"));
         real("fingerprint: una protezione in piu' da togliere cambia l'fingerprint", !PackagePlan.signature(a1).equals(PackagePlan.signature(a4)));
 
-        // ---------------- la fix c'e'? ----------------
+        // ---------------- la correzione c'e'? ----------------
 
         String audit = """
             {
@@ -236,7 +236,7 @@ public class PackagePlanTest {
         real("'<=': fix non indicata", "fix-not-stated".equals(v.getString("verdict")));
         v = PackagePlan.assessFix("2.1", "2.1", issues("= 2.1"), CMP);
         real("'=': solo quella versione, ma il catalogo non ne ha un'altra", "fix-outside-branch".equals(v.getString("verdict")));
-        // Piu' ranges: conta quello in cui cade la versione installata, non il primo.
+        // Piu' intervalli: conta quello in cui cade la versione installata, non il primo.
         v = PackagePlan.assessFix("1.27.5", "1.27.5", issues("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);
         real("due rami di versioni: la fix del ramo giusto", "1.28.1".equals(v.getString("firstFixed")));
         v = PackagePlan.assessFix("1.27.5", "1.28.0", issues("< 1.26.3", ">= 1.27.0 : < 1.28.1"), CMP);

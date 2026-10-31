@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
  * 2. "La patch c'e' o no?" pkg audit dice "vulnerabile" e basta. Ma VuXML, il database da cui
  *    legge, per ogni problema dice QUALI versioni sono vulnerabili (per esempio "< 1.30.5,3"),
  *    cioe' da quale versione in poi il problema e' corretto. Messa accanto alla versione che il
- *    catalogo offre diventa una risposta esatta: si corregge aggiornando; oppure la fix
+ *    catalogo offre diventa una risposta esatta: si corregge aggiornando; oppure la correzione
  *    esiste ma il tuo ramo non ce l'ha ancora; oppure una versione corretta non esiste.
  *
  * I formati letti qui sono quelli del sorgente di pkg (src/utils.c, src/audit.c,
@@ -209,11 +209,11 @@ public final class PackagePlan {
     }
 
     /**
-     * L'fingerprint di un piano: cio' che e' stato approvato e cio' che si esegue devono coincidere.
+     * L'impronta di un piano: cio' che e' stato approvato e cio' che si esegue devono coincidere.
      *
      * Dentro ci sono le protezioni da togliere e ogni cambiamento con le sue versioni, in ordine
      * fisso. Fra la lettura del piano e il click puo' passare un aggiornamento del catalogo: con
-     * l'fingerprint, il pannello se ne accorge e si ferma invece di eseguire un piano diverso da
+     * l'impronta, il pannello se ne accorge e si ferma invece di eseguire un piano diverso da
      * quello che e' stato letto.
      */
     static String signature(JSONObject plan) {
@@ -236,7 +236,7 @@ public final class PackagePlan {
     }
 
     /**
-     * L'fingerprint dei soli CAMBIAMENTI del piano, senza le protezioni da togliere.
+     * L'impronta dei soli CAMBIAMENTI del piano, senza le protezioni da togliere.
      *
      * Serve per confrontare due piani calcolati in condizioni diverse: quello approvato,
      * dove il pacchetto era ancora protetto e andava sbloccato, e quello ricalcolato dopo lo
@@ -376,10 +376,10 @@ public final class PackagePlan {
     }
 
     /**
-     * @param gemelloInstallato riceve il nome di un pacchetto che il piano INSTALLEREBBE e
-     *                          restituisce il nome di un pacchetto GIA' installato della
-     *                          stessa famiglia, o null. Serve a riconoscere quando pkg sta
-     *                          girando attorno a un blocco: vedi il ciclo di planWith.
+     * @param installedTwin riceve il nome di un pacchetto che il piano INSTALLEREBBE e
+     *                      restituisce il nome di un pacchetto GIA' installato della
+     *                      stessa famiglia, o null. Serve a riconoscere quando pkg sta
+     *                      girando attorno a un blocco: vedi il ciclo di planWith.
      */
     public static JSONObject planFor(List<String> packages, Set<String> protectedNames,
                                       Function<JSONObject, String> reasonNotToUnlock,
@@ -390,7 +390,7 @@ public final class PackagePlan {
     }
 
     /**
-     * Il piano della manutenzione completa: tutto cio' che pkg aggiornerebbe, con 'daSbloccare'
+     * Il piano della manutenzione completa: tutto cio' che pkg aggiornerebbe, con 'toUnlock'
      * sbloccati. Qui un pacchetto protetto che pkg nomina e che non si puo' sbloccare non e' un
      * impedimento: e' uno di quelli trattenuti apposta, pkg lo salta e aggiorna il resto. Resta
      * nel piano, con il suo motivo, perche' chi legge sappia cosa NON verra' aggiornato.
@@ -451,7 +451,7 @@ public final class PackagePlan {
         // pkg aggiorna prima se stesso. In un aggiornamento vero, se il catalogo ha un pkg piu'
         // recente, pkg installa quello, si rilancia e poi fa il resto; con -n questo passo lo
         // salta, quindi la simulazione non lo mostra. Un piano "esatto" che tace un pacchetto
-        // che cambiera' non lo e': si aggiunge in testa, entra nell'fingerprint e viene verificato.
+        // che cambiera' non lo e': si aggiunge in testa, entra nell'impronta e viene verificato.
         JSONObject before = plan.optBoolean("measured") ? pkgToUpdate() : null;
         if (before != null && changes != null) {
             boolean already = false;
@@ -562,7 +562,7 @@ public final class PackagePlan {
         }
     }
 
-    /** Le versioni installate senza lo stato di blocco: {@code name -> versione}. */
+    /** Le versioni installate senza lo stato di blocco: {@code nome -> versione}. */
     public static Map<String, String> versionsOnly(Map<String, String[]> installed) {
         Map<String, String> r = new java.util.TreeMap<>();
         if (installed != null)
@@ -680,7 +680,7 @@ public final class PackagePlan {
         return outcome;
     }
 
-    // ===================== la fix c'e'? =====================
+    // ===================== la correzione c'e'? =====================
 
     /** Confronto di due versioni, con le regole di pkg. Negativo, zero o positivo. */
     public interface VersionComparator { int compare(String a, String b); }
@@ -753,7 +753,7 @@ public final class PackagePlan {
 
     /**
      * {@code pkg audit -Rjson} ridotto a cio' che serve: per ogni pacchetto la versione e i
-     * problemi, ognuno con gli ranges di versioni vulnerabili.
+     * problemi, ognuno con gli intervalli di versioni vulnerabili.
      *
      * Attenzione alla forma dell'opzione: e' {@code -Rjson}, attaccato. Con {@code -R json}
      * pkg prende "json" per il nome di un pacchetto e produce un altro formato.
@@ -784,8 +784,8 @@ public final class PackagePlan {
     }
 
     /**
-     * La risposta a "la fix c'e'?" per un pacchetto: la versione installata, quella che
-     * il catalogo offre, e gli ranges di VuXML di ogni problema.
+     * La risposta a "la correzione c'e'?" per un pacchetto: la versione installata, quella che
+     * il catalogo offre, e gli intervalli di VuXML di ogni problema.
      *
      * Verdetti, dal migliore al peggiore:
      *  - "fixed-by-upgrade": il catalogo ha una versione piu' recente che VuXML non
@@ -891,7 +891,7 @@ public final class PackagePlan {
     }
 
     /**
-     * Per ogni pacchetto vulnerabile: se e dove esiste la fix. Legge il database delle
+     * Per ogni pacchetto vulnerabile: se e dove esiste la correzione. Legge il database delle
      * vulnerabilita' gia' scaricato (chi chiama decide se riscaricarlo prima) e il catalogo.
      */
     public static JSONObject fixes() {

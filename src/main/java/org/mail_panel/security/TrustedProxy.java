@@ -73,13 +73,13 @@ public final class TrustedProxy {
      * Quando la lista qui sopra e' stata confrontata con quella ufficiale, da un essere umano.
      *
      * Il 02/09/2026 il confronto e' stato eseguito davvero contro cloudflare.com/ips-v4 e
-     * ips-v6: 15 ranges IPv4 e 7 IPv6, nessuna divergenza in nessuna delle due direzioni.
+     * ips-v6: 15 intervalli IPv4 e 7 IPv6, nessuna divergenza in nessuna delle due direzioni.
      * La lista non e' cambiata da dicembre — e' stata verificata, che e' un'altra cosa e vale
      * la pena distinguerla: "scritta allora" non dice se sia ancora giusta.
      */
     public static final String UPDATED_ON = "2026-09-02";
 
-    /** Gli ranges compilati dentro il pannello: quelli da cui si accettano le
+    /** Gli intervalli compilati dentro il pannello: quelli da cui si accettano le
      *  intestazioni di inoltro. Si espongono per poterli MOSTRARE, non solo confrontare:
      *  una lista che decide di chi fidarsi e che nessuno puo' leggere e' una regola segreta. */
     public static List<String> cloudflareV4() { return List.copyOf(CLOUDFLARE_V4); }

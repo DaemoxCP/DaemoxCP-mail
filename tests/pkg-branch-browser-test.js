@@ -1,7 +1,7 @@
 // La scheda "Ramo dei pacchetti" della pagina Aggiornamenti in Chromium, con il server simulato:
 // la logica vera (pkg -vv, il file del pannello, i ripristini) la prova PkgBranchTest. Qui si
 // controlla che la scheda si legga da sola, mostri ramo e repository solo come testo, chieda
-// l'anteprima, pretenda il nome del ramo scritto a mano, mandi fingerprint e token CSRF, segua il
+// l'anteprima, pretenda il nome del ramo scritto a mano, mandi impronta e token CSRF, segua il
 // lavoro fino all'esito e dica gli errori.
 //
 // Uso (dalla radice del progetto, dopo mvn package):

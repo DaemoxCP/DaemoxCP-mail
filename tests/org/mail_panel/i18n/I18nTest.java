@@ -75,7 +75,7 @@ public class I18nTest {
             if (k.endsWith(".other") && !it.containsKey(k.substring(0, k.length() - 6) + ".one")) plurals.add(k);
         }
         check("every plural has .one and .other" + (plurals.isEmpty() ? "" : ": " + plurals), plurals.isEmpty());
-        // Le frasi .html entrano nella pagina cosi' come sono: solo i tag di text, nient'altro
+        // Le frasi .html entrano nella pagina cosi' come sono: solo i tag di testo, nient'altro
         Pattern tag = Pattern.compile("<(/?)([a-zA-Z0-9]+)[^>]*>");
         Set<String> allowed = Set.of("strong", "em", "code", "kbd", "br");
         List<String> oddTags = new ArrayList<>();
@@ -89,7 +89,7 @@ public class I18nTest {
         }
         check("the .html sentences only have strong, em, code, kbd, br (no attributes)" + (oddTags.isEmpty() ? "" : ": " + oddTags), oddTags.isEmpty());
         // Gli script mettono i testi semplici anche dentro dell'HTML costruito a mano: senza < > &
-        // il text e' lo stesso, scappato o no. (I messaggi del server passano sempre da escape().)
+        // il testo e' lo stesso, scappato o no. (I messaggi del server passano sempre da escape().)
         List<String> withSigns = new ArrayList<>();
         for (Map<String, String> b : List.of(it, en)) {
             for (Map.Entry<String, String> e : b.entrySet()) {
@@ -120,7 +120,7 @@ public class I18nTest {
             Matcher s = SCRIPT.matcher(html);
             while (s.find()) if (s.group(1).contains("{{t:")) inScripts.add(name);
         }
-        // La cornice e' una pagina anche lei: le sue keys stanno in Layout
+        // La cornice e' una pagina anche lei: le sue chiavi stanno in Layout
         sources.add(Layout.expand(Layout.placeholder("home"), "it", SUPERADMIN));
         for (String html : sources) {
             Matcher m = PLACEHOLDER.matcher(html);
@@ -142,15 +142,15 @@ public class I18nTest {
         }
         check(pageCount + " pages: every text used exists in both languages" + (missing.isEmpty() ? "" : ": " + new TreeSet<>(missing)), missing.isEmpty());
         check("no {{t:...}} inside a script" + (inScripts.isEmpty() ? "" : ": " + new TreeSet<>(inScripts)), inScripts.isEmpty());
-        // Una variabile o un parametro di name t (o tn, tNodes, escHtml) nasconde la funzione del
+        // Una variabile o un parametro di nome t (o tn, tNodes, escHtml) nasconde la funzione del
         // dizionario: dentro quella funzione t('chiave') diventerebbe un errore. Nessuno script li usa.
         Pattern shadow = Pattern.compile("\\b(?:let|const|var)\\s+(?:t|tn|tNodes|escHtml)(?:\\s*[=;,)]|\\s+(?:of|in)\\b)"
                 + "|function\\s*[A-Za-z0-9_$]*\\s*\\([^)]*\\b(?:t|tn|tNodes|escHtml)\\b[^)]*\\)"
                 + "|(?<![A-Za-z0-9_$.])(?:t|tn|tNodes|escHtml)\\s*=>"
                 + "|\\(\\s*(?:[A-Za-z0-9_$]+\\s*,\\s*)*(?:t|tn|tNodes|escHtml)\\s*(?:,\\s*[A-Za-z0-9_$]+\\s*)*\\)\\s*=>"
                 + "|catch\\s*\\(\\s*(?:t|tn|tNodes|escHtml)\\s*\\)");
-        // Ne' usa t come un asValue (escapeHtml(t), { type: t }): e' una variabile rinominata a
-        // meta'. Cosi' la pagina Kafka mostrava il code della funzione al posto dei topic.
+        // Ne' usa t come un valore (escapeHtml(t), { type: t }): e' una variabile rinominata a
+        // meta'. Cosi' la pagina Kafka mostrava il codice della funzione al posto dei topic.
         Pattern asValue = Pattern.compile("(?<![A-Za-z0-9_$.'\"#-])t(?![A-Za-z0-9_$'\"(:-])");
         List<String> shadows = new ArrayList<>(), asValues = new ArrayList<>();
         for (Method m : MailPanelContent.class.getDeclaredMethods()) {
@@ -178,15 +178,15 @@ public class I18nTest {
         System.out.println("  (texts the pages do not use: " + unused.size() + (unused.isEmpty() ? "" : " " + unused) + ")");
 
         System.out.println("\n== The server messages ==");
-        // Le keys che il code del server scrive per intero: I18n.tr("..."), jsonError("...") e
-        // ogni text "server.qualcosa" (anche passato a un metodo che poi lo traduce). Quelle che
+        // Le chiavi che il codice del server scrive per intero: I18n.tr("..."), jsonError("...") e
+        // ogni testo "server.qualcosa" (anche passato a un metodo che poi lo traduce). Quelle che
         // finiscono con un punto sono prefissi completati a runtime: le controllano le prove dei
         // loro moduli (SoftwareVersionsTest per i ruoli dei programmi).
         Set<String> serverKeys = new TreeSet<>();
-        // (un text "server.x" con un punto solo, come server.properties di Kafka, non e' una chiave)
-        // (qui solo le chiamate: nel pannello mail "server.example.com" e' un name di host, non una chiave)
+        // (un testo "server.x" con un punto solo, come server.properties di Kafka, non e' una chiave)
+        // (qui solo le chiamate: nel pannello mail "server.example.com" e' un nome di host, non una chiave)
         Pattern serverKey = Pattern.compile("(?:I18n\\.tr|jsonError)\\(\"([A-Za-z0-9_.-]*[A-Za-z0-9_-])\"()");
-        // I18n.trn("chiave", n, ...) usa key.one e key.other
+        // I18n.trn("chiave", n, ...) usa chiave.one e chiave.other
         Pattern pluralCall = Pattern.compile("I18n\\.trn\\(\"([A-Za-z0-9_.-]*[A-Za-z0-9_-])\"");
         Set<String> serverPlurals = new TreeSet<>();
         try (var files = java.nio.file.Files.walk(java.nio.file.Path.of("src/main/java"))) {

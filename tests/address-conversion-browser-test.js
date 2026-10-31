@@ -2,7 +2,7 @@
 // Chromium, sulle pagine generate dal pannello. Il server qui e' simulato: le sue regole e le sue
 // transazioni le prova AddressConversionTest, su MySQL. Qui si controlla che la pagina mostri l'anteprima,
 // chieda quello che serve (password, scelta sulla posta di prima, indirizzo scritto per conferma),
-// mandi al server l'fingerprint e il token CSRF, e che "Elimina casella" ora mandi il token.
+// mandi al server l'impronta e il token CSRF, e che "Elimina casella" ora mandi il token.
 //
 // Uso (dalla radice del progetto, dopo mvn package):
 //   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \

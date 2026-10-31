@@ -387,7 +387,7 @@ public class MtaStsSetup {
 
     /**
      * @param job se presente, l'avanzamento viene scritto li' mentre accade.
-     * @param soloDominio se presente, i passi per dominio toccano solo quello. I primi tre —
+     * @param domainOnly se presente, i passi per dominio toccano solo quello. I primi tre —
      *        include di nginx, 443, jail — restano globali perche' quella superficie e' una
      *        sola per tutti i domini, e installarla e' idempotente. Il certificato resta
      *        globale per una ragione piu' seria, spiegata al suo passo.

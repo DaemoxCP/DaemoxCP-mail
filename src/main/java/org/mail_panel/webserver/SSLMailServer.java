@@ -1159,7 +1159,7 @@ public class SSLMailServer {
     /**
      * GET /i18n/(lingua).js: il dizionario degli script, con t() e tn(). Pubblico (ci sono solo i
      * testi dell'interfaccia, e serve anche alla pagina di accesso) e da tenere in cache:
-     * l'indirizzo cambia con i testi (?v=fingerprint).
+     * l'indirizzo cambia con i testi (?v=impronta).
      */
     private void handleI18nScript(HttpExchange exchange) throws IOException {
         try (exchange) {
@@ -3103,7 +3103,7 @@ public class SSLMailServer {
         // vedendo il token gia' li'. Da quel momento la regola vive dentro il binario dei
         // browser, e rimuoverla richiede mesi — mentre qui basta che il certificato del
         // pannello si rompa una volta per restare fuori proprio quando serve entrare a
-        // ripararlo (HSTS toglie il "prosegui comunque" sugli warnings di certificato).
+        // ripararlo (HSTS toglie il "prosegui comunque" sugli avvisi di certificato).
         //
         // Cosa resta, e perche': max-age si rinnova a ogni visita e includeSubDomains vale per
         // i sottodomini di QUESTO nome. Si tengono perche' il certificato si rinnova da solo e
@@ -7051,7 +7051,7 @@ public class SSLMailServer {
                 case "branch_status" -> response = UpdateManager.branchStatus();
                 case "branch_preview" -> response = UpdateManager.branchPreview(req.optString("destination", ""));
                 case "branch_change" -> {
-                    // La conferma e' il nome del ramo scritto a mano, e l'fingerprint e' quella
+                    // La conferma e' il nome del ramo scritto a mano, e l'impronta e' quella
                     // dell'anteprima: si cambia solo cio' che si e' visto.
                     String target = req.optString("destination", "");
                     if (target.isEmpty() || !target.equals(req.optString("confirm", ""))) {
@@ -8541,7 +8541,7 @@ public class SSLMailServer {
                         JSONObject x = notJudged.getJSONObject(i);
                         if (ng.length() > 0) ng.append(" | ");
                         ng.append(x.optString("jail")).append(": ").append(x.optString("why"));
-                        // L'evidenza accanto al verdict: cosa ha risposto fail2ban, e cosa ha
+                        // L'evidenza accanto al verdetto: cosa ha risposto fail2ban, e cosa ha
                         // scritto nel proprio log. Senza, la riga dice solo che non si sa.
                         String u = x.optString("output", "");
                         if (!u.isEmpty()) ng.append(" [").append(I18n.tr("server.f2b.ban.answers", Map.of("answer", u))).append("]");
@@ -8572,7 +8572,7 @@ public class SSLMailServer {
 
         // ========== I ban arrivano davvero a pf? ==========
         // E' il controllo piu' profondo che il pannello sappia fare, e finora viveva soltanto
-        // nella scheda del confronto: il verdict in cima diceva "Tutto OK" mentre recidive
+        // nella scheda del confronto: il verdetto in cima diceva "Tutto OK" mentre recidive
         // aveva una tabella che nessuna regola legge. Un riepilogo che non comprende il
         // controllo piu' severo non e' un riepilogo: e' la stessa mezza verita' che ha tenuto
         // nascoste per mesi una jail cieca e due che bannavano nel vuoto.
@@ -8780,7 +8780,7 @@ public class SSLMailServer {
             (pfAnchorPresent || !pfConfExists) ? null : "add_pf_anchor",
             I18n.tr("server.pf.fixAnchor")));
 
-        // Il verdict complessivo si legge dai controlli, non da un elenco di booleani scritto
+        // Il verdetto complessivo si legge dai controlli, non da un elenco di booleani scritto
         // a mano. Quell'elenco era una seconda versione della stessa verita', e le due
         // divergevano appena se ne aggiungeva uno: il controllo nuovo compariva rosso nella
         // lista mentre in cima restava "Tutto OK" e il pulsante per rimediare restava nascosto,
@@ -8800,7 +8800,7 @@ public class SSLMailServer {
         r.put("checks", checks);
         // Stato CSRF token per i POST successivi
         try {
-            // riusiamo il sessionCode dell'exchange — si ottiene fuori. Qui generichiamo il check.
+            // riusiamo il token di sessione dell'exchange — si ottiene fuori. Qui generichiamo il check.
         } catch (Exception ignored) {}
         return r;
     }

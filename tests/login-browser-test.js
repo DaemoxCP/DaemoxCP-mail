@@ -16,7 +16,7 @@
 //
 // Usage (from the project root, after mvn package, with the test MySQL of README.md):
 //   D=$(mktemp -d) && cp target/freebsd-mail-panel-1.0.jar $D/
-//   MYSQL="-Dmysql.porta=33062 -Dmysql.utente=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova" \
+//   MYSQL="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova" \
 //     NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [screenshots-dir]
 const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('child_process');

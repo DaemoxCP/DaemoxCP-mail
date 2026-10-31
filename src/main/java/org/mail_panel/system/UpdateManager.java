@@ -642,7 +642,7 @@ public final class UpdateManager {
 
     /**
      * Il quadro unico dei pacchetti per la pagina Aggiornamenti: per ognuno versione
-     * installata e del catalogo, blocco, vulnerabilita' con il verdict sulla fix, e se
+     * installata e del catalogo, blocco, vulnerabilita' con il verdetto sulla correzione, e se
      * si puo' aggiornare da qui. Sola lettura e senza rete. Dentro: i pacchetti dello stack di
      * posta, piu' ogni altro pacchetto vulnerabile o bloccato; gli altri con un aggiornamento
      * (librerie, dipendenze) solo elencati a parte.
@@ -929,7 +929,7 @@ public final class UpdateManager {
         // Quali pacchetti hanno una versione piu' recente nel catalogo, PROTETTI COMPRESI.
         //
         // Serve perche' "pkg upgrade -n" i protetti li salta: dalla simulazione non si puo'
-        // sapere se per un pacchetto protetto esista una fix. "pkg version" invece
+        // sapere se per un pacchetto protetto esista una correzione. "pkg version" invece
         // confronta le versioni e del lock non si occupa, quindi risponde anche per quelli.
         Set<String> updatable = new java.util.LinkedHashSet<>();
         for (String line : sh("pkg version -U -vRL= 2>/dev/null", 60).split("\n")) {
@@ -940,7 +940,7 @@ public final class UpdateManager {
             // Solo "<" vuol dire che esiste una versione piu' recente. ">" (installato piu'
             // nuovo del catalogo), "?" (non nel catalogo) e "!" (confronto fallito) sono
             // differenze, non aggiornamenti: prenderle per tali direbbe a chi legge che per
-            // un pacchetto vulnerabile esiste una fix che non esiste.
+            // un pacchetto vulnerabile esiste una correzione che non esiste.
             String[] fields = t.split("\\s+");
             if (fields.length < 2 || !"<".equals(fields[1])) continue;
             String pv = fields[0];
@@ -960,9 +960,9 @@ public final class UpdateManager {
             JSONObject v = new JSONObject().put("name", name).put("locked", lk)
                     .put("mailPackage", role != null).put("role", role == null ? "" : role)
                     .put("updateAvailable", hasUpdate)
-                    // Prima qui c'era "!lk && simulation.contains(nome)", e per un pacchetto
+                    // Prima qui c'era "!lk && simulazione.contains(nome)", e per un pacchetto
                     // protetto veniva sempre falso — mentre la scheda scriveva "protetto,
-                    // quindi NON riceve la fix", cioe' affermava che una fix
+                    // quindi NON riceve la correzione", cioe' affermava che una correzione
                     // esistesse. Nessuno l'aveva verificato: la simulazione i protetti li
                     // salta, quindi da li' quell'informazione non si ricava proprio.
                     .put("fixedByUpgrade", !lk && (hasUpdate
@@ -975,9 +975,9 @@ public final class UpdateManager {
             v.put("references", d.getJSONArray("references"));
             vulnerable.put(v);
         }
-        // "C'e' una versione piu' recente" non risponde a "la fix c'e'?": la versione
-        // piu' recente puo' essere ancora vulnerabile, e la fix puo' esistere in una
-        // versione che il tuo catalogo non ha. Lo dicono gli ranges di VuXML.
+        // "C'e' una versione piu' recente" non risponde a "la correzione c'e'?": la versione
+        // piu' recente puo' essere ancora vulnerabile, e la correzione puo' esistere in una
+        // versione che il tuo catalogo non ha. Lo dicono gli intervalli di VuXML.
         if (vulnerable.length() > 0) {
             JSONObject fixes = PackagePlan.fixes();
             if (fixes.optBoolean("success")) {
@@ -992,7 +992,7 @@ public final class UpdateManager {
         }
         r.put("vulnerable", vulnerable);
         // Lezione pagata sull'altro server il 30/08: mysql80-server era stato aggiornato a
-        // 8.0.46 ma il processo continuava a girare sui binari 8.0.45, quindi la fix
+        // 8.0.46 ma il processo continuava a girare sui binari 8.0.45, quindi la correzione
         // non era in servizio pur risultando installata. Vale per ogni libreria condivisa.
         r.put("restartNote",
             I18n.tr("server.um.updatesStatus.2"));
@@ -1008,7 +1008,7 @@ public final class UpdateManager {
 
     /**
      * Estrae dal referto di `pkg audit` il blocco che riguarda un pacchetto: descrizione,
-     * identificativi CVE e references. Senza questo il pannello direbbe soltanto "e'
+     * identificativi CVE e riferimenti. Senza questo il pannello direbbe soltanto "e'
      * vulnerabile", che non basta per decidere se valga la pena sbloccare e aggiornare.
      */
     /** La riga con cui pkg audit chiude il referto. E' la prova che il controllo e' avvenuto. */
@@ -1021,7 +1021,7 @@ public final class UpdateManager {
      * Due trappole, misurate sulla VM FreeBSD 15.1 il 23/10/2026, che insieme rendevano
      * questo controllo incapace di dire qualunque cosa.
      *
-     * 1. `pkg audit name`, col solo nome, non risponde "la versione installata e'
+     * 1. `pkg audit nome`, col solo nome, non risponde "la versione installata e'
      *    vulnerabile?" ma "VuXML ha voci per questo nome?". Su nginx 1.30.6,3, appena
      *    aggiornato e non vulnerabile, rispondeva "nginx is vulnerable" con 25 problemi,
      *    elencando intervalli come "< 1.8.1_3,2" che non c'entrano niente; `pkg audit` senza
@@ -1033,7 +1033,7 @@ public final class UpdateManager {
      *    vulnerabilita' nota registrata per questo pacchetto", mentre pkg diceva
      *    "php84 is vulnerable" e PackagePlan.fixes, che la domanda la pone giusta,
      *    trovava la fix nella 8.4.27.
-     *    La forma che risponde alla domanda giusta e' `pkg audit nome-version`: con
+     *    La forma che risponde alla domanda giusta e' `pkg audit nome-versione`: con
      *    "nginx-1.30.6,3" dice "0 problem(s)", con "php84-8.4.26" trova l'unico problema vero.
      *
      * 2. Se il database delle vulnerabilita' non c'e', pkg risponde "vulnxml file vuln.xml
@@ -2146,7 +2146,7 @@ public final class UpdateManager {
 
     /**
      * Riscrive la SOLA configurazione di Dovecot dalla sorgente unica, senza toccare i
-     * pacchetti. Serviva: prima, per applicare una fix alla configurazione bisognava
+     * pacchetti. Serviva: prima, per applicare una correzione alla configurazione bisognava
      * passare dalla reinstallazione del pacchetto — `pkg delete` e reinstallazione — che e'
      * sproporzionato per riscrivere dei file di testo e introduce rischi che non c'entrano.
      *
@@ -4319,7 +4319,7 @@ public final class UpdateManager {
             boolean webOk = pw.optBoolean("ok");
             if (!testedWeb) {
                 job.write("    " + I18n.tr("server.um.x.webTestNotRun", java.util.Map.of("e", String.valueOf(pw.optString("error")))));
-                webOk = true;   // non provata non vuol dire guasta: non boccio cio' che non ho measured
+                webOk = true;   // non provata non vuol dire guasta: non boccio cio' che non ho misurato
             } else if (webOk) {
                 job.write("    " + I18n.tr("server.um.x.urlAnswersOrigin", java.util.Map.of("url", String.valueOf(pw.optString("url")), "code", String.valueOf(pw.optString("code")))));
             } else {
@@ -4332,7 +4332,7 @@ public final class UpdateManager {
                 job.status = "completed";
                 job.write("");
                 // "In servizio" si puo' dire solo se qualcuno l'ha visto rispondere. Senza quella
-                // prova il lavoro puo' essere andato benissimo, ma il verdict sarebbe piu' verde
+                // prova il lavoro puo' essere andato benissimo, ma il verdetto sarebbe piu' verde
                 // delle prove che ho: allora lo dico, e la verifica la fai tu.
                 job.write(testedWeb
                         ? I18n.tr("server.um.runRoundcubeUpdate.18")
@@ -5506,7 +5506,7 @@ public final class UpdateManager {
                 I18n.tr("server.um.maintenancePlan.6"),
                 updatedContext ? null : new JSONObject().put("type", "updates_apply")));
 
-        // --- Passi 3..N: un passo per ogni pacchetto protetto vulnerabile con fix ---
+        // --- Passi 3..N: un passo per ogni pacchetto protetto vulnerabile con correzione ---
         // L'ordine e' per numero di CVE chiuse: prima cio' che porta piu' beneficio.
         java.util.List<JSONObject> vulnerable = new ArrayList<>();
         Matcher mv = Pattern.compile("(?m)^(\\S+?)-[0-9][^\\s]* is vulnerable:").matcher(audit);
@@ -5517,7 +5517,7 @@ public final class UpdateManager {
             if (covered.test(name)) continue;                 // ha gia' la sua fase dedicata
             String cur = sh("pkg query %v " + name + " 2>/dev/null", 20);
             String av  = sh("pkg rquery -U %v " + name + " 2>/dev/null", 20);
-            if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // nessuna fix disponibile
+            if (cur.isEmpty() || av.isEmpty() || av.equals(cur)) continue;   // nessuna correzione disponibile
             boolean major = significantJump(name, cur, av);
             JSONObject warning = warningFor(name, major);
             int nCve = vulnerabilityDetail(audit, name).getJSONArray("cve").length();
@@ -5740,7 +5740,7 @@ public final class UpdateManager {
                     : I18n.tr("server.um.maintenancePlan.42"), null));
         }
 
-        // Vulnerabilita' senza fix disponibile: non sono un passo, ma vanno sapute.
+        // Vulnerabilita' senza correzione disponibile: non sono un passo, ma vanno sapute.
         JSONArray withoutRemedy = new JSONArray();
         for (String name : seen) {
             String cur = sh("pkg query %v " + name + " 2>/dev/null", 20);
@@ -6224,12 +6224,12 @@ public final class UpdateManager {
                     problems > 0 ? I18n.tr("server.um.x.openCves", java.util.Map.of("n", String.valueOf(problems), "d", String.valueOf(report.getString("description"))))
                                  : I18n.tr("server.um.packagePreflight.9"));
 
-        // Servizi da riavviare. Il punto dolente: senza riavvio la fix non entra in
+        // Servizi da riavviare. Il punto dolente: senza riavvio la correzione non entra in
         // servizio. E vanno calcolati su TUTTA la famiglia, non sul solo pacchetto nominato:
         // aggiornando mysql80-server insieme a mysql80-client, sono i programmi collegati al
         // CLIENT (Postfix, Dovecot, php-fpm) a tenersi in memoria la libreria vecchia. Guardare
         // il solo nome scritto nel passo li lascerebbe fuori, ed e' esattamente il caso in cui
-        // la fix risulta installata senza essere in servizio.
+        // la correzione risulta installata senza essere in servizio.
         java.util.LinkedHashSet<String> logicalNames = new java.util.LinkedHashSet<>();
         for (String member : family) logicalNames.addAll(servicesToRestart(member));
         JSONArray services = new JSONArray();
@@ -6431,10 +6431,10 @@ public final class UpdateManager {
     }
 
     /**
-     * @param firmaApprovata l'fingerprint del piano che chi preme ha letto nella scheda. Il job
-     *                       ricalcola il piano e parte solo se e' lo stesso: fra la lettura e il
-     *                       click il catalogo puo' essere cambiato, e allora si eseguirebbe un
-     *                       piano che nessuno ha visto.
+     * @param approvedSignature l'impronta del piano che chi preme ha letto nella scheda. Il job
+     *                          ricalcola il piano e parte solo se e' lo stesso: fra la lettura e il
+     *                          click il catalogo puo' essere cambiato, e allora si eseguirebbe un
+     *                          piano che nessuno ha visto.
      */
     public static JSONObject startGuidedUpdate(String name, String approvedSignature) {
         if (!isValidName(name)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
@@ -6471,7 +6471,7 @@ public final class UpdateManager {
         java.util.List<String> services = new ArrayList<>();
         Map<String, String> pidBefore = new LinkedHashMap<>();
         Map<String, Boolean> activeBefore = new LinkedHashMap<>();
-        // attivoPrima riguarda i soli servizi che si riavvieranno; per il quadro finale
+        // activeBefore riguarda i soli servizi che si riavvieranno; per il quadro finale
         // serve lo stato di TUTTI, preso prima di toccare qualunque cosa.
         Map<String, Boolean> servicesBefore = servicesState();
         // Cio' che il piano non puo' dire: che cosa fanno gli script di installazione alla
@@ -6506,7 +6506,7 @@ public final class UpdateManager {
                     ? new JSONArray().put(name) : pf.getJSONArray("family"));
 
             // Si esegue il piano che e' stato letto, o niente. Il preflight qui sopra l'ha appena
-            // ricalcolato: se l'fingerprint non e' quella approvata, qualcosa e' cambiato nel
+            // ricalcolato: se l'impronta non e' quella approvata, qualcosa e' cambiato nel
             // frattempo (di solito il catalogo) e il piano che partirebbe non l'ha visto nessuno.
             plan = pf.getJSONObject("plan");
             String currentSignature = pf.optString("signature", "");
@@ -7061,7 +7061,7 @@ public final class UpdateManager {
      *   - un soname fornito dal pacchetto (libssl.so.12): sparisce la libreria, e chi ci si
      *     collega non parte piu'.
      *
-     * Quindi si separano nettamente due elenchi: i references che ROMPONO e quelli che
+     * Quindi si separano nettamente due elenchi: i riferimenti che ROMPONO e quelli che
      * REGGONO. E si cerca in tre posti diversi, perche' bastano due su tre per ingannarsi:
      * dentro il jar, fra i pacchetti installati (chi dichiara quei soname), e sui file di
      * testo del sistema, dove vivono gli script che girano piu' tardi.
@@ -7272,7 +7272,7 @@ public final class UpdateManager {
                     .put("error", I18n.tr("server.um.x.rmJarSays", java.util.Map.of("v", String.valueOf(v))) + " "
                             + use.optString("explanation", ""));
 
-        // --- e i references sul disco? il jar e' solo uno dei tre posti ---
+        // --- e i riferimenti sul disco? il jar e' solo uno dei tre posti ---
         JSONObject deepResult = deepAnalysis(name);
         r.put("deep", deepResult);
         if (deepResult.optBoolean("blocking"))
@@ -7440,7 +7440,7 @@ public final class UpdateManager {
      * che si smette di leggere.
      */
     /**
-     * Con aggiornaDatabase = false non tocca la rete: e' la forma per l'anteprima.
+     * Con updateDatabase = false non tocca la rete: e' la forma per l'anteprima.
      *
      * "pkg audit -F" scarica il database delle vulnerabilita'. L'anteprima lo chiamava, quindi
      * premere "guarda il rapporto" poteva restare appeso su una rete lenta mentre la scheda
@@ -8010,7 +8010,7 @@ public final class UpdateManager {
                  ? I18n.tr("server.um.opensslUsage.3", java.util.Map.of("withLibssl", String.valueOf(withLibssl)))
                  : I18n.tr("server.um.opensslUsage.4"));
 
-        // --- il verdict, nell'ordine in cui le prove pesano ---
+        // --- il verdetto, nell'ordine in cui le prove pesano ---
         String verdict, explanation;
         if (useThePort.length() > 0) {
             verdict = "IN_USE_NOW";
@@ -8128,7 +8128,7 @@ public final class UpdateManager {
     /**
      * Da quale ramo dei pacchetti si serve questo sistema.
      *
-     * Cambia quanto ci mette una fix ad arrivare, ed e' la risposta alla domanda "perche'
+     * Cambia quanto ci mette una correzione ad arrivare, ed e' la risposta alla domanda "perche'
      * il repository non ha ancora la versione che chiude questa vulnerabilita'". Non si legge da
      * un file scelto a occhio: pkg fonde /etc/pkg/FreeBSD.conf con gli eventuali file in
      * /usr/local/etc/pkg/repos/, e solo lui sa quale ha vinto. "pkg -vv" stampa la
@@ -8149,7 +8149,7 @@ public final class UpdateManager {
      *  - le versioni installate e quelle del repository si leggono con DUE interrogazioni sole
      *    (pkg query e pkg rquery -U su tutto) e si uniscono qui: interrogare pkg 41 volte per 41
      *    pacchetti ci metterebbe minuti per la stessa informazione.
-     *  - non entra NIENTE di segreto: nomi, versioni, stati e warnings. Nessun file di
+     *  - non entra NIENTE di segreto: nomi, versioni, stati e avvisi. Nessun file di
      *    configurazione, nessuna password, nessuna chiave. Un rapporto fatto per essere
      *    incollato deve poter essere incollato senza rileggerlo riga per riga.
      */
@@ -8545,7 +8545,7 @@ public final class UpdateManager {
      * riparte, quelle cose non si rompono — si fermano dove sono, e nessuno lo segnala.
      */
     /**
-     * La lista degli ranges Cloudflare compilata nel pannello e' ancora quella ufficiale?
+     * La lista degli intervalli Cloudflare compilata nel pannello e' ancora quella ufficiale?
      *
      * Perche' serve. Il pannello si fida di CF-Connecting-IP soltanto se la richiesta arriva da
      * un indirizzo che riconosce come Cloudflare; l'elenco di quegli indirizzi e' scritto a mano
@@ -8579,11 +8579,11 @@ public final class UpdateManager {
             // Senza, una risposta parziale o una pagina di errore da cui si salvano due righe
             // darebbe una lista ufficiale corta. Nessun intervallo "mancante" — quindi niente
             // rosso — e invece una dozzina di "non piu' ufficiali": il pannello consiglierebbe
-            // di TOGLIERE dalla lista di fiducia ranges che Cloudflare usa eccome. Un
+            // di TOGLIERE dalla lista di fiducia intervalli che Cloudflare usa eccome. Un
             // consiglio sbagliato e' peggio di un verde sbagliato, perche' chi lo segue rompe
             // qualcosa di suo con le proprie mani.
             //
-            // Cloudflare pubblica da anni almeno 15 ranges IPv4 e 7 IPv6. La soglia sta
+            // Cloudflare pubblica da anni almeno 15 intervalli IPv4 e 7 IPv6. La soglia sta
             // sotto apposta: deve scattare su una risposta rotta, non su un aggiornamento
             // legittimo della lista.
             final int MIN_V4 = 10, MIN_V6 = 5;
@@ -8799,7 +8799,7 @@ public final class UpdateManager {
      *  - "sysrc -x" su una variabile che non esiste ha un esito non documentato: in quel caso
      *    non lo si chiama nemmeno. Non si danno comandi al buio a un file di configurazione
      *    del boot.
-     *  - Il verdict NON si legge dai codici di uscita: si rilegge "sysrc -n" e si ricontrolla
+     *  - Il verdetto NON si legge dai codici di uscita: si rilegge "sysrc -n" e si ricontrolla
      *    il file. Un comando che "riesce" senza aver fatto la cosa e' il modo piu' comune di
      *    raccontarsi che e' andata bene.
      *
@@ -8851,7 +8851,7 @@ public final class UpdateManager {
             // 3. Lo script.
             if (installed) ok("rm -f " + path, 20);
 
-            // 4. Il verdict: si RILEGGE, non si deduce dai codici di uscita.
+            // 4. Il verdetto: si RILEGGE, non si deduce dai codici di uscita.
             JSONObject after = autoStart();
             r.put("after", after);
             boolean fileStays = after.optBoolean("installed", false);
@@ -10381,7 +10381,7 @@ public final class UpdateManager {
         }
     }
 
-    /** @param firmaApprovata l'fingerprint del piano mostrato dall'anteprima: si esegue quello o niente. */
+    /** @param approvedSignature l'impronta del piano mostrato dall'anteprima: si esegue quello o niente. */
     public static JSONObject startMaintenance(String approvedSignature) {
         if (approvedSignature == null || !approvedSignature.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
@@ -10391,7 +10391,7 @@ public final class UpdateManager {
         return startOnTurn(id, j, I18n.tr("server.um.x.turnMaintenance"), "update-maintenance", () -> runMaintenanceJob(j, approvedSignature));
     }
 
-    /** @param firmaApprovata la firma del piano letto nella scheda: si esegue quello o niente. */
+    /** @param approvedSignature la firma del piano letto nella scheda: si esegue quello o niente. */
     public static JSONObject startUnlockedPackagesUpdate(String approvedSignature) {
         if (approvedSignature == null || !approvedSignature.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
@@ -10735,7 +10735,7 @@ public final class UpdateManager {
             }
 
             // Aggiornare un pacchetto non aggiorna il processo che lo usa: finche' non riparte gira
-            // sui file vecchi, e la fix risulta installata senza essere in servizio. La
+            // sui file vecchi, e la correzione risulta installata senza essere in servizio. La
             // manutenzione completa non riavvia niente da sola (lo fa l'aggiornamento guidato, un
             // pacchetto alla volta), ma dice esattamente chi va riavviato.
             java.util.LinkedHashSet<String> toRestart = new java.util.LinkedHashSet<>();

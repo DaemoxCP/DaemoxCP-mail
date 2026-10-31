@@ -11,7 +11,7 @@ import java.util.List;
  * Da quale sendmail parte il rapporto, e come il pannello capisce com'e' andata.
  *
  * Il difetto del 25/09/2026: il sendmail si cercava nel PATH, si trovava /usr/sbin/sendmail,
- * cioe' mailwrapper, cioe' dma. dma consegnava da solo, in chiaro e senza signature DKIM, e il
+ * cioe' mailwrapper, cioe' dma. dma consegnava da solo, in chiaro e senza firma DKIM, e il
  * pannello scriveva "riuscito" perche' guardava solo il codice di uscita. Qui si prova che
  * mailwrapper non viene mai scelto, e che con le righe di dma nel log l'esito NON diventa
  * "consegnato": Postfix quel messaggio non l'ha visto.
@@ -24,7 +24,7 @@ public class ReportDeliveryTest {
     private static final String A = "owner@example.com";
 
     public static void main(String[] args) throws Exception {
-        // --- Consegnato a Gmail, con TLS: quello che deve succedere dopo la fix ---
+        // --- Consegnato a Gmail, con TLS: quello che deve succedere dopo la correzione ---
         // In mezzo ci sono le righe di un altro messaggio, che non devono confondere niente.
         List<String> gmail = List.of(
             "Sep 25 17:52:10 mail postfix/pickup[81234]: 4hB2Kq3Xz9zB6: uid=0 from=<noreply-mailserver@domain-b.test>",
