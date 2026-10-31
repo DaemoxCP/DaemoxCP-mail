@@ -32,8 +32,9 @@ import java.util.regex.Pattern;
  *       versione che non ne ha piu' bisogno (lo dice il catalogo), o non c'e';</li>
  *   <li>lo stesso per chi usa le sue librerie (pkg shlib);</li>
  *   <li>se legge un tipo di mappa di Postfix (lmdb, cdb, e Berkeley DB se fosse di pacchetto),
- *       ogni mappa di quel tipo ha il suo testo: dopo l'aggiornamento PostfixMaps la rigenera,
- *       perche' la libreria nuova potrebbe non leggere i file della vecchia.</li>
+ *       ogni mappa di quel tipo si puo' rigenerare uguale a prima: dopo l'aggiornamento
+ *       PostfixMaps la rigenera, perche' la libreria nuova potrebbe non leggere i file della
+ *       vecchia.</li>
  * </ol>
  *
  * <p>Misurato sulla VM il 31/10/2026 con pacchetti finti e librerie ELF vere: nel caso innocuo
@@ -42,7 +43,7 @@ import java.util.regex.Pattern;
  * dichiararla, pkg toglie la libreria e lascia il programma ROTTO («Shared object not found»).
  *
  * <p>Se qualcosa che resta installato sparirebbe o smetterebbe di funzionare, se una mappa di
- * Postfix non si potrebbe rigenerare dal suo testo, o se non si e' potuto misurare, il pannello
+ * Postfix non si potrebbe rigenerare uguale a prima, o se non si e' potuto misurare, il pannello
  * non la esegue (il committente, 31/10/2026: «questa cosa e' molto pericolosa»). Non c'e' modo di
  * confermarla: l'unico caso che si confermava, scrivendo il nome del pacchetto, era il formato dei
  * dati in uso, e adesso lo sistema il pannello da solo rigenerando le mappe (PostfixMaps).
@@ -97,7 +98,7 @@ final class PackageReplacement {
                     case REMOVED_TOO -> "server.replace.libraryRemoved";
                     case STAYS -> "server.replace.libraryStays";
                 }, Map.of("p", p, "lib", lib)))));
-        // 4. le mappe di Postfix che legge: si rigenerano dal loro testo, o si perderebbero
+        // 4. le mappe di Postfix che legge: si rigenerano uguali a prima, o si perderebbero
         if (f.dataFormat() != null && !f.dataFormat().isEmpty()) {
             if (f.dataUses().isEmpty())
                 ok.add(I18n.tr("server.replace.dataUnused", Map.of("fmt", f.dataFormat())));
@@ -189,8 +190,7 @@ final class PackageReplacement {
             libraryUsers.put(lib, users);
         }
 
-        // Le mappe di Postfix che le sue librerie leggono: senza testo, o con un database che non
-        // coincide col testo, non si rigenerano.
+        // Le mappe di Postfix che le sue librerie leggono e che dopo non si rigenererebbero uguali.
         Set<String> types = PostfixMaps.typesReadBy(name);
         List<String> lost = new ArrayList<>();
         PostfixMaps.unrebuildable(types).forEach((table, why) -> lost.add(table + ": " + why));
