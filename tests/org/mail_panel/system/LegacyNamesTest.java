@@ -38,7 +38,8 @@ public class LegacyNamesTest {
     static final String[] SECTIONS = {"files", "vmailFolders", "publicSurface", "bootEnvironmentPrefix",
             "jumpKeys", "jumpStepKeys", "jumpAsks", "jumpPhases", "inventoryFiles", "inventoryServiceStates",
             "javaScriptOutcomes", "reportFrequencies", "reportFailedPrefix",
-            "panelSignature", "dovecotSignature", "fail2banFilterSignature", "autoconfigMarker"};
+            "panelSignature", "dovecotSignature", "fail2banFilterSignature", "autoconfigMarker",
+            "damagedComments"};
 
     static int countOf(String text, String part) {
         int n = 0;
