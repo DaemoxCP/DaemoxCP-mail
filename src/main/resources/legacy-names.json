@@ -1,0 +1,60 @@
+{
+  "files": [
+    ["/var/db/mailpanel/pannello.log", "/var/db/mailpanel/panel.log"],
+    ["/var/db/mailpanel/riavvio.log", "/var/db/mailpanel/reboot.log"],
+    ["/var/db/mailpanel/pubblico", "/var/db/mailpanel/public"],
+    ["/var/db/mailpanel/prova-copia.sql", "/var/db/mailpanel/test-dump.sql"],
+    ["/var/db/mailpanel/ssl-precedente", "/var/db/mailpanel/ssl-previous"],
+    ["/var/db/mailpanel/mailpanel-pubblico.conf-precedente", "/var/db/mailpanel/mailpanel-public.conf-previous"],
+    ["/var/db/mailpanel/mailpanel.rc.prova", "/var/db/mailpanel/mailpanel.rc.test"],
+    ["/var/db/mailpanel/mailpanel.rc.rimosso", "/var/db/mailpanel/mailpanel.rc.removed"],
+    ["/var/db/mailpanel/mailpanel.rc.precedente", "/var/db/mailpanel/mailpanel.rc.previous"],
+    ["/var/db/mailpanel/master.cf-prima-della-465", "/var/db/mailpanel/master.cf-before-465"],
+    ["/var/db/mailpanel/nginx-prima-di-autoconfig.conf", "/var/db/mailpanel/nginx-before-autoconfig.conf"],
+    ["/var/db/mailpanel/nginx.conf-prima-di-include", "/var/db/mailpanel/nginx.conf-before-include"],
+    ["/var/db/mailpanel/sistema", "/var/db/mailpanel/system"],
+    ["/var/db/mailpanel/system/salto.json", "/var/db/mailpanel/system/version-jump.json"],
+    ["/var/db/mail-panel/copie-fail2ban", "/var/db/mail-panel/fail2ban-backups"],
+    ["/usr/local/etc/pkg/repos/zz-pannello-ramo.conf", "/usr/local/etc/pkg/repos/zz-panel-branch.conf"]
+  ],
+  "vmailFolders": [
+    [".archivio-pannello", ".panel-archive"]
+  ],
+  "publicSurface": [
+    ["mailpanel-pubblico", "mailpanel-public"]
+  ],
+  "bootEnvironmentPrefix": [
+    ["prima-di-", "before-"]
+  ],
+  "jumpKeys": [
+    ["fase", "phase"], ["passi", "steps"], ["bersaglio", "target"], ["ricostruzione", "rebuild"]
+  ],
+  "jumpStepKeys": [
+    ["giro", "round"], ["codice", "code"], ["chiede", "asks"]
+  ],
+  "jumpAsks": [
+    ["ancora", "again"], ["ancora-ricostruisci", "rebuild"]
+  ],
+  "jumpPhases": [
+    ["attende-riavvio", "awaiting-restart"], ["attende-riavvio-finale", "awaiting-final-restart"],
+    ["errore", "error"], ["finito", "finished"], ["troppi-giri", "too-many-rounds"]
+  ],
+  "inventoryFiles": [
+    ["versione.txt", "version.txt"], ["servizi.txt", "services.txt"], ["pacchetti.txt", "packages.txt"]
+  ],
+  "inventoryServiceStates": [
+    ["attivo", "active"]
+  ],
+  "javaScriptOutcomes": [
+    ["=== ESITO: RIUSCITO", "=== OUTCOME: SUCCEEDED"],
+    ["=== ESITO: ANNULLATO", "=== OUTCOME: CANCELLED"],
+    ["=== ESITO: DA CONTROLLARE", "=== OUTCOME: TO CHECK"],
+    ["=== ESITO:", "=== OUTCOME:"]
+  ],
+  "reportFrequencies": [
+    ["giornaliero", "daily"], ["settimanale", "weekly"], ["mensile", "monthly"]
+  ],
+  "reportFailedPrefix": [
+    ["fallito: ", "failed: "]
+  ]
+}

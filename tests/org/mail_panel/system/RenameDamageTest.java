@@ -40,23 +40,31 @@ public class RenameDamageTest {
         bad.stream().limit(10).forEach(b -> System.out.println("  " + b));
         check("nessuna stringa nomina una libreria .os invece di .so", bad.isEmpty());
 
-        // 2. PathMigration: un passo con lo stesso nome di qua e di la' non migra niente.
-        String pm = Files.readString(root.resolve("src/main/java/org/mail_panel/system/PathMigration.java"));
-        Matcher m = Pattern.compile("rename\\((?:db \\+ )?\"([^\"]+)\",\\s*(?:db \\+ )?\"([^\"]+)\"\\)").matcher(pm);
+        // 2. I nomi di prima stanno nel file di dati: una coppia con lo stesso nome di qua e di la'
+        //    non migra niente (una rinomina fatta a testo li cambierebbe tutti e due).
+        org.json.JSONObject legacy = new org.json.JSONObject(Files.readString(root.resolve("src/main/resources/legacy-names.json")));
         int pairs = 0; List<String> same = new ArrayList<>();
-        while (m.find()) { pairs++; if (m.group(1).equals(m.group(2))) same.add(m.group(1)); }
+        for (String section : legacy.keySet()) {
+            org.json.JSONArray a = legacy.getJSONArray(section);
+            for (int i = 0; i < a.length(); i++) {
+                pairs++;
+                if (a.getJSONArray(i).getString(0).equals(a.getJSONArray(i).getString(1))) same.add(section + ": " + a.getJSONArray(i).getString(0));
+            }
+        }
         same.forEach(x -> System.out.println("  stesso nome: " + x));
-        check("PathMigration: " + pairs + " passi, ognuno da un nome vecchio a uno nuovo", pairs > 0 && same.isEmpty());
+        check("legacy-names.json: " + pairs + " coppie, ognuna da un nome vecchio a uno nuovo", pairs > 0 && same.isEmpty());
 
         // 3. il php.ini di Roundcube carica le estensioni col loro nome vero.
         String rc = Files.readString(root.resolve("src/main/java/org/mail_panel/scripts/RoundcubeScript.java"));
         check("Roundcube: extension=pdo_mysql.so e intl.so nel php.ini",
                 rc.contains("extension=pdo_mysql.so") && rc.contains("extension=intl.so"));
 
-        // 4. il profilo Apple tiene l'identificatore che i dispositivi conoscono.
+        // 4. il profilo Apple tiene l'identificatore che i dispositivi conoscono (dal 30/10/2026:
+        //    cambiarlo ancora farebbe installare un secondo profilo accanto al primo).
         String ap = Files.readString(root.resolve("src/main/java/org/mail_panel/system/AppleProfile.java"));
-        check("profilo Apple: PayloadIdentifier ...posta e seme \"posta:\" invariati",
-                ap.contains("<string>%s.posta</string>") && ap.contains("deterministic(\"posta:\""));
+        check("profilo Apple: PayloadIdentifier ...mail e semi \"mail:\" e \"profile:\" invariati",
+                ap.contains("<string>%s.mail</string>") && ap.contains("deterministic(\"mail:\"")
+                        && ap.contains("deterministic(\"profile:\""));
 
         System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
         if (failures > 0) System.exit(1);

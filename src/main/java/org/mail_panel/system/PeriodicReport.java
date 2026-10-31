@@ -72,32 +72,34 @@ public final class PeriodicReport {
     // ===================== impostazioni =====================
 
     /**
-     * La frequenza salvata, con i nomi di adesso. Fino al 24/10/2026 si salvava "giornaliero",
-     * "settimanale" o "mensile": una pianificazione gia' fatta deve continuare a valere.
+     * La frequenza salvata, con i nomi di adesso. Fino al 24/10/2026 si salvava coi nomi di prima
+     * (file di dati, reportFrequencies): una pianificazione gia' fatta deve continuare a valere.
      */
     static String normalizedFrequency(String f) {
-        return switch (f) {
-            case "giornaliero" -> "daily";
-            case "settimanale" -> "weekly";
-            case "mensile" -> "monthly";
-            default -> f;
-        };
+        return LegacyNames.current("reportFrequencies", f);
     }
 
     /** L'esito di un invio fallito comincia cosi', e lo scheduler lo riconosce da qui. */
     static final String FAILED_PREFIX = "failed: ";
-    /** Il prefisso che si scriveva fino al 24/10/2026: un esito gia' salvato va riconosciuto. */
-    static final String OLD_FAILED_PREFIX = "fallito: ";
+    /**
+     * L'esito col prefisso di adesso. Fino al 24/10/2026 se ne scriveva un altro (file di dati,
+     * reportFailedPrefix): un esito gia' salvato va riconosciuto.
+     */
+    static String currentOutcome(String outcome) {
+        for (String old : LegacyNames.oldNamesOf("reportFailedPrefix", FAILED_PREFIX))
+            if (!old.isEmpty() && outcome.startsWith(old)) return FAILED_PREFIX + outcome.substring(old.length());
+        return outcome;
+    }
 
     static boolean isFailedOutcome(String outcome) {
-        return outcome.startsWith(FAILED_PREFIX) || outcome.startsWith(OLD_FAILED_PREFIX);
+        return currentOutcome(outcome).startsWith(FAILED_PREFIX);
     }
 
     /** L'esito come lo legge chi apre la pagina: il prefisso e' un codice, non un testo. */
     static String shownOutcome(String outcome) {
-        for (String p : new String[]{FAILED_PREFIX, OLD_FAILED_PREFIX})
-            if (outcome.startsWith(p))
-                return I18n.tr("server.rp.lastFailed", java.util.Map.of("error", outcome.substring(p.length())));
+        String o = currentOutcome(outcome);
+        if (o.startsWith(FAILED_PREFIX))
+            return I18n.tr("server.rp.lastFailed", java.util.Map.of("error", o.substring(FAILED_PREFIX.length())));
         return outcome;
     }
 

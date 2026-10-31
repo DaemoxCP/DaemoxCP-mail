@@ -689,7 +689,7 @@ public class AutoDns {
                     // e le due sembravano diverse mentre erano lo stesso record scritto in due
                     // formati: manca solo la priorita', che Cloudflare tiene da parte.
                     sb.append(fullSrv(t));
-                    if (t.proxied) sb.append("  (proxato)");
+                    if (t.proxied) sb.append("  (").append(I18n.tr("server.adns.proxiedTag")).append(")");
                 }
                 j.put("content", sb.toString());
                 boolean proxied = false;

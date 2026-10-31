@@ -209,7 +209,7 @@ public class Autoconfig {
         // Prima era "nomeCoperto && rottaPresente", cioe' il risultato di una ricerca dentro
         // nginx.conf del marcatore che questa classe stessa scrive. Ma la rotta puo' stare
         // altrove — e sta altrove: la scheda della 443 la installa in
-        // conf.d/mailpanel-pubblico.conf, che serve esattamente questi due file, la politica
+        // conf.d/mailpanel-public.conf, che serve esattamente questi due file, la politica
         // MTA-STS e questo XML. Risultato: il pannello scaricava il file davvero, lo otteneva,
         // e un attimo dopo dichiarava che nginx non lo serve e che i client devono
         // configurarsi a mano. Il commento qui sopra diceva gia' quale delle due misure ha
@@ -253,7 +253,7 @@ public class Autoconfig {
 
     private static JSONObject testDownload(String name, String domain) {
         JSONObject r = new JSONObject();
-        String url = "https://" + name + "/mail/config-v1.1.xml?emailaddress=prova@" + domain;
+        String url = "https://" + name + "/mail/config-v1.1.xml?emailaddress=test@" + domain;
         r.put("url", url);
         try {
             java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()
@@ -377,7 +377,7 @@ public class Autoconfig {
             // sintassi. Quindi la decisione va presa qui, prima di scrivere.
             if (WebProtection.state().optBoolean("installed", false))
                 return r.put("success", false).put("alreadyElsewhere", true)
-                        .put("error", I18n.tr("server.autoconf.publicSurface") + " " + st.optString("why", ""));
+                        .put("error", I18n.tr("server.autoconf.publicSurface", java.util.Map.of("file", WebProtection.FILE_NAME)) + " " + st.optString("why", ""));
 
             // Quali politiche MTA-STS rispondono PRIMA di toccare qualcosa. Senza questa
             // fotografia, dopo non c'e' modo di sapere se una l'ho rotta io.

@@ -104,7 +104,7 @@
                 changes.appendChild(li);
             });
             card.appendChild(changes);
-            const warnings = branchEl('ul', 'small testo-avviso mb-2');
+            const warnings = branchEl('ul', 'small text-caution mb-2');
             (r.warnings || []).forEach(a => warnings.appendChild(branchEl('li', '', a)));
             card.appendChild(warnings);
             const where = branchEl('p', 'small mb-1');

@@ -1034,7 +1034,7 @@ public class MtaStsSetup {
 
     private static boolean jailActive() {
         try {
-            ProcessBuilder pb = new ProcessBuilder("fail2ban-client", "status", "mailpanel-pubblico");
+            ProcessBuilder pb = new ProcessBuilder("fail2ban-client", "status", WebProtection.NAME);
             Shell.applyPath(pb);
             pb.redirectErrorStream(true);
             Process p = pb.start();

@@ -30,13 +30,13 @@ public class MailPanelContent {
     private static String resource(String path) {
         try (java.io.InputStream in = MailPanelContent.class.getResourceAsStream("/" + path)) {
             if (in == null) {
-                System.err.println("[Contenuto] risorsa mancante nel jar: " + path);
-                return "<!-- risorsa mancante: " + path + " -->";
+                System.err.println("[Content] resource missing from the jar: " + path);
+                return "<!-- missing resource: " + path + " -->";
             }
             return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception e) {
-            System.err.println("[Contenuto] non riesco a leggere " + path + ": " + e.getMessage());
-            return "<!-- risorsa illeggibile: " + path + " -->";
+            System.err.println("[Content] cannot read " + path + ": " + e.getMessage());
+            return "<!-- unreadable resource: " + path + " -->";
         }
     }
 
@@ -237,10 +237,10 @@ public class MailPanelContent {
            text-success, text-warning e text-danger di Bootstrap sul fondo scuro stanno sotto
            il contrasto minimo di 4.5:1 (gli stessi colori del pannello web). */
         .text-ok { color: #146c43; }
-        .testo-avviso { color: #7a4e00; }
+        .text-caution { color: #7a4e00; }
         .text-risk { color: #b02a37; }
         [data-theme="dark"] .text-ok { color: #75d9a3; }
-        [data-theme="dark"] .testo-avviso { color: #ffcf5c; }
+        [data-theme="dark"] .text-caution { color: #ffcf5c; }
         [data-theme="dark"] .text-risk { color: #f1aeb5; }
         /* ===== Telefono e tablet: sotto i 992px niente deve allargare la pagina =====
            Una pagina piu' larga della finestra scorre tutta in orizzontale. Regole per i casi che si
@@ -1362,7 +1362,7 @@ public class MailPanelContent {
             }
             cell.appendChild(lineItem);
             [[v.detail, 'small text-muted'], [v.pkgName ? t('ver.package', { name: v.pkgName }) : '', 'small text-muted'],
-             [v.restartNote, 'small testo-avviso'], [v.warning, 'small text-risk']].forEach(([textValue, cssClass]) => {
+             [v.restartNote, 'small text-caution'], [v.warning, 'small text-risk']].forEach(([textValue, cssClass]) => {
                 if (!textValue) return;
                 const d = document.createElement('div');
                 d.className = cssClass;
@@ -2031,11 +2031,11 @@ public class MailPanelContent {
                             <legend class="fs-6 float-none w-auto px-1 mb-0">{{t:ac.oldMail}}</legend>
                             <p class="small mb-2" id="acMailInfo"></p>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acPosta" id="acRecover" value="recover">
+                                <input class="form-check-input" type="radio" name="acMail" id="acRecover" value="recover">
                                 <label class="form-check-label" for="acRecover">{{t:ac.recover}}</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acPosta" id="acArchive" value="archive">
+                                <input class="form-check-input" type="radio" name="acMail" id="acArchive" value="archive">
                                 <label class="form-check-label" for="acArchive">{{t:ac.archive}}</label>
                             </div>
                         </fieldset>
@@ -2151,7 +2151,7 @@ public class MailPanelContent {
             if (!pwCheck('acPass')) return;
             let mail = '';
             if (acInfo.mail) {
-                const choice = document.querySelector('input[name="acPosta"]:checked');
+                const choice = document.querySelector('input[name="acMail"]:checked');
                 if (!choice) { err.textContent = t('ac.chooseMail'); return; }
                 mail = choice.value;
             }
@@ -2182,7 +2182,7 @@ public class MailPanelContent {
             });
         }
         // Fatta la scelta sulla posta di prima, l'avviso che la chiedeva non serve piu'.
-        document.querySelectorAll('input[name="acPosta"]').forEach(x => x.addEventListener('change', () => {
+        document.querySelectorAll('input[name="acMail"]').forEach(x => x.addEventListener('change', () => {
             document.getElementById('acErr').textContent = '';
         }));
 """;
@@ -12565,7 +12565,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 h += '<button class="btn btn-sm btn-outline-primary" onclick="where24()">'
                    + '<i class="fas fa-file-lines me-1" aria-hidden="true"></i>' + escHtml(t('up.see24')) + '</button>'
-                   + '<div id="dove24-body" class="mt-2"></div>';
+                   + '<div id="where24-body" class="mt-2"></div>';
             }
 
             // ---------- Postfix: non una rottura annunciata, ma la rete di sicurezza ----------
@@ -13311,7 +13311,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // una nuova release, una nuova Roundcube, una nuova JVM. Tenerle spalancate significa
         // scorrere ogni volta attraverso cose gia' fatte per arrivare a quelle da leggere.
         const PROCEDURE = ['proc-release', 'proc-python', 'proc-jvm',
-                           'proc-roundcube', 'proc-mysql', 'proc-protetto'];
+                           'proc-roundcube', 'proc-mysql'];
 
         function procOpen(id, forced) {
             const c = document.getElementById(id), tog = document.getElementById(id + '-tog');
@@ -13330,9 +13330,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 let wanted = null;
                 try { wanted = localStorage.getItem('mp-' + id); } catch (e) { }
                 // Chiuse per impostazione predefinita: si aprono se le hai aperte tu.
-                // 'aperta' e' come lo salvava la pagina fino al 24/10/2026: chi aveva lasciato una
-                // scheda aperta la ritrova aperta.
-                procOpen(id, wanted === 'open' || wanted === 'aperta');
+                procOpen(id, wanted === 'open');
                 // E si aprono DA SOLE quando hanno qualcosa da dire: premere un pulsante
                 // dell'intestazione scrive nel corpo, e un corpo nascosto non si vedrebbe.
                 try {
@@ -13426,7 +13424,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- anteprima della configurazione Dovecot 2.4 ----------
         async function where24() {
-            const el = document.getElementById('dove24-body');
+            const el = document.getElementById('where24-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.buildingPreview')) + '';
             const r = await updApi('dovecot24_preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }

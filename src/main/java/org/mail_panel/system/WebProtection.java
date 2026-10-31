@@ -49,12 +49,21 @@ import java.nio.file.Path;
  */
 public class WebProtection {
 
+    /**
+     * Il nome della superficie pubblica sul sistema: il file di nginx, il suo log, il filtro e
+     * la jail di fail2ban, e quindi l'ancora e la tabella di pf (f2b/NAME, f2b-NAME). Viaggia
+     * fra tre servizi: nginx scrive il log che fail2ban legge. Fino al 30/10/2026 era
+     * "mailpanel-pubblico": i server installati prima li sposta PublicSurfaceRename all'avvio.
+     */
+    public static final String NAME = "mailpanel-public";
+
     private static final String NGINX_PREFIX = "/usr/local/etc/nginx";
-    private static final String FILE_NAME = "mailpanel-pubblico.conf";
-    private static final String COPY = "/var/db/mailpanel/mailpanel-public.conf-previous";
+    static final String FILE_NAME = NAME + ".conf";
+    private static final String COPY = "/var/db/mailpanel/" + NAME + ".conf-previous";
     public static final String PUBLIC_DIR = "/var/db/mailpanel/public";
     public static final String POLICY_FILE = PUBLIC_DIR + "/mta-sts.txt";
-    public static final String ACCESS_LOG = "/var/log/nginx/mailpanel-pubblico-access.log";
+    static final String LOG_DIR = "/var/log/nginx";
+    public static final String ACCESS_LOG = LOG_DIR + "/" + NAME + "-access.log";
 
     private WebProtection() {}
 
@@ -423,8 +432,9 @@ public class WebProtection {
      * La jail fail2ban
      * =================================================================== */
 
-    private static final String FILTER = "/usr/local/etc/fail2ban/filter.d/mailpanel-pubblico.conf";
-    private static final String JAIL   = "/usr/local/etc/fail2ban/jail.d/mailpanel-pubblico.conf";
+    static final String F2B_DIR = "/usr/local/etc/fail2ban";
+    static final String FILTER = F2B_DIR + "/filter.d/" + NAME + ".conf";
+    public static final String JAIL = F2B_DIR + "/jail.d/" + NAME + ".conf";
 
     /**
      * Il filtro guarda SOLO il log di questo sito, e solo le risposte 404, 405 e 429.
@@ -449,10 +459,10 @@ public class WebProtection {
     public static String jail() {
         return """
             # Scritto dal pannello di posta.
-            [mailpanel-pubblico]
+            [%1$s]
             enabled  = true
-            filter   = mailpanel-pubblico
-            logpath  = %s
+            filter   = %1$s
+            logpath  = %2$s
             maxretry = 10
             findtime = 600
             bantime  = 3600
@@ -481,8 +491,8 @@ public class WebProtection {
             # quattro jail di posta, che il confronto con pf mostra avere tabella E regola. Fra
             # cio' che la documentazione lascia intendere e cio' che il server fa vedere, vince
             # il server.
-            action   = pf[name=mailpanel-pubblico, port="http,https"]
-            """.formatted(ACCESS_LOG);
+            action   = pf[name=%1$s, port="http,https"]
+            """.formatted(NAME, ACCESS_LOG);
     }
 
     /** Installa filtro e jail, e verifica che fail2ban la veda davvero attiva. */
@@ -508,7 +518,7 @@ public class WebProtection {
             }
 
             // Non basta che il reload sia andato: si chiede a fail2ban se la vede.
-            RunResult st = run("fail2ban-client", "status", "mailpanel-pubblico");
+            RunResult st = run("fail2ban-client", "status", NAME);
             if (st.code != 0)
                 return r.put("success", false)
                         .put("error", I18n.tr("server.pubweb.jailNotActive", java.util.Map.of("out", String.valueOf(st.output.trim()))));

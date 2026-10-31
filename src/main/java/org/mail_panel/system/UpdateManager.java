@@ -4642,14 +4642,14 @@ public final class UpdateManager {
             if (last.isEmpty())
                 return new JSONObject().put("success", true).put("present", false);
             String text = sh("cat " + last + " 2>/dev/null", 30);
-            // Il registro di uno script scritto prima del 29/10/2026 ha i marcatori in italiano.
-            boolean finished = text.contains("=== OUTCOME:") || text.contains("=== ESITO:");
-            boolean succeeded = text.contains("=== OUTCOME: SUCCEEDED") || text.contains("=== ESITO: RIUSCITO");
+            // Il registro di uno script scritto prima del 29/10/2026 ha i marcatori di prima:
+            // si portano ai nomi di adesso (file di dati), poi si guarda solo quelli.
+            for (String[] m : LegacyNames.pairs("javaScriptOutcomes")) text = text.replace(m[0], m[1]);
+            boolean finished = text.contains("=== OUTCOME:");
+            boolean succeeded = text.contains("=== OUTCOME: SUCCEEDED");
             // I marcatori restano fissi nel file (si rileggono qui sopra); a chi legge si mostrano
             // nella sua lingua
-            String shown = text.replace("=== ESITO: RIUSCITO", "=== OUTCOME: SUCCEEDED").replace("=== ESITO: ANNULLATO", "=== OUTCOME: CANCELLED")
-                    .replace("=== ESITO: DA CONTROLLARE", "=== OUTCOME: TO CHECK")
-                    .replace("=== OUTCOME: SUCCEEDED", "=== " + I18n.tr("server.um.jvs.outcomeOk"))
+            String shown = text.replace("=== OUTCOME: SUCCEEDED", "=== " + I18n.tr("server.um.jvs.outcomeOk"))
                     .replace("=== OUTCOME: CANCELLED", "=== " + I18n.tr("server.um.jvs.outcomeCancelled"))
                     .replace("=== OUTCOME: TO CHECK", "=== " + I18n.tr("server.um.jvs.outcomeCheck"));
             return new JSONObject().put("success", true).put("present", true)
@@ -5247,7 +5247,7 @@ public final class UpdateManager {
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
             String bk = "/var/db/mailpanel/python/" + ts;
             if (!ok("mkdir -p " + bk, 30)) throw new IllegalStateException("cannot create " + bk);
-            sh("pkg query '%n %v' > " + bk + "/pacchetti-prima.txt 2>/dev/null", 60);
+            sh("pkg query '%n %v' > " + bk + "/packages-before.txt 2>/dev/null", 60);
             for (String d : new String[]{"/usr/local/etc/fail2ban", "/usr/local/etc/letsencrypt"}) {
                 if (!ok("test -d " + d, 10)) { job.write(I18n.tr("server.um.runPythonTransition.5", java.util.Map.of("d", String.valueOf(d)))); continue; }
                 String name = d.substring(d.lastIndexOf('/') + 1);
@@ -6757,7 +6757,7 @@ public final class UpdateManager {
                     if (relocked) relockedCount++;
                     else job.write(I18n.tr("server.um.runGuidedUpdate.41", java.util.Map.of("m", String.valueOf(m))));
                 }
-                job.write("  " + relockedCount + "/" + toRelock2.size() + " riprotetti");
+                job.write("  " + I18n.tr("server.um.x.reprotectedCount", java.util.Map.of("n", String.valueOf(relockedCount), "tot", String.valueOf(toRelock2.size()))));
                 if (relockedCount == toRelock2.size()) clearState();
                 else {
                     job.write(I18n.tr("server.um.runPythonTransition.21", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
@@ -8921,7 +8921,7 @@ public final class UpdateManager {
                 return r.put("success", false)
                         .put("error", I18n.tr("server.um.panelRcScript.3", java.util.Map.of("syntax", String.valueOf(syntaxCheck))));
             }
-            if (exists) ok("cp -p " + path + " /var/db/mailpanel/mailpanel.rc.precedente", 20);
+            if (exists) ok("cp -p " + path + " /var/db/mailpanel/mailpanel.rc.previous", 20);
             Files.writeString(Paths.get(path), text);
             ok("chmod 755 " + path, 15);
             ok("rm -f " + tmp, 15);
@@ -9214,7 +9214,7 @@ public final class UpdateManager {
             job.advance(3, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runSystemPreparation.4", java.util.Map.of("total", String.valueOf(TOT))));
-            String beName = "prima-di-" + target.replace(".", "") + "-" + ts;
+            String beName = BE_PREFIX + target.replace(".", "") + "-" + ts;
             if (!pf.optBoolean("bootEnvironment", false)) {
                 job.write(I18n.tr("server.um.runSystemPreparation.5"));
                 job.write(I18n.tr("server.um.runSystemPreparation.6"));
@@ -9290,7 +9290,7 @@ public final class UpdateManager {
             if (target == null || !target.matches("[0-9]{1,2}\\.[0-9]{1,2}"))
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.systemUpgradeInstructions.1"));
             JSONObject pf = systemUpgradePreflight(target);
-            String be = sh("bectl list -H 2>/dev/null | grep '^prima-di-' | tail -1 | awk '{print $1}'", 30).trim();
+            String be = lastPanelBootEnvironment(sh("bectl list -H 2>/dev/null", 30));
             String startup = startCommand(false);
             String dir = System.getProperty("user.dir", "/home/panel");
             boolean minor = pf.optBoolean("minorJump", true);
@@ -9412,16 +9412,48 @@ public final class UpdateManager {
         } catch (Exception e) { return new JSONObject(); }
     }
 
-    /** Le chiavi che lo stato del salto aveva prima del 24/10/2026, con il nome di adesso. */
-    private static final String[][] OLD_JUMP_KEYS = {
-        {"fase", "phase"}, {"passi", "steps"}, {"bersaglio", "target"}, {"ricostruzione", "rebuild"}};
-    private static final String[][] OLD_JUMP_STEP_KEYS = {{"giro", "round"}, {"codice", "code"}, {"chiede", "asks"}};
-    /** I valori di "asks" scritti prima del 29/10/2026. */
-    private static final String[][] OLD_JUMP_ASKS = {{"ancora", "again"}, {"ancora-ricostruisci", "rebuild"}};
-    /** E le fasi, che sono valori: "attende-riavvio" eccetera. */
-    private static final String[][] OLD_JUMP_PHASES = {
-        {"attende-riavvio", "awaiting-restart"}, {"attende-riavvio-finale", "awaiting-final-restart"},
-        {"errore", "error"}, {"finito", "finished"}, {"troppi-giri", "too-many-rounds"}};
+    // Le chiavi e i valori che lo stato del salto aveva prima del 24 e del 29/10/2026 stanno nel
+    // file di dati (LegacyNames: jumpKeys, jumpStepKeys, jumpAsks, jumpPhases), non qui.
+
+    /** Il prefisso dei boot environment che il pannello crea prima di un salto di release. */
+    static final String BE_PREFIX = "before-";
+
+    /**
+     * Un boot environment creato dal pannello: col prefisso di adesso o con quello delle versioni
+     * di prima (file di dati), che sui server gia' avviati c'e' ancora.
+     */
+    static boolean panelBootEnvironment(String name) {
+        if (name.startsWith(BE_PREFIX)) return true;
+        for (String old : LegacyNames.oldNamesOf("bootEnvironmentPrefix", BE_PREFIX))
+            if (!old.isEmpty() && name.startsWith(old)) return true;
+        return false;
+    }
+
+    /**
+     * La via di ritorno piu' recente, da "bectl list -H": l'ultimo creato col prefisso di adesso
+     * e, solo se non ce n'e', l'ultimo col prefisso di prima. Un nome di adesso e' sempre piu'
+     * recente di uno di prima, anche se nell'elenco alfabetico viene prima.
+     */
+    static String lastPanelBootEnvironment(String bectlList) {
+        String now = "", before = "";
+        for (String line : bectlList == null ? new String[0] : bectlList.split("\n")) {
+            String name = line.split("\t")[0].trim();
+            if (name.startsWith(BE_PREFIX)) now = name;
+            else if (panelBootEnvironment(name)) before = name;
+        }
+        return now.isEmpty() ? before : now;
+    }
+
+    /**
+     * "cat" di un file dell'inventario preso prima di un salto: il nome di adesso e, se manca,
+     * quelli delle copie fatte dalle versioni di prima (file di dati).
+     */
+    static String inventoryCat(String dir, String name) {
+        StringBuilder c = new StringBuilder("cat " + dir + "/" + name + " 2>/dev/null");
+        for (String old : LegacyNames.oldNamesOf("inventoryFiles", name))
+            c.append(" || cat ").append(dir).append('/').append(old).append(" 2>/dev/null");
+        return c.toString();
+    }
 
     /**
      * Lo stato di un salto scritto dal pannello di prima, letto con i nomi di adesso.
@@ -9432,18 +9464,16 @@ public final class UpdateManager {
      * dichiarerebbe mai cominciato. Una chiave nuova gia' presente vince: non si sovrascrive.
      */
     static JSONObject upgradeOldJumpState(JSONObject st) {
-        for (String[] k : OLD_JUMP_KEYS)
+        for (String[] k : LegacyNames.pairs("jumpKeys"))
             if (st.has(k[0]) && !st.has(k[1])) st.put(k[1], st.remove(k[0]));
-        for (String[] p : OLD_JUMP_PHASES)
-            if (p[0].equals(st.optString("phase"))) st.put("phase", p[1]);
+        if (st.has("phase")) st.put("phase", LegacyNames.current("jumpPhases", st.optString("phase")));
         JSONArray steps = st.optJSONArray("steps");
         for (int i = 0; steps != null && i < steps.length(); i++) {
             JSONObject s = steps.optJSONObject(i);
             if (s == null) continue;
-            for (String[] k : OLD_JUMP_STEP_KEYS)
+            for (String[] k : LegacyNames.pairs("jumpStepKeys"))
                 if (s.has(k[0]) && !s.has(k[1])) s.put(k[1], s.remove(k[0]));
-            for (String[] v : OLD_JUMP_ASKS)
-                if (v[0].equals(s.optString("asks"))) s.put("asks", v[1]);
+            if (s.has("asks")) s.put("asks", LegacyNames.current("jumpAsks", s.optString("asks")));
         }
         return st;
     }
@@ -9644,10 +9674,11 @@ public final class UpdateManager {
                 boolean inUse = active.contains("N");
                 boolean atRestart = active.contains("R");
 
-                // Chi l'ha creato si capisce dal nome: il pannello usa "prima-di-", e
-                // freebsd-update usa <versione>_<data>. Saperlo cambia cosa significa tenerlo.
+                // Chi l'ha creato si capisce dal nome: il pannello usa BE_PREFIX (o il prefisso
+                // delle versioni di prima), e freebsd-update usa <versione>_<data>. Saperlo cambia
+                // cosa significa tenerlo.
                 String origin, explain;
-                if (name.startsWith("prima-di-")) {
+                if (panelBootEnvironment(name)) {
                     origin = I18n.tr("server.um.bootEnvironments.2");
                     explain = I18n.tr("server.um.bootEnvironments.3");
                 } else if (name.matches("^[0-9]+\\.[0-9].*_[0-9]{4}-[0-9]{2}-[0-9]{2}.*")) {
@@ -9735,7 +9766,7 @@ public final class UpdateManager {
             r.put("inventory", dir);
 
             JSONObject os = operatingSystem();
-            String before = sh("(cat " + dir + "/version.txt 2>/dev/null || cat " + dir + "/versione.txt 2>/dev/null) | tr '\n' ' '", 30).trim();
+            String before = sh("(" + inventoryCat(dir, "version.txt") + ") | tr '\n' ' '", 30).trim();
             addCheck(checks, "ver", I18n.tr("server.um.x.version"), "ok",
                     I18n.tr("server.um.x.versionBeforeNow", java.util.Map.of("before", String.valueOf(before), "k", String.valueOf(os.optString("installedKernel")), "l", String.valueOf(os.optString("userland")))));
             if (os.optBoolean("restartNeeded")) {
@@ -9749,10 +9780,10 @@ public final class UpdateManager {
             // Servizi: quelli che erano attivi prima devono esserlo adesso.
             java.util.List<String> off = new ArrayList<>(), absent = new ArrayList<>();
             int checked = 0;
-            // Una copia fatta prima del 24/10/2026 ha il file col nome italiano e "attivo".
-            for (String line : sh("cat " + dir + "/services.txt 2>/dev/null || cat " + dir + "/servizi.txt 2>/dev/null", 30).split("\n")) {
+            // Una copia fatta prima del 24/10/2026 ha il file e lo stato coi nomi di prima.
+            for (String line : sh(inventoryCat(dir, "services.txt"), 30).split("\n")) {
                 String[] c = line.trim().split("\\s+");
-                if (c.length != 2 || !("active".equals(c[1]) || "attivo".equals(c[1]))) continue;
+                if (c.length != 2 || !"active".equals(LegacyNames.current("inventoryServiceStates", c[1]))) continue;
                 checked++;
                 if (!ok("test -f /usr/local/etc/rc.d/" + c[0] + " -o -f /etc/rc.d/" + c[0], 10)) { absent.add(c[0]); continue; }
                 if (!ok("service " + c[0] + " status", 20)) off.add(c[0]);
@@ -9773,8 +9804,8 @@ public final class UpdateManager {
             }
             java.util.List<String> missing = new ArrayList<>(), different = new ArrayList<>();
             int totalBefore = 0;
-            // Una copia fatta prima del 29/10/2026 ha il file col nome italiano, pacchetti.txt.
-            for (String line : sh("cat " + dir + "/packages.txt 2>/dev/null || cat " + dir + "/pacchetti.txt 2>/dev/null", 60).split("\n")) {
+            // Una copia fatta prima del 29/10/2026 ha il file col nome di prima.
+            for (String line : sh(inventoryCat(dir, "packages.txt"), 60).split("\n")) {
                 String[] c = line.trim().split("\\s+");
                 if (c.length != 2) continue;
                 totalBefore++;
@@ -10286,10 +10317,10 @@ public final class UpdateManager {
         } finally {
             if (!unlockedPackages.isEmpty()) {
                 job.write("");
-                job.write("Riproteggo...");
+                job.write(I18n.tr("server.um.x.reprotecting", java.util.Map.of("n", String.valueOf(unlockedPackages.size()))));
                 int n = 0;
                 for (String p2 : unlockedPackages) if (ok("pkg info -e " + p2, 15) && ok("pkg lock -y " + p2, 30)) n++;
-                job.write("  " + n + "/" + unlockedPackages.size() + " riprotetti");
+                job.write("  " + I18n.tr("server.um.x.reprotectedCount", java.util.Map.of("n", String.valueOf(n), "tot", String.valueOf(unlockedPackages.size()))));
                 if (n == unlockedPackages.size()) clearState();
             }
             job.finishedAt = System.currentTimeMillis();
