@@ -6771,8 +6771,9 @@ public final class UpdateManager {
             // E la configurazione con gli indirizzi in ascolto, nello stesso istante: il piano
             // dice quali pacchetti cambiano, non che cosa i loro script riscrivono.
             sideEffects.takeBefore();
-            // Chi legge ogni tipo di mappa di Postfix, prima: se dopo e' cambiato, si rigenerano.
-            Map<String, String> mapReadersBefore = PostfixMaps.librarySignature();
+            // Chi legge ogni tipo di mappa di Postfix, e quali mappe non coincidono col loro testo,
+            // prima: se dopo la libreria e' cambiata, si rigenerano le altre.
+            PostfixMaps.Before mapsBefore = PostfixMaps.before();
             // -U: stesso catalogo su cui e' stato calcolato il piano. Riscaricarlo adesso potrebbe
             // portare versioni diverse da quelle approvate.
             int code = runLogged(job, "pkg upgrade -y -U" + list + " 2>&1", 1800, captured);
@@ -6797,7 +6798,7 @@ public final class UpdateManager {
             sideEffects.checkConfig(job, plan, outsidePlan, !services.isEmpty());
             // Le mappe prima del riavvio dei servizi, e anche se pkg e' uscito con un errore: e'
             // proprio quando la macchina puo' essere rimasta a meta'.
-            String mapsProblem = PostfixMaps.afterUpgrade(mapReadersBefore, l -> job.write("  " + l)).problem();
+            String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
 
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
             if (mapsProblem != null) throw new IllegalStateException(mapsProblem);
@@ -10671,8 +10672,9 @@ public final class UpdateManager {
             job.write("");
             // L'uscita si tiene anche qui, per ripescare alla fine i messaggi degli script.
             StringBuilder captured = new StringBuilder();
-            // Chi legge ogni tipo di mappa di Postfix, prima: se dopo e' cambiato, si rigenerano.
-            Map<String, String> mapReadersBefore = PostfixMaps.librarySignature();
+            // Chi legge ogni tipo di mappa di Postfix, e quali mappe non coincidono col loro testo,
+            // prima: se dopo la libreria e' cambiata, si rigenerano le altre.
+            PostfixMaps.Before mapsBefore = PostfixMaps.before();
             // -U: lo stesso catalogo su cui e' stato calcolato il piano. Prima era senza, cioe'
             // riscaricava il catalogo e poteva installare versioni diverse da quelle mostrate.
             int code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
@@ -10682,7 +10684,7 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runUpdateJob.3"));
                 code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
             }
-            String mapsProblem = PostfixMaps.afterUpgrade(mapReadersBefore, l -> job.write("  " + l)).problem();
+            String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
 
             job.write("");
             job.write(I18n.tr("server.um.runMaintenanceJob.13"));
@@ -10894,8 +10896,9 @@ public final class UpdateManager {
             sideEffects.takeBefore();
             // L'uscita si tiene anche qui, per ripescare alla fine i messaggi degli script.
             StringBuilder captured = new StringBuilder();
-            // Chi legge ogni tipo di mappa di Postfix, prima: se dopo e' cambiato, si rigenerano.
-            Map<String, String> mapReadersBefore = PostfixMaps.librarySignature();
+            // Chi legge ogni tipo di mappa di Postfix, e quali mappe non coincidono col loro testo,
+            // prima: se dopo la libreria e' cambiata, si rigenerano le altre.
+            PostfixMaps.Before mapsBefore = PostfixMaps.before();
             // -U: lo stesso catalogo su cui e' stato calcolato il piano.
             int code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
             // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso. Le versioni recenti si rilanciano
@@ -10904,7 +10907,7 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runUpdateJob.3"));
                 code = runLogged(job, "pkg upgrade -y -U 2>&1", 3600, captured);
             }
-            String mapsProblem = PostfixMaps.afterUpgrade(mapReadersBefore, l -> job.write("  " + l)).problem();
+            String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
             job.write(I18n.tr("server.um.runUpdateJob.4", java.util.Map.of("code", String.valueOf(code))));
             if (code != 0) { job.status = "error"; job.errorMessage = I18n.tr("server.um.runUpdateJob.5", java.util.Map.of("code", String.valueOf(code))); }
             else job.status = "completed";
