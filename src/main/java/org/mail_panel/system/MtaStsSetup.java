@@ -90,12 +90,12 @@ public class MtaStsSetup {
         boolean includeOk = inclusion != null && inclusion.optBoolean("ok", false);
         steps.add(step("include", I18n.tr("server.sts.stepInclude"),
                 inclusion == null ? "" : inclusion.optString("reason", ""),
-                includeOk ? "done" : "da fare", null));
+                includeOk ? "done" : "todo", null));
         steps.add(step("config443", I18n.tr("server.sts.step443"),
                 web.optString("file", ""),
-                web.optBoolean("installed", false) ? "done" : "da fare", null));
+                web.optBoolean("installed", false) ? "done" : "todo", null));
         steps.add(step("jail", I18n.tr("server.sts.stepJail"), "",
-                jailActive() ? "done" : "da fare", null));
+                jailActive() ? "done" : "todo", null));
 
         // 4 e 4-bis: i CNAME. Una sola lettura della zona per entrambi i passi, cosi' non
         // possono contraddirsi come e' successo con domain-d.test.
@@ -121,7 +121,7 @@ public class MtaStsSetup {
             cnameDetail = I18n.tr("server.sts.allPresentProxy");
         else cnameDetail = I18n.tr("server.sts.allPresentOk");
         steps.add(step("cname", I18n.tr("server.sts.stepCname"), cnameDetail,
-                !cnameTroubles.isEmpty() ? "da fare" : (blindOnes.isEmpty() ? "done" : "uncertain"),
+                !cnameTroubles.isEmpty() ? "todo" : (blindOnes.isEmpty() ? "done" : "uncertain"),
                 blindOnes.isEmpty() ? null
                     : I18n.tr("server.sts.blindDns")));
 
@@ -131,7 +131,7 @@ public class MtaStsSetup {
                 !proxied.isEmpty() ? I18n.tr("server.sts.viaCf", java.util.Map.of("list", String.valueOf(String.join(", ", proxied))))
                         : (blind ? I18n.tr("server.sts.checkedVisible")
                                  : I18n.tr("server.sts.noneViaCf")),
-                !proxied.isEmpty() ? "da fare" : (blind ? "uncertain" : "done"),
+                !proxied.isEmpty() ? "todo" : (blind ? "uncertain" : "done"),
                 proxied.isEmpty() ? null
                     : I18n.tr("server.sts.proxyWhy")
                     + (proxyFromWildcard
@@ -145,7 +145,7 @@ public class MtaStsSetup {
         List<String> excluded = domainsOnOtherAccount();
         steps.add(step("certificate", I18n.tr("server.sts.stepCert"),
                 uncovered.isEmpty() ? I18n.tr("server.sts.allCovered") : I18n.tr("server.sts.uncovered", java.util.Map.of("list", String.valueOf(String.join(", ", uncovered)))),
-                uncovered.isEmpty() ? "done" : "da fare",
+                uncovered.isEmpty() ? "done" : "todo",
                 excluded.isEmpty() ? null
                     : I18n.tr("server.sts.otherAccount", java.util.Map.of("list", String.valueOf(String.join(", ", excluded))))));
 
@@ -167,7 +167,7 @@ public class MtaStsSetup {
         int toDo = 0, uncertain = 0;
         for (Step p : steps) {
             a.put(p.json());
-            if ("da fare".equals(p.state)) toDo++;
+            if ("todo".equals(p.state)) toDo++;
             else if ("uncertain".equals(p.state)) uncertain++;
         }
         r.put("steps", a).put("toDo", toDo).put("uncertain", uncertain);
@@ -232,25 +232,25 @@ public class MtaStsSetup {
                 notAnswering.isEmpty()
                     ? I18n.tr("server.sts.answersAll")
                     : I18n.tr("server.sts.noAnswerFor", java.util.Map.of("list", String.valueOf(String.join(", ", notAnswering)))),
-                notAnswering.isEmpty() ? "done" : "da fare", null));
+                notAnswering.isEmpty() ? "done" : "todo", null));
 
         String txtDetail, txtState, txtReason = null;
         if (!unmaintained.isEmpty()) {
             txtDetail = I18n.tr("server.sts.notKept", java.util.Map.of("list", String.valueOf(String.join("; ", unmaintained))));
-            txtState = "da fare";
+            txtState = "todo";
             txtReason = I18n.tr("server.sts.notKeptWhy");
         } else if (!tooMany.isEmpty()) {
             txtDetail = I18n.tr("server.sts.moreThanOne", java.util.Map.of("list", String.valueOf(String.join(", ", tooMany))));
-            txtState = "da fare";
+            txtState = "todo";
             txtReason = I18n.tr("server.sts.moreThanOneWhy");
         } else if (!unknownTxt.isEmpty()) {
-            txtDetail = "non so se c'e' per: " + String.join(", ", unknownTxt);
+            txtDetail = I18n.tr("server.sts.unknownFor", java.util.Map.of("list", String.join(", ", unknownTxt)));
             txtState = "uncertain";
             txtReason = I18n.tr("server.sts.notMarkedDone");
         } else if (!notAnswering.isEmpty()) {
-            txtDetail = I18n.tr("server.sts.waitingPrev"); txtState = "da fare";
+            txtDetail = I18n.tr("server.sts.waitingPrev"); txtState = "todo";
         } else if (!withoutTxt.isEmpty()) {
-            txtDetail = I18n.tr("server.sts.missingList", java.util.Map.of("list", String.valueOf(String.join(", ", withoutTxt)))); txtState = "da fare";
+            txtDetail = I18n.tr("server.sts.missingList", java.util.Map.of("list", String.valueOf(String.join(", ", withoutTxt)))); txtState = "todo";
         } else {
             txtDetail = I18n.tr("server.sts.allPublished"); txtState = "done";
         }

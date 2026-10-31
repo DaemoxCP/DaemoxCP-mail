@@ -34,16 +34,17 @@ import java.util.stream.Stream;
  * <ul>
  *   <li>niente col nome vecchio: non fa niente, e non lancia neanche nginx -T (e' il caso di
  *       ogni avvio dopo il primo);</li>
- *   <li>un file vecchio che non ha scritto il pannello (manca «Scritto dal pannello»), il nome
- *       nuovo gia' presente accanto al vecchio, o due file vecchi in due cartelle di nginx: non
- *       tocca niente e lo scrive nel log, come PathMigration: scegliere non e' compito suo;</li>
+ *   <li>un file vecchio che non ha scritto il pannello (manca la firma, vedi PanelMarker), il
+ *       nome nuovo gia' presente accanto al vecchio, o due file vecchi in due cartelle di nginx:
+ *       non tocca niente e lo scrive nel log, come PathMigration: scegliere non e' compito suo;</li>
  *   <li>altrimenti: sposta il log con le sue copie ruotate e i tre file cambiando il nome dentro;
  *       poi nginx -t e reload di nginx; sposta lo stato della jail nel database di fail2ban; reload
  *       di fail2ban, e chiede a fail2ban se la jail nuova c'e'. Al primo passo che fallisce
  *       rimette tutto com'era, stato compreso, e ricarica: al prossimo avvio ci riprova.</li>
  * </ul>
  *
- * <p>Il contenuto dei file vecchi resta quello, cambiato solo nel nome: e' una rinomina, non una
+ * <p>Il contenuto dei file vecchi resta quello, cambiato solo nel nome e nella firma (che passa
+ * all'inglese come fa PanelMarker per i file gia' rinominati): e' una rinomina, non una
  * riparazione (quella la fanno installJail e BanActionRepair). Nei file scritti dal pannello il
  * nome vecchio compare solo dove e' un nome.
  *
@@ -64,9 +65,6 @@ public final class PublicSurfaceRename {
     /** Il nome di prima, dal file di dati: serve solo a trovarlo sul disco. */
     static final String OLD_NAME = LegacyNames.single("publicSurface");
     static final String NEW_NAME = WebProtection.NAME;
-
-    /** La riga che il pannello scrive in testa ai tre file, fin dalla prima versione. */
-    static final String MARKER = "Scritto dal pannello";
 
     private PublicSurfaceRename() {}
 
@@ -150,7 +148,7 @@ public final class PublicSurfaceRename {
         for (Move m : moves) {
             if (exists(m.to()))
                 return new Report(Outcome.BOTH_NAMES, "both " + m.from() + " and " + m.to() + " exist: nothing moved");
-            if (m.renameInside() && !Files.readString(m.from(), StandardCharsets.UTF_8).contains(MARKER))
+            if (m.renameInside() && !PanelMarker.writtenByPanel(Files.readString(m.from(), StandardCharsets.UTF_8)))
                 return new Report(Outcome.NOT_OURS, m.from() + " was not written by the panel: nothing moved, rename it by hand");
         }
 
@@ -264,7 +262,7 @@ public final class PublicSurfaceRename {
     }
 
     static String renamed(String content) {
-        return content.replace(OLD_NAME, NEW_NAME);
+        return PanelMarker.current(content.replace(OLD_NAME, NEW_NAME), PanelMarker.SIGNATURE);
     }
 
     /** NOME-access.log e le sue copie ruotate (NOME-access.log.0.bz2, ...), non quelle di altri. */

@@ -798,7 +798,7 @@ public final class PackagePlan {
      *    corretta;
      *  - "no-fix": VuXML non mette un limite superiore, cioe' nessuna versione
      *    pubblicata e' corretta;
-     *  - "non-so": un intervallo non si lascia leggere o il confronto non ha risposto.
+     *  - "unknown": un intervallo non si lascia leggere o il confronto non ha risposto.
      */
     static JSONObject assessFix(String installed, String catalog, JSONArray issues, VersionComparator c) {
         JSONObject r = new JSONObject().put("installedVersion", installed).put("catalog", catalog == null ? "" : catalog);
@@ -822,7 +822,7 @@ public final class PackagePlan {
                         .put("ranges", ranges);
                 if (its == null) {
                     unreadable = true;
-                    d.put("type", "non-so");
+                    d.put("type", "unknown");
                 } else {
                     Bound upperBound = null;
                     boolean exact = false;
@@ -855,7 +855,7 @@ public final class PackagePlan {
 
             String verdict, explain;
             if (unreadable) {
-                verdict = "non-so";
+                verdict = "unknown";
                 explain = I18n.tr("server.plan.v.unknownRange");
             } else if (newerCatalog && stillOpenInCatalog.isEmpty()) {
                 verdict = "fixed-by-upgrade";
@@ -877,12 +877,12 @@ public final class PackagePlan {
                 verdict = "fix-outside-branch";
                 explain = I18n.tr("server.plan.v.fixOutsideBranch", java.util.Map.of("fixed", String.valueOf(firstFixed), "cat", String.valueOf(emptyIf(catalog, installed))));
             } else {
-                verdict = "non-so";
+                verdict = "unknown";
                 explain = I18n.tr("server.plan.v.noComparable");
             }
             return r.put("verdict", verdict).put("explanation", explain);
         } catch (RuntimeException e) {
-            return r.put("verdict", "non-so").put("explanation", I18n.tr("server.plan.v.compareFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return r.put("verdict", "unknown").put("explanation", I18n.tr("server.plan.v.compareFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 

@@ -37,7 +37,25 @@ public class LegacyNamesTest {
     /** Le sezioni che il codice chiede: se ne manca una, quella migrazione non fa niente. */
     static final String[] SECTIONS = {"files", "vmailFolders", "publicSurface", "bootEnvironmentPrefix",
             "jumpKeys", "jumpStepKeys", "jumpAsks", "jumpPhases", "inventoryFiles", "inventoryServiceStates",
-            "javaScriptOutcomes", "reportFrequencies", "reportFailedPrefix"};
+            "javaScriptOutcomes", "reportFrequencies", "reportFailedPrefix",
+            "panelSignature", "dovecotSignature", "fail2banFilterSignature", "autoconfigMarker"};
+
+    static int countOf(String text, String part) {
+        int n = 0;
+        for (int i = text.indexOf(part); i >= 0; i = text.indexOf(part, i + 1)) n++;
+        return n;
+    }
+
+    /** Le due configurazioni di Dovecot come le scrive lo script (config23 e config24 sono private). */
+    static String dovecotScripts() throws Exception {
+        StringBuilder b = new StringBuilder();
+        for (String m : new String[]{"config23", "config24"}) {
+            java.lang.reflect.Method x = org.mail_panel.scripts.DovecotConfig.class.getDeclaredMethod(m);
+            x.setAccessible(true);
+            b.append((String) x.invoke(null));
+        }
+        return b.toString();
+    }
 
     public static void main(String[] args) throws Exception {
         System.out.println("\n== Il file di dati ==");
@@ -78,6 +96,35 @@ public class LegacyNamesTest {
         check("l'inventario si legge col nome di adesso e poi con quello di prima: " + cat,
                 cat.startsWith("cat /var/db/mailpanel/system/x/services.txt 2>/dev/null || cat /var/db/mailpanel/system/x/")
                         && cat.contains(LegacyNames.oldNamesOf("inventoryFiles", "services.txt").get(0)));
+
+        // Le firme: chi rilegge riconosce quella di adesso e quelle di prima, e le righe di prima
+        // diventano esattamente quelle che il codice scrive oggi.
+        List<String> oldSignatures = LegacyNames.oldNamesOf(PanelMarker.SIGNATURE, PanelMarker.WRITTEN);
+        boolean recognized = PanelMarker.writtenByPanel("# " + PanelMarker.WRITTEN + "\n");
+        for (String o : oldSignatures) recognized &= PanelMarker.writtenByPanel("# " + o + ".\n[x]\n");
+        check("la firma del pannello, di adesso e di prima (" + oldSignatures.size() + "), si riconosce; un file senza no",
+                !oldSignatures.isEmpty() && recognized && !PanelMarker.writtenByPanel("# il mio file\n[x]\n"));
+        boolean same = true;
+        for (String o : oldSignatures)
+            for (String now : List.of(WebProtection.configuration("/c", "/k"), WebProtection.filter(), WebProtection.jail()))
+                same &= now.contains(PanelMarker.WRITTEN)
+                        && PanelMarker.current(now.replace(PanelMarker.WRITTEN, o), PanelMarker.SIGNATURE).equals(now);
+        check("i tre file della 443 con una firma di prima tornano identici a quelli di oggi", same);
+        check("  ma solo nei commenti: una riga che non e' un commento resta com'era",
+                PanelMarker.current("x = " + oldSignatures.get(0) + "\n", PanelMarker.SIGNATURE).contains(oldSignatures.get(0)));
+        check("la nota dei blocchi e il file del ramo hanno la firma di adesso",
+                UpdateManager.lockNoteText(List.of("nginx"), "2026-10-30T01:00:00Z").startsWith("# " + PanelMarker.WRITTEN)
+                        && PkgBranch.MARK.equals("# " + PanelMarker.WRITTEN));
+        String dovecotOld = LegacyNames.oldNamesOf(PanelMarker.DOVECOT, org.mail_panel.scripts.DovecotConfig.SIGNATURE).get(0);
+        String options = UpdateManager.dovecotSignatureOptions();
+        check("la manutenzione cerca in dovecot.conf la firma di adesso e quella di prima: " + options,
+                options.contains("-e '" + org.mail_panel.scripts.DovecotConfig.SIGNATURE + "'") && options.contains("-e '" + dovecotOld + "'"));
+        check("il generatore di Dovecot scrive la firma di adesso, nelle due versioni",
+                countOf(dovecotScripts(), "— " + org.mail_panel.scripts.DovecotConfig.SIGNATURE + "\n") == 2);
+        String autoconfigOld = LegacyNames.oldNamesOf("autoconfigMarker", Autoconfig.MARKER).get(0);
+        check("il blocco di autoconfig si riconosce col marcatore di adesso e con quello di prima",
+                Autoconfig.hasBlock("server {\n" + Autoconfig.MARKER + "\n") && Autoconfig.hasBlock("server {\n    " + autoconfigOld + "\n")
+                        && !Autoconfig.hasBlock("server {\n    location / {}\n"));
 
         System.out.println("\n== Nei sorgenti, fuori dal file di dati ==");
         Path root = Path.of(args.length > 0 ? args[0] : ".");

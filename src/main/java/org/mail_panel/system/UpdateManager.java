@@ -401,14 +401,14 @@ public final class UpdateManager {
     /**
      * Il testo della nota. Funzione pura: riceve l'elenco e il momento, cosi' si prova.
      *
-     * In italiano come gli altri file che il pannello genera sulla macchina (l'override del
-     * ramo di pkg, il filtro di fail2ban, la lista permaban): li legge chi amministra il
-     * server, non il programma.
+     * I commenti in italiano come negli altri file che il pannello genera sulla macchina
+     * (l'override del ramo di pkg, il filtro di fail2ban, la lista permaban): li legge chi
+     * amministra il server, non il programma. La firma in inglese, come in tutti (PanelMarker).
      */
     static String lockNoteText(java.util.Collection<String> locked, String when) {
         StringBuilder sb = new StringBuilder();
-        sb.append("# Pacchetti bloccati dal pannello mail FreeBSD\n")
-          .append("# Scritto dal pannello il ").append(when).append(" (UTC). NON modificare a mano:\n")
+        sb.append("# ").append(PanelMarker.WRITTEN).append(" on ").append(when).append(" (UTC).\n")
+          .append("# Pacchetti bloccati dal pannello mail FreeBSD. NON modificare a mano:\n")
           .append("# viene riscritto a ogni avvio del pannello e a ogni cambio di protezione.\n")
           .append("#\n")
           .append("# PERCHE': i pacchetti dello stack di posta restano bloccati (pkg lock) perche' un\n")
@@ -489,8 +489,8 @@ public final class UpdateManager {
         writeLockNote();
         try {
             int[] done = syncLockMarks();
-            if (done[0] + done[1] > 0)
-                LOGGER.info("Lock marks: " + done[0] + " added, " + done[1] + " removed");
+            if (done[0] + done[1] + done[2] > 0)
+                LOGGER.info("Lock marks: " + done[0] + " added, " + done[1] + " removed, " + done[2] + " rewritten");
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Cannot update the lock marks", e);
         }
@@ -528,31 +528,48 @@ public final class UpdateManager {
      */
     static int[] syncLockMarks() {
         Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg lock -l");
-        Shell.Result annotations = Shell.runShell(Duration.ofSeconds(60), "pkg query -a '%n %At'");
+        Shell.Result annotations = Shell.runShell(Duration.ofSeconds(60), "pkg query -a '%n %At %Av'");
         if (!lock.success() || !annotations.success()) {
             LOGGER.warning("Lock marks not updated: cannot read the locks or the annotations");
-            return new int[]{0, 0};
+            return new int[]{0, 0, 0};
         }
         Set<String> locked = new TreeSet<>();
         for (String n : lockedNames(lock.outputTrim())) if (roleOf(n) != null) locked.add(n);
-        Set<String> marked = markedIn(annotations.outputTrim());
-        int added = 0, removed = 0;
-        for (String cmd : lockMarkCommands(locked, marked)) {
+        String out = annotations.outputTrim();
+        int added = 0, removed = 0, rewritten = 0;
+        for (String cmd : lockMarkCommands(locked, markedIn(out), staleMarksIn(out))) {
             if (!ok(cmd, 20)) continue;
-            if (cmd.contains(" -A ")) added++; else removed++;
+            if (cmd.contains(" -A ")) added++; else if (cmd.contains(" -M ")) rewritten++; else removed++;
         }
-        return new int[]{added, removed};
+        return new int[]{added, removed, rewritten};
     }
 
     /**
      * I pacchetti che portano l'annotazione del pannello, da un'uscita di
-     * `pkg query -a '%n %At'`: una riga per annotazione, "nome chiave". Funzione pura.
+     * `pkg query -a '%n %At %Av'` (o '%n %At'): una riga per annotazione, "nome chiave valore".
+     * Funzione pura.
      */
     static Set<String> markedIn(String output) {
         Set<String> r = new TreeSet<>();
         for (String line : output.split("\n")) {
-            String[] c = line.trim().split(" ", 2);
-            if (c.length == 2 && MARK_KEY.equals(c[1].trim()) && isValidName(c[0])) r.add(c[0]);
+            String[] c = line.trim().split(" ", 3);
+            if (c.length >= 2 && MARK_KEY.equals(c[1]) && isValidName(c[0])) r.add(c[0]);
+        }
+        return r;
+    }
+
+    /**
+     * Quelli il cui cartello non dice piu' quello che il pannello scrive adesso: il testo di
+     * prima, in italiano, sui server installati prima della fine di ottobre 2026. Il cartello e'
+     * solo una spiegazione per chi lo legge con pkg info -A, quindi non serve riconoscerlo: basta
+     * che non sia quello di adesso. Funzione pura, sull'uscita di `pkg query -a '%n %At %Av'`.
+     */
+    static Set<String> staleMarksIn(String output) {
+        Set<String> r = new TreeSet<>();
+        for (String line : output.split("\n")) {
+            String[] c = line.trim().split(" ", 3);
+            if (c.length >= 2 && MARK_KEY.equals(c[1]) && isValidName(c[0])
+                    && !(c.length == 3 && MARK_VALUE.equals(c[2]))) r.add(c[0]);
         }
         return r;
     }
@@ -565,7 +582,17 @@ public final class UpdateManager {
      * devono dire la stessa cosa.
      */
     static java.util.List<String> lockMarkCommands(Set<String> locked, Set<String> marked) {
+        return lockMarkCommands(locked, marked, Set.of());
+    }
+
+    /** Come sopra, e in piu' riscrive i cartelli rimasti col testo di prima sui pacchetti ancora bloccati. */
+    static java.util.List<String> lockMarkCommands(Set<String> locked, Set<String> marked, Set<String> stale) {
         java.util.List<String> r = new ArrayList<>();
+        for (String n : new TreeSet<>(stale)) {
+            if (!locked.contains(n) || !marked.contains(n)) continue;
+            String cmd = rewriteMarkCommand(n);
+            if (cmd != null) r.add(cmd);
+        }
         for (String n : new TreeSet<>(locked)) {
             if (marked.contains(n)) continue;
             String cmd = markCommand(n);
@@ -588,6 +615,10 @@ public final class UpdateManager {
     /** La chiave dell'annotazione nel database di pkg. */
     static final String MARK_KEY = "mail_panel_lock";
 
+    /** Il valore: rimanda alla nota e al comando che libera tutto. */
+    static final String MARK_VALUE = "locked by the mail panel: see " + LOCK_NOTE
+            + " - unlock with " + UNLOCK_ALL_COMMAND;
+
     /**
      * Il comando che scrive l'annotazione, o null se il nome non passa il filtro.
      *
@@ -598,9 +629,13 @@ public final class UpdateManager {
      */
     static String markCommand(String name) {
         if (!isValidName(name)) return null;
-        return "pkg annotate -y -A " + name + " " + MARK_KEY
-             + " 'bloccato dal pannello mail: vedi " + LOCK_NOTE
-             + " - si libera con " + UNLOCK_ALL_COMMAND + "'";
+        return "pkg annotate -y -A " + name + " " + MARK_KEY + " '" + MARK_VALUE + "'";
+    }
+
+    /** Il comando che riscrive il valore di un cartello che c'e' gia', o null se il nome non passa il filtro. */
+    static String rewriteMarkCommand(String name) {
+        if (!isValidName(name)) return null;
+        return "pkg annotate -y -M " + name + " " + MARK_KEY + " '" + MARK_VALUE + "'";
     }
 
     // ===================== il quadro dei pacchetti =====================
@@ -5408,6 +5443,14 @@ public final class UpdateManager {
 
     // ===================== piano di manutenzione guidato =====================
 
+    /** Le opzioni di grep per la firma di dovecot.conf, di adesso e di prima: " -e 'firma' ...". */
+    static String dovecotSignatureOptions() {
+        StringBuilder b = new StringBuilder();
+        for (String f : PanelMarker.forms("dovecotSignature", org.mail_panel.scripts.DovecotConfig.SIGNATURE))
+            b.append(" -e '").append(f).append('\'');
+        return b.toString();
+    }
+
     /**
      * Il piano: cosa va fatto su QUESTA macchina, in quale ordine, e a che punto sei.
      *
@@ -5605,7 +5648,8 @@ public final class UpdateManager {
 
         // --- Passo finale: configurazione Dovecot dalla sorgente unica ---
         // Lo stato si ricava dal file vivo: l'intestazione la scrive solo il generatore nuovo.
-        boolean regenerated = ok("grep -q 'generato dal FreeBSD Mail Panel' "
+        // Anche quella di prima: un server che non ha ancora cambiato firma e' gia' rigenerato.
+        boolean regenerated = ok("grep -qF" + dovecotSignatureOptions() + " "
                 + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
         boolean sieveActive = ok("grep -qE '^protocols.*sieve' " + DOVECOT_DIR + "/dovecot.conf 2>/dev/null", 15);
         steps.put(repeatable(step("phase-dovecot", "phase", I18n.tr("server.um.maintenancePlan.30"),
@@ -7160,6 +7204,17 @@ public final class UpdateManager {
     }
 
     /**
+     * Il verdetto del jar lascia procedere la rimozione: il pannello non ne usa i comandi (anche
+     * se e' una libreria: chi la richiede lo dice pkg query %rn, controllato prima, e i file sul
+     * disco li guarda deepAnalysis, dopo), oppure li nomina ma non sono i suoi. Il 25/10/2026 i
+     * verdetti sono passati all'inglese, e qui era rimasto il prefisso italiano di quello delle
+     * librerie: la rimozione di una libreria non usata veniva rifiutata. Funzione pura.
+     */
+    static boolean removableByJarVerdict(String v) {
+        return "PANEL_DOES_NOT_USE".equals(v) || "NAMES_NOT_THEIRS".equals(v) || "LIBRARY_ONLY".equals(v);
+    }
+
+    /**
      * La rimozione di un pacchetto, fatta dal pannello e non dettata come comando da SSH.
      *
      * Non e' un pulsante che esegue "pkg delete": e' il controllo che decide se eseguirlo.
@@ -7212,8 +7267,7 @@ public final class UpdateManager {
         JSONObject use = panelUsage(name);
         r.put("use", use);
         String v = use.optString("verdict", "");
-        if (!v.equals("PANEL_DOES_NOT_USE") && !v.equals("NAMES_NOT_THEIRS")
-                && !v.startsWith("NON NE USA I COMANDI"))
+        if (!removableByJarVerdict(v))
             return new JSONObject().put("success", false).put("use", use)
                     .put("error", I18n.tr("server.um.x.rmJarSays", java.util.Map.of("v", String.valueOf(v))) + " "
                             + use.optString("explanation", ""));

@@ -188,16 +188,16 @@ public class MtaStsTest {
         require("un record giusto e la politica che risponde: fatto (" + p.detail + ")", "done".equals(p.state));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", true, l2)), expected);
         require("due record, anche col primo giusto: NON fatto -> " + p.state + " (" + p.detail + ")",
-                "da fare".equals(p.state));
+                "todo".equals(p.state));
         require("il dettaglio nomina tutti e due i record",
                 p.detail.contains("id=0fec393151a7c577266a") && p.detail.contains("id=1700000000000"));
         require("e il motivo dice perche' conta", p.reason != null && p.reason.contains("RFC 8461"));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", true, l2),
                              new MtaStsSetup.TxtReview("domain-a.test", true, one)), expected);
-        require("un dominio a posto non copre quello con due record: " + p.state, "da fare".equals(p.state));
+        require("un dominio a posto non copre quello con due record: " + p.state, "todo".equals(p.state));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", false, l2)), expected);
         require("due record e la politica che non risponde: segnalati come non mantenuti (" + p.detail + ")",
-                "da fare".equals(p.state) && p.detail.contains("NON mantenuto"));
+                "todo".equals(p.state) && p.detail.contains("NON mantenuto"));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", true,
                 MtaStsSetup.parseTxt(0, servfail))), expected);
         require("un SERVFAIL resta incerto, col motivo (" + p.detail + ")",

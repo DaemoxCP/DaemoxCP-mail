@@ -41,6 +41,33 @@ public class LockMarksTest {
         check("  un nome che non passa il filtro non entra", marked.stream().noneMatch(n -> n.contains(";")));
         check("uscita vuota: nessun cartello", UpdateManager.markedIn("").isEmpty());
 
+        // --- 1-bis. Il testo del cartello, da pkg query -a '%n %At %Av' ---
+        // Sui server installati prima il valore e' quello italiano: non serve riconoscerlo, basta
+        // che non sia quello di adesso. Il pannello lo riscrive, solo sui pacchetti ancora bloccati.
+        String withValues = String.join("\n",
+                "nginx repository FreeBSD",
+                "redis " + UpdateManager.MARK_KEY + " " + UpdateManager.MARK_VALUE,
+                "postfix-mysql " + UpdateManager.MARK_KEY + " un testo di prima: vedi la nota",
+                "dovecot " + UpdateManager.MARK_KEY,
+                "lmdb " + UpdateManager.MARK_KEY + " un testo di prima",
+                "");
+        check("con i valori si leggono gli stessi cartelli",
+             UpdateManager.markedIn(withValues).equals(Set.of("redis", "postfix-mysql", "dovecot", "lmdb")));
+        check("  e quelli col testo di prima (o senza testo): postfix-mysql, dovecot, lmdb",
+             UpdateManager.staleMarksIn(withValues).equals(Set.of("postfix-mysql", "dovecot", "lmdb")));
+        List<String> rw = UpdateManager.lockMarkCommands(Set.of("redis", "postfix-mysql", "dovecot"),
+                UpdateManager.markedIn(withValues), UpdateManager.staleMarksIn(withValues));
+        check("si riscrivono postfix-mysql e dovecot, bloccati; lmdb, non piu' bloccato, si toglie (" + rw + ")",
+             rw.size() == 3 && rw.contains(UpdateManager.rewriteMarkCommand("postfix-mysql"))
+                     && rw.contains(UpdateManager.rewriteMarkCommand("dovecot")) && rw.contains(UpdateManager.removeMarkCommand("lmdb")));
+        check("il valore e' in inglese e rimanda alla nota e al comando di sblocco",
+             UpdateManager.MARK_VALUE.startsWith("locked by the mail panel")
+                     && UpdateManager.MARK_VALUE.contains(UpdateManager.LOCK_NOTE) && UpdateManager.MARK_VALUE.contains(UpdateManager.UNLOCK_ALL_COMMAND));
+        check("il comando che riscrive usa -M con lo stesso valore di quello che mette",
+             ("pkg annotate -y -M nginx " + UpdateManager.MARK_KEY + " '" + UpdateManager.MARK_VALUE + "'").equals(UpdateManager.rewriteMarkCommand("nginx"))
+                     && UpdateManager.markCommand("nginx").endsWith(" '" + UpdateManager.MARK_VALUE + "'")
+                     && UpdateManager.rewriteMarkCommand("x; rm -rf /") == null);
+
         // --- 2. I comandi per portare i cartelli dove servono ---
         List<String> c = UpdateManager.lockMarkCommands(
                 Set.of("nginx", "redis", "dovecot"), Set.of("redis", "lmdb"));
@@ -102,7 +129,13 @@ public class LockMarksTest {
                      done[0] == 1 && done[1] == 1);
             }
             check("  e una seconda volta non c'e' niente da fare",
-                 java.util.Arrays.equals(UpdateManager.syncLockMarks(), new int[]{0, 0}));
+                 java.util.Arrays.equals(UpdateManager.syncLockMarks(), new int[]{0, 0, 0}));
+
+            // Il cartello col testo di prima, come lo lascia un server installato prima.
+            sh("pkg annotate -y -M " + one + " " + UpdateManager.MARK_KEY + " 'un testo di prima'");
+            int[] again = UpdateManager.syncLockMarks();
+            check("  il cartello di " + one + " col testo di prima si riscrive (" + again[2] + "), e dice quello di adesso",
+                 again[2] == 1 && sh("pkg annotate -S " + one + " " + UpdateManager.MARK_KEY).contains(UpdateManager.MARK_VALUE));
         } finally {
             // Come li ho trovati, cartello per cartello.
             Set<String> now = markedNow();

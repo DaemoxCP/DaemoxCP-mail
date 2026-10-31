@@ -41,10 +41,19 @@ public class PublicSurfaceRenameTest {
     static final String CERT = "/usr/local/etc/ssl/mail/fullchain.pem";
     static final String KEY = "/usr/local/etc/ssl/mail/privkey.pem";
 
-    /** I tre file come li scriveva main prima della rinomina: quelli di oggi col nome di ieri. */
-    static String oldConf() { return WebProtection.configuration(CERT, KEY).replace(NEW, OLD); }
-    static String oldFilter() { return WebProtection.filter().replace(NEW, OLD); }
-    static String oldJail() { return WebProtection.jail().replace(NEW, OLD); }
+    /**
+     * Le firme di prima, dal file di dati: la piu' lunga ("... di posta") stava in filtro e jail,
+     * la piu' corta nel file di nginx.
+     */
+    static final List<String> OLD_SIGNATURES = LegacyNames.oldNamesOf("panelSignature", PanelMarker.WRITTEN);
+    static String signedBefore(String content, String signature) { return content.replace(PanelMarker.WRITTEN, signature); }
+
+    /** I tre file come li scriveva main prima della rinomina: quelli di oggi col nome e la firma di ieri. */
+    static String oldConf() {
+        return signedBefore(WebProtection.configuration(CERT, KEY), OLD_SIGNATURES.get(OLD_SIGNATURES.size() - 1)).replace(NEW, OLD);
+    }
+    static String oldFilter() { return signedBefore(WebProtection.filter(), OLD_SIGNATURES.get(0)).replace(NEW, OLD); }
+    static String oldJail() { return signedBefore(WebProtection.jail(), OLD_SIGNATURES.get(0)).replace(NEW, OLD); }
 
     static final class FakeServices implements PublicSurfaceRename.Services {
         final Path jailDir;
@@ -178,9 +187,10 @@ public class PublicSurfaceRenameTest {
                 "/var/db/fail2ban/fail2ban.sqlite3".equals(PublicSurfaceRename.fail2banDatabase(
                         "Current database file is:\n`- /var/db/fail2ban/fail2ban.sqlite3\n"))
                         && PublicSurfaceRename.fail2banDatabase("Database currently disabled") == null);
-        check("i tre file di main hanno il marcatore del pannello",
-                oldConf().contains(PublicSurfaceRename.MARKER) && oldFilter().contains(PublicSurfaceRename.MARKER)
-                        && oldJail().contains(PublicSurfaceRename.MARKER));
+        check("i tre file di main hanno la firma di prima, e il pannello la riconosce",
+                OLD_SIGNATURES.size() == 2 && !oldConf().contains(PanelMarker.WRITTEN) && !oldJail().contains(PanelMarker.WRITTEN)
+                        && !oldFilter().contains(PanelMarker.WRITTEN) && PanelMarker.writtenByPanel(oldConf())
+                        && PanelMarker.writtenByPanel(oldFilter()) && PanelMarker.writtenByPanel(oldJail()));
         check("la riga di fail2ban-client status si legge",
                 PublicSurfaceRename.bannedFrom("|- Actions\n   |- Currently banned:\t2\n   |- Total banned:\t46\n"
                         + "   `- Banned IP list:\t203.0.113.7 198.51.100.9\n").equals(List.of("203.0.113.7", "198.51.100.9"))

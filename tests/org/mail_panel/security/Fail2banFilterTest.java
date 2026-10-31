@@ -140,6 +140,11 @@ public class Fail2banFilterTest {
                 !Fail2banAutoSetup.shouldRewriteFilter(Fail2banAutoSetup.filterContent()));
         check("uno vecchio scritto dal pannello si riscrive",
                 Fail2banAutoSetup.shouldRewriteFilter(Fail2banAutoSetup.MARKER + "\n" + OLD_FILTER));
+        for (String signature : org.mail_panel.system.LegacyNames.oldNamesOf(Fail2banAutoSetup.MARKER_SECTION, Fail2banAutoSetup.MARKER))
+            check("uno con la firma di prima si riscrive anche se il resto e' uguale a oggi",
+                    Fail2banAutoSetup.shouldRewriteFilter(Fail2banAutoSetup.filterContent().replace(Fail2banAutoSetup.MARKER, signature)));
+        check("la firma di prima c'e' nel file di dati",
+                !org.mail_panel.system.LegacyNames.oldNamesOf(Fail2banAutoSetup.MARKER_SECTION, Fail2banAutoSetup.MARKER).isEmpty());
         check("uno modificato a mano non si tocca",
                 !Fail2banAutoSetup.shouldRewriteFilter("# il mio filtro\n" + OLD_FILTER));
         check("se non c'e' si scrive", Fail2banAutoSetup.shouldRewriteFilter(null));

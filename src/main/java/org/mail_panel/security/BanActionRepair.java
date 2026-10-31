@@ -105,7 +105,7 @@ public final class BanActionRepair {
                 // Riscrivere il file intero e' lecito solo se e' il file che scrive il pannello.
                 // Se qualcuno lo ha sostituito con il proprio, sovrascriverlo cancellerebbe il
                 // suo lavoro senza avvisare — e questo e' un rimedio, non un ripristino.
-                if (!before.contains("Scritto dal pannello")) {
+                if (!org.mail_panel.system.PanelMarker.writtenByPanel(before)) {
                     steps.put(step(PUBLIC_NAME, false,
                         I18n.tr("server.banfix.notOurFile", java.util.Map.of("file", String.valueOf(PUBLIC_JAIL), "jail", PUBLIC_NAME))));
                     toReviewByHand = true;

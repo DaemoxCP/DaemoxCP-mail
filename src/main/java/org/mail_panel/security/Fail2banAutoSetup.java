@@ -336,12 +336,15 @@ public final class Fail2banAutoSetup {
      *
      * <p>Si', solo se e' ancora quello del pannello ed e' diverso da quello che il pannello
      * scriverebbe oggi. Un file modificato a mano non si tocca, e si riconosce dal fatto che
-     * non comincia piu' con la firma.
+     * non comincia piu' con la firma. Vale anche la firma di prima (legacy-names.json): su un
+     * server installato prima il filtro si riscrive una volta, e prende quella di adesso.
      */
     static boolean shouldRewriteFilter(String existing) {
         if (existing == null) return true;
         if (existing.equals(filterContent())) return false;
-        return existing.startsWith(MARKER);
+        for (String f : org.mail_panel.system.PanelMarker.forms(MARKER_SECTION, MARKER))
+            if (existing.startsWith(f)) return true;
+        return false;
     }
 
     /**
@@ -517,7 +520,8 @@ public final class Fail2banAutoSetup {
     // ================== EMBEDDED CONFIG CONTENT ==================
 
     /** La riga con cui il pannello firma i file che scrive lui: solo quelli li riscrive. */
-    static final String MARKER = "# Fail2ban filter per FreeBSD-Mail-Panel (auto-generato dal pannello)";
+    static final String MARKER = "# Fail2ban filter for FreeBSD-Mail-Panel (written by the mail panel)";
+    static final String MARKER_SECTION = "fail2banFilterSignature";
 
     private static final String FAILURES = "LOGIN_FAILURE|LOGIN_2FA_FAILURE|LOGIN_INVALID_INPUT"
         + "|LOGIN_BLOCKED|CSRF_FAILURE|SSL_CERT_[A-Z_]+_FAILED|FAIL2BAN_[A-Z_]+_FAILED"
