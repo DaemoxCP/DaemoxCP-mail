@@ -24,9 +24,9 @@ import java.util.TreeSet;
  *                  fakelib0, fakeapp 1.1 gira, e il registro del lavoro ha le prove;
  *   altro utente   anche fakeother, che usa ancora fakelib: pkg lo toglierebbe in silenzio.
  *                  Ognuno dei tre lavori si ferma e non cambia niente; la scheda, a pacchetti
- *                  scaricati, mostra le due rimozioni, mai confermabili;
- *   confermato     lo stesso, con le due rimozioni «confermate» da una richiesta costruita a
- *                  mano: la scheda non lascia partire, il lavoro si rifiuta, fakeother resta;
+ *                  scaricati, mostra le due rimozioni, che il pannello non esegue;
+ *   lanciato       lo stesso a pacchetti scaricati, col via dato comunque con la firma della
+ *                  scheda: la scheda non lascia partire, il lavoro si rifiuta, fakeother resta;
  *   plugin rotto   fakeplugin usa libfake.so.1 senza dichiarare fakelib: pkg toglierebbe fakelib
  *                  e lo lascerebbe ROTTO. Il lavoro si ferma, fake-plugin gira ancora.
  *
@@ -75,7 +75,7 @@ public class PackageReplacementE2ETest {
             for (String flow : new String[]{"guided", "unprotected", "maintenance"}) innocuous(flow);
             innocuousCached();
             for (String flow : new String[]{"guided", "unprotected", "maintenance"}) otherUserStops(flow);
-            otherUserConfirmed();
+            otherUserStartedAnyway();
             pluginBreaks();
         } finally {
             removeFakes();
@@ -101,7 +101,7 @@ public class PackageReplacementE2ETest {
     static void innocuous(String flow) throws Exception {
         System.out.println("\n  --- " + flow + ": fakelib sostituito da fakelib0, nessun altro lo usa ---");
         setUp(flow, null);
-        JSONObject r = runFlow(flow, Set.of());
+        JSONObject r = runFlow(flow);
         if (r == null) return;
         String label = flow + " innocuo: ";
         check(label + "il lavoro finisce (" + r.optString("status") + ")", "completed".equals(r.optString("status")));
@@ -119,7 +119,7 @@ public class PackageReplacementE2ETest {
         System.out.println("\n  --- guided: innocuo, a pacchetti gia' scaricati ---");
         setUp("guided", null);
         sh("pkg unlock -y fakeapp; pkg upgrade -F -y fakeapp 2>&1; pkg lock -y fakeapp");
-        JSONObject pf = preview("guided", Set.of());
+        JSONObject pf = preview("guided");
         JSONArray v = pf.optJSONObject("plan") == null ? null : pf.getJSONObject("plan").optJSONArray("replacements");
         check("scaricato: la scheda vede fakelib, innocuo",
                 v != null && v.length() == 1 && v.getJSONObject(0).optString("name").equals("fakelib") && v.getJSONObject(0).optBoolean("safe"));
@@ -129,7 +129,7 @@ public class PackageReplacementE2ETest {
             if ("plan-removals".equals(ck.getJSONObject(i).optString("id"))) review = ck.getJSONObject(i).optString("level");
         check("scaricato: e lascia partire, con un avviso invece di un blocco (" + review + ")",
                 pf.optBoolean("canProceed") && "review".equals(review));
-        JSONObject r = runFlow("guided", Set.of());
+        JSONObject r = runFlow("guided");
         if (r == null) return;
         check("scaricato: il lavoro finisce (" + r.optString("status") + ")", "completed".equals(r.optString("status")));
         check("scaricato: fakeapp 1.1, fakelib0 al posto di fakelib", sh("pkg query '%n %v' fakeapp fakelib0 fakelib 2>/dev/null")
@@ -140,51 +140,50 @@ public class PackageReplacementE2ETest {
         System.out.println("\n  --- " + flow + ": anche fakeother usa fakelib, e pkg lo toglierebbe ---");
         setUp(flow, "fakeother");
         String before = sh("pkg query %n-%v | sort");
-        JSONObject r = runFlow(flow, Set.of());
+        JSONObject r = runFlow(flow);
         if (r == null) return;
         String label = flow + " altro utente: ";
         check(label + "il lavoro si ferma (" + r.optString("status") + ")", "error".equals(r.optString("status")));
-        check(label + "e il motivo dell'arresto dice quali rimozioni confermare", r.optString("errorMessage").contains("fakeother 1.0")
+        check(label + "e il motivo dell'arresto dice quali rimozioni il pannello non esegue", r.optString("errorMessage").contains("fakeother 1.0")
                 && r.optString("errorMessage").contains("fakelib 1.0"));
         check(label + "nessun pacchetto cambiato", sh("pkg query %n-%v | sort").equals(before));
         check(label + "fake-other gira ancora", sh("/usr/local/bin/fake-other; echo $?").trim().equals("0"));
         check(label + "fakeapp di nuovo protetto come prima", flow.equals("unprotected") || locked().contains("fakeapp"));
-        // A pacchetti scaricati la scheda vede le due rimozioni, e le dice da confermare.
-        JSONObject preview = preview(flow, Set.of());
+        // A pacchetti scaricati la scheda vede le due rimozioni, e dice che non le esegue.
+        JSONObject preview = preview(flow);
         JSONArray v = preview.optJSONObject("plan") == null ? null : preview.getJSONObject("plan").optJSONArray("replacements");
         Set<String> never = new TreeSet<>();
         for (int i = 0; v != null && i < v.length(); i++)
-            if (!v.getJSONObject(i).optBoolean("safe") && !v.getJSONObject(i).optBoolean("confirmable"))
+            if (!v.getJSONObject(i).optBoolean("safe"))
                 never.add(v.getJSONObject(i).optString("name"));
-        check(label + "la scheda mostra fakelib e fakeother, mai confermabili (trovato " + never + ")",
+        check(label + "la scheda mostra fakelib e fakeother, che il pannello non toglie (trovato " + never + ")",
                 never.equals(Set.of("fakelib", "fakeother")));
         boolean blocked = flow.equals("guided") ? !preview.optBoolean("canProceed") : !preview.optString("blockedReason").isEmpty();
-        check(label + "e non lascia partire senza conferma", blocked);
+        check(label + "e non lascia partire", blocked);
     }
 
     /**
-     * Le due rimozioni «confermate» con una richiesta costruita a mano, come se qualcuno
-     * scavalcasse la pagina: la scheda non lascia partire, e il lavoro, lanciato lo stesso con la
-     * firma vera, si rifiuta. fakeother resta e gira.
+     * A pacchetti scaricati la scheda vede le due rimozioni e non lascia partire; il via dato lo
+     * stesso, con la firma vera della scheda, come se qualcuno scavalcasse la pagina: il lavoro si
+     * rifiuta. Non c'e' piu' nessuna conferma da mandare. fakeother resta e gira.
      */
-    static void otherUserConfirmed() throws Exception {
-        System.out.println("\n  --- guided: le due rimozioni «confermate» con una richiesta costruita a mano ---");
+    static void otherUserStartedAnyway() throws Exception {
+        System.out.println("\n  --- guided: a pacchetti scaricati, il via dato lo stesso ---");
         setUp("guided", "fakeother");
         // A pacchetti scaricati, come dopo il primo tentativo; da protetto pkg non lo scaricherebbe.
         sh("pkg unlock -y fakeapp; pkg upgrade -F -y fakeapp 2>&1; pkg lock -y fakeapp");
         String before = sh("pkg query %n-%v | sort");
-        Set<String> forged = Set.of("fakelib 1.0", "fakeother 1.0");
-        JSONObject pf = preview("guided", forged);
-        check("confermato a mano: la scheda non lascia partire", !pf.optBoolean("canProceed"));
-        JSONObject start = UpdateManager.startGuidedUpdate("fakeapp", pf.optString("signature"), forged);
+        JSONObject pf = preview("guided");
+        check("lanciato lo stesso: la scheda non lascia partire", !pf.optBoolean("canProceed"));
+        JSONObject start = UpdateManager.startGuidedUpdate("fakeapp", pf.optString("signature"));
         String id = start.optString("jobId");
         long deadline = System.currentTimeMillis() + 600_000;
         while (!id.isEmpty() && PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
         JSONObject job = id.isEmpty() ? new JSONObject() : UpdateManager.jobStatus(id).getJSONObject("job");
         System.out.println("     esito: " + job.optString("status") + " " + job.optString("errorMessage"));
-        check("confermato a mano: il lavoro lanciato lo stesso si rifiuta", id.isEmpty() || "error".equals(job.optString("status")));
-        check("confermato a mano: nessun pacchetto cambiato", sh("pkg query %n-%v | sort").equals(before));
-        check("confermato a mano: fake-other gira", sh("/usr/local/bin/fake-other; echo $?").trim().equals("0"));
+        check("lanciato lo stesso: il lavoro si rifiuta", id.isEmpty() || "error".equals(job.optString("status")));
+        check("lanciato lo stesso: nessun pacchetto cambiato", sh("pkg query %n-%v | sort").equals(before));
+        check("lanciato lo stesso: fake-other gira", sh("/usr/local/bin/fake-other; echo $?").trim().equals("0"));
     }
 
     /** fakeplugin usa libfake.so.1 senza dichiarare fakelib: pkg lo lascerebbe rotto. */
@@ -192,20 +191,20 @@ public class PackageReplacementE2ETest {
         System.out.println("\n  --- guided: fakeplugin usa libfake.so.1 senza dichiararlo ---");
         setUp("guided", "fakeplugin");
         String before = sh("pkg query %n-%v | sort");
-        JSONObject r = runFlow("guided", Set.of());
+        JSONObject r = runFlow("guided");
         if (r == null) return;
         check("plugin: il lavoro si ferma (" + r.optString("status") + ")", "error".equals(r.optString("status")));
         check("plugin: nessun pacchetto cambiato", sh("pkg query %n-%v | sort").equals(before));
         check("plugin: fake-plugin gira ancora", sh("/usr/local/bin/fake-plugin; echo $?").trim().equals("0"));
-        JSONObject pf = preview("guided", Set.of("fakelib 1.0"));
+        JSONObject pf = preview("guided");
         JSONArray v = pf.optJSONObject("plan") == null ? null : pf.getJSONObject("plan").optJSONArray("replacements");
         JSONObject fl = null;
         for (int i = 0; v != null && i < v.length(); i++) if (v.getJSONObject(i).optString("name").equals("fakelib")) fl = v.getJSONObject(i);
-        check("plugin: la scheda dice fakelib mai confermabile, perche' fakeplugin usa libfake.so.1",
-                fl != null && !fl.optBoolean("safe") && !fl.optBoolean("confirmable")
+        check("plugin: la scheda dice che fakelib non si toglie, perche' fakeplugin usa libfake.so.1",
+                fl != null && !fl.optBoolean("safe")
                         && fl.optJSONArray("problems").toString().contains("fakeplugin")
                         && fl.optJSONArray("problems").toString().contains("libfake.so.1"));
-        check("plugin: e non lascia partire nemmeno confermata", !pf.optBoolean("canProceed"));
+        check("plugin: e non lascia partire", !pf.optBoolean("canProceed"));
     }
 
     /* ===================================================================
@@ -222,18 +221,18 @@ public class PackageReplacementE2ETest {
         sh("pkg update -f -r " + REPO + " 2>&1");
     }
 
-    /** L'anteprima della scheda del lavoro, con le conferme date. */
-    static JSONObject preview(String flow, Set<String> confirmed) {
+    /** L'anteprima della scheda del lavoro. */
+    static JSONObject preview(String flow) {
         return switch (flow) {
-            case "guided" -> UpdateManager.packagePreflight("fakeapp", confirmed);
-            case "unprotected" -> UpdateManager.updatesStatus(confirmed);
-            default -> UpdateManager.maintenancePreview(confirmed);
+            case "guided" -> UpdateManager.packagePreflight("fakeapp");
+            case "unprotected" -> UpdateManager.updatesStatus();
+            default -> UpdateManager.maintenancePreview();
         };
     }
 
     /** Il lavoro intero, come da pagina: anteprima, controllo del piano, via, attesa. null se non e' partito. */
-    static JSONObject runFlow(String flow, Set<String> confirmed) throws Exception {
-        JSONObject pv = preview(flow, confirmed);
+    static JSONObject runFlow(String flow) throws Exception {
+        JSONObject pv = preview(flow);
         JSONObject plan = pv.optJSONObject("plan");
         Set<String> inPlan = new TreeSet<>();
         JSONArray ch = plan == null ? null : plan.optJSONArray("changes");
@@ -249,9 +248,9 @@ public class PackageReplacementE2ETest {
         }
         String signature = pv.optString("signature");
         JSONObject start = switch (flow) {
-            case "guided" -> UpdateManager.startGuidedUpdate("fakeapp", signature, confirmed);
-            case "unprotected" -> UpdateManager.startUnlockedPackagesUpdate(signature, confirmed);
-            default -> UpdateManager.startMaintenance(signature, confirmed);
+            case "guided" -> UpdateManager.startGuidedUpdate("fakeapp", signature);
+            case "unprotected" -> UpdateManager.startUnlockedPackagesUpdate(signature);
+            default -> UpdateManager.startMaintenance(signature);
         };
         String id = start.optString("jobId");
         if (id.isEmpty()) { check(flow + ": il lavoro parte (" + start + ")", false); return null; }

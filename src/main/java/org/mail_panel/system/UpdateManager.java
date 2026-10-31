@@ -872,10 +872,6 @@ public final class UpdateManager {
      * una simulazione e `pkg audit` interroga soltanto il database delle vulnerabilita'.
      */
     public static JSONObject updatesStatus() {
-        return updatesStatus(java.util.Set.of());
-    }
-
-    public static JSONObject updatesStatus(java.util.Set<String> confirmed) {
         JSONObject r = new JSONObject();
         ok("pkg update -q", 120);
 
@@ -894,7 +890,7 @@ public final class UpdateManager {
         // gemello di famiglia da sbloccare, per la stessa ragione: qui non si sblocca niente.
         JSONObject unprotectedPlan = judged(PackagePlan.fullPlan(java.util.Set.of(), lockedNames(),
                 b -> I18n.tr("server.um.x.staysLockedHere")));
-        String blocked = destructivePlanReason(unprotectedPlan, confirmed);
+        String blocked = destructivePlanReason(unprotectedPlan);
         r.put("plan", planForCard(unprotectedPlan))
          .put("signature", unprotectedPlan.optString("signature"))
          .put("blockedReason", blocked == null ? "" : blocked);
@@ -1117,10 +1113,6 @@ public final class UpdateManager {
     }
 
     public static JSONObject maintenancePreview() {
-        return maintenancePreview(java.util.Set.of());
-    }
-
-    public static JSONObject maintenancePreview(java.util.Set<String> confirmed) {
         ok("pkg update -q", 120);
         JSONArray arr = lockedUpdates();
         int majors = 0, expectedOnes = 0;
@@ -1133,7 +1125,7 @@ public final class UpdateManager {
         // con gli stessi sblocchi che fara' il lavoro vero. La tabella qui sopra dice i pacchetti
         // protetti; questo dice TUTTO cio' che cambiera', dipendenze comprese.
         JSONObject plan = judged(maintenancePlan(arr).getJSONObject("plan"));
-        String blocked = destructivePlanReason(plan, confirmed);
+        String blocked = destructivePlanReason(plan);
         return new JSONObject().put("success", true).put("packages", arr)
                 .put("blockedReason", blocked == null ? "" : blocked)
                 .put("plan", planForCard(plan)).put("signature", plan.optString("signature", ""))
@@ -2505,8 +2497,7 @@ public final class UpdateManager {
     record Recheck(String stop, JSONObject plan) {}
 
     private static Recheck fetchAndRecheck(Job job, String fetchCommand, JSONObject approved,
-                                              java.util.function.Supplier<JSONObject> recompute,
-                                              java.util.Set<String> confirmed) throws Exception {
+                                              java.util.function.Supplier<JSONObject> recompute) throws Exception {
         job.write("  " + I18n.tr("server.um.x.fetchFirst"));
         int fetchCode = runLogged(job, fetchCommand, 1800);
         if (fetchCode != 0) {
@@ -2526,8 +2517,8 @@ public final class UpdateManager {
             return new Recheck(null, approved);
         }
         // Cresciuto di sole rimozioni: e' il caso di lmdb -> lmdb0, dove pkg vede il conflitto sui
-        // file solo dopo aver scaricato. Se ognuna e' una sostituzione innocua (o confermata) si
-        // va avanti col piano nuovo, e le prove si scrivono qui, nel registro del lavoro.
+        // file solo dopo aver scaricato. Se ognuna e' una sostituzione innocua si va avanti col
+        // piano nuovo, e le prove si scrivono qui, nel registro del lavoro.
         java.util.List<String> added = onlyAddedRemovals(approved, now);
         if (added != null && !added.isEmpty()) {
             judged(now);
@@ -2536,13 +2527,12 @@ public final class UpdateManager {
                 job.write("  " + mapsNow);
                 return new Recheck(mapsNow, approved);
             }
-            if (removalsToConfirm(now, confirmed).isEmpty()) {
+            if (removalsRefused(now).isEmpty()) {
                 job.write("  " + I18n.tr("server.um.x.planGrewReplacement", java.util.Map.of("list", String.join(", ", added))));
                 JSONArray v = now.getJSONArray("replacements");
                 for (int i = 0; i < v.length(); i++) {
                     JSONObject x = v.getJSONObject(i);
-                    job.write("    " + x.optString("name") + " " + x.optString("version")
-                            + (x.optBoolean("safe") ? "" : " (" + I18n.tr("server.um.x.removalConfirmedByYou") + ")"));
+                    job.write("    " + x.optString("name") + " " + x.optString("version"));
                     for (String e : jsonArrayToList(x.optJSONArray("evidence"))) job.write("      ok  " + e);
                     for (String e : jsonArrayToList(x.optJSONArray("problems"))) job.write("      !!  " + e);
                 }
@@ -2551,12 +2541,10 @@ public final class UpdateManager {
                 return new Recheck(null, now);
             }
             // Il motivo dell'arresto e' questo, non il generico «il piano e' cambiato»: dice a chi
-            // legge che cosa confermare, e dove.
-            String why = removalsNever(now).isEmpty()
-                    ? I18n.tr("server.um.x.planGrewConfirm", java.util.Map.of("list", String.join(", ", removalsToConfirm(now, confirmed))))
-                    : removalsReason(now, confirmed);
+            // legge quali rimozioni il pannello non esegue.
+            String why = removalsReason(now);
             job.write("  " + why);
-            LOGGER.warning("Plan grew after fetching by removals to confirm: " + before + " -> " + after + "; " + now.getJSONArray("replacements"));
+            LOGGER.warning("Plan grew after fetching by removals the panel refuses: " + before + " -> " + after + "; " + now.getJSONArray("replacements"));
             return new Recheck(why, approved);
         }
         job.write("  " + I18n.tr("server.um.x.planGrew", java.util.Map.of("before", String.valueOf(before), "after", String.valueOf(after))));
@@ -2650,11 +2638,6 @@ public final class UpdateManager {
         return plan.put("replacements", PackageReplacement.judgePlan(plan));
     }
 
-    /** Le rimozioni confermate dalla pagina ("nome versione"), solo nella forma ammessa. */
-    public static java.util.Set<String> removalConfirmations(JSONArray fromPage) {
-        return PackageReplacement.confirmations(fromPage);
-    }
-
     /** Il giudizio su ogni rimozione del piano, per "nome versione". */
     private static Map<String, JSONObject> verdictsByKey(JSONObject plan) {
         Map<String, JSONObject> m = new LinkedHashMap<>();
@@ -2667,64 +2650,39 @@ public final class UpdateManager {
     }
 
     /**
-     * "nome versione" delle rimozioni del piano che il pannello non esegue da solo: quelle non
-     * innocue che nessuno ha confermato, e quelle che non si possono confermare affatto.
+     * "nome versione" delle rimozioni del piano che il pannello non esegue: tutte quelle che non
+     * sono una sostituzione innocua. Qualcosa che resta installato sparirebbe o smetterebbe di
+     * funzionare, o non si e' potuto misurare (una rimozione senza giudizio conta cosi'). Non c'e'
+     * modo di confermarle: vedi PackageReplacement.
      */
-    static java.util.List<String> removalsToConfirm(JSONObject plan, java.util.Set<String> confirmed) {
+    static java.util.List<String> removalsRefused(JSONObject plan) {
         Map<String, JSONObject> v = verdictsByKey(plan);
-        java.util.List<String> left = new ArrayList<>();
+        java.util.List<String> refused = new ArrayList<>();
         for (String r : jsonArrayToList(destructiveChanges(plan).getJSONArray("removes"))) {
             JSONObject x = v.get(r);
-            if (x != null && x.optBoolean("safe")) continue;
-            if (x != null && x.optBoolean("confirmable") && confirmed != null && confirmed.contains(r)) continue;
-            left.add(r);
+            if (x == null || !x.optBoolean("safe")) refused.add(r);
         }
-        return left;
+        return refused;
     }
 
-    /**
-     * "nome versione" delle rimozioni che il pannello non esegue mai, nemmeno confermate: qualcosa
-     * che resta installato sparirebbe o smetterebbe di funzionare, o non si e' potuto misurare (una
-     * rimozione senza giudizio conta cosi'). Vedi PackageReplacement.
-     */
-    static java.util.List<String> removalsNever(JSONObject plan) {
-        Map<String, JSONObject> v = verdictsByKey(plan);
-        java.util.List<String> never = new ArrayList<>();
-        for (String r : jsonArrayToList(destructiveChanges(plan).getJSONArray("removes"))) {
-            JSONObject x = v.get(r);
-            if (x == null || (!x.optBoolean("safe") && !x.optBoolean("confirmable"))) never.add(r);
-        }
-        return never;
-    }
-
-    /** Il motivo per le rimozioni che fermano il piano, nelle due specie, o null se non ce ne sono. */
-    static String removalsReason(JSONObject plan, java.util.Set<String> confirmed) {
-        java.util.List<String> never = removalsNever(plan);
-        java.util.List<String> toConfirm = new ArrayList<>(removalsToConfirm(plan, confirmed));
-        toConfirm.removeAll(never);
-        java.util.List<String> reasons = new ArrayList<>();
-        if (!never.isEmpty())
-            reasons.add(I18n.tr("server.um.x.planRemovesNever", java.util.Map.of("list", String.join(", ", never))));
-        if (!toConfirm.isEmpty())
-            reasons.add(I18n.tr("server.um.x.planRemoves", java.util.Map.of("list", String.join(", ", toConfirm))));
-        return reasons.isEmpty() ? null : String.join(" ", reasons);
+    /** Il motivo per le rimozioni che fermano il piano, o null se non ce ne sono. */
+    static String removalsReason(JSONObject plan) {
+        java.util.List<String> refused = removalsRefused(plan);
+        return refused.isEmpty() ? null
+                : I18n.tr("server.um.x.planRemovesNever", java.util.Map.of("list", String.join(", ", refused)));
     }
 
     /**
      * Il motivo per cui un piano non si esegue, o null se non tocca niente in quel modo.
      * Lo chiedono i tre lavori che eseguono un piano, cosi' la regola e' una sola.
      *
-     * Una rimozione passa se e' una sostituzione innocua (il giudizio sta nel piano, vedi
-     * judged) o se chi guarda l'ha confermata; le retrocessioni non passano mai.
+     * Una rimozione passa solo se e' una sostituzione innocua (il giudizio sta nel piano, vedi
+     * judged); le retrocessioni non passano mai.
      */
     static String destructivePlanReason(JSONObject plan) {
-        return destructivePlanReason(plan, java.util.Set.of());
-    }
-
-    static String destructivePlanReason(JSONObject plan, java.util.Set<String> confirmed) {
         JSONObject d = destructiveChanges(plan);
         java.util.List<String> reasons = new ArrayList<>();
-        String removals = removalsReason(plan, confirmed);
+        String removals = removalsReason(plan);
         if (removals != null) reasons.add(removals);
         // Un piano che puo' cambiare la libreria di un tipo di mappa di Postfix, se una mappa di quel
         // tipo non ha il suo testo: dopo non si potrebbe rigenerare (PostfixMaps).
@@ -6298,10 +6256,6 @@ public final class UpdateManager {
      * andranno riavviati, prima che qualcuno prema qualcosa.
      */
     public static JSONObject packagePreflight(String name) {
-        return packagePreflight(name, java.util.Set.of());
-    }
-
-    public static JSONObject packagePreflight(String name, java.util.Set<String> confirmed) {
         JSONObject r = new JSONObject();
         if (!isValidName(name)) return r.put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
         JSONArray checks = new JSONArray();
@@ -6477,15 +6431,13 @@ public final class UpdateManager {
                 block = true;
             }
             if (!removed.isEmpty()) {
-                // Una sostituzione innocua, o una rimozione confermata, e' un avviso; le altre
-                // fermano, e la pagina mostra le prove col pulsante per confermarle.
-                java.util.List<String> left = removalsToConfirm(plan, confirmed);
-                if (left.isEmpty()) {
+                // Una sostituzione innocua e' un avviso; le altre fermano, e la pagina mostra le prove.
+                if (removalsRefused(plan).isEmpty()) {
                     addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "review",
                             I18n.tr("server.um.x.removalsAccepted", java.util.Map.of("list", String.join(", ", removed))));
                 } else {
                     addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "block",
-                            removalsReason(plan, confirmed));
+                            removalsReason(plan));
                     block = true;
                 }
             }
@@ -6612,10 +6564,6 @@ public final class UpdateManager {
      *                          piano che nessuno ha visto.
      */
     public static JSONObject startGuidedUpdate(String name, String approvedSignature) {
-        return startGuidedUpdate(name, approvedSignature, java.util.Set.of());
-    }
-
-    public static JSONObject startGuidedUpdate(String name, String approvedSignature, java.util.Set<String> confirmed) {
         if (!isValidName(name)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
         if (approvedSignature == null || !approvedSignature.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
@@ -6626,7 +6574,7 @@ public final class UpdateManager {
         // approvati da due schede non possono partire insieme.
         final String pkgName2 = name;
         return startOnTurn(id, j, I18n.tr("server.um.startGuidedUpdate.2", java.util.Map.of("name", String.valueOf(name))), "guided-update",
-                () -> runGuidedUpdate(j, pkgName2, approvedSignature, confirmed));
+                () -> runGuidedUpdate(j, pkgName2, approvedSignature));
     }
 
     /**
@@ -6638,7 +6586,7 @@ public final class UpdateManager {
      * aggiornato con il processo ancora sui file vecchi e' una vulnerabilita' aperta che
      * risulta chiusa: il modo peggiore di stare fermi.
      */
-    private static void runGuidedUpdate(Job job, String name, String approvedSignature, java.util.Set<String> confirmed) {
+    private static void runGuidedUpdate(Job job, String name, String approvedSignature) {
         job.status = "running";
         final int TOT = 6;
         boolean planNotFollowed = false;
@@ -6664,7 +6612,7 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.runGuidedUpdate.1", java.util.Map.of("name", String.valueOf(name))));
             job.write("");
             job.write(I18n.tr("server.um.runMigration84.1", java.util.Map.of("total", String.valueOf(TOT))));
-            JSONObject pf = packagePreflight(name, confirmed);
+            JSONObject pf = packagePreflight(name);
             if (!pf.optBoolean("canProceed", false)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runMigration84.3");
@@ -6759,7 +6707,7 @@ public final class UpdateManager {
             final java.util.List<String> family = pkgFamily;
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U" + list + " 2>&1", plan,
                     () -> PackagePlan.planFor(family, lockedNames(), UpdateManager::reasonNotToUnlock,
-                            UpdateManager::installedFamilyTwin), confirmed);
+                            UpdateManager::installedFamilyTwin));
             if (grown.stop() != null) throw new IllegalStateException(grown.stop());
             plan = grown.plan();
             // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
@@ -10570,35 +10518,27 @@ public final class UpdateManager {
 
     /** @param approvedSignature l'impronta del piano mostrato dall'anteprima: si esegue quello o niente. */
     public static JSONObject startMaintenance(String approvedSignature) {
-        return startMaintenance(approvedSignature, java.util.Set.of());
-    }
-
-    public static JSONObject startMaintenance(String approvedSignature, java.util.Set<String> confirmed) {
         if (approvedSignature == null || !approvedSignature.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.um.startMaintenance.1"));
         String id = "maint-" + System.currentTimeMillis();
         Job j = new Job(id, "maintenance");
-        return startOnTurn(id, j, I18n.tr("server.um.x.turnMaintenance"), "update-maintenance", () -> runMaintenanceJob(j, approvedSignature, confirmed));
+        return startOnTurn(id, j, I18n.tr("server.um.x.turnMaintenance"), "update-maintenance", () -> runMaintenanceJob(j, approvedSignature));
     }
 
     /** @param approvedSignature la firma del piano letto nella scheda: si esegue quello o niente. */
     public static JSONObject startUnlockedPackagesUpdate(String approvedSignature) {
-        return startUnlockedPackagesUpdate(approvedSignature, java.util.Set.of());
-    }
-
-    public static JSONObject startUnlockedPackagesUpdate(String approvedSignature, java.util.Set<String> confirmed) {
         if (approvedSignature == null || !approvedSignature.matches("[0-9a-f]{16}"))
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.um.startUnlockedPackagesUpdate.2"));
         String id = "upd-" + System.currentTimeMillis();
         Job j = new Job(id, "update");
         return startOnTurn(id, j, I18n.tr("server.um.startUnlockedPackagesUpdate.1"), "update-plain",
-                () -> runUpdateJob(j, approvedSignature, confirmed));
+                () -> runUpdateJob(j, approvedSignature));
     }
 
     /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti bloccati. */
-    private static void runUpdateJob(Job job, String approvedSignature, java.util.Set<String> confirmed) {
+    private static void runUpdateJob(Job job, String approvedSignature) {
         job.status = "running";
         // Lo stato dei servizi PRIMA dell'aggiornamento: e' l'unico modo di distinguere un
         // servizio caduto da uno che non era attivo nemmeno prima.
@@ -10638,7 +10578,7 @@ public final class UpdateManager {
                 return;
             }
             // La stessa regola degli altri due: niente rimozioni, niente retrocessioni.
-            String destructive = destructivePlanReason(judged(plan), confirmed);
+            String destructive = destructivePlanReason(judged(plan));
             if (destructive != null) {
                 job.status = "error";
                 job.errorMessage = destructive;
@@ -10661,7 +10601,7 @@ public final class UpdateManager {
             // da cio' che e' nella cache di pkg (vedi fetchAndRecheck).
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U 2>&1", plan,
                     () -> PackagePlan.fullPlan(java.util.Set.of(), lockedNames(),
-                            b -> I18n.tr("server.um.x.staysLockedHere")), confirmed);
+                            b -> I18n.tr("server.um.x.staysLockedHere")));
             if (grown.stop() != null) throw new IllegalStateException(grown.stop());
             plan = grown.plan();
 
@@ -10769,7 +10709,7 @@ public final class UpdateManager {
                 .put("protectedNames", new JSONArray(new ArrayList<>(protectedNames)));
     }
 
-    private static void runMaintenanceJob(Job job, String approvedSignature, java.util.Set<String> confirmed) {
+    private static void runMaintenanceJob(Job job, String approvedSignature) {
         job.status = "running";
         List<String> toRelock = new ArrayList<>();
         JSONObject plan = null;
@@ -10838,7 +10778,7 @@ public final class UpdateManager {
             // La stessa regola della scheda di un pacchetto: il pannello non esegue piani
             // che rimuovono o retrocedono pacchetti. Qui mancava, e questo e' il lavoro che
             // si preme per aggiornare tutto.
-            String destructive = destructivePlanReason(judged(plan), confirmed);
+            String destructive = destructivePlanReason(judged(plan));
             if (destructive != null) {
                 job.status = "error";
                 job.errorMessage = destructive;
@@ -10885,7 +10825,7 @@ public final class UpdateManager {
             // Come nell'aggiornamento guidato: prima si scarica e si ricalcola, perche' il
             // piano dipende da cio' che e' nella cache di pkg (vedi fetchAndRecheck).
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U 2>&1", plan,
-                    () -> maintenancePlan(lockedUpdates()).getJSONObject("plan"), confirmed);
+                    () -> maintenancePlan(lockedUpdates()).getJSONObject("plan"));
             if (grown.stop() != null) throw new IllegalStateException(grown.stop());
             plan = grown.plan();
 

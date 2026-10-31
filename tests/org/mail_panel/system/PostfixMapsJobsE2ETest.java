@@ -169,9 +169,9 @@ public class PostfixMapsJobsE2ETest {
         System.out.println("     motivo: " + reason);
         check(label + "e il motivo nomina la mappa senza testo", reason.contains(SOURCE));
         JSONObject start = switch (flow) {
-            case "guided" -> UpdateManager.startGuidedUpdate(FAKE, pv.optString("signature"), Set.of());
-            case "unprotected" -> UpdateManager.startUnlockedPackagesUpdate(pv.optString("signature"), Set.of());
-            default -> UpdateManager.startMaintenance(pv.optString("signature"), Set.of());
+            case "guided" -> UpdateManager.startGuidedUpdate(FAKE, pv.optString("signature"));
+            case "unprotected" -> UpdateManager.startUnlockedPackagesUpdate(pv.optString("signature"));
+            default -> UpdateManager.startMaintenance(pv.optString("signature"));
         };
         String id = start.optString("jobId");
         long deadline = System.currentTimeMillis() + 600_000;
@@ -229,7 +229,7 @@ public class PostfixMapsJobsE2ETest {
         System.out.println("     motivo: " + m);
         check("solo nel db, prevista: la scheda non lascia partire", !pv.optBoolean("canProceed"));
         check("solo nel db, prevista: e il motivo nomina la mappa", m.contains(SOURCE));
-        JSONObject start = UpdateManager.startGuidedUpdate(FAKE, pv.optString("signature"), Set.of());
+        JSONObject start = UpdateManager.startGuidedUpdate(FAKE, pv.optString("signature"));
         String id = start.optString("jobId");
         long deadline = System.currentTimeMillis() + 600_000;
         while (!id.isEmpty() && PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
@@ -267,9 +267,9 @@ public class PostfixMapsJobsE2ETest {
 
     static JSONObject preview(String flow) {
         return switch (flow) {
-            case "guided" -> UpdateManager.packagePreflight(FAKE, Set.of());
-            case "unprotected" -> UpdateManager.updatesStatus(Set.of());
-            default -> UpdateManager.maintenancePreview(Set.of());
+            case "guided" -> UpdateManager.packagePreflight(FAKE);
+            case "unprotected" -> UpdateManager.updatesStatus();
+            default -> UpdateManager.maintenancePreview();
         };
     }
 
@@ -291,9 +291,9 @@ public class PostfixMapsJobsE2ETest {
         }
         String signature = pv.optString("signature");
         JSONObject start = switch (flow) {
-            case "guided" -> UpdateManager.startGuidedUpdate(FAKE, signature, Set.of());
-            case "unprotected" -> UpdateManager.startUnlockedPackagesUpdate(signature, Set.of());
-            default -> UpdateManager.startMaintenance(signature, Set.of());
+            case "guided" -> UpdateManager.startGuidedUpdate(FAKE, signature);
+            case "unprotected" -> UpdateManager.startUnlockedPackagesUpdate(signature);
+            default -> UpdateManager.startMaintenance(signature);
         };
         String id = start.optString("jobId");
         if (id.isEmpty()) { check(flow + ": il lavoro parte (" + start + ")", false); return null; }
