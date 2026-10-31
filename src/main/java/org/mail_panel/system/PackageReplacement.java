@@ -214,10 +214,31 @@ final class PackageReplacement {
 
     /** Dove Postfix usa il tipo di mappa (main.cf, master.cf) e i file con quell'estensione. */
     static List<String> postfixUses(String mapType, String extension) {
-        List<String> uses = new ArrayList<>();
         Shell.Result dir = Shell.run(Duration.ofSeconds(20), "postconf", "-h", "config_directory");
-        if (!dir.success()) return uses;   // senza Postfix nessuno legge quelle mappe
-        Path conf = Path.of(dir.outputTrim());
+        if (!dir.success()) return new ArrayList<>();   // senza Postfix nessuno legge quelle mappe
+        List<String> uses = new ArrayList<>();
+        // I parametri in vigore, predefiniti compresi: main.cf non dice tutto (alias_maps, per
+        // esempio, ha un valore predefinito che nel file non compare).
+        Shell.Result all = Shell.run(Duration.ofSeconds(20), "postconf");
+        if (all.success()) uses.addAll(parametersUsing(all.output(), mapType));
+        uses.addAll(postfixUses(Path.of(dir.outputTrim()), mapType, extension));
+        return uses;
+    }
+
+    /** I parametri di "postconf" (nome = valore) il cui valore usa il tipo di mappa. */
+    static List<String> parametersUsing(String postconf, String mapType) {
+        List<String> out = new ArrayList<>();
+        Pattern use = Pattern.compile("(^|[\\s,=])" + Pattern.quote(mapType) + ":");
+        for (String line : (postconf == null ? "" : postconf).split("\n")) {
+            int eq = line.indexOf(" = ");
+            if (eq > 0 && use.matcher(line.substring(eq + 3)).find()) out.add("postconf " + line.substring(0, eq).trim());
+        }
+        return out;
+    }
+
+    /** Lo stesso su una cartella di configurazione data: separato per provarlo senza Postfix. */
+    static List<String> postfixUses(Path conf, String mapType, String extension) {
+        List<String> uses = new ArrayList<>();
         for (String f : new String[]{"main.cf", "master.cf"}) {
             try {
                 Path p = conf.resolve(f);

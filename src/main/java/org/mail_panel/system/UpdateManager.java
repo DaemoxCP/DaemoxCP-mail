@@ -2545,8 +2545,13 @@ public final class UpdateManager {
                         + "; " + v);
                 return new Recheck(null, now);
             }
-            job.write("  " + I18n.tr("server.um.x.planGrewConfirm", java.util.Map.of(
-                    "list", String.join(", ", removalsToConfirm(now, confirmed)))));
+            // Il motivo dell'arresto e' questo, non il generico «il piano e' cambiato»: dice a chi
+            // legge che cosa confermare, e dove.
+            String why = I18n.tr("server.um.x.planGrewConfirm", java.util.Map.of(
+                    "list", String.join(", ", removalsToConfirm(now, confirmed))));
+            job.write("  " + why);
+            LOGGER.warning("Plan grew after fetching by removals to confirm: " + before + " -> " + after + "; " + now.getJSONArray("replacements"));
+            return new Recheck(why, approved);
         }
         job.write("  " + I18n.tr("server.um.x.planGrew", java.util.Map.of("before", String.valueOf(before), "after", String.valueOf(after))));
         job.write("  " + I18n.tr("server.um.x.planApproved"));
