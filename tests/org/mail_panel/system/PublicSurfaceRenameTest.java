@@ -20,6 +20,8 @@ import java.util.stream.Stream;
  * ogni reload attiva le jail che trova in jail.d riprendendo dal database i ban di ciascuna. Una
  * jail col nome nuovo ritrova i ban solo se lo stato nel database e' passato a lei. Conta anche
  * i ban dati a mano (le righe «Ban» che la jail recidive conta): una rinomina non ne deve dare.
+ * Con la superficie si sposta la cartella dei suoi file (mta-sts.txt), che il file di nginx cita
+ * per percorso: sul server vero, il 31/10/2026, quel percorso restava quello vecchio.
  * L'effetto su nginx, fail2ban e pf veri lo misura la prova sulla VM (reperti).
  *
  * Si lancia ovunque (non chiama niente):
@@ -48,10 +50,18 @@ public class PublicSurfaceRenameTest {
     static final List<String> OLD_SIGNATURES = LegacyNames.oldNamesOf("panelSignature", PanelMarker.WRITTEN);
     static String signedBefore(String content, String signature) { return content.replace(PanelMarker.WRITTEN, signature); }
 
-    /** I tre file come li scriveva main prima della rinomina: quelli di oggi col nome e la firma di ieri. */
-    static String oldConf() {
-        return signedBefore(WebProtection.configuration(CERT, KEY), OLD_SIGNATURES.get(OLD_SIGNATURES.size() - 1)).replace(NEW, OLD);
+    /**
+     * I tre file come li scriveva main prima della rinomina: quelli di oggi col nome e la firma di
+     * ieri, e il file di nginx con la cartella dei file pubblici di ieri (folder).
+     */
+    static String oldConf(Path folder) {
+        return signedBefore(WebProtection.configuration(CERT, KEY), OLD_SIGNATURES.get(OLD_SIGNATURES.size() - 1))
+                .replace(NEW, OLD).replace(WebProtection.PUBLIC_DIR, folder.toString());
     }
+    /** Il file di nginx di oggi, con la cartella dei file pubblici data. */
+    static String conf(Path folder) { return WebProtection.configuration(CERT, KEY).replace(WebProtection.PUBLIC_DIR, folder.toString()); }
+    /** Il nome della cartella dei file pubblici di prima, dal file di dati. */
+    static final String OLD_FOLDER = Path.of(LegacyNames.single("publicFolder")).getFileName().toString();
     static String oldFilter() { return signedBefore(WebProtection.filter(), OLD_SIGNATURES.get(0)).replace(NEW, OLD); }
     static String oldJail() { return signedBefore(WebProtection.jail(), OLD_SIGNATURES.get(0)).replace(NEW, OLD); }
 
@@ -113,7 +123,7 @@ public class PublicSurfaceRenameTest {
 
     /** Un server installato con main prima della rinomina, in una cartella temporanea. */
     static final class Server {
-        final Path root, f2b, jailD, filterD, logs, confD, sites;
+        final Path root, f2b, jailD, filterD, logs, confD, sites, oldFolder, newFolder;
         final PublicSurfaceRename.Places places;
         final FakeServices sv;
 
@@ -125,12 +135,18 @@ public class PublicSurfaceRenameTest {
             logs = Files.createDirectories(root.resolve("log/nginx"));
             confD = Files.createDirectories(root.resolve("nginx/conf.d"));
             sites = Files.createDirectories(root.resolve("nginx/sites-enabled"));
-            places = new PublicSurfaceRename.Places(f2b, logs, confD);
+            oldFolder = root.resolve("db").resolve(OLD_FOLDER);
+            newFolder = root.resolve("db").resolve(Path.of(WebProtection.PUBLIC_DIR).getFileName().toString());
+            places = new PublicSurfaceRename.Places(f2b, logs, confD, oldFolder, newFolder);
             sv = new FakeServices(jailD, List.of(confD.toString()));
             // Le cose degli altri che non devono muoversi.
             Files.writeString(logs.resolve("access.log"), "webmail\n");
             Files.writeString(jailD.resolve("postfix-sasl.conf"), "[postfix-sasl]\n");
-            if (withConf) Files.writeString(confD.resolve(OLD + ".conf"), oldConf());
+            if (withConf) {
+                Files.writeString(confD.resolve(OLD + ".conf"), oldConf(oldFolder));
+                Files.createDirectories(oldFolder);
+                Files.writeString(oldFolder.resolve("mta-sts.txt"), "version: STSv1\nmode: enforce\n");
+            }
             if (withJail) {
                 Files.writeString(filterD.resolve(OLD + ".conf"), oldFilter());
                 Path j = jailD.resolve(OLD + ".conf");
@@ -176,9 +192,11 @@ public class PublicSurfaceRenameTest {
         String newName = (String) WebProtection.class.getDeclaredField("NAME").get(null);
         check("il nome vecchio viene dal file di dati e il nuovo e' diverso",
                 !oldName.isEmpty() && oldName.equals(OLD) && newName.equals(NEW) && !oldName.equals(newName));
-        check("il codice di oggi non scrive piu' il nome vecchio (configurazione, filtro, jail)",
+        check("il codice di oggi non scrive piu' il nome vecchio (configurazione, filtro, jail), ne' la cartella di prima",
                 !WebProtection.configuration(CERT, KEY).contains(OLD) && !WebProtection.jail().contains(OLD)
-                        && !WebProtection.filter().contains(OLD) && !WebProtection.ACCESS_LOG.contains(OLD));
+                        && !WebProtection.filter().contains(OLD) && !WebProtection.ACCESS_LOG.contains(OLD)
+                        && !WebProtection.configuration(CERT, KEY).contains(LegacyNames.single("publicFolder"))
+                        && WebProtection.configuration(CERT, KEY).contains(WebProtection.PUBLIC_DIR + "/mta-sts.txt"));
         check("la jail di oggi: sezione, filtro, log e ancora pf col nome nuovo",
                 WebProtection.jail().contains("[" + NEW + "]") && WebProtection.jail().contains("filter   = " + NEW + "\n")
                         && WebProtection.jail().contains("logpath  = /var/log/nginx/" + NEW + "-access.log")
@@ -188,8 +206,8 @@ public class PublicSurfaceRenameTest {
                         "Current database file is:\n`- /var/db/fail2ban/fail2ban.sqlite3\n"))
                         && PublicSurfaceRename.fail2banDatabase("Database currently disabled") == null);
         check("i tre file di main hanno la firma di prima, e il pannello la riconosce",
-                OLD_SIGNATURES.size() == 2 && !oldConf().contains(PanelMarker.WRITTEN) && !oldJail().contains(PanelMarker.WRITTEN)
-                        && !oldFilter().contains(PanelMarker.WRITTEN) && PanelMarker.writtenByPanel(oldConf())
+                OLD_SIGNATURES.size() == 2 && !oldConf(Path.of("/x")).contains(PanelMarker.WRITTEN) && !oldJail().contains(PanelMarker.WRITTEN)
+                        && !oldFilter().contains(PanelMarker.WRITTEN) && PanelMarker.writtenByPanel(oldConf(Path.of("/x")))
                         && PanelMarker.writtenByPanel(oldFilter()) && PanelMarker.writtenByPanel(oldJail()));
         check("la riga di fail2ban-client status si legge",
                 PublicSurfaceRename.bannedFrom("|- Actions\n   |- Currently banned:\t2\n   |- Total banned:\t46\n"
@@ -200,9 +218,11 @@ public class PublicSurfaceRenameTest {
         Server s = new Server(true, true, true);
         PublicSurfaceRename.Report r = s.run();
         check("esito DONE", r.outcome() == PublicSurfaceRename.Outcome.DONE);
-        check("nginx: il file nuovo e' quello che scrive il pannello oggi, il vecchio non c'e' piu'",
-                WebProtection.configuration(CERT, KEY).equals(s.read(s.confD.resolve(NEW + ".conf")))
+        check("nginx: il file nuovo e' quello che scrive il pannello oggi, con la cartella nuova; il vecchio non c'e' piu'",
+                conf(s.newFolder).equals(s.read(s.confD.resolve(NEW + ".conf")))
                         && !Files.exists(s.confD.resolve(OLD + ".conf")));
+        check("la cartella dei file pubblici ha il nome nuovo, con mta-sts.txt dentro, e la vecchia non c'e' piu'",
+                "version: STSv1\nmode: enforce\n".equals(s.read(s.newFolder.resolve("mta-sts.txt"))) && !Files.exists(s.oldFolder));
         check("fail2ban: jail e filtro nuovi uguali a quelli di oggi, i vecchi tolti",
                 WebProtection.jail().equals(s.read(s.jailD.resolve(NEW + ".conf")))
                         && WebProtection.filter().equals(s.read(s.filterD.resolve(NEW + ".conf")))
@@ -284,14 +304,14 @@ public class PublicSurfaceRenameTest {
                         && s.sv.nginxTests == 0 && s.sv.f2bReloads == 0);
 
         s = new Server(true, true, true);
-        Files.writeString(s.confD.resolve(NEW + ".conf"), WebProtection.configuration(CERT, KEY));
+        Files.writeString(s.confD.resolve(NEW + ".conf"), conf(s.newFolder));
         before = s.snapshot();
         r = s.run();
         check("nome vecchio e nuovo insieme: BOTH_NAMES, niente spostato",
                 r.outcome() == PublicSurfaceRename.Outcome.BOTH_NAMES && before.equals(s.snapshot()));
 
         s = new Server(true, true, true);
-        Files.writeString(s.sites.resolve(OLD + ".conf"), oldConf());
+        Files.writeString(s.sites.resolve(OLD + ".conf"), oldConf(s.oldFolder));
         s.sv.folders = List.of(s.confD.toString(), s.sites.toString());
         before = s.snapshot();
         r = s.run();
@@ -328,6 +348,62 @@ public class PublicSurfaceRenameTest {
         check("senza jail (la 443 c'e', fail2ban non l'ha): si sposta nginx, fail2ban non si tocca",
                 r.outcome() == PublicSurfaceRename.Outcome.DONE && Files.exists(s.confD.resolve(NEW + ".conf"))
                         && s.sv.f2bReloads == 0 && s.sv.nginxReloads == 1);
+
+        OUT.println("\n== La cartella dei file pubblici ==");
+        check("la cartella la sposta solo questa migrazione: non e' fra i file che sposta PathMigration",
+                !LegacyNames.single("publicFolder").isEmpty()
+                        && LegacyNames.pairs("files").stream().noneMatch(p -> p[0].equals(LegacyNames.single("publicFolder"))));
+        s = new Server(true, true, true);
+        Files.createDirectories(s.newFolder);
+        before = s.snapshot();
+        r = s.run();
+        check("cartella vecchia e nuova insieme: BOTH_NAMES, niente spostato",
+                r.outcome() == PublicSurfaceRename.Outcome.BOTH_NAMES && before.equals(s.snapshot()) && Files.exists(s.oldFolder));
+
+        s = new Server(true, true, true);
+        s.sv.nginxTestFails = true;
+        r = s.run();
+        check("nginx rifiuta: la cartella torna al nome vecchio, e nginx la cita ancora",
+                r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK && Files.exists(s.oldFolder.resolve("mta-sts.txt"))
+                        && !Files.exists(s.newFolder) && oldConf(s.oldFolder).equals(s.read(s.confD.resolve(OLD + ".conf"))));
+
+        // Un server che main ha gia' portato al nome nuovo prima di questa correzione: la cartella
+        // l'ha spostata PathMigration, e il file di nginx cita ancora la vecchia.
+        s = new Server(false, false, false);
+        Files.createDirectories(s.newFolder);
+        Files.writeString(s.newFolder.resolve("mta-sts.txt"), "version: STSv1\n");
+        Files.writeString(s.confD.resolve(NEW + ".conf"), conf(s.oldFolder));
+        r = s.run();
+        check("gia' rinominato ma col percorso vecchio: si riscrive solo il file di nginx, nginx -t e reload",
+                r.outcome() == PublicSurfaceRename.Outcome.DONE && conf(s.newFolder).equals(s.read(s.confD.resolve(NEW + ".conf")))
+                        && s.sv.nginxTests == 1 && s.sv.nginxReloads == 1 && s.sv.f2bReloads == 0);
+        calls = s.sv.foldersCalls;
+        r = s.run();
+        check("  e al secondo avvio non c'e' piu' niente da fare, nemmeno nginx -T",
+                r.outcome() == PublicSurfaceRename.Outcome.NOTHING && s.sv.foldersCalls == calls);
+
+        s = new Server(false, false, false);
+        Files.createDirectories(s.newFolder);
+        Files.writeString(s.confD.resolve(NEW + ".conf"), conf(s.oldFolder));
+        s.sv.nginxTestFails = true;
+        before = s.snapshot();
+        r = s.run();
+        check("  se nginx rifiuta il file riscritto, torna com'era", r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK
+                && before.equals(s.snapshot()));
+
+        s = new Server(false, false, false);
+        Files.createDirectories(s.oldFolder);
+        Files.writeString(s.oldFolder.resolve("mta-sts.txt"), "version: STSv1\n");
+        r = s.run();
+        check("solo la cartella vecchia, nessun file di nginx che la cita: si sposta, senza nginx -t",
+                r.outcome() == PublicSurfaceRename.Outcome.DONE && Files.exists(s.newFolder.resolve("mta-sts.txt"))
+                        && !Files.exists(s.oldFolder) && s.sv.nginxTests == 0);
+
+        check("il percorso conta solo intero: un'altra cartella che comincia allo stesso modo non cambia",
+                PublicSurfaceRename.renamed("alias /d/" + OLD_FOLDER + "-bis/x;\n", Path.of("/d/" + OLD_FOLDER), Path.of("/d/public"))
+                        .contains("/d/" + OLD_FOLDER + "-bis/x;")
+                        && PublicSurfaceRename.renamed("alias /d/" + OLD_FOLDER + "/x;\n", Path.of("/d/" + OLD_FOLDER), Path.of("/d/public"))
+                        .contains("/d/public/x;"));
 
         OUT.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
         if (failed > 0) System.exit(1);

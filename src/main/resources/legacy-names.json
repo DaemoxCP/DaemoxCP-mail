@@ -2,7 +2,6 @@
   "files": [
     ["/var/db/mailpanel/pannello.log", "/var/db/mailpanel/panel.log"],
     ["/var/db/mailpanel/riavvio.log", "/var/db/mailpanel/reboot.log"],
-    ["/var/db/mailpanel/pubblico", "/var/db/mailpanel/public"],
     ["/var/db/mailpanel/prova-copia.sql", "/var/db/mailpanel/test-dump.sql"],
     ["/var/db/mailpanel/ssl-precedente", "/var/db/mailpanel/ssl-previous"],
     ["/var/db/mailpanel/mailpanel-pubblico.conf-precedente", "/var/db/mailpanel/mailpanel-public.conf-previous"],
@@ -22,6 +21,9 @@
   ],
   "publicSurface": [
     ["mailpanel-pubblico", "mailpanel-public"]
+  ],
+  "publicFolder": [
+    ["/var/db/mailpanel/pubblico", "/var/db/mailpanel/public"]
   ],
   "bootEnvironmentPrefix": [
     ["prima-di-", "before-"]

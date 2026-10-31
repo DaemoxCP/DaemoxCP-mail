@@ -32,8 +32,10 @@ import java.util.logging.Logger;
  *
  * <p>NON sono qui i nomi che leggono anche nginx e fail2ban: il file della superficie pubblica
  * sulla 443, il suo log di accesso, il filtro e la jail di fail2ban (e con la jail l'ancora e la
- * tabella di pf). Vanno spostati tutti insieme, con nginx e fail2ban ricaricati e un ritorno
- * indietro se uno dei due rifiuta: li sposta PublicSurfaceRename.
+ * tabella di pf), e la cartella dei suoi file (/var/db/mailpanel/pubblico, che nginx legge per
+ * mta-sts.txt). Vanno spostati tutti insieme, con nginx e fail2ban ricaricati e un ritorno
+ * indietro se uno dei due rifiuta: li sposta PublicSurfaceRename. La cartella stava qui fino al
+ * 31/10/2026, ed era sbagliato: sul server vero nginx l'avrebbe cercata col nome vecchio.
  */
 public final class PathMigration {
 
