@@ -35,7 +35,7 @@ public class LegacyNamesTest {
     }
 
     /** Le sezioni che il codice chiede: se ne manca una, quella migrazione non fa niente. */
-    static final String[] SECTIONS = {"files", "vmailFolders", "publicSurface", "bootEnvironmentPrefix",
+    static final String[] SECTIONS = {"files", "vmailFolders", "publicSurface", "publicFolder", "bootEnvironmentPrefix",
             "jumpKeys", "jumpStepKeys", "jumpAsks", "jumpPhases", "inventoryFiles", "inventoryServiceStates",
             "javaScriptOutcomes", "reportFrequencies", "reportFailedPrefix",
             "panelSignature", "dovecotSignature", "fail2banFilterSignature", "autoconfigMarker",

@@ -48,6 +48,13 @@ import java.util.stream.Stream;
  * riparazione (quella la fanno installJail e BanActionRepair). Nei file scritti dal pannello il
  * nome vecchio compare solo dove e' un nome.
  *
+ * <p>Con la superficie si sposta anche la cartella dei suoi file, /var/db/mailpanel/pubblico ->
+ * public: nginx la legge (alias .../mta-sts.txt), quindi non sta in PathMigration ma qui, nello
+ * stesso tutto-o-niente, e il percorso dentro il file di nginx cambia con lei. Misurato sul server
+ * vero il 31/10/2026: con la cartella spostata da PathMigration e il file di nginx che citava
+ * ancora quella vecchia, la politica MTA-STS sarebbe diventata un 404. Se la cartella e' gia'
+ * quella nuova e il file di nginx (gia' rinominato) cita ancora la vecchia, si riscrive solo lui.
+ *
  * <p>I ban: fail2ban li tiene per jail, nel suo database, e quando una jail parte rimette quelli
  * non ancora scaduti. Una jail con un altro nome partirebbe vuota. Quindi prima del reload si
  * passano alla jail nuova, nel database, i ban e la posizione raggiunta nel log: la jail nuova li
@@ -65,6 +72,9 @@ public final class PublicSurfaceRename {
     /** Il nome di prima, dal file di dati: serve solo a trovarlo sul disco. */
     static final String OLD_NAME = LegacyNames.single("publicSurface");
     static final String NEW_NAME = WebProtection.NAME;
+    /** La cartella dei file pubblici: quella di prima dal file di dati, quella di adesso da WebProtection. */
+    static final String OLD_FOLDER = LegacyNames.single("publicFolder");
+    static final String NEW_FOLDER = WebProtection.PUBLIC_DIR;
 
     private PublicSurfaceRename() {}
 
@@ -73,7 +83,7 @@ public final class PublicSurfaceRename {
     record Report(Outcome outcome, String detail) {}
 
     /** Dove stanno i file: fissi sul server, cartelle temporanee nella prova. */
-    record Places(Path f2bDir, Path logDir, Path defaultNginxFolder) {}
+    record Places(Path f2bDir, Path logDir, Path defaultNginxFolder, Path oldFolder, Path newFolder) {}
 
     /** Quello che serve da nginx e fail2ban, separato per provarlo senza i servizi veri. */
     interface Services {
@@ -96,7 +106,7 @@ public final class PublicSurfaceRename {
     public static void ensureAtBoot() {
         try {
             Places at = new Places(Path.of(WebProtection.F2B_DIR), Path.of(WebProtection.LOG_DIR),
-                    Path.of(WebProtection.PROPOSED_FOLDER));
+                    Path.of(WebProtection.PROPOSED_FOLDER), OLD_FOLDER.isEmpty() ? null : Path.of(OLD_FOLDER), Path.of(NEW_FOLDER));
             Report r = migrate(at, new RealServices());
             if (r.outcome() == Outcome.NOTHING) return;
             String line = "[PublicSurfaceRename] " + r.outcome() + ": " + r.detail();
@@ -118,7 +128,12 @@ public final class PublicSurfaceRename {
         Path oldFilter = at.f2bDir().resolve("filter.d").resolve(OLD_NAME + ".conf");
         List<Path> oldLogs = logsNamed(at.logDir(), OLD_NAME);
         Path defaultConf = at.defaultNginxFolder().resolve(OLD_NAME + ".conf");
-        if (!exists(oldJail) && !exists(oldFilter) && oldLogs.isEmpty() && !exists(defaultConf))
+        Path oldFolder = at.oldFolder(), newFolder = at.newFolder();
+        boolean folderMoves = oldFolder != null && exists(oldFolder);
+        Path defaultNewConf = at.defaultNginxFolder().resolve(NEW_NAME + ".conf");
+        boolean staleDefault = oldFolder != null && exists(defaultNewConf)
+                && citesFolder(Files.readString(defaultNewConf, StandardCharsets.UTF_8), oldFolder);
+        if (!exists(oldJail) && !exists(oldFilter) && oldLogs.isEmpty() && !exists(defaultConf) && !folderMoves && !staleDefault)
             return new Report(Outcome.NOTHING, "");
 
         // Il file di nginx sta in una delle cartelle che nginx include: si chiede a nginx quali.
@@ -134,21 +149,38 @@ public final class PublicSurfaceRename {
         if (confs.size() > 1)
             return new Report(Outcome.AMBIGUOUS, "more than one " + OLD_NAME + ".conf for nginx " + confs + ": nothing moved");
         Path oldConf = confs.isEmpty() ? null : confs.iterator().next();
+        // Il file col nome nuovo che cita ancora la cartella vecchia: si riscrive al suo posto.
+        Path staleConf = null;
+        if (oldConf == null && oldFolder != null) {
+            Set<Path> stale = new LinkedHashSet<>();
+            for (String f : folders) {
+                Path c = Path.of(f).resolve(NEW_NAME + ".conf");
+                if (exists(c) && citesFolder(Files.readString(c, StandardCharsets.UTF_8), oldFolder)) stale.add(c);
+            }
+            if (staleDefault) stale.add(defaultNewConf);
+            if (stale.size() > 1)
+                return new Report(Outcome.AMBIGUOUS, "more than one " + NEW_NAME + ".conf for nginx " + stale + ": nothing moved");
+            staleConf = stale.isEmpty() ? null : stale.iterator().next();
+        }
 
-        // Le coppie da spostare: vecchio -> nuovo, e se dentro si cambia il nome.
+        // Le coppie da spostare: vecchio -> nuovo, e come cambia il contenuto (null: non cambia).
+        java.util.function.UnaryOperator<String> rewrite = c -> renamed(c, oldFolder, newFolder);
         List<Move> moves = new ArrayList<>();
         for (Path p : oldLogs)
-            moves.add(new Move(p, p.resolveSibling(NEW_NAME + p.getFileName().toString().substring(OLD_NAME.length())), false));
-        if (oldConf != null) moves.add(new Move(oldConf, oldConf.resolveSibling(NEW_NAME + ".conf"), true));
-        if (exists(oldFilter)) moves.add(new Move(oldFilter, oldFilter.resolveSibling(NEW_NAME + ".conf"), true));
+            moves.add(new Move(p, p.resolveSibling(NEW_NAME + p.getFileName().toString().substring(OLD_NAME.length())), null));
+        if (folderMoves) moves.add(new Move(oldFolder, newFolder, null));
+        if (oldConf != null) moves.add(new Move(oldConf, oldConf.resolveSibling(NEW_NAME + ".conf"), rewrite));
+        if (staleConf != null) moves.add(new Move(staleConf, staleConf, rewrite));
+        if (exists(oldFilter)) moves.add(new Move(oldFilter, oldFilter.resolveSibling(NEW_NAME + ".conf"), rewrite));
         boolean jailMoves = exists(oldJail);
-        if (jailMoves) moves.add(new Move(oldJail, newJail, true));
+        if (jailMoves) moves.add(new Move(oldJail, newJail, rewrite));
+        boolean confTouched = oldConf != null || staleConf != null;
 
         // Prima si guarda tutto, poi si tocca: nessun passo parte se uno solo non puo' partire.
         for (Move m : moves) {
-            if (exists(m.to()))
+            if (!m.from().equals(m.to()) && exists(m.to()))
                 return new Report(Outcome.BOTH_NAMES, "both " + m.from() + " and " + m.to() + " exist: nothing moved");
-            if (m.renameInside() && !PanelMarker.writtenByPanel(Files.readString(m.from(), StandardCharsets.UTF_8)))
+            if (m.rewrites() && !PanelMarker.writtenByPanel(Files.readString(m.from(), StandardCharsets.UTF_8)))
                 return new Report(Outcome.NOT_OURS, m.from() + " was not written by the panel: nothing moved, rename it by hand");
         }
 
@@ -161,7 +193,7 @@ public final class PublicSurfaceRename {
         String oldLog = at.logDir().resolve(OLD_NAME + "-access.log").toString();
         String newLog = at.logDir().resolve(NEW_NAME + "-access.log").toString();
         boolean stateMoved = false;
-        boolean nginxRunning = oldConf != null && sv.nginxRunning();
+        boolean nginxRunning = confTouched && sv.nginxRunning();
 
         Deque<Move> done = new ArrayDeque<>();
         try {
@@ -171,7 +203,7 @@ public final class PublicSurfaceRename {
                 return rollBack(done, sv, false, false, "could not move the files: " + e.getMessage());
             }
 
-            if (oldConf != null) {
+            if (confTouched) {
                 Shell.Result t = sv.nginxTest();
                 if (!t.success()) return rollBack(done, sv, false, false, "nginx -t refused the renamed file: " + t.outputTrim());
                 if (nginxRunning) {
@@ -237,32 +269,48 @@ public final class PublicSurfaceRename {
                 + (problems.isEmpty() ? "" : " EXCEPT: " + String.join("; ", problems)));
     }
 
-    /** Uno spostamento, con quello che serve per disfarlo. Non segue i link. */
+    /**
+     * Uno spostamento (un file o una cartella), con quello che serve per disfarlo. Non segue i link.
+     * from uguale a to: il file resta dov'e' e cambia solo dentro.
+     */
     private static final class Move {
         private final Path from, to;
-        private final boolean renameInside;
+        private final java.util.function.UnaryOperator<String> rewrite;
         private String before;
 
-        Move(Path from, Path to, boolean renameInside) { this.from = from; this.to = to; this.renameInside = renameInside; }
+        Move(Path from, Path to, java.util.function.UnaryOperator<String> rewrite) { this.from = from; this.to = to; this.rewrite = rewrite; }
         Path from() { return from; }
         Path to() { return to; }
-        boolean renameInside() { return renameInside; }
+        boolean rewrites() { return rewrite != null; }
 
         void apply() throws IOException {
-            if (renameInside) before = Files.readString(from, StandardCharsets.UTF_8);
+            if (rewrite != null) before = Files.readString(from, StandardCharsets.UTF_8);
             // Si sposta il file invece di scriverne uno nuovo: proprietario e permessi restano.
-            Files.move(from, to);
-            if (renameInside) Files.writeString(to, renamed(before), StandardCharsets.UTF_8);
+            if (!from.equals(to)) Files.move(from, to);
+            if (rewrite != null) Files.writeString(to, rewrite.apply(before), StandardCharsets.UTF_8);
         }
 
         void undo() throws IOException {
-            if (renameInside) Files.writeString(to, before, StandardCharsets.UTF_8);
-            Files.move(to, from);
+            if (rewrite != null) Files.writeString(to, before, StandardCharsets.UTF_8);
+            if (!from.equals(to)) Files.move(to, from);
         }
     }
 
-    static String renamed(String content) {
-        return PanelMarker.current(content.replace(OLD_NAME, NEW_NAME), PanelMarker.SIGNATURE);
+    /** Il contenuto col nome nuovo, la firma di adesso e, se c'e', la cartella nuova al posto della vecchia. */
+    static String renamed(String content, Path oldFolder, Path newFolder) {
+        String c = content.replace(OLD_NAME, NEW_NAME);
+        if (oldFolder != null && newFolder != null)
+            c = folderReference(oldFolder).matcher(c).replaceAll(Matcher.quoteReplacement(newFolder.toString()));
+        return PanelMarker.current(c, PanelMarker.SIGNATURE);
+    }
+
+    /** La cartella come percorso intero: seguita da "/", da un separatore o dalla fine, non da altre lettere. */
+    private static Pattern folderReference(Path folder) {
+        return Pattern.compile(Pattern.quote(folder.toString()) + "(?=[/;\\s\"']|$)", Pattern.MULTILINE);
+    }
+
+    static boolean citesFolder(String content, Path folder) {
+        return folderReference(folder).matcher(content).find();
     }
 
     /** NOME-access.log e le sue copie ruotate (NOME-access.log.0.bz2, ...), non quelle di altri. */

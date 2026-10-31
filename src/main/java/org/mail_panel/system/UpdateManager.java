@@ -9030,7 +9030,7 @@ public final class UpdateManager {
               + "# REQUIRE: LOGIN\n"
               + "# KEYWORD: shutdown\n"
               + "#\n"
-              + "# Generato dal pannello il giorno dell'installazione. Avvia il pannello in\n"
+              + "# " + RcScriptRepair.MARKER + ". Avvia il pannello in\n"
               + "# modalita' solo-web (--web): niente menu a schermo, nessun terminale richiesto.\n"
               + "# Per riavere il menu: service mailpanel stop, poi lancialo a mano senza --web.\n"
               + "#\n"

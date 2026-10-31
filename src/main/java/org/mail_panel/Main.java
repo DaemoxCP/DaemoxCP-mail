@@ -356,6 +356,8 @@ public class Main {
 
         // Generate all panel HTML content
         org.mail_panel.system.PathMigration.run();
+        // Lo script di avvio scritto dal pannello cita i file che PathMigration ha appena rinominato.
+        org.mail_panel.system.RcScriptRepair.ensureAtBoot();
         MailPanelContent.generateAllContent();
 
         // Se una manutenzione dei pacchetti non e' arrivata in fondo (pannello ucciso, crash,
