@@ -357,7 +357,7 @@ fi
 # utente ci entra, e il contenuto e' al riparo dal momento in cui nasce. Prima lo script SQL
 # stava in /tmp e veniva portato a 600 DOPO essere stato scritto: in mezzo c'era una finestra
 # in cui chiunque poteva leggerlo. Non si tocca la maschera globale: piu' avanti lo script
-# scrive file che devono restare leggibili da www e da postfix.
+# scrive file che devono restare leggibili da roundcube e da postfix.
 MYSQL_WORK=$(mktemp -d /var/tmp/mailpanel-mysql.XXXXXXXX) || {
     echo "${RED}Error: cannot create the temporary folder${NC}"; exit 1; }
 trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
@@ -365,7 +365,7 @@ MYSQL_ROOT_CNF="$MYSQL_WORK/root.cnf"
 MYSQL_SETUP_SQL="$MYSQL_WORK/setup.sql"
 
 # La password di root. Un MySQL appena installato su FreeBSD lascia root SENZA password, e
-# finche' resta cosi' qualunque utente locale -- www compreso, che fa girare Roundcube -- ha
+# finche' resta cosi' qualunque utente locale -- roundcube compreso, che fa girare la webmail -- ha
 # i pieni poteri sul database. Prima nessuno la impostava: lo script faceva "mysql -u root"
 # e, se falliva, "mysql -u root --password=".
 #
@@ -1010,16 +1010,16 @@ cat > /usr/local/www/roundcube/config/config.inc.php << ROUNDCUBE_CONFIG
 \\$config['plugins'] = array('archive', 'zipdownload');
 ROUNDCUBE_CONFIG
 
-chown -R www:www /usr/local/www/roundcube/temp /usr/local/www/roundcube/logs
-chmod 640 /usr/local/www/roundcube/config/config.inc.php
-chown root:www /usr/local/www/roundcube/config/config.inc.php
+# Chi puo' leggere config.inc.php (la password del database, la des_key), temp e logs lo decide
+# piu' avanti il pezzo di RoundcubeUser, dopo il pool: root:roundcube 640, non piu' root:www.
+chmod 600 /usr/local/www/roundcube/config/config.inc.php
 
-# Generate SSO key
+# Generate SSO key. La legge solo il pannello: il plugin ha il segreto nella sua configurazione.
 if [ ! -f /var/db/mailpanel/roundcube_sso.key ]; then
     openssl rand 32 > /var/db/mailpanel/roundcube_sso.key
 fi
-chmod 640 /var/db/mailpanel/roundcube_sso.key
-chown root:www /var/db/mailpanel/roundcube_sso.key
+chmod 600 /var/db/mailpanel/roundcube_sso.key
+chown root:wheel /var/db/mailpanel/roundcube_sso.key
 
 # php.ini
 #
@@ -1076,7 +1076,7 @@ date.timezone = UTC
 [Session]
 session.save_handler = files
 ; NON /tmp, che e' il predefinito: li' i file di sessione di Roundcube sarebbero
-; leggibili da qualunque utente locale. Questa cartella la crea lo script, 700 e di www.
+; leggibili da qualunque utente locale. Questa cartella la crea lo script, 700 e di roundcube.
 session.save_path = "/var/db/mailpanel/php_sessions"
 session.use_strict_mode = 1
 session.use_cookies = 1
@@ -1108,12 +1108,11 @@ if [ ! -f /usr/local/etc/php.ini ]; then
 fi
 chmod 644 /usr/local/etc/php.ini
 
-# La cartella delle sessioni di Roundcube e il registro degli errori di PHP.
+# La cartella delle sessioni di Roundcube e il registro degli errori di PHP: di roundcube, che
+# ci scrive. Proprietario e permessi li mette il pezzo di RoundcubeUser, dopo il pool.
 mkdir -p /var/db/mailpanel/php_sessions
-chown www:www /var/db/mailpanel/php_sessions
 chmod 700 /var/db/mailpanel/php_sessions
 touch /var/log/php_errors.log
-chown www:www /var/log/php_errors.log
 chmod 640 /var/log/php_errors.log
 
 # La rotazione, altrimenti quel registro cresce senza fine. La cartella si crea: su una
@@ -1121,26 +1120,14 @@ chmod 640 /var/log/php_errors.log
 mkdir -p /usr/local/etc/newsyslog.conf.d
 cat > /usr/local/etc/newsyslog.conf.d/php-errors.conf << 'PHPLOGEOF'
 # Registro degli errori di PHP (scritto dall'installazione del pannello mail)
-/var/log/php_errors.log    www:www    640    7    1024    *    JC
+/var/log/php_errors.log    roundcube:roundcube    640    7    1024    *    JC
 PHPLOGEOF
 
 echo "${GREEN}  php.ini written${NC}"
 
-# PHP-FPM
-cat > /usr/local/etc/php-fpm.d/www.conf << 'PHPFPM_CONF'
-[www]
-user = www
-group = www
-listen = /var/run/php-fpm.sock
-listen.owner = www
-listen.group = www
-listen.mode = 0660
-pm = dynamic
-pm.max_children = 10
-pm.start_servers = 3
-pm.min_spare_servers = 2
-pm.max_spare_servers = 5
-PHPFPM_CONF
+# PHP-FPM: il pool di Roundcube, col suo utente (prima era il pool www, l'utente di nginx).
+"""
+            + org.mail_panel.system.RoundcubeUser.shellPool() + """
 
 # Determine SSL for Roundcube
 if [ -n "$ROUNDCUBE_SSL_CERT" ] && [ -f "$ROUNDCUBE_SSL_CERT" ]; then
@@ -1194,7 +1181,7 @@ http {
             fastcgi_split_path_info ^(.+\\\\.php)(/.+)\\$;
             fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
             fastcgi_param PATH_INFO \\$fastcgi_path_info;
-            fastcgi_pass unix:/var/run/php-fpm.sock;
+            fastcgi_pass unix:/var/run/php-fpm-roundcube.sock;
         }
 
         location ~ /\\\\. { deny all; }
@@ -1213,7 +1200,8 @@ fi
 
 sysrc nginx_enable="YES"
 sysrc php_fpm_enable="YES"
-
+"""
+            + org.mail_panel.system.RoundcubeUser.shellOwnership() + """
 echo "${GREEN}  Roundcube configured${NC}"
 
 # =============================================================================

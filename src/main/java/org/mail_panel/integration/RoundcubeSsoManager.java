@@ -400,11 +400,15 @@ public class RoundcubeSsoManager {
                 if (changed) executeCommand("service php_fpm reload >/dev/null 2>&1 || true");
             }
 
-            // Set permissions
-            executeCommand("chown -R www:www " + SSO_PLUGIN_PATH);
+            // Set permissions. Il codice e' di root: chi gira come la webmail non lo puo' cambiare.
+            // La configurazione ha il segreto dei gettoni (con dentro la password master di Dovecot)
+            // e la chiave del vault: la legge solo il gruppo con cui gira il PHP di Roundcube,
+            // roundcube dopo la migrazione (RoundcubeUser), www prima. Non piu' nginx.
+            executeCommand("chown -R root:wheel " + SSO_PLUGIN_PATH);
             executeCommand("chmod 755 " + SSO_PLUGIN_PATH);
             executeCommand("chmod 644 " + SSO_PLUGIN_PATH + "/mailpanel_sso.php");
-            executeCommand("chmod 600 " + SSO_PLUGIN_PATH + "/config.inc.php");
+            executeCommand("chown root:" + org.mail_panel.system.RoundcubeUser.runtimeGroup() + " " + SSO_PLUGIN_PATH + "/config.inc.php");
+            executeCommand("chmod 640 " + SSO_PLUGIN_PATH + "/config.inc.php");
 
             result.success = true;
             result.message = "SSO plugin installed successfully";

@@ -80,21 +80,8 @@ public class RoundcubeScript {
             mkdir -p /usr/local/etc/php
             mkdir -p /usr/local/etc/php-fpm.d
 
-            # Configure PHP-FPM to use socket (matching nginx config)
-            cat > /usr/local/etc/php-fpm.d/www.conf << 'PHPFPMCONF'
-[www]
-user = www
-group = www
-listen = /var/run/php-fpm.sock
-listen.owner = www
-listen.group = www
-listen.mode = 0660
-pm = dynamic
-pm.max_children = 10
-pm.start_servers = 2
-pm.min_spare_servers = 1
-pm.max_spare_servers = 5
-PHPFPMCONF
+            # PHP-FPM: il pool di Roundcube col suo utente e il suo socket (lo stesso di nginx sotto)
+""" + org.mail_panel.system.RoundcubeUser.shellPool() + """
 
             # Configure PHP for Roundcube
             cat > /usr/local/etc/php/ext-30-roundcube.ini << 'PHPINI'
@@ -226,7 +213,7 @@ server {
         fastcgi_split_path_info ^(.+\\.php)(/.+)$;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         fastcgi_param PATH_INFO $fastcgi_path_info;
-        fastcgi_pass unix:/var/run/php-fpm.sock;
+        fastcgi_pass unix:/var/run/php-fpm-roundcube.sock;
     }
 
     location ~ /\\. {
@@ -248,11 +235,8 @@ NGINXCONF
                 echo "  Roundcube 1.7 or later: nginx root set to public_html"
             fi
 
-            # Set permissions
-            chown -R www:www /usr/local/www/roundcube/temp
-            chown -R www:www /usr/local/www/roundcube/logs
-            chmod 700 /usr/local/www/roundcube/temp
-            chmod 700 /usr/local/www/roundcube/logs
+            # Set permissions: i file della webmail sono di roundcube, non dell'utente di nginx
+""" + org.mail_panel.system.RoundcubeUser.shellOwnership() + """
 
             # Restart services
             service php_fpm restart || service php_fpm start
