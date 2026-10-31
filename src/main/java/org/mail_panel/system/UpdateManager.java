@@ -2547,8 +2547,9 @@ public final class UpdateManager {
             }
             // Il motivo dell'arresto e' questo, non il generico «il piano e' cambiato»: dice a chi
             // legge che cosa confermare, e dove.
-            String why = I18n.tr("server.um.x.planGrewConfirm", java.util.Map.of(
-                    "list", String.join(", ", removalsToConfirm(now, confirmed))));
+            String why = removalsNever(now).isEmpty()
+                    ? I18n.tr("server.um.x.planGrewConfirm", java.util.Map.of("list", String.join(", ", removalsToConfirm(now, confirmed))))
+                    : removalsReason(now, confirmed);
             job.write("  " + why);
             LOGGER.warning("Plan grew after fetching by removals to confirm: " + before + " -> " + after + "; " + now.getJSONArray("replacements"));
             return new Recheck(why, approved);
@@ -2649,17 +2650,59 @@ public final class UpdateManager {
         return PackageReplacement.confirmations(fromPage);
     }
 
+    /** Il giudizio su ogni rimozione del piano, per "nome versione". */
+    private static Map<String, JSONObject> verdictsByKey(JSONObject plan) {
+        Map<String, JSONObject> m = new LinkedHashMap<>();
+        JSONArray v = plan == null ? null : plan.optJSONArray("replacements");
+        for (int i = 0; v != null && i < v.length(); i++) {
+            JSONObject x = v.getJSONObject(i);
+            m.put(x.optString("name") + " " + x.optString("version"), x);
+        }
+        return m;
+    }
+
     /**
      * "nome versione" delle rimozioni del piano che il pannello non esegue da solo: quelle non
-     * giudicate innocue (o non giudicate affatto) che nessuno ha confermato.
+     * innocue che nessuno ha confermato, e quelle che non si possono confermare affatto.
      */
     static java.util.List<String> removalsToConfirm(JSONObject plan, java.util.Set<String> confirmed) {
-        java.util.Set<String> safe = new java.util.HashSet<>(
-                PackageReplacement.safe(plan == null ? null : plan.optJSONArray("replacements")));
+        Map<String, JSONObject> v = verdictsByKey(plan);
         java.util.List<String> left = new ArrayList<>();
-        for (String r : jsonArrayToList(destructiveChanges(plan).getJSONArray("removes")))
-            if (!safe.contains(r) && (confirmed == null || !confirmed.contains(r))) left.add(r);
+        for (String r : jsonArrayToList(destructiveChanges(plan).getJSONArray("removes"))) {
+            JSONObject x = v.get(r);
+            if (x != null && x.optBoolean("safe")) continue;
+            if (x != null && x.optBoolean("confirmable") && confirmed != null && confirmed.contains(r)) continue;
+            left.add(r);
+        }
         return left;
+    }
+
+    /**
+     * "nome versione" delle rimozioni che il pannello non esegue mai, nemmeno confermate: qualcosa
+     * che resta installato sparirebbe o smetterebbe di funzionare, o non si e' potuto misurare (una
+     * rimozione senza giudizio conta cosi'). Vedi PackageReplacement.
+     */
+    static java.util.List<String> removalsNever(JSONObject plan) {
+        Map<String, JSONObject> v = verdictsByKey(plan);
+        java.util.List<String> never = new ArrayList<>();
+        for (String r : jsonArrayToList(destructiveChanges(plan).getJSONArray("removes"))) {
+            JSONObject x = v.get(r);
+            if (x == null || (!x.optBoolean("safe") && !x.optBoolean("confirmable"))) never.add(r);
+        }
+        return never;
+    }
+
+    /** Il motivo per le rimozioni che fermano il piano, nelle due specie, o null se non ce ne sono. */
+    static String removalsReason(JSONObject plan, java.util.Set<String> confirmed) {
+        java.util.List<String> never = removalsNever(plan);
+        java.util.List<String> toConfirm = new ArrayList<>(removalsToConfirm(plan, confirmed));
+        toConfirm.removeAll(never);
+        java.util.List<String> reasons = new ArrayList<>();
+        if (!never.isEmpty())
+            reasons.add(I18n.tr("server.um.x.planRemovesNever", java.util.Map.of("list", String.join(", ", never))));
+        if (!toConfirm.isEmpty())
+            reasons.add(I18n.tr("server.um.x.planRemoves", java.util.Map.of("list", String.join(", ", toConfirm))));
+        return reasons.isEmpty() ? null : String.join(" ", reasons);
     }
 
     /**
@@ -2676,9 +2719,8 @@ public final class UpdateManager {
     static String destructivePlanReason(JSONObject plan, java.util.Set<String> confirmed) {
         JSONObject d = destructiveChanges(plan);
         java.util.List<String> reasons = new ArrayList<>();
-        java.util.List<String> left = removalsToConfirm(plan, confirmed);
-        if (!left.isEmpty())
-            reasons.add(I18n.tr("server.um.x.planRemoves", java.util.Map.of("list", String.join(", ", left))));
+        String removals = removalsReason(plan, confirmed);
+        if (removals != null) reasons.add(removals);
         if (!d.getJSONArray("downgrades").isEmpty())
             reasons.add(I18n.tr("server.um.x.planDowngrades", java.util.Map.of("list",
                     String.valueOf(String.join(", ", jsonArrayToList(d.getJSONArray("downgrades")))))));
@@ -6434,7 +6476,7 @@ public final class UpdateManager {
                             I18n.tr("server.um.x.removalsAccepted", java.util.Map.of("list", String.join(", ", removed))));
                 } else {
                     addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "block",
-                            I18n.tr("server.um.x.planRemoves", java.util.Map.of("list", String.join(", ", left))));
+                            removalsReason(plan, confirmed));
                     block = true;
                 }
             }

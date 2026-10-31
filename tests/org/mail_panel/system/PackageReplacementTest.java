@@ -88,25 +88,32 @@ public class PackageReplacementTest {
         check("lmdb -> lmdb0 come sulla VM: innocua", v.safe() && v.problems().isEmpty() && v.replacedBy().equals("lmdb0"));
         check("  con le quattro prove scritte", v.evidence().size() == 4);
 
+        check("  e non c'e' niente da confermare", !v.confirmable());
+
         v = PackageReplacement.judge(lmdb("", one("postfix-mysql", AWAY), lib("liblmdb.so.1", one("postfix-mysql", AWAY)), List.of(), ""));
-        check("nessuno prende il suo posto: da confermare", !v.safe() && v.problems().size() == 1);
+        check("nessuno prende il suo posto: non innocua, e MAI confermabile (sparirebbe)",
+                !v.safe() && v.problems().size() == 1 && !v.confirmable());
 
         v = PackageReplacement.judge(lmdb("lmdb0", one("p5-LMDB", STAYS), lib("liblmdb.so.1", one("postfix-mysql", AWAY)), List.of(), ""));
-        check("un pacchetto che dipende da lui resta: da confermare, e lo nomina", !v.safe() && says(v, "p5-LMDB"));
+        check("un pacchetto che dipende da lui resta: mai confermabile, e lo nomina", !v.safe() && !v.confirmable() && says(v, "p5-LMDB"));
 
         v = PackageReplacement.judge(lmdb("lmdb0", one("fakeother", REMOVED), Map.of(), List.of(), ""));
-        check("chi dipende da lui verrebbe tolto anche lui (il caso misurato: pkg toglie in silenzio): da confermare",
-                !v.safe() && says(v, "fakeother"));
+        check("chi dipende da lui verrebbe tolto anche lui (misurato: pkg lo toglie in silenzio): mai confermabile",
+                !v.safe() && !v.confirmable() && says(v, "fakeother"));
 
         v = PackageReplacement.judge(lmdb("lmdb0", Map.of(), lib("liblmdb.so.1", one("py312-lmdb", STAYS)), List.of(), ""));
-        check("un programma usa la sua libreria e resta: da confermare, con la libreria", !v.safe() && says(v, "py312-lmdb") && says(v, "liblmdb.so.1"));
+        check("un programma usa la sua libreria e resta (misurato: resta ROTTO): mai confermabile, con la libreria",
+                !v.safe() && !v.confirmable() && says(v, "py312-lmdb") && says(v, "liblmdb.so.1"));
 
         v = PackageReplacement.judge(lmdb("lmdb0", one("postfix-mysql", AWAY), lib("liblmdb.so.1", one("postfix-mysql", AWAY)),
                 List.of("/usr/local/etc/postfix/main.cf (lmdb:)"), ""));
-        check("Postfix usa mappe lmdb: da confermare (la libreria nuova potrebbe non leggerle)", !v.safe() && says(v, "main.cf"));
+        check("Postfix usa mappe lmdb e nient'altro: confermabile, scrivendo il nome (niente sparisce, le mappe si rigenerano)",
+                !v.safe() && v.confirmable() && says(v, "main.cf"));
+        v = PackageReplacement.judge(lmdb("lmdb0", one("p5-LMDB", STAYS), Map.of(), List.of("/usr/local/etc/postfix/main.cf (lmdb:)"), ""));
+        check("  ma col formato in uso E un dipendente che resta: mai confermabile", !v.safe() && !v.confirmable());
 
         v = PackageReplacement.judge(lmdb("lmdb0", Map.of(), Map.of(), List.of(), "pkg query: database locked"));
-        check("se non si e' potuto misurare non e' innocua", !v.safe() && says(v, "database locked"));
+        check("se non si e' potuto misurare non e' innocua, e non si conferma", !v.safe() && !v.confirmable() && says(v, "database locked"));
 
         v = PackageReplacement.judge(new PackageReplacement.Facts("fakelib", "1.0", "fakelib0", "/usr/local/bin/fake-tool",
                 Map.of(), Map.of(), "", List.of(), ""));
@@ -149,24 +156,35 @@ public class PackageReplacementTest {
                 && UpdateManager.removalsToConfirm(safe, Set.of()).isEmpty());
 
         JSONObject unsafe = new JSONObject(safe.toString());
-        unsafe.getJSONArray("replacements").getJSONObject(0).put("safe", false);
+        unsafe.getJSONArray("replacements").getJSONObject(0).put("safe", false).put("confirmable", true);
         String reason = UpdateManager.destructivePlanReason(unsafe);
-        check("una rimozione non innocua si ferma, e il motivo la nomina", reason != null && reason.contains("lmdb 1.0.2,1"));
+        check("una rimozione confermabile si ferma, e il motivo la nomina", reason != null && reason.contains("lmdb 1.0.2,1"));
         check("  confermata da chi guarda, passa", UpdateManager.destructivePlanReason(unsafe, Set.of("lmdb 1.0.2,1")) == null);
         check("  ma una conferma per un'altra versione non vale", UpdateManager.destructivePlanReason(unsafe, Set.of("lmdb 1.0.3")) != null);
 
+        JSONObject never = new JSONObject(safe.toString());
+        never.getJSONArray("replacements").getJSONObject(0).put("safe", false).put("confirmable", false);
+        check("una rimozione mai confermabile si ferma anche confermata (una richiesta costruita a mano non basta)",
+                UpdateManager.destructivePlanReason(never, Set.of("lmdb 1.0.2,1")) != null
+                        && UpdateManager.removalsNever(never).equals(List.of("lmdb 1.0.2,1")));
+        check("  e il motivo e' diverso da quello delle confermabili",
+                !UpdateManager.destructivePlanReason(never).equals(UpdateManager.destructivePlanReason(unsafe)));
+
         JSONObject unjudged = plan(change("remove", "lmdb", "1.0.2,1", ""));
-        check("una rimozione senza giudizio si ferma (com'era sempre)", UpdateManager.destructivePlanReason(unjudged) != null);
+        check("una rimozione senza giudizio si ferma (com'era sempre), anche confermata",
+                UpdateManager.destructivePlanReason(unjudged, Set.of("lmdb 1.0.2,1")) != null);
+        check("  e conta da confermare anche per chi chiede solo quelle (preflight, piano cresciuto)",
+                UpdateManager.removalsToConfirm(unjudged, Set.of("lmdb 1.0.2,1")).equals(List.of("lmdb 1.0.2,1")));
 
         JSONObject down = plan(change("downgrade", "redis", "8.10.2", "8.9.0"));
         check("una retrocessione si ferma anche con delle conferme", UpdateManager.destructivePlanReason(down, Set.of("redis 8.10.2")) != null);
 
         JSONObject two = plan(change("remove", "fakelib", "1.0", ""), change("remove", "fakeother", "1.0", ""));
         two.put("replacements", new JSONArray()
-                .put(new JSONObject().put("name", "fakelib").put("version", "1.0").put("safe", false))
-                .put(new JSONObject().put("name", "fakeother").put("version", "1.0").put("safe", false)));
-        check("due rimozioni da confermare: ne conferma una, l'altra ferma ancora",
-                UpdateManager.removalsToConfirm(two, Set.of("fakelib 1.0")).equals(List.of("fakeother 1.0")));
+                .put(new JSONObject().put("name", "fakelib").put("version", "1.0").put("safe", false).put("confirmable", true))
+                .put(new JSONObject().put("name", "fakeother").put("version", "1.0").put("safe", false).put("confirmable", false)));
+        check("due rimozioni: confermata quella confermabile, l'altra ferma ancora, anche confermata",
+                UpdateManager.removalsToConfirm(two, Set.of("fakelib 1.0", "fakeother 1.0")).equals(List.of("fakeother 1.0")));
 
         System.out.println("\n== Il piano cresciuto dopo lo scaricamento ==");
         JSONObject approved = plan(change("install", "lmdb0", "", "0.9.35"), change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"));

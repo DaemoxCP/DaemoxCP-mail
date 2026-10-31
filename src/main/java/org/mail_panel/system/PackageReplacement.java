@@ -41,9 +41,15 @@ import java.util.stream.Stream;
  * </ol>
  *
  * <p>Misurato sulla VM il 31/10/2026 con pacchetti finti e librerie ELF vere: nel caso innocuo
- * pkg toglie la libreria vecchia e il programma gira; se un altro programma usa ancora la
- * libreria vecchia, pkg toglie IN SILENZIO anche quello, e quel programma sparisce. E' il caso che
- * la regola 2 e la 1 fermano: nessuna riga di conflitto dice sostituito l'altro programma.
+ * pkg toglie la libreria vecchia e il programma gira; se un altro programma la usa ancora e la
+ * dichiara come dipendenza, pkg toglie IN SILENZIO anche quel programma; se la usa senza
+ * dichiararla, pkg toglie la libreria e lascia il programma ROTTO («Shared object not found»).
+ *
+ * <p>Confermabile, da chi guarda e scrivendo il nome del pacchetto, e' solo una rimozione il cui
+ * unico problema e' il formato dei dati in uso: li' non sparisce e non si rompe niente, e le
+ * mappe si possono rigenerare. Se invece qualcosa che resta installato sparirebbe o smetterebbe
+ * di funzionare, o se non si e' potuto misurare, il pannello non la esegue mai, nemmeno
+ * confermata (il committente, 31/10/2026: «questa cosa e' molto pericolosa»).
  */
 final class PackageReplacement {
 
@@ -57,10 +63,16 @@ final class PackageReplacement {
                  Map<String, Use> dependents, Map<String, Map<String, Use>> libraryUsers,
                  String dataFormat, List<String> dataUses, String error) {}
 
-    record Verdict(String name, String version, boolean safe, String replacedBy,
+    /**
+     * @param confirmable vero solo se non e' innocua e l'unico problema e' il formato dei dati:
+     *                    tutto il resto (nessuno la sostituisce, qualcosa che resta la usa, non
+     *                    misurata) il pannello non lo esegue mai.
+     */
+    record Verdict(String name, String version, boolean safe, boolean confirmable, String replacedBy,
                    List<String> evidence, List<String> problems) {
         JSONObject toJson() {
             return new JSONObject().put("name", name).put("version", version).put("safe", safe)
+                    .put("confirmable", confirmable)
                     .put("replacedBy", replacedBy).put("evidence", new JSONArray(evidence))
                     .put("problems", new JSONArray(problems));
         }
@@ -71,7 +83,7 @@ final class PackageReplacement {
         List<String> ok = new ArrayList<>(), no = new ArrayList<>();
         if (f.error() != null && !f.error().isEmpty()) {
             no.add(I18n.tr("server.replace.notMeasured", Map.of("err", f.error())));
-            return new Verdict(f.name(), f.version(), false, "", ok, no);
+            return new Verdict(f.name(), f.version(), false, false, "", ok, no);
         }
         // 1. qualcuno prende il suo posto
         if (f.replacedBy() == null || f.replacedBy().isEmpty())
@@ -94,6 +106,8 @@ final class PackageReplacement {
                     case REMOVED_TOO -> "server.replace.libraryRemoved";
                     case STAYS -> "server.replace.libraryStays";
                 }, Map.of("p", p, "lib", lib)))));
+        // Fin qui ogni problema vuol dire che qualcosa sparisce o smette di funzionare.
+        boolean somethingBreaks = !no.isEmpty();
         // 4. il formato dei dati
         if (f.dataFormat() != null && !f.dataFormat().isEmpty()) {
             if (f.dataUses().isEmpty())
@@ -101,7 +115,7 @@ final class PackageReplacement {
             else
                 no.add(I18n.tr("server.replace.dataUsed", Map.of("fmt", f.dataFormat(), "uses", String.join(", ", f.dataUses()))));
         }
-        return new Verdict(f.name(), f.version(), no.isEmpty(),
+        return new Verdict(f.name(), f.version(), no.isEmpty(), !no.isEmpty() && !somethingBreaks,
                 f.replacedBy() == null ? "" : f.replacedBy(), ok, no);
     }
 
@@ -270,27 +284,6 @@ final class PackageReplacement {
     /* ===================================================================
      * La regola, per i tre lavori e le tre schede
      * =================================================================== */
-
-    /** "nome versione" di ogni rimozione che non e' innocua e che chi guarda non ha confermato. */
-    static List<String> unconfirmed(JSONArray verdicts, Set<String> confirmed) {
-        List<String> out = new ArrayList<>();
-        for (int i = 0; verdicts != null && i < verdicts.length(); i++) {
-            JSONObject v = verdicts.getJSONObject(i);
-            String key = v.optString("name") + " " + v.optString("version");
-            if (!v.optBoolean("safe") && (confirmed == null || !confirmed.contains(key))) out.add(key);
-        }
-        return out;
-    }
-
-    /** "nome versione" delle rimozioni innocue. */
-    static List<String> safe(JSONArray verdicts) {
-        List<String> out = new ArrayList<>();
-        for (int i = 0; verdicts != null && i < verdicts.length(); i++) {
-            JSONObject v = verdicts.getJSONObject(i);
-            if (v.optBoolean("safe")) out.add(v.optString("name") + " " + v.optString("version"));
-        }
-        return out;
-    }
 
     /** Le conferme mandate dalla pagina: "nome versione", nient'altro. */
     private static final Pattern CONFIRMATION = Pattern.compile("[A-Za-z0-9._+-]{1,100} [A-Za-z0-9._,+-]{1,60}");
