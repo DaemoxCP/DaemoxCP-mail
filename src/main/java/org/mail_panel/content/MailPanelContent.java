@@ -12354,7 +12354,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const go = document.getElementById('pkUpdGo');
             go.hidden = true; go.disabled = true;
             pkUpdModal().show();
-            const r = await updApi('package_preflight', { package: name });
+            const r = await updApi('package_preflight', { package: name, confirmRemovals: [...updConfirmedRemovals] });
             if (!r.success) { body.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
             pkUpd.signature = r.signature || '';
             const blocks = (r.checks || []).filter(c => c.level === 'block');
@@ -12372,7 +12372,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                + '<li>' + escHtml(t('pkgs.m.stepUpgrade')) + '</li>'
                + '<li>' + escHtml(services.length ? t('pkgs.m.stepRestart', { list: services.join(', ') }) : t('pkgs.m.stepNoRestart')) + '</li>'
                + '<li>' + escHtml(unlockedList.length ? t('pkgs.m.stepRelock') : t('pkgs.m.stepCheck')) + '</li></ol>'
-               + updPlanHtml(r.plan, r.signature);
+               + updPlanHtml(r.plan, r.signature, 'pkg');
             if (warnings.length) {
                 h += '<h6 class="mt-3">' + escHtml(t('pkgs.m.warnings')) + '</h6><ul class="small">'
                    + warnings.map(c => '<li><strong>' + escHtml(c.label) + ':</strong> ' + escHtml(c.detail) + '</li>').join('') + '</ul>';
@@ -12392,7 +12392,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const go = document.getElementById('pkUpdGo');
             go.disabled = true;
             const res = document.getElementById('pkUpdResult');
-            const r = await updApi('package_update', { package: pkUpd.name, confirm: document.getElementById('pkUpdName').value, signature: pkUpd.signature });
+            const r = await updApi('package_update', { package: pkUpd.name, confirm: document.getElementById('pkUpdName').value, signature: pkUpd.signature,
+                                                       confirmRemovals: [...updConfirmedRemovals] });
             if (!r.success) { res.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; go.disabled = false; return; }
             pkUpd.job = r.jobId;
             go.hidden = true;
@@ -14144,7 +14145,43 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         let updMaintenanceSignature = '';
 
         /* Il piano esatto di pkg: ogni pacchetto che cambia, da quale versione a quale. */
-        function updPlanHtml(pn, signature) {
+        /* Le rimozioni che chi guarda ha confermato ("nome versione"): viaggiano con le richieste
+           delle tre schede, che chiedono il piano e danno il via. Il pannello toglie da solo solo
+           le sostituzioni innocue; le altre le toglie solo se sono qui. */
+        const updConfirmedRemovals = new Set();
+        function updConfirmRemoval(key, card) {
+            updConfirmedRemovals.add(key);
+            if (card === 'pkg') pkUpdOpen(pkUpd.name);
+            else if (card === 'unprot') updStatus();
+            else updMaintPreview();
+        }
+
+        /* Le prove su ogni pacchetto che il piano toglie: innocuo, da confermare, confermato. */
+        function updReplacementsHtml(pn, card) {
+            const rs = (pn && pn.replacements) || [];
+            if (!rs.length) return '';
+            let h = '<div class="small fw-bold mt-2 mb-1">' + escHtml(t('up.replTitle')) + '</div>';
+            rs.forEach(v => {
+                const key = v.name + ' ' + v.version;
+                const confirmed = updConfirmedRemovals.has(key);
+                h += '<div class="small border rounded p-2 mb-2"><code>' + updEsc(key) + '</code> '
+                   + (v.safe ? '<span class="badge bg-success">' + escHtml(t('up.replSafe')) + '</span>'
+                             : '<span class="badge ' + (confirmed ? 'bg-warning text-dark' : 'bg-danger') + '">'
+                               + escHtml(confirmed ? t('up.replConfirmed') : t('up.replToConfirm')) + '</span>')
+                   + '<ul class="mb-1 mt-1">'
+                   + (v.evidence || []).map(e => '<li><i class="fas fa-check text-success me-1" aria-hidden="true"></i>' + updEsc(e) + '</li>').join('')
+                   + (v.problems || []).map(e => '<li><i class="fas fa-triangle-exclamation text-danger me-1" aria-hidden="true"></i>' + updEsc(e) + '</li>').join('')
+                   + '</ul>'
+                   + (!v.safe && !confirmed && card
+                        ? '<button type="button" class="btn btn-sm btn-outline-danger" data-key="' + escHtml(key) + '" data-card="' + escHtml(card)
+                          + '" onclick="updConfirmRemoval(this.dataset.key, this.dataset.card)">' + escHtml(t('up.replConfirmBtn', { name: v.name })) + '</button>'
+                        : '')
+                   + '</div>';
+            });
+            return h;
+        }
+
+        function updPlanHtml(pn, signature, card) {
             if (!pn) return '';
             if (!pn.measured) {
                 return '<div class="alert alert-danger py-2 small mb-2">' + escHtml(t('up.planUnavailable')) + ' '
@@ -14173,6 +14210,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else {
                 h += '<div class="small text-muted mb-1">' + escHtml(t('up.planNoChange')) + '</div>';
             }
+            h += updReplacementsHtml(pn, card);
             (pn.blockers || []).forEach(x => {
                 h += '<div class="small text-warning-emphasis"><i class="fas fa-lock me-1" aria-hidden="true"></i><code>' + updEsc(x.name)
                    + '</code>: ' + updEsc(x.reason) + '</div>';
@@ -14211,10 +14249,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function updStatus() {
             const el = document.getElementById('upd-status');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.simulating')) + '';
-            const r = await updApi('updates_status');
+            const r = await updApi('updates_status', { confirmRemovals: [...updConfirmedRemovals] });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             updUnprotectedSignature = r.signature || '';
             let h = '';
+            if (r.blockedReason) {
+                h += '<div class="alert alert-danger py-2 small"><strong>'
+                   + escHtml(t('up.notRunnableUpdate')) + '</strong> ' + updEsc(r.blockedReason) + '</div>';
+            }
 
             if (r.rebootPending) {
                 h += '<div class="alert alert-warning py-2 small"><strong>' + escHtml(t('up.rebootMissing')) + '</strong> '
@@ -14301,7 +14343,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
             /* Il piano esatto con la sua firma, come nelle altre due schede. L'uscita grezza
                di pkg resta sotto, ripiegata: e' il dettaglio, non la decisione. */
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
+            if (r.plan) h += updPlanHtml(r.plan, r.signature, 'unprot');
             h += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('up.fullSim')) + '</summary>'
                + '<pre class="upd-log mt-2">' + updEsc(r.dryRun) + '</pre></details>';
             if (r.audit) {
@@ -14319,7 +14361,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm('', t('up.wUpgrade'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updUnprotectedSignature });
+            const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updUnprotectedSignature, confirmRemovals: [...updConfirmedRemovals] });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -14329,7 +14371,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function updMaintPreview() {
             const el = document.getElementById('upd-status');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.computingChange')) + '';
-            const r = await updApi('maintenance_preview');
+            const r = await updApi('maintenance_preview', { confirmRemovals: [...updConfirmedRemovals] });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="alert alert-secondary py-2 small">' + updEsc(r.generalNote) + '</div>';
             /* Se il piano rimuove o retrocede pacchetti il pannello non lo esegue: si dice
@@ -14358,9 +14400,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-warning py-2 small"><strong>' + escHtml(tn('up.staysLocked', r.waitCount)) + '</strong> '
                    + escHtml(t('up.staysLockedNote')) + '</div>';
             }
-            h += updPlanHtml(r.plan, r.signature);
+            h += updPlanHtml(r.plan, r.signature, 'maint');
             updMaintenanceSignature = r.signature || '';
-            if (r.plan && r.plan.runnable) {
+            if (r.plan && r.plan.runnable && !r.blockedReason) {
                 h += '<button class="btn btn-sm btn-danger" onclick="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
             } else {
                 h += '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.nothingToRun')) + '</div>';
@@ -14372,7 +14414,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm(t('up.confirmMaint'), t('up.wMaint'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
-            const r = await updApi('maintenance_run', { confirm: 'MAINTENANCE', signature: updMaintenanceSignature });
+            const r = await updApi('maintenance_run', { confirm: 'MAINTENANCE', signature: updMaintenanceSignature, confirmRemovals: [...updConfirmedRemovals] });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.maintRunning')) + '</span>';
             pre.style.display = 'block';

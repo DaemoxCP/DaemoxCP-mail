@@ -7025,7 +7025,8 @@ public class SSLMailServer {
             switch (action) {
                 case "packages_status" -> response = UpdateManager.packagesStatus();
                 case "packages_overview" -> response = UpdateManager.packagesOverview();
-                case "updates_status" -> response = UpdateManager.updatesStatus();
+                case "updates_status" -> response = UpdateManager.updatesStatus(
+                        UpdateManager.removalConfirmations(req.optJSONArray("confirmRemovals")));
                 case "compatibility" -> response = UpdateManager.compatibilityReport();
                 case "dovecot_config_dump" -> response = UpdateManager.dumpDovecotConfig();
                 case "dovecot_config_regen" -> {
@@ -7041,7 +7042,8 @@ public class SSLMailServer {
                 case "maintenance_preview" -> {
                     String now = org.mail_panel.system.PackageQueue.planNotNow();
                     response = now != null ? new JSONObject().put("success", false).put("error", now)
-                             : UpdateManager.maintenancePreview();
+                             : UpdateManager.maintenancePreview(
+                                     UpdateManager.removalConfirmations(req.optJSONArray("confirmRemovals")));
                 }
                 case "plan" -> response = UpdateManager.maintenancePlan();
                 case "mysql84_preflight" -> response = UpdateManager.mysql84Preflight();
@@ -7315,7 +7317,8 @@ public class SSLMailServer {
                 case "package_preflight" -> {
                     String now = org.mail_panel.system.PackageQueue.planNotNow();
                     response = now != null ? new JSONObject().put("success", false).put("error", now)
-                             : UpdateManager.packagePreflight(req.optString("package", ""));
+                             : UpdateManager.packagePreflight(req.optString("package", ""),
+                                     UpdateManager.removalConfirmations(req.optJSONArray("confirmRemovals")));
                 }
                 case "package_update" -> {
                     // La conferma e' il NOME DEL PACCHETTO scritto a mano: cosi' non si puo'
@@ -7327,8 +7330,12 @@ public class SSLMailServer {
                                 .put("error", I18n.tr("server.updates.typePackage"));
                         break;
                     }
-                    response = UpdateManager.startGuidedUpdate(pk, req.optString("signature", ""));
-                    logAudit("GUIDED_UPDATE_STARTED", ip, pk + " -> " + response.optString("jobId", ""));
+                    // Le rimozioni che il pannello non sa dimostrare innocue, confermate da chi guarda
+                    // le prove nella scheda: restano scritte nel registro, con chi e quando.
+                    java.util.Set<String> confirmedRemovals = UpdateManager.removalConfirmations(req.optJSONArray("confirmRemovals"));
+                    response = UpdateManager.startGuidedUpdate(pk, req.optString("signature", ""), confirmedRemovals);
+                    logAudit("GUIDED_UPDATE_STARTED", ip, pk + " -> " + response.optString("jobId", "")
+                            + (confirmedRemovals.isEmpty() ? "" : "; confirmed removals: " + String.join(", ", confirmedRemovals)));
                 }
                 case "packages_lock" -> {
                     boolean lock = req.optBoolean("lock", true);
@@ -7344,16 +7351,20 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.startUnlockedPackagesUpdate(req.optString("signature", ""));
-                    logAudit("UPDATES_APPLY_STARTED", ip, response.optString("jobId", ""));
+                    java.util.Set<String> confirmedRemovals = UpdateManager.removalConfirmations(req.optJSONArray("confirmRemovals"));
+                    response = UpdateManager.startUnlockedPackagesUpdate(req.optString("signature", ""), confirmedRemovals);
+                    logAudit("UPDATES_APPLY_STARTED", ip, response.optString("jobId", "")
+                            + (confirmedRemovals.isEmpty() ? "" : "; confirmed removals: " + String.join(", ", confirmedRemovals)));
                 }
                 case "maintenance_run" -> {
                     if (!"MAINTENANCE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.startMaintenance(req.optString("signature", ""));
-                    logAudit("MAINTENANCE_STARTED", ip, response.optString("jobId", ""));
+                    java.util.Set<String> confirmedRemovals = UpdateManager.removalConfirmations(req.optJSONArray("confirmRemovals"));
+                    response = UpdateManager.startMaintenance(req.optString("signature", ""), confirmedRemovals);
+                    logAudit("MAINTENANCE_STARTED", ip, response.optString("jobId", "")
+                            + (confirmedRemovals.isEmpty() ? "" : "; confirmed removals: " + String.join(", ", confirmedRemovals)));
                 }
                 case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
                 default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
