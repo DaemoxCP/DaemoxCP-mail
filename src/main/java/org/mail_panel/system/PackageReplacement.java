@@ -8,7 +8,6 @@ import org.mail_panel.util.Shell;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,7 +22,7 @@ import java.util.regex.Pattern;
  * libreria con un'altra che installa gli stessi file (a fine ottobre 2026 lmdb con lmdb0, per
  * Postfix), e allora aggiornare vuol dire togliere la vecchia: il rifiuto teneva Postfix fermo
  * finche' qualcuno non faceva lo scambio a mano. Il committente (31/10/2026): il pannello toglie
- * da solo il pacchetto vecchio quando dimostra che e' innocuo, e chiede quando non lo e'.
+ * da solo il pacchetto vecchio quando dimostra che e' innocuo, e altrimenti non lo toglie.
  *
  * <p>Innocuo vuol dire tutte e quattro:
  * <ol>
@@ -43,11 +42,10 @@ import java.util.regex.Pattern;
  * dichiararla, pkg toglie la libreria e lascia il programma ROTTO («Shared object not found»).
  *
  * <p>Se qualcosa che resta installato sparirebbe o smetterebbe di funzionare, se una mappa di
- * Postfix senza testo diventerebbe illeggibile, o se non si e' potuto misurare, il pannello non la
- * esegue mai, nemmeno confermata (il committente, 31/10/2026: «questa cosa e' molto
- * pericolosa»). Il caso che prima si confermava scrivendo il nome, il formato dei dati in uso,
- * adesso lo sistema il pannello da solo rigenerando le mappe: oggi nessuna rimozione e'
- * confermabile, e "confirmable" resta per la pagina, che sa gia' mostrarla.
+ * Postfix non si potrebbe rigenerare dal suo testo, o se non si e' potuto misurare, il pannello
+ * non la esegue (il committente, 31/10/2026: «questa cosa e' molto pericolosa»). Non c'e' modo di
+ * confermarla: l'unico caso che si confermava, scrivendo il nome del pacchetto, era il formato dei
+ * dati in uso, e adesso lo sistema il pannello da solo rigenerando le mappe (PostfixMaps).
  */
 final class PackageReplacement {
 
@@ -61,16 +59,11 @@ final class PackageReplacement {
                  Map<String, Use> dependents, Map<String, Map<String, Use>> libraryUsers,
                  String dataFormat, List<String> dataUses, String error) {}
 
-    /**
-     * @param confirmable vero solo se non e' innocua e l'unico problema e' il formato dei dati:
-     *                    tutto il resto (nessuno la sostituisce, qualcosa che resta la usa, non
-     *                    misurata) il pannello non lo esegue mai.
-     */
-    record Verdict(String name, String version, boolean safe, boolean confirmable, String replacedBy,
+    /** Il giudizio su una rimozione: innocua (safe) o no, con le prove dell'una e dell'altra cosa. */
+    record Verdict(String name, String version, boolean safe, String replacedBy,
                    List<String> evidence, List<String> problems) {
         JSONObject toJson() {
             return new JSONObject().put("name", name).put("version", version).put("safe", safe)
-                    .put("confirmable", confirmable)
                     .put("replacedBy", replacedBy).put("evidence", new JSONArray(evidence))
                     .put("problems", new JSONArray(problems));
         }
@@ -81,7 +74,7 @@ final class PackageReplacement {
         List<String> ok = new ArrayList<>(), no = new ArrayList<>();
         if (f.error() != null && !f.error().isEmpty()) {
             no.add(I18n.tr("server.replace.notMeasured", Map.of("err", f.error())));
-            return new Verdict(f.name(), f.version(), false, false, "", ok, no);
+            return new Verdict(f.name(), f.version(), false, "", ok, no);
         }
         // 1. qualcuno prende il suo posto
         if (f.replacedBy() == null || f.replacedBy().isEmpty())
@@ -111,8 +104,8 @@ final class PackageReplacement {
             else
                 no.add(I18n.tr("server.replace.dataUsed", Map.of("fmt", f.dataFormat(), "uses", String.join(", ", f.dataUses()))));
         }
-        // Ogni problema qui vuol dire che qualcosa sparisce, si rompe o si perde: mai confermabile.
-        return new Verdict(f.name(), f.version(), no.isEmpty(), false,
+        // Ogni problema qui vuol dire che qualcosa sparisce, si rompe o si perde: non si toglie.
+        return new Verdict(f.name(), f.version(), no.isEmpty(),
                 f.replacedBy() == null ? "" : f.replacedBy(), ok, no);
     }
 
@@ -222,22 +215,6 @@ final class PackageReplacement {
     private static List<String> lines(String s) {
         List<String> out = new ArrayList<>();
         for (String l : (s == null ? "" : s).split("\n")) if (!l.isBlank()) out.add(l.trim());
-        return out;
-    }
-
-    /* ===================================================================
-     * La regola, per i tre lavori e le tre schede
-     * =================================================================== */
-
-    /** Le conferme mandate dalla pagina: "nome versione", nient'altro. */
-    private static final Pattern CONFIRMATION = Pattern.compile("[A-Za-z0-9._+-]{1,100} [A-Za-z0-9._,+-]{1,60}");
-
-    static Set<String> confirmations(JSONArray fromPage) {
-        Set<String> out = new LinkedHashSet<>();
-        for (int i = 0; fromPage != null && i < fromPage.length() && i < 50; i++) {
-            String s = fromPage.optString(i, "");
-            if (CONFIRMATION.matcher(s).matches()) out.add(s);
-        }
         return out;
     }
 }
