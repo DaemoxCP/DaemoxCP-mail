@@ -24,8 +24,11 @@ import java.util.TreeSet;
  *                  fakelib0, fakeapp 1.1 gira, e il registro del lavoro ha le prove;
  *   altro utente   anche fakeother, che usa ancora fakelib: pkg lo toglierebbe in silenzio.
  *                  Ognuno dei tre lavori si ferma e non cambia niente; la scheda, a pacchetti
- *                  scaricati, mostra le due rimozioni da confermare;
- *   confermato     lo stesso, con le due rimozioni confermate: l'aggiornamento guidato va.
+ *                  scaricati, mostra le due rimozioni, mai confermabili;
+ *   confermato     lo stesso, con le due rimozioni «confermate» da una richiesta costruita a
+ *                  mano: la scheda non lascia partire, il lavoro si rifiuta, fakeother resta;
+ *   plugin rotto   fakeplugin usa libfake.so.1 senza dichiarare fakelib: pkg toglierebbe fakelib
+ *                  e lo lascerebbe ROTTO. Il lavoro si ferma, fake-plugin gira ancora.
  *
  * Durante la prova FreeBSD-ports e FreeBSD-ports-kmods sono spenti, e prima di ogni lavoro si
  * controlla che il piano tocchi solo i pacchetti finti. Alla fine la macchina e' com'era, e lo si
@@ -41,7 +44,7 @@ public class PackageReplacementE2ETest {
     static final String REPO_CONF = "/usr/local/etc/pkg/repos/zzz-sost.conf";
     static final Path WORK = Path.of("/var/tmp/sost-e2e");
     static final int PORT = 8099;
-    static final Set<String> FAKES = Set.of("fakeapp", "fakelib", "fakelib0", "fakeother");
+    static final Set<String> FAKES = Set.of("fakeapp", "fakelib", "fakelib0", "fakeother", "fakeplugin");
     static boolean createdReposDir;
 
     public static void main(String[] args) throws Exception {
@@ -73,6 +76,7 @@ public class PackageReplacementE2ETest {
             innocuousCached();
             for (String flow : new String[]{"guided", "unprotected", "maintenance"}) otherUserStops(flow);
             otherUserConfirmed();
+            pluginBreaks();
         } finally {
             removeFakes();
             sh("rm -f " + REPO_CONF + "; rm -rf /var/db/pkg/repos/" + REPO + "; rm -f /var/cache/pkg/fake*");
@@ -96,7 +100,7 @@ public class PackageReplacementE2ETest {
 
     static void innocuous(String flow) throws Exception {
         System.out.println("\n  --- " + flow + ": fakelib sostituito da fakelib0, nessun altro lo usa ---");
-        setUp(flow, false);
+        setUp(flow, null);
         JSONObject r = runFlow(flow, Set.of());
         if (r == null) return;
         String label = flow + " innocuo: ";
@@ -113,7 +117,7 @@ public class PackageReplacementE2ETest {
     /** A pacchetti gia' scaricati la scheda vede la rimozione: innocua, la lascia partire con un avviso. */
     static void innocuousCached() throws Exception {
         System.out.println("\n  --- guided: innocuo, a pacchetti gia' scaricati ---");
-        setUp("guided", false);
+        setUp("guided", null);
         sh("pkg unlock -y fakeapp; pkg upgrade -F -y fakeapp 2>&1; pkg lock -y fakeapp");
         JSONObject pf = preview("guided", Set.of());
         JSONArray v = pf.optJSONObject("plan") == null ? null : pf.getJSONObject("plan").optJSONArray("replacements");
@@ -134,7 +138,7 @@ public class PackageReplacementE2ETest {
 
     static void otherUserStops(String flow) throws Exception {
         System.out.println("\n  --- " + flow + ": anche fakeother usa fakelib, e pkg lo toglierebbe ---");
-        setUp(flow, true);
+        setUp(flow, "fakeother");
         String before = sh("pkg query %n-%v | sort");
         JSONObject r = runFlow(flow, Set.of());
         if (r == null) return;
@@ -148,26 +152,60 @@ public class PackageReplacementE2ETest {
         // A pacchetti scaricati la scheda vede le due rimozioni, e le dice da confermare.
         JSONObject preview = preview(flow, Set.of());
         JSONArray v = preview.optJSONObject("plan") == null ? null : preview.getJSONObject("plan").optJSONArray("replacements");
-        Set<String> toConfirm = new TreeSet<>();
+        Set<String> never = new TreeSet<>();
         for (int i = 0; v != null && i < v.length(); i++)
-            if (!v.getJSONObject(i).optBoolean("safe")) toConfirm.add(v.getJSONObject(i).optString("name"));
-        check(label + "la scheda mostra fakelib e fakeother da confermare (trovato " + toConfirm + ")",
-                toConfirm.equals(Set.of("fakelib", "fakeother")));
+            if (!v.getJSONObject(i).optBoolean("safe") && !v.getJSONObject(i).optBoolean("confirmable"))
+                never.add(v.getJSONObject(i).optString("name"));
+        check(label + "la scheda mostra fakelib e fakeother, mai confermabili (trovato " + never + ")",
+                never.equals(Set.of("fakelib", "fakeother")));
         boolean blocked = flow.equals("guided") ? !preview.optBoolean("canProceed") : !preview.optString("blockedReason").isEmpty();
         check(label + "e non lascia partire senza conferma", blocked);
     }
 
+    /**
+     * Le due rimozioni «confermate» con una richiesta costruita a mano, come se qualcuno
+     * scavalcasse la pagina: la scheda non lascia partire, e il lavoro, lanciato lo stesso con la
+     * firma vera, si rifiuta. fakeother resta e gira.
+     */
     static void otherUserConfirmed() throws Exception {
-        System.out.println("\n  --- guided: le due rimozioni confermate da chi guarda ---");
-        setUp("guided", true);
+        System.out.println("\n  --- guided: le due rimozioni «confermate» con una richiesta costruita a mano ---");
+        setUp("guided", "fakeother");
         // A pacchetti scaricati, come dopo il primo tentativo; da protetto pkg non lo scaricherebbe.
         sh("pkg unlock -y fakeapp; pkg upgrade -F -y fakeapp 2>&1; pkg lock -y fakeapp");
-        JSONObject r = runFlow("guided", Set.of("fakelib 1.0", "fakeother 1.0"));
+        String before = sh("pkg query %n-%v | sort");
+        Set<String> forged = Set.of("fakelib 1.0", "fakeother 1.0");
+        JSONObject pf = preview("guided", forged);
+        check("confermato a mano: la scheda non lascia partire", !pf.optBoolean("canProceed"));
+        JSONObject start = UpdateManager.startGuidedUpdate("fakeapp", pf.optString("signature"), forged);
+        String id = start.optString("jobId");
+        long deadline = System.currentTimeMillis() + 600_000;
+        while (!id.isEmpty() && PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
+        JSONObject job = id.isEmpty() ? new JSONObject() : UpdateManager.jobStatus(id).getJSONObject("job");
+        System.out.println("     esito: " + job.optString("status") + " " + job.optString("errorMessage"));
+        check("confermato a mano: il lavoro lanciato lo stesso si rifiuta", id.isEmpty() || "error".equals(job.optString("status")));
+        check("confermato a mano: nessun pacchetto cambiato", sh("pkg query %n-%v | sort").equals(before));
+        check("confermato a mano: fake-other gira", sh("/usr/local/bin/fake-other; echo $?").trim().equals("0"));
+    }
+
+    /** fakeplugin usa libfake.so.1 senza dichiarare fakelib: pkg lo lascerebbe rotto. */
+    static void pluginBreaks() throws Exception {
+        System.out.println("\n  --- guided: fakeplugin usa libfake.so.1 senza dichiararlo ---");
+        setUp("guided", "fakeplugin");
+        String before = sh("pkg query %n-%v | sort");
+        JSONObject r = runFlow("guided", Set.of());
         if (r == null) return;
-        check("confermato: il lavoro finisce (" + r.optString("status") + ")", "completed".equals(r.optString("status")));
-        check("confermato: fakeother tolto come confermato, fakeapp 1.1 con fakelib0",
-                sh("pkg query '%n %v' fakeapp fakelib0 fakelib fakeother 2>/dev/null").trim().equals("fakeapp 1.1\nfakelib0 0.9"));
-        check("confermato: fake-app gira", sh("/usr/local/bin/fake-app; echo $?").trim().equals("0"));
+        check("plugin: il lavoro si ferma (" + r.optString("status") + ")", "error".equals(r.optString("status")));
+        check("plugin: nessun pacchetto cambiato", sh("pkg query %n-%v | sort").equals(before));
+        check("plugin: fake-plugin gira ancora", sh("/usr/local/bin/fake-plugin; echo $?").trim().equals("0"));
+        JSONObject pf = preview("guided", Set.of("fakelib 1.0"));
+        JSONArray v = pf.optJSONObject("plan") == null ? null : pf.getJSONObject("plan").optJSONArray("replacements");
+        JSONObject fl = null;
+        for (int i = 0; v != null && i < v.length(); i++) if (v.getJSONObject(i).optString("name").equals("fakelib")) fl = v.getJSONObject(i);
+        check("plugin: la scheda dice fakelib mai confermabile, perche' fakeplugin usa libfake.so.1",
+                fl != null && !fl.optBoolean("safe") && !fl.optBoolean("confirmable")
+                        && fl.optJSONArray("problems").toString().contains("fakeplugin")
+                        && fl.optJSONArray("problems").toString().contains("libfake.so.1"));
+        check("plugin: e non lascia partire nemmeno confermata", !pf.optBoolean("canProceed"));
     }
 
     /* ===================================================================
@@ -175,11 +213,11 @@ public class PackageReplacementE2ETest {
      * =================================================================== */
 
     /** I pacchetti finti del catalogo di prima, installati; il catalogo nuovo, non ancora scaricato. */
-    static void setUp(String flow, boolean other) {
+    static void setUp(String flow, String extra) {
         removeFakes();
         sh("rm -f /var/cache/pkg/fake*");
         sh("pkg add " + WORK + "/repoA/fakeapp-1.0.pkg 2>&1");
-        if (other) sh("pkg add " + WORK + "/repoA/fakeother-1.0.pkg 2>&1");
+        if (extra != null) sh("pkg add " + WORK + "/repoA/" + extra + "-1.0.pkg 2>&1");
         if (!flow.equals("unprotected")) sh("pkg lock -y fakeapp");
         sh("pkg update -f -r " + REPO + " 2>&1");
     }
@@ -227,7 +265,7 @@ public class PackageReplacementE2ETest {
     }
 
     static void removeFakes() {
-        sh("pkg unlock -y fakeapp fakeother fakelib fakelib0 2>/dev/null; pkg delete -y -f fakeapp fakeother fakelib fakelib0 2>/dev/null");
+        sh("pkg unlock -y fakeapp fakeother fakeplugin fakelib fakelib0 2>/dev/null; pkg delete -y -f fakeapp fakeother fakeplugin fakelib fakelib0 2>/dev/null");
     }
 
     /** I pacchetti con librerie ELF vere, e nginx che serve il catalogo nuovo sulla 8099. */
@@ -247,6 +285,7 @@ public class PackageReplacementE2ETest {
                 cc -o fake-app-1.0 app1.c -L. -lfake
                 cc -o fake-app-1.1 app0.c -L. -lfake0
                 cc -o fake-other app1.c -L. -lfake
+                cc -o fake-plugin app1.c -L. -lfake
                 mk() {
                     name=$1; ver=$2; origin=$3; out=$4; shift 4
                     root="$W/stage/$name-$ver"; rm -rf "$root"; mkdir -p "$root"
@@ -267,6 +306,7 @@ public class PackageReplacementE2ETest {
                 for R in repoA repoB; do
                     mk fakelib 1.0 test/fakelib "$W/$R" text:/usr/local/bin/fake-tool libfake.so.1:/usr/local/lib/libfake.so.1 --
                     mk fakeother 1.0 test/fakeother "$W/$R" fake-other:/usr/local/bin/fake-other -- fakelib:1.0:test/fakelib
+                    mk fakeplugin 1.0 test/fakeplugin "$W/$R" fake-plugin:/usr/local/bin/fake-plugin --
                 done
                 mk fakeapp 1.0 test/fakeapp "$W/repoA" fake-app-1.0:/usr/local/bin/fake-app -- fakelib:1.0:test/fakelib
                 mk fakelib0 0.9 test/fakelib0 "$W/repoB" text:/usr/local/bin/fake-tool libfake0.so.0:/usr/local/lib/libfake0.so.0 --

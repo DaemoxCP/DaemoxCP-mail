@@ -14161,7 +14161,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const rs = (pn && pn.replacements) || [];
             if (!rs.length) return '';
             let h = '<div class="small fw-bold mt-2 mb-1">' + escHtml(t('up.replTitle')) + '</div>';
-            rs.forEach(v => {
+            rs.forEach((v, idx) => {
                 const key = v.name + ' ' + v.version;
                 const confirmed = updConfirmedRemovals.has(key);
                 h += '<div class="small border rounded p-2 mb-2"><code>' + updEsc(key) + '</code> '
@@ -14172,9 +14172,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + (v.evidence || []).map(e => '<li><i class="fas fa-check text-success me-1" aria-hidden="true"></i>' + updEsc(e) + '</li>').join('')
                    + (v.problems || []).map(e => '<li><i class="fas fa-triangle-exclamation text-danger me-1" aria-hidden="true"></i>' + updEsc(e) + '</li>').join('')
                    + '</ul>'
-                   + (!v.safe && !confirmed && card
-                        ? '<button type="button" class="btn btn-sm btn-outline-danger" data-key="' + escHtml(key) + '" data-card="' + escHtml(card)
-                          + '" onclick="updConfirmRemoval(this.dataset.key, this.dataset.card)">' + escHtml(t('up.replConfirmBtn', { name: v.name })) + '</button>'
+                   + (!v.safe && !v.confirmable
+                        ? '<div class="text-danger fw-bold"><i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('up.replNever')) + '</div>'
+                        : '')
+                   /* Confermabile solo scrivendo il nome del pacchetto, come l'aggiornamento guidato:
+                      un clic di riflesso non toglie niente. */
+                   + (!v.safe && v.confirmable && !confirmed && card
+                        ? '<label class="form-label mb-1" for="updRepl-' + card + '-' + idx + '">' + escHtml(t('up.replTypeName', { name: v.name })) + '</label>'
+                          + '<div class="d-flex flex-wrap gap-2"><input type="text" class="form-control" style="max-width:20rem" id="updRepl-' + card + '-' + idx
+                          + '" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-name="' + escHtml(v.name)
+                          + '" oninput="this.parentElement.querySelector(\\'button\\').disabled = this.value !== this.dataset.name">'
+                          + '<button type="button" class="btn btn-sm btn-outline-danger" disabled data-key="' + escHtml(key) + '" data-card="' + escHtml(card)
+                          + '" onclick="updConfirmRemoval(this.dataset.key, this.dataset.card)">' + escHtml(t('up.replConfirmBtn', { name: v.name })) + '</button></div>'
                         : '')
                    + '</div>';
             });
