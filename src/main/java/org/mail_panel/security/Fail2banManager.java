@@ -573,7 +573,7 @@ public class Fail2banManager {
      *
      * Questo metodo:
      *  1. Aggiunge le direttive di logging mancanti a config.inc.php (idempotente)
-     *  2. Crea il file userlogins vuoto se non esiste, con perms www:www 640
+     *  2. Crea il file userlogins vuoto se non esiste, dell'utente della webmail, 640
      *
      * Best-effort: se Roundcube non è installato o il file di config non è scrivibile,
      * il metodo non blocca l'install della jail (fail2ban segnalerà comunque l'errore).
@@ -692,7 +692,7 @@ public class Fail2banManager {
                 System.out.println("[Fail2banManager] Roundcube config updated (log_logins/log_driver/log_dir)");
             }
 
-            // Crea il file userlogins vuoto se non esiste, perms www:www 640
+            // Crea il file userlogins vuoto se non esiste, dell'utente della webmail, 640
             Path logsDir = Paths.get(installPath + "/logs");
             if (!Files.isDirectory(logsDir)) Files.createDirectories(logsDir);
             // Lo stesso nome che usa la jail e che Roundcube scrivera': una funzione sola.
@@ -701,7 +701,9 @@ public class Fail2banManager {
                 Files.createFile(userlogins);
                 System.out.println("[Fail2banManager] Created " + userlogins);
             }
-            try { executeCommand("chown www:www " + userlogins); } catch (Exception ignored) {}
+            // Lo scrive il PHP di Roundcube: roundcube dopo la migrazione (RoundcubeUser), www prima.
+            String rcUser = org.mail_panel.system.RoundcubeUser.runtimeUser();
+            try { executeCommand("chown " + rcUser + ":" + org.mail_panel.system.RoundcubeUser.runtimeGroup() + " " + userlogins); } catch (Exception ignored) {}
             try { executeCommand("chmod 640 " + userlogins); } catch (Exception ignored) {}
 
             // Verifica post-operazione

@@ -509,6 +509,27 @@ public final class UpdateManager {
     }
 
     /**
+     * Il lavoro sul turno dei pacchetti, con la proprieta' dei file della webmail riaffermata
+     * quando finisce: il post-install di roundcube-php84 fa "chown www:www" di logs e temp a ogni
+     * installazione e aggiornamento (misurato sulla VM FreeBSD 15.1 il 31/10/2026), e il PHP di
+     * Roundcube, che gira come roundcube, non potrebbe piu' scriverci. Avvolge tutti i lavori del
+     * turno, come withLockTrace: anche quelli che aggiornano Roundcube senza dirlo.
+     */
+    static Runnable withWebmailOwnership(Runnable work) {
+        return () -> {
+            try { work.run(); }
+            finally {
+                try {
+                    java.util.List<String> changed = RoundcubeUser.repairOwnership();
+                    if (!changed.isEmpty()) LOGGER.info("Webmail files given back to " + RoundcubeUser.USER + ": " + changed);
+                } catch (RuntimeException e) {
+                    LOGGER.log(Level.WARNING, "Cannot give the webmail files back to " + RoundcubeUser.USER, e);
+                }
+            }
+        };
+    }
+
+    /**
      * Mette l'annotazione su ogni pacchetto bloccato dal pannello che non ce l'ha, e la toglie
      * da quelli che non lo sono piu'. Restituisce {aggiunte, tolte}.
      *
@@ -3020,6 +3041,7 @@ public final class UpdateManager {
         // Ogni lavoro del turno puo' aver tolto e rimesso protezioni, o aggiornato pacchetti
         // protetti (che cosi' perdono l'annotazione): la traccia si rimette in pari alla fine.
         work = withLockTrace(work);
+        work = withWebmailOwnership(work);
         JOBS.put(id, j);
         PackageQueue.start(id, threadName, withEndMarked(j, work));
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
@@ -4409,6 +4431,12 @@ public final class UpdateManager {
             job.advance(7, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runRoundcubeUpdate.12", java.util.Map.of("total", String.valueOf(TOT))));
+            // Il pacchetto ha appena rimesso logs e temp a www:www: tornano alla webmail prima che
+            // php-fpm riparta, non alla fine del lavoro, perche' la prova qui sotto li usa gia'.
+            java.util.List<String> given = RoundcubeUser.repairOwnership();
+            if (!given.isEmpty())
+                job.write(I18n.tr("server.um.runRoundcubeUpdate.ownership", java.util.Map.of("user", RoundcubeUser.USER,
+                        "n", String.valueOf(given.size()))));
             String svc = realServiceName("php_fpm");
             if (svc != null) {
                 ok("service " + svc + " restart", 120);

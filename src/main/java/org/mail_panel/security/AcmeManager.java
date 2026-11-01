@@ -28,11 +28,13 @@ import java.util.regex.*;
  */
 public class AcmeManager {
 
-    // Paths - MUST match FullMailServerScript.java
-    private static final String ACME_HOME = "/root/.acme.sh";
-    private static final String ACME_SH = ACME_HOME + "/acme.sh";
-    /**
-     * acme.sh sceglie la propria cartella di lavoro cosi' (sorgente ufficiale, riga 11 e 3145):
+    /*
+     * Dove sta acme.sh e con quale utente gira lo dice AcmeUser.layout(): come acme da
+     * /var/db/acme (il pacchetto security/acme.sh), o da root in /root/.acme.sh finche' la
+     * migrazione all'avvio non l'ha spostato.
+     *
+     * Ogni comando porta "--home": acme.sh sceglie la propria cartella di lavoro cosi' (sorgente
+     * ufficiale, riga 11 e 3145):
      *     DEFAULT_INSTALL_HOME="$HOME/.$PROJECT_NAME"
      *     if [ -z "$LE_WORKING_DIR" ]; then LE_WORKING_DIR="$DEFAULT_INSTALL_HOME"; fi
      * Il pannello viene avviato da rc.d, che NON passa HOME. Con HOME vuoto quella
@@ -41,7 +43,6 @@ public class AcmeManager {
      * "--home" (riga 8436 del sorgente) e' il rimedio documentato, ed e' lo stesso flag
      * che acme.sh scrive nel proprio cron: non si fida dell'ambiente nemmeno lui.
      */
-    private static final String ACME_CMD = ACME_SH + " --home " + ACME_HOME;
     private static final String SSL_DIR = "/usr/local/etc/ssl/mail";
     private static final String CERT_FILE = SSL_DIR + "/fullchain.pem";
     private static final String KEY_FILE = SSL_DIR + "/privkey.pem";
@@ -102,6 +103,14 @@ public class AcmeManager {
     public void startAutoRenewal() {
         // Run check immediately at startup
         scheduler.execute(() -> {
+            // Prima, sui server installati prima: acme.sh da /root, da root, a /var/db/acme come
+            // acme. Qui e non nel resto dell'avvio, perche' puo' installare il pacchetto (minuti,
+            // se la rete e' lenta), e prima del controllo, che altrimenti rinnoverebbe con quello vecchio.
+            AcmeUser.ensureAtBoot();
+            // Con quale utente gira ogni servizio, e gli avvisi nel log. Qui, dopo la migrazione
+            // di acme.sh: prima avviserebbe che acme.sh gira da root mentre lo si sta spostando
+            // (visto sulla VM il 31/10/2026, un avviso falso al primo avvio).
+            org.mail_panel.system.ServiceUsers.logAtBoot();
             try {
                 System.out.println("[ACME] Checking certificate status at startup...");
                 checkAndRenewCertificates();
@@ -141,34 +150,70 @@ public class AcmeManager {
      * Check if acme.sh is installed
      */
     public boolean isAcmeInstalled() {
-        return Files.exists(Paths.get(ACME_SH));
+        return AcmeUser.layout() != null;
+    }
+
+    /** acme.sh con le cartelle e l'utente di questa macchina; null se non c'e'. */
+    private AcmeUser.Layout layout() {
+        return AcmeUser.layout();
+    }
+
+    /** Esegue acme.sh (come acme, o da root prima della migrazione) con quegli argomenti. */
+    private String acme(String args) throws Exception {
+        return acme(args, null);
+    }
+
+    private String acme(String args, Map<String, String> env) throws Exception {
+        AcmeUser.Layout l = layout();
+        if (l == null) throw new IOException(I18n.tr("server.acme.notInstalled"));
+        return AcmeUser.run(l, args, env);
     }
 
     /**
-     * Install acme.sh
+     * La sfida HTTP. Come acme, acme.sh non puo' aprire la porta 80 (--standalone): scrive il file
+     * della sfida nella sua cartella, e la porta la apre il pannello per il tempo del comando. Con
+     * un webroot dato dall'amministratore (un sito che risponde gia' sulla 80) acme ci scrive solo
+     * la cartella della sfida. Da root, prima della migrazione, resta tutto come prima.
+     */
+    private String acmeWithHttpChallenge(String args, String webroot) throws Exception {
+        AcmeUser.Layout l = layout();
+        if (l == null) throw new IOException(I18n.tr("server.acme.notInstalled"));
+        boolean own = webroot == null || webroot.isEmpty() || AcmeUser.WEBROOT.equals(webroot);
+        if (!l.asAcme())
+            return AcmeUser.run(l, args + (own ? " --standalone" : " -w " + webroot), null);
+        if (!own) {
+            AcmeUser.allowChallengeIn(webroot);
+            return AcmeUser.run(l, args + " -w " + webroot, null);
+        }
+        return withPort80(l, args + " -w " + AcmeUser.WEBROOT);
+    }
+
+    /** acme.sh come acme con la porta 80 aperta dal pannello sulla cartella delle sfide. */
+    private String withPort80(AcmeUser.Layout l, String args) throws Exception {
+        AcmeUser.prepareWebroot();
+        try (AcmeUser.Challenge c = AcmeUser.Challenge.open()) {
+            return AcmeUser.run(l, args, null);
+        } catch (java.net.BindException e) {
+            return I18n.tr("server.acme.port80Busy", java.util.Map.of("m", String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Install acme.sh: il pacchetto security/acme.sh, che crea l'utente acme e installa il
+     * programma in /usr/local/sbin. Prima: "curl https://get.acme.sh | sh" da root.
      */
     public InstallResult installAcme(String email) {
+        if (!InputValidator.isValidEmail(email))
+            return new InstallResult(false, I18n.tr("server.acme.badEmail"), null);
         try {
-            // Download and install acme.sh
-            String installScript = """
-                #!/bin/sh
-                set -e
-
-                # Install dependencies
-                pkg install -y curl socat
-
-                # Download acme.sh
-                cd /root
-                export HOME=/root
-                curl -s https://get.acme.sh | sh -s email=%s
-
-                # Set default CA to Let's Encrypt
-                %s/acme.sh --set-default-ca --server letsencrypt
-
-                echo "acme.sh installed successfully"
-                """.formatted(email, ACME_HOME);
-
-            String output = executeScript(installScript);
+            org.mail_panel.util.Shell.Result r = org.mail_panel.util.Shell.run(java.time.Duration.ofMinutes(10),
+                    "pkg", "install", "-y", AcmeUser.PACKAGE);
+            String output = r.outputTrim();
+            if (isAcmeInstalled() && layout().asAcme()) {
+                AcmeUser.prepareWebroot();
+                // L'account con la CA, con l'email per gli avvisi di scadenza. --server su ogni comando.
+                output += "\n" + acme("--register-account -m " + email + " --server letsencrypt");
+            }
 
             if (isAcmeInstalled()) {
                 // Save email to database
@@ -223,35 +268,23 @@ public class AcmeManager {
             // Build acme.sh command
             StringBuilder cmd = new StringBuilder();
             // Vedi la nota in emitWithNames: la CA si dichiara a ogni comando.
-            cmd.append(ACME_CMD).append(" --issue --server letsencrypt");
+            cmd.append("--issue --server letsencrypt");
 
             // Add all domains
             for (String d : domains) {
                 cmd.append(" -d ").append(d);
             }
 
-            // Challenge type
-            if ("dns".equals(challengeType)) {
-                cmd.append(" --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please");
-            } else {
-                // HTTP challenge
-                if (webroot != null && !webroot.isEmpty()) {
-                    cmd.append(" -w ").append(webroot);
-                } else {
-                    // Standalone mode (requires port 80 to be free)
-                    cmd.append(" --standalone");
-                }
-            }
-
             // Force issue even if cert exists
             cmd.append(" --force");
 
-            String output = executeCommand(cmd.toString());
+            // Challenge type. HTTP: la porta 80 la apre il pannello (acmeWithHttpChallenge).
+            String output = "dns".equals(challengeType)
+                    ? acme(cmd + " --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please")
+                    : acmeWithHttpChallenge(cmd.toString(), webroot);
 
             // Check if certificate was issued (check both regular and ECC directories)
-            Path certPath = Paths.get(ACME_HOME, mailHostname, mailHostname + ".cer");
-            Path certPathEcc = Paths.get(ACME_HOME, mailHostname + "_ecc", mailHostname + ".cer");
-            if (Files.exists(certPath) || Files.exists(certPathEcc)) {
+            if (layout().certDir(mailHostname) != null) {
                 // Deploy certificate
                 DeployResult deployResult = deployCertificate(mailHostname);
                 if (deployResult.success) {
@@ -409,18 +442,12 @@ public class AcmeManager {
             if (source != null && !Files.exists(source.resolve(mailHostname + ".cer"))) source = null;
 
             if (source == null) {
-                // Source paths (acme.sh storage) - check both regular and ECC directories
-                Path eccDir = Paths.get(ACME_HOME, mailHostname + "_ecc");
-                Path regularDir = Paths.get(ACME_HOME, mailHostname);
-
-                // Prefer ECC certificates if available (acme.sh default)
-                if (Files.exists(eccDir) && Files.exists(eccDir.resolve(mailHostname + ".cer"))) {
-                    source = eccDir;
-                } else if (Files.exists(regularDir) && Files.exists(regularDir.resolve(mailHostname + ".cer"))) {
-                    source = regularDir;
-                } else {
-                    return new DeployResult(false, I18n.tr("server.acme.filesNotFound", java.util.Map.of("d", String.valueOf(ACME_HOME))), null);
-                }
+                // Source paths (acme.sh storage) - ECC first, as acme.sh does by default
+                AcmeUser.Layout l = layout();
+                source = l == null ? null : l.certDir(mailHostname);
+                if (source == null)
+                    return new DeployResult(false, I18n.tr("server.acme.filesNotFound", java.util.Map.of("d",
+                            String.valueOf(l == null ? AcmeUser.CERT_HOME : l.certHome()))), null);
             }
 
             Path acmeCert = source.resolve(mailHostname + ".cer");
@@ -602,8 +629,13 @@ public class AcmeManager {
      */
     private CertificateResult renewStandard(String mailHostname) {
         try {
-            String cmd = ACME_CMD + " --renew -d " + mailHostname + " --force 2>&1";
-            String output = executeCommand(cmd);
+            // Un certificato chiesto con la sfida HTTP si rinnova con la stessa: la porta 80 di nuovo.
+            String cmd = "--renew -d " + mailHostname + " --force";
+            AcmeUser.Layout l = layout();
+            Path dir = l == null ? null : l.certDir(mailHostname);
+            boolean http = l != null && l.asAcme() && dir != null
+                    && AcmeUser.WEBROOT.equals(AcmeUser.savedWebroot(dir, mailHostname));
+            String output = http ? withPort80(l, cmd) : acme(cmd);
 
             // Check success
             if (output.contains("Cert success") || output.contains("Skip")) {
@@ -661,7 +693,7 @@ public class AcmeManager {
         // ZeroSSL — che pretende una registrazione con email e fa fallire l'emissione con un
         // messaggio che non c'entra niente con il certificato. Un default impostato altrove
         // e' una dipendenza nascosta: meglio dirlo ogni volta.
-        StringBuilder cmd = new StringBuilder(ACME_CMD + " --issue --server letsencrypt --dns dns_cf -d " + mailHostname);
+        StringBuilder cmd = new StringBuilder("--issue --server letsencrypt --dns dns_cf -d " + mailHostname);
         java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
         seen.add(mailHostname.toLowerCase(java.util.Locale.ROOT));
         if (extraNames != null) for (String n : extraNames) {
@@ -671,12 +703,12 @@ public class AcmeManager {
             if (x.isEmpty() || !InputValidator.isValidHostname(x) || !seen.add(x)) continue;
             cmd.append(" -d ").append(x);
         }
-        cmd.append(" --force 2>&1");
+        cmd.append(" --force");
 
         try {
             Map<String, String> env = new HashMap<>();
             env.put("CF_Token", cf.apiToken);
-            String output = sanitize(executeCommand(cmd.toString(), env), cf.apiToken);
+            String output = sanitize(acme(cmd.toString(), env), cf.apiToken);
             // "Skipping. Next renewal time" NON e' un successo quando si chiedono nomi nuovi:
             // vuol dire che acme.sh ha lasciato il certificato com'era. Contarlo come riuscito
             // faceva installare quello vecchio e dichiarare "emesso con 11 nomi" una cosa che
@@ -736,14 +768,14 @@ public class AcmeManager {
             // con i record MTA-STS gia' pubblicati vuol dire posta RIFIUTATA, settimane dopo,
             // senza che nessuno abbia toccato niente. Quindi rileggo i nomi da quello in uso.
             StringBuilder cmd = new StringBuilder(
-                    ACME_CMD + " --issue --server letsencrypt --dns dns_cf -d " + mailHostname);
+                    "--issue --server letsencrypt --dns dns_cf -d " + mailHostname);
             java.util.List<String> keep = new java.util.ArrayList<>();
             for (String n : installedCertificateNames())
                 if (!n.equalsIgnoreCase(mailHostname)) keep.add(n);
             java.util.Collections.sort(keep);
             for (String n : keep) cmd.append(" -d ").append(n);
-            cmd.append(" --force 2>&1");
-            String output = sanitize(executeCommand(cmd.toString(), env), cf.apiToken);
+            cmd.append(" --force");
+            String output = sanitize(acme(cmd.toString(), env), cf.apiToken);
 
             if (output.contains("Cert success") || output.contains("Cert renewed")
                     || output.contains("Skipping. Next renewal time")) {
@@ -1066,17 +1098,14 @@ public class AcmeManager {
 
         try {
             // Check if a valid certificate already exists
-            Path certPathEcc = Paths.get(ACME_HOME, hostname + "_ecc", hostname + ".cer");
-            Path certPath = Paths.get(ACME_HOME, hostname, hostname + ".cer");
-            if ((Files.exists(certPathEcc) || Files.exists(certPath)) && !forceRegenerate) {
+            if (layout().certDir(hostname) != null && !forceRegenerate) {
                 // Certificate exists - return special status so user can choose
                 return new DnsChallengeResult(false, "CERT_EXISTS", null, null);
             }
 
             // Request certificate with DNS manual mode - this will output the TXT record needed
-            String cmd = ACME_CMD + " --issue --server letsencrypt -d " + hostname +
-                         " --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please --force 2>&1";
-            String output = executeCommand(cmd);
+            String output = acme("--issue --server letsencrypt -d " + hostname
+                    + " --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please --force");
 
             // Parse the output to extract TXT record info
             // acme.sh outputs something like:
@@ -1150,14 +1179,11 @@ public class AcmeManager {
             }
 
             // TXT record verified, now complete the certificate issuance with --renew
-            String cmd = ACME_CMD + " --renew -d " + hostname +
-                         " --yes-I-know-dns-manual-mode-enough-go-ahead-please 2>&1";
-            String output = executeCommand(cmd);
+            String output = acme("--renew -d " + hostname
+                    + " --yes-I-know-dns-manual-mode-enough-go-ahead-please");
 
             // Check if certificate was issued (check both regular and ECC directories)
-            Path certPath = Paths.get(ACME_HOME, hostname, hostname + ".cer");
-            Path certPathEcc = Paths.get(ACME_HOME, hostname + "_ecc", hostname + ".cer");
-            if (Files.exists(certPath) || Files.exists(certPathEcc)) {
+            if (layout().certDir(hostname) != null) {
                 // Deploy certificate
                 DeployResult deployResult = deployCertificate(hostname);
 
@@ -1317,26 +1343,23 @@ public class AcmeManager {
                 exit 1
             fi
 
-            # Install dependencies
-            echo "[1/3] Installing dependencies..."
-            pkg install -y curl socat
+            # The package creates the user acme (home %s) and installs %s
+            echo "[1/2] Installing acme.sh..."
+            pkg install -y %s
 
-            # Download and install acme.sh
-            echo "[2/3] Installing acme.sh..."
-            cd /root
-            curl https://get.acme.sh | sh -s email=%s
-
-            # Configure
-            echo "[3/3] Configuring..."
-            . ~/.acme.sh/acme.sh.env
-            acme.sh --set-default-ca --server letsencrypt
+            # The account with the CA, as acme: it never runs as root
+            echo "[2/2] Registering the account..."
+            mkdir -p %s && chown %s:%s %s
+            su -m %s -c "%s --home %s --cert-home %s --register-account -m %s --server letsencrypt"
 
             echo ""
             echo "=== acme.sh Installation Complete ==="
             echo ""
             echo "You can now request certificates from the panel."
             echo ""
-            """.formatted(email);
+            """.formatted(AcmeUser.BASE, AcmeUser.SCRIPT, AcmeUser.PACKAGE,
+                AcmeUser.WEBROOT, AcmeUser.USER, AcmeUser.USER, AcmeUser.WEBROOT,
+                AcmeUser.USER, AcmeUser.SCRIPT, AcmeUser.HOME, AcmeUser.CERT_HOME, email);
     }
 
     // ============== Helper Methods ==============

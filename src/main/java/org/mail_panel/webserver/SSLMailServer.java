@@ -534,7 +534,13 @@ public class SSLMailServer {
             // Idempotente, e non attiva niente se la posta di sistema rimbalzerebbe.
             org.mail_panel.system.LocalMtaRepair.ensureAtBoot();
 
-            // Start auto-renewal for certificates
+            // Roundcube col suo utente e il suo pool di php-fpm, non piu' con l'utente di nginx: sui
+            // server installati prima. Prima del plugin SSO, che da' la sua configurazione al gruppo
+            // con cui gira la webmail.
+            org.mail_panel.system.RoundcubeUser.ensureAtBoot();
+
+            // Start auto-renewal for certificates (prima, nello stesso thread, acme.sh passa da root
+            // all'utente acme: AcmeUser.ensureAtBoot)
             acmeManager.startAutoRenewal();
 
             // Start DKIM rotation scheduler (polls DNS propagation hourly)
@@ -552,6 +558,9 @@ public class SSLMailServer {
 
             // Dopo: la webmail non scrive piu' password in chiaro, quelle rimaste si sistemano
             repairPlaintextMailboxPasswords();
+
+            // Con quale utente gira ogni servizio, e gli avvisi nel log: lo dice il thread dei
+            // rinnovi, dopo la migrazione di acme.sh (AcmeManager.startAutoRenewal).
         }
     }
 
@@ -7115,6 +7124,7 @@ public class SSLMailServer {
                 case "dovecot24_preview" -> response = UpdateManager.dovecot24Preview();
                 case "rspamd_timeout" -> response = UpdateManager.rspamdTimeoutDiagnostics();
                 case "web_diagnosis" -> response = org.mail_panel.system.WebDiagnostics.state();
+                case "service_users" -> response = org.mail_panel.system.ServiceUsers.state();
                 case "web443_status" -> response = org.mail_panel.system.WebProtection.state();
                 case "web443_config" -> response = new JSONObject().put("success", true)
                         .put("configuration", org.mail_panel.system.WebProtection.configuration(
@@ -8237,8 +8247,11 @@ public class SSLMailServer {
             JSONArray sslEntries = new JSONArray();
             sslEntries.put(pathEntry(I18n.tr("server.paths.certChain"), "/usr/local/etc/ssl/mail/fullchain.pem", I18n.tr("server.paths.certChainDesc")));
             sslEntries.put(pathEntry(I18n.tr("server.paths.privKey"), "/usr/local/etc/ssl/mail/privkey.pem", I18n.tr("server.paths.privKeyDesc")));
-            sslEntries.put(pathEntry(I18n.tr("server.paths.acmeHome"), "/root/.acme.sh", I18n.tr("server.paths.acmeHomeDesc")));
-            sslEntries.put(pathEntry(I18n.tr("server.paths.acmeBin"), "/root/.acme.sh/acme.sh", I18n.tr("server.paths.acmeBinDesc")));
+            // Dove sta davvero: in /var/db/acme come acme, in /root/.acme.sh finche' la migrazione non l'ha spostato.
+            org.mail_panel.security.AcmeUser.Layout acmeAt = org.mail_panel.security.AcmeUser.layout();
+            sslEntries.put(pathEntry(I18n.tr("server.paths.acmeHome"), acmeAt == null ? org.mail_panel.security.AcmeUser.HOME : acmeAt.home(), I18n.tr("server.paths.acmeHomeDesc")));
+            sslEntries.put(pathEntry(I18n.tr("server.paths.acmeBin"), acmeAt == null ? org.mail_panel.security.AcmeUser.SCRIPT : acmeAt.script(), I18n.tr("server.paths.acmeBinDesc")));
+            sslEntries.put(pathEntry(I18n.tr("server.paths.acmeCerts"), acmeAt == null ? org.mail_panel.security.AcmeUser.CERT_HOME : acmeAt.certHome(), I18n.tr("server.paths.acmeCertsDesc")));
             categories.put(new JSONObject().put("name", "SSL/TLS").put("entries", sslEntries));
 
             // === Web server (nginx) ===
@@ -11504,13 +11517,15 @@ http {
             fastcgi_split_path_info ^(.+\\.php)(/.+)$;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
             fastcgi_param PATH_INFO $fastcgi_path_info;
-            fastcgi_pass unix:/var/run/php-fpm.sock;
+            fastcgi_pass %s;
         }
 
         location ~ /\\. { deny all; }
     }
 }
-""".formatted(port, sslCert, sslKey, port, domain, rcRoot, sslCert, sslKey);
+""".formatted(port, sslCert, sslKey, port, domain, rcRoot, sslCert, sslKey,
+                    // Il pool di Roundcube: il suo socket, o quello di prima se la migrazione non c'e' ancora.
+                    org.mail_panel.system.RoundcubeUser.fastcgiPass());
 
             Path nginxConf = Path.of("/usr/local/etc/nginx/nginx.conf");
             Files.writeString(nginxConf, config);

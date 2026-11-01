@@ -634,7 +634,7 @@ http {
             fastcgi_split_path_info ^(.+\\.php)(/.+)$;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
             fastcgi_param PATH_INFO $fastcgi_path_info;
-            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_pass unix:/var/run/php-fpm-roundcube.sock;
         }
 
         location ~ /\\. { deny all; }
@@ -651,17 +651,8 @@ NGINXCONF
                 echo "  Roundcube 1.7 or later: nginx root set to public_html"
             fi
 
-            cat > /usr/local/etc/php-fpm.d/www.conf << 'PHPFPMCONF'
-[www]
-user = www
-group = www
-listen = 127.0.0.1:9000
-pm = dynamic
-pm.max_children = 10
-pm.start_servers = 2
-pm.min_spare_servers = 1
-pm.max_spare_servers = 5
-PHPFPMCONF
+            # Il pool di Roundcube col suo utente e il suo socket, non il pool www sulla 9000
+""" + org.mail_panel.system.RoundcubeUser.shellPool() + """
 
             sysrc nginx_enable="YES"
             sysrc php_fpm_enable="YES"
@@ -700,7 +691,8 @@ PHPFPMCONF
 \\$config['managesieve_port'] = 4190;
 RCCONF
 
-            chown -R www:www /usr/local/www/roundcube
+            # Prima tutta la webmail, codice compreso, era di www: scrivibile da nginx.
+""" + org.mail_panel.system.RoundcubeUser.shellOwnership() + """
             mysql -u root roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
 
             # ============ Start All Services ============

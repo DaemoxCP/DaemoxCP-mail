@@ -12084,6 +12084,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-user-shield me-2" aria-hidden="true"></i><strong>{{t:up.svcUsers}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.svcUsersSub}}</span></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="svcUsersLoad()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:up.svcUsersIntro1.html}}</p>
+                    <div id="upd-svc-users"><span class="text-muted">{{t:up.phSvcUsers}}</span></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-binoculars me-2" aria-hidden="true"></i><strong>{{t:up.watch}}</strong>
                         <span class="small text-muted ms-2">{{t:up.watchSub}}</span></span>
                     <button class="btn btn-sm btn-outline-primary" onclick="watchLoad()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
@@ -12514,7 +12526,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.bWait')) + '</span>';
         }
 
-""" + resource("pages/port465.js") + resource("pages/standards-watch.js") + resource("pages/web-diagnostics.js") + resource("pages/web443.js") + resource("pages/enable-mtasts.js") + resource("pages/cf-ranges.js") + """
+""" + resource("pages/port465.js") + resource("pages/standards-watch.js") + resource("pages/web-diagnostics.js") + resource("pages/service-users.js") + resource("pages/web443.js") + resource("pages/enable-mtasts.js") + resource("pages/cf-ranges.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');

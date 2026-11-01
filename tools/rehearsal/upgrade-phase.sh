@@ -17,5 +17,5 @@ wait_panel
 service mailpanel restart
 wait_panel
 /root/rehearsal/check-state.sh "$DOMAIN" > "$OUT/second-start.txt" 2>&1
-grep -h "RcScriptRepair\|PublicSurfaceRename\|PathMigration\|LocalMta\|Renamed\|Both " /var/db/mailpanel/*.log 2>/dev/null | tail -30 > "$OUT/migrations.txt"
+grep -h "RcScriptRepair\|PublicSurfaceRename\|PathMigration\|LocalMta\|RoundcubeUser\|AcmeUser\|ServiceUsers\|Renamed\|Both " /var/db/mailpanel/*.log 2>/dev/null | tail -30 > "$OUT/migrations.txt"
 echo FINE > "$OUT/done"

@@ -30,5 +30,21 @@ token="rehearsal-$(date +%s)"
 printf "Subject: %s\n\nprova\n" "$token" | timeout -f 20 /usr/local/sbin/sendmail "$box"
 i=0; while [ $i -lt 30 ] && ! timeout -f 5 doveadm search -u "$box" mailbox INBOX subject "$token" 2>/dev/null | grep -q .; do sleep 1; i=$((i+1)); done
 timeout -f 5 doveadm search -u "$box" mailbox INBOX subject "$token" 2>/dev/null | grep -q . && echo "consegnata in ${i}s" || echo "NON consegnata"
+echo "== gli utenti dei servizi"
+ps -axww -o user= -o command= | awk '/php-fpm: pool|nginx: (master|worker)|php-fpm: master/ {print $1, $2, $3, $4}' | sort | uniq -c
+ls -1 /usr/local/etc/php-fpm.d/; grep -h "^\[\|^user\|^listen" /usr/local/etc/php-fpm.d/*.conf 2>/dev/null | tr "\n" " "; echo
+grep -h "fastcgi_pass" /usr/local/etc/nginx/nginx.conf /usr/local/etc/nginx/conf.d/*.conf 2>/dev/null | sort | uniq -c
+for f in /usr/local/www/roundcube/config/config.inc.php /usr/local/www/roundcube/plugins/mailpanel_sso/config.inc.php \
+         /usr/local/www/roundcube/temp /usr/local/www/roundcube/logs /var/db/mailpanel/php_sessions /var/log/php_errors.log \
+         /var/db/mailpanel/roundcube_sso.key; do
+    [ -e "$f" ] && stat -f "%Sp %Su:%Sg %N" "$f"
+done
+grep -h "www:www\|roundcube:roundcube" /usr/local/etc/newsyslog.conf.d/php-errors.conf /usr/local/etc/newsyslog.conf.d/roundcube.conf 2>/dev/null
+printf "webmail: "; n=$(awk '/server_name/ && !/_;/ {gsub(";","",$2); print $2; exit}' /usr/local/etc/nginx/nginx.conf)
+p=$(awk '/listen/ && !/default_server/ {print $2; exit}' /usr/local/etc/nginx/nginx.conf)
+curl -sk -m 15 --resolve "$n:$p:127.0.0.1" "https://$n:$p/" | grep -c rcmloginuser
+printf "acme.sh: "; [ -d /root/.acme.sh ] && echo "/root/.acme.sh c'e'" || echo "/root/.acme.sh no"
+[ -d /var/db/acme ] && stat -f "%Sp %Su:%Sg %N" /var/db/acme /var/db/acme/certs 2>/dev/null; ls -1 /var/db/acme/certs 2>/dev/null
+crontab -l -u root 2>/dev/null | grep -c acme.sh
 echo "== pacchetti protetti"
 pkg lock -l 2>/dev/null | sed 1d | wc -l | tr -d " "
