@@ -49,10 +49,11 @@ public class PhpIniTest {
         if (ini == null) { OUT.println("\n" + (++failed) + " CONTROLLI FALLITI"); System.exit(1); }
         check("e lo script si ferma se non riesce a scriverlo",
                 script.contains("if [ ! -f /usr/local/etc/php.ini ]"));
-        check("la cartella delle sessioni la crea, 700 e di www",
+        // Di roundcube, non piu' di www: la webmail ha il suo utente (RoundcubeUser).
+        check("la cartella delle sessioni la crea, 700 e di roundcube",
                 script.contains("mkdir -p /var/db/mailpanel/php_sessions")
-                        && script.contains("chown www:www /var/db/mailpanel/php_sessions")
-                        && script.contains("chmod 700 /var/db/mailpanel/php_sessions"));
+                        && script.contains("chown -R roundcube:roundcube /var/db/mailpanel/php_sessions; chmod 700 /var/db/mailpanel/php_sessions")
+                        && !script.contains("chown www:www /var/db/mailpanel/php_sessions"));
         check("il registro degli errori esiste e ruota",
                 script.contains("touch /var/log/php_errors.log")
                         && script.contains("/usr/local/etc/newsyslog.conf.d/php-errors.conf"));

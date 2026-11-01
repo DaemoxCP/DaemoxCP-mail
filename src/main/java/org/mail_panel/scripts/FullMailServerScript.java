@@ -1108,8 +1108,9 @@ if [ ! -f /usr/local/etc/php.ini ]; then
 fi
 chmod 644 /usr/local/etc/php.ini
 
-# La cartella delle sessioni di Roundcube e il registro degli errori di PHP: di roundcube, che
-# ci scrive. Proprietario e permessi li mette il pezzo di RoundcubeUser, dopo il pool.
+# La cartella delle sessioni di Roundcube e il registro degli errori di PHP.
+# Sono di roundcube, che ci scrive: proprietario e permessi li mette il pezzo di RoundcubeUser,
+# dopo il pool. (La riga qui sopra resta com'e': CommentRepair la usa come forma giusta.)
 mkdir -p /var/db/mailpanel/php_sessions
 chmod 700 /var/db/mailpanel/php_sessions
 touch /var/log/php_errors.log
