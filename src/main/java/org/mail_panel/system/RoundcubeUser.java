@@ -306,9 +306,11 @@ public final class RoundcubeUser {
             try {
                 PosixFileAttributeView v = Files.getFileAttributeView(s.path(), PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
                 UserPrincipalLookupService names = s.path().getFileSystem().getUserPrincipalLookupService();
-                v.setOwner(names.lookupPrincipalByName(s.user()));
-                v.setGroup(names.lookupPrincipalByGroupName(s.group()));
-                v.setPermissions(s.perms());
+                // Solo quello che e' cambiato: un file che non si e' potuto cambiare non si tocca di nuovo.
+                PosixFileAttributes a = v.readAttributes();
+                if (!a.owner().getName().equals(s.user())) v.setOwner(names.lookupPrincipalByName(s.user()));
+                if (!a.group().getName().equals(s.group())) v.setGroup(names.lookupPrincipalByGroupName(s.group()));
+                if (!a.permissions().equals(s.perms())) v.setPermissions(s.perms());
             } catch (IOException e) {
                 problems.add(s.path() + ": " + e.getMessage());
             }
@@ -356,7 +358,7 @@ public final class RoundcubeUser {
         Path php = at.newsyslogDir().resolve("php-errors.conf");
         if (Files.isRegularFile(php, LinkOption.NOFOLLOW_LINKS)) {
             String before = Files.readString(php, StandardCharsets.UTF_8);
-            String after = before.replaceAll("(?m)^(" + Pattern.quote(PHP_ERRORS_LOG) + "\\s+)www:www(\\s)",
+            String after = before.replaceAll("(?m)^(" + Pattern.quote(at.phpErrorsLog().toString()) + "\\s+)www:www(\\s)",
                     "$1" + USER + ":" + GROUP + "$2");
             if (!after.equals(before)) l.add(new FileEdit(php, before, after));
         }

@@ -315,6 +315,9 @@ public final class AcmeUser {
         Deque<Path> copied = new ArrayDeque<>();
         Path accountConf = at.home().resolve("account.conf");
         String accountBefore = Files.isRegularFile(accountConf) ? Files.readString(accountConf, StandardCharsets.UTF_8) : null;
+        // Anche di chi era e con che permessi: tornando indietro si rimette tutto, non solo il testo.
+        java.nio.file.attribute.PosixFileAttributes accountAttrs = accountBefore == null ? null
+                : Files.readAttributes(accountConf, java.nio.file.attribute.PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         String crontabBefore = null;
         try {
             // La crea il pacchetto, di acme; se manca, la si crea di acme.
@@ -345,31 +348,32 @@ public final class AcmeUser {
             for (Path d : certs) {
                 String name = d.getFileName().toString().replaceFirst("_ecc$", "");
                 if (list == null || !Pattern.compile("(?m)^" + Pattern.quote(name) + "\\s").matcher(list).find())
-                    return rollBack(copied, accountConf, accountBefore, null, sv,
+                    return rollBack(copied, accountConf, accountBefore, accountAttrs, null, sv,
                             "acme.sh, run as " + USER + ", does not list " + name + " after the copy" + (list == null ? " (it did not run)" : ""));
             }
 
             // Solo adesso il cron di root smette di eseguire quello vecchio.
             crontabBefore = sv.rootCrontab();
             if (crontabBefore == null)
-                return rollBack(copied, accountConf, accountBefore, null, sv, "cannot read root's crontab");
+                return rollBack(copied, accountConf, accountBefore, accountAttrs, null, sv, "cannot read root's crontab");
             String crontabAfter = withoutAcmeCron(crontabBefore, at.oldHome().toString());
             if (!crontabAfter.equals(crontabBefore)) {
                 backup(at, "root-crontab", crontabBefore);
                 if (!sv.writeRootCrontab(crontabAfter) || !crontabAfter.equals(sv.rootCrontab()))
-                    return rollBack(copied, accountConf, accountBefore, crontabBefore, sv, "cannot rewrite root's crontab");
+                    return rollBack(copied, accountConf, accountBefore, accountAttrs, crontabBefore, sv, "cannot rewrite root's crontab");
             }
 
             Files.move(at.oldHome(), at.movedHome());
         } catch (IOException | RuntimeException e) {
-            return rollBack(copied, accountConf, accountBefore, crontabBefore, sv, "unexpected error: " + e);
+            return rollBack(copied, accountConf, accountBefore, accountAttrs, crontabBefore, sv, "unexpected error: " + e);
         }
         return new Report(Outcome.DONE, "acme.sh runs as " + USER + " from " + at.home() + ": " + certs.size()
                 + " certificate" + (certs.size() == 1 ? "" : "s") + " moved to " + at.certHome()
                 + ", root's crontab no longer runs it, the old folder is " + at.movedHome() + " (it can be deleted)");
     }
 
-    private static Report rollBack(Deque<Path> copied, Path accountConf, String accountBefore, String crontabBefore,
+    private static Report rollBack(Deque<Path> copied, Path accountConf, String accountBefore,
+                                   java.nio.file.attribute.PosixFileAttributes accountAttrs, String crontabBefore,
                                    Services sv, String why) {
         List<String> problems = new ArrayList<>();
         while (!copied.isEmpty()) {
@@ -378,7 +382,13 @@ public final class AcmeUser {
         }
         try {
             if (accountBefore == null) Files.deleteIfExists(accountConf);
-            else Files.writeString(accountConf, accountBefore, StandardCharsets.UTF_8);
+            else {
+                Files.writeString(accountConf, accountBefore, StandardCharsets.UTF_8);
+                PosixFileAttributeView v = Files.getFileAttributeView(accountConf, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+                v.setOwner(accountAttrs.owner());
+                v.setGroup(accountAttrs.group());
+                v.setPermissions(accountAttrs.permissions());
+            }
         } catch (IOException e) { problems.add(accountConf + ": " + e.getMessage()); }
         if (crontabBefore != null) {
             String now = sv.rootCrontab();

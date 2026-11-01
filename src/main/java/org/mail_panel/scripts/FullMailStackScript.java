@@ -691,7 +691,7 @@ NGINXCONF
 \\$config['managesieve_port'] = 4190;
 RCCONF
 
-            # Prima: "chown -R www:www" di TUTTA la webmail, codice compreso, cioe' scrivibile da nginx.
+            # Prima tutta la webmail, codice compreso, era di www: scrivibile da nginx.
 """ + org.mail_panel.system.RoundcubeUser.shellOwnership() + """
             mysql -u root roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
 

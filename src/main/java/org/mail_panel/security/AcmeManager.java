@@ -107,6 +107,10 @@ public class AcmeManager {
             // acme. Qui e non nel resto dell'avvio, perche' puo' installare il pacchetto (minuti,
             // se la rete e' lenta), e prima del controllo, che altrimenti rinnoverebbe con quello vecchio.
             AcmeUser.ensureAtBoot();
+            // Con quale utente gira ogni servizio, e gli avvisi nel log. Qui, dopo la migrazione
+            // di acme.sh: prima avviserebbe che acme.sh gira da root mentre lo si sta spostando
+            // (visto sulla VM il 31/10/2026, un avviso falso al primo avvio).
+            org.mail_panel.system.ServiceUsers.logAtBoot();
             try {
                 System.out.println("[ACME] Checking certificate status at startup...");
                 checkAndRenewCertificates();

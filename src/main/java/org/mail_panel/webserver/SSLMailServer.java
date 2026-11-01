@@ -559,8 +559,8 @@ public class SSLMailServer {
             // Dopo: la webmail non scrive piu' password in chiaro, quelle rimaste si sistemano
             repairPlaintextMailboxPasswords();
 
-            // Ultimo: con quale utente gira ogni servizio, e gli avvisi nel log.
-            org.mail_panel.system.ServiceUsers.logAtBoot();
+            // Con quale utente gira ogni servizio, e gli avvisi nel log: lo dice il thread dei
+            // rinnovi, dopo la migrazione di acme.sh (AcmeManager.startAutoRenewal).
         }
     }
 

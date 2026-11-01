@@ -173,7 +173,7 @@ public final class ServiceUsers {
         Map<String, Set<String>> byUser = new TreeMap<>();
         for (Service s : services.values())
             for (String u : s.users)
-                if (!"root".equals(u)) byUser.computeIfAbsent(u, k -> new LinkedHashSet<>()).add(s.name);
+                if (!"root".equals(u)) byUser.computeIfAbsent(u, k -> new java.util.TreeSet<>()).add(s.name);
         for (Map.Entry<String, Set<String>> e : byUser.entrySet())
             if (e.getValue().size() > 1)
                 problems.add(new Problem("shared", String.join(", ", e.getValue()), e.getKey(), String.join(" and ", e.getValue())));
