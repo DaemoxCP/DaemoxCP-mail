@@ -51,3 +51,16 @@ compila tutto quello che trova in `tests/` contro il jar di adesso.
 6. **Una fase per versione**, ognuna dalla stessa fotografia. Prima di passare alla fotografia si
    rimettono le due cartelle condivise, e si tolgono da `/var/log/nginx` i log avanzati da altre
    prove: un `mailpanel-public-access.log` del 30/10 fermava la rinomina.
+
+## Attenzione: il banco non e' piu' «prima»
+
+Dal 31/10/2026 sera `rehearsal-before-healthy` contiene gia' il passaggio della #89: c'e'
+`/root/rehearsal/after-branch` (21:56), lo script di avvio scrive `panel.log`, nginx include
+`mailpanel-public.conf`. Lo stato «11/10» sta solo nelle due cartelle condivise di `before2/`, e
+messe sopra questo boot environment non tornano d'accordo (il jar vecchio su file gia' rinominati,
+i log di nginx col nome vecchio accanto a quello nuovo: `BOTH_NAMES`).
+
+Per una prova che riguarda altro va bene cosi', con il jar di `main` (73bfbcd) in `/home/panel`
+come «prima» e senza rimettere i log di nginx: e' come la #84-#89 lascia il server vero. Cosi' e'
+stata fatta la prova degli utenti dei servizi (reperti, punto 116). Per rifare il passaggio
+dall'11/10 serve rifare il banco.

@@ -539,3 +539,30 @@ la copia sparisce alla fine.
 davanti agli stessi due casi. Serve a dimostrare che i controlli di MtaStsTest non sono
 decorativi: qui devono fallire. Se un giorno passa anche questa, vuol dire che la prova
 non sta piu' verificando niente.
+
+**RoundcubeUserTest** — Roundcube dal pool `www` di php-fpm (l'utente di nginx) al pool
+`roundcube` (RoundcubeUser.migrate), in una cartella di `/var/tmp` con file, proprietari e
+permessi veri e con php-fpm, nginx e la webmail finti; il php-fpm finto, ricaricato, fa girare i
+pool che trova nei file. Per ogni passo che puo' andare male un guasto piantato (php-fpm -t, nginx -t,
+i due reload, il pool www che resta, la webmail che non risponde, un file con `chflags schg`), e la
+migrazione deve rimettere OGNI file com'era, confrontato con una fotografia di contenuto,
+proprietario, gruppo e permessi. Poi i rifiuti, il link messo in `logs` (non si segue), la
+seconda volta, le derive (Roundcube aggiornato che rimette `logs` a `www`, php84 che ricopia
+`www.conf.default`) e i tre script d'installazione. Tocca proprietari veri e crea l'utente
+`roundcube`: **da root, sulla VM**.
+
+**AcmeUserTest** — acme.sh da `/root/.acme.sh` all'utente `acme` (AcmeUser.migrate) in cartelle
+temporanee, con pkg, cron e `--list` finti e un guasto per ogni passo (il pacchetto che non si
+installa, un certificato che acme.sh non vede, il cron che non si legge o non si riscrive,
+`/root/.acme.sh` che non si sposta); la porta della sfida HTTP (gettoni, percorsi fuori dalla
+cartella, link, metodi); e l'esecuzione vera come `acme` (utente, casa, ambiente vuoto, il token
+di Cloudflare che arriva, `acme.sh --version`). Quest'ultima parte vuole il pacchetto
+`security/acme.sh` e si salta dicendolo. **Da root, sulla VM.**
+
+**ServiceUsersTest** — il controllo di chi fa girare ogni servizio (ServiceUsers.examine) sull'uscita
+di `ps` della VM prima e dopo, con un guasto piantato per ogni avviso e i casi che NON devono
+avvisare (`local` di Postfix, `auth` di Dovecot). Non chiama niente.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeUserTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceUsersTest
