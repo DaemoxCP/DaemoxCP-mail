@@ -1,6 +1,8 @@
 package org.mail_panel.system;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
+import org.mail_panel.i18n.I18n;
 import org.mail_panel.util.Shell;
 
 import java.io.BufferedReader;
@@ -15,30 +17,30 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Dove l'aggiornamento dei pacchetti puo' rompersi: misure, non correzioni.
+ * I bordi dell'aggiornamento dei pacchetti, con lavori veri su pacchetti finti.
  *
- * Il committente vuole l'aggiornamento dei pacchetti «super solido». Il disegno del cuore (piano
- * firmato, -U, scaricamento e ricalcolo, inventario prima e dopo, riprotezione nel finally) e'
- * gia' provato dalle altre prove. Questa misura i bordi che quelle non toccano, con lavori veri su
- * pacchetti finti, e STAMPA cosa succede; i controlli dicono solo se la misura e' stata fatta,
- * non se il comportamento e' quello giusto (quello lo decide il committente):
+ * Il 06/11/2026 questa prova misurava soltanto (reperti 146-148): dove l'aggiornamento si rompe.
+ * Il committente ha scelto di correggere i primi quattro punti, e adesso ogni misura controlla il
+ * comportamento giusto, e continua a stampare cosa succede:
  *
- *   M1  la via di ritorno: un aggiornamento guidato crea un boot environment? tiene una copia
- *       del pacchetto di prima?
- *   M2  il turno: due processi Java (il pannello web e un secondo, il menu o una prova) prendono
- *       il turno tutti e due?
- *   M2b un secondo avvio del jar mentre il pannello aggiorna: all'avvio riprotegge dall'elenco
- *   M3  un pkg esterno (da SSH) che tiene il lock del database mentre parte un lavoro del pannello
- *   M4  il pannello ucciso (kill -9, un riavvio, un crash) mentre pkg sta installando: che fine
- *       fa pkg, e cosa trova il pannello al riavvio
- *   M5  il timeout di runLogged: chi uccide, e in che stato lascia pkg
- *   M6  dopo un lavoro interrotto, il rapporto periodico lo dice?
+ *   M1  la via di ritorno: un boot environment prima di ogni lavoro, tolto se non e' cambiato
+ *       niente, i piu' vecchi potati, e l'avviso se posta e database ci stanno dentro
+ *   M2  il turno vale fra processi: un secondo processo Java non lo prende
+ *   M2b un secondo avvio del jar mentre il pannello aggiorna non tocca il lavoro in corso
+ *   M3  un pkg esterno (da SSH) che tiene il lock: il lavoro del pannello si rifiuta
+ *   M4  il pannello ucciso mentre pkg installa: al riavvio riprotegge appena pkg ha finito, senza
+ *       aspettare il riavvio successivo, e lascia l'avviso
+ *   M5  il timeout: un pkg non si uccide a meta' (si avvisa e si aspetta); un altro comando si
+ *       ferma con tutti i suoi figli; mai un'eccezione al posto del codice d'uscita
+ *   M6  il rapporto periodico dice i pacchetti senza protezione e il lavoro interrotto
  *   M7  la macchina che si spegne di colpo durante pkg upgrade (-Dmeasure=m7, poi il modo m7-after)
  *
- * Tocca il sistema: installa e toglie pacchetti finti, spegne i repository veri per la durata,
- * sblocca e riprotegge. Solo su una macchina di prova, da root, con -De2e.vm=yes:
+ * Tocca il sistema: installa e toglie pacchetti finti, crea e toglie boot environment, spegne i
+ * repository veri per la durata, sblocca e riprotegge. Solo su una macchina di prova, da root, con
+ * -De2e.vm=yes:
  *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdaterRobustnessE2ETest
- * Alla fine controlla che pacchetti, protezioni e repository siano quelli di prima.
+ * Con -Dmeasure=m1,m4 solo quelle. Alla fine controlla che pacchetti, protezioni, repository e boot
+ * environment siano quelli di prima.
  */
 public class UpdaterRobustnessE2ETest {
 
@@ -51,6 +53,7 @@ public class UpdaterRobustnessE2ETest {
     private static int failures = 0;
     private static Path work;
     private static boolean createdReposDir;
+    private static String noticeBefore;
 
     public static void main(String[] args) throws Exception {
         if (args.length > 0) { child(args); return; }
@@ -63,27 +66,13 @@ public class UpdaterRobustnessE2ETest {
 
         String packagesBefore = sh("pkg query %n-%v | sort | sha256");
         Set<String> lockedBefore = locked();
-        String bootEnvironmentsBefore = sh("bectl list -H | cut -f1 | sort");
+        String bootEnvironmentsBefore = bootEnvironments();
+        noticeBefore = Files.exists(PackageRecovery.notice) ? Files.readString(PackageRecovery.notice) : null;
         cleanup();
         work = Files.createTempDirectory(Path.of("/var/tmp"), "robust-probe");
         Files.createDirectories(DIR);
         try {
-            build(PKG, "1.0", false);
-            build(PKG, "1.1", true);
-            build(OTHER, "1.0", true);
-            if (!Files.isDirectory(Path.of(REPO_CONF).getParent())) {
-                Files.createDirectories(Path.of(REPO_CONF).getParent());
-                createdReposDir = true;
-            }
-            Path repo = work.resolve("repo");
-            sh("mkdir -p " + repo + " && cp " + work.resolve("pkgs/" + PKG + "-1.1.pkg") + " " + work.resolve("pkgs/" + OTHER + "-1.0.pkg")
-                    + " " + repo + " && pkg repo " + repo + " >/dev/null 2>&1");
-            Files.writeString(Path.of(REPO_CONF),
-                    "FreeBSD-ports: { enabled: no }\nFreeBSD-ports-kmods: { enabled: no }\n"
-                  + "robustprobe: { url: \"file://" + repo + "\", signature_type: \"none\", enabled: yes }\n");
-            sh("pkg update -f -r robustprobe >/dev/null 2>&1");
-
-            // -Dmeasure=m2b,m4: solo quelle; senza, tutte.
+            setUp();
             Set<String> only = new TreeSet<>(List.of(System.getProperty("measure", "all").split(",")));
             java.util.function.Predicate<String> on = m -> only.contains("all") || only.contains(m);
             if (on.test("m1")) m1WayBack(bootEnvironmentsBefore);
@@ -92,41 +81,90 @@ public class UpdaterRobustnessE2ETest {
             if (on.test("m3")) m3ExternalPkgHoldsTheLock();
             if (on.test("m4")) m4PanelKilledDuringPkg();
             if (on.test("m5")) m5Timeout();
-            if (on.test("m6")) m6ReportAfterInterruption();
+            if (on.test("m6")) m6Report();
         } finally {
             cleanup();
             sh("rm -f " + REPO_CONF + "; rm -rf /var/db/pkg/repos/robustprobe " + work + " " + DIR);
             if (createdReposDir) sh("rmdir " + Path.of(REPO_CONF).getParent());
+            removeOwnBootEnvironments(bootEnvironmentsBefore);
+            restoreNotice();
             UpdateManager.refreshLockTrace();
             check("alla fine: gli stessi pacchetti di prima", sh("pkg query %n-%v | sort | sha256").equals(packagesBefore));
             check("alla fine: gli stessi pacchetti protetti", locked().equals(lockedBefore));
             check("alla fine: nessun elenco di un lavoro interrotto", !PackageQueue.statePresent());
             check("alla fine: FreeBSD-ports di nuovo acceso",
                     sh("pkg -vv 2>/dev/null | grep -A3 '^  FreeBSD-ports: {' | grep -c 'enabled *: yes'").trim().equals("1"));
-            check("alla fine: gli stessi boot environment", sh("bectl list -H | cut -f1 | sort").equals(bootEnvironmentsBefore));
+            check("alla fine: gli stessi boot environment", bootEnvironments().equals(bootEnvironmentsBefore));
         }
-        System.out.println(failures == 0 ? "\nMISURE FATTE" : "\n" + failures + " MISURE NON RIUSCITE");
+        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
         if (failures > 0) System.exit(1);
+    }
+
+    static void setUp() throws Exception {
+        build(PKG, "1.0", false);
+        build(PKG, "1.1", true);
+        build(OTHER, "1.0", true);
+        if (!Files.isDirectory(Path.of(REPO_CONF).getParent())) {
+            Files.createDirectories(Path.of(REPO_CONF).getParent());
+            createdReposDir = true;
+        }
+        Path repo = work.resolve("repo");
+        sh("mkdir -p " + repo + " && cp " + work.resolve("pkgs/" + PKG + "-1.1.pkg") + " " + work.resolve("pkgs/" + OTHER + "-1.0.pkg")
+                + " " + repo + " && pkg repo " + repo + " >/dev/null 2>&1");
+        Files.writeString(Path.of(REPO_CONF),
+                "FreeBSD-ports: { enabled: no }\nFreeBSD-ports-kmods: { enabled: no }\n"
+              + "robustprobe: { url: \"file://" + repo + "\", signature_type: \"none\", enabled: yes }\n");
+        sh("pkg update -f -r robustprobe >/dev/null 2>&1");
     }
 
     // ===================== M1 =====================
 
     static void m1WayBack(String bootEnvironmentsBefore) throws Exception {
-        System.out.println("\n== M1. La via di ritorno di un aggiornamento guidato ==");
+        System.out.println("\n== M1. La via di ritorno ==");
         fresh(0);
         JSONObject job = guided();
         if (job == null) return;
-        String after = sh("bectl list -H | cut -f1 | sort");
-        System.out.println("  esito del lavoro: " + job.optString("status") + " " + job.optString("errorMessage"));
-        System.out.println("  versione dopo: " + sh("pkg query %v " + PKG).trim());
-        System.out.println("  boot environment prima: " + bootEnvironmentsBefore.replace("\n", " "));
-        System.out.println("  boot environment dopo:  " + after.replace("\n", " "));
-        System.out.println("  il pacchetto 1.0 da qualche parte sulla macchina: "
-                + (sh("find /var/cache/pkg /var/db/mailpanel /var/backups -name '" + PKG + "-1.0*' 2>/dev/null").trim().isEmpty() ? "NO" : "si'"));
         String log = job.optString("consoleLog");
-        System.out.println("  il log parla di una via di ritorno (bectl / boot environment / pkg create): "
-                + (log.matches("(?s).*(bectl|boot environment|ambiente di avvio|pkg create).*") ? "si'" : "NO"));
-        check("M1 misurata: il lavoro e' finito", !job.optString("status").isEmpty());
+        List<String> created = newOwn(bootEnvironmentsBefore);
+        System.out.println("  esito: " + job.optString("status") + ", versione " + sh("pkg query %v " + PKG).trim());
+        System.out.println("  boot environment nuovi: " + created);
+        for (String l : log.split("\n")) if (l.contains("packages-before-") || l.contains("bectl")) System.out.println("    | " + l);
+        check("M1 il lavoro riesce", "completed".equals(job.optString("status")));
+        check("M1 un boot environment nuovo, del guidato", created.size() == 1 && created.get(0).endsWith("-guided-update"));
+        check("M1 il log dice come tornare indietro", !created.isEmpty() && log.contains("bectl activate " + created.get(0)));
+        List<String> inside = PackageWayBack.dataInside();
+        System.out.println("  dati dentro il boot environment: " + inside);
+        check("M1 il log avverte quando posta o database stanno dentro il boot environment",
+                inside.isEmpty() || log.contains(String.join(", ", inside)));
+
+        // Un lavoro che non cambia nessun pacchetto: il boot environment non serve e si toglie.
+        String before = bootEnvironments();
+        UpdateManager.Job j = new UpdateManager.Job("measure-m1-noop", "measure");
+        UpdateManager.withWayBack(j, "noop-test", () -> j.write("nothing to do")).run();
+        String noopLog = j.toJson().optString("consoleLog");
+        System.out.println("  un lavoro senza cambiamenti: " + noopLog.replace("\n", " | "));
+        check("M1 un lavoro senza cambiamenti non lascia il suo boot environment", bootEnvironments().equals(before)
+                && noopLog.contains("packages-before-"));
+
+        // La potatura: se ne tengono gli ultimi tre, mai uno in uso, e gli snapshot d'origine vanno via.
+        String snapshotsBefore = sh("zfs list -H -t snapshot -o name | sort");
+        List<String> old = new ArrayList<>();
+        for (int i = 1; i <= 4; i++) {
+            String n = "packages-before-2000-01-0" + i + "-000000-prune-test";
+            sh("bectl create " + n);
+            old.add(n);
+        }
+        StringBuilder pl = new StringBuilder();
+        PackageWayBack.prune(l -> pl.append(l).append(" | "), PackageWayBack.KEEP);
+        String now = bootEnvironments();
+        System.out.println("  potatura: " + pl);
+        // Con il boot environment di M1 (piu' recente) gli ultimi tre sono: M1, 04, 03.
+        check("M1 la potatura toglie i piu' vecchi e tiene gli ultimi tre",
+                !now.contains(old.get(0)) && !now.contains(old.get(1)) && now.contains(old.get(3)) && now.contains(old.get(2))
+                && !created.isEmpty() && now.contains(created.get(0)));
+        for (String n : old) if (now.contains(n)) PackageWayBack.destroy(n);
+        check("M1 gli snapshot d'origine dei boot environment tolti vanno via", sh("zfs list -H -t snapshot -o name | sort")
+                .lines().filter(x -> !snapshotsBefore.contains(x)).filter(x -> !created.isEmpty() && !x.isEmpty()).count() <= 1);
     }
 
     // ===================== M2 =====================
@@ -134,58 +172,52 @@ public class UpdaterRobustnessE2ETest {
     static void m2TurnAcrossProcesses() throws Exception {
         System.out.println("\n== M2. Il turno, con due processi ==");
         String mine = PackageQueue.take("measure-m2", "measurement M2");
-        System.out.println("  questo processo prende il turno: " + (mine == null ? "si'" : "no: " + mine));
-        String other = runChild(30, "take-turn").trim();
-        System.out.println("  un secondo processo Java, nello stesso momento: " + other);
+        String other = runChild(60, "take-turn").trim();
         PackageQueue.release("measure-m2");
-        check("M2 misurata: il secondo processo ha risposto", !other.isEmpty());
+        String afterRelease = runChild(60, "take-turn").trim();
+        System.out.println("  questo processo: " + (mine == null ? "preso" : mine));
+        System.out.println("  un secondo processo, nello stesso momento: " + other);
+        System.out.println("  un secondo processo, dopo il rilascio: " + afterRelease);
+        check("M2 il secondo processo NON prende il turno mentre lo tiene il primo", mine == null && other.startsWith("RIFIUTATO"));
+        check("M2 e lo prende appena il primo lo rilascia", afterRelease.startsWith("PRESO"));
     }
 
     // ===================== M2b =====================
 
-    /**
-     * Ogni avvio del jar, anche quello che poi si ferma perche' la porta e' occupata, chiama per
-     * prima cosa restoreLocksAfterCrash (Main, prima del controllo della porta). Qui un lavoro
-     * guidato e' in corso nel pannello (questo processo) e un secondo avvio del jar fa quel primo
-     * passo, come farebbe chi apre il menu da console mentre il pannello web lavora.
-     */
     static void m2bSecondStartDuringJob() throws Exception {
         System.out.println("\n== M2b. Un secondo avvio del jar mentre il pannello aggiorna ==");
+        // Durante pkg upgrade.
         fresh(25);
         JSONObject pf = UpdateManager.packagePreflight(PKG);
         if (!pf.optBoolean("canProceed")) { check("M2b: il preflight lascia partire (" + firstProblem(pf) + ")", false); return; }
         JSONObject start = UpdateManager.startGuidedUpdate(PKG, pf.optString("signature"));
         String id = start.optString("jobId");
-        if (id.isEmpty()) { check("M2b: il lavoro parte (" + start + ")", false); return; }
-        if (!waitFor(STARTED, 240)) { check("M2b: il lavoro e' arrivato allo script di installazione", false); return; }
-        System.out.println("  il lavoro e' dentro pkg upgrade; elenco su disco: "
-                + (PackageQueue.statePresent() ? Files.readString(PackageQueue.list).trim().replace("\n", ",") : "NESSUNO"));
+        if (id.isEmpty() || !waitFor(STARTED, 240)) { check("M2b: il lavoro arriva allo script di installazione (" + start + ")", false); return; }
         String second = runChild(180, "restore").trim();
-        System.out.println("  il secondo avvio (restoreLocksAfterCrash): " + (second.isEmpty() ? "(niente da fare)" : second.replace("\n", " | ")));
-        System.out.println("  elenco su disco dopo il secondo avvio: " + (PackageQueue.statePresent() ? "c'e' ancora" : "CANCELLATO"));
-        long deadline = System.currentTimeMillis() + 900_000;
-        while (PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
-        JSONObject job = UpdateManager.jobStatus(id).getJSONObject("job");
-        System.out.println("  il lavoro del pannello: " + job.optString("status") + " " + job.optString("errorMessage"));
-        System.out.println("  " + PKG + " alla fine: " + sh("pkg query '%v locked=%k' " + PKG).trim());
+        System.out.println("  il secondo avvio durante pkg upgrade: " + second.replace("\n", " | "));
+        check("M2b durante pkg: il secondo avvio non tocca l'elenco", PackageQueue.statePresent() && second.contains("another panel process"));
+        JSONObject job = waitJob(id);
+        System.out.println("  il lavoro: " + job.optString("status") + " " + job.optString("errorMessage"));
+        check("M2b durante pkg: il lavoro finisce bene e riprotegge", "completed".equals(job.optString("status"))
+                && sh("pkg query 'locked=%k' " + PKG).trim().equals("locked=1"));
 
-        // Stessa cosa, ma il secondo avvio arriva nella finestra fra lo sblocco e pkg upgrade:
-        // si simula con un elenco scritto e il pacchetto sbloccato, come li lascia il lavoro un
-        // attimo prima di lanciare pkg.
+        // Nella finestra fra lo sblocco e pkg upgrade: questo processo tiene il turno, come il lavoro.
         fresh(0);
         PackageQueue.take("measure-m2b", "measurement M2b");
         PackageQueue.writeState(List.of(PKG));
         sh("pkg unlock -y " + PKG);
         String second2 = runChild(180, "restore").trim();
-        System.out.println("  nella finestra fra sblocco e pkg upgrade, il secondo avvio: " + second2.replace("\n", " | "));
-        System.out.println("  " + PKG + " adesso: " + sh("pkg query 'locked=%k' " + PKG).trim()
-                + ", elenco su disco: " + (PackageQueue.statePresent() ? "c'e'" : "CANCELLATO"));
+        System.out.println("  il secondo avvio nella finestra: " + second2.replace("\n", " | "));
+        check("M2b nella finestra: il secondo avvio non riprotegge e non cancella l'elenco",
+                PackageQueue.statePresent() && sh("pkg query 'locked=%k' " + PKG).trim().equals("locked=0"));
         String up = sh("pkg upgrade -y -U " + PKG + " 2>&1; echo rc=$?");
-        System.out.println("  il pkg upgrade che il lavoro lancerebbe adesso: " + up.trim().replace("\n", " | "));
+        System.out.println("  il pkg upgrade del lavoro, dopo: " + up.trim().replace("\n", " | "));
+        check("M2b nella finestra: il pkg upgrade del lavoro funziona", up.contains("rc=0") && sh("pkg query %v " + PKG).trim().equals("1.1"));
+        sh("pkg lock -y " + PKG);
         PackageQueue.deleteState();
         PackageQueue.release("measure-m2b");
-        check("M2b misurata", true);
         Files.writeString(SLEEP, "0");
+        Files.deleteIfExists(PackageRecovery.notice);
     }
 
     // ===================== M3 =====================
@@ -199,28 +231,11 @@ public class UpdaterRobustnessE2ETest {
         Process external = new ProcessBuilder("sh", "-c", "pkg install -y " + OTHER + " > " + DIR.resolve("external.log") + " 2>&1")
                 .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();
         if (!waitFor(STARTED, 60)) { check("M3: il pkg esterno e' arrivato al suo script", false); external.destroy(); return; }
-        System.out.println("  pkg esterno nel suo script di installazione (tiene il lock del database)");
-        long t0 = System.currentTimeMillis();
         JSONObject pf = UpdateManager.packagePreflight(PKG);
-        System.out.println("  anteprima dell'aggiornamento guidato in " + (System.currentTimeMillis() - t0) / 1000 + " s: canProceed="
-                + pf.optBoolean("canProceed") + " " + firstProblem(pf));
-        if (!pf.optBoolean("canProceed")) {
-            String all = pf.toString();
-            System.out.println("  l'anteprima, per intero (prime righe): " + all.substring(0, Math.min(1500, all.length())));
-        }
-        JSONObject job = pf.optBoolean("canProceed") ? guidedWith(pf.optString("signature")) : null;
-        if (job != null) {
-            System.out.println("  il lavoro: " + job.optString("status") + " in " + job.optLong("elapsedSeconds") + " s");
-            System.out.println("  errore: " + job.optString("errorMessage"));
-            for (String l : job.optString("consoleLog").split("\n"))
-                if (l.contains("lock") || l.contains("locked") || l.contains("pkg:")) System.out.println("    | " + l);
-        }
-        System.out.println("  il pkg esterno era ancora in corso alla fine del lavoro: " + (external.isAlive() ? "si'" : "no"));
+        System.out.println("  anteprima del guidato col pkg esterno al lavoro: canProceed=" + pf.optBoolean("canProceed"));
         external.waitFor();
-        System.out.println("  pkg esterno: uscita " + external.exitValue());
-        System.out.println("  " + PKG + " dopo: " + sh("pkg query '%v locked=%k' " + PKG).trim()
-                + ", elenco di un lavoro interrotto: " + (PackageQueue.statePresent() ? "SI'" : "no"));
-        check("M3 misurata", true);
+        check("M3 il lavoro del pannello non parte e non tocca niente", !pf.optBoolean("canProceed")
+                && sh("pkg query '%v locked=%k' " + PKG).trim().equals("1.0 locked=1") && !PackageQueue.statePresent());
         Files.writeString(SLEEP, "0");
     }
 
@@ -228,7 +243,8 @@ public class UpdaterRobustnessE2ETest {
 
     static void m4PanelKilledDuringPkg() throws Exception {
         System.out.println("\n== M4. Il pannello ucciso mentre pkg installa ==");
-        fresh(30);
+        fresh(40);
+        Files.deleteIfExists(PackageRecovery.notice);
         String cp = System.getProperty("java.class.path");
         Process child = new ProcessBuilder("java", "-De2e.vm=yes", "-cp", cp, UpdaterRobustnessE2ETest.class.getName(), "run-guided")
                 .redirectErrorStream(true).redirectOutput(DIR.resolve("child.log").toFile())
@@ -239,39 +255,32 @@ public class UpdaterRobustnessE2ETest {
             child.destroyForcibly();
             return;
         }
-        String pkgBefore = sh("pgrep -lf 'pkg upgrade' | grep -v pgrep").trim();
-        System.out.println("  pkg in corso nel figlio: " + pkgBefore.replace("\n", " | "));
         sh("kill -9 " + child.pid());
         child.waitFor();
         Thread.sleep(2000);
-        String pkgAfterKill = sh("pgrep -lf 'pkg upgrade' | grep -v pgrep").trim();
-        System.out.println("  subito dopo kill -9 del processo Java: pkg " + (pkgAfterKill.isEmpty() ? "NON c'e' piu'" : "c'e' ancora: " + pkgAfterKill));
-        System.out.println("  elenco del lavoro interrotto: " + (PackageQueue.statePresent() ? "c'e' (" + Files.readString(PackageQueue.list).trim().replace("\n", ",") + ")" : "NO"));
-        System.out.println("  " + PKG + " protetto: " + (locked().contains(PKG) ? "si'" : "NO"));
-        String restore1 = runChild(120, "restore").trim();
-        System.out.println("  il riavvio del pannello (restoreLocksAfterCrash) adesso: " + restore1.replace("\n", " | "));
-        boolean done = waitFor(DONE, 90);
-        Thread.sleep(3000);
-        System.out.println("  lo script di installazione e' arrivato in fondo: " + (done ? "si'" : "NO"));
-        System.out.println("  pkg alla fine: " + (sh("pgrep -lf 'pkg upgrade' | grep -v pgrep").trim().isEmpty() ? "finito" : "ancora in corso"));
+        System.out.println("  dopo kill -9 del pannello: pkg " + (sh("pgrep -lf 'pkg upgrade' | grep -v pgrep").trim().isEmpty() ? "finito" : "ancora al lavoro")
+                + ", " + PKG + " protetto: " + (locked().contains(PKG) ? "si'" : "no"));
+        // Il pannello riparte e resta acceso: il figlio fa il ripristino d'avvio e aspetta.
+        String restart = runChild(200, "restore-and-stay", "150").trim();
+        System.out.println("  il pannello riavviato (e rimasto acceso): " + restart.replace("\n", " | "));
+        JSONObject n = PackageRecovery.notice();
         System.out.println("  " + PKG + " alla fine: " + sh("pkg query '%v locked=%k' " + PKG).trim()
-                + ", file installato: " + sh("cat /usr/local/share/robust-probe/version 2>&1").trim()
-                + ", pkg check: " + sh("pkg check -s " + PKG + " 2>&1; echo rc=$?").trim().replace("\n", " "));
-        System.out.println("  elenco del lavoro interrotto: " + (PackageQueue.statePresent() ? "c'e' ancora" : "tolto"));
-        String restore2 = runChild(120, "restore").trim();
-        System.out.println("  un secondo riavvio del pannello: " + restore2.replace("\n", " | "));
-        System.out.println("  " + PKG + " dopo il secondo: " + sh("pkg query '%v locked=%k' " + PKG).trim());
-        System.out.println("  il log del figlio (ultime righe):");
-        List<String> lines = Files.readAllLines(DIR.resolve("child.log"));
-        for (String l : lines.subList(Math.max(0, lines.size() - 12), lines.size())) System.out.println("    | " + l);
-        check("M4 misurata", true);
+                + ", elenco: " + (PackageQueue.statePresent() ? "c'e' ancora" : "tolto"));
+        System.out.println("  l'avviso: " + n);
+        check("M4 il riavvio dice che pkg sta ancora lavorando e che riprova", restart.contains("retrying every"));
+        check("M4 riprotetto appena pkg ha finito, senza un altro riavvio",
+                sh("pkg query '%v locked=%k' " + PKG).trim().equals("1.1 locked=1") && !PackageQueue.statePresent()
+                && restart.contains("PROTECTED AGAIN IN THE BACKGROUND"));
+        check("M4 l'avviso dice quale lavoro, che pkg lavorava, e quando e' stato riprotetto",
+                n.optString("description").contains(PKG) && !n.optString("pkgWasRunning").isEmpty() && n.has("relockedUtc"));
         Files.writeString(SLEEP, "0");
+        Files.deleteIfExists(PackageRecovery.notice);
     }
 
     // ===================== M5 =====================
 
     static void m5Timeout() throws Exception {
-        System.out.println("\n== M5. Il timeout di runLogged durante un pkg ==");
+        System.out.println("\n== M5. Il timeout di runLogged ==");
         sh("pkg delete -y " + OTHER + " >/dev/null 2>&1");
         Files.writeString(SLEEP, "40");
         Files.deleteIfExists(STARTED);
@@ -279,54 +288,78 @@ public class UpdaterRobustnessE2ETest {
         UpdateManager.Job job = new UpdateManager.Job("measure-m5", "measure");
         long t0 = System.currentTimeMillis();
         String outcome;
-        try {
-            outcome = "codice " + UpdateManager.runLogged(job, "pkg install -y " + OTHER + " 2>&1", 10);
-        } catch (Exception e) {
-            // Misurato al primo giro: allo scadere non torna un codice, esce un'eccezione.
-            outcome = "ECCEZIONE " + e;
-        }
+        int code = Integer.MIN_VALUE;
+        try { code = UpdateManager.runLogged(job, "pkg install -y " + OTHER + " 2>&1", 10); outcome = "codice " + code; }
+        catch (Exception e) { outcome = "ECCEZIONE " + e; }
         long took = (System.currentTimeMillis() - t0) / 1000;
-        String pkgNow = sh("pgrep -lf 'pkg install' | grep -v pgrep").trim();
-        System.out.println("  runLogged con timeout 10 s e uno script da 40 s: tornato dopo " + took + " s, " + outcome);
-        System.out.println("  pkg subito dopo: " + (pkgNow.isEmpty() ? "non c'e' piu'" : "c'e' ancora: " + pkgNow));
-        boolean done = waitFor(DONE, 60);
-        Thread.sleep(3000);
-        System.out.println("  lo script di installazione e' arrivato in fondo: " + (done ? "si'" : "NO"));
-        System.out.println("  " + OTHER + " registrato da pkg: " + sh("pkg query %v " + OTHER + " 2>&1").trim()
-                + ", il suo file: " + sh("ls /usr/local/share/" + OTHER + "/ 2>&1").trim());
-        System.out.println("  pkg check -s: " + sh("pkg check -s " + OTHER + " 2>&1; echo rc=$?").trim().replace("\n", " "));
-        System.out.println("  il log del lavoro: " + job.toJson().optString("consoleLog").replace("\n", " | "));
-        check("M5 misurata", true);
+        String log = job.toJson().optString("consoleLog");
+        System.out.println("  pkg install con timeout 10 s e uno script da 40 s: tornato dopo " + took + " s, " + outcome);
+        for (String l : log.split("\n")) if (l.contains("pkg") && (l.contains("minut") || l.contains("TIMEOUT"))) System.out.println("    | " + l);
+        check("M5 pkg: torna con il codice d'uscita di pkg, nessuna eccezione", code == 0);
+        check("M5 pkg: non ucciso, arriva in fondo al suo script", Files.exists(DONE) && took >= 38
+                && sh("pkg check -s " + OTHER + " >/dev/null 2>&1; echo $?").trim().equals("0"));
+        check("M5 pkg: il log dice che aspetta, non che lo termina",
+                log.contains(I18n.tr("server.um.runLogged.pkgStillRunning", java.util.Map.of("cmd", "pkg", "minutes", "1")).substring(0, 12))
+                && !log.contains("TIMEOUT"));
         Files.writeString(SLEEP, "0");
+
+        // Un comando che non e' pkg: allo scadere si ferma, con tutti i suoi figli.
+        UpdateManager.Job j2 = new UpdateManager.Job("measure-m5b", "measure");
+        t0 = System.currentTimeMillis();
+        int c2 = Integer.MIN_VALUE;
+        String o2;
+        try { c2 = UpdateManager.runLogged(j2, "sleep 61 & sleep 62; wait", 3); o2 = "codice " + c2; }
+        catch (Exception e) { o2 = "ECCEZIONE " + e; }
+        long took2 = (System.currentTimeMillis() - t0) / 1000;
+        String left = sh("pgrep -lf 'sleep 6[12]$'").trim();
+        System.out.println("  sleep 61 & sleep 62 con timeout 3 s: tornato dopo " + took2 + " s, " + o2 + ", rimasti: " + (left.isEmpty() ? "nessuno" : left));
+        check("M5 altro comando: fermato allo scadere con 124, senza eccezione", c2 == UpdateManager.TIMED_OUT && took2 < 20);
+        check("M5 altro comando: nessun figlio rimasto in vita", left.isEmpty());
+        sh("pkill -f 'sleep 6[12]$'");
+
+        // La tabella: cosa non si ferma mai.
+        check("M5 la tabella dei comandi da non fermare", UpdateManager.mustNotBeKilled("pkg upgrade -y -U 2>&1")
+                && UpdateManager.mustNotBeKilled("pkg install -f -y dovecot 2>&1")
+                && UpdateManager.mustNotBeKilled("pkg autoremove -y 2>&1")
+                && UpdateManager.mustNotBeKilled("freebsd-update install 2>&1")
+                && !UpdateManager.mustNotBeKilled("pkg upgrade -F -y -U 2>&1")
+                && !UpdateManager.mustNotBeKilled("pkg upgrade -n 2>&1")
+                && !UpdateManager.mustNotBeKilled("freebsd-update --not-running-from-cron fetch 2>&1")
+                && !UpdateManager.mustNotBeKilled("cp -Rp /var/db/mysql /x"));
     }
 
     // ===================== M6 =====================
 
-    /**
-     * Dopo M4 un pacchetto dello stack puo' restare sbloccato fino al riavvio successivo, con
-     * l'elenco del lavoro interrotto su disco. Il rapporto periodico e' l'unico canale che
-     * raggiunge chi non apre il pannello: lo dice?
-     */
-    static void m6ReportAfterInterruption() throws Exception {
-        System.out.println("\n== M6. Il rapporto dopo un lavoro interrotto ==");
+    static void m6Report() throws Exception {
+        System.out.println("\n== M6. Il rapporto ==");
         fresh(0);
+        // Un lavoro interrotto con il pacchetto ancora sbloccato, e l'avviso.
+        PackageQueue.take("measure-m6", "Guided update of " + PKG);
         PackageQueue.writeState(List.of(PKG));
+        PackageQueue.release("measure-m6");
         sh("pkg unlock -y " + PKG);
-        JSONObject d = UpdateManager.reportData(false);
-        var toDo = d.optJSONArray("toDo");
-        System.out.println("  " + PKG + " sbloccato, elenco del lavoro interrotto su disco; le cose da fare del rapporto:");
-        boolean mentions = false;
-        for (int i = 0; toDo != null && i < toDo.length(); i++) {
-            String what = toDo.getJSONObject(i).optString("what");
-            System.out.println("    - " + what);
-            if (what.contains(PKG) || what.toLowerCase().contains("interrott") || what.toLowerCase().contains("interrupted")
-                    || what.toLowerCase().contains("unlocked") || what.toLowerCase().contains("sbloccat")) mentions = true;
-        }
-        System.out.println("  il rapporto parla del pacchetto sbloccato o del lavoro interrotto: " + (mentions ? "si'" : "NO"));
-        System.out.println("  conti del rapporto: protetti " + d.optInt("lockedPackageCount") + " su " + d.optInt("totalPackages"));
+        PackageRecovery.recordInterruption(PackageQueue.jobRecord(), List.of(PKG), List.of(PKG), "");
+        JSONArray toDo = UpdateManager.reportData(false).optJSONArray("toDo");
+        List<String> whats = new ArrayList<>();
+        for (int i = 0; toDo != null && i < toDo.length(); i++) whats.add(toDo.getJSONObject(i).optInt("urgency") + " " + toDo.getJSONObject(i).optString("what"));
+        whats.forEach(w -> System.out.println("    - " + w));
+        check("M6 il rapporto dice, con urgenza 0, i pacchetti ancora senza protezione",
+                whats.stream().anyMatch(w -> w.startsWith("0 ") && w.contains(PKG) && w.contains("pkg lock -y")));
+        check("M6 il rapporto dice quale lavoro si e' interrotto e cosa controllare",
+                whats.stream().anyMatch(w -> w.startsWith("1 ") && w.contains("Guided update of " + PKG) && w.contains("pkg check -s")));
+        JSONObject st = PackageRecovery.status();
+        check("M6 la pagina riceve l'avviso e i pacchetti senza protezione",
+                st.optJSONObject("notice") != null && st.optJSONArray("stillUnprotected") != null
+                && st.getJSONArray("stillUnprotected").toList().contains(PKG));
+        check("M6 l'avviso non si chiude finche' i pacchetti sono senza protezione", !PackageRecovery.dismiss().optBoolean("success"));
         PackageQueue.deleteState();
+        // Senza elenco, ma con un pacchetto dello stack sbloccato fuori dal pannello.
+        toDo = UpdateManager.reportData(false).optJSONArray("toDo");
+        boolean loose = false;
+        for (int i = 0; toDo != null && i < toDo.length(); i++) if (toDo.getJSONObject(i).optString("what").contains(PKG)) loose = true;
+        check("M6 un pacchetto dello stack sbloccato fuori dal pannello e' nel rapporto", loose);
+        check("M6 l'avviso si chiude dopo aver controllato", PackageRecovery.dismiss().optBoolean("success") && PackageRecovery.notice().isEmpty());
         sh("pkg lock -y " + PKG);
-        check("M6 misurata", true);
     }
 
     // ===================== M7 =====================
@@ -338,14 +371,15 @@ public class UpdaterRobustnessE2ETest {
      * M7, prima parte: un aggiornamento guidato con lo script di installazione lungo, e la macchina
      * che si spegne di colpo mentre pkg installa (reboot -nq: niente script di spegnimento, niente
      * sync, come una mancanza di corrente). Chi la lancia aspetta "M7 IN PKG" e poi fa il riavvio.
-     * La seconda parte (dopo il riavvio) e' il modo "m7-after".
+     * La seconda parte (dopo il riavvio, e dopo che il pannello e' ripartito) e' il modo "m7-after".
      */
     static void m7Before() throws Exception {
         Files.createDirectories(M7);
         Files.writeString(M7.resolve("packages-before"), sh("pkg query %n-%v | sort | sha256"));
         Files.writeString(M7.resolve("locked-before"), String.join("\n", locked()));
-        Files.writeString(M7.resolve("boot-environments-before"), sh("bectl list -H | cut -f1 | sort"));
+        Files.writeString(M7.resolve("boot-environments-before"), bootEnvironments());
         cleanup();
+        Files.deleteIfExists(PackageRecovery.notice);
         work = Files.createDirectories(M7.resolve("work"));
         Files.createDirectories(DIR);
         build(PKG, "1.0", false);
@@ -371,30 +405,35 @@ public class UpdaterRobustnessE2ETest {
         System.out.println("M7: the job ended before the reboot: " + job);
     }
 
-    /** M7, seconda parte: cosa ha trovato il pannello all'avvio, com'e' pkg, e poi la pulizia. */
+    /** M7, seconda parte: cosa ha trovato il pannello all'avvio, cosa dicono pagina e rapporto, e la pulizia. */
     static void m7After() throws Exception {
         System.out.println("== M7. Dopo un riavvio brusco durante pkg upgrade ==");
-        System.out.println("  uptime: " + sh("uptime").trim());
-        System.out.println("  il pannello all'avvio (panel.log): " + sh("grep -A3 'Interrupted maintenance detected' /var/db/mailpanel/panel.log | tail -4").trim().replace("\n", " | "));
-        System.out.println("  elenco del lavoro interrotto: " + (PackageQueue.statePresent() ? "c'e' ancora" : "non c'e'"));
+        JSONObject n = PackageRecovery.notice();
+        System.out.println("  l'avviso lasciato dal pannello all'avvio: " + n);
         System.out.println("  " + PKG + ": " + sh("pkg query '%v locked=%k' " + PKG + " 2>&1").trim()
-                + ", file: " + sh("cat /usr/local/share/robust-probe/version 2>&1").trim());
-        System.out.println("  pkg check -s " + PKG + ": " + sh("pkg check -s " + PKG + " 2>&1; echo rc=$?").trim().replace("\n", " "));
-        System.out.println("  pkg check -d (dipendenze di tutto): " + sh("pkg check -d -a -n 2>&1 | tail -3; echo rc=$?").trim().replace("\n", " "));
-        System.out.println("  lo script di installazione era arrivato in fondo: " + (Files.exists(DONE) ? "si'" : "NO"));
-        System.out.println("  sqlite del database di pkg: " + sh("sqlite3 /var/db/pkg/local.sqlite 'pragma integrity_check' 2>&1").trim());
+                + ", script di installazione arrivato in fondo: " + (Files.exists(DONE) ? "si'" : "NO"));
+        check("M7 riprotetto all'avvio, elenco chiuso", sh("pkg query 'locked=%k' " + PKG).trim().equals("locked=1") && !PackageQueue.statePresent());
+        check("M7 l'avviso dice quale lavoro si e' interrotto, ed e' riprotetto", n.optString("description").contains(PKG) && n.has("relockedUtc"));
+        JSONArray toDo = UpdateManager.reportData(false).optJSONArray("toDo");
+        boolean inReport = false;
+        for (int i = 0; toDo != null && i < toDo.length(); i++)
+            if (toDo.getJSONObject(i).optString("what").contains(PKG) && toDo.getJSONObject(i).optString("what").contains("pkg install -f")) inReport = true;
+        check("M7 il rapporto lo dice, con cosa fare", inReport);
+        check("M7 l'avviso si chiude dopo aver controllato", PackageRecovery.dismiss().optBoolean("success"));
         // la pulizia
         cleanup();
         sh("rm -f " + REPO_CONF + "; rm -rf /var/db/pkg/repos/robustprobe " + DIR);
         if (Files.exists(M7.resolve("created-repos-dir"))) sh("rmdir " + Path.of(REPO_CONF).getParent());
+        removeOwnBootEnvironments(Files.readString(M7.resolve("boot-environments-before")));
         UpdateManager.refreshLockTrace();
         check("M7 alla fine: gli stessi pacchetti di prima",
                 sh("pkg query %n-%v | sort | sha256").equals(Files.readString(M7.resolve("packages-before"))));
         check("M7 alla fine: gli stessi pacchetti protetti",
                 String.join("\n", locked()).equals(Files.readString(M7.resolve("locked-before"))));
-        check("M7 alla fine: FreeBSD-ports di nuovo acceso",
-                sh("pkg -vv 2>/dev/null | grep -A3 '^  FreeBSD-ports: {' | grep -c 'enabled *: yes'").trim().equals("1"));
+        check("M7 alla fine: gli stessi boot environment", bootEnvironments().equals(Files.readString(M7.resolve("boot-environments-before"))));
         sh("rm -rf " + M7);
+        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        if (failures > 0) System.exit(1);
     }
 
     // ===================== i figli =====================
@@ -403,13 +442,20 @@ public class UpdaterRobustnessE2ETest {
         switch (args[0]) {
             case "take-turn" -> {
                 String r = PackageQueue.take("measure-m2-child", "measurement M2, second process");
-                System.out.println(r == null ? "HA PRESO IL TURNO anche lui" : "turno rifiutato: " + r);
+                System.out.println(r == null ? "PRESO" : "RIFIUTATO: " + r);
+                if (r == null) PackageQueue.release("measure-m2-child");
             }
             case "run-guided" -> {
                 JSONObject job = guided();
                 System.out.println("child finished: " + (job == null ? "null" : job.optString("status")));
             }
             case "restore" -> System.out.println(UpdateManager.restoreLocksAfterCrash());
+            case "restore-and-stay" -> {
+                System.out.println(UpdateManager.restoreLocksAfterCrash());
+                long until = System.currentTimeMillis() + Long.parseLong(args[1]) * 1000;
+                while (PackageQueue.statePresent() && System.currentTimeMillis() < until) Thread.sleep(1000);
+                if (!PackageQueue.statePresent()) System.out.println("PROTECTED AGAIN IN THE BACKGROUND");
+            }
             case "m7-after" -> m7After();
             default -> throw new IllegalArgumentException(args[0]);
         }
@@ -433,26 +479,22 @@ public class UpdaterRobustnessE2ETest {
             check("il preflight lascia partire (" + firstProblem(pf) + ")", false);
             return null;
         }
-        return guidedWith(pf.optString("signature"));
-    }
-
-    static JSONObject guidedWith(String signature) throws Exception {
-        JSONObject start = UpdateManager.startGuidedUpdate(PKG, signature);
+        JSONObject start = UpdateManager.startGuidedUpdate(PKG, pf.optString("signature"));
         String id = start.optString("jobId");
         if (id.isEmpty()) { System.out.println("  il lavoro non parte: " + start); return start; }
         System.out.println("  lavoro " + id + " partito");
+        return waitJob(id);
+    }
+
+    static JSONObject waitJob(String id) throws Exception {
         long deadline = System.currentTimeMillis() + 900_000;
         while (PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
         return UpdateManager.jobStatus(id).getJSONObject("job");
     }
 
     static String firstProblem(JSONObject pf) {
-        var checks = pf.optJSONArray("checks");
-        for (int i = 0; checks != null && i < checks.length(); i++) {
-            JSONObject c = checks.optJSONObject(i);
-            if (c != null && !c.optBoolean("ok", true)) return c.toString();
-        }
-        return pf.optString("error", "");
+        String all = pf.toString();
+        return all.substring(0, Math.min(400, all.length()));
     }
 
     /** Un pacchetto finto: un file con la versione, e uno script di installazione che puo' dormire. */
@@ -484,14 +526,39 @@ public class UpdaterRobustnessE2ETest {
         PackageQueue.deleteState();
     }
 
-    static String runChild(int seconds, String mode) throws Exception {
+    /** L'avviso di un lavoro interrotto com'era prima della prova (di solito: non c'era). */
+    static void restoreNotice() throws Exception {
+        if (noticeBefore == null) Files.deleteIfExists(PackageRecovery.notice);
+        else Files.writeString(PackageRecovery.notice, noticeBefore);
+    }
+
+    static String bootEnvironments() {
+        return sh("bectl list -H | cut -f1 | sort");
+    }
+
+    /** I boot environment dei pacchetti comparsi durante la prova. */
+    static List<String> newOwn(String before) {
+        List<String> r = new ArrayList<>();
+        for (String n : bootEnvironments().split("\n"))
+            if (n.startsWith(PackageWayBack.PREFIX) && !before.contains(n)) r.add(n.trim());
+        return r;
+    }
+
+    static void removeOwnBootEnvironments(String before) {
+        for (String n : newOwn(before)) PackageWayBack.destroy(n);
+    }
+
+    static String runChild(int seconds, String... mode) throws Exception {
         String cp = System.getProperty("java.class.path");
-        Process p = new ProcessBuilder("java", "-De2e.vm=yes", "-cp", cp, UpdaterRobustnessE2ETest.class.getName(), mode)
-                .redirectErrorStream(true).redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();
+        List<String> cmd = new ArrayList<>(List.of("java", "-De2e.vm=yes", "-cp", cp, UpdaterRobustnessE2ETest.class.getName()));
+        cmd.addAll(List.of(mode));
+        Process p = new ProcessBuilder(cmd).redirectErrorStream(true)
+                .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();
         StringBuilder out = new StringBuilder();
         try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
             String l;
-            while ((l = r.readLine()) != null) if (!l.startsWith("WARNING") && !l.contains("java.util.logging")) out.append(l).append('\n');
+            while ((l = r.readLine()) != null)
+                if (!l.startsWith("WARNING") && !l.startsWith("INFO:") && !l.matches("^[A-Z][a-z]{2} \\d{2}, \\d{4} .*")) out.append(l).append('\n');
         }
         p.waitFor(seconds, java.util.concurrent.TimeUnit.SECONDS);
         return out.toString();
