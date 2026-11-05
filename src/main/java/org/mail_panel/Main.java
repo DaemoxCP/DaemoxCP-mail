@@ -15,6 +15,7 @@ import org.mail_panel.gui.RoundcubeConfig;
 import org.mail_panel.gui.Welcome;
 import org.mail_panel.scripts.*;
 import org.mail_panel.sqli.dataBaseManager;
+import org.mail_panel.system.InstallLocks;
 import org.mail_panel.webserver.SSLMailServer;
 import org.mail_panel.webserver.WebSessions;
 
@@ -204,7 +205,7 @@ public class Main {
      * Execute a shell script with detailed output
      */
     public static boolean executeScript(String scriptPath, String scriptName, String... args) {
-        return executeScript(scriptPath, scriptName, java.util.Map.of(), args);
+        return executeScript(scriptPath, scriptName, java.util.Map.of(), true, args);
     }
 
     /**
@@ -226,11 +227,16 @@ public class Main {
      */
     public static boolean executeScriptWithSecrets(String scriptPath, String scriptName,
                                                    java.util.Map<String, String> secrets, String... args) {
-        return executeScript(scriptPath, scriptName, secrets, args);
+        return executeScript(scriptPath, scriptName, secrets, true, args);
     }
 
+    /**
+     * @param pause se aspettare ENTER alla fine (solo con un terminale, vedi waitForEnter). Falso
+     *              quando dopo lo script c'e' ancora qualcosa da fare che non deve dipendere da un
+     *              tasto: l'installazione completa riprotegge i pacchetti, e aspetta dopo.
+     */
     private static boolean executeScript(String scriptPath, String scriptName,
-                                         java.util.Map<String, String> secrets, String... args) {
+                                         java.util.Map<String, String> secrets, boolean pause, String... args) {
         System.out.println();
         System.out.println(ANSI_CYAN + "═══════════════════════════════════════════════════════════════" + ANSI_RESET);
         System.out.println(ANSI_CYAN + "  Executing: " + scriptName + ANSI_RESET);
@@ -247,7 +253,7 @@ public class Main {
         File scriptFile = new File(scriptPath);
         if (!scriptFile.exists()) {
             System.out.println(ANSI_RED + "[ERROR] Script file not found: " + scriptPath + ANSI_RESET);
-            waitForEnter();
+            if (pause) waitForEnter();
             return false;
         }
 
@@ -308,12 +314,12 @@ public class Main {
             System.out.println();
             System.out.flush();
 
-            waitForEnter();
+            if (pause) waitForEnter();
             return exitCode == 0;
 
         } catch (Exception e) {
             System.out.println(ANSI_RED + "[ERROR] Failed to execute script: " + e.getMessage() + ANSI_RESET);
-            waitForEnter();
+            if (pause) waitForEnter();
             return false;
         }
     }
@@ -576,14 +582,73 @@ public class Main {
             return;
         }
 
-        // Save hostname
-        dbManager.setMailHostname(mailHostname.trim());
-
         try {
             screen.stopScreen();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        runInstallation(mailHostname.trim());
+
+        // Un'attesa sola, alla fine: dopo la riprotezione dei pacchetti, non prima. Con l'attesa
+        // dentro executeScript, chi chiudeva il terminale davanti a "Press ENTER" uccideva il
+        // processo con i pacchetti ancora sbloccati (li riproteggeva solo il prossimo avvio).
+        waitForEnter();
+
+        try {
+            screen.startScreen();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * L'installazione completa, senza la finestra del nome: e' quello che fa la voce del menu
+     * dopo che il nome e' stato scritto. Pubblica per il conduttore delle prove
+     * (tests/org/mail_panel/system/MenuReinstall.java), che cosi' prova proprio questo codice.
+     *
+     * Sul turno dei lavori sui pacchetti, con i pacchetti protetti sbloccati prima e riprotetti
+     * alla fine (InstallLocks). Il turno e lo sblocco vengono PRIMA di qualunque cambiamento:
+     * prima del nome, dei flag dei servizi e soprattutto della nuova password di MySQL, che
+     * salvata senza installazione lascerebbe il pannello con una password che MySQL non conosce.
+     *
+     * @return vero se lo script e' uscito con 0
+     */
+    public static boolean runInstallation(String mailHostname) {
+        InstallLocks.Start start;
+        org.mail_panel.i18n.I18n.setCurrent("en");   // la console e' in inglese
+        try { start = InstallLocks.prepare(org.mail_panel.i18n.I18n.tr("server.reinstall.turn")); }
+        finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+        if (start.refusal() != null) {
+            System.out.println(ANSI_RED + "[STOPPED] " + start.refusal() + ANSI_RESET);
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            try { System.out.println(ANSI_RED + org.mail_panel.i18n.I18n.tr("server.reinstall.notStarted") + ANSI_RESET); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+            System.out.flush();
+            return false;
+        }
+        if (!start.report().isEmpty()) System.out.println(ANSI_YELLOW + "[LOCKS] " + start.report() + ANSI_RESET);
+        boolean success = false;
+        try {
+            success = installOnTurn(mailHostname);
+        } finally {
+            String back;
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            try { back = InstallLocks.finish(start.held()); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+            if (!back.isEmpty()) {
+                boolean allBack = !org.mail_panel.system.PackageQueue.statePresent();
+                System.out.println((allBack ? ANSI_GREEN : ANSI_RED) + "[LOCKS] " + back + ANSI_RESET);
+            }
+            System.out.flush();
+        }
+        return success;
+    }
+
+    /** Il corpo dell'installazione, con il turno gia' preso e i pacchetti gia' sbloccati. */
+    private static boolean installOnTurn(String mailHostname) {
+        // Save hostname
+        dbManager.setMailHostname(mailHostname);
 
         // Reset all service flags in SQLite (fresh install/reinstall)
         System.out.println(ANSI_YELLOW + "[RESET] Resetting service flags for fresh installation..." + ANSI_RESET);
@@ -684,11 +749,13 @@ public class Main {
 
         // Execute the unified mail server installation script. Le due password viaggiano
         // nell'ambiente e non fra gli argomenti: un argomento lo legge chiunque con "ps".
-        boolean success = executeScriptWithSecrets("./install_scripts/install_mail_server.sh",
+        // Senza l'attesa di un tasto alla fine: la fa installMailServer, dopo la riprotezione.
+        boolean success = executeScript("./install_scripts/install_mail_server.sh",
                 "Complete Mail Server Installation",
                 java.util.Map.of("MYSQL_PASSWORD", mysqlPassword,
                                  "MYSQL_ROOT_PASSWORD", mysqlRootPassword),
-                mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname.trim(),
+                false,
+                mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname,
                 roundcubeDomain, roundcubePort, roundcubeSslCert, roundcubeSslKey, roundcubeSslChain);
 
         if (success) {
@@ -747,14 +814,7 @@ public class Main {
             System.out.println(ANSI_YELLOW + "Remember to configure a real SSL certificate from the web panel!" + ANSI_RESET);
             System.out.flush();
         }
-
-        // L'attesa di un tasto la fa gia' executeScript(), e solo se c'e' un terminale.
-
-        try {
-            screen.startScreen();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        return success;
     }
 
     /**

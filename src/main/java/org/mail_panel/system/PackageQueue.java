@@ -3,6 +3,7 @@ package org.mail_panel.system;
 import java.nio.ByteBuffer;
 import org.mail_panel.i18n.I18n;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -30,6 +31,15 @@ import java.util.logging.Logger;
  * Il turno si prende nella richiesta, PRIMA di avviare il lavoro: quindi prima dei controlli, del
  * piano e di ogni sblocco. Si rilascia quando il lavoro finisce, qualunque cosa succeda. Chi lo
  * trova preso non parte, e sa chi lo tiene.
+ *
+ * Il turno vale fra PROCESSI, non solo fra i thread di un pannello. Il servizio (--web) e il
+ * menu a schermo sono due JVM, e il menu ha la sua reinstallazione completa: con il turno solo
+ * in memoria, il menu non vedeva una manutenzione in corso nel servizio, e il servizio non
+ * vedeva una reinstallazione partita dal menu. Peggio, ogni avvio del jar (anche solo
+ * --access-code) riproteggeva "dopo un crash" l'elenco di un lavoro vivo in un altro processo, e
+ * glielo cancellava. Per questo chi tiene il turno tiene anche un blocco del sistema operativo
+ * su un file accanto all'elenco: il blocco muore col processo, l'elenco no, ed e' proprio la
+ * differenza fra "un lavoro e' in corso" e "un lavoro si e' interrotto".
  */
 public final class PackageQueue {
 
@@ -50,6 +60,27 @@ public final class PackageQueue {
     private record Turn(String id, String description, long start) {}
 
     private static final AtomicReference<Turn> IN_PROGRESS = new AtomicReference<>();
+
+    /**
+     * Il file del turno fra processi, accanto all'elenco: /var/db/mail-panel-package-turn. Chi
+     * tiene il turno ne tiene il blocco (fcntl, attraverso FileChannel.tryLock) e ci scrive chi
+     * e': pid, lavoro, da quando. Il file resta sempre; e' il blocco che dice se il turno e'
+     * preso, e il sistema lo toglie da solo quando il processo muore, anche con kill -9.
+     *
+     * Si ricava da 'list' perche' le prove, spostando l'elenco, spostino anche questo.
+     */
+    static Path turnFile() {
+        return list.resolveSibling("mail-panel-package-turn");
+    }
+
+    /**
+     * Il canale e il blocco del turno fra processi, se questo processo lo tiene. Un canale solo
+     * per tutto: in Java (e in fcntl) chiudere UN qualunque canale sullo stesso file toglie i
+     * blocchi del processo su quel file, quindi il file del turno non si apre mai altrove
+     * mentre lo si tiene.
+     */
+    private static FileChannel turnChannel;
+    private static FileLock turnLock;
 
     /**
      * Prende il turno per il lavoro 'id'. null se l'ha preso; altrimenti il motivo per cui il
@@ -78,6 +109,14 @@ public final class PackageQueue {
             if (holder != null) return busy(holder);
             // Rilasciato fra i due passi: si riprova.
         }
+        // In questo processo il turno e' nostro; adesso fra i processi. Prima di guardare
+        // l'elenco: se c'e' ed e' di un lavoro vivo in un altro processo, la risposta giusta e'
+        // "c'e' un lavoro in corso", non "c'e' un lavoro interrotto".
+        String elsewhere = lockAcrossProcesses(fresh);
+        if (elsewhere != null) {
+            IN_PROGRESS.compareAndSet(fresh, null);
+            return elsewhere;
+        }
         if (notWithOpenList && statePresent()) {
             release(id);
             return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(list)));
@@ -88,7 +127,80 @@ public final class PackageQueue {
     /** Rilascia il turno, ma solo se e' di 'id': un lavoro non puo' liberare quello di un altro. */
     public static void release(String id) {
         Turn t = IN_PROGRESS.get();
-        if (t != null && t.id().equals(id)) IN_PROGRESS.compareAndSet(t, null);
+        if (t != null && t.id().equals(id)) {
+            // Prima il blocco fra processi, poi il turno in memoria: al contrario, un altro
+            // thread di questo processo prenderebbe il turno e chiederebbe un blocco che questa
+            // JVM tiene ancora.
+            unlockAcrossProcesses();
+            IN_PROGRESS.compareAndSet(t, null);
+        }
+    }
+
+    /**
+     * Prende il blocco del file del turno, senza aspettare. null se l'ha preso (e ci ha scritto
+     * chi e'); altrimenti il motivo per cui il lavoro non puo' partire: il turno e' di un altro
+     * processo, e il messaggio dice di chi; o il file non si apre, e allora non si parte, perche'
+     * senza quel blocco due processi potrebbero sbloccare insieme.
+     */
+    private static synchronized String lockAcrossProcesses(Turn t) {
+        // Non deve succedere (il turno in memoria e' appena stato preso): ma aprire e chiudere
+        // un secondo canale toglierebbe il blocco a chi lo tiene, quindi non si apre niente.
+        if (turnChannel != null) return busy(t.description());
+        Path f = turnFile();
+        FileChannel c = null;
+        try {
+            c = FileChannel.open(f, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
+            FileLock l = c.tryLock();
+            if (l == null) {
+                String who = readHolder(c);
+                c.close();
+                return I18n.tr("server.turn.otherProcess", java.util.Map.of("who",
+                        who.isEmpty() ? I18n.tr("server.turn.otherProcessUnknown") : who));
+            }
+            String me = "pid " + ProcessHandle.current().pid() + ": " + t.description() + " (since "
+                    + java.time.Instant.ofEpochMilli(t.start()).truncatedTo(java.time.temporal.ChronoUnit.SECONDS) + " UTC)\n";
+            c.truncate(0);
+            ByteBuffer b = ByteBuffer.wrap(me.getBytes(StandardCharsets.UTF_8));
+            long at = 0;
+            while (b.hasRemaining()) at += c.write(b, at);
+            c.force(false);
+            turnChannel = c;
+            turnLock = l;
+            return null;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Cannot lock " + f, e);
+            if (c != null) {
+                try { c.close(); } catch (Exception x) { LOGGER.log(Level.FINE, "close " + f, x); }
+            }
+            return I18n.tr("server.turn.cannotLock", java.util.Map.of("file", String.valueOf(f), "err", String.valueOf(e)));
+        }
+    }
+
+    /** Chi tiene il turno in un altro processo, da quello che ha scritto nel file ("" se niente). */
+    private static String readHolder(FileChannel c) {
+        try {
+            ByteBuffer b = ByteBuffer.allocate(512);
+            int n = c.read(b, 0);
+            if (n <= 0) return "";
+            String s = new String(b.array(), 0, n, StandardCharsets.UTF_8).trim();
+            // Lo ha scritto il pannello, ma finisce in un messaggio: niente a capo, niente controllo.
+            return s.replaceAll("[\\p{Cntrl}]+", " ");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** Toglie il blocco del turno fra processi, se lo tiene questo processo, e svuota il file. */
+    private static synchronized void unlockAcrossProcesses() {
+        if (turnChannel == null) return;
+        try { turnChannel.truncate(0); }
+        catch (Exception e) { LOGGER.log(Level.FINE, "Cannot empty " + turnFile(), e); }
+        try { turnLock.release(); }
+        catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot release the lock on " + turnFile(), e); }
+        try { turnChannel.close(); }
+        catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot close " + turnFile(), e); }
+        turnChannel = null;
+        turnLock = null;
     }
 
     /** Chi tiene il turno adesso ("manutenzione, in corso da 3 minuti"), o null se e' libero. */

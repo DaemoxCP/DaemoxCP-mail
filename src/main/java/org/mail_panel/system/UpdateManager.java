@@ -351,7 +351,26 @@ public final class UpdateManager {
      * senza l'elenco degli sblocchi voluti bloccherebbe anche quelli.
      */
     public static String applyLockPolicy() {
-        if (Files.exists(Paths.get(MAINTENANCE_STATE)) || org.mail_panel.Main.mailDatabase == null) return "";
+        if (PackageQueue.statePresent() || org.mail_panel.Main.mailDatabase == null) return "";
+        // Sul turno dei pacchetti, come ogni cambio di protezioni: se un altro processo del
+        // pannello sta lavorando sui pacchetti (la reinstallazione dal menu, che li ha sbloccati
+        // apposta), bloccarli adesso gli fermerebbe pkg a meta'. La regola si applica al
+        // prossimo avvio; i pacchetti che quel lavoro ha sbloccato li riprotegge lui.
+        String id = "policy-" + System.nanoTime();
+        String refusal = PackageQueue.takeForLocks(id, I18n.tr("server.turn.lockPolicy"));
+        if (refusal != null) {
+            String msg = "Lock rule not applied at this start, it is applied at the next one: " + refusal;
+            LOGGER.info(msg);
+            return msg;
+        }
+        try {
+            // Con il turno in mano si riguarda: l'elenco puo' essere comparso nel frattempo.
+            if (PackageQueue.statePresent()) return "";
+            return applyLockPolicyOnTurn();
+        } finally { PackageQueue.release(id); }
+    }
+
+    private static String applyLockPolicyOnTurn() {
         Set<String> unlockedByHand = unlockedByHand();
         List<String> lockedPackages = new ArrayList<>(), failed = new ArrayList<>();
         JSONArray st = packagesStatus().getJSONArray("packages");
@@ -2136,7 +2155,26 @@ public final class UpdateManager {
      * gia' protetto non ha effetti, quindi e' sicuro anche se in realta' era andato tutto bene.
      */
     public static String restoreLocksAfterCrash() {
-        Path f = Paths.get(MAINTENANCE_STATE);
+        Path f = PackageQueue.list;
+        if (!Files.exists(f)) return "";
+        // L'elenco puo' essere di un lavoro VIVO in un altro processo del pannello: il servizio
+        // in manutenzione mentre qualcuno lancia il jar per il menu o per --access-code, o il
+        // menu in reinstallazione mentre il servizio riparte. Prima questo avvio riproteggeva i
+        // pacchetti di quel lavoro a meta' e gli cancellava l'elenco. Il turno lo dice: se e'
+        // preso, il lavoro e' vivo, e l'elenco resta suo.
+        String id = "restore-" + System.nanoTime();
+        String refusal = PackageQueue.takeForLocks(id, I18n.tr("server.turn.restore"));
+        if (refusal != null) {
+            String msg = "A list of unlocked packages is on disk, but its job is still running: left alone. " + refusal;
+            LOGGER.info(msg);
+            return msg;
+        }
+        try { return restoreLocksFrom(f); }
+        finally { PackageQueue.release(id); }
+    }
+
+    private static String restoreLocksFrom(Path f) {
+        // Il lavoro puo' aver chiuso il suo elenco fra il primo sguardo e il turno.
         if (!Files.exists(f)) return "";
         StringBuilder log = new StringBuilder();
         int done = 0, totals = 0, skipped = 0;

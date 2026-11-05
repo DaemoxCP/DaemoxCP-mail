@@ -129,6 +129,43 @@ echo "  Roundcube:      https://$ROUNDCUBE_DOMAIN:$ROUNDCUBE_PORT"
 echo ""
 
 # =============================================================================
+# Prima di fermare qualunque cosa: i pacchetti protetti
+# =============================================================================
+# Misurato il 05/11/2026 sulla VM FreeBSD 15.1 (reperto 126): dove il pannello e' gia' partito,
+# i pacchetti dello stack sono protetti con pkg lock (39 su quella macchina). La fase 1 fermava
+# i servizi e ne cancellava le configurazioni, la fase 2 si fermava su «mysql84-server-8.4.11_4
+# is locked and may not be modified», lo script usciva 1 e la posta restava spenta.
+# Un pacchetto protetto qualunque puo' fermare pkg install, anche una dipendenza: ci si ferma se
+# ce n'e' anche uno solo, e PRIMA della fase 1. La voce del menu del pannello li sblocca da se'
+# (con l'elenco salvato) e li riprotegge alla fine; chi lancia lo script a mano li sblocca lui.
+# Si legge con pkg query e non con "pkg lock -l -q", che senza nessun protetto esce con 1 come
+# per un errore (misurato lo stesso giorno). "pkg -N" dice se pkg e' installato: se non lo e',
+# protetti non ce ne sono, e la fase 2 lo installa.
+if pkg -N >/dev/null 2>&1; then
+    if ! LOCKED_PACKAGES=$(pkg query -e '%k = 1' '%n-%v' 2>/dev/null); then
+        echo "${RED}Error: pkg cannot say which packages are locked:${NC}"
+        pkg query -e '%k = 1' '%n-%v'
+        echo "Nothing was stopped and nothing was changed."
+        exit 1
+    fi
+    if [ -n "$LOCKED_PACKAGES" ]; then
+        echo "${RED}=============================================================================${NC}"
+        echo "${RED}  STOPPED: some packages are locked (pkg lock). pkg would refuse to change${NC}"
+        echo "${RED}  them halfway through, with the mail services already stopped.${NC}"
+        echo "${RED}=============================================================================${NC}"
+        echo "Locked now:"
+        echo "$LOCKED_PACKAGES" | sed 's/^/  /'
+        echo ""
+        echo "Nothing was stopped and nothing was changed."
+        echo "The mail panel locks the mail stack packages when it starts. Its menu entry"
+        echo "'Install/Reinstall Complete Mail Server' unlocks them before this script and"
+        echo "locks them again after it. Running this script by hand: unlock them first"
+        echo "(pkg unlock -a -y); the panel locks the mail stack again at its next start."
+        exit 1
+    fi
+fi
+
+# =============================================================================
 # PHASE 1: CLEANUP
 # =============================================================================
 echo "${YELLOW}[PHASE 1/10] Cleaning up existing installation...${NC}"
