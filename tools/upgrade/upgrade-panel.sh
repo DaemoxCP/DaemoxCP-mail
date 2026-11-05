@@ -186,7 +186,8 @@ say "Passaggio del pannello: tutto quello che vedo va in $WORK"
 # Lo stato che deve restare uguale dopo il passaggio, una riga per cosa. Niente password ne'
 # contenuti: solo esiti.
 state() {
-    for s in $(service -e | sed -n 's#^/usr/local/etc/rc.d/##p' | grep -vx mailpanel); do
+    # In ordine di nome: service -e segue rcorder, che cambia quando un pacchetto si aggiunge.
+    for s in $(service -e | sed -n 's#^/usr/local/etc/rc.d/##p' | grep -vx mailpanel | sort); do
         printf 'servizio %s: %s\n' "$s" "$(service "$s" status >/dev/null 2>&1 && echo acceso || echo SPENTO)"
     done
     printf 'mysqld: %s\n' "$(pgrep -q mysqld && echo acceso || echo SPENTO)"
