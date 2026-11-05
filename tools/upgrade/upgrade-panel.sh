@@ -306,20 +306,16 @@ mv -f "$JAR.new" "$JAR"
 SWAPPED=yes
 say "Jar nuovo al suo posto: $NEW_SHA"
 
-# Il log dal segno in poi. Il file puo' cambiare nome durante l'avvio (PathMigration rinomina il log
-# che daemon sta scrivendo, RcScriptRepair corregge lo script), e lo script di avvio lo mette da
-# parte (.1) se supera 10 MB: si cerca il segno dappertutto.
+# Il log dal segno in poi. Il file si cerca prima per inode, perche' daemon(8) scrive sempre lo
+# stesso file anche se cambia nome: il pannello nuovo puo' rinominarlo (PathMigration) senza che lo
+# script di avvio lo sappia, ed e' proprio il difetto che la #89 ha corretto. Se lo script di avvio
+# l'ha messo da parte (.1, oltre 10 MB), il resto sta nel file nuovo.
 segment() {
-    for f in "$(rc_setting mailpanel_log)" "$LOG_BEFORE"; do
-        if [ -f "$f" ] && grep -qF "$1" "$f"; then
-            awk -v m="$1" 'found {print} index($0, m) {found = 1}' "$f"
-            return
-        fi
-        if [ -f "$f.1" ] && grep -qF "$1" "$f.1"; then
-            awk -v m="$1" 'found {print} index($0, m) {found = 1}' "$f.1"
-            cat "$f"
-            return
-        fi
+    for f in $(find "$LOG_DIR" -maxdepth 1 -type f -inum "$LOG_INODE" 2>/dev/null) "$(rc_setting mailpanel_log)" "$LOG_BEFORE"; do
+        [ -f "$f" ] && grep -qF "$1" "$f" || continue
+        awk -v m="$1" 'found {print} index($0, m) {found = 1}' "$f"
+        case $f in *.1) [ -f "${f%.1}" ] && cat "${f%.1}" ;; esac
+        return
     done
 }
 
@@ -327,7 +323,10 @@ segment() {
 # migrazioni del thread principale, quella dell'ACME dopo AcmeUser e ServiceUsers.
 boot() {
     mark="=== upgrade-panel.sh $STAMP: $1 ==="
-    printf '%s\n' "$mark" >> "$(rc_setting mailpanel_log)"
+    f=$(rc_setting mailpanel_log)
+    printf '%s\n' "$mark" >> "$f"
+    LOG_DIR=${f%/*}
+    LOG_INODE=$(stat -f %i "$f")
     service mailpanel "$2" >> "$WORK/service.txt" 2>&1
     i=0
     while [ $i -lt $BOOT_TIMEOUT ]; do
