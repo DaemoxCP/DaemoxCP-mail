@@ -198,7 +198,7 @@ public class PanelMailTest {
         return new JSONObject()
                 .put("toDo", toDo)
                 .put("system", new JSONObject().put("installedKernel", "15.1-RELEASE-p3").put("runningKernel", "15.1-RELEASE-p2")
-                        .put("userland", "15.1-RELEASE-p3").put("architecture", "arm64").put("endOfSupport", "31/12/2026"))
+                        .put("userland", "15.1-RELEASE-p3").put("arch", "arm64").put("endOfSupport", "31/12/2026"))
                 .put("daysToEndOfSupport", 56)
                 .put("branch", new JSONObject().put("branch", "quarterly"))
                 .put("totalPackages", 143).put("lockedPackageCount", 40).put("packagesWithUpdate", 3)
@@ -235,7 +235,7 @@ public class PanelMailTest {
         PanelMail.Message m = ReportMail.message(en, data(four));
         System.out.println("  oggetto: " + m.subject());
         check("oggetto: server, urgenza, la cosa piu' urgente, quante altre, data",
-                m.subject().equals("[mail.example.org] Urgent: Restart the stopped services: dovecot, and 3 more - report of 5 November 2026"));
+                m.subject().equals("[mail.example.org] Urgent: Restart the stopped services: dovecot, and 3 more things to do - report of 5 November 2026"));
         check("oggetto: niente piu' \"thing to do\" generico ne' data numerica", !m.subject().contains("thing to do") && !m.subject().contains("05/11/2026"));
         for (int i = 0; i < four.length(); i++) {
             JSONObject x = four.getJSONObject(i);
@@ -253,6 +253,7 @@ public class PanelMailTest {
         check("le sezioni dello stato, in testo e in HTML", List.of("System", "Packages", "Known vulnerabilities", "TLS certificate",
                 "Services", "Libraries", "Disk space", "Ways back (boot environments)").stream()
                 .allMatch(s -> m.text().contains(s.toUpperCase()) && m.html().contains(">" + PanelMail.esc(s) + "<")));
+        check("architettura: dalla chiave che operatingSystem mette davvero (\"arch\")", flat(m.text()).contains("Architecture: arm64"));
         check("spazio: la riga di df detta in parole", flat(m.text()).contains("File system /: 18% used, 24G free of 29G"));
         check("certificato: nome, emittente, scadenza", flat(m.text()).contains("Expiry: in 10 days, on 15 November 2026"));
         check("piede: perche' arriva e come si ferma", flat(m.text()).contains("sent automatically by the mail control panel of mail.example.org to admin@example.org")
@@ -285,7 +286,7 @@ public class PanelMailTest {
         ReportMail.Context it = new ReportMail.Context("it", "mail.esempio.it", "admin@esempio.it", true, "monthly", WHEN);
         PanelMail.Message mi = ReportMail.message(it, data(new JSONArray().put(item(1, "Applica 2 correzioni di sicurezza", "x", "Aggiornamenti")).put(item(3, "Aggiorna il catalogo dei pacchetti", "y", "Aggiornamenti"))));
         System.out.println("  oggetto: " + mi.subject());
-        check("italiano: oggetto", mi.subject().equals("[mail.esempio.it] Urgente: Applica 2 correzioni di sicurezza, e un'altra cosa - rapporto del 5 novembre 2026"));
+        check("italiano: oggetto", mi.subject().equals("[mail.esempio.it] Urgente: Applica 2 correzioni di sicurezza, e un'altra cosa da fare - rapporto del 5 novembre 2026"));
         check("italiano: rapporto mensile, data con il mese per esteso", mi.text().contains("Rapporto mensile, 5 novembre 2026 alle 20:15 UTC"));
         check("italiano: html lang=it", mi.html().contains("<html lang=\"it\">"));
 

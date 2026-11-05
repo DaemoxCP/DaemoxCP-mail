@@ -92,7 +92,8 @@ public final class ReportMail {
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.installed"), os.optString("installedKernel", "?")});
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.running"), os.optString("runningKernel", "?")});
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.userland"), os.optString("userland", "?")});
-                rows.add(new String[]{I18n.t(lang, "mail.report.fact.architecture"), os.optString("architecture", "?")});
+                // La chiave e' "arch" (operatingSystem): con "architecture" il rapporto ha sempre scritto "?".
+                rows.add(new String[]{I18n.t(lang, "mail.report.fact.architecture"), os.optString("arch", "?")});
                 long days = d.optLong("daysToEndOfSupport", -1);
                 rows.add(new String[]{I18n.t(lang, "mail.report.fact.endOfSupport"), os.optString("endOfSupport", "?")
                         + (days >= 0 ? " " + I18n.t(lang, "mail.report.fact.inDays", Map.of("n", days)) : "")});

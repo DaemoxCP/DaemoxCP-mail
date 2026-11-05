@@ -7702,12 +7702,17 @@ public final class UpdateManager {
         r.put("totalPackages", count.getInt("totals")).put("lockedPackageCount", count.getInt("protectedNames"))
          .put("packagesWithUpdate", withUpdate).put("toUpdate", toUpdate)
          .put("heldBackPackages", heldBack);
-        if (withUpdate > 0)
+        // Quelli che il blocco trattiene hanno la loro voce qui sotto, con il posto giusto dove
+        // applicarli: contarli anche qui faceva dire due volte la stessa cosa ("aggiorna 1
+        // pacchetto" e "applica 1 aggiornamento trattenuto", per lo stesso openjdk25 sulla VM il
+        // 06/11/2026), con due indicazioni diverse su dove farlo.
+        int freeUpdates = withUpdate - heldBack;
+        if (freeUpdates > 0)
             toDo.put(new JSONObject().put("urgency", 2)
-                    .put("title", I18n.trn("mail.report.title.updates", withUpdate, java.util.Map.of()))
-                    .put("what", withUpdate == 1
+                    .put("title", I18n.trn("mail.report.title.updates", freeUpdates, java.util.Map.of()))
+                    .put("what", freeUpdates == 1
                             ? I18n.tr("server.um.x.newerInRepo.one")
-                            : I18n.tr("server.um.x.newerInRepo.other", java.util.Map.of("n", String.valueOf(withUpdate))))
+                            : I18n.tr("server.um.x.newerInRepo.other", java.util.Map.of("n", String.valueOf(freeUpdates))))
                     .put("where", I18n.tr("server.um.reportData.5")));
         // Un aggiornamento che esiste e che il blocco trattiene e' una notizia diversa da un
         // aggiornamento disponibile: `pkg upgrade`, da qui o da SSH, lo salta ed esce 0.
