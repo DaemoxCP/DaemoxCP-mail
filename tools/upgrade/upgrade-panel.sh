@@ -39,8 +39,40 @@ MIN_FREE_KB=1048576   # 1 GiB liberi nel pool del boot environment
 
 usage() {
     echo "uso: $0 [-m CASELLA -p FILE_PASSWORD] JAR_NUOVO SHA256_DEL_JAR" >&2
+    echo "     $0 --check-log FILE first|second" >&2
     exit 64
 }
+
+# L'annuncio di LocalMtaRepair, scritto come avviso ma previsto sui server installati prima che
+# Postfix fosse l'MTA locale (il server vero ha myorigin = il nome dell'host): dice cosa sta per
+# cambiare, e subito dopo "Postfix is now the local MTA" dice che e' fatto. E' una migrazione, non
+# un segnale storto; se non riesce, le righe dopo sono avvisi veri e fermano.
+LOCAL_MTA_NOTICE='^WARNING: \[LocalMta\] (myorigin .* is not in mydestination: it becomes localhost first|sendmail\(8\) hands over to dma: )'
+
+# Le righe che fermano: ogni avviso o errore, le eccezioni, e i nomi trovati due volte.
+bad_lines() {
+    grep -nE '^(WARNING|SEVERE):|Exception|Both .* exist|Could not rename|FAILED|failed:' "$1" \
+        | grep -vE "^[0-9]+:${LOCAL_MTA_NOTICE#^}"
+}
+
+# Quello che le migrazioni hanno fatto: al primo avvio si leggono, al secondo non ce ne devono essere.
+# Le righe dei controlli che passano ("Alias map OK", "already hands over") non contano.
+migration_lines() {
+    grep -nE "^(INFO|WARNING|SEVERE): (\[[A-Za-z0-9]+\] [A-Z_]+: |Renamed |\[CommentRepair\] comments repaired|\[LocalMta\] Postfix is now|\[PostfixAliases\] Auto-fix|Mail stack packages locked at startup)|${LOCAL_MTA_NOTICE}" "$1"
+}
+
+# Solo la lettura di un pezzo di log, con le regole del passaggio: per rileggere un avvio a mano, e
+# per provare le regole su log costruiti apposta. "first": le migrazioni si elencano, gli avvisi
+# fermano; "second": ferma anche una sola migrazione. Esce 1 se il log fermerebbe il passaggio.
+if [ "${1:-}" = "--check-log" ]; then
+    [ $# -eq 3 ] && [ -f "$2" ] || usage
+    case $3 in first|second) ;; *) usage ;; esac
+    m=$(migration_lines "$2"); b=$(bad_lines "$2")
+    [ -n "$m" ] && printf 'migrazioni:\n%s\n' "$m"
+    [ -n "$b" ] && printf 'righe che fermano:\n%s\n' "$b"
+    [ -z "$b" ] && { [ "$3" = first ] || [ -z "$m" ]; } && { echo "esito: va"; exit 0; }
+    echo "esito: FERMO"; exit 1
+fi
 
 MAILBOX=
 PASSFILE=
@@ -173,8 +205,32 @@ state() {
         printf 'pagina di accesso della webmail (%s:%s): %s\n' "$wn" "$wp" \
             "$(curl -sk -m 15 --resolve "$wn:$wp:127.0.0.1" "https://$wn:$wp/" | grep -c rcmloginuser)"
     fi
-    pkg lock -l 2>/dev/null | sed 1d | sed 's/^[[:space:]]*/pacchetto protetto: /'
     [ -n "$MAILBOX" ] && mailbox_state "$wn" "$wp"
+    return 0
+}
+
+# I pacchetti protetti, uno per riga. Si confrontano a parte: all'avvio il pannello nuovo protegge
+# anche i pacchetti dello stack che non lo erano (UpdateManager.applyLockPolicy) e non ne sblocca
+# nessuno, quindi l'elenco puo' crescere; quelli di prima devono restarci tutti.
+locked() {
+    pkg query -e '%k = 1' '%n' 2>/dev/null | sort
+}
+
+# Il confronto con la fotografia: lo stato uguale, e nessun pacchetto protetto perso.
+compare() {
+    state > "$WORK/state-after-$1.txt" 2>&1
+    locked > "$WORK/locked-after-$1.txt"
+    if ! diff -u "$WORK/state-before.txt" "$WORK/state-after-$1.txt" > "$WORK/state-diff-$1.txt"; then
+        cat "$WORK/state-diff-$1.txt"
+        fail "lo stato e' cambiato rispetto alla fotografia (sopra)"
+    fi
+    comm -23 "$WORK/locked-before.txt" "$WORK/locked-after-$1.txt" > "$WORK/locked-lost-$1.txt"
+    if [ -s "$WORK/locked-lost-$1.txt" ]; then
+        cat "$WORK/locked-lost-$1.txt"
+        fail "questi pacchetti erano protetti e non lo sono piu'"
+    fi
+    comm -13 "$WORK/locked-before.txt" "$WORK/locked-after-$1.txt" > "$WORK/locked-new-$1.txt"
+    [ -s "$WORK/locked-new-$1.txt" ] && say "Protetti in piu': $(tr '\n' ' ' < "$WORK/locked-new-$1.txt")"
     return 0
 }
 
@@ -182,7 +238,9 @@ state() {
 mailbox_state() {
     printf 'accesso alla casella: %s\n' "$(timeout -f 20 doveadm auth test "$MAILBOX" < "$PASSFILE" >/dev/null 2>&1 && echo ok || echo RIFIUTATO)"
     token="panel-upgrade-$STAMP-$(date +%s)"
-    printf 'Subject: %s\n\nprova del passaggio del pannello\n' "$token" | timeout -f 20 sendmail "$MAILBOX"
+    # Il sendmail di Postfix, non /usr/sbin/sendmail: prima del passaggio quello puo' ancora andare a
+    # dma (mailer.conf), che consegna fuori invece che in casella.
+    printf 'Subject: %s\n\nprova del passaggio del pannello\n' "$token" | timeout -f 20 "$(postconf -h sendmail_path)" "$MAILBOX"
     i=0
     while [ $i -lt 60 ] && ! timeout -f 5 doveadm search -u "$MAILBOX" mailbox INBOX subject "$token" 2>/dev/null | grep -q .; do
         sleep 1; i=$((i + 1))
@@ -208,12 +266,13 @@ mailbox_state() {
 
 STEP="fotografia"
 state > "$WORK/state-before.txt" 2>&1
+locked > "$WORK/locked-before.txt"
 grep -E 'SPENTO|ERRORE|NON RISPONDE|RIFIUTATO|NON ARRIVATA' "$WORK/state-before.txt" > "$WORK/already-wrong.txt"
 if [ -s "$WORK/already-wrong.txt" ]; then
     cat "$WORK/already-wrong.txt"
     fail "qualcosa non va gia' prima del passaggio (sopra): prima si sistema quello"
 fi
-say "Fotografia: $(wc -l < "$WORK/state-before.txt" | tr -d ' ') righe, tutto a posto"
+say "Fotografia: $(wc -l < "$WORK/state-before.txt" | tr -d ' ') righe, tutto a posto; $(wc -l < "$WORK/locked-before.txt" | tr -d ' ') pacchetti protetti"
 
 # --- 3. pannello fermo, boot environment, copie -------------------------------------------------
 
@@ -282,16 +341,6 @@ boot() {
     fail "l'avvio non e' finito in $BOOT_TIMEOUT s: $WORK/$1.log"
 }
 
-# Le righe che fermano: ogni avviso o errore, le eccezioni, e i nomi trovati due volte.
-bad_lines() {
-    grep -nE '^(WARNING|SEVERE):|Exception|Both .* exist|Could not rename|FAILED|failed:' "$1"
-}
-
-# Quello che le migrazioni hanno fatto: al primo avvio si leggono, al secondo non ce ne devono essere.
-migration_lines() {
-    grep -nE '^(INFO|WARNING|SEVERE): (\[[A-Za-z0-9]+\] [A-Z_]+: |Renamed |\[CommentRepair\] comments repaired|\[LocalMta\] Postfix is now|\[PostfixAliases\])' "$1"
-}
-
 STEP="primo avvio"
 boot first-start start
 migration_lines "$WORK/first-start.log" > "$WORK/first-start-migrations.txt"
@@ -306,11 +355,7 @@ fi
 # --- 5. lo stato dopo il primo avvio ------------------------------------------------------------
 
 STEP="stato dopo il primo avvio"
-state > "$WORK/state-after-first-start.txt" 2>&1
-if ! diff -u "$WORK/state-before.txt" "$WORK/state-after-first-start.txt" > "$WORK/state-diff-first-start.txt"; then
-    cat "$WORK/state-diff-first-start.txt"
-    fail "lo stato e' cambiato rispetto alla fotografia (sopra)"
-fi
+compare first-start
 say "Stato dopo il primo avvio: uguale alla fotografia"
 
 # --- 6. il secondo avvio ------------------------------------------------------------------------
@@ -327,11 +372,7 @@ fi
 # --- 7. di nuovo lo stato -----------------------------------------------------------------------
 
 STEP="stato dopo il secondo avvio"
-state > "$WORK/state-after-second-start.txt" 2>&1
-if ! diff -u "$WORK/state-before.txt" "$WORK/state-after-second-start.txt" > "$WORK/state-diff-second-start.txt"; then
-    cat "$WORK/state-diff-second-start.txt"
-    fail "lo stato e' cambiato rispetto alla fotografia dopo il secondo avvio (sopra)"
-fi
+compare second-start
 
 {
     say "FATTO: primo avvio con le migrazioni qui sotto, secondo avvio muto, stato uguale alla fotografia."

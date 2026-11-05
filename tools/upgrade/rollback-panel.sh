@@ -63,6 +63,12 @@ if [ -d "$VMAIL" ]; then
         || { bectl umount "$BE"; restart_mail; fail "la copia della posta nel boot environment non e' riuscita: niente e' stato attivato"; }
     echo "Posta di adesso copiata nel boot environment di prima (quella di prima: $VMAIL.before-rollback-$STAMP)"
 fi
+# Le caselle di sistema vuote che pw useradd crea in /var/mail (fuori dai boot environment) per gli
+# utenti nati col passaggio (roundcube, acme): nel boot environment di prima quegli utenti non ci sono.
+for f in /var/mail/*; do
+    u=${f##*/}
+    [ -f "$f" ] && [ ! -s "$f" ] && ! grep -q "^$u:" "$MNT/etc/passwd" && rm -f "$f" && echo "tolta la casella vuota $f (l'utente $u non c'e' prima del passaggio)"
+done
 bectl umount "$BE" || { restart_mail; fail "bectl umount $BE non e' riuscito"; }
 rmdir "$MNT" 2>/dev/null
 
