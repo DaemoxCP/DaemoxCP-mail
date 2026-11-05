@@ -1,6 +1,6 @@
 #!/bin/sh
 # Il passaggio del pannello di posta a un jar nuovo, su un server gia' avviato: lo stesso giro che e'
-# stato provato sulla VM dal pannello dell'11/10 (reperti, punto 127). Si ferma al primo segnale
+# stato provato sulla VM dal pannello dell'11/10 (reperti, punto 135). Si ferma al primo segnale
 # storto, e da quel momento non tocca piu' niente: dice cosa ha visto e come tornare indietro.
 #
 # Uso, da root:

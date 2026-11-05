@@ -2,7 +2,7 @@
 # La fotografia del banco: un boot environment, con dentro le copie delle due cartelle che stanno
 # FUORI dai boot environment e che il passaggio tocca (/home/panel e /var/log). Senza quelle copie
 # un clone riparte col jar e coi log di nginx dell'ultima prova, non con quelli della fotografia
-# (reperti, punti 112 e 127).
+# (reperti, punti 112 e 135).
 #
 # Uso, da root sulla VM:
 #   photo.sh take NOME             le copie in /root/rehearsal-photo, poi bectl create NOME

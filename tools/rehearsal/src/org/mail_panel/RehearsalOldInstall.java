@@ -28,7 +28,7 @@ public class RehearsalOldInstall {
         Main.dbManager.updateRoundcubeConfig(webmail, "8443", cert, key, "");
         new org.mail_panel.scripts.FullMailServerScript().write_file();
         // Sul catalogo di oggi lo script di allora ha due nomi di pacchetto che non vanno piu'
-        // (reperti, punto 127). postfix-mysql porta mysql84-client, che toglie mysql80-server gia'
+        // (reperti, punto 135). postfix-mysql porta mysql84-client, che toglie mysql80-server gia'
         // nella fase dei pacchetti, prima che MySQL sia mai partito: niente database, e lo script
         // dice lo stesso «riuscita». E dovecot-pigeonhole lascia lmtp senza sieve. Il server vero ha
         // mysql84-server e dovecot-pigeonhole-mysql: si cambiano quelle due righe e nient'altro.
