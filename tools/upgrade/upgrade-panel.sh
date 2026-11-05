@@ -197,8 +197,20 @@ state() {
     printf 'doveconf: %s\n' "$(doveconf -n >/dev/null 2>&1 && echo ok || echo ERRORE)"
     printf 'fail2ban: %s\n' "$(timeout -f 20 fail2ban-client ping >/dev/null 2>&1 && echo risponde || echo NON RISPONDE)"
     printf 'pannello sulla 2096: %s\n' "$(curl -sk -m 15 -o /dev/null -w '%{http_code}' https://127.0.0.1:2096/)"
-    for h in $(grep -h "server_name" /usr/local/etc/nginx/conf.d/*.conf 2>/dev/null | tr -s ' ;' '\n' | grep '^mta-sts\.' | sort -u); do
-        printf 'MTA-STS %s: %s\n' "$h" "$(curl -sk -m 15 --resolve "$h:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$h/.well-known/mta-sts.txt")"
+    # MTA-STS: dai file di nginx che servono la politica, chiesta a ogni loro nome. Sul server (e sul
+    # banco) la 443 e' il sito predefinito, "server_name _": risponde a qualunque nome, quindi si
+    # chiede all'indirizzo locale. Senza nessun file lo si dice, cosi' anche una sparizione cambia
+    # lo stato (la prima versione cercava "mta-sts." fra i nomi e non controllava niente).
+    confs=$(grep -l 'mta-sts\.txt' /usr/local/etc/nginx/conf.d/*.conf 2>/dev/null)
+    [ -n "$confs" ] || say "MTA-STS sulla 443: nessun file di nginx la serve"
+    for c in $confs; do
+        for h in $(awk '/^[[:space:]]*server_name/ {for (i = 2; i <= NF; i++) {gsub(";", "", $i); print $i}}' "$c" | sort -u); do
+            [ "$h" = "_" ] && h=127.0.0.1
+            t=$(mktemp /var/tmp/panel-upgrade-mta-sts.XXXXXX)
+            code=$(curl -sk -m 15 --resolve "$h:443:127.0.0.1" -o "$t" -w '%{http_code}' "https://$h/.well-known/mta-sts.txt")
+            printf 'MTA-STS sulla 443 (%s): %s %s\n' "$h" "$code" "$(head -1 "$t" | tr -cd '[:print:]')"
+            rm -f "$t"
+        done
     done
     wn=$(awk '/server_name/ && !/_;/ {gsub(";", "", $2); print $2; exit}' /usr/local/etc/nginx/nginx.conf 2>/dev/null)
     wp=$(awk '/listen/ && !/default_server/ {gsub(";", "", $2); print $2; exit}' /usr/local/etc/nginx/nginx.conf 2>/dev/null)
