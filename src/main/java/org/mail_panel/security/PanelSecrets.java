@@ -41,6 +41,11 @@ public final class PanelSecrets {
     public static final String MYSQL_PASSWORD = "mysql_password";
     /** La password di root di MySQL: prima non esisteva, e root entrava senza nulla. */
     public static final String MYSQL_ROOT_PASSWORD = "mysql_root_password";
+    /**
+     * La password dell'utente MySQL della webmail (roundcube), che puo' toccare solo il database
+     * di Roundcube. Prima la webmail entrava con l'utente del pannello: vedi RoundcubeDbUser.
+     */
+    public static final String ROUNDCUBE_DB_PASSWORD = "roundcube_db_password";
     /** La chiave privata TLS (PEM) del pannello (prima stava nel database SQLite di configurazione). */
     public static final String PANEL_TLS_KEY = "panel_tls_key";
 
@@ -191,9 +196,10 @@ public final class PanelSecrets {
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=".toCharArray();
 
     /**
-     * Solo lettere e cifre: l'alfabeto per la password dell'utente del pannello.
+     * Solo lettere e cifre: l'alfabeto per la password dell'utente del pannello e per quella
+     * della webmail.
      *
-     * <p>Non e' una scelta pigra. Quella password, a differenza di quella di root, finisce
+     * <p>Non e' una scelta pigra. Quelle password, a differenza di quella di root, finiscono
      * in posti che <em>non</em> sono SQL: l'URL di collegamento di Roundcube
      * ({@code mysql://utente:password@127.0.0.1/roundcubemail}), i file di Postfix e la
      * configurazione di Dovecot. In un URL una chiocciola spezza l'indirizzo, un
@@ -240,13 +246,28 @@ public final class PanelSecrets {
      * che in MySQL non e' mai stata impostata.
      */
     public static synchronized String ensureMysqlRootPassword() {
-        String v = get(MYSQL_ROOT_PASSWORD);
+        return ensureGenerated(MYSQL_ROOT_PASSWORD, () -> newPassword(28));
+    }
+
+    /**
+     * La password dell'utente MySQL della webmail, generandola se non c'e' ancora. Come quella di
+     * root si genera una volta sola e poi si rilegge: la usano gli script d'installazione e la
+     * migrazione all'avvio, e devono dare a MySQL e a config.inc.php lo stesso segreto. Solo
+     * lettere e cifre, perche' finisce nell'URL di db_dsnw.
+     */
+    public static synchronized String ensureRoundcubeDbPassword() {
+        return ensureGenerated(ROUNDCUBE_DB_PASSWORD, () -> newAlphanumericPassword(24));
+    }
+
+    /** Il segreto se c'e'; altrimenti lo genera sotto il lock del file, e chi arriva secondo trova il primo. */
+    private static synchronized String ensureGenerated(String name, java.util.function.Supplier<String> generator) {
+        String v = get(name);
         if (!v.isEmpty()) return v;
         return update(p -> {
-            if (!p.getProperty(MYSQL_ROOT_PASSWORD, "").isEmpty()) return null;   // l'ha appena scritta un altro
-            p.setProperty(MYSQL_ROOT_PASSWORD, newPassword(28));
+            if (!p.getProperty(name, "").isEmpty()) return null;   // l'ha appena scritta un altro
+            p.setProperty(name, generator.get());
             return p;
-        }).getProperty(MYSQL_ROOT_PASSWORD, "");
+        }).getProperty(name, "");
     }
 
     /**

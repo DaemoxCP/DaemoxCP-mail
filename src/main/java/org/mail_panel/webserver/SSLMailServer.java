@@ -556,6 +556,11 @@ public class SSLMailServer {
             // (e il cambio password della webmail che passa dal pannello)
             autoInstallSsoPlugin();
 
+            // La webmail entra in MySQL col suo utente (roundcube, solo il database di Roundcube) e
+            // non piu' con quello del pannello: sui server installati prima. Dopo il plugin SSO,
+            // perche' la verifica fa un accesso vero come il pulsante «Apri webmail».
+            org.mail_panel.system.RoundcubeDbUser.ensureAtBoot(ssoManager);
+
             // Dopo: la webmail non scrive piu' password in chiaro, quelle rimaste si sistemano
             repairPlaintextMailboxPasswords();
 
@@ -2406,7 +2411,7 @@ public class SSLMailServer {
             java.util.function.Supplier<JSONObject> install = () -> {
                 JSONObject r = new JSONObject();
                 try {
-                    String output = executeScript(script, component);
+                    String output = executeScript(script, component, scriptEnvironment(component));
                     Main.mailDatabase.markComponentInstalled(component, "latest");
                     // La configurazione appena scritta dallo script non ha ancora il plugin SSO ne'
                     // il cambio password tramite il pannello: si aggiungono subito, non al prossimo avvio
@@ -2783,6 +2788,25 @@ public class SSLMailServer {
     }
 
     private String executeScript(String scriptContent, String scriptName) throws Exception {
+        return executeScript(scriptContent, scriptName, Map.of());
+    }
+
+    /**
+     * L'ambiente degli script dei componenti. A quelli che installano la webmail ("roundcube",
+     * "all") servono la password del suo utente MySQL, dal file dei segreti, e quella di root se il
+     * pannello l'ha impostata. Nell'ambiente e non fra gli argomenti, come per l'installazione
+     * completa: un argomento lo legge chiunque con "ps".
+     */
+    static Map<String, String> scriptEnvironment(String component) {
+        if (!"roundcube".equals(component) && !"all".equals(component)) return Map.of();
+        Map<String, String> env = new HashMap<>();
+        env.put("ROUNDCUBE_DB_PASSWORD", org.mail_panel.security.PanelSecrets.ensureRoundcubeDbPassword());
+        String root = org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.MYSQL_ROOT_PASSWORD);
+        if (!root.isEmpty()) env.put("MYSQL_ROOT_PASSWORD", root);
+        return env;
+    }
+
+    private String executeScript(String scriptContent, String scriptName, Map<String, String> env) throws Exception {
         String jarDir = getJarDirectory();
         Path scriptPath = Paths.get(jarDir, "install_scripts", "install_" + scriptName + ".sh");
         Files.createDirectories(scriptPath.getParent());
@@ -2792,6 +2816,7 @@ public class SSLMailServer {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", scriptPath.toString());
         org.mail_panel.util.Shell.applyPath(pb);
+        pb.environment().putAll(env);
         pb.redirectErrorStream(true);
         Process process = pb.start();
 

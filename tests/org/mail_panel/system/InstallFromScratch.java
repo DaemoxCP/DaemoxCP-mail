@@ -55,6 +55,7 @@ public class InstallFromScratch {
         String mysqlPassword = PanelSecrets.newAlphanumericPassword(24);
         Main.dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
         String mysqlRootPassword = PanelSecrets.ensureMysqlRootPassword();
+        String roundcubeDbPassword = PanelSecrets.ensureRoundcubeDbPassword();
 
         // Le password si scrivono QUI, in due file leggibili solo da root, perche' chi guarda
         // l'esito deve poterle confrontare con quello che e' finito in MySQL. Nel pannello
@@ -67,7 +68,8 @@ public class InstallFromScratch {
         System.out.println("=== installazione, hostname " + mailHostname + " ===");
         boolean ok = Main.executeScriptWithSecrets("./install_scripts/install_mail_server.sh",
                 "Complete Mail Server Installation",
-                Map.of("MYSQL_PASSWORD", mysqlPassword, "MYSQL_ROOT_PASSWORD", mysqlRootPassword),
+                Map.of("MYSQL_PASSWORD", mysqlPassword, "MYSQL_ROOT_PASSWORD", mysqlRootPassword,
+                       "ROUNDCUBE_DB_PASSWORD", roundcubeDbPassword),
                 mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname,
                 roundcubeDomain, roundcubePort, "", "", "");
         System.out.println("=== esito: " + (ok ? "riuscita" : "FALLITA") + " ===");

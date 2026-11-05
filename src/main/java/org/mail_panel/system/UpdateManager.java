@@ -3366,35 +3366,23 @@ public final class UpdateManager {
     /**
      * Credenziali del database della webmail, lette da config.inc.php.
      *
-     * Non si indovinano: nel pannello compaiono due utenti diversi per lo stesso database
-     * (mailpanel in un punto, roundcube in un altro), e quello autorevole e' cio' che
-     * Roundcube usa davvero, cioe' il DSN nella sua configurazione. La lettura si fa in Java
+     * Non si indovinano: quello autorevole e' cio' che Roundcube usa davvero, cioe' il DSN
+     * nella sua configurazione -- roundcube, l'utente suo, dopo RoundcubeDbUser; quello del
+     * pannello sui server dove la migrazione non e' ancora riuscita. La lettura si fa in Java
      * e non con una catena di grep e sed: niente da proteggere in una shell, e la password
-     * non passa mai da una riga di comando.
+     * non passa mai da una riga di comando. E' la stessa di RoundcubeDbUser.activeDsn (righe
+     * commentate escluse, vince l'ultima assegnazione): la copia del database e la migrazione
+     * devono vedere lo stesso collegamento.
      */
     static JSONObject dsnRoundcube() {
         JSONObject r = new JSONObject().put("ok", false);
         try {
             java.nio.file.Path f = Paths.get(RC_DIR + "/config/config.inc.php");
             if (!Files.exists(f)) return r.put("error", I18n.tr("server.um.dsnRoundcube.1", java.util.Map.of("rcDir", String.valueOf(RC_DIR))));
-            Pattern pat = Pattern.compile("db_dsnw'?\\]?\\s*=\\s*['\"]([a-z]+)://([^:]+):([^@]*)@([^/]+)/([A-Za-z0-9_]+)");
-            // Riga per riga, non su tutto il testo, per due motivi che una ricerca globale
-            // sbaglia entrambi: le righe COMMENTATE non contano — un DSN vecchio lasciato li'
-            // farebbe fare copia e aggiornamento dello schema sul database sbagliato — e in PHP
-            // vince l'ULTIMA assegnazione, non la prima, perche' i file di configurazione
-            // spesso impostano un valore e poi lo sovrascrivono.
-            JSONObject last = null;
-            for (String line : Files.readAllLines(f)) {
-                String t = line.trim();
-                if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) continue;
-                Matcher m = pat.matcher(t);
-                if (m.find()) {
-                    last = new JSONObject().put("ok", true).put("driver", m.group(1)).put("user", m.group(2))
-                            .put("pass", m.group(3)).put("host", m.group(4)).put("db", m.group(5));
-                }
-            }
-            if (last == null) return r.put("error", I18n.tr("server.um.dsnRoundcube.2"));
-            return last;
+            RoundcubeDbUser.Dsn d = RoundcubeDbUser.activeDsn(Files.readString(f, StandardCharsets.UTF_8));
+            if (d == null) return r.put("error", I18n.tr("server.um.dsnRoundcube.2"));
+            return new JSONObject().put("ok", true).put("driver", d.driver()).put("user", d.user())
+                    .put("pass", d.password()).put("host", d.host()).put("db", d.db());
         } catch (Exception e) {
             return r.put("error", e.getMessage());
         }

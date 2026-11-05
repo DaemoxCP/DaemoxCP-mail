@@ -625,6 +625,10 @@ public class Main {
         String mysqlRootPassword = org.mail_panel.security.PanelSecrets.ensureMysqlRootPassword();
         System.out.println(ANSI_GREEN + "[AUTO] MySQL root password ready in the panel secrets file" + ANSI_RESET);
 
+        // La password dell'utente MySQL della webmail (roundcube): come quella di root si genera
+        // una volta sola, perche' la migrazione all'avvio la rilegge da li' (RoundcubeDbUser).
+        String roundcubeDbPassword = org.mail_panel.security.PanelSecrets.ensureRoundcubeDbPassword();
+
         // Read Roundcube configuration
         String roundcubeDomain = dbManager.getRoundcubeDomain();
         String roundcubePort = dbManager.getRoundcubePort();
@@ -682,12 +686,13 @@ public class Main {
             }
         }
 
-        // Execute the unified mail server installation script. Le due password viaggiano
+        // Execute the unified mail server installation script. Le password viaggiano
         // nell'ambiente e non fra gli argomenti: un argomento lo legge chiunque con "ps".
         boolean success = executeScriptWithSecrets("./install_scripts/install_mail_server.sh",
                 "Complete Mail Server Installation",
                 java.util.Map.of("MYSQL_PASSWORD", mysqlPassword,
-                                 "MYSQL_ROOT_PASSWORD", mysqlRootPassword),
+                                 "MYSQL_ROOT_PASSWORD", mysqlRootPassword,
+                                 "ROUNDCUBE_DB_PASSWORD", roundcubeDbPassword),
                 mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname.trim(),
                 roundcubeDomain, roundcubePort, roundcubeSslCert, roundcubeSslKey, roundcubeSslChain);
 
