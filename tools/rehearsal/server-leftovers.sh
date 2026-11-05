@@ -1,0 +1,60 @@
+#!/bin/sh
+# Quello che il server di posta vero ha in piu' del banco, visto in sola lettura il 05/11/2026
+# (reperti, punto 135), rifatto sul banco dopo RehearsalOldSetup e acme.sh da root:
+#   - due certificati in /root/.acme.sh, chiesti con la sfida DNS (dns_cf per Cloudflare, dns a mano),
+#     non con --standalone;
+#   - i file coi nomi italiani che PathMigration rinomina: riavvio.log, ssl-precedente/,
+#     sistema/salto.json (un salto di release FINITO, come sul server) con la sua cartella
+#     d'inventario; e installazione-completata, che nessuno rinomina.
+# I contenuti sono finti ma della stessa forma: chiavi e campi come sul server, nessun dato vero.
+# Uso, da root sulla VM, col pannello vecchio acceso: server-leftovers.sh
+set -eu
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+H=/root/.acme.sh
+D=/var/db/mailpanel
+[ -d "$H/mail.rehearsal.test_ecc" ] || { echo "manca $H/mail.rehearsal.test_ecc: prima acme.sh da root (README)"; exit 1; }
+
+# Il primo certificato con la sfida DNS di Cloudflare, il secondo con quella a mano.
+sed -i '' "s/^Le_Webroot=.*/Le_Webroot='dns_cf'/" "$H/mail.rehearsal.test_ecc/mail.rehearsal.test.conf"
+N=mail.second.test
+C=$H/${N}_ecc
+mkdir -p "$C"
+openssl ecparam -name prime256v1 -genkey -noout -out "$C/$N.key" 2>/dev/null
+chmod 600 "$C/$N.key"
+openssl req -new -key "$C/$N.key" -subj "/CN=$N" -out "$C/$N.csr" 2>/dev/null
+openssl x509 -req -in "$C/$N.csr" -signkey "$C/$N.key" -days 90 -out "$C/$N.cer" 2>/dev/null
+cp "$C/$N.cer" "$C/ca.cer"
+cat "$C/$N.cer" "$C/ca.cer" > "$C/fullchain.cer"
+cp "$H/mail.rehearsal.test_ecc/mail.rehearsal.test.csr.conf" "$C/$N.csr.conf"
+sed -e "s/mail\.rehearsal\.test/$N/g" -e "s/^Le_Webroot=.*/Le_Webroot='dns'/" \
+    "$H/mail.rehearsal.test_ecc/mail.rehearsal.test.conf" > "$C/$N.conf"
+"$H/acme.sh" --home "$H" --list
+
+# I nomi italiani di /var/db/mailpanel, con proprietari e permessi come sul server.
+printf '2026-10-12T02:41:57Z riavvio chiesto dal pannello\n2026-10-12T02:42:30Z il pannello e'"'"' ripartito\n' > "$D/riavvio.log"
+chmod 600 "$D/riavvio.log"
+printf 'installazione completata il 2026-09-01T14:18:00Z\n' > "$D/installazione-completata"
+chmod 644 "$D/installazione-completata"
+mkdir -p "$D/ssl-precedente"
+cp /usr/local/etc/ssl/mail/fullchain.pem "$D/ssl-precedente/fullchain.pem"
+cp /usr/local/etc/ssl/mail/fullchain.pem "$D/ssl-precedente/ca.pem"
+cp /usr/local/etc/ssl/mail/privkey.pem "$D/ssl-precedente/privkey.pem"
+chmod 644 "$D/ssl-precedente/fullchain.pem" "$D/ssl-precedente/ca.pem"
+chmod 600 "$D/ssl-precedente/privkey.pem"
+mkdir -p "$D/sistema/20260831-190102"
+cat > "$D/sistema/salto.json" <<'EOF'
+{
+  "fase": "finito",
+  "passi": [
+    {"giro": 1, "codice": 0, "chiede": "ancora"},
+    {"giro": 2, "codice": 0, "chiede": "finished"}
+  ],
+  "kernel": "15.1-RELEASE-p3",
+  "userland": "15.1-RELEASE-p3"
+}
+EOF
+chmod 644 "$D/sistema/salto.json"
+freebsd-version -k > "$D/sistema/20260831-190102/versione.txt"
+for s in postfix dovecot nginx; do echo "$s attivo"; done > "$D/sistema/20260831-190102/servizi.txt"
+pkg query '%n-%v' | head -20 > "$D/sistema/20260831-190102/pacchetti.txt"
+ls -la "$D" "$D/sistema"
