@@ -229,7 +229,9 @@ public class RoundcubeDbUserTest {
         }
 
         @Override public Shell.Result phpFpmReload() {
-            if (reloadFails) { reloadFails = false; return r(false, "php_fpm: reload failed"); }   // una volta: il ritorno indietro ricarica
+            // Come php-fpm -t vero, su piu' righe; una volta sola: il ritorno indietro ricarica
+            if (reloadFails) { reloadFails = false; return r(false, "Performing sanity check on php-fpm configuration:\n"
+                    + "ERROR: failed to load configuration file '/usr/local/etc/php-fpm.conf'\nERROR: FPM initialization failed"); }
             try { if (!reloadIgnored) reload(); } catch (Exception e) { return r(false, e.toString()); }
             return r(true, "");
         }
@@ -440,6 +442,7 @@ public class RoundcubeDbUserTest {
                     f.state().equals(st) && acc.toString().equals(f.accounts.toString()));
             check(fault[1] + ": la webmail risponde col pannello", f.webmailDb() && !f.accounts.containsKey("roundcube@127.0.0.1"));
             check(fault[1] + ": nessuna istruzione sconosciuta", f.unknown.isEmpty());
+            check(fault[1] + ": il messaggio sta su una riga del log", !r.detail().contains("\n"));
         }
         {
             // Senza performance_schema il php-fpm che tiene la configurazione vecchia lo vede la verifica dopo la revoca.

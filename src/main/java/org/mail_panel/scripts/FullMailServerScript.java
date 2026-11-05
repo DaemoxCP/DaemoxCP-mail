@@ -62,13 +62,13 @@ ROUNDCUBE_SSL_CERT="$8"
 ROUNDCUBE_SSL_KEY="$9"
 ROUNDCUBE_SSL_CHAIN="${10}"
 
-# Le password NON sono argomenti: arrivano dall'ambiente, perche' la riga di comando
+# Le due password NON sono argomenti: arrivano dall'ambiente, perche' la riga di comando
 # di un processo la legge chiunque con "ps" per tutto il tempo che l'installazione dura.
-#   MYSQL_PASSWORD          quella dell'utente del pannello
-#   MYSQL_ROOT_PASSWORD     quella di root, generata dal pannello e tenuta nel file dei segreti
-#   ROUNDCUBE_DB_PASSWORD   quella dell'utente MySQL della webmail (roundcube), anche lei nel
-#                           file dei segreti: la webmail non entra piu' come il pannello
+#   MYSQL_PASSWORD        quella dell'utente del pannello
+#   MYSQL_ROOT_PASSWORD   quella di root, generata dal pannello e tenuta nel file dei segreti
 # Chi lancia questo script a mano deve esportarle.
+# Dall'ambiente arriva anche ROUNDCUBE_DB_PASSWORD, quella dell'utente MySQL della webmail
+# (roundcube), anche lei nel file dei segreti: la webmail non entra piu' come il pannello.
 
 # Colors. Con printf, non fra apici: l'echo di /bin/sh su FreeBSD non interpreta \\033, e il log
 # dell'installazione mostrava "\\033[1;33m[PHASE 6/10]" scritto a lettere (33 righe, misurato).

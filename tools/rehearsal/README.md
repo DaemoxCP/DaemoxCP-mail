@@ -64,3 +64,24 @@ Per una prova che riguarda altro va bene cosi', con il jar di `main` (73bfbcd) i
 come «prima» e senza rimettere i log di nginx: e' come la #84-#89 lascia il server vero. Cosi' e'
 stata fatta la prova degli utenti dei servizi (reperti, punto 116). Per rifare il passaggio
 dall'11/10 serve rifare il banco.
+
+## Il banco col jar di adesso (05/11/2026)
+
+Per le prove che non riguardano il passaggio dall'11/10, il «prima» si fa col jar di `main` su una
+VM vergine (reperti, punto 124):
+1. `InstallFromScratch` del commit di `main`, compilato contro il suo jar, in `/root/panel`;
+2. `src/org/mail_panel/RehearsalCurrentSetup.java`, compilato contro lo stesso jar e lanciato da
+   `/root/panel`: certificato, amministratore, `rehearsal.test` con alice e bob, lo script di avvio
+   (punta a `/root/panel`, dentro il boot environment: niente da rimettere in `/home`);
+3. `sysrc mailpanel_enable=YES` e `service mailpanel start`.
+
+Due strumenti in piu':
+- `roundcube-db-state.sh`: chi entra in MySQL per la webmail, gli account coi privilegi, chi legge
+  cosa, la pagina d'accesso, un accesso vero di alice dal modulo e l'hash dell'utente master di
+  Dovecot. Non stampa password: per ognuna dice di chi e';
+- `roundcube-db-faults.sh plant|clear NOME`: i guasti piantati per RoundcubeDbUser. Due
+  (`users-trigger`, `session-update`) non rompono la webmail, e la migrazione lo dice: sono
+  rimasti come esempio di guasto che non lo era.
+
+Attenzione: avviare il pannello protegge i pacchetti, e dopo l'installatore non li puo'
+reinstallare. Per rifare un'installazione sopra il banco: `pkg unlock -a -y` prima.

@@ -337,23 +337,23 @@ public final class RoundcubeDbUser {
         try {
             u.accountTouched = true;
             Shell.Result r = sv.root(accountSql(host, db, secret));
-            if (!r.success()) return rollBack(sv, u, "cannot create the MySQL account " + USER + "@" + host + ": " + r.outputTrim());
+            if (!r.success()) return rollBack(sv, u, "cannot create the MySQL account " + USER + "@" + host + ": " + oneLine(r));
             Shell.Result in = sv.as(USER, secret, host, db, "SELECT COUNT(*) FROM session");
             if (!in.success())
-                return rollBack(sv, u, USER + " cannot read " + db + " with the new password: " + in.outputTrim());
+                return rollBack(sv, u, USER + " cannot read " + db + " with the new password: " + oneLine(in));
 
             FileState was = FileState.of(cfg, before);
             u.config = was;
             write(cfg, withCredentials(before, d, USER, secret), was.withoutOthers());
             u.reloadFpm = true;
             r = sv.phpFpmReload();
-            if (!r.success()) return rollBack(sv, u, "php-fpm reload failed: " + r.outputTrim());
+            if (!r.success()) return rollBack(sv, u, "php-fpm reload failed: " + oneLine(r));
             String why = verify(sv, sites, db, true, realLogin);
             if (why != null) return rollBack(sv, u, why + " after the switch to " + USER);
 
             u.revoked = true;
             r = sv.root(revokeSql(panel, db, panelGrants));
-            if (!r.success()) return rollBack(sv, u, "cannot take " + db + " away from " + panel + ": " + r.outputTrim());
+            if (!r.success()) return rollBack(sv, u, "cannot take " + db + " away from " + panel + ": " + oneLine(r));
             why = verify(sv, sites, db, false, realLogin);
             if (why != null) return rollBack(sv, u, why + " once " + panel + " lost " + db);
         } catch (IOException | RuntimeException e) {
@@ -393,7 +393,7 @@ public final class RoundcubeDbUser {
         u.panelGrants = grants;
         u.revoked = true;
         Shell.Result r = sv.root(revokeSql(panel, db, grants));
-        if (!r.success()) return rollBack(sv, u, "cannot take " + db + " away from " + panel + ": " + r.outputTrim());
+        if (!r.success()) return rollBack(sv, u, "cannot take " + db + " away from " + panel + ": " + oneLine(r));
         String why = verify(sv, sites, db, false, realLogin);
         if (why != null) return rollBack(sv, u, why + " once " + panel + " lost " + db);
         return new Report(Outcome.FINISHED, panel + " no longer has privileges on " + db
@@ -454,6 +454,15 @@ public final class RoundcubeDbUser {
         } catch (NumberFormatException e) {
             return -1;
         }
+    }
+
+    /**
+     * L'uscita di un comando su una riga sola, per il log: php-fpm -t ne scrive cinque, e la riga
+     * del pannello si spezzava a meta' (chi cerca "RoundcubeDbUser" nel log vedeva solo l'inizio).
+     */
+    static String oneLine(Shell.Result r) {
+        String s = String.join(" | ", r.outputTrim().lines().map(String::trim).filter(l -> !l.isEmpty()).toList());
+        return s.length() > 600 ? s.substring(0, 600) + "..." : s;
     }
 
     // ===================== MySQL da root =====================
@@ -537,7 +546,7 @@ public final class RoundcubeDbUser {
         List<String> problems = new ArrayList<>();
         if (u.revoked && !u.panelGrants.isEmpty()) {
             Shell.Result r = sv.root(String.join(";\n", u.panelGrants) + ";");
-            if (!r.success()) problems.add("the privileges of the panel's user: " + r.outputTrim());
+            if (!r.success()) problems.add("the privileges of the panel's user: " + oneLine(r));
         }
         if (u.config != null) {
             try {
@@ -548,12 +557,12 @@ public final class RoundcubeDbUser {
         }
         if (u.reloadFpm) {
             Shell.Result r = sv.phpFpmReload();
-            if (!r.success()) problems.add("php-fpm reload: " + r.outputTrim());
+            if (!r.success()) problems.add("php-fpm reload: " + oneLine(r));
         }
         if (u.accountTouched) {
             Shell.Result r = sv.root("DROP USER IF EXISTS '" + USER + "'@'" + u.accountHost + "';\n"
                     + (u.accountBefore.isEmpty() ? "" : String.join(";\n", u.accountBefore) + ";"));
-            if (!r.success()) problems.add("the MySQL account " + USER + ": " + r.outputTrim());
+            if (!r.success()) problems.add("the MySQL account " + USER + ": " + oneLine(r));
         }
         return new Report(Outcome.ROLLED_BACK, why + "; everything put back"
                 + (problems.isEmpty() ? "" : " EXCEPT: " + String.join("; ", problems)));
