@@ -45,6 +45,7 @@ public class PanelMailTest {
 
     public static void main(String[] args) throws Exception {
         envelope();
+        serverName();
         report();
         codes();
         texts();
@@ -62,7 +63,7 @@ public class PanelMailTest {
         String tricky = "a=b\ttab finale \nspazio finale \n\n=3D non decodificato\n" + long1 + "\nultima";
         String qp = PanelMail.quotedPrintable(tricky);
         check("quoted-printable: nessuna riga oltre 76", qp.lines().allMatch(l -> l.length() <= 76));
-        check("quoted-printable: solo ASCII stampabile", qp.chars().allMatch(c -> c == '\r' || c == '\n' || (c >= 32 && c < 127)));
+        check("quoted-printable: solo ASCII stampabile (e il TAB dentro la riga, che la norma ammette)", qp.chars().allMatch(c -> c == '\r' || c == '\n' || c == '\t' || (c >= 32 && c < 127)));
         check("quoted-printable: si decodifica esattamente nel testo di partenza", qpDecode(qp).equals(tricky.replace("\r\n", "\n")));
         check("quoted-printable: lo spazio a fine riga diventa =20", qp.contains("finale=20\r\n"));
         check("quoted-printable: '=' diventa =3D", qp.contains("a=3Db"));
@@ -95,7 +96,7 @@ public class PanelMailTest {
         String raw = PanelMail.compose(PanelMail.senderName("it", SERVER), "no-reply@example.org", "admin@example.org", msg,
                 "report.1@example.org", WHEN);
         String head = raw.substring(0, raw.indexOf("\r\n\r\n"));
-        check("busta: From con il nome del pannello e del server", head.contains("From: \"Pannello di controllo della posta (mail.example.org)\" <no-reply@example.org>"));
+        check("busta: From con il nome del pannello e del server", "\"Pannello di controllo della posta (mail.example.org)\" <no-reply@example.org>".equals(unfold(head, "From")));
         check("busta: Date in forma RFC 5322", head.contains("\r\nDate: Thu, 5 Nov 2026 20:15:00 +0000"));
         check("busta: Message-ID", head.contains("\r\nMessage-ID: <report.1@example.org>"));
         check("busta: Content-Language", head.contains("\r\nContent-Language: it"));
@@ -121,8 +122,10 @@ public class PanelMailTest {
                 "admin@example.org", longOnes, "report.2@example.org", WHEN);
         String head2 = raw2.substring(0, raw2.indexOf("\r\n\r\n"));
         check("intestazioni lunghe: nessuna riga oltre 78", head2.lines().allMatch(l -> l.length() <= 78));
-        check("intestazioni lunghe: il mittente va a capo prima dell'indirizzo",
-                head2.contains("(posta-principale.esempio-molto-lungo.it)\"\r\n <no-reply@esempio-molto-lungo.it>"));
+        String from2 = unfold(head2, "From");
+        check("intestazioni lunghe: un nome che fra virgolette non ci sta va in parole codificate, che si ricompongono identiche",
+                from2.startsWith("=?UTF-8?B?") && from2.endsWith(" <no-reply@esempio-molto-lungo.it>")
+                && decodeWords(from2.substring(0, from2.lastIndexOf(" <"))).equals("Pannello di controllo della posta (posta-principale.esempio-molto-lungo.it)"));
         check("intestazioni lunghe: l'oggetto ripiegato si ricompone identico",
                 unfold(head2, "Subject").equals(longOnes.subject()));
         String raw3 = PanelMail.compose("x", "a@example.org", "b@example.org", new PanelMail.Message(subject, "x", "y", "it"),
@@ -130,11 +133,45 @@ public class PanelMailTest {
         check("intestazioni lunghe: anche l'oggetto codificato sta nei 78", raw3.substring(0, raw3.indexOf("\r\n\r\n")).lines().allMatch(l -> l.length() <= 78));
     }
 
+    /** Le parole codificate di RFC 2047 riunite: lo spazio fra due parole codificate non conta. */
+    private static String decodeWords(String s) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        Matcher m = Pattern.compile("=\\?UTF-8\\?B\\?([A-Za-z0-9+/=]*)\\?=").matcher(s);
+        while (m.find()) bytes.writeBytes(Base64.getDecoder().decode(m.group(1)));
+        return bytes.toString(StandardCharsets.UTF_8);
+    }
+
     /** Il valore di un'intestazione con le righe ripiegate riunite (RFC 5322, 2.2.3). */
     private static String unfold(String head, String name) {
         String u = head.replace("\r\n ", " ").replace("\r\n\t", "\t");
         for (String l : u.split("\r\n")) if (l.startsWith(name + ": ")) return l.substring(name.length() + 2);
         return null;
+    }
+
+    /**
+     * Il nome del server, sul sistema vero: senza database del pannello lo dice Postfix
+     * (myhostname), non hostname(1). Sulla VM hostname(1) e' "freebsdlocal" e myhostname
+     * "mail.rehearsal.test", come sul server vero "freebsd" e "mail.domain-b.test": e' proprio il
+     * caso che ha prodotto "[freebsd] 1 thing to do". Senza postconf (sul Mac) si salta.
+     */
+    static void serverName() throws Exception {
+        System.out.println("\n== il nome del server ==");
+        String postfix = run("postconf", "-h", "myhostname");
+        String host = run("hostname");
+        if (postfix.isEmpty()) { System.out.println("  (postconf non c'e': controllo saltato)"); return; }
+        String name = PanelMail.serverName();
+        System.out.println("  hostname(1) " + host + ", myhostname " + postfix + ", il pannello usa " + name);
+        check("il nome del server e' quello di Postfix", name.equals(postfix.toLowerCase()));
+        if (!host.equalsIgnoreCase(postfix))
+            check("e non quello di hostname(1), che qui e' diverso", !name.equalsIgnoreCase(host));
+    }
+
+    private static String run(String... cmd) {
+        try {
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            return p.waitFor() == 0 ? out : "";
+        } catch (Exception e) { return ""; }
     }
 
     private static String body(String part) {
@@ -273,7 +310,7 @@ public class PanelMailTest {
                 check(name + ": l'oggetto dice il server", m.subject().startsWith("[" + SERVER + "] "));
                 check(name + ": l'IP di chi l'ha chiesto " + (k == CodeMail.Kind.EMAIL_CHANGE ? "NON c'e' (va a un indirizzo nuovo)" : "c'e'"),
                         (k == CodeMail.Kind.EMAIL_CHANGE) != (m.text().contains("203.0.113.7") && m.html().contains("203.0.113.7")));
-                check(name + ": quando e' stato chiesto", m.text().contains(lang.equals("en") ? "5 November 2026 at 20:15 UTC" : "5 novembre 2026 alle 20:15 UTC"));
+                check(name + ": quando e' stato chiesto", flat(m.text()).contains(lang.equals("en") ? "5 November 2026 at 20:15 UTC" : "5 novembre 2026 alle 20:15 UTC"));
                 check(name + ": validita' in minuti", m.text().contains("10"));
                 check(name + ": nessun collegamento", !m.html().contains("<a ") && !m.html().contains("http"));
             }

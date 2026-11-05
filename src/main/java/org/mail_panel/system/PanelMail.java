@@ -130,12 +130,62 @@ public final class PanelMail {
         return b.toString();
     }
 
-    /** "Nome" <indirizzo>: tra virgolette se e' ASCII, in RFC 2047 se non lo e'. */
+    /**
+     * "Nome" <indirizzo>: tra virgolette se e' ASCII e la riga del mittente ci sta; altrimenti
+     * in parole codificate RFC 2047, che si possono mandare a capo fra l'una e l'altra (chi
+     * legge le riunisce senza spazi). Un nome lungo fra virgolette non si puo' spezzare senza
+     * affidarsi a programmi che riuniscano bene le virgolette piegate.
+     */
     static String address(String name, String address) {
         if (name == null || name.isBlank()) return address;
-        if (isPrintableAscii(name))
-            return "\"" + name.replace("\\", "\\\\").replace("\"", "\\\"") + "\" <" + address + ">";
-        return encodeHeader(name, "From: ".length()) + " <" + address + ">";
+        String quoted = "\"" + name.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        if (isPrintableAscii(name) && "From: ".length() + quoted.length() <= 78)
+            return quoted + " <" + address + ">";
+        return encodeWords(name) + " <" + address + ">";
+    }
+
+    /**
+     * Un'intestazione secondo RFC 2047 se contiene caratteri non ASCII.
+     *
+     * Ogni parola codificata sta entro i 75 caratteri che la norma impone, e non spezza mai un
+     * carattere UTF-8 a meta': la versione di prima metteva tutto l'oggetto in una sola parola,
+     * che con un oggetto lungo superava il limite. Le parole successive vanno a capo con uno
+     * spazio davanti (folding), che chi legge non vede.
+     */
+    static String encodeHeader(String s, int alreadyUsed) {
+        if (s == null) return "";
+        String clean = s.replace("\r", " ").replace("\n", " ");
+        if (isPrintableAscii(clean)) return clean;
+        return encodeWords(clean);
+    }
+
+    /** Il testo in parole codificate "=?UTF-8?B?...?=", una per riga, ognuna entro i 77 caratteri con il nome dell'intestazione. */
+    static String encodeWords(String s) {
+        String clean = s.replace("\r", " ").replace("\n", " ");
+        StringBuilder out = new StringBuilder();
+        StringBuilder chunk = new StringBuilder();
+        int chunkBytes = 0;
+        final int maxBytes = 42;       // 42 byte = 56 caratteri base64: con =?UTF-8?B?, ?= e "Subject: " fanno 77
+        for (int i = 0; i < clean.length(); ) {
+            int cp = clean.codePointAt(i);
+            String c = new String(Character.toChars(cp));
+            int n = c.getBytes(StandardCharsets.UTF_8).length;
+            if (chunkBytes + n > maxBytes) {
+                appendWord(out, chunk.toString());
+                chunk.setLength(0);
+                chunkBytes = 0;
+            }
+            chunk.append(c);
+            chunkBytes += n;
+            i += Character.charCount(cp);
+        }
+        if (chunk.length() > 0) appendWord(out, chunk.toString());
+        return out.toString();
+    }
+
+    private static void appendWord(StringBuilder out, String text) {
+        if (out.length() > 0) out.append("\r\n ");
+        out.append("=?UTF-8?B?").append(Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8))).append("?=");
     }
 
     /**
@@ -161,44 +211,6 @@ public final class PanelMail {
 
     private static boolean isPrintableAscii(String s) {
         return s.chars().allMatch(c -> c >= 32 && c < 127);
-    }
-
-    /**
-     * Un'intestazione secondo RFC 2047 se contiene caratteri non ASCII.
-     *
-     * Ogni parola codificata sta entro i 75 caratteri che la norma impone, e non spezza mai un
-     * carattere UTF-8 a meta': la versione di prima metteva tutto l'oggetto in una sola parola,
-     * che con un oggetto lungo superava il limite. Le parole successive vanno a capo con uno
-     * spazio davanti (folding), che chi legge non vede.
-     */
-    static String encodeHeader(String s, int alreadyUsed) {
-        if (s == null) return "";
-        String clean = s.replace("\r", " ").replace("\n", " ");
-        if (isPrintableAscii(clean)) return clean;
-        StringBuilder out = new StringBuilder();
-        StringBuilder chunk = new StringBuilder();
-        int chunkBytes = 0;
-        final int maxBytes = 42;       // 42 byte = 56 caratteri base64: con =?UTF-8?B?, ?= e "Subject: " fanno 77
-        for (int i = 0; i < clean.length(); ) {
-            int cp = clean.codePointAt(i);
-            String c = new String(Character.toChars(cp));
-            int n = c.getBytes(StandardCharsets.UTF_8).length;
-            if (chunkBytes + n > maxBytes) {
-                appendWord(out, chunk.toString());
-                chunk.setLength(0);
-                chunkBytes = 0;
-            }
-            chunk.append(c);
-            chunkBytes += n;
-            i += Character.charCount(cp);
-        }
-        if (chunk.length() > 0) appendWord(out, chunk.toString());
-        return out.toString();
-    }
-
-    private static void appendWord(StringBuilder out, String text) {
-        if (out.length() > 0) out.append("\r\n ");
-        out.append("=?UTF-8?B?").append(Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8))).append("?=");
     }
 
     /**
