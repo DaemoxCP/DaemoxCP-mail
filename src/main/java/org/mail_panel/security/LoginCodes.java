@@ -46,14 +46,31 @@ public final class LoginCodes {
 
     static LongSupplier clock = System::currentTimeMillis;
 
-    /** Chi spedisce le email; i test lo sostituiscono. */
+    /**
+     * Chi spedisce le email; i test lo sostituiscono con una lambda che riceve destinatario,
+     * oggetto e testo. Il pannello vero riceve il messaggio intero (testo e HTML) dal secondo
+     * metodo, che per una lambda ripiega sul primo.
+     */
     public interface Mailer {
         void send(String to, String subject, String body) throws Exception;
+
+        default void send(String to, org.mail_panel.system.PanelMail.Message message) throws Exception {
+            send(to, message.subject(), message.text());
+        }
     }
 
-    public static Mailer mailer = (to, subject, body) -> {
-        if (!org.mail_panel.system.PeriodicReport.sendPanelMessage(to, subject, body))
-            throw new IllegalStateException("Postfix did not accept the message");
+    public static Mailer mailer = new Mailer() {
+        @Override
+        public void send(String to, String subject, String body) throws Exception {
+            send(to, new org.mail_panel.system.PanelMail.Message(subject, body,
+                    "<pre>" + org.mail_panel.system.PanelMail.esc(body) + "</pre>", I18n.current()));
+        }
+
+        @Override
+        public void send(String to, org.mail_panel.system.PanelMail.Message message) {
+            if (!org.mail_panel.system.PeriodicReport.sendPanelMessage(to, message))
+                throw new IllegalStateException("Postfix did not accept the message");
+        }
     };
 
     private static final ExecutorService QUEUE = Executors.newSingleThreadExecutor(r -> {
@@ -65,12 +82,18 @@ public final class LoginCodes {
     /** Nei test l'invio avviene subito, per poterlo controllare. */
     public static boolean synchronousMail = false;
 
-    /** In coda, nella lingua di chi ha chiesto. */
-    static void queue(String to, String subjectKey, String bodyKey, Map<String, ?> params) {
+    /**
+     * In coda, nella lingua di chi ha chiesto, con l'ora e l'indirizzo della richiesta: il
+     * messaggio si compone nel thread della coda, perche' leggere il nome del server puo' voler
+     * dire chiedere a Postfix, e chi risponde alla richiesta non deve aspettarlo.
+     */
+    static void queue(String to, org.mail_panel.system.CodeMail.Kind kind, String code, long minutes, String ip) {
         String lang = I18n.current();
+        java.time.ZonedDateTime when = java.time.ZonedDateTime.now();
         Runnable job = () -> {
             try {
-                mailer.send(to, I18n.t(lang, subjectKey), I18n.t(lang, bodyKey, params));
+                mailer.send(to, org.mail_panel.system.CodeMail.message(kind, lang,
+                        org.mail_panel.system.PanelMail.serverName(), code, minutes, ip, when));
             } catch (Exception e) {
                 // Ne' l'indirizzo ne' il messaggio: dentro c'e' il codice. I dettagli sono nel log della posta.
                 LOGGER.warning("Login code email not delivered");
@@ -164,7 +187,7 @@ public final class LoginCodes {
         String code = digits(6);
         if (!AuthStore.saveCode(AuthStore.CodeFlow.EMAIL_LOGIN, admin.get().id(),
                 DataCrypto.codeHash("email_login", admin.get().id(), code), in(EMAIL_TTL_S), null, null)) return;
-        queue(admin.get().email(), "mail.loginCode.subject", "mail.loginCode.body", Map.of("code", code, "minutes", EMAIL_TTL_S / 60));
+        queue(admin.get().email(), org.mail_panel.system.CodeMail.Kind.LOGIN, code, EMAIL_TTL_S / 60, ip);
     }
 
     /** L'amministratore, se il codice e' giusto, valido e non ancora usato. */
@@ -217,7 +240,7 @@ public final class LoginCodes {
         String code = digits(6);
         if (!AuthStore.saveCode(AuthStore.CodeFlow.STEP_UP, admin.id(),
                 DataCrypto.codeHash("step_up", admin.id(), code), in(STEP_UP_TTL_S), null, null)) return false;
-        queue(admin.email(), "mail.stepUp.subject", "mail.stepUp.body", Map.of("code", code, "minutes", STEP_UP_TTL_S / 60));
+        queue(admin.email(), org.mail_panel.system.CodeMail.Kind.STEP_UP, code, STEP_UP_TTL_S / 60, ip);
         return true;
     }
 
@@ -242,7 +265,7 @@ public final class LoginCodes {
                 DataCrypto.codeHash("email_change", admin.id(), code), in(EMAIL_CHANGE_TTL_S),
                 DataCrypto.encrypt(newEmail.trim()), DataCrypto.emailIndex(newEmail)))
             return ChangeResult.LIMIT;
-        queue(newEmail.trim(), "mail.emailChange.subject", "mail.emailChange.body", Map.of("code", code, "minutes", EMAIL_CHANGE_TTL_S / 60));
+        queue(newEmail.trim(), org.mail_panel.system.CodeMail.Kind.EMAIL_CHANGE, code, EMAIL_CHANGE_TTL_S / 60, ip);
         return ChangeResult.SENT;
     }
 
