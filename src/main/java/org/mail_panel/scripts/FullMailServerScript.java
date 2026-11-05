@@ -139,9 +139,9 @@ echo ""
 # ce n'e' anche uno solo, e PRIMA della fase 1. La voce del menu del pannello li sblocca da se'
 # (con l'elenco salvato) e li riprotegge alla fine; chi lancia lo script a mano li sblocca lui.
 # Si legge con pkg query e non con "pkg lock -l -q", che senza nessun protetto esce con 1 come
-# per un errore (misurato lo stesso giorno). "pkg -N" dice se pkg e' installato: se non lo e',
-# protetti non ce ne sono, e la fase 2 lo installa.
-if pkg -N >/dev/null 2>&1; then
+# per un errore (misurato lo stesso giorno). Se pkg non risponde ci si ferma lo stesso: la fase 2
+# fallirebbe uguale, ma a servizi spenti.
+if true; then
     if ! LOCKED_PACKAGES=$(pkg query -e '%k = 1' '%n-%v' 2>/dev/null); then
         echo "${RED}Error: pkg cannot say which packages are locked:${NC}"
         pkg query -e '%k = 1' '%n-%v'

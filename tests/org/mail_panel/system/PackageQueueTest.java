@@ -101,6 +101,11 @@ public class PackageQueueTest {
         real("elenco chiuso: l'aggiornamento parte", PackageQueue.take("upd", "aggiornamento") == null);
         PackageQueue.release("upd");
 
+        // Il file del turno fra processi resta (e' il suo blocco che conta): sta nella stessa
+        // cartella di prova perche' si ricava dall'elenco.
+        real("il file del turno sta accanto all'elenco, non in /var/db",
+            PackageQueue.turnFile().getParent().equals(d));
+        Files.deleteIfExists(PackageQueue.turnFile());
         Files.delete(d);
         System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
         if (failed > 0) System.exit(1);
