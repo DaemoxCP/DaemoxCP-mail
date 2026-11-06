@@ -32,6 +32,8 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageQueueTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallLocksTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PendingDbPasswordTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PendingDbPasswordE2ETest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
@@ -320,6 +322,22 @@ riprotegge con l'avviso che nomina il lavoro interrotto. Poi `lockf(1)` contro i
 due sensi, e la parte del turno di `install_mail_server.sh` (dal testo vero, fino al controllo dei
 protetti: non arriva mai alla fase 1) dal menu, a mano, con le variabili messe a mano. Da root,
 sulla VM: tutto in una cartella di `/var/tmp`, pkg solo in lettura. Reperto 153.
+
+**PendingDbPasswordTest** — la password MySQL nuova del pannello resta in attesa finche' MySQL non
+la conosce (`PendingDbPassword`, reperto 157), con un MySQL finto: lo script che esce prima di
+MySQL (si tiene la vecchia), quello che ci arriva (si adotta la nuova), MySQL muto (non si decide,
+e l'installazione dopo riusa quella in attesa), la password in attesa che non si scrive, la copia
+di Postfix per i server rotti dalla versione di prima (adottata solo se MySQL la accetta e solo se
+e' dello stesso utente). Gira ovunque, ma si lancia sulla VM come le altre.
+
+**PendingDbPasswordE2ETest** — lo stesso con MySQL vero e il corpo vero dell'installazione
+(`Main.installOnTurn`): al posto di `install_mail_server.sh` uno script piantato che esce prima di
+MySQL, fallisce dopo, riesce, o uccide il pannello con kill -9 prima o dopo aver cambiato la
+password; poi l'avvio (`settleAtStartup`), anche col turno dei pacchetti tenuto da un altro
+processo e con MySQL che non risponde (porta 1). Dopo ogni giro: il pannello entra in MySQL
+(`Main.connectFromConfig`)? Ogni giro ha cartella, SQLite e file dei segreti suoi, e un utente
+MySQL di prova (`e2e_pending`) che alla fine si toglie; la password di root la legge dal file dei
+segreti vero. Si accende solo con `-De2e.vm=yes`, da root, con MySQL acceso.
 
 **AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
 un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un
