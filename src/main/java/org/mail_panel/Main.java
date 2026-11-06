@@ -391,6 +391,21 @@ public class Main {
             dbManager.insert_data_default();
         }
 
+        // Prima che qualunque cosa entri in MySQL: se un'installazione e' stata interrotta con la
+        // password nuova ancora in attesa, o se MySQL rifiuta quella del pannello (i server rotti
+        // dalla versione di prima, reperto 156), si chiede a MySQL quale conosce. Vale per ogni
+        // processo: il servizio --web, il menu, i comandi da console. Di solito costa una
+        // connessione e non cambia niente (PendingDbPassword.settleAtStartup).
+        try {
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            String decided;
+            try { decided = org.mail_panel.system.PendingDbPassword.settleAtStartup(dbManager).message(); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+            if (!decided.isEmpty()) System.out.println("[MYSQL] " + decided);
+        } catch (Exception e) {
+            System.out.println("Checking the panel's MySQL password failed: " + e.getMessage());
+        }
+
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
         //   java -jar freebsd-mail-panel-1.0.jar --create-admin <nome> <email>   il primo amministratore
         //   java -jar freebsd-mail-panel-1.0.jar --access-code [nome]            un codice di accesso monouso
@@ -673,14 +688,30 @@ public class Main {
             System.out.println(ANSI_YELLOW + "[WARNING] Could not read MySQL config: " + e.getMessage() + ANSI_RESET);
         }
 
-        // ALWAYS generate a new password (both install and reinstall)
-        // This ensures a fresh secure password every time
-        mysqlPassword = org.mail_panel.security.PanelSecrets.newAlphanumericPassword(24);
-        System.out.println(ANSI_GREEN + "[AUTO] Generated MySQL password" + ANSI_RESET);
-
-        // Save it (replaces old password if reinstalling): the password goes to the panel secrets file, the rest to SQLite
-        dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
-        System.out.println(ANSI_GREEN + "[AUTO] MySQL password saved to the panel secrets file" + ANSI_RESET);
+        // Una password nuova a ogni installazione, ma IN ATTESA: quella del pannello resta la
+        // vecchia finche' MySQL non conosce la nuova. Prima la si scriveva subito come password del
+        // pannello, e ogni uscita dello script prima della fase 3 (Roundcube non configurato, un
+        // parametro mancante, il turno, un pacchetto protetto, pkg) lasciava il pannello con una
+        // password che MySQL rifiutava (reperto 156). La decisione e' dopo lo script, qui sotto.
+        org.mail_panel.system.PendingDbPassword.Store passwordStore =
+                org.mail_panel.system.PendingDbPassword.panelStore(dbManager);
+        org.mail_panel.system.PendingDbPassword.Probe mysqlProbe =
+                org.mail_panel.system.PendingDbPassword.mysqlProbe(mysqlHost, mysqlPort, mysqlUser);
+        org.mail_panel.i18n.I18n.setCurrent("en");   // la console e' in inglese
+        try {
+            org.mail_panel.system.PendingDbPassword.Prepared prepared =
+                    org.mail_panel.system.PendingDbPassword.prepare(passwordStore, mysqlProbe, mysqlUser);
+            mysqlPassword = prepared.password();
+            if (!prepared.note().isEmpty()) System.out.println(ANSI_YELLOW + "[MYSQL] " + prepared.note() + ANSI_RESET);
+            System.out.println(ANSI_GREEN + "[AUTO] " + org.mail_panel.i18n.I18n.tr("server.dbPassword.aside") + ANSI_RESET);
+        } catch (RuntimeException e) {
+            System.out.println(ANSI_RED + "[STOPPED] " + org.mail_panel.i18n.I18n.tr("server.dbPassword.cannotAside",
+                    java.util.Map.of("err", String.valueOf(e.getMessage()))) + ANSI_RESET);
+            System.out.flush();
+            return false;
+        } finally {
+            org.mail_panel.i18n.I18n.clearCurrent();
+        }
 
         // La password di root di MySQL. Quella NON si rigenera a ogni installazione: la si
         // genera la prima volta e poi e' quella, perche' se MySQL c'e' gia' root la usa gia'
@@ -762,6 +793,30 @@ public class Main {
                 false,
                 mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname,
                 roundcubeDomain, roundcubePort, roundcubeSslCert, roundcubeSslKey, roundcubeSslChain);
+
+        // Quale password conosce MySQL adesso: lo dice MySQL, non il codice d'uscita. Uno script
+        // fallito dopo la fase 3 ha gia' dato a MySQL (e a Postfix e Dovecot) la password nuova;
+        // uno fermato prima no. Il turno dei pacchetti e' ancora nostro (runInstallation).
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        try {
+            org.mail_panel.system.PendingDbPassword.Result decided =
+                    org.mail_panel.system.PendingDbPassword.settle(passwordStore, mysqlProbe, mysqlUser);
+            if (decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.NEW_ADOPTED) {
+                // Il resto della configurazione MySQL (host, porta, utente, database) in SQLite.
+                dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
+            }
+            boolean good = decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.NEW_ADOPTED
+                    || decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.OLD_KEPT
+                    || decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.COPY_ADOPTED;
+            if (!decided.message().isEmpty())
+                System.out.println((good ? ANSI_GREEN : ANSI_YELLOW) + "[MYSQL] " + decided.message() + ANSI_RESET);
+        } catch (RuntimeException e) {
+            System.out.println(ANSI_YELLOW + "[MYSQL] " + org.mail_panel.i18n.I18n.tr("server.dbPassword.settleFailed",
+                    java.util.Map.of("err", String.valueOf(e.getMessage()))) + ANSI_RESET);
+        } finally {
+            org.mail_panel.i18n.I18n.clearCurrent();
+        }
+        System.out.flush();
 
         if (success) {
             // Mark all services as installed
