@@ -352,6 +352,14 @@ public final class UpdateManager {
      */
     public static String applyLockPolicy() {
         if (Files.exists(Paths.get(MAINTENANCE_STATE)) || org.mail_panel.Main.mailDatabase == null) return "";
+        // Anche questa passa all'avvio di ogni processo: se un altro pannello sta lavorando sui
+        // pacchetti, le protezioni che ha tolto sono sue (reperto 147).
+        if (PackageQueue.takeForLocks("startup-lock-policy", I18n.tr("server.recovery.turnLockPolicy")) != null) return "";
+        try { return applyLockPolicyOnTurn(); }
+        finally { PackageQueue.release("startup-lock-policy"); }
+    }
+
+    private static String applyLockPolicyOnTurn() {
         Set<String> unlockedByHand = unlockedByHand();
         List<String> lockedPackages = new ArrayList<>(), failed = new ArrayList<>();
         JSONArray st = packagesStatus().getJSONArray("packages");
@@ -2073,6 +2081,52 @@ public final class UpdateManager {
         return runLogged(job, command, timeoutSeconds, capture, null);
     }
 
+    /** Il codice d'uscita di un comando fermato allo scadere del tempo, come timeout(1). */
+    static final int TIMED_OUT = 124;
+
+    /**
+     * Un comando che cambia i pacchetti o il sistema, che allo scadere del tempo NON si ferma.
+     *
+     * Misurato sulla VM il 06/11/2026 (reperto 147): allo scadere il log diceva «termino il
+     * processo», ma il processo terminato era la shell; pkg, suo figlio, continuava e finiva, e
+     * runLogged tornava solo alla fine di pkg con IOException invece di un codice. Il lavoro
+     * finiva in errore mentre pkg stava ancora installando. Fermarlo davvero non e' la cura:
+     * un pkg ucciso a meta' di un'installazione lascia pacchetti installati a meta'. Quindi per
+     * questi comandi il tempo diventa una soglia di avviso: si dice che sta ancora lavorando e si
+     * aspetta. Scaricare (-F) e simulare (-n) invece si possono fermare.
+     */
+    static boolean mustNotBeKilled(String command) {
+        for (String part : command.split("[;&|]")) {
+            String c = part.trim();
+            String[] w = c.split("\\s+");
+            if (w.length == 0) continue;
+            String cmd = w[0].substring(w[0].lastIndexOf('/') + 1);
+            if (cmd.equals("pkg") || cmd.equals("pkg-static")) {
+                String sub = null;
+                for (int i = 1; i < w.length; i++) if (!w[i].startsWith("-")) { sub = w[i]; break; }
+                if (sub == null || !Set.of("upgrade", "install", "delete", "remove", "autoremove", "add").contains(sub)) continue;
+                List<String> words = List.of(w);
+                if (words.contains("-n") || words.contains("--dry-run") || words.contains("-F") || words.contains("--fetch-only")) continue;
+                return true;
+            }
+            if (cmd.equals("freebsd-update") && (List.of(w).contains("install") || List.of(w).contains("rollback"))) return true;
+        }
+        return false;
+    }
+
+    /** Ferma il processo e TUTTI i suoi discendenti: prima con le buone, dopo 10 secondi con le cattive. */
+    static void stopTree(Process p) {
+        List<ProcessHandle> tree = p.descendants().toList();
+        tree.forEach(ProcessHandle::destroy);
+        p.destroy();
+        long until = System.currentTimeMillis() + 10_000;
+        while (System.currentTimeMillis() < until && (p.isAlive() || tree.stream().anyMatch(ProcessHandle::isAlive))) {
+            try { Thread.sleep(200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+        }
+        tree.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+        if (p.isAlive()) p.destroyForcibly();
+    }
+
     static int runLogged(Job job, String command, int timeoutSeconds,
                             StringBuilder capture, Map<String, String> environment) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
@@ -2088,31 +2142,63 @@ public final class UpdateManager {
 
         // Il timeout va sorvegliato da FUORI. Metterlo solo sulla waitFor finale non
         // servirebbe a niente: se il processo si blocca senza chiudere lo standard output,
-        // readLine resta in attesa per sempre e la waitFor non viene mai raggiunta. Un pkg
-        // piantato terrebbe il lock del database dei pacchetti a tempo indefinito.
+        // readLine resta in attesa per sempre e la waitFor non viene mai raggiunta.
+        boolean keepWaiting = mustNotBeKilled(command);
+        java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
         Thread guard = localizedThread(() -> {
             try {
-                if (!p.waitFor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)) {
-                    job.write(I18n.tr("server.um.runLogged.1", java.util.Map.of("timeoutSeconds", String.valueOf(timeoutSeconds))));
-                    p.destroyForcibly();
+                long waited = 0;
+                while (!p.waitFor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)) {
+                    waited += timeoutSeconds;
+                    if (keepWaiting) {
+                        job.write(I18n.tr("server.um.runLogged.pkgStillRunning", java.util.Map.of(
+                                "cmd", command.trim().split("\\s+")[0], "minutes", String.valueOf(Math.max(1, waited / 60)))));
+                        continue;
+                    }
+                    stopped.set(true);
+                    job.write(I18n.tr("server.um.runLogged.stopped", java.util.Map.of("timeoutSeconds", String.valueOf(timeoutSeconds))));
+                    stopTree(p);
+                    return;
                 }
             } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
         }, "update-watchdog");
         guard.setDaemon(true);
         guard.start();
 
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-            String l;
-            while ((l = br.readLine()) != null) {
-                job.write(l);
-                if (capture != null) capture.append(l).append('\n');
+        // L'uscita si legge in un thread a parte, e la fine la decide il PROCESSO, non l'uscita.
+        // Un processo che il comando ha lanciato e lasciato andare (una subshell con "&", un demone
+        // che non chiude lo standard output) esce dall'albero e tiene aperta la pipe: leggendola
+        // qui fino in fondo, runLogged avrebbe aspettato lui, timeout o no. Misurato sulla VM il
+        // 06/11/2026: "(sleep 71 &); sleep 63" con 3 secondi di timeout tornava dopo 71.
+        java.util.concurrent.CountDownLatch drained = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<java.io.IOException> readError = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread reader = localizedThread(() -> {
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                String l;
+                while ((l = br.readLine()) != null) {
+                    job.write(l);
+                    if (capture != null) synchronized (capture) { capture.append(l).append('\n'); }
+                }
+            } catch (java.io.IOException e) {
+                // Dopo stopTree lo stream si chiude sotto la lettura: quello che e' arrivato e' tutto.
+                if (!stopped.get()) readError.set(e);
+            } finally {
+                drained.countDown();
             }
-        }
+        }, "update-output");
+        reader.setDaemon(true);
+        reader.start();
         int code = p.waitFor();
         guard.interrupt();
-        return code;
+        if (!drained.await(stopped.get() ? 5 : OUTPUT_GRACE_SECONDS, java.util.concurrent.TimeUnit.SECONDS))
+            job.write(I18n.tr("server.um.runLogged.outputHeld"));
+        if (readError.get() != null) throw readError.get();
+        return stopped.get() ? TIMED_OUT : code;
     }
+
+    /** Quanto si aspetta l'uscita dopo la fine del comando, prima di non aspettarla piu'. */
+    static int OUTPUT_GRACE_SECONDS = 30;
 
     // ===================== stato su disco, per sopravvivere a un crash =====================
 
@@ -2131,14 +2217,65 @@ public final class UpdateManager {
     }
 
     /**
-     * Da chiamare all'avvio del pannello. Se il file di stato esiste, una manutenzione non e'
-     * arrivata in fondo: i pacchetti elencati vanno riprotetti subito. Riproteggere qualcosa di
+     * Da chiamare all'avvio del pannello. Se il file di stato esiste, un lavoro sui pacchetti non
+     * e' arrivato in fondo: i pacchetti elencati vanno riprotetti subito. Riproteggere qualcosa di
      * gia' protetto non ha effetti, quindi e' sicuro anche se in realta' era andato tutto bene.
+     *
+     * Tre cose misurate sulla VM il 06/11/2026 (reperto 147), e la risposta a ognuna:
+     *  - ogni avvio del jar passa di qui, anche il menu da console aperto mentre il pannello web
+     *    aggiorna: senza il turno fra processi riproteggeva i pacchetti del lavoro in corso e ne
+     *    cancellava l'elenco. Adesso si prende il turno, e se lo tiene un altro processo non si
+     *    tocca niente;
+     *  - se pkg sta ancora lavorando (il pannello e' stato ucciso, non pkg), "pkg lock" fallisce e il
+     *    pacchetto restava sbloccato fino al riavvio SUCCESSIVO. Adesso si riprova da soli ogni
+     *    mezzo minuto, finche' pkg non ha finito;
+     *  - l'interruzione si annotava solo nel log. Adesso c'e' un avviso (PackageRecovery) che la
+     *    pagina Aggiornamenti e il rapporto mostrano finche' qualcuno non controlla.
      */
     public static String restoreLocksAfterCrash() {
         Path f = Paths.get(MAINTENANCE_STATE);
         if (!Files.exists(f)) return "";
-        StringBuilder log = new StringBuilder();
+        String refusal = PackageQueue.takeForLocks("startup-restore", I18n.tr("server.recovery.turnAtStartup"));
+        if (refusal != null) {
+            String msg = "A list of unlocked packages is on disk, but another panel process holds the package turn "
+                    + "(a job is running there): the list is not touched. " + refusal;
+            LOGGER.info(msg);
+            return msg;
+        }
+        try {
+            JSONObject job = PackageQueue.jobRecord();
+            List<String> names = PackageRecovery.statePackages();
+            Set<String> lockedNow = lockedNames();
+            List<String> unlockedNow = new ArrayList<>();
+            for (String n : names) if (!lockedNow.contains(n) && ok("pkg info -e " + n, 15)) unlockedNow.add(n);
+            String pkgNow = PackageRecovery.pkgRunning();
+            // L'aggiornamento della JVM lascia l'elenco apposta e si fa riavviare dal suo script:
+            // se lo script ha gia' riprotetto tutto e pkg non lavora piu', non e' un'interruzione.
+            boolean expected = job.optBoolean("expectsRestart") && unlockedNow.isEmpty() && pkgNow.isEmpty();
+            if (!expected) PackageRecovery.recordInterruption(job, names, unlockedNow, pkgNow);
+            StringBuilder log = new StringBuilder();
+            boolean done = relockFromState(f, log);
+            String msg = "Interrupted maintenance detected at startup: " + log;
+            if (!done) {
+                msg += (pkgNow.isEmpty() ? "" : "pkg is still working (" + pkgNow.replace("\n", "; ") + "): ")
+                        + "retrying every " + PackageRecovery.retrySeconds + " seconds until they are protected again.\n";
+                PackageRecovery.retryInBackground(UpdateManager::retryRelock);
+            } else if (!expected) {
+                PackageRecovery.markRelocked();
+            }
+            LOGGER.warning(msg);
+            return msg;
+        } finally {
+            PackageQueue.release("startup-restore");
+        }
+    }
+
+    /**
+     * Riprotegge i pacchetti dell'elenco. Vero se alla fine sono tutti protetti (o non piu'
+     * installati) e l'elenco e' stato tolto; falso se qualcuno non si e' riprotetto, e allora
+     * l'elenco resta.
+     */
+    static boolean relockFromState(Path f, StringBuilder log) {
         int done = 0, totals = 0, skipped = 0;
         try {
             for (String line : Files.readString(f).split("\n")) {
@@ -2150,15 +2287,34 @@ public final class UpdateManager {
                 if (ok("pkg lock -y " + n, 30)) { done++; log.append("  ").append(n).append(": protected again\n"); }
                 else log.append("  ").append(n).append(": PROTECTING AGAIN FAILED\n");
             }
-            if (done + skipped == totals) { clearState(); log.append("State cleared.\n"); }
-            else log.append("Some were not protected again: the state stays, it is retried at the next start.\n");
+            log.insert(0, done + "/" + totals + " packages protected again.\n");
+            if (done + skipped == totals) { clearState(); log.append("State cleared.\n"); return true; }
+            log.append("Some were not protected again: the state stays.\n");
         } catch (Exception e) {
             log.append("Restore ERROR: ").append(e.getMessage()).append('\n');
         }
-        String msg = "Interrupted maintenance detected at startup: " + done + "/" + totals
-                + " packages protected again.\n" + log;
-        LOGGER.warning(msg);
-        return msg;
+        return false;
+    }
+
+    /**
+     * Un tentativo del ripristino in background (PackageRecovery.retryInBackground): vero quando
+     * l'elenco non c'e' piu', cioe' quando non resta niente da fare. Prende il turno a ogni
+     * tentativo, per non pestare un lavoro partito nel frattempo.
+     */
+    static boolean retryRelock() {
+        Path f = Paths.get(MAINTENANCE_STATE);
+        if (!Files.exists(f)) return true;
+        if (PackageQueue.takeForLocks("relock-retry", I18n.tr("server.recovery.turnRetry")) != null) return false;
+        try {
+            StringBuilder log = new StringBuilder();
+            if (!relockFromState(f, log)) return false;
+            PackageRecovery.markRelocked();
+            refreshLockTrace();
+            LOGGER.warning("Packages of the interrupted job protected again in the background: " + log);
+            return true;
+        } finally {
+            PackageQueue.release("relock-retry");
+        }
     }
 
     /** Insieme dei pacchetti protetti adesso, nomi senza versione. */
@@ -3035,9 +3191,33 @@ public final class UpdateManager {
         };
     }
 
+    /**
+     * Il lavoro con la sua via di ritorno (PackageWayBack): il boot environment prima, e dopo la
+     * pulizia (tolto se nessun pacchetto e' cambiato, altrimenti i piu' vecchi). Se il boot
+     * environment non si crea su un sistema che li ha, il lavoro finisce in errore senza partire.
+     */
+    static Runnable withWayBack(Job j, String kind, Runnable work) {
+        return () -> {
+            PackageWayBack.Prepared wb;
+            try {
+                wb = PackageWayBack.before(j::write, kind);
+            } catch (IllegalStateException e) {
+                j.status = "error";
+                j.errorMessage = e.getMessage();
+                j.write(e.getMessage());
+                return;
+            }
+            j.write("");
+            try { work.run(); }
+            finally { PackageWayBack.after(j::write, wb); }
+        };
+    }
+
     private static JSONObject startOnTurn(String id, Job j, String description, String threadName, Runnable work) {
         String refusal = PackageQueue.take(id, description);
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
+        // Prima di tutto la via di ritorno: un boot environment, o il lavoro non tocca niente.
+        work = withWayBack(j, threadName, work);
         // Ogni lavoro del turno puo' aver tolto e rimesso protezioni, o aggiornato pacchetti
         // protetti (che cosi' perdono l'annotazione): la traccia si rimette in pari alla fine.
         work = withLockTrace(work);
@@ -4798,7 +4978,7 @@ public final class UpdateManager {
             // avvio restoreLocksAfterCrash() li riprotegge da solo. Se l'elenco non si scrive,
             // lo script non parte. Finche' l'elenco c'e', nessun altro lavoro sui pacchetti parte:
             // lo script lavora fuori dal pannello, e il turno del pannello non lo vede.
-            String stateError = PackageQueue.writeState(java.util.List.of(pkg));
+            String stateError = PackageQueue.writeStateForRestart(java.util.List.of(pkg));
             if (stateError != null)
                 return new JSONObject().put("success", false)
                         .put("error", I18n.tr("server.um.startJavaUpdateNow.5", java.util.Map.of("stateError", String.valueOf(stateError))));
@@ -7392,8 +7572,21 @@ public final class UpdateManager {
         String id = "remove-" + System.nanoTime();
         String refusal = PackageQueue.take(id, I18n.tr("server.um.removePackage.1", java.util.Map.of("name", String.valueOf(name))));
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
-        try { return removePackageNow(name); }
-        finally { refreshLockTrace(); PackageQueue.release(id); }
+        StringBuilder wayBack = new StringBuilder();
+        PackageWayBack.Prepared wb;
+        try { wb = PackageWayBack.before(l -> wayBack.append(l).append('\n'), "remove-" + name); }
+        catch (IllegalStateException e) {
+            PackageQueue.release(id);
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+        JSONObject r = null;
+        try { return r = removePackageNow(name); }
+        finally {
+            PackageWayBack.after(l -> wayBack.append(l).append('\n'), wb);
+            if (r != null) r.put("log", wayBack + r.optString("log", ""));
+            refreshLockTrace();
+            PackageQueue.release(id);
+        }
     }
 
     private static JSONObject removePackageNow(String name) {
@@ -7846,6 +8039,40 @@ public final class UpdateManager {
                     .put("title", I18n.tr("mail.report.title.servicesDown", java.util.Map.of("list", String.join(", ", jsonArrayToList(down)))))
                     .put("what", I18n.tr("server.um.x.svcDown", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(down))))))
                     .put("where", I18n.tr("server.um.reportData.11")));
+
+        // --- un lavoro sui pacchetti interrotto, e i pacchetti dello stack rimasti senza protezione ---
+        //
+        // Il rapporto e' l'unico canale che raggiunge chi non apre il pannello. Misurato sulla VM
+        // il 06/11/2026 (reperto 147): con un pacchetto dello stack sbloccato e l'elenco di un
+        // lavoro interrotto su disco, le cose da fare non ne parlavano.
+        List<String> stillUnprotected = PackageRecovery.statePackages();
+        if (PackageQueue.statePresent())
+            toDo.put(new JSONObject().put("urgency", 0)
+                    .put("title", I18n.tr("server.recovery.unprotectedTitle"))
+                    .put("what", I18n.tr("server.recovery.unprotected", java.util.Map.of(
+                            "n", String.valueOf(stillUnprotected.size()),
+                            "list", String.join(" ", stillUnprotected))))
+                    .put("where", I18n.tr("server.um.x.updatesPage")));
+        JSONObject interrupted = PackageRecovery.notice();
+        if (!interrupted.isEmpty())
+            toDo.put(new JSONObject().put("urgency", 1)
+                    .put("title", I18n.tr("server.recovery.title"))
+                    .put("what", PackageRecovery.text(interrupted))
+                    .put("where", I18n.tr("server.um.x.updatesPage")));
+        Set<String> byHand = unlockedByHand();
+        List<String> loose = new ArrayList<>();
+        JSONArray stack = pk.optJSONArray("packages");
+        for (int i = 0; stack != null && i < stack.length(); i++) {
+            JSONObject x = stack.getJSONObject(i);
+            String n = x.optString("name");
+            if (!x.optBoolean("locked") && !byHand.contains(n) && !stillUnprotected.contains(n)) loose.add(n);
+        }
+        if (!loose.isEmpty())
+            toDo.put(new JSONObject().put("urgency", 1)
+                    .put("title", I18n.tr("server.recovery.looseTitle"))
+                    .put("what", I18n.tr("server.recovery.loose", java.util.Map.of(
+                            "n", String.valueOf(loose.size()), "list", String.join(" ", loose))))
+                    .put("where", I18n.tr("server.um.x.updatesPage")));
 
         // --- spazio ---
         String df = sh("df -h / 2>/dev/null | tail -1", 30);
@@ -9911,7 +10138,12 @@ public final class UpdateManager {
                 // delle versioni di prima), e freebsd-update usa <versione>_<data>. Saperlo cambia
                 // cosa significa tenerlo.
                 String origin, explain;
-                if (panelBootEnvironment(name)) {
+                if (PackageWayBack.OWN.matcher(name).matches()) {
+                    // La via di ritorno di un lavoro sui pacchetti (PackageWayBack): senza questo
+                    // ramo cadeva in "origine non riconosciuta, guardalo prima di toccarlo".
+                    origin = I18n.tr("server.um.bootEnvironments.packagesOrigin");
+                    explain = I18n.tr("server.um.bootEnvironments.packagesExplain");
+                } else if (panelBootEnvironment(name)) {
                     origin = I18n.tr("server.um.bootEnvironments.2");
                     explain = I18n.tr("server.um.bootEnvironments.3");
                 } else if (name.matches("^[0-9]+\\.[0-9].*_[0-9]{4}-[0-9]{2}-[0-9]{2}.*")) {

@@ -11857,6 +11857,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         <div class="content-container">
             <h2><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i>{{t:up.title}}</h2>
             <p class="text-muted">{{t:up.intro.html}}</p>
+            <div id="upd-interrupted" aria-live="polite"></div>
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -12444,6 +12445,40 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         document.addEventListener('DOMContentLoaded', () => { if (document.getElementById('pk-body')) pkOverview(); });
+
+        // Un lavoro sui pacchetti che non e' arrivato in fondo (pannello ucciso, riavvio, corrente
+        // mancata): l'avviso sta in cima finche' un amministratore non dice di aver controllato.
+        async function updInterrupted() {
+            const el = document.getElementById('upd-interrupted');
+            if (!el) return;
+            const r = await updApi('interruption_status');
+            if (!r || !r.success) { el.innerHTML = ''; return; }
+            let h = '';
+            if (r.stillUnprotected && r.stillUnprotected.length) {
+                h += '<div class="alert alert-danger" role="alert"><strong>' + escHtml(t('up.stillUnprotectedTitle')) + '</strong><br>'
+                   + escHtml(t('up.stillUnprotected', { list: r.stillUnprotected.join(' ') }))
+                   + (r.retrying ? ' ' + escHtml(t('up.retrying')) : '') + '</div>';
+            }
+            if (r.notice) {
+                h += '<div class="alert alert-warning" role="alert"><strong>' + escHtml(t('up.interruptedTitle')) + '</strong>'
+                   + '<p class="mb-2">' + escHtml(r.notice.text) + '</p>'
+                   + '<button type="button" class="btn btn-sm btn-outline-dark" onclick="updInterruptedDismiss()">'
+                   + '<i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.interruptedDismiss')) + '</button></div>';
+            }
+            el.innerHTML = h;
+        }
+
+        async function updInterruptedDismiss() {
+            const el = document.getElementById('upd-interrupted');
+            const r = await updApi('interruption_dismiss');
+            if (!r.success) {
+                el.insertAdjacentHTML('beforeend', '<div class="alert alert-danger py-2 small" role="alert">' + escHtml(r.error || '') + '</div>');
+                return;
+            }
+            el.innerHTML = '<div class="alert alert-success py-2 small" role="status">' + escHtml(r.note || '') + '</div>';
+        }
+
+        document.addEventListener('DOMContentLoaded', updInterrupted);
         """;
     }
 
@@ -12456,7 +12491,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // sta qui, in un punto solo, invece che dentro ogni funzione.
         async function updApi(action, extra) {
             if (updBusy) return { success: false, error: t('up.busy') };
-            const slow = action !== 'job_status';
+            const slow = action !== 'job_status' && action !== 'interruption_status';
             if (slow) updBusy = true;
             try {
                 const body = Object.assign({

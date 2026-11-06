@@ -76,6 +76,7 @@ public class PostfixMapsJobsE2ETest {
             return;
         }
         String packagesBefore = sh("pkg query %n-%v | sort | sha256");
+        String bootEnvironmentsBefore = sh("bectl list -H 2>/dev/null | cut -f1 | sort");
         Set<String> lockedBefore = locked();
         String transportSet = sh("postconf -n transport_maps").trim();
         String verifySet = sh("postconf -n address_verify_map").trim();
@@ -105,6 +106,7 @@ public class PostfixMapsJobsE2ETest {
             }
         } finally {
             removeFake();
+            removeWayBacks(bootEnvironmentsBefore);
             sh("rm -f " + REPO_CONF + "; rm -rf /var/db/pkg/repos/" + REPO + "; rm -f /var/cache/pkg/" + FAKE + "*; rm -rf " + WORK);
             if (createdReposDir) sh("rmdir " + Path.of(REPO_CONF).getParent());
             sh("rmdir " + SHADOW + " 2>/dev/null");
@@ -113,6 +115,8 @@ public class PostfixMapsJobsE2ETest {
             sh("rm -f " + SOURCE + " " + SOURCE + ".lmdb " + CACHE + ".lmdb " + CACHE + ".lmdb-lock");
             sh("postfix reload");
             UpdateManager.refreshLockTrace();
+            check("alla fine: gli stessi boot environment di prima",
+                    sh("bectl list -H 2>/dev/null | cut -f1 | sort").equals(bootEnvironmentsBefore));
             check("alla fine: gli stessi pacchetti di prima, alle stesse versioni",
                     sh("pkg query %n-%v | sort | sha256").equals(packagesBefore));
             check("alla fine: gli stessi pacchetti protetti di prima", locked().equals(lockedBefore));
@@ -400,5 +404,14 @@ public class PostfixMapsJobsE2ETest {
     static void check(String name, boolean ok) {
         System.out.println((ok ? "  ok   " : "  NO   ") + name);
         if (!ok) failures++;
+    }
+
+    /**
+     * I boot environment che i lavori della prova hanno creato prima di toccare i pacchetti
+     * (PackageWayBack, dal 06/11/2026): si tolgono, come si rimette tutto il resto.
+     */
+    private static void removeWayBacks(String before) {
+        for (String n : sh("bectl list -H 2>/dev/null | cut -f1").split("\n"))
+            if (n.trim().startsWith(PackageWayBack.PREFIX) && !before.contains(n.trim())) PackageWayBack.destroy(n.trim());
     }
 }

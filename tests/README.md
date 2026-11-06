@@ -85,6 +85,20 @@ minuto: un indirizzo che manca si aspetta sessanta secondi prima di dirlo perso.
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallScriptDriftTest
 
+`UpdaterRobustnessE2ETest` prova i bordi dell'aggiornamento dei pacchetti con lavori veri su
+pacchetti finti (`nginx-robust-probe`, `robust-probe-other`) da un catalogo `file://`, coi
+repository veri spenti: la via di ritorno (M1), il turno fra processi (M2, M2b), un pkg esterno
+che tiene il lock (M3), il pannello ucciso a meta' di pkg (M4), il timeout (M5), il rapporto
+dopo un lavoro interrotto (M6). Crea e toglie boot environment `packages-before-*`. La M7 (la
+macchina spenta di colpo durante pkg) e' in due tempi: `-Dmeasure=m7`, poi `reboot -nq` quando
+stampa «M7 IN PKG», poi, a pannello ripartito, il modo `m7-after`. Solo su una macchina di prova.
+
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdaterRobustnessE2ETest
+
+Le quattro prove che fanno lavori veri (questa, `InstallScriptDriftTest`,
+`PackageReplacementE2ETest`, `PostfixMapsJobsE2ETest`) alla fine tolgono i boot environment che
+i loro lavori hanno creato.
+
 `HeldUpdatesReportTest` e `AuditReportTest` hanno bisogno del database delle vulnerabilita'
 (`pkg audit -F`): senza, dicono quali prove hanno saltato e perche'.
 
