@@ -326,7 +326,7 @@ public class LoginSecurityTest {
         check("an address that is nobody's: no email", MAIL.isEmpty());
         LoginCodes.requestEmailLogin("Admin@Example.org", "198.51.100.1");
         check("the admin's address (any case): one email, to the stored address", MAIL.size() == 1
-                && MAIL.get(0)[0].equals("admin@example.org") && MAIL.get(0)[1].equals("Mail panel sign-in code"));
+                && MAIL.get(0)[0].equals("admin@example.org") && MAIL.get(0)[1].matches("\\[[a-z0-9.-]+\\] Your sign-in code for the mail control panel"));
         String code = lastCode();
         check("a 6-digit code, and the database holds only its HMAC", code != null
                 && one("SELECT COUNT(*) FROM login_code_email WHERE code_hash LIKE ?", "%" + code + "%").equals("0")
@@ -395,7 +395,7 @@ public class LoginSecurityTest {
         LoginCodes.resetLimits();
         admin = AuthStore.adminById(admin.id()).orElseThrow();     // with the email set above
         check("the step-up code goes to the admin's own address", LoginCodes.requestStepUp(admin, "198.51.100.80")
-                && MAIL.get(MAIL.size() - 1)[0].equals("admin@example.org") && MAIL.get(MAIL.size() - 1)[1].equals("Confirm an operation in the mail panel"));
+                && MAIL.get(MAIL.size() - 1)[0].equals("admin@example.org") && MAIL.get(MAIL.size() - 1)[1].matches("\\[[a-z0-9.-]+\\] Code to confirm an operation in the mail control panel"));
         String su = lastCode();
         AuthStore.Admin thirdAdmin = AuthStore.adminById(third.id()).orElseThrow();
         check("another admin cannot use it", !LoginCodes.verifyStepUp(thirdAdmin, su));

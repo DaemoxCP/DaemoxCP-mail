@@ -10,7 +10,6 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Base64;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -41,10 +40,6 @@ import java.util.concurrent.TimeUnit;
  */
 public final class PeriodicReport {
 
-    /** Data e ora nella lingua del rapporto ("alle" / "at"). */
-    private static DateTimeFormatter data() {
-        return DateTimeFormatter.ofPattern(I18n.tr("server.rp.dateTime"));
-    }
     private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     private final ScheduledExecutorService scheduler;
@@ -221,27 +216,41 @@ public final class PeriodicReport {
                 : I18n.tr("server.rp.savedOff"));
     }
 
-    /** Il testo che verrebbe inviato, senza inviarlo. */
+    /** Il messaggio che verrebbe inviato, senza inviarlo: mittente, oggetto e testo. */
     public static JSONObject preview() {
         try {
             // L'anteprima non tocca la rete: la scheda promette una lettura, e deve restarlo.
             JSONObject data = UpdateManager.reportData(false);
+            JSONArray toDo = data.optJSONArray("toDo");
+            if (toDo == null) toDo = new JSONArray();
             JSONObject cert = certificateWarning();
-            if (cert != null) {
-                JSONArray df = data.optJSONArray("toDo");
-                if (df == null) df = new JSONArray();
-                df.put(cert);
-                data.put("toDo", df);
-            }
-            String host = Shell.runShell(java.time.Duration.ofSeconds(10), "hostname").outputTrim();
+            if (cert != null) toDo.put(cert);
+            data.put("toDo", sortedByUrgency(toDo)).put("certificate", certificateState());
+            String server = PanelMail.serverName();
             String sender = setting("report_from", "no-reply@" + panelDomain());
-            String dest = setting("report_to", I18n.tr("server.rp.noRecipient"));
+            String recipient = setting("report_to", "");
+            String lang = I18n.current();
+            PanelMail.Message m = ReportMail.message(new ReportMail.Context(lang, server,
+                    recipient.isEmpty() ? I18n.tr("server.rp.noRecipient") : recipient, true,
+                    normalizedFrequency(setting("report_freq", "weekly")), java.time.ZonedDateTime.now()), data);
             return new JSONObject().put("success", true)
-                    .put("text", compose(data, host, sender, dest))
-                    .put("thingsToDo", data.optJSONArray("toDo") == null ? 0 : data.getJSONArray("toDo").length());
+                    .put("from", PanelMail.address(PanelMail.senderName(lang, server), sender))
+                    .put("subject", m.subject())
+                    .put("text", m.text())
+                    .put("thingsToDo", data.getJSONArray("toDo").length());
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", I18n.tr("server.rp.composeFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
+    }
+
+    /** Le cose da fare, dalla piu' urgente. A parita', resta l'ordine in cui sono arrivate. */
+    static JSONArray sortedByUrgency(JSONArray a) {
+        java.util.List<JSONObject> l = new java.util.ArrayList<>();
+        for (int i = 0; i < a.length(); i++) l.add(a.getJSONObject(i));
+        l.sort(java.util.Comparator.comparingInt(x -> x.optInt("urgency", 9)));
+        JSONArray sorted = new JSONArray();
+        for (JSONObject x : l) sorted.put(x);
+        return sorted;
     }
 
     // ===================== l'identita' del pannello =====================
@@ -409,7 +418,7 @@ public final class PeriodicReport {
             // Fuori da ogni richiesta: il rapporto esce nella lingua di chi l'ha configurato
             I18n.setCurrent(setting("report_lang", "it"));
             JSONObject outcome;
-            try { outcome = sendNow(a); }
+            try { outcome = sendNow(a, true); }
             finally { I18n.clearCurrent(); }
             System.out.println("[Report] automatic send: "
                     + (outcome.optBoolean("success") ? "succeeded" : "FAILED - " + outcome.optString("error")));
@@ -477,7 +486,15 @@ public final class PeriodicReport {
 
     // ===================== invio =====================
 
-    public static JSONObject sendNow(String recipient) {
+    /** L'invio chiesto dal pannello ("Invia una prova adesso"). */
+    public static JSONObject sendNow(String recipient) { return sendNow(recipient, false); }
+
+    /**
+     * Raccoglie i dati, compone il rapporto e lo consegna. "automatic" dice solo come si
+     * presenta il messaggio (rapporto settimanale o inviato su richiesta): i dati e l'invio
+     * sono gli stessi.
+     */
+    public static JSONObject sendNow(String recipient, boolean automatic) {
         JSONObject r = new JSONObject().put("recipient", recipient);
         if (!org.mail_panel.webserver.SecurityUtils.isValidEmail(recipient))
             return r.put("success", false).put("error", I18n.tr("server.rp.badRecipientLower"));
@@ -500,29 +517,19 @@ public final class PeriodicReport {
         // essere scoperte per caso mentre si sta facendo altro. E' il motivo per cui la
         // sorveglianza esiste: un avviso che nessuno va a cercare non e' un avviso.
         for (JSONObject x : watchWarnings()) df.put(x);
+        data.put("toDo", sortedByUrgency(df)).put("certificate", certificateState());
 
-        java.util.List<JSONObject> l = new java.util.ArrayList<>();
-        for (int i = 0; i < df.length(); i++) l.add(df.getJSONObject(i));
-        l.sort(java.util.Comparator.comparingInt(x -> x.optInt("urgency", 9)));
-        JSONArray sorted = new JSONArray();
-        for (JSONObject x : l) sorted.put(x);
-        data.put("toDo", sorted);
-
-        String host = Shell.runShell(java.time.Duration.ofSeconds(10), "hostname").outputTrim();
-        int howMany = data.optJSONArray("toDo") == null ? 0 : data.getJSONArray("toDo").length();
-        String subject = "[" + (host.isEmpty() ? I18n.tr("server.rp.mailServer") : host) + "] "
-                + (howMany == 0 ? I18n.tr("server.rp.allGood")
-                   : howMany == 1 ? I18n.tr("server.rp.todo.one")
-                   : I18n.tr("server.rp.todo.other", java.util.Map.of("n", String.valueOf(howMany))))
-                + " - " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-        String body = compose(data, host, sender, recipient);
+        String server = PanelMail.serverName();
+        int howMany = data.getJSONArray("toDo").length();
+        PanelMail.Message message = ReportMail.message(new ReportMail.Context(I18n.current(), server, recipient,
+                automatic, normalizedFrequency(setting("report_freq", "weekly")), java.time.ZonedDateTime.now()), data);
 
         // Prima di provare, non dopo: se il pannello muore durante l'invio, al riavvio questa
         // data c'e' gia' e la pausa dopo un fallimento vale lo stesso.
         storeSetting("report_last_try", LocalDateTime.now().format(ISO));
 
-        JSONObject outcome = delivery(sender, recipient, subject, body);
-        r.put("subject", subject).put("body", body).put("sender", sender)
+        JSONObject outcome = delivery(sender, recipient, message, server, "report");
+        r.put("subject", message.subject()).put("body", message.text()).put("sender", sender)
          .put("thingsToDo", howMany).put("output", outcome.optString("output", ""));
         if (outcome.optBoolean("success")) {
             String now = LocalDateTime.now().format(ISO);
@@ -537,44 +544,32 @@ public final class PeriodicReport {
     }
 
     /**
-     * Un messaggio del pannello a un amministratore (il codice di accesso), con lo stesso mittente
-     * e lo stesso sendmail di Postfix del rapporto. Restituisce solo se e' partito: il corpo
-     * contiene un codice monouso e non deve finire in nessun log, quindi l'uscita di sendmail e le
-     * righe del log della posta qui non si restituiscono.
+     * Un messaggio del pannello a un amministratore (i codici), con lo stesso mittente e lo
+     * stesso sendmail di Postfix del rapporto. Restituisce solo se e' partito: il corpo contiene
+     * un codice monouso e non deve finire in nessun log, quindi l'uscita di sendmail e le righe
+     * del log della posta qui non si restituiscono.
      */
-    public static boolean sendPanelMessage(String recipient, String subject, String body) {
+    public static boolean sendPanelMessage(String recipient, PanelMail.Message message) {
         String sender = setting("report_from", "no-reply@" + panelDomain());
         if (!org.mail_panel.webserver.SecurityUtils.isValidEmail(sender)
                 || !org.mail_panel.webserver.SecurityUtils.isValidEmail(recipient)) return false;
-        return delivery(sender, recipient, subject, body).optBoolean("success", false);
+        return delivery(sender, recipient, message, PanelMail.serverName(), "code").optBoolean("success", false);
     }
 
     /**
      * Consegna a Postfix con il suo sendmail(1), poi segue il messaggio nel log della posta.
-     * L'oggetto viene codificato secondo RFC 2047 perche' un'intestazione non puo' contenere
-     * caratteri non ASCII, e il corpo dichiara UTF-8: senza, le lettere accentate
-     * arriverebbero storte. Il Message-ID lo sceglie il pannello: e' il filo che lega il
-     * messaggio alle righe che Postfix scrive nel log.
+     * La busta (intestazioni, testo e HTML, codifiche) la fa PanelMail. Il Message-ID lo
+     * sceglie il pannello: e' il filo che lega il messaggio alle righe che Postfix scrive nel log.
      */
-    private static JSONObject delivery(String from, String to, String subject, String body) {
+    private static JSONObject delivery(String from, String to, PanelMail.Message m, String server, String kind) {
         JSONObject r = new JSONObject();
         JSONObject chosen = postfixSendmail();
         if (!chosen.optBoolean("success")) return r.put("success", false).put("error", chosen.optString("error"));
         String sendmail = chosen.getString("path");
 
-        String messageId = newMessageId(from);
-        StringBuilder message = new StringBuilder();
-        message.append("From: ").append(I18n.tr("server.rp.fromName")).append(" <").append(from).append(">\r\n")
-                 .append("To: ").append(to).append("\r\n")
-                 .append("Subject: ").append(subject2047(subject)).append("\r\n")
-                 .append("Message-ID: <").append(messageId).append(">\r\n")
-                 .append("MIME-Version: 1.0\r\n")
-                 .append("Content-Type: text/plain; charset=UTF-8\r\n")
-                 .append("Content-Transfer-Encoding: 8bit\r\n")
-                 .append("Auto-Submitted: auto-generated\r\n")   // non e' posta scritta da una persona
-                 .append("X-Mailer: FreeBSD Mail Panel\r\n")
-                 .append("\r\n")
-                 .append(body.replace("\n", "\r\n"));
+        String messageId = newMessageId(kind, from);
+        String message = PanelMail.compose(PanelMail.senderName(m.lang(), server), from, to, m, messageId,
+                java.time.ZonedDateTime.now());
         StringBuilder output = new StringBuilder()
                 .append("* ").append(I18n.tr("server.rp.postfixSendmail", java.util.Map.of("p", String.valueOf(sendmail)))).append('\n')
                 .append("* Message-ID: <").append(messageId).append(">\n");
@@ -587,7 +582,7 @@ public final class PeriodicReport {
             pb.redirectErrorStream(true);
             Process p = pb.start();
             try (OutputStream os = p.getOutputStream()) {
-                os.write(message.toString().getBytes(StandardCharsets.UTF_8));
+                os.write(message.getBytes(StandardCharsets.UTF_8));
             }
             String said = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
             if (!said.isEmpty()) output.append(said).append('\n');
@@ -684,11 +679,11 @@ public final class PeriodicReport {
         return null;
     }
 
-    /** Un Message-ID che nessun altro messaggio ha: ora UTC, 16 byte casuali, dominio del mittente. */
-    static String newMessageId(String sender) {
-        byte[] randomBytes = new byte[16];
+    /** Un Message-ID che nessun altro messaggio ha: tipo, ora UTC, 12 byte casuali, dominio del mittente. */
+    static String newMessageId(String kind, String sender) {
+        byte[] randomBytes = new byte[12];
         new java.security.SecureRandom().nextBytes(randomBytes);
-        return "report." + LocalDateTime.now(java.time.ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+        return kind + "." + LocalDateTime.now(java.time.ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
                 + "." + java.util.HexFormat.of().formatHex(randomBytes)
                 + "@" + sender.substring(sender.indexOf('@') + 1);
     }
@@ -940,16 +935,7 @@ public final class PeriodicReport {
         return s.length() <= 300 ? s : s.substring(0, 297) + "...";
     }
 
-    /** Oggetto con lettere accentate: RFC 2047, altrimenti l'intestazione non e' valida. */
-    private static String subject2047(String s) {
-        boolean onlyAscii = s.chars().allMatch(c -> c >= 32 && c < 127);
-        if (onlyAscii) return s;
-        return "=?UTF-8?B?" + Base64.getEncoder().encodeToString(s.getBytes(StandardCharsets.UTF_8)) + "?=";
-    }
-
-    // ===================== il testo =====================
-
-    private static String line(String c, int n) { return String.valueOf(c).repeat(Math.max(0, n)); }
+    // ===================== le voci che aggiunge il rapporto =====================
 
     /**
      * Le voci che arrivano dalla sorveglianza: specifiche sostituite o aggiornate, e versioni
@@ -970,19 +956,23 @@ public final class PeriodicReport {
                 int g = o.optInt("severity", 0);
                 if (g == 2)
                     outside.add(new JSONObject().put("urgency", 1)
+                            .put("title", I18n.tr("mail.report.title.standardChanged"))
                             .put("what", o.optString("comment"))
                             .put("where", I18n.tr("server.rp.whereSurveillance")));
                 else if (g == 1)
                     outside.add(new JSONObject().put("urgency", 3)
+                            .put("title", I18n.tr("mail.report.title.standardChanged"))
                             .put("what", o.optString("comment"))
                             .put("where", I18n.tr("server.rp.whereSurveillance")));
             }
             if (c.optInt("unread", 0) > 0)
                 outside.add(new JSONObject().put("urgency", 3)
+                        .put("title", I18n.tr("mail.report.title.watchIncomplete"))
                         .put("what", I18n.tr("server.rp.rfcUnread", java.util.Map.of("n", String.valueOf(c.optInt("unread")))))
                         .put("where", I18n.tr("server.rp.whereSurveillance")));
         } catch (Exception e) {
             outside.add(new JSONObject().put("urgency", 3)
+                    .put("title", I18n.tr("mail.report.title.watchIncomplete"))
                     .put("what", I18n.tr("server.rp.survFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))))
                     .put("where", I18n.tr("server.rp.whereSurveillance")));
         }
@@ -996,6 +986,7 @@ public final class PeriodicReport {
                 int u = x.optInt("urgency", 0);
                 if (u == 1 || u == 2)
                     outside.add(new JSONObject().put("urgency", u == 2 ? 1 : 2)
+                            .put("title", I18n.tr("mail.report.title.openssl", java.util.Map.of("version", x.optString("version"))))
                             .put("what", "OpenSSL " + x.optString("version") + " ("
                                     + x.optString("type") + "): " + x.optString("comment"))
                             .put("where", I18n.tr("server.rp.whereSurveillance")));
@@ -1003,153 +994,6 @@ public final class PeriodicReport {
         } catch (Exception ignore) {}
 
         return outside;
-    }
-
-    static String compose(JSONObject d, String host, String sender, String recipient) {
-        StringBuilder t = new StringBuilder();
-        JSONObject os = d.optJSONObject("system");
-        JSONArray toDo = d.optJSONArray("toDo");
-
-        t.append(I18n.tr("server.rp.c.title")).append("\n")
-         .append(line("=", 60)).append("\n")
-         .append(I18n.tr("server.rp.c.server", java.util.Map.of("v", String.valueOf(host.isEmpty() ? "-" : host)))).append("\n")
-         .append(I18n.tr("server.rp.c.sent", java.util.Map.of("v", String.valueOf(LocalDateTime.now().format(data()))))).append("\n")
-         .append(I18n.tr("server.rp.c.from", java.util.Map.of("v", String.valueOf(sender)))).append("\n")
-         .append(I18n.tr("server.rp.c.to", java.util.Map.of("v", String.valueOf(recipient)))).append("\n\n");
-
-        // --- cio' per cui il rapporto esiste ---
-        t.append(I18n.tr("server.rp.c.todo")).append("\n").append(line("-", 60)).append("\n");
-        if (toDo == null || toDo.length() == 0) {
-            t.append(I18n.tr("server.rp.c.nothing")).append("\n\n");
-        } else {
-            for (int i = 0; i < toDo.length(); i++) {
-                JSONObject x = toDo.getJSONObject(i);
-                int u = x.optInt("urgency", 9);
-                String label = u == 0 ? I18n.tr("server.rp.c.now") : u == 1 ? I18n.tr("server.rp.c.urgent")
-                        : u == 2 ? I18n.tr("server.rp.c.todoTag") : I18n.tr("server.rp.c.whenYouCan");
-                t.append(label).append(" ").append(x.optString("what")).append("\n")
-                 .append("           ").append(I18n.tr("server.rp.c.where", java.util.Map.of("v", String.valueOf(x.optString("where"))))).append("\n\n");
-            }
-        }
-
-        // --- sistema ---
-        t.append(I18n.tr("server.rp.c.system")).append("\n").append(line("-", 60)).append("\n");
-        if (os != null) {
-            t.append(I18n.tr("server.rp.c.fbInstalled", java.util.Map.of("v", String.valueOf(os.optString("installedKernel", "?"))))).append("\n")
-             .append(I18n.tr("server.rp.c.kernelRunning", java.util.Map.of("v", String.valueOf(os.optString("runningKernel", "?"))))).append("\n")
-             .append(I18n.tr("server.rp.c.userland", java.util.Map.of("v", String.valueOf(os.optString("userland", "?"))))).append("\n")
-             .append(I18n.tr("server.rp.c.arch", java.util.Map.of("v", String.valueOf(os.optString("architecture", "?"))))).append("\n")
-             .append(I18n.tr("server.rp.c.eol", java.util.Map.of("v", String.valueOf(os.optString("endOfSupport", "?")))));
-            long g = d.optLong("daysToEndOfSupport", -1);
-            if (g >= 0) t.append("  ").append(I18n.tr("server.rp.c.inDays", java.util.Map.of("n", String.valueOf(g))));
-            t.append("\n");
-        }
-        JSONObject branch = d.optJSONObject("branch");
-        if (branch != null) t.append(I18n.tr("server.rp.c.branch", java.util.Map.of("v", String.valueOf(branch.optString("branch", "?"))))).append("\n");
-        t.append("\n");
-
-        // --- pacchetti ---
-        t.append(I18n.tr("server.rp.c.packages")).append("\n").append(line("-", 60)).append("\n")
-         .append(I18n.tr("server.rp.c.pkgCounts", java.util.Map.of("tot", String.valueOf(d.optInt("totalPackages")), "locked", String.valueOf(d.optInt("lockedPackageCount")), "updatable", String.valueOf(d.optInt("packagesWithUpdate"))))).append("\n");
-        JSONArray update = d.optJSONArray("toUpdate");
-        if (update != null && update.length() > 0) {
-            for (int i = 0; i < update.length(); i++) t.append("  - ").append(update.getString(i)).append("\n");
-        }
-        t.append("\n");
-
-        // --- vulnerabilita' ---
-        t.append(I18n.tr("server.rp.c.vulns")).append("\n").append(line("-", 60)).append("\n");
-
-        // Di che dati stiamo parlando. I numeri qui sotto escono dal database delle
-        // vulnerabilita' e dal catalogo dei pacchetti GIA' presenti sul server: dire quanto
-        // sono vecchi e' l'unica cosa che distingue una misura da un numero che sembra una
-        // misura. L'anteprima non scarica niente, l'invio automatico si.
-        long gv = d.optLong("vulnDbDays", -1), gc = d.optLong("catalogDays", -1);
-        t.append(I18n.tr("server.rp.c.vulnDb")).append(" ")
-         .append(gv < 0 ? I18n.tr("server.rp.c.ageUnknown") : (gv == 0 ? I18n.tr("server.rp.c.updatedToday") : I18n.tr("server.rp.c.daysAgo", java.util.Map.of("n", String.valueOf(gv)))))
-         .append(" ").append(d.optBoolean("vulnDbUpdatedNow", false) ? I18n.tr("server.rp.c.downloadedNow") : I18n.tr("server.rp.c.notDownloadedNow"))
-         // Del catalogo si dice quando e' stato PUBBLICATO sul server di pkg: e' la data che pkg
-         // da' al file (vedi PkgCatalog), e non cambia se il server non ha niente di nuovo.
-         .append(". ").append(I18n.tr("server.rp.c.catalog")).append(" ")
-         .append(gc < 0 ? I18n.tr("server.rp.c.catalogUnknown")
-                        : I18n.tr("server.rp.c.published", java.util.Map.of("howMuch", String.valueOf(PkgCatalog.howMuch(gc)), "data", String.valueOf(d.optString("catalogDate")))))
-         .append(d.optBoolean("refreshedCatalog", false) ? ", " + I18n.tr("server.rp.c.checkedNow") : "")
-         .append(".\n");
-        // Piu' repository, uno senza catalogo, o nessuna data: la frase intera, che dice quale e perche'.
-        JSONObject cat = d.optJSONObject("catalog");
-        if (cat != null) {
-            int found = 0;
-            JSONArray rep = cat.optJSONArray("repository");
-            for (int i = 0; rep != null && i < rep.length(); i++)
-                if (rep.getJSONObject(i).optBoolean("found")) found++;
-            JSONArray missing = cat.optJSONArray("missing");
-            if (gc < 0 || found > 1 || (missing != null && missing.length() > 0))
-                t.append(cat.optString("note")).append("\n");
-        }
-
-        // Se il conto non torna, lo si dice PRIMA dell'elenco: un elenco parziale letto come
-        // completo e' peggio di nessun elenco, e chi legge deve saperlo prima di rassicurarsi.
-        String doesNotMatch = d.optString("vulnCountMismatch", "");
-        if (!doesNotMatch.isEmpty()) t.append(I18n.tr("server.rp.c.warning", java.util.Map.of("v", String.valueOf(doesNotMatch)))).append("\n");
-        JSONArray nc = d.optJSONArray("vulnNotUnderstood");
-        if (nc != null && nc.length() > 0) {
-            t.append(I18n.tr("server.rp.c.unparsed")).append("\n");
-            for (int i = 0; i < nc.length(); i++) t.append("  ? ").append(nc.getString(i)).append("\n");
-        }
-
-        JSONArray cr = d.optJSONArray("vulnWithRemedy"), sr = d.optJSONArray("vulnWithoutRemedy");
-        if ((cr == null || cr.length() == 0) && (sr == null || sr.length() == 0)) {
-            t.append(I18n.tr("server.rp.c.noneAudit")).append("\n");
-        } else {
-            if (cr != null && cr.length() > 0) {
-                t.append(I18n.tr("server.rp.c.withFix")).append("\n");
-                for (int i = 0; i < cr.length(); i++) t.append("  - ").append(cr.getString(i)).append("\n");
-            }
-            if (sr != null && sr.length() > 0) {
-                t.append(I18n.tr("server.rp.c.withoutFix")).append("\n");
-                for (int i = 0; i < sr.length(); i++) t.append("  - ").append(sr.getString(i)).append("\n");
-            }
-        }
-        t.append("\n");
-
-        // --- certificato ---
-        t.append(I18n.tr("server.rp.c.cert")).append("\n").append(line("-", 60)).append("\n").append(certificate()).append("\n");
-
-        // --- servizi ---
-        t.append(I18n.tr("server.rp.c.services")).append("\n").append(line("-", 60)).append("\n");
-        JSONArray sv = d.optJSONArray("services");
-        int active = 0;
-        if (sv != null) for (int i = 0; i < sv.length(); i++) if (sv.getJSONObject(i).getBoolean("active")) active++;
-        t.append(I18n.tr("server.rp.c.runningOf", java.util.Map.of("n", String.valueOf(active), "tot", String.valueOf(sv == null ? 0 : sv.length())))).append("\n");
-        JSONArray down = d.optJSONArray("inactiveServices");
-        if (down != null && down.length() > 0)
-            for (int i = 0; i < down.length(); i++) t.append("  ").append(I18n.tr("server.rp.c.notRunning", java.util.Map.of("v", String.valueOf(down.getString(i))))).append("\n");
-        t.append("\n");
-
-        // --- librerie ---
-        JSONArray broken = d.optJSONArray("missingLibraries");
-        t.append(I18n.tr("server.rp.c.libs")).append("\n").append(line("-", 60)).append("\n")
-         .append(broken == null || broken.length() == 0
-                 ? I18n.tr("server.rp.c.libsOk")
-                 : I18n.tr("server.rp.c.libsMissing", java.util.Map.of("n", String.valueOf(broken.length())))).append("\n\n");
-
-        // --- spazio e ambienti ---
-        t.append(I18n.tr("server.rp.c.space")).append("\n").append(line("-", 60)).append("\n").append(d.optString("space", "-")).append("\n\n");
-        JSONObject be = d.optJSONObject("environments");
-        if (be != null && be.optBoolean("success")) {
-            JSONArray el = be.optJSONArray("environments");
-            t.append(I18n.tr("server.rp.c.waysBack")).append("\n").append(line("-", 60)).append("\n");
-            if (el != null) for (int i = 0; i < el.length(); i++) {
-                JSONObject x = el.getJSONObject(i);
-                t.append("  ").append(x.optString("name")).append("   ").append(x.optString("space"))
-                 .append("   ").append(x.optString("state")).append("\n");
-            }
-            t.append("\n");
-        }
-
-        t.append(line("=", 60)).append("\n")
-         .append(I18n.tr("server.rp.c.footer")).append("\n");
-        return t.toString();
     }
 
     /**
@@ -1163,23 +1007,25 @@ public final class PeriodicReport {
 
     public static void link(org.mail_panel.security.AcmeManager a) { acme = a; }
 
-    /** Lo stato del certificato, in poche righe leggibili. */
-    private static String certificate() {
-        if (acme == null) return I18n.tr("server.rp.c.acmeMissing") + "\n";
+    /**
+     * Lo stato del certificato per la sezione del rapporto: nome, emittente, scadenza; oppure,
+     * in "problem", la frase che dice perche' non si sa.
+     */
+    static JSONObject certificateState() {
+        JSONObject r = new JSONObject();
+        if (acme == null) return r.put("problem", I18n.tr("server.rp.c.acmeMissing"));
         try {
             org.mail_panel.security.AcmeManager.CertificateInfo i = acme.getCertificateInfo();
-            if (i == null || !i.installed) return I18n.tr("server.rp.c.noCert") + "\n";
-            StringBuilder t = new StringBuilder();
-            t.append(I18n.tr("server.rp.c.certName", java.util.Map.of("v", String.valueOf(i.commonName == null ? "-" : i.commonName)))).append("\n")
-             .append(I18n.tr("server.rp.c.certIssuer", java.util.Map.of("v", String.valueOf(i.issuer == null ? "-" : i.issuer))))
-             .append(i.letsEncrypt ? "  (Let's Encrypt)" : "").append("\n");
-            if (i.expired) t.append(I18n.tr("server.rp.c.expired"));
-            else t.append(I18n.tr("server.rp.c.expiresIn", java.util.Map.of("n", String.valueOf(i.daysUntilExpiry))));
-            if (i.expiresAt != null) t.append(", ").append(I18n.tr("server.rp.c.onDate", java.util.Map.of("d", String.valueOf(i.expiresAt.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))))));
-            t.append(".\n");
-            return t.toString();
+            if (i == null || !i.installed) return r.put("problem", I18n.tr("server.rp.c.noCert"));
+            String lang = I18n.current();
+            return r.put("name", i.commonName == null ? "-" : i.commonName)
+                    .put("issuer", (i.issuer == null ? "-" : i.issuer) + (i.letsEncrypt ? " (Let's Encrypt)" : ""))
+                    .put("expired", i.expired)
+                    .put("days", i.daysUntilExpiry)
+                    .put("expiresOn", i.expiresAt == null ? "?"
+                            : PanelMail.longDate(lang, i.expiresAt.atZone(java.time.ZoneId.systemDefault())));
         } catch (Exception e) {
-            return I18n.tr("server.rp.c.certReadFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))) + "\n";
+            return r.put("problem", I18n.tr("server.rp.c.certReadFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -1190,16 +1036,19 @@ public final class PeriodicReport {
             org.mail_panel.security.AcmeManager.CertificateInfo i = acme.getCertificateInfo();
             if (i == null || !i.installed)
                 return new JSONObject().put("urgency", 2)
+                        .put("title", I18n.tr("mail.report.title.certMissing"))
                         .put("what", I18n.tr("server.rp.c.noTlsCert"))
-                        .put("where", "SSL");
+                        .put("where", I18n.tr("mail.report.where.ssl"));
             if (i.expired)
                 return new JSONObject().put("urgency", 0)
+                        .put("title", I18n.tr("mail.report.title.certExpired"))
                         .put("what", I18n.tr("server.rp.c.tlsExpired"))
-                        .put("where", "SSL");
+                        .put("where", I18n.tr("mail.report.where.ssl"));
             if (i.daysUntilExpiry <= 15)
                 return new JSONObject().put("urgency", i.daysUntilExpiry <= 5 ? 0 : 1)
+                        .put("title", I18n.tr("mail.report.title.certExpiring", java.util.Map.of("n", String.valueOf(i.daysUntilExpiry))))
                         .put("what", I18n.tr("server.rp.c.tlsExpiresIn", java.util.Map.of("n", String.valueOf(i.daysUntilExpiry))))
-                        .put("where", "SSL");
+                        .put("where", I18n.tr("mail.report.where.ssl"));
         } catch (Exception ignored) { }
         return null;
     }

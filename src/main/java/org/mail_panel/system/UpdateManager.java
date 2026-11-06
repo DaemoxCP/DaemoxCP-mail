@@ -7672,6 +7672,7 @@ public final class UpdateManager {
         String kernel = os.optString("installedKernel", ""), running = os.optString("runningKernel", "");
         if (!kernel.isEmpty() && !running.isEmpty() && !kernel.equals(running))
             toDo.put(new JSONObject().put("urgency", 1)
+                    .put("title", I18n.tr("mail.report.title.restart"))
                     .put("what", I18n.tr("server.um.reportData.1", java.util.Map.of("kernel", String.valueOf(kernel), "running", String.valueOf(running))))
                     .put("where", I18n.tr("server.um.reportData.2")));
         String end = os.optString("endOfSupport", "");
@@ -7679,6 +7680,7 @@ public final class UpdateManager {
         r.put("daysToEndOfSupport", eolDays);
         if (eolDays >= 0 && eolDays < 120)
             toDo.put(new JSONObject().put("urgency", eolDays < 45 ? 1 : 3)
+                    .put("title", I18n.tr("mail.report.title.endOfSupport"))
                     .put("what", I18n.tr("server.um.reportData.3", java.util.Map.of("eolDays", String.valueOf(eolDays), "end", String.valueOf(end))))
                     .put("where", I18n.tr("server.um.reportData.4")));
 
@@ -7700,11 +7702,17 @@ public final class UpdateManager {
         r.put("totalPackages", count.getInt("totals")).put("lockedPackageCount", count.getInt("protectedNames"))
          .put("packagesWithUpdate", withUpdate).put("toUpdate", toUpdate)
          .put("heldBackPackages", heldBack);
-        if (withUpdate > 0)
+        // Quelli che il blocco trattiene hanno la loro voce qui sotto, con il posto giusto dove
+        // applicarli: contarli anche qui faceva dire due volte la stessa cosa ("aggiorna 1
+        // pacchetto" e "applica 1 aggiornamento trattenuto", per lo stesso openjdk25 sulla VM il
+        // 06/11/2026), con due indicazioni diverse su dove farlo.
+        int freeUpdates = withUpdate - heldBack;
+        if (freeUpdates > 0)
             toDo.put(new JSONObject().put("urgency", 2)
-                    .put("what", withUpdate == 1
+                    .put("title", I18n.trn("mail.report.title.updates", freeUpdates, java.util.Map.of()))
+                    .put("what", freeUpdates == 1
                             ? I18n.tr("server.um.x.newerInRepo.one")
-                            : I18n.tr("server.um.x.newerInRepo.other", java.util.Map.of("n", String.valueOf(withUpdate))))
+                            : I18n.tr("server.um.x.newerInRepo.other", java.util.Map.of("n", String.valueOf(freeUpdates))))
                     .put("where", I18n.tr("server.um.reportData.5")));
         // Un aggiornamento che esiste e che il blocco trattiene e' una notizia diversa da un
         // aggiornamento disponibile: `pkg upgrade`, da qui o da SSH, lo salta ed esce 0.
@@ -7713,6 +7721,7 @@ public final class UpdateManager {
         // ZERO. Chi legge solo il codice di uscita conclude che non c'era niente da fare.
         if (heldBack > 0)
             toDo.put(new JSONObject().put("urgency", 2)
+                    .put("title", I18n.trn("mail.report.title.held", heldBack, java.util.Map.of()))
                     .put("what", heldBack == 1
                             ? I18n.tr("server.um.x.heldByLock.one")
                             : I18n.tr("server.um.x.heldByLock.other", java.util.Map.of("n", String.valueOf(heldBack))))
@@ -7743,18 +7752,21 @@ public final class UpdateManager {
         r.put("catalog", cat).put("catalogDays", catalogDays).put("catalogDate", cat.optString("data"));
         if (updateDatabase && !refreshedCatalog)
             toDo.put(new JSONObject().put("urgency", 2)
+                    .put("title", I18n.tr("mail.report.title.catalogNotRefreshed"))
                     .put("what", catalogDays < 0
                             ? I18n.tr("server.um.x.pkgUpdateFailed")
                             : I18n.tr("server.um.x.pkgUpdateFailedDated", java.util.Map.of("howMuch", String.valueOf(PkgCatalog.howMuch(catalogDays)), "data", String.valueOf(cat.optString("data")))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
         else if (catalogDays < 0)
             toDo.put(new JSONObject().put("urgency", 3)
+                    .put("title", I18n.tr("mail.report.title.catalogUnknown"))
                     .put("what", cat.optString("note") + " " + I18n.tr("server.um.x.noCatalogDate"))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
         else if (catalogDays >= 7 && !refreshedCatalog)
             // Dopo un "pkg update" riuscito, un catalogo vecchio e' l'ultimo che il server offre:
             // non c'e' niente da fare. Senza (l'anteprima), puo' esserci un catalogo piu' nuovo.
             toDo.put(new JSONObject().put("urgency", catalogDays >= 28 ? 2 : 3)
+                    .put("title", I18n.tr("mail.report.title.catalogOld"))
                     .put("what", I18n.tr("server.um.x.catalogOld", java.util.Map.of("howMuch", String.valueOf(PkgCatalog.howMuch(catalogDays)), "data", String.valueOf(cat.optString("data")))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
 
@@ -7807,6 +7819,7 @@ public final class UpdateManager {
         r.put("vulnWithRemedy", withRemedy).put("vulnWithoutRemedy", withoutRemedy);
         if (withRemedy.length() > 0)
             toDo.put(new JSONObject().put("urgency", 1)
+                    .put("title", I18n.trn("mail.report.title.securityFixes", withRemedy.length(), java.util.Map.of()))
                     .put("what", withRemedy.length() == 1
                             ? I18n.tr("server.um.x.vulnFix.one", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(withRemedy)))))
                             : I18n.tr("server.um.x.vulnFix.other", java.util.Map.of("n", String.valueOf(withRemedy.length()), "list", String.valueOf(String.join(", ", jsonArrayToList(withRemedy))))))
@@ -7817,6 +7830,7 @@ public final class UpdateManager {
         r.put("missingLibraries", broken == null ? new JSONArray() : broken);
         if (broken != null && broken.length() > 0)
             toDo.put(new JSONObject().put("urgency", 1)
+                    .put("title", I18n.tr("mail.report.title.missingLibraries"))
                     .put("what", I18n.tr("server.um.reportData.9", java.util.Map.of("length", String.valueOf(broken.length()))))
                     .put("where", I18n.tr("server.um.reportData.10")));
 
@@ -7829,6 +7843,7 @@ public final class UpdateManager {
         r.put("inactiveServices", down);
         if (down.length() > 0)
             toDo.put(new JSONObject().put("urgency", 0)
+                    .put("title", I18n.tr("mail.report.title.servicesDown", java.util.Map.of("list", String.join(", ", jsonArrayToList(down)))))
                     .put("what", I18n.tr("server.um.x.svcDown", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(down))))))
                     .put("where", I18n.tr("server.um.reportData.11")));
 
@@ -7841,6 +7856,7 @@ public final class UpdateManager {
             r.put("usedPercent", used);
             if (used >= 85)
                 toDo.put(new JSONObject().put("urgency", used >= 92 ? 0 : 2)
+                        .put("title", I18n.tr("mail.report.title.disk", java.util.Map.of("used", String.valueOf(used))))
                         .put("what", I18n.tr("server.um.reportData.12", java.util.Map.of("used", String.valueOf(used))))
                         .put("where", I18n.tr("server.um.reportData.13")));
         }

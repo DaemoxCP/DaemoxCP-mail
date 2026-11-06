@@ -28,6 +28,7 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.MtaStsOldLogicTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.SrvRecordTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReportDeliveryTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMailTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageQueueTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
@@ -566,3 +567,19 @@ avvisare (`local` di Postfix, `auth` di Dovecot). Non chiama niente.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceUsersTest
+
+## Le email del pannello
+
+`PanelMailTest` prova la busta (mittente, oggetto in RFC 2047, quoted-printable, intestazioni) e
+il contenuto del rapporto e dei codici nelle due lingue, senza toccare il sistema; sulla VM
+controlla anche che il nome del server venga da Postfix e non da hostname(1). Con
+`-Dpanelmail.dump=<cartella>` scrive i messaggi composti come `.eml`, da aprire in un programma di
+posta.
+
+`PanelMailE2ETest` manda posta vera: il rapporto e le tre email dei codici, per il sendmail di
+Postfix, a una casella del server; poi le ritrova nella Maildir e controlla il messaggio come e'
+arrivato. Solo su una macchina di prova, con `-De2e.vm=yes`:
+
+    java -De2e.vm=yes -Dpanelmail.to=alice@rehearsal.test \
+         -Dpanelmail.maildir=/var/vmail/rehearsal.test/alice -Dpanelmail.copies=/var/tmp/panel-emails/copies \
+         -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMailE2ETest
