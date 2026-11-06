@@ -3482,6 +3482,8 @@
   "server.reinstall.turn": "installazione completa del server di posta",
   "server.reinstall.unlockFailed": "Ancora protetti dopo lo sblocco: {list}. L'installazione si fermerebbe su di loro con i servizi di posta già spenti, quindi non parte. {back}",
   "server.reinstall.unlocked": "{n} pacchetti protetti sbloccati per l'installazione. L'elenco è in {file}: alla fine si riproteggono, anche se l'installazione fallisce, e se questo processo muore li riprotegge il pannello al prossimo avvio.",
+  "server.reinstall.wayBackKept": "{name} resta: è il server com'era prima di questa installazione, che ha fermato i servizi, riscritto le configurazioni, svuotato /var/vmail e ricreato le tabelle di MySQL. Per tornarci: bectl activate {name} && shutdown -r now",
+  "server.reinstall.wayBackNotNeeded": "L'installazione si è fermata prima di cambiare qualcosa, quindi {name} non serve: tolto.",
   "server.tz.badValue": "Valore non valido: un offset come '+02:00', 'SYSTEM' o un nome come 'Europe/Rome'.",
   "server.tz.globalFailed": "time_zone globale non impostato (manca il privilegio SUPER?): {error}",
   "server.tz.globalSet": "time_zone globale impostato a '{value}'",

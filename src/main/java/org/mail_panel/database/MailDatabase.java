@@ -51,6 +51,38 @@ public class MailDatabase {
         this.password = password;
     }
 
+    /**
+     * Da dove rileggere la password a ogni collegamento: quella del pannello, nel file dei segreti.
+     *
+     * <p>Senza, il pannello si ricollegava con la password che aveva in memoria dall'avvio. Una
+     * reinstallazione completa dal menu cambia la password dell'utente MySQL del pannello (e la
+     * scrive nel file dei segreti quando MySQL la conosce, PendingDbPassword) e riavvia MySQL: il
+     * servizio --web acceso intanto perdeva la connessione e riprovava per sempre con quella
+     * vecchia, «Access denied», finche' qualcuno non lo riavviava (reperto 156).
+     */
+    public void setPasswordSource(java.util.function.Supplier<String> source) {
+        this.passwordSource = source;
+    }
+
+    private java.util.function.Supplier<String> passwordSource;
+
+    /** La password per il prossimo collegamento: quella della fonte se ne da' una, altrimenti l'ultima. */
+    private String currentPassword() {
+        if (passwordSource != null) {
+            try {
+                String p = passwordSource.get();
+                if (p != null && !p.isEmpty()) {
+                    if (password != null && !password.isEmpty() && !p.equals(password))
+                        LOGGER.info("The panel's MySQL password changed in the secrets file: connecting with the new one.");
+                    password = p;
+                }
+            } catch (RuntimeException e) {
+                LOGGER.warning("Cannot read the panel's MySQL password again, using the previous one: " + e.getMessage());
+            }
+        }
+        return password;
+    }
+
     public void setConnection(String host, int port, String database) {
         this.host = host;
         this.port = port;
@@ -77,9 +109,11 @@ public class MailDatabase {
      * Try to connect to MySQL. Returns false if MySQL is not available.
      */
     public boolean connect() {
+        boolean again = connection != null;
         try {
-            connection = DriverManager.getConnection(databaseUrl(), username, password);
+            connection = DriverManager.getConnection(databaseUrl(), username, currentPassword());
             connected = true;
+            if (again) System.out.println("Connected to MySQL again.");
             return true;
         } catch (SQLException e) {
             System.err.println("MySQL not available: " + e.getMessage());
@@ -101,7 +135,7 @@ public class MailDatabase {
      * l'autocommit spento i loro comandi finirebbero dentro la transazione di un altro.
      */
     private Connection ownConnection() throws SQLException {
-        return DriverManager.getConnection(databaseUrl(), username, password);
+        return DriverManager.getConnection(databaseUrl(), username, currentPassword());
     }
 
     /**

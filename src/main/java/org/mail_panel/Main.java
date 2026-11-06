@@ -237,6 +237,13 @@ public class Main {
      */
     private static boolean executeScript(String scriptPath, String scriptName,
                                          java.util.Map<String, String> secrets, boolean pause, String... args) {
+        return executeScript(scriptPath, scriptName, secrets, pause, (java.util.function.Consumer<String>) null, args);
+    }
+
+    /** Come sopra, e ogni riga dello script passa anche da {@code onLine} (se non e' null). */
+    private static boolean executeScript(String scriptPath, String scriptName,
+                                         java.util.Map<String, String> secrets, boolean pause,
+                                         java.util.function.Consumer<String> onLine, String... args) {
         System.out.println();
         System.out.println(ANSI_CYAN + "═══════════════════════════════════════════════════════════════" + ANSI_RESET);
         System.out.println(ANSI_CYAN + "  Executing: " + scriptName + ANSI_RESET);
@@ -296,6 +303,7 @@ public class Main {
                 while ((line = reader.readLine()) != null) {
                     System.out.println(line);
                     System.out.flush();
+                    if (onLine != null) onLine.accept(line);
                 }
             }
 
@@ -631,8 +639,25 @@ public class Main {
      */
     public static boolean runInstallation(String mailHostname) {
         InstallLocks.Start start;
+        // La via di ritorno (reperto 156): un boot environment fatto col turno preso e PRIMA dello
+        // sblocco, cioe' col server com'e' adesso, pacchetti protetti compresi. Lo script cancella
+        // le configurazioni, svuota /var/vmail e ricrea le tabelle di MySQL: senza, tornare indietro
+        // da una reinstallazione andata male non si poteva. Se il sistema ha i boot environment e
+        // questo non si crea, l'installazione non parte (la regola dei lavori sui pacchetti).
+        org.mail_panel.system.PackageWayBack.Prepared[] wayBack = {null};
+        java.util.function.Consumer<String> wayBackLog =
+                line -> { if (!line.isEmpty()) System.out.println(ANSI_CYAN + "[WAY BACK] " + line + ANSI_RESET); };
         org.mail_panel.i18n.I18n.setCurrent("en");   // la console e' in inglese
-        try { start = InstallLocks.prepare(org.mail_panel.i18n.I18n.tr("server.reinstall.turn")); }
+        try {
+            start = InstallLocks.prepare(org.mail_panel.i18n.I18n.tr("server.reinstall.turn"), () -> {
+                try {
+                    wayBack[0] = org.mail_panel.system.PackageWayBack.before(wayBackLog, "reinstall");
+                    return null;
+                } catch (IllegalStateException e) {
+                    return e.getMessage();
+                }
+            });
+        }
         finally { org.mail_panel.i18n.I18n.clearCurrent(); }
         if (start.refusal() != null) {
             System.out.println(ANSI_RED + "[STOPPED] " + start.refusal() + ANSI_RESET);
@@ -644,8 +669,9 @@ public class Main {
         }
         if (!start.report().isEmpty()) System.out.println(ANSI_YELLOW + "[LOCKS] " + start.report() + ANSI_RESET);
         boolean success = false;
+        java.util.concurrent.atomic.AtomicBoolean systemTouched = new java.util.concurrent.atomic.AtomicBoolean(false);
         try {
-            success = installOnTurn(mailHostname);
+            success = installOnTurn(mailHostname, systemTouched);
         } finally {
             String back;
             org.mail_panel.i18n.I18n.setCurrent("en");
@@ -655,6 +681,12 @@ public class Main {
                 boolean allBack = !org.mail_panel.system.PackageQueue.statePresent();
                 System.out.println((allBack ? ANSI_GREEN : ANSI_RED) + "[LOCKS] " + back + ANSI_RESET);
             }
+            // Dopo la riprotezione: il boot environment resta se lo script ha cominciato a cambiare
+            // il sistema, si toglie se si e' fermato prima.
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            try { org.mail_panel.system.PackageWayBack.afterInstallation(wayBackLog, wayBack[0], systemTouched.get()); }
+            catch (RuntimeException e) { System.out.println(ANSI_YELLOW + "[WAY BACK] " + e.getMessage() + ANSI_RESET); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
             System.out.flush();
         }
         return success;
@@ -662,6 +694,15 @@ public class Main {
 
     /** Il corpo dell'installazione, con il turno gia' preso e i pacchetti gia' sbloccati. */
     private static boolean installOnTurn(String mailHostname) {
+        return installOnTurn(mailHostname, new java.util.concurrent.atomic.AtomicBoolean(false));
+    }
+
+    /**
+     * @param systemTouched diventa vero quando lo script arriva alla fase 1, cioe' comincia a
+     *        fermare servizi e cancellare configurazioni. Prima di li' lo script controlla soltanto
+     *        (turno, parametri, Roundcube, pacchetti protetti) e non cambia niente.
+     */
+    private static boolean installOnTurn(String mailHostname, java.util.concurrent.atomic.AtomicBoolean systemTouched) {
         // Save hostname
         dbManager.setMailHostname(mailHostname);
 
@@ -791,6 +832,7 @@ public class Main {
                                  "MYSQL_ROOT_PASSWORD", mysqlRootPassword,
                                  "MAIL_PANEL_PACKAGE_TURN", String.valueOf(ProcessHandle.current().pid())),
                 false,
+                line -> { if (line.contains("[PHASE 1/10]")) systemTouched.set(true); },
                 mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname,
                 roundcubeDomain, roundcubePort, roundcubeSslCert, roundcubeSslKey, roundcubeSslChain);
 
@@ -965,6 +1007,8 @@ public class Main {
                 String mysqlDatabase = result.getString("mysql_database");
 
                 mailDatabase = new MailDatabase();
+
+                mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
                 mailDatabase.setCredentials(mysqlUser, mysqlPassword);
                 mailDatabase.setHost(mysqlHost);
                 mailDatabase.setPort(Integer.parseInt(mysqlPort));
@@ -1088,6 +1132,8 @@ public class Main {
                 String mysqlDatabase = result.getString("mysql_database");
 
                 mailDatabase = new MailDatabase();
+
+                mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
                 mailDatabase.setCredentials(mysqlUser, mysqlPassword);
                 mailDatabase.setHost(mysqlHost);
                 mailDatabase.setPort(Integer.parseInt(mysqlPort));
@@ -1131,6 +1177,8 @@ public class Main {
             String mysqlDatabase = result.getString("mysql_database");
 
             mailDatabase = new MailDatabase();
+
+            mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
             mailDatabase.setCredentials(mysqlUser, mysqlPassword);
             mailDatabase.setHost(mysqlHost);
             mailDatabase.setPort(Integer.parseInt(mysqlPort));
@@ -1291,6 +1339,7 @@ public class Main {
             if (!result.next())
                 return "The panel is not configured yet: install the mail server from the menu first.";
             mailDatabase = new MailDatabase();
+            mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
             mailDatabase.setCredentials(result.getString("mysql_user"), dbManager.mysqlPassword());
             mailDatabase.setHost(result.getString("mysql_host"));
             mailDatabase.setPort(Integer.parseInt(result.getString("mysql_port")));
