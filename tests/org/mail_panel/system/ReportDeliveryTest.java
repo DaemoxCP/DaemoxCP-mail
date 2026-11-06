@@ -240,10 +240,14 @@ public class ReportDeliveryTest {
             "queued".equals(PeriodicReport.outcomeInLog(suffix, ID, A).optString("state")));
 
         // --- Il Message-ID che il pannello genera ---
-        String id1 = PeriodicReport.newMessageId("noreply-mailserver@domain-b.test");
-        String id2 = PeriodicReport.newMessageId("noreply-mailserver@domain-b.test");
-        real("Message-ID: forma", id1.matches("report\\.\\d{14}\\.[0-9a-f]{32}@domain-b\\.test"));
+        String id1 = PeriodicReport.newMessageId("report", "noreply-mailserver@domain-b.test");
+        String id2 = PeriodicReport.newMessageId("report", "noreply-mailserver@domain-b.test");
+        real("Message-ID: forma", id1.matches("report\\.\\d{14}\\.[0-9a-f]{24}@domain-b\\.test"));
         real("Message-ID: due invii, due identificativi", !id1.equals(id2));
+        real("Message-ID: quello dei codici si riconosce dal tipo",
+            PeriodicReport.newMessageId("code", "noreply-mailserver@domain-b.test").startsWith("code."));
+        // Con il server vero (domain-b.test) l'intestazione intera sta nei 78 caratteri raccomandati.
+        real("Message-ID: l'intestazione sta nei 78 caratteri", ("Message-ID: <" + id1 + ">").length() <= 78);
 
         // --- Quale sendmail ---
         Path d = Files.createTempDirectory("prova-sendmail");

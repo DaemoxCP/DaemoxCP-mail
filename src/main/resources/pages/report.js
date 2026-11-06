@@ -149,7 +149,10 @@
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.composing')) + '';
             const r = await repApi('preview');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + repEsc(r.error) + '</span>'; return; }
+            // Mittente e oggetto come li vedra' chi riceve: sono la prima cosa che legge.
             el.innerHTML = '<div class="alert alert-info py-2 small">' + escHtml(t('rep.previewNote')) + '</div>'
+                         + '<div class="small text-muted">' + escHtml(t('rep.previewFrom')) + ' <code>' + repEsc(r.from) + '</code></div>'
+                         + '<div class="small text-muted mb-2">' + escHtml(t('rep.subject')) + ' <code>' + repEsc(r.subject) + '</code></div>'
                          + '<pre class="upd-log">' + repEsc(r.text) + '</pre>'
                          + '<button class="btn btn-sm btn-outline-secondary" onclick="repLoad()">'
                          + '<i class="fas fa-arrow-left me-1" aria-hidden="true"></i>' + escHtml(t('rep.back')) + '</button>';
