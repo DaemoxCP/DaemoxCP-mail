@@ -76,17 +76,79 @@ YELLOW=$(printf '\\033[1;33m')
 CYAN=$(printf '\\033[0;36m')
 NC=$(printf '\\033[0m')
 
-echo ""
-echo "${CYAN}=============================================================================${NC}"
-echo "${CYAN}           FreeBSD Mail Server - Complete Installation (Postfix)${NC}"
-echo "${CYAN}=============================================================================${NC}"
-echo ""
-
 # Check root
 if [ "$(id -u)" -ne 0 ]; then
     echo "${RED}Error: Must run as root${NC}"
     exit 1
 fi
+
+# =============================================================================
+# Il turno dei lavori sui pacchetti: lo stesso del pannello
+# =============================================================================
+# Questo script toglie e rimette pacchetti mentre la posta e' spenta. Se intanto il pannello
+# aggiorna o protegge pacchetti (una manutenzione dalla pagina Aggiornamenti, o la regola dei
+# blocchi a un suo avvio), i due si tolgono le protezioni a vicenda e pkg si ferma a meta'. Il
+# pannello lo evita col turno: chi lavora sui pacchetti tiene un lock su PACKAGE_TURN_LOCK
+# (PackageQueue.TURN_LOCK_PATH), e dentro scrive chi e'.
+#  - Lanciato dal menu del pannello (MAIL_PANEL_PACKAGE_TURN = pid del pannello): il turno lo
+#    tiene gia' il pannello, che e' il processo padre. Non lo si crede: si controlla che il lock
+#    sia preso e che dentro ci sia scritto quel pid.
+#  - Lanciato a mano: si prende il turno rilanciandosi sotto lockf(1). Se lo tiene qualcun
+#    altro ci si ferma qui, prima di fermare qualunque cosa.
+# Misurato il 06/11/2026 sulla VM FreeBSD 15.1 (reperto 153): il lock di lockf (flock) e quello
+# del pannello (fcntl, FileChannel.tryLock) si escludono in tutte e due le direzioni. Due modi
+# di usare lockf invece non vanno: senza -k cancella il file alla fine (e un pannello che lo
+# tiene aperto non escluderebbe piu' chi ne crea uno nuovo); e "exec 9>>file; lockf 9" fa
+# ereditare il lock a ogni figlio della shell, cioe' anche ai servizi che lo script avvia, che
+# lo terrebbero per sempre. Con "lockf -k file comando" il comando non eredita il descrittore.
+PACKAGE_TURN_LOCK=/var/db/mailpanel/package-turn.lock
+
+# Vero se qualcuno tiene il turno. lockf esce 75 (EX_TEMPFAIL) se il lock e' gia' preso; se lo
+# prende, lo rilascia subito. Ogni altro codice (il file non si apre) non e' "preso".
+turn_is_held() {
+    lockf -k -s -t 0 "$PACKAGE_TURN_LOCK" true
+    [ $? -eq 75 ]
+}
+
+if [ -n "${MAIL_PANEL_PACKAGE_TURN:-}" ]; then
+    TURN_HOLDER=$(head -n 1 "$PACKAGE_TURN_LOCK" 2>/dev/null)
+    if [ "$MAIL_PANEL_PACKAGE_TURN" != "$PPID" ] || ! turn_is_held || [ "${TURN_HOLDER#pid $PPID,}" = "$TURN_HOLDER" ]; then
+        echo "${RED}STOPPED: started as the mail panel's installation, but the panel does not hold the package turn.${NC}"
+        echo "Turn lock $PACKAGE_TURN_LOCK says: ${TURN_HOLDER:-nothing}"
+        echo "Nothing was stopped and nothing was changed."
+        exit 1
+    fi
+elif [ "${MAIL_PANEL_TURN_BY_LOCKF:-}" = "1" ]; then
+    # Il rilancio sotto lockf: il turno lo tiene lockf, il processo padre.
+    if [ "$(ps -o comm= -p "$PPID")" != "lockf" ] || ! turn_is_held; then
+        echo "${RED}STOPPED: MAIL_PANEL_TURN_BY_LOCKF is set, but this script is not running under lockf holding the package turn.${NC}"
+        echo "Nothing was stopped and nothing was changed."
+        exit 1
+    fi
+    echo "pid $$, complete mail server installation, install_mail_server.sh started by hand ($(date -u +%Y-%m-%dT%H:%M:%SZ))" > "$PACKAGE_TURN_LOCK"
+else
+    if [ ! -f "$0" ]; then
+        echo "${RED}Error: run this script by its path (sh /path/to/install_mail_server.sh), not from standard input.${NC}"
+        exit 1
+    fi
+    mkdir -p "$(dirname "$PACKAGE_TURN_LOCK")"
+    if turn_is_held; then
+        echo "${RED}STOPPED: another job is working on the packages:${NC}"
+        sed 's/^/  /' "$PACKAGE_TURN_LOCK"
+        echo "Nothing was stopped and nothing was changed. Wait for it to finish, then run this script again."
+        exit 1
+    fi
+    export MAIL_PANEL_TURN_BY_LOCKF=1
+    exec lockf -k -t 0 "$PACKAGE_TURN_LOCK" /bin/sh "$0" "$@"
+    echo "${RED}Error: cannot start lockf.${NC}"
+    exit 1
+fi
+
+echo ""
+echo "${CYAN}=============================================================================${NC}"
+echo "${CYAN}           FreeBSD Mail Server - Complete Installation (Postfix)${NC}"
+echo "${CYAN}=============================================================================${NC}"
+echo ""
 
 # Validate parameters
 if [ -z "$MYSQL_PASSWORD" ]; then

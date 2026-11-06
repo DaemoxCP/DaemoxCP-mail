@@ -100,6 +100,12 @@ public class InstallLocksTest {
         check("l'elenco nomina i tre pacchetti, senza versione",
                 Files.readString(list).equals("dovecot-mysql\nmysql84-server\nnginx\n"));
         check("tutti e tre sbloccati", p.lockedCount() == 0);
+        // Accanto all'elenco, chi l'ha scritto: se questo processo muore, l'avviso dell'avvio
+        // (PackageRecovery) dice che si e' interrotta la reinstallazione, non "un lavoro".
+        check("il record del lavoro dice quale e da quale processo",
+                "prova".equals(PackageQueue.jobRecord().optString("description"))
+                && PackageQueue.jobRecord().optLong("pid") == ProcessHandle.current().pid()
+                && !PackageQueue.jobRecord().optBoolean("expectsRestart"));
         check("il rapporto dice quanti e dove sta l'elenco",
                 s.report().contains("3") && s.report().contains(list.toString()));
         check("un altro lavoro non prende il turno", PackageQueue.take("other", "altro") != null);
@@ -107,6 +113,7 @@ public class InstallLocksTest {
         String back = InstallLocks.finish(s.held(), p, false);
         check("riprotetti tutti e tre", p.lockedCount() == 3);
         check("l'elenco e' chiuso", !Files.exists(list));
+        check("e il record del lavoro con lui", !Files.exists(PackageQueue.jobRecordPath()));
         check("il turno e' libero", PackageQueue.holder() == null);
         check("il rapporto dice 3 di nuovo protetti", back.contains("3"));
         check("una seconda chiusura non fa niente", InstallLocks.finish(s.held(), p, false).isEmpty());

@@ -750,10 +750,15 @@ public class Main {
         // Execute the unified mail server installation script. Le due password viaggiano
         // nell'ambiente e non fra gli argomenti: un argomento lo legge chiunque con "ps".
         // Senza l'attesa di un tasto alla fine: la fa installMailServer, dopo la riprotezione.
+        // MAIL_PANEL_PACKAGE_TURN dice allo script che il turno dei pacchetti lo tiene questo
+        // processo, suo padre: senza, lo script prenderebbe il turno da se' con lockf, lo
+        // troverebbe preso da noi e si fermerebbe. Lo script non ci crede sulla parola: controlla
+        // che il lock sia preso e che dentro ci sia questo pid (FullMailServerScript).
         boolean success = executeScript("./install_scripts/install_mail_server.sh",
                 "Complete Mail Server Installation",
                 java.util.Map.of("MYSQL_PASSWORD", mysqlPassword,
-                                 "MYSQL_ROOT_PASSWORD", mysqlRootPassword),
+                                 "MYSQL_ROOT_PASSWORD", mysqlRootPassword,
+                                 "MAIL_PANEL_PACKAGE_TURN", String.valueOf(ProcessHandle.current().pid())),
                 false,
                 mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname,
                 roundcubeDomain, roundcubePort, roundcubeSslCert, roundcubeSslKey, roundcubeSslChain);
