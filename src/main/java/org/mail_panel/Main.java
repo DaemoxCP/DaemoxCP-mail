@@ -771,6 +771,10 @@ public class Main {
         try {
             start = InstallLocks.prepare(org.mail_panel.i18n.I18n.tr("server.reinstall.turn"), () -> {
                 try {
+                    // Lo spazio prima della via di ritorno: con meno di 1 GB libero si ferma qui, e
+                    // altrimenti dice quanto la via di ritorno terra' occupato (reperto 170).
+                    String noSpace = org.mail_panel.system.PackageWayBack.reinstallSpace(wayBackLog);
+                    if (noSpace != null) return noSpace;
                     wayBack[0] = org.mail_panel.system.PackageWayBack.beforeInstallation(wayBackLog);
                     return null;
                 } catch (IllegalStateException e) {

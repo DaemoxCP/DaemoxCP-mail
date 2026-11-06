@@ -97,6 +97,59 @@ public final class PackageWayBack {
         return REINSTALL_PREFIX + when.withZoneSameInstant(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss"));
     }
 
+    /**
+     * Lo spazio libero che la reinstallazione vuole prima di partire. Misurato sulla VM il 06/11/2026
+     * (reperto 170): con i pacchetti gia' installati la reinstallazione ha scritto 54 MB netti; con
+     * pacchetti da scaricare e installare sono molti di piu'. Un disco che si riempie a meta' lascia
+     * la posta spenta peggio di una reinstallazione che non parte.
+     */
+    static long reinstallMinFree = 1L << 30;
+
+    /**
+     * Prima della reinstallazione, sui sistemi coi boot environment: se il pool ha meno di
+     * reinstallMinFree libero, il motivo del rifiuto; altrimenti null, e il log dice quanto la via di
+     * ritorno terra' occupato. Misurato (reperto 170): la reinstallazione svuota /var/vmail e ricrea
+     * MySQL, ma i blocchi di prima non si liberano, li tiene lo snapshot della via di ritorno. Con 500 MB
+     * di posta, 516 MB. Finche' la via di ritorno c'e', la posta nuova riempie il disco accanto a
+     * quella vecchia.
+     */
+    public static String reinstallSpace(Consumer<String> log) {
+        if (!run("bectl check", 30).success()) return null;
+        String root = run("zfs list -H -o name / 2>/dev/null", 30).outputTrim();
+        String avail = root.isEmpty() ? "" : run("zfs get -Hp -o value available " + root + " 2>/dev/null", 30).outputTrim();
+        if (!avail.matches("[0-9]+")) return null;      // non si sa: non si ferma niente per questo
+        long free = Long.parseLong(avail);
+        long data = 0;
+        for (String path : dataInside()) {
+            String kb = run("du -sk " + path + " 2>/dev/null | cut -f1", 600).outputTrim();
+            if (kb.matches("[0-9]+")) data += Long.parseLong(kb) * 1024;
+        }
+        if (free < reinstallMinFree)
+            return I18n.tr("server.reinstall.noSpace", Map.of("free", mb(free), "need", mb(reinstallMinFree)));
+        log.accept(I18n.tr("server.reinstall.wayBackSpace", Map.of("data", mb(data), "free", mb(free))));
+        return null;
+    }
+
+    static String mb(long bytes) {
+        return String.valueOf(Math.round(bytes / 1048576.0));
+    }
+
+    /**
+     * Lo spazio che una via di ritorno tiene occupato davvero: i blocchi che ha solo lei, cioe' quelli
+     * dello snapshot da cui e' nata (zfs «used» dello snapshot). Il «used» del boot environment, appena
+     * creato, e' 0: bectl list e la scheda dicevano «0 MB» per una via di ritorno che ne teneva 516
+     * (misurato, reperto 170). -1 se non si sa.
+     */
+    static long pinnedBytes(String name) {
+        String root = run("zfs list -H -o name / 2>/dev/null", 30).outputTrim();
+        String parent = root.contains("/") ? root.substring(0, root.lastIndexOf('/')) : "";
+        if (parent.isEmpty()) return -1;
+        String origin = run("zfs get -H -o value origin " + parent + "/" + name + " 2>/dev/null", 30).outputTrim();
+        if (!origin.contains("@")) return -1;
+        String used = run("zfs get -Hp -o value used " + origin + " 2>/dev/null", 30).outputTrim();
+        return used.matches("[0-9]+") ? Long.parseLong(used) : -1;
+    }
+
     /** La via di ritorno di reinstallazione piu' recente su questo sistema, o "" se non ce n'e'. */
     static String newestReinstallWayBack() {
         String newest = "";

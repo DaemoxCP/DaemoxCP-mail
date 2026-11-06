@@ -10211,11 +10211,19 @@ public final class UpdateManager {
                     // configurazioni, caselle e database compresi.
                     origin = I18n.tr("server.um.bootEnvironments.reinstallOrigin");
                     explain = I18n.tr("server.um.bootEnvironments.reinstallExplain");
+                    // Il suo «used» e' 0 appena creata: lo spazio che tiene sta nello snapshot da cui e'
+                    // nata (reperto 170). Lo si dice, o sembra gratis.
+                    long pinned = PackageWayBack.pinnedBytes(name);
+                    if (pinned >= 0) explain += " " + I18n.tr("server.um.bootEnvironments.keepsSpace",
+                            java.util.Map.of("space", PackageWayBack.mb(pinned)));
                 } else if (PackageWayBack.OWN.matcher(name).matches()) {
                     // La via di ritorno di un lavoro sui pacchetti (PackageWayBack): senza questo
                     // ramo cadeva in "origine non riconosciuta, guardalo prima di toccarlo".
                     origin = I18n.tr("server.um.bootEnvironments.packagesOrigin");
                     explain = I18n.tr("server.um.bootEnvironments.packagesExplain");
+                    long pinned = PackageWayBack.pinnedBytes(name);
+                    if (pinned >= 0) explain += " " + I18n.tr("server.um.bootEnvironments.keepsSpace",
+                            java.util.Map.of("space", PackageWayBack.mb(pinned)));
                 } else if (panelBootEnvironment(name)) {
                     origin = I18n.tr("server.um.bootEnvironments.2");
                     explain = I18n.tr("server.um.bootEnvironments.3");

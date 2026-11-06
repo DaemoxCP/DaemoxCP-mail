@@ -182,6 +182,7 @@ public class ReinstallJobTest {
         String log = Files.readString(Path.of(exit.toString().replace(".exit", ".log")));
         check(name + ": il registro ha tutto, fino alla riprotezione", log.contains("step 12") && log.contains("packages locked again"));
         check(name + ": lo script vecchio non e' girato", !log.contains("stale script ran"));
+        check(name + ": prima della via di ritorno ha guardato lo spazio", log.contains("The way back keeps the mail and the database"));
         check(name + ": i pacchetti di nuovo protetti, nessun elenco", locked() == lockedBefore && !PackageQueue.statePresent());
         check(name + ": la reinstallazione non c'e' piu' e il turno e' libero", waitGone(job) && takeAndRelease());
         Files.deleteIfExists(panel.resolve("script-done"));

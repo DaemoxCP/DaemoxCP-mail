@@ -88,6 +88,9 @@ public class ReinstallReturnE2ETest {
             for (int i = 1; i <= 3; i++)
                 Files.writeString(PROBE.resolve("new/1800000000.M" + i + "P2.e2e"), "From: prova\nSubject: arrivato dopo " + i + "\n\nmessaggio nuovo\n");
             Files.writeString(PROBE.resolve("dovecot-uidlist"), "3 V2 N1 di dopo\n");
+            // Come una consegna vera: i messaggi nuovi sono di vmail (prima della correzione erano di root,
+            // e il controllo dei proprietari non poteva passare).
+            sh("chown -R vmail:vmail /var/vmail/e2e-way-back.test 2>/dev/null");
 
             System.out.println("\n== I rifiuti ==");
             boolean postfixUp = up("postfix");
