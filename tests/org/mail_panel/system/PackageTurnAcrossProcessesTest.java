@@ -35,6 +35,7 @@ public class PackageTurnAcrossProcessesTest {
     public static void main(String[] args) throws Exception {
         Path d = Files.createTempDirectory("turn-across");
         PackageQueue.list = d.resolve("mail-panel-maintenance-locks");
+        PackageQueue.turnLock = d.resolve("package-turn.lock");
         Path list = PackageQueue.list;
 
         System.out.println("== Un altro processo tiene il turno, senza elenco ==");
@@ -55,9 +56,8 @@ public class PackageTurnAcrossProcessesTest {
         h.release();
         check("rilasciato dall'altro, qui si prende", PackageQueue.take("here", "aggiornamento guidato") == null);
         check("e il file del turno dice chi lo tiene adesso",
-                Files.readString(PackageQueue.turnFile()).contains("pid " + ProcessHandle.current().pid()));
+                Files.readString(PackageQueue.turnLock).contains("pid " + ProcessHandle.current().pid()));
         PackageQueue.release("here");
-        check("rilasciato, il file del turno e' vuoto", Files.size(PackageQueue.turnFile()) == 0);
 
         System.out.println("\n== Un altro processo lavora con i pacchetti sbloccati (elenco su disco) ==");
         h = Holder.start(list, "reinstallazione di prova", "e2e-turn-probe-a", "e2e-turn-probe-b");
@@ -77,7 +77,7 @@ public class PackageTurnAcrossProcessesTest {
         check("e il turno e' libero", PackageQueue.take("here", "manutenzione") == null);
         PackageQueue.release("here");
 
-        Files.deleteIfExists(PackageQueue.turnFile());
+        Files.deleteIfExists(PackageQueue.turnLock);
         Files.delete(d);
         System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
         System.exit(failed == 0 ? 0 : 1);

@@ -16,7 +16,8 @@ import java.util.TreeSet;
  * una lettura delle protezioni che non risponde, una riprotezione che fallisce. Con il finto si
  * provano tutti, e per ognuno si guarda la stessa cosa che conta sulla macchina: se lo script
  * puo' partire, che cosa resta protetto, se l'elenco su disco si chiude o resta, se il turno si
- * libera. L'elenco e il file del turno stanno in una cartella di prova, non in /var/db.
+ * libera. L'elenco, il record del lavoro e il lock del turno stanno in una cartella di prova,
+ * non in /var/db.
  *
  * Il caso vero (il pannello acceso, 39 protetti, la reinstallazione dal menu) lo prova
  * MenuReinstall sulla VM; questa prova gira ovunque, ma va lanciata sulla VM come le altre.
@@ -79,6 +80,7 @@ public class InstallLocksTest {
     public static void main(String[] args) throws Exception {
         Path d = Files.createTempDirectory("install-locks");
         PackageQueue.list = d.resolve("mail-panel-maintenance-locks");
+        PackageQueue.turnLock = d.resolve("package-turn.lock");
         Path list = PackageQueue.list;
 
         System.out.println("== Nessun pacchetto protetto ==");
@@ -207,7 +209,8 @@ public class InstallLocksTest {
         check("e non ha chiesto niente a pkg", p.calls.isEmpty());
         Files.delete(list);
 
-        Files.deleteIfExists(PackageQueue.turnFile());
+        Files.deleteIfExists(PackageQueue.turnLock);
+        Files.deleteIfExists(PackageQueue.jobRecordPath());
         Files.delete(d);
         System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
         System.exit(failed == 0 ? 0 : 1);

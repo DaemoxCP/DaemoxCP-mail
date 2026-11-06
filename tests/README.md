@@ -28,6 +28,7 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.MtaStsOldLogicTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.SrvRecordTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReportDeliveryTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMailTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageQueueTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
@@ -83,6 +84,20 @@ protezioni e repository siano quelli di prima. Solo su una macchina di prova. Du
 minuto: un indirizzo che manca si aspetta sessanta secondi prima di dirlo perso.
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallScriptDriftTest
+
+`UpdaterRobustnessE2ETest` prova i bordi dell'aggiornamento dei pacchetti con lavori veri su
+pacchetti finti (`nginx-robust-probe`, `robust-probe-other`) da un catalogo `file://`, coi
+repository veri spenti: la via di ritorno (M1), il turno fra processi (M2, M2b), un pkg esterno
+che tiene il lock (M3), il pannello ucciso a meta' di pkg (M4), il timeout (M5), il rapporto
+dopo un lavoro interrotto (M6). Crea e toglie boot environment `packages-before-*`. La M7 (la
+macchina spenta di colpo durante pkg) e' in due tempi: `-Dmeasure=m7`, poi `reboot -nq` quando
+stampa «M7 IN PKG», poi, a pannello ripartito, il modo `m7-after`. Solo su una macchina di prova.
+
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdaterRobustnessE2ETest
+
+Le quattro prove che fanno lavori veri (questa, `InstallScriptDriftTest`,
+`PackageReplacementE2ETest`, `PostfixMapsJobsE2ETest`) alla fine tolgono i boot environment che
+i loro lavori hanno creato.
 
 `HeldUpdatesReportTest` e `AuditReportTest` hanno bisogno del database delle vulnerabilita'
 (`pkg audit -F`): senza, dicono quali prove hanno saltato e perche'.
@@ -566,3 +581,19 @@ avvisare (`local` di Postfix, `auth` di Dovecot). Non chiama niente.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceUsersTest
+
+## Le email del pannello
+
+`PanelMailTest` prova la busta (mittente, oggetto in RFC 2047, quoted-printable, intestazioni) e
+il contenuto del rapporto e dei codici nelle due lingue, senza toccare il sistema; sulla VM
+controlla anche che il nome del server venga da Postfix e non da hostname(1). Con
+`-Dpanelmail.dump=<cartella>` scrive i messaggi composti come `.eml`, da aprire in un programma di
+posta.
+
+`PanelMailE2ETest` manda posta vera: il rapporto e le tre email dei codici, per il sendmail di
+Postfix, a una casella del server; poi le ritrova nella Maildir e controlla il messaggio come e'
+arrivato. Solo su una macchina di prova, con `-De2e.vm=yes`:
+
+    java -De2e.vm=yes -Dpanelmail.to=alice@rehearsal.test \
+         -Dpanelmail.maildir=/var/vmail/rehearsal.test/alice -Dpanelmail.copies=/var/tmp/panel-emails/copies \
+         -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMailE2ETest

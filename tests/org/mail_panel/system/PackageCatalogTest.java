@@ -132,16 +132,20 @@ public class PackageCatalogTest {
         System.out.println("\n== il rapporto ==");
         c = PkgCatalog.data(pkg.toString(), enabledOnes, NOW);
         c.put("note", PkgCatalog.note(c));
-        String t = PeriodicReport.compose(new JSONObject()
+        PanelMail.Message report = ReportMail.message(new ReportMail.Context("it", "mail.esempio.it", "admin@esempio.it",
+                true, "weekly", java.time.ZonedDateTime.now()), new JSONObject()
                 .put("catalog", c).put("catalogDays", c.optLong("days")).put("catalogDate", c.optString("data"))
-                .put("refreshedCatalog", true).put("vulnDbDays", 0),
-                "freebsd", "noreply@esempio.it", "admin@esempio.it");
-        String line = t.lines().filter(l -> l.startsWith("Database delle vulnerabilità")).findFirst().orElse("");
-        System.out.println("  " + line);
+                .put("refreshedCatalog", true).put("vulnDbDays", 0));
+        // Nel testo le righe vanno a capo a 72 colonne: si cerca nel testo con gli spazi ridotti a uno.
+        String t = report.text().replaceAll("\\s+", " ");
+        int at = t.indexOf("Catalogo dei pacchetti: pubblicato 2 giorni fa (");
+        System.out.println("  " + (at < 0 ? "(manca la riga del catalogo)" : t.substring(at, Math.min(t.length(), at + 90))));
         require("il rapporto dice quando e' stato pubblicato, e che e' stato controllato adesso",
-                line.contains("Catalogo dei pacchetti: pubblicato 2 giorni fa (") && line.contains("controllato adesso"));
+                at >= 0 && t.indexOf("controllato adesso", at) > at && t.indexOf("controllato adesso", at) - at < 100);
         require("e con due repository aggiunge la frase intera", t.contains("I conteggi sono freschi quanto il più vecchio"));
-        require("niente piu' \"eta' sconosciuta\" per il catalogo", !line.contains("Catalogo dei pacchetti: età sconosciuta"));
+        require("niente piu' \"eta' sconosciuta\" per il catalogo", !t.contains("Catalogo dei pacchetti: età sconosciuta")
+                && !t.contains("data di pubblicazione sconosciuta"));
+        require("anche l'HTML lo dice", report.html().contains("pubblicato 2 giorni fa (") && report.html().contains("controllato adesso"));
 
         System.out.println("\n== dove guardava prima ==");
         require("su FreeBSD 15 /var/db/pkg/repo-FreeBSD.sqlite non c'e': di qui \"eta' sconosciuta\"",

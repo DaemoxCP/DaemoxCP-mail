@@ -18,7 +18,10 @@ import java.util.List;
  */
 public class TurnHolder {
     public static void main(String[] args) throws Exception {
-        if (!"-".equals(args[0])) PackageQueue.list = Path.of(args[0]);
+        if (!"-".equals(args[0])) {
+            PackageQueue.list = Path.of(args[0]);
+            PackageQueue.turnLock = PackageQueue.list.resolveSibling("package-turn.lock");
+        }
         String id = "holder-" + ProcessHandle.current().pid();
         String refusal = PackageQueue.take(id, args[1]);
         if (refusal != null) {
