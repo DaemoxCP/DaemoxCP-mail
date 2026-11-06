@@ -131,6 +131,12 @@ public class UpdaterRobustnessE2ETest {
         for (String l : log.split("\n")) if (l.contains("packages-before-") || l.contains("bectl")) System.out.println("    | " + l);
         check("M1 il lavoro riesce", "completed".equals(job.optString("status")));
         check("M1 un boot environment nuovo, del guidato", created.size() == 1 && created.get(0).endsWith("-guided-update"));
+        JSONArray envs = UpdateManager.bootEnvironments().optJSONArray("environments");
+        boolean labelled = false;
+        for (int i = 0; envs != null && i < envs.length(); i++)
+            if (!created.isEmpty() && created.get(0).equals(envs.getJSONObject(i).optString("name")))
+                labelled = envs.getJSONObject(i).optString("origin").equals(I18n.tr("server.um.bootEnvironments.packagesOrigin"));
+        check("M1 la scheda dei boot environment lo presenta come via di ritorno dei pacchetti", labelled);
         check("M1 il log dice come tornare indietro", !created.isEmpty() && log.contains("bectl activate " + created.get(0)));
         List<String> inside = PackageWayBack.dataInside();
         System.out.println("  dati dentro il boot environment: " + inside);
@@ -474,6 +480,30 @@ public class UpdaterRobustnessE2ETest {
                 if (!PackageQueue.statePresent()) System.out.println("PROTECTED AGAIN IN THE BACKGROUND");
             }
             case "m7-after" -> m7After();
+            case "be-label" -> {
+                // Come la scheda e il rapporto descrivono una via di ritorno dei pacchetti. Non
+                // tocca pacchetti ne' repository: crea un boot environment col nome giusto, chiede
+                // a bootEnvironments() e lo toglie.
+                String n = "packages-before-2000-01-01-000000-label-test";
+                sh("bectl create " + n);
+                try {
+                    String origin = "", explain = "";
+                    JSONArray envs = UpdateManager.bootEnvironments().optJSONArray("environments");
+                    for (int i = 0; envs != null && i < envs.length(); i++)
+                        if (n.equals(envs.getJSONObject(i).optString("name"))) {
+                            origin = envs.getJSONObject(i).optString("origin");
+                            explain = envs.getJSONObject(i).optString("explanation");
+                        }
+                    System.out.println("  " + n + ": " + origin + " / " + explain);
+                    check("una via di ritorno dei pacchetti si presenta come tale",
+                            origin.equals(I18n.tr("server.um.bootEnvironments.packagesOrigin"))
+                            && explain.equals(I18n.tr("server.um.bootEnvironments.packagesExplain")));
+                } finally {
+                    PackageWayBack.destroy(n);
+                }
+                check("e il boot environment di prova non c'e' piu'", !bootEnvironments().contains(n));
+                if (failures > 0) System.exit(1);
+            }
             default -> throw new IllegalArgumentException(args[0]);
         }
     }
