@@ -12461,11 +12461,31 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             if (r.notice) {
                 h += '<div class="alert alert-warning" role="alert"><strong>' + escHtml(t('up.interruptedTitle')) + '</strong>'
-                   + '<p class="mb-2">' + escHtml(r.notice.text) + '</p>'
-                   + '<button type="button" class="btn btn-sm btn-outline-dark" onclick="updInterruptedDismiss()">'
+                   + '<p class="mb-2">' + escHtml(r.notice.text) + '</p>';
+                // La reinstallazione interrotta: tornare al server di prima con un pulsante, non con bectl in una shell.
+                if (r.notice.reinstall && r.notice.wayBack) {
+                    h += '<button type="button" class="btn btn-sm btn-danger me-2" id="upd-way-back-btn" onclick="updWayBack(this.dataset.name)" data-name="'
+                       + escHtml(r.notice.wayBack) + '">'
+                       + '<i class="fas fa-rotate-left me-1" aria-hidden="true"></i>' + escHtml(t('up.wayBackButton', { name: r.notice.wayBack })) + '</button>';
+                }
+                h += '<button type="button" class="btn btn-sm btn-outline-dark" onclick="updInterruptedDismiss()">'
                    + '<i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.interruptedDismiss')) + '</button></div>';
             }
             el.innerHTML = h;
+        }
+
+        async function updWayBack(name) {
+            if (!confirm(t('up.wayBackConfirm', { name: name }))) return;
+            const el = document.getElementById('upd-interrupted');
+            const r = await updApi('reinstall_way_back', { name: name, confirm: 'GO BACK' });
+            if (!r || !r.success) {
+                el.insertAdjacentHTML('beforeend', '<div class="alert alert-danger py-2 small" role="alert">' + escHtml((r && r.error) || '') + '</div>');
+                return;
+            }
+            const lines = (r.log || []).map(l => '<li>' + escHtml(l) + '</li>').join('');
+            const reboot = r.reboot && r.reboot.success ? t('up.wayBackRebooting') : t('up.wayBackRebootByHand');
+            el.innerHTML = '<div class="alert alert-success" role="status"><p class="mb-1">' + escHtml(r.note || '') + '</p>'
+                + (lines ? '<ul class="small mb-1">' + lines + '</ul>' : '') + '<p class="mb-0"><strong>' + escHtml(reboot) + '</strong></p></div>';
         }
 
         async function updInterruptedDismiss() {

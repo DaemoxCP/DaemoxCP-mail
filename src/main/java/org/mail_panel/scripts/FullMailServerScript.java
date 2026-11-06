@@ -1413,19 +1413,9 @@ echo ""
 exit 0
         """;
 
+    /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
     public void write_file() {
-        File scriptFile = new File(SCRIPT_PATH);
-        if (scriptFile.exists()) {
-            scriptFile.delete();
-        }
-
-        try (FileWriter writer = new FileWriter(SCRIPT_PATH)) {
-            writer.write(this.data);
-            scriptFile.setExecutable(true);
-            this.writed = true;
-        } catch (IOException e) {
-            System.out.println("Error writing script: " + e.getMessage());
-        }
+        this.writed = InstallScripts.write(SCRIPT_PATH, this.data);
     }
 
     public String getScriptContent() {

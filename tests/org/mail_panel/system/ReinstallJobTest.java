@@ -26,7 +26,10 @@ import java.util.List;
  *      resta acceso durante J1-J3, e li' non deve toccare niente.
  * Dopo ognuna: l'esito, la fine dello script, i pacchetti riprotetti, il turno libero.
  *
- * Lo script e' piantato (fase 1, dodici passi da un secondo, poi un segno), il resto e' vero: la
+ * Lo script e' piantato con una classe ombra di FullMailServerScript (tests/planted, davanti al jar
+ * nel classpath: la reinstallazione lo riscrive sempre dal suo jar), e su disco all'inizio c'e' uno
+ * script VECCHIO che non deve mai girare. Lo script piantato: fase 1, dodici passi da un secondo, poi
+ * un segno. Il resto e' vero: la
  * JVM staccata (Main --reinstall), il turno, lo sblocco e la riprotezione dei pacchetti protetti
  * (pkg vero), la via di ritorno (bectl vero). Il pannello di prova sta in una cartella sua, con
  * SQLite, segreti e registri suoi; MySQL non serve (porta 1). SOLO su un clone di prova: si accende
@@ -75,6 +78,11 @@ public class ReinstallJobTest {
         logs = base.resolve("logs");
         Files.createDirectories(panel);
         System.out.println("pacchetti protetti prima: " + lockedBefore);
+        // Senza la classe ombra davanti al jar la reinstallazione scriverebbe ed eseguirebbe lo script VERO.
+        if (!new org.mail_panel.scripts.FullMailServerScript().getScriptContent().contains("classe ombra")) {
+            System.out.println("FERMATA: manca la classe ombra di tests/planted davanti al jar: questa prova eseguirebbe lo script vero.");
+            System.exit(2);
+        }
         Path notice = base.resolve("package-job-interrupted.json");
         Path serviceOut = base.resolve("service.out");
         Process service = null;
@@ -173,6 +181,7 @@ public class ReinstallJobTest {
         }
         String log = Files.readString(Path.of(exit.toString().replace(".exit", ".log")));
         check(name + ": il registro ha tutto, fino alla riprotezione", log.contains("step 12") && log.contains("packages locked again"));
+        check(name + ": lo script vecchio non e' girato", !log.contains("stale script ran"));
         check(name + ": i pacchetti di nuovo protetti, nessun elenco", locked() == lockedBefore && !PackageQueue.statePresent());
         check(name + ": la reinstallazione non c'e' piu' e il turno e' libero", waitGone(job) && takeAndRelease());
         Files.deleteIfExists(panel.resolve("script-done"));
@@ -277,12 +286,11 @@ public class ReinstallJobTest {
                 Main.dbManager.ensurePostfixColumn();
                 if (Main.dbManager.check_tables() < 1) { Main.dbManager.create_tables(); Main.dbManager.insert_data_default(); }
                 Main.dbManager.update_mysql_config("127.0.0.1", "1", "e2e_nobody", "E2eNessuna1", "e2e_nobody");
+                // Uno script VECCHIO su disco: la reinstallazione deve riscriverlo dal suo jar (qui la
+                // classe ombra di tests/planted) e non eseguire questo (InstallScripts, reperto 169).
                 Files.createDirectories(Path.of("install_scripts"));
                 Files.writeString(Path.of("install_scripts/install_mail_server.sh"),
-                        "#!/bin/sh\n# prova: piantato al posto di install_mail_server.sh\n"
-                        + "echo \"[PHASE 1/10] Cleaning up existing installation...\"\n"
-                        + "i=1; while [ $i -le 12 ]; do echo \"planted: step $i\"; sleep 1; i=$((i+1)); done\n"
-                        + "touch ./script-done\nexit 0\n");
+                        "#!/bin/sh\n# uno script di una versione di prima\necho \"stale script ran\"\nexit 42\n");
                 System.out.println("SETUP OK");
                 System.exit(0);
             }

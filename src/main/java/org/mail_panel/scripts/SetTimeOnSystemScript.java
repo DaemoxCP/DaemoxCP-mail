@@ -11,20 +11,8 @@ public class SetTimeOnSystemScript {
     public boolean writed = false;
     private static final String SCRIPT_PATH = "./install_scripts/setup_timezone_and_dns.sh";
 
+    /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
     public void write_file() {
-        File scriptFile = new File(SCRIPT_PATH);
-        if (scriptFile.exists()) {
-            // Script already exists, don't overwrite
-            return;
-        }
-
-        SetTimeOnSystem script = new SetTimeOnSystem();
-        try (FileWriter writer = new FileWriter(SCRIPT_PATH)) {
-            writer.write(script.getScriptContent());
-            scriptFile.setExecutable(true);
-            this.writed = true;
-        } catch (IOException e) {
-            System.out.println("Error writing script: " + e.getMessage());
-        }
+        this.writed = InstallScripts.write(SCRIPT_PATH, new SetTimeOnSystem().getScriptContent());
     }
 }

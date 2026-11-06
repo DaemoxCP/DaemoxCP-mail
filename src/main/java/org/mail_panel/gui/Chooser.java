@@ -107,6 +107,16 @@ public class Chooser {
         // Il codice di accesso di emergenza, per quando passkey ed email non bastano: si genera
         // solo da qui (o con --access-code), cioe' da chi ha accesso al server.
         actionListBox.addItem("5) Emergency access code", () -> setOptionAndClose(5));
+        actionListBox.addItem("6) Go back to the server before the last reinstallation", () -> {
+            if (confirmAction("Go back",
+                    "Go back to the server as it was before the last\n" +
+                    "complete reinstallation (its way back)?\n\n" +
+                    "The mail that arrived after it is kept.\n" +
+                    "The MySQL database goes back to then.\n" +
+                    "The server must restart: you choose when.")) {
+                setOptionAndClose(6);
+            }
+        });
 
         // ============== START SERVER ==============
         actionListBox.addItem(">>> Start Mail Panel WebServer <<<", () -> {

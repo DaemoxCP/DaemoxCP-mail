@@ -231,6 +231,29 @@ public final class ReinstallJob {
         return null;
     }
 
+    /**
+     * Il registro dell'ultima reinstallazione finita male DOPO aver cominciato a cambiare il sistema
+     * (arrivata alla fase 1): uccisa senza esito, o esito 1. "" se l'ultima e' andata bene, si e'
+     * fermata prima di cambiare qualcosa, e' ancora in corso, o non ce n'e'.
+     */
+    public static String lastFailedAfterChanges() {
+        try (var files = Files.list(dir)) {
+            String latest = files.map(p -> p.getFileName().toString())
+                    .filter(n -> n.matches("reinstall-[0-9-]+\\.log"))
+                    .map(n -> n.substring(0, n.length() - ".log".length()))
+                    .sorted(java.util.Comparator.reverseOrder()).findFirst().orElse(null);
+            if (latest == null) return "";
+            Run r = Run.named(latest);
+            if (alive(r)) return "";
+            String exit = Files.exists(r.exit()) ? Files.readString(r.exit(), StandardCharsets.UTF_8).trim() : "";
+            if ("0".equals(exit)) return "";
+            String log = Files.readString(r.log(), StandardCharsets.UTF_8);
+            return log.contains("[PHASE 1/10]") ? r.log().toString() : "";
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
     /** Alla fine del lavoro staccato (Main --reinstall): l'esito, scritto tutto o niente. */
     public static void writeExit(Path exit, boolean ok) {
         try {
