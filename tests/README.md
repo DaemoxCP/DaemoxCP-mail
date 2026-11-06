@@ -38,8 +38,12 @@ passata.
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.MysqlReconnectTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallWayBackTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallWayBackE2ETest
-    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallJobTest
+    javac -cp target/freebsd-mail-panel-1.0.jar -d tests/planted tests/planted/org/mail_panel/scripts/FullMailServerScript.java
+    java -De2e.vm=yes -cp "tests/planted:tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionWatchTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.InstallScriptsTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.InstallScriptVersionTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallReturnE2ETest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
@@ -379,6 +383,23 @@ quando NON tocca l'elenco dei pacchetti sbloccati (l'elenco dell'aggiornamento d
 scritto ancora vivo, un lavoro di questo processo, il turno tenuto da un altro processo) e il testo
 dell'avviso di una reinstallazione interrotta. Senza pkg: il caso che riprotegge davvero e'
 `ReinstallJobTest` J4.
+
+**InstallScriptsTest** — gli script d'installazione su disco sono sempre quelli del jar che gira
+(`InstallScripts`, reperto 169): scrittura tutto o niente, lo script vecchio riscritto, quelli che nessuno
+scrive piu' messi da parte, l'impronta del jar dopo la `#!`; con `-De2e.vm=yes` anche un avvio vero del
+pannello che lo fa.
+
+**InstallScriptVersionTest** — `install_mail_server.sh` lanciato a mano si ferma se e' di un'altra
+versione del pannello di quella del servizio, prima di cambiare qualunque cosa. Script vero, da root,
+sulla VM: si ferma sempre prima della fase 1, e rimette rc.conf.
+
+**ReinstallReturnE2ETest** — tornare alla via di ritorno di una reinstallazione con la posta arrivata dopo
+fusa dentro (`ReinstallReturn`, reperto 170), con bectl vero e senza riavviare; tutto rimesso nell'ordine
+giusto (bectl activate promuove). Solo su un clone.
+
+`ReinstallJobTest` vuole la classe ombra di `FullMailServerScript` (`tests/planted`) davanti al jar: la
+reinstallazione riscrive sempre lo script dal suo jar, e senza l'ombra eseguirebbe quello vero (la prova lo
+controlla e si rifiuta). `MenuGoBack` e' il conduttore della voce 6 del menu, come `MenuReinstall`.
 
 **AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
 un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un

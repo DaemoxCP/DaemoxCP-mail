@@ -158,8 +158,13 @@ public class ReinstallWayBackE2ETest {
             p = PackageWayBack.beforeInstallation(log::add);
             made.add(p.name());
             sh("rm -f " + probe);       // come la reinstallazione che svuota /var/vmail
-            sh("sync; sleep 2");
-            long pinned = PackageWayBack.pinnedBytes(p.name());
+            // ZFS conta lo spazio di uno snapshot quando chiude la transazione: letto subito dopo la
+            // cancellazione dava 0 (misurato). Si forza la chiusura e si aspetta fino a 30 secondi.
+            long pinned = -1;
+            for (int k = 0; k < 15 && pinned < 45L * 1048576; k++) {
+                sh("zpool sync 2>/dev/null; sleep 2");
+                pinned = PackageWayBack.pinnedBytes(p.name());
+            }
             check("i 50 MB cancellati restano occupati dalla via di ritorno (" + PackageWayBack.mb(pinned) + " MB)", pinned >= 45L * 1048576);
             String explain = "";
             org.json.JSONArray list2 = UpdateManager.bootEnvironments().optJSONArray("environments");

@@ -62,6 +62,11 @@ public class ReinstallJobTest {
             System.out.println("SALTATA: serve -De2e.vm=yes (un clone di prova sulla VM FreeBSD, da root).");
             System.exit(0);
         }
+        // Senza la classe ombra davanti al jar la reinstallazione scriverebbe ed eseguirebbe lo script VERO.
+        if (!new org.mail_panel.scripts.FullMailServerScript().getScriptContent().contains("classe ombra")) {
+            System.out.println("FERMATA: manca la classe ombra di tests/planted davanti al jar: questa prova eseguirebbe lo script vero.");
+            System.exit(2);
+        }
         for (String n : sh("bectl list -H 2>/dev/null | cut -f1").split("\n"))
             if (PackageWayBack.REINSTALL_OWN.matcher(n.trim()).matches()) {
                 System.out.println("FERMATA: c'e' gia' la via di ritorno di una reinstallazione (" + n.trim() + "): la potatura la toglierebbe.");
@@ -78,11 +83,6 @@ public class ReinstallJobTest {
         logs = base.resolve("logs");
         Files.createDirectories(panel);
         System.out.println("pacchetti protetti prima: " + lockedBefore);
-        // Senza la classe ombra davanti al jar la reinstallazione scriverebbe ed eseguirebbe lo script VERO.
-        if (!new org.mail_panel.scripts.FullMailServerScript().getScriptContent().contains("classe ombra")) {
-            System.out.println("FERMATA: manca la classe ombra di tests/planted davanti al jar: questa prova eseguirebbe lo script vero.");
-            System.exit(2);
-        }
         Path notice = base.resolve("package-job-interrupted.json");
         Path serviceOut = base.resolve("service.out");
         Process service = null;
