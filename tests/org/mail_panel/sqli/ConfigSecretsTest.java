@@ -49,7 +49,7 @@ public class ConfigSecretsTest {
             // Dentro ci sono un database e un file dei segreti di prova: in /tmp, fuori dai boot
             // environment, restavano dopo ogni giro (reperto 162).
             try (var walk = Files.walk(dir)) {
-                for (Path q : walk.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(q);
+                for (Path q : walk.sorted((x, y) -> y.compareTo(x)).toList()) Files.deleteIfExists(q);   // prima i figli
             }
             System.exit(code);
         }

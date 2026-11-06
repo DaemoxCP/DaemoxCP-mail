@@ -447,9 +447,10 @@ public class Main {
                     if (exitFile != null) org.mail_panel.system.ReinstallJob.writeExit(exitFile, false);
                     System.exit(2);
                 }
-                // Il menu riscrive gli script a ogni avvio (generateInstallScripts): qui lo stesso.
+                // Lo script e' quello che il menu che lo lancia ha scritto al suo avvio
+                // (generateInstallScripts), con lo stesso jar: qui lo si scrive solo se manca.
                 createDirectoryIfNotExists("./install_scripts/");
-                new FullMailServerScript().write_file();
+                if (!new File("./install_scripts/install_mail_server.sh").exists()) new FullMailServerScript().write_file();
                 boolean ok = false;
                 try {
                     ok = runInstallation(host);

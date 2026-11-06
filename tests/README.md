@@ -38,6 +38,7 @@ passata.
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.MysqlReconnectTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallWayBackTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallWayBackE2ETest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
@@ -104,8 +105,9 @@ stampa «M7 IN PKG», poi, a pannello ripartito, il modo `m7-after`. Solo su una
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdaterRobustnessE2ETest
 
 `MenuReinstall` non e' una prova ma il conduttore della reinstallazione completa dal menu
-(`Main.runInstallation`, la stessa funzione della voce del menu) su un server dove il pannello e'
-gia' partito: sblocca i protetti, lancia lo script col turno del pannello, li riprotegge. Ferma la
+(`ReinstallJob.runFromMenu`, la stessa funzione della voce del menu: la lancia staccata con daemon(8)
+e ne segue il registro) su un server dove il pannello e' gia' partito: sblocca i protetti, lancia lo
+script col turno del pannello, li riprotegge. Ferma la
 posta, svuota `/var/vmail` e cambia la password di MySQL del pannello: solo su un clone di un boot
 environment, e da una COPIA della cartella del pannello se questa sta in `/home` (fuori dai boot
 environment). Come e' stata usata sulla VM, con i tentativi di concorrenza a meta': reperto 154.
@@ -363,6 +365,12 @@ il sistema» solo se lo script (piantato) arriva alla fase 1.
 toglie, e alla fine gli stessi boot environment e snapshot di prima. Crea e toglie boot environment:
 solo su un clone, e si rifiuta di partire (codice 2) se ci sono gia' vie di ritorno dei lavori sui
 pacchetti, che la potatura toglierebbe.
+
+**ReinstallJobTest** — la reinstallazione completa staccata dal menu (`ReinstallJob`, reperto 163): il
+menu ucciso, il terminale del menu che si chiude (SIGHUP al suo gruppo), un secondo menu aperto a
+meta', la reinstallazione stessa uccisa. Script piantato, il resto vero (JVM staccata, turno, pkg,
+bectl): solo su un clone, `-De2e.vm=yes`, da root; si rifiuta di partire se ci sono gia' vie di
+ritorno di reinstallazioni o un elenco di pacchetti sbloccati.
 
 **AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
 un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un
