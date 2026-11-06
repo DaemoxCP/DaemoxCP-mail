@@ -435,6 +435,30 @@ public class Main {
             if ("--access-code".equals(args[i])) {
                 System.exit(printAccessCode(i + 1 < args.length ? args[i + 1] : null));
             }
+            // La reinstallazione completa staccata dal menu (ReinstallJob): la lancia la voce del
+            // menu con daemon(8), in una sessione sua, e la segue. Chi chiude il terminale o uccide
+            // il menu non la ferma piu' a meta' (reperto 163). L'esito va nel file indicato.
+            if ("--reinstall".equals(args[i])) {
+                nonInteractive = true;
+                String host = i + 1 < args.length ? args[i + 1].trim() : "";
+                Path exitFile = i + 2 < args.length ? Path.of(args[i + 2]) : null;
+                if (!org.mail_panel.system.ReinstallJob.validHostname(host)) {
+                    System.err.println("Usage: java -jar freebsd-mail-panel-1.0.jar --reinstall <mail hostname> [result file]");
+                    if (exitFile != null) org.mail_panel.system.ReinstallJob.writeExit(exitFile, false);
+                    System.exit(2);
+                }
+                // Il menu riscrive gli script a ogni avvio (generateInstallScripts): qui lo stesso.
+                createDirectoryIfNotExists("./install_scripts/");
+                new FullMailServerScript().write_file();
+                boolean ok = false;
+                try {
+                    ok = runInstallation(host);
+                } finally {
+                    if (exitFile != null) org.mail_panel.system.ReinstallJob.writeExit(exitFile, ok);
+                }
+                System.out.flush();
+                System.exit(ok ? 0 : 1);
+            }
         }
 
         // Modalita' solo-web: nessun menu a schermo.
@@ -611,7 +635,9 @@ public class Main {
             throw new RuntimeException(e);
         }
 
-        runInstallation(mailHostname.trim());
+        // Staccata dal menu (ReinstallJob): il menu la lancia e la segue. Se questo terminale si
+        // chiude, la reinstallazione va avanti da sola fino in fondo.
+        org.mail_panel.system.ReinstallJob.runFromMenu(mailHostname.trim(), System.out);
 
         // Un'attesa sola, alla fine: dopo la riprotezione dei pacchetti, non prima. Con l'attesa
         // dentro executeScript, chi chiudeva il terminale davanti a "Press ENTER" uccideva il
@@ -651,7 +677,7 @@ public class Main {
         try {
             start = InstallLocks.prepare(org.mail_panel.i18n.I18n.tr("server.reinstall.turn"), () -> {
                 try {
-                    wayBack[0] = org.mail_panel.system.PackageWayBack.before(wayBackLog, "reinstall");
+                    wayBack[0] = org.mail_panel.system.PackageWayBack.beforeInstallation(wayBackLog);
                     return null;
                 } catch (IllegalStateException e) {
                     return e.getMessage();

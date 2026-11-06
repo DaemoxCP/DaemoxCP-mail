@@ -45,7 +45,13 @@ public class ConfigSecretsTest {
                     "-cp", absolute(System.getProperty("java.class.path")),
                     ConfigSecretsTest.class.getName(), "child")
                     .directory(dir.toFile()).inheritIO().start();
-            System.exit(child.waitFor());
+            int code = child.waitFor();
+            // Dentro ci sono un database e un file dei segreti di prova: in /tmp, fuori dai boot
+            // environment, restavano dopo ogni giro (reperto 162).
+            try (var walk = Files.walk(dir)) {
+                for (Path q : walk.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(q);
+            }
+            System.exit(code);
         }
 
         String key = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\nBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----\n";
