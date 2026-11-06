@@ -1098,6 +1098,9 @@ public class Main {
                     return false;
                 }
                 server.start();
+                // Il guardiano dei lavori sui pacchetti morti a meta' mentre il servizio e' acceso
+                // (UpdateManager.startInterruptionWatch): prima ci pensava solo l'avvio.
+                org.mail_panel.system.UpdateManager.startInterruptionWatch();
 
                 // La regola dei blocchi: i pacchetti dello stack di posta restano bloccati,
                 // tranne quelli sbloccati apposta da un amministratore.

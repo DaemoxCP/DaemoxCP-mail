@@ -37,6 +37,9 @@ public final class InstallLocks {
 
     private InstallLocks() {}
 
+    /** Il prefisso del turno della reinstallazione completa, scritto nel record del lavoro (turnId). */
+    public static final String REINSTALL_TURN_PREFIX = "reinstall-";
+
     /** I comandi di pkg che servono qui. Nelle prove un finto, per i guasti che pkg vero non da'. */
     interface Pkg {
         /** I pacchetti protetti, un nome-versione per riga ("" se nessuno), o null se pkg non risponde. */
@@ -113,7 +116,10 @@ public final class InstallLocks {
     }
 
     static Start prepare(String description, Pkg pkg, java.util.function.Supplier<String> onTurn) {
-        String id = "install-" + System.nanoTime();
+        // "reinstall-": lo riconosce l'avviso di un lavoro interrotto (PackageRecovery), che per la
+        // reinstallazione dice anche che la posta puo' essere spenta e dov'e' la via di ritorno.
+        // "install-" lo usa gia' l'installazione di un pacchetto dalla pagina web.
+        String id = REINSTALL_TURN_PREFIX + System.nanoTime();
         // take, non takeForLocks: con l'elenco di un lavoro interrotto su disco i pacchetti
         // potrebbero essere gia' sbloccati, e un elenco nuovo non si potrebbe nemmeno scrivere.
         String refusal = PackageQueue.take(id, description);
