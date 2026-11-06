@@ -31,6 +31,8 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMailTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageQueueTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallLocksTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
@@ -94,6 +96,15 @@ macchina spenta di colpo durante pkg) e' in due tempi: `-Dmeasure=m7`, poi `rebo
 stampa «M7 IN PKG», poi, a pannello ripartito, il modo `m7-after`. Solo su una macchina di prova.
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdaterRobustnessE2ETest
+
+`MenuReinstall` non e' una prova ma il conduttore della reinstallazione completa dal menu
+(`Main.runInstallation`, la stessa funzione della voce del menu) su un server dove il pannello e'
+gia' partito: sblocca i protetti, lancia lo script col turno del pannello, li riprotegge. Ferma la
+posta, svuota `/var/vmail` e cambia la password di MySQL del pannello: solo su un clone di un boot
+environment, e da una COPIA della cartella del pannello se questa sta in `/home` (fuori dai boot
+environment). Come e' stata usata sulla VM, con i tentativi di concorrenza a meta': reperto 154.
+
+    cd <copia della cartella del pannello> && java -cp "<tests compilate>:freebsd-mail-panel-1.0.jar" org.mail_panel.system.MenuReinstall
 
 Le quattro prove che fanno lavori veri (questa, `InstallScriptDriftTest`,
 `PackageReplacementE2ETest`, `PostfixMapsJobsE2ETest`) alla fine tolgono i boot environment che
@@ -295,6 +306,20 @@ chiedere il turno nello stesso istante (lo prende uno solo), controlla che il tu
 quando il lavoro fallisce, che l'elenco di un lavoro interrotto non venga sovrascritto, che un
 elenco non scritto venga detto, e che con quell'elenco su disco non parta nessun lavoro che
 installa o aggiorna, mentre rimettere le protezioni resta possibile.
+
+**InstallLocksTest** — la reinstallazione completa su un server coi pacchetti protetti
+(`InstallLocks`), con un pkg finto per i guasti che pkg vero non da': uno sblocco che dice si' e
+non sblocca, una lettura delle protezioni che non risponde, una riprotezione che fallisce, pkg che
+esplode a meta'. Per ognuno: se lo script puo' partire, che cosa resta protetto, se l'elenco su
+disco (e il record del lavoro accanto) si chiude o resta, se il turno si libera.
+
+**PackageTurnAcrossProcessesTest** — il turno dei pacchetti fra processi: un secondo processo
+vero (`TurnHolder`) lo tiene, e questo non lo prende, non riprotegge l'elenco dell'altro
+all'avvio, non applica la regola dei blocchi (e lo dice); ucciso l'altro con kill -9, l'elenco si
+riprotegge con l'avviso che nomina il lavoro interrotto. Poi `lockf(1)` contro il pannello, nei
+due sensi, e la parte del turno di `install_mail_server.sh` (dal testo vero, fino al controllo dei
+protetti: non arriva mai alla fase 1) dal menu, a mano, con le variabili messe a mano. Da root,
+sulla VM: tutto in una cartella di `/var/tmp`, pkg solo in lettura. Reperto 153.
 
 **AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
 un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un
