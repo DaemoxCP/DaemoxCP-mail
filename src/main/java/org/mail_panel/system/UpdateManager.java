@@ -2265,13 +2265,10 @@ public final class UpdateManager {
     public static synchronized void startInterruptionWatch() {
         if (interruptionWatch != null && interruptionWatch.isAlive()) return;
         interruptionWatch = new Thread(() -> {
-            String last = "";
             while (true) {
                 try {
                     Thread.sleep(watchSeconds * 1000L);
-                    String r = watchOnce();
-                    if (!r.isEmpty() && !r.equals(last)) LOGGER.warning(r);
-                    last = r;
+                    watchOnce();      // quello che trova lo scrive gia' nel log il ripristino
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return;

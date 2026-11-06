@@ -20,7 +20,10 @@ import java.util.List;
  *      parte sotto daemon(8), cosi' ha un gruppo suo come davanti a un terminale vero);
  *  J3. un menu ucciso a meta' e un secondo menu aperto mentre lei lavora: il secondo segue quella
  *      in corso, non ne fa partire un'altra;
- *  J4. la reinstallazione stessa uccisa con kill -9: il menu lo dice e non la da' per riuscita.
+ *  J4. la reinstallazione stessa uccisa con kill -9: il menu lo dice e non la da' per riuscita, e
+ *      un «servizio» acceso col guardiano (UpdateManager.startInterruptionWatch, reperto 166)
+ *      riprotegge i pacchetti da solo e scrive l'avviso con la via di ritorno. Lo stesso servizio
+ *      resta acceso durante J1-J3, e li' non deve toccare niente.
  * Dopo ognuna: l'esito, la fine dello script, i pacchetti riprotetti, il turno libero.
  *
  * Lo script e' piantato (fase 1, dodici passi da un secondo, poi un segno), il resto e' vero: la
@@ -72,8 +75,17 @@ public class ReinstallJobTest {
         logs = base.resolve("logs");
         Files.createDirectories(panel);
         System.out.println("pacchetti protetti prima: " + lockedBefore);
+        Path notice = base.resolve("package-job-interrupted.json");
+        Path serviceOut = base.resolve("service.out");
+        Process service = null;
         try {
             check("pannello di prova pronto", run(panel, "setup").contains("SETUP OK"));
+            String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+            service = new ProcessBuilder(java, "-cp", absolute(System.getProperty("java.class.path")),
+                    ReinstallJobTest.class.getName(), "child", "service-watch", notice.toString())
+                    .directory(base.toFile()).redirectErrorStream(true).redirectOutput(serviceOut.toFile()).start();
+            for (int i = 0; i < 40 && !(Files.exists(serviceOut) && Files.readString(serviceOut).contains("WATCHING")); i++) Thread.sleep(250);
+            check("il servizio col guardiano e' acceso", Files.readString(serviceOut).contains("WATCHING"));
 
             System.out.println("\n== J1. Il menu ucciso con kill -9 a meta' ==");
             Process menu = startMenu("j1");
@@ -114,17 +126,26 @@ public class ReinstallJobTest {
             System.out.println("\n== J4. La reinstallazione stessa uccisa con kill -9 ==");
             menu = startMenu("j4");
             job = waitJobStep(3);
+            check("durante J1-J3 il guardiano non ha toccato niente", !Files.exists(notice)
+                    && !Files.readString(serviceOut).contains("Interrupted package job detected"));
             sh("kill -9 " + job);
             out = new String(menu.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             code = menu.waitFor();
             echo(out);
             check("il menu dice che si e' fermata senza finire", out.contains("stopped without finishing"));
             check("e non la da' per riuscita", code != 0 && out.contains("MENU RESULT false"));
-            check("i pacchetti sono rimasti sbloccati con l'elenco su disco (li riprotegge il prossimo avvio)", PackageQueue.statePresent());
-            String back = UpdateManager.restoreLocksAfterCrash();
-            check("il ripristino dell'avvio li riprotegge", !PackageQueue.statePresent() && locked() == lockedBefore);
-            System.out.println("      | " + back.replace("\n", " ").trim());
+            boolean relocked = false;
+            for (int i = 0; i < 60 && !relocked; i++) {
+                Thread.sleep(1000);
+                relocked = !PackageQueue.statePresent() && locked() == lockedBefore;
+            }
+            check("il servizio acceso se ne accorge e riprotegge i pacchetti da solo", relocked);
+            org.json.JSONObject n = Files.exists(notice) ? new org.json.JSONObject(Files.readString(notice)) : new org.json.JSONObject();
+            check("e scrive l'avviso: era la reinstallazione, con la sua via di ritorno (" + n.optString("wayBack") + ")",
+                    n.optBoolean("reinstall") && PackageWayBack.REINSTALL_OWN.matcher(n.optString("wayBack")).matches());
+            echo(Files.readString(serviceOut));
         } finally {
+            if (service != null) { service.getOutputStream().close(); service.waitFor(); }
             // Le vie di ritorno fatte dalle reinstallazioni di prova.
             for (String n : sh("bectl list -H | cut -f1").split("\n"))
                 if (PackageWayBack.REINSTALL_OWN.matcher(n.trim()).matches()) PackageWayBack.destroy(n.trim());
@@ -263,6 +284,16 @@ public class ReinstallJobTest {
                         + "i=1; while [ $i -le 12 ]; do echo \"planted: step $i\"; sleep 1; i=$((i+1)); done\n"
                         + "touch ./script-done\nexit 0\n");
                 System.out.println("SETUP OK");
+                System.exit(0);
+            }
+            case "service-watch" -> {
+                // Il guardiano del servizio --web, con un giro di 3 secondi invece di 60.
+                UpdateManager.watchSeconds = 3;
+                PackageRecovery.notice = Path.of(a[2]);
+                UpdateManager.startInterruptionWatch();
+                System.out.println("WATCHING");
+                System.out.flush();
+                System.in.read();
                 System.exit(0);
             }
             case "menu" -> {

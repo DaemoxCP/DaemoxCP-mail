@@ -39,6 +39,7 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallWayBackTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallWayBackE2ETest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallJobTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionWatchTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
@@ -368,9 +369,16 @@ pacchetti, che la potatura toglierebbe.
 
 **ReinstallJobTest** — la reinstallazione completa staccata dal menu (`ReinstallJob`, reperto 163): il
 menu ucciso, il terminale del menu che si chiude (SIGHUP al suo gruppo), un secondo menu aperto a
-meta', la reinstallazione stessa uccisa. Script piantato, il resto vero (JVM staccata, turno, pkg,
+meta', la reinstallazione stessa uccisa (e un «servizio» col guardiano che se ne accorge da solo,
+reperto 166). Script piantato, il resto vero (JVM staccata, turno, pkg,
 bectl): solo su un clone, `-De2e.vm=yes`, da root; si rifiuta di partire se ci sono gia' vie di
 ritorno di reinstallazioni o un elenco di pacchetti sbloccati.
+
+**InterruptionWatchTest** — il guardiano del servizio acceso (`UpdateManager.watchOnce`, reperto 166):
+quando NON tocca l'elenco dei pacchetti sbloccati (l'elenco dell'aggiornamento della JVM, chi l'ha
+scritto ancora vivo, un lavoro di questo processo, il turno tenuto da un altro processo) e il testo
+dell'avviso di una reinstallazione interrotta. Senza pkg: il caso che riprotegge davvero e'
+`ReinstallJobTest` J4.
 
 **AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
 un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un
