@@ -9,8 +9,11 @@ public class database {
     /**
      * Quanto aspetta una scrittura se il database e' occupato da un altro processo, prima di
      * arrendersi con SQLITE_BUSY. Il database lo usano insieme il servizio --web e il menu (o un
-     * comando da console) avviati dalla stessa cartella; una scrittura dura millisecondi. Senza
-     * attesa, la prima scrittura dell'uno mentre l'altro legge falliva subito (reperto 156).
+     * comando da console) avviati dalla stessa cartella. sqlite-jdbc aspetta gia' 3 secondi di suo:
+     * misurato sulla VM il 06/11/2026 (reperto 160), il jar di prima falliva dopo 3 secondi a
+     * scrittura. Il difetto del reperto 156 non era l'attesa ma il lock tenuto per sempre dalle
+     * letture lasciate aperte (sotto). Quindici secondi sono il margine per una scrittura lunga
+     * dell'altro processo: una tenuta di 6 secondi passa con 15, con 3 no (misurato).
      */
     static final int BUSY_TIMEOUT_MS = 15_000;
 

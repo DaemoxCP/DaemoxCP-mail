@@ -1,0 +1,109 @@
+package org.mail_panel.system;
+
+import org.mail_panel.i18n.I18n;
+import org.mail_panel.util.Shell;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * PackageWayBack.afterInstallation con bectl vero: quando la via di ritorno della reinstallazione
+ * completa resta e quando si toglie.
+ *
+ *  - lo script si e' fermato prima della fase 1 e i pacchetti sono uguali: il boot environment si
+ *    toglie, e con lui lo snapshot da cui era nato;
+ *  - lo script e' arrivato alla fase 1: resta, e il messaggio dice come tornarci;
+ *  - i pacchetti sono cambiati (anche senza fase 1): resta.
+ * Alla fine non resta niente: gli stessi boot environment e gli stessi snapshot di prima.
+ *
+ * Crea e toglie boot environment veri: SOLO su un clone di prova, e si rifiuta di partire se ci sono
+ * gia' vie di ritorno dei lavori sui pacchetti (la potatura le toglierebbe). Si accende con
+ * -De2e.vm=yes, da root, dove bectl check riesce:
+ *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallWayBackE2ETest
+ */
+public class ReinstallWayBackE2ETest {
+
+    static int failed = 0;
+
+    static void check(String what, boolean ok) {
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
+        if (!ok) failed++;
+    }
+
+    static String sh(String cmd) {
+        return Shell.runShell(Duration.ofSeconds(120), cmd).outputTrim();
+    }
+
+    static List<String> bootEnvironments() {
+        List<String> r = new ArrayList<>();
+        for (String l : sh("bectl list -H 2>/dev/null | cut -f1").split("\n")) if (!l.isBlank()) r.add(l.trim());
+        return r;
+    }
+
+    static String snapshots() {
+        return sh("zfs list -H -t snapshot -o name 2>/dev/null | sort");
+    }
+
+    public static void main(String[] args) {
+        if (!"yes".equals(System.getProperty("e2e.vm"))) {
+            System.out.println("SALTATA: serve -De2e.vm=yes (un clone di prova sulla VM FreeBSD, da root).");
+            System.exit(0);
+        }
+        if (!Shell.runShell(Duration.ofSeconds(30), "bectl check").success()) {
+            System.out.println("FALLITA: bectl check non riesce, qui non ci sono boot environment.");
+            System.exit(1);
+        }
+        I18n.setCurrent("en");
+        List<String> beBefore = bootEnvironments();
+        // La prova chiama afterInstallation, che pota le vie di ritorno piu' vecchie (ne tiene
+        // PackageWayBack.KEEP). Con vie di ritorno vere gia' qui ne toglierebbe una: misurato sul
+        // clone il 06/11/2026, la prova lanciata dopo tre reinstallazioni vere ha tolto la piu'
+        // vecchia. Quindi parte solo dove non ce ne sono.
+        List<String> own = new ArrayList<>();
+        for (String n : beBefore) if (PackageWayBack.OWN.matcher(n).matches()) own.add(n);
+        if (!own.isEmpty()) {
+            System.out.println("FERMATA: qui ci sono gia' vie di ritorno dei lavori sui pacchetti " + own
+                    + ", e la prova ne poterebbe qualcuna. Toglierle (o usare un clone senza) e rilanciare.");
+            System.exit(2);
+        }
+        String snapBefore = snapshots();
+        List<String> made = new ArrayList<>();
+        try {
+            System.out.println("== Lo script si ferma prima della fase 1, pacchetti uguali ==");
+            List<String> log = new ArrayList<>();
+            PackageWayBack.Prepared p = PackageWayBack.before(log::add, "reinstall");
+            made.add(p.name());
+            check("creato prima dell'installazione: " + p.name(), bootEnvironments().contains(p.name())
+                    && p.name().matches("packages-before-[0-9-]+-reinstall"));
+            PackageWayBack.afterInstallation(log::add, p, false);
+            check("tolto alla fine", !bootEnvironments().contains(p.name()));
+            check("e lo snapshot da cui era nato", snapshots().equals(snapBefore));
+            check("il messaggio dice che non serviva", String.join("\n", log).contains("not needed: removed"));
+
+            System.out.println("\n== Lo script arriva alla fase 1 ==");
+            log.clear();
+            p = PackageWayBack.before(log::add, "reinstall");
+            made.add(p.name());
+            PackageWayBack.afterInstallation(log::add, p, true);
+            check("resta", bootEnvironments().contains(p.name()));
+            check("e il messaggio dice come tornarci", String.join("\n", log).contains("bectl activate " + p.name()));
+            check("toglierlo a mano lascia tutto come prima", PackageWayBack.destroy(p.name()) == null
+                    && bootEnvironments().equals(beBefore) && snapshots().equals(snapBefore));
+
+            System.out.println("\n== Pacchetti cambiati, anche senza fase 1 ==");
+            log.clear();
+            p = PackageWayBack.before(log::add, "reinstall");
+            made.add(p.name());
+            PackageWayBack.afterInstallation(log::add, new PackageWayBack.Prepared(p.name(), "un altro inventario"), false);
+            check("resta", bootEnvironments().contains(p.name()));
+            check("toglierlo lascia tutto come prima", PackageWayBack.destroy(p.name()) == null
+                    && bootEnvironments().equals(beBefore) && snapshots().equals(snapBefore));
+        } finally {
+            for (String n : made) if (bootEnvironments().contains(n)) PackageWayBack.destroy(n);
+        }
+        check("alla fine: gli stessi boot environment e snapshot di prima", bootEnvironments().equals(beBefore) && snapshots().equals(snapBefore));
+        System.out.println(failed == 0 ? "\nTutte le prove passate." : "\n" + failed + " prove FALLITE.");
+        System.exit(failed == 0 ? 0 : 1);
+    }
+}

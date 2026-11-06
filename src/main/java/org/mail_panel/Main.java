@@ -1005,6 +1005,12 @@ public class Main {
                 String mysqlUser = result.getString("mysql_user");
                 String mysqlPassword = dbManager.mysqlPassword();
                 String mysqlDatabase = result.getString("mysql_database");
+                // Letti i valori, la lettura di SQLite si chiude QUI e non alla fine del try: sul
+                // percorso buono questo metodo non torna (resta in ascolto), e il ResultSet aperto
+                // teneva la lettura, cioe' il lock SHARED sul file, per tutta la vita del servizio.
+                // Ogni scrittura di un altro processo dalla stessa cartella (il menu, la console)
+                // finiva in SQLITE_BUSY: misurato sul clone il 06/11/2026 (reperti 156 e 160).
+                result.close();
 
                 mailDatabase = new MailDatabase();
 
@@ -1130,6 +1136,7 @@ public class Main {
                 String mysqlUser = result.getString("mysql_user");
                 String mysqlPassword = dbManager.mysqlPassword();
                 String mysqlDatabase = result.getString("mysql_database");
+                result.close();     // letti i valori: la lettura di SQLite non resta aperta mentre si lavora su MySQL
 
                 mailDatabase = new MailDatabase();
 
@@ -1175,6 +1182,7 @@ public class Main {
             String mysqlUser = result.getString("mysql_user");
             String mysqlPassword = dbManager.mysqlPassword();
             String mysqlDatabase = result.getString("mysql_database");
+            result.close();     // letti i valori: la lettura di SQLite non resta aperta mentre si azzera MySQL
 
             mailDatabase = new MailDatabase();
 

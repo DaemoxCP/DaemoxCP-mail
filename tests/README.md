@@ -34,6 +34,10 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallLocksTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PendingDbPasswordTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PendingDbPasswordE2ETest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.sqli.SqliteSharedTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.MysqlReconnectTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallWayBackTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallWayBackE2ETest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
@@ -338,6 +342,27 @@ processo e con MySQL che non risponde (porta 1). Dopo ogni giro: il pannello ent
 (`Main.connectFromConfig`)? Ogni giro ha cartella, SQLite e file dei segreti suoi, e un utente
 MySQL di prova (`e2e_pending`) che alla fine si toglie; la password di root la legge dal file dei
 segreti vero. Si accende solo con `-De2e.vm=yes`, da root, con MySQL acceso.
+
+**SqliteSharedTest** — il database SQLite del pannello usato da due processi insieme, come il
+servizio `--web` e il menu dalla stessa cartella (reperto 160): un processo fa le letture del servizio
+e resta acceso, un altro scrive quello che scrive la reinstallazione, tutto subito e senza
+`SQLITE_BUSY`; poi una scrittura tenuta 6 secondi dall'uno e l'altro che aspetta e riesce (6 e non 3:
+sqlite-jdbc aspetta gia' 3 secondi di suo). NON vede il ResultSet che `startWebServer` teneva aperto
+per tutta la vita del servizio: quello lo vede solo la reinstallazione dal menu col servizio vero
+acceso, sul clone (reperto 161).
+
+**MysqlReconnectTest** — il pannello acceso si ricollega a MySQL con la password che c'e' adesso nel
+file dei segreti, non con quella dell'avvio. MySQL vero, utente di prova `e2e_reconnect` tolto alla
+fine; `-De2e.vm=yes`, da root.
+
+**InstallWayBackTest** — la via di ritorno della reinstallazione senza bectl: il passo che la crea gira
+col turno e prima dello sblocco, un suo rifiuto ferma tutto, e `Main.installOnTurn` dice «ha cambiato
+il sistema» solo se lo script (piantato) arriva alla fase 1.
+
+**ReinstallWayBackE2ETest** — la stessa con bectl vero: quando il boot environment resta e quando si
+toglie, e alla fine gli stessi boot environment e snapshot di prima. Crea e toglie boot environment:
+solo su un clone, e si rifiuta di partire (codice 2) se ci sono gia' vie di ritorno dei lavori sui
+pacchetti, che la potatura toglierebbe.
 
 **AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
 un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un
