@@ -2165,21 +2165,40 @@ public final class UpdateManager {
         guard.setDaemon(true);
         guard.start();
 
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-            String l;
-            while ((l = br.readLine()) != null) {
-                job.write(l);
-                if (capture != null) capture.append(l).append('\n');
+        // L'uscita si legge in un thread a parte, e la fine la decide il PROCESSO, non l'uscita.
+        // Un processo che il comando ha lanciato e lasciato andare (una subshell con "&", un demone
+        // che non chiude lo standard output) esce dall'albero e tiene aperta la pipe: leggendola
+        // qui fino in fondo, runLogged avrebbe aspettato lui, timeout o no. Misurato sulla VM il
+        // 06/11/2026: "(sleep 71 &); sleep 63" con 3 secondi di timeout tornava dopo 71.
+        java.util.concurrent.CountDownLatch drained = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<java.io.IOException> readError = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread reader = localizedThread(() -> {
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                String l;
+                while ((l = br.readLine()) != null) {
+                    job.write(l);
+                    if (capture != null) synchronized (capture) { capture.append(l).append('\n'); }
+                }
+            } catch (java.io.IOException e) {
+                // Dopo stopTree lo stream si chiude sotto la lettura: quello che e' arrivato e' tutto.
+                if (!stopped.get()) readError.set(e);
+            } finally {
+                drained.countDown();
             }
-        } catch (java.io.IOException e) {
-            // Dopo stopTree lo stream si chiude sotto la lettura: quello che e' arrivato e' tutto.
-            if (!stopped.get()) throw e;
-        }
+        }, "update-output");
+        reader.setDaemon(true);
+        reader.start();
         int code = p.waitFor();
         guard.interrupt();
+        if (!drained.await(stopped.get() ? 5 : OUTPUT_GRACE_SECONDS, java.util.concurrent.TimeUnit.SECONDS))
+            job.write(I18n.tr("server.um.runLogged.outputHeld"));
+        if (readError.get() != null) throw readError.get();
         return stopped.get() ? TIMED_OUT : code;
     }
+
+    /** Quanto si aspetta l'uscita dopo la fine del comando, prima di non aspettarla piu'. */
+    static int OUTPUT_GRACE_SECONDS = 30;
 
     // ===================== stato su disco, per sopravvivere a un crash =====================
 

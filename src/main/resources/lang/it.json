@@ -3396,6 +3396,7 @@
   "server.um.bootEnvironments.packagesExplain": "La via di ritorno preparata prima di un aggiornamento dei pacchetti: tutto il sistema com'era appena prima di quel lavoro. Il pannello tiene gli ultimi tre e toglie da solo quelli più vecchi.",
   "server.um.runLogged.pkgStillRunning": "{cmd} sta lavorando da {minutes} minuti. Continuo ad aspettare: fermarlo a metà di un'installazione lascerebbe pacchetti installati a metà. Se è davvero bloccato lo vedi con: ps -axo pid,etime,command | grep -e pkg -e freebsd-update",
   "server.um.runLogged.stopped": "TIMEOUT dopo {timeoutSeconds}s: ho fermato il comando e i suoi sottoprocessi.",
+  "server.um.runLogged.outputHeld": "Il comando è finito, ma un processo che ha avviato tiene ancora aperta la sua uscita: non lo aspetto.",
   "server.tz.badValue": "Valore non valido: un offset come '+02:00', 'SYSTEM' o un nome come 'Europe/Rome'.",
   "server.tz.globalFailed": "time_zone globale non impostato (manca il privilegio SUPER?): {error}",
   "server.tz.globalSet": "time_zone globale impostato a '{value}'",
