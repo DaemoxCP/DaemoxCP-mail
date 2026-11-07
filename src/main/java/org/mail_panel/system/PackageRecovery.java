@@ -73,6 +73,11 @@ public final class PackageRecovery {
                 .put("packages", new JSONArray(packages))
                 .put("unlockedAtStart", new JSONArray(unlockedAtStart))
                 .put("pkgWasRunning", pkgNow);
+        // La reinstallazione completa interrotta lascia la posta spenta e le configurazioni
+        // cancellate, non solo dei pacchetti da riproteggere: l'avviso lo dice, con la sua via di
+        // ritorno (reperto 166).
+        if (job.optString("turnId", "").startsWith(InstallLocks.REINSTALL_TURN_PREFIX))
+            n.put("reinstall", true).put("wayBack", PackageWayBack.newestReinstallWayBack());
         JSONObject old = notice();
         if (!old.isEmpty()) n.put("earlier", old);
         write(n);
@@ -95,6 +100,21 @@ public final class PackageRecovery {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Cannot write " + notice, e);
         }
+    }
+
+    /**
+     * Per il rapporto periodico (UpdateManager.reportData): l'avviso come una cosa da fare, o null se
+     * non c'e'. La reinstallazione interrotta e' la cosa piu' urgente (la posta puo' essere spenta) e
+     * ha il suo titolo; prima usciva con l'urgenza e il titolo di un lavoro qualunque (reperto 172).
+     */
+    public static JSONObject reportItem() {
+        JSONObject n = notice();
+        if (n.isEmpty()) return null;
+        boolean reinstall = n.optBoolean("reinstall");
+        return new JSONObject().put("urgency", reinstall ? 0 : 1)
+                .put("title", I18n.tr(reinstall ? "mail.report.title.reinstallInterrupted" : "server.recovery.title"))
+                .put("what", text(n))
+                .put("where", I18n.tr(reinstall ? "mail.report.where.interrupted" : "server.um.x.updatesPage"));
     }
 
     /** L'avviso, o un oggetto vuoto se non c'e'. */
@@ -168,11 +188,14 @@ public final class PackageRecovery {
                 ? I18n.tr("server.recovery.relocked", java.util.Map.of("when", n.optString("relockedUtc")))
                 : I18n.tr("server.recovery.notYetRelocked");
         String pkg = n.optString("pkgWasRunning", "").isEmpty() ? "" : " " + I18n.tr("server.recovery.pkgWasRunning");
+        String reinstall = !n.optBoolean("reinstall") ? ""
+                : " " + (n.optString("wayBack", "").isEmpty() ? I18n.tr("server.recovery.reinstallNoWayBack")
+                        : I18n.tr("server.recovery.reinstallHint", java.util.Map.of("name", n.optString("wayBack"))));
         return I18n.tr("server.recovery.text", java.util.Map.of(
                 "what", what.isEmpty() ? I18n.tr("server.recovery.unknownJob") : what,
                 "started", n.optString("startedUtc", "?"),
                 "detected", n.optString("detectedUtc", "?"),
                 "state", state + pkg,
-                "list", list.isEmpty() ? "?" : list));
+                "list", list.isEmpty() ? "?" : list)) + reinstall;
     }
 }

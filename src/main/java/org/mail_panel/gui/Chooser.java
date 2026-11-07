@@ -45,6 +45,17 @@ public class Chooser {
     /**
      * Confirm action with Cancel as default (safety first)
      */
+    /**
+     * Cosa cancella una reinstallazione, detto prima. Prima diceva solo «la configurazione si azzera»,
+     * ma lo script ricrea vuote anche le tabelle della posta e quelle delle utenze del pannello
+     * (amministratori, passkey, sessioni): si cancellano, deciso dal committente il 07/11/2026.
+     */
+    private static String reinstallWarning() {
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        try { return org.mail_panel.i18n.I18n.tr("server.reinstall.menuWarning"); }
+        finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+    }
+
     private boolean confirmAction(String title, String message) {
         MessageDialogButton result = new MessageDialogBuilder()
             .setTitle(title)
@@ -97,8 +108,7 @@ public class Chooser {
                     "  • Roundcube (Webmail)\n" +
                     "  • MySQL tables\n" +
                     "  • Self-signed SSL (temporary)\n\n" +
-                    "WARNING: If already installed,\n" +
-                    "ALL configuration will be RESET!")) {
+                    reinstallWarning())) {
                 setOptionAndClose(4);
             }
         });
@@ -107,6 +117,16 @@ public class Chooser {
         // Il codice di accesso di emergenza, per quando passkey ed email non bastano: si genera
         // solo da qui (o con --access-code), cioe' da chi ha accesso al server.
         actionListBox.addItem("5) Emergency access code", () -> setOptionAndClose(5));
+        actionListBox.addItem("6) Go back to the server before the last reinstallation", () -> {
+            if (confirmAction("Go back",
+                    "Go back to the server as it was before the last\n" +
+                    "complete reinstallation (its way back)?\n\n" +
+                    "The mail that arrived after it is kept.\n" +
+                    "The MySQL database goes back to then.\n" +
+                    "The server must restart: you choose when.")) {
+                setOptionAndClose(6);
+            }
+        });
 
         // ============== START SERVER ==============
         actionListBox.addItem(">>> Start Mail Panel WebServer <<<", () -> {

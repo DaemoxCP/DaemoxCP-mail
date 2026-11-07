@@ -26,6 +26,9 @@ public class PackageQueueTest {
         Path d = Files.createTempDirectory("prova-turno");
         Path f = d.resolve("mail-panel-maintenance-locks");
         PackageQueue.list = f;
+        // E il lock del turno fra processi: senza, la prova prenderebbe quello vero, e su una
+        // macchina col pannello acceso lo troverebbe preso (o lo terrebbe ai suoi lavori).
+        PackageQueue.turnLock = d.resolve("package-turn.lock");
 
         // --- Il turno ---
         real("libero all'inizio", PackageQueue.holder() == null);
@@ -101,6 +104,11 @@ public class PackageQueueTest {
         real("elenco chiuso: l'aggiornamento parte", PackageQueue.take("upd", "aggiornamento") == null);
         PackageQueue.release("upd");
 
+        // Il file del lock fra processi resta (e' il lock che conta, non il file): e' quello
+        // della cartella di prova, non quello di /var/db/mailpanel.
+        real("il lock del turno e' quello della cartella di prova, non quello in /var/db",
+            Files.exists(PackageQueue.turnLock) && PackageQueue.turnLock.getParent().equals(d));
+        Files.deleteIfExists(PackageQueue.turnLock);
         Files.delete(d);
         System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
         if (failed > 0) System.exit(1);

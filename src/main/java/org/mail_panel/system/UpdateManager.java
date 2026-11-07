@@ -351,11 +351,24 @@ public final class UpdateManager {
      * senza l'elenco degli sblocchi voluti bloccherebbe anche quelli.
      */
     public static String applyLockPolicy() {
-        if (Files.exists(Paths.get(MAINTENANCE_STATE)) || org.mail_panel.Main.mailDatabase == null) return "";
+        if (PackageQueue.statePresent() || org.mail_panel.Main.mailDatabase == null) return "";
         // Anche questa passa all'avvio di ogni processo: se un altro pannello sta lavorando sui
-        // pacchetti, le protezioni che ha tolto sono sue (reperto 147).
-        if (PackageQueue.takeForLocks("startup-lock-policy", I18n.tr("server.recovery.turnLockPolicy")) != null) return "";
-        try { return applyLockPolicyOnTurn(); }
+        // pacchetti, le protezioni che ha tolto sono sue (reperto 147). Per esempio la
+        // reinstallazione completa dal menu, che li ha sbloccati apposta: bloccarli adesso le
+        // fermerebbe pkg a meta' (reperto 154). Lo si dice nel log: tornando "" come quando non
+        // c'e' niente da fare, chi legge il log del servizio non sapeva che la regola era saltata.
+        String refusal = PackageQueue.takeForLocks("startup-lock-policy", I18n.tr("server.recovery.turnLockPolicy"));
+        if (refusal != null) {
+            String msg = "Package lock rule not applied at this start (it is applied at the next one): " + refusal;
+            LOGGER.info(msg);
+            return msg;
+        }
+        try {
+            // Col turno in mano si riguarda: l'elenco di un lavoro puo' essere comparso fra il
+            // primo sguardo e il turno, e allora prima va ripristinato quello.
+            if (PackageQueue.statePresent()) return "";
+            return applyLockPolicyOnTurn();
+        }
         finally { PackageQueue.release("startup-lock-policy"); }
     }
 
@@ -551,12 +564,17 @@ public final class UpdateManager {
      * protetti dal pannello l'annotazione stava su uno, redis: il cartello spariva proprio dai
      * pacchetti che il pannello aveva aggiornato.
      *
-     * Costa due letture (pkg lock -l, pkg query) e un comando per ogni cartello da cambiare,
-     * quindi a regime nessuno. Se una delle due letture fallisce non si tocca niente: con
-     * l'elenco dei blocchi vuoto per un errore, i cartelli si toglierebbero da tutti.
+     * Costa due letture (pkg query) e un comando per ogni cartello da cambiare, quindi a regime
+     * nessuno. Se una delle due letture fallisce non si tocca niente: con l'elenco dei blocchi
+     * vuoto per un errore, i cartelli si toglierebbero da tutti.
+     *
+     * I bloccati si leggono con pkg query e non con "pkg lock -l": misurato sulla VM il 07/11/2026
+     * (pkg 2.8.4), senza nessun pacchetto bloccato "pkg lock -l" esce con 1 («No locked packages
+     * were found»), cioe' come un errore, e qui si fermava tutto: i cartelli rimasti sui pacchetti
+     * sbloccati non se ne andavano piu' (reperto 173). Lo stesso tranello di InstallLocks.real().
      */
     static int[] syncLockMarks() {
-        Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg lock -l");
+        Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg query -e '%k = 1' '%n-%v'");
         Shell.Result annotations = Shell.runShell(Duration.ofSeconds(60), "pkg query -a '%n %At %Av'");
         if (!lock.success() || !annotations.success()) {
             LOGGER.warning("Lock marks not updated: cannot read the locks or the annotations");
@@ -2233,9 +2251,64 @@ public final class UpdateManager {
      *    pagina Aggiornamenti e il rapporto mostrano finche' qualcuno non controlla.
      */
     public static String restoreLocksAfterCrash() {
-        Path f = Paths.get(MAINTENANCE_STATE);
+        return restoreLocksAfterCrash(I18n.tr("server.recovery.turnAtStartup"));
+    }
+
+    /** Ogni quanto il servizio acceso guarda se un lavoro sui pacchetti e' morto a meta'. */
+    static int watchSeconds = 60;
+    private static Thread interruptionWatch;
+
+    /**
+     * Il guardiano del servizio --web: ogni watchSeconds, il ripristino dell'avvio se un lavoro sui
+     * pacchetti e' morto a meta' MENTRE il pannello era acceso.
+     *
+     * <p>Misurato sulla VM il 06/11/2026 (reperto 165): la reinstallazione completa uccisa a meta'
+     * lasciava i 39 pacchetti sbloccati con l'elenco su disco, e il servizio acceso non se ne
+     * accorgeva: il ripristino lo faceva solo il suo avvio successivo, cioe' anche giorni dopo. Lo
+     * stesso per qualunque lavoro di un altro processo del pannello (il menu, un comando da console).
+     */
+    public static synchronized void startInterruptionWatch() {
+        if (interruptionWatch != null && interruptionWatch.isAlive()) return;
+        interruptionWatch = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(watchSeconds * 1000L);
+                    watchOnce();      // quello che trova lo scrive gia' nel log il ripristino
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                } catch (RuntimeException e) {
+                    LOGGER.warning("Watching for interrupted package jobs failed: " + e.getMessage());
+                }
+            }
+        }, "package-job-watch");
+        interruptionWatch.setDaemon(true);
+        interruptionWatch.start();
+    }
+
+    /**
+     * Un giro del guardiano. Il ripristino dell'avvio solo se l'elenco c'e', non e' quello lasciato
+     * apposta dall'aggiornamento della JVM (lo chiude il riavvio che lui stesso fa), e chi l'ha
+     * scritto non c'e' piu'. Il turno lo controlla poi il ripristino: se lo tiene qualcun altro, non
+     * tocca niente. "" se non c'era niente da fare.
+     */
+    static String watchOnce() {
+        if (!PackageQueue.statePresent()) return "";
+        JSONObject job = PackageQueue.jobRecord();
+        if (job.optBoolean("expectsRestart")) return "";
+        long pid = job.optLong("pid", 0);
+        long self = ProcessHandle.current().pid();
+        if (pid == self && PackageQueue.holder() != null) return "";     // un lavoro di questo processo
+        if (pid > 0 && pid != self && ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) return "";
+        return restoreLocksAfterCrash(I18n.tr("server.recovery.turnWatch"));
+    }
+
+    static String restoreLocksAfterCrash(String turnDescription) {
+        // PackageQueue.list, non il percorso scritto qui: e' lo stesso file, ma e' quello che
+        // leggono PackageRecovery.statePackages e le prove, che lo spostano in una cartella loro.
+        Path f = PackageQueue.list;
         if (!Files.exists(f)) return "";
-        String refusal = PackageQueue.takeForLocks("startup-restore", I18n.tr("server.recovery.turnAtStartup"));
+        String refusal = PackageQueue.takeForLocks("startup-restore", turnDescription);
         if (refusal != null) {
             String msg = "A list of unlocked packages is on disk, but another panel process holds the package turn "
                     + "(a job is running there): the list is not touched. " + refusal;
@@ -2255,7 +2328,7 @@ public final class UpdateManager {
             if (!expected) PackageRecovery.recordInterruption(job, names, unlockedNow, pkgNow);
             StringBuilder log = new StringBuilder();
             boolean done = relockFromState(f, log);
-            String msg = "Interrupted maintenance detected at startup: " + log;
+            String msg = "Interrupted package job detected: " + log;
             if (!done) {
                 msg += (pkgNow.isEmpty() ? "" : "pkg is still working (" + pkgNow.replace("\n", "; ") + "): ")
                         + "retrying every " + PackageRecovery.retrySeconds + " seconds until they are protected again.\n";
@@ -2302,7 +2375,7 @@ public final class UpdateManager {
      * tentativo, per non pestare un lavoro partito nel frattempo.
      */
     static boolean retryRelock() {
-        Path f = Paths.get(MAINTENANCE_STATE);
+        Path f = PackageQueue.list;
         if (!Files.exists(f)) return true;
         if (PackageQueue.takeForLocks("relock-retry", I18n.tr("server.recovery.turnRetry")) != null) return false;
         try {
@@ -3546,35 +3619,23 @@ public final class UpdateManager {
     /**
      * Credenziali del database della webmail, lette da config.inc.php.
      *
-     * Non si indovinano: nel pannello compaiono due utenti diversi per lo stesso database
-     * (mailpanel in un punto, roundcube in un altro), e quello autorevole e' cio' che
-     * Roundcube usa davvero, cioe' il DSN nella sua configurazione. La lettura si fa in Java
+     * Non si indovinano: quello autorevole e' cio' che Roundcube usa davvero, cioe' il DSN
+     * nella sua configurazione -- roundcube, l'utente suo, dopo RoundcubeDbUser; quello del
+     * pannello sui server dove la migrazione non e' ancora riuscita. La lettura si fa in Java
      * e non con una catena di grep e sed: niente da proteggere in una shell, e la password
-     * non passa mai da una riga di comando.
+     * non passa mai da una riga di comando. E' la stessa di RoundcubeDbUser.activeDsn (righe
+     * commentate escluse, vince l'ultima assegnazione): la copia del database e la migrazione
+     * devono vedere lo stesso collegamento.
      */
     static JSONObject dsnRoundcube() {
         JSONObject r = new JSONObject().put("ok", false);
         try {
             java.nio.file.Path f = Paths.get(RC_DIR + "/config/config.inc.php");
             if (!Files.exists(f)) return r.put("error", I18n.tr("server.um.dsnRoundcube.1", java.util.Map.of("rcDir", String.valueOf(RC_DIR))));
-            Pattern pat = Pattern.compile("db_dsnw'?\\]?\\s*=\\s*['\"]([a-z]+)://([^:]+):([^@]*)@([^/]+)/([A-Za-z0-9_]+)");
-            // Riga per riga, non su tutto il testo, per due motivi che una ricerca globale
-            // sbaglia entrambi: le righe COMMENTATE non contano — un DSN vecchio lasciato li'
-            // farebbe fare copia e aggiornamento dello schema sul database sbagliato — e in PHP
-            // vince l'ULTIMA assegnazione, non la prima, perche' i file di configurazione
-            // spesso impostano un valore e poi lo sovrascrivono.
-            JSONObject last = null;
-            for (String line : Files.readAllLines(f)) {
-                String t = line.trim();
-                if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) continue;
-                Matcher m = pat.matcher(t);
-                if (m.find()) {
-                    last = new JSONObject().put("ok", true).put("driver", m.group(1)).put("user", m.group(2))
-                            .put("pass", m.group(3)).put("host", m.group(4)).put("db", m.group(5));
-                }
-            }
-            if (last == null) return r.put("error", I18n.tr("server.um.dsnRoundcube.2"));
-            return last;
+            RoundcubeDbUser.Dsn d = RoundcubeDbUser.activeDsn(Files.readString(f, StandardCharsets.UTF_8));
+            if (d == null) return r.put("error", I18n.tr("server.um.dsnRoundcube.2"));
+            return new JSONObject().put("ok", true).put("driver", d.driver()).put("user", d.user())
+                    .put("pass", d.password()).put("host", d.host()).put("db", d.db());
         } catch (Exception e) {
             return r.put("error", e.getMessage());
         }
@@ -8053,12 +8114,9 @@ public final class UpdateManager {
                             "n", String.valueOf(stillUnprotected.size()),
                             "list", String.join(" ", stillUnprotected))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
-        JSONObject interrupted = PackageRecovery.notice();
-        if (!interrupted.isEmpty())
-            toDo.put(new JSONObject().put("urgency", 1)
-                    .put("title", I18n.tr("server.recovery.title"))
-                    .put("what", PackageRecovery.text(interrupted))
-                    .put("where", I18n.tr("server.um.x.updatesPage")));
+        // L'avviso di un lavoro interrotto; la reinstallazione con la sua urgenza e il suo titolo (reperto 172).
+        JSONObject interrupted = PackageRecovery.reportItem();
+        if (interrupted != null) toDo.put(interrupted);
         Set<String> byHand = unlockedByHand();
         List<String> loose = new ArrayList<>();
         JSONArray stack = pk.optJSONArray("packages");
@@ -10138,11 +10196,24 @@ public final class UpdateManager {
                 // delle versioni di prima), e freebsd-update usa <versione>_<data>. Saperlo cambia
                 // cosa significa tenerlo.
                 String origin, explain;
-                if (PackageWayBack.OWN.matcher(name).matches()) {
+                if (PackageWayBack.REINSTALL_OWN.matcher(name).matches()) {
+                    // La via di ritorno di una reinstallazione completa dal menu: il server di prima,
+                    // configurazioni, caselle e database compresi.
+                    origin = I18n.tr("server.um.bootEnvironments.reinstallOrigin");
+                    explain = I18n.tr("server.um.bootEnvironments.reinstallExplain");
+                    // Il suo «used» e' 0 appena creata: lo spazio che tiene sta nello snapshot da cui e'
+                    // nata (reperto 170). Lo si dice, o sembra gratis.
+                    long pinned = PackageWayBack.pinnedBytes(name);
+                    if (pinned >= 0) explain += " " + I18n.tr("server.um.bootEnvironments.keepsSpace",
+                            java.util.Map.of("space", PackageWayBack.mb(pinned)));
+                } else if (PackageWayBack.OWN.matcher(name).matches()) {
                     // La via di ritorno di un lavoro sui pacchetti (PackageWayBack): senza questo
                     // ramo cadeva in "origine non riconosciuta, guardalo prima di toccarlo".
                     origin = I18n.tr("server.um.bootEnvironments.packagesOrigin");
                     explain = I18n.tr("server.um.bootEnvironments.packagesExplain");
+                    long pinned = PackageWayBack.pinnedBytes(name);
+                    if (pinned >= 0) explain += " " + I18n.tr("server.um.bootEnvironments.keepsSpace",
+                            java.util.Map.of("space", PackageWayBack.mb(pinned)));
                 } else if (panelBootEnvironment(name)) {
                     origin = I18n.tr("server.um.bootEnvironments.2");
                     explain = I18n.tr("server.um.bootEnvironments.3");

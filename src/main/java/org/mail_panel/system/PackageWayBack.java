@@ -48,6 +48,19 @@ public final class PackageWayBack {
     static final java.util.regex.Pattern OWN = java.util.regex.Pattern.compile(
             "^packages-before-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}-[a-z0-9-]{1,40}$");
 
+    /*
+     * La via di ritorno della reinstallazione completa dal menu ha un nome e una potatura sua.
+     * Prima era "packages-before-...-reinstall" e contava fra le KEEP dei lavori sui pacchetti:
+     * tre aggiornamenti dopo una reinstallazione la toglievano (reperto 162), e una prova lanciata
+     * sul clone dopo tre reinstallazioni ne aveva tolta una vera. Adesso i lavori sui pacchetti non
+     * la vedono, e lei pota solo le sue: e' la sola copia del server di prima (configurazioni,
+     * caselle, database), e una reinstallazione si fa di rado.
+     */
+    static final String REINSTALL_PREFIX = "reinstall-before-";
+    static final int REINSTALL_KEEP = 2;
+    public static final java.util.regex.Pattern REINSTALL_OWN = java.util.regex.Pattern.compile(
+            "^reinstall-before-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$");
+
     /** I dati che, se stanno dentro il boot environment, tornano indietro con lui. */
     static final List<String> DATA = List.of("/var/vmail", "/var/db/mysql");
 
@@ -76,12 +89,90 @@ public final class PackageWayBack {
      * chiama non deve toccare i pacchetti.
      */
     public static Prepared before(Consumer<String> log, String kind) {
+        return create(log, nameFor(kind, ZonedDateTime.now()));
+    }
+
+    /** Il nome della via di ritorno di una reinstallazione, con l'ora UTC. */
+    static String reinstallName(ZonedDateTime when) {
+        return REINSTALL_PREFIX + when.withZoneSameInstant(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss"));
+    }
+
+    /**
+     * Lo spazio libero che la reinstallazione vuole prima di partire. Misurato sulla VM: con i
+     * pacchetti gia' installati la reinstallazione ha scritto 54 MB netti (06/11/2026, reperto 170);
+     * con gli undici pacchetti principali da scaricare e reinstallare, e la cache di pkg vuota, 358 MB,
+     * di cui 81 di cache (07/11/2026, reperto 174). 1 GB e' quasi tre volte il caso peggiore misurato,
+     * per i picchi durante l'estrazione e per la posta che intanto arriva. Un disco che si riempie a
+     * meta' lascia la posta spenta peggio di una reinstallazione che non parte.
+     */
+    static long reinstallMinFree = 1L << 30;
+
+    /**
+     * Prima della reinstallazione, sui sistemi coi boot environment: se il pool ha meno di
+     * reinstallMinFree libero, il motivo del rifiuto; altrimenti null, e il log dice quanto la via di
+     * ritorno terra' occupato. Misurato (reperto 170): la reinstallazione svuota /var/vmail e ricrea
+     * MySQL, ma i blocchi di prima non si liberano, li tiene lo snapshot della via di ritorno. Con 500 MB
+     * di posta, 516 MB. Finche' la via di ritorno c'e', la posta nuova riempie il disco accanto a
+     * quella vecchia.
+     */
+    public static String reinstallSpace(Consumer<String> log) {
+        if (!run("bectl check", 30).success()) return null;
+        String root = run("zfs list -H -o name / 2>/dev/null", 30).outputTrim();
+        String avail = root.isEmpty() ? "" : run("zfs get -Hp -o value available " + root + " 2>/dev/null", 30).outputTrim();
+        if (!avail.matches("[0-9]+")) return null;      // non si sa: non si ferma niente per questo
+        long free = Long.parseLong(avail);
+        long data = 0;
+        for (String path : dataInside()) {
+            String kb = run("du -sk " + path + " 2>/dev/null | cut -f1", 600).outputTrim();
+            if (kb.matches("[0-9]+")) data += Long.parseLong(kb) * 1024;
+        }
+        if (free < reinstallMinFree)
+            return I18n.tr("server.reinstall.noSpace", Map.of("free", mb(free), "need", mb(reinstallMinFree)));
+        log.accept(I18n.tr("server.reinstall.wayBackSpace", Map.of("data", mb(data), "free", mb(free))));
+        return null;
+    }
+
+    static String mb(long bytes) {
+        return String.valueOf(Math.round(bytes / 1048576.0));
+    }
+
+    /**
+     * Lo spazio che una via di ritorno tiene occupato davvero: i blocchi che ha solo lei, cioe' quelli
+     * dello snapshot da cui e' nata (zfs «used» dello snapshot). Il «used» del boot environment, appena
+     * creato, e' 0: bectl list e la scheda dicevano «0 MB» per una via di ritorno che ne teneva 516
+     * (misurato, reperto 170). -1 se non si sa.
+     */
+    static long pinnedBytes(String name) {
+        String root = run("zfs list -H -o name / 2>/dev/null", 30).outputTrim();
+        String parent = root.contains("/") ? root.substring(0, root.lastIndexOf('/')) : "";
+        if (parent.isEmpty()) return -1;
+        String origin = run("zfs get -H -o value origin " + parent + "/" + name + " 2>/dev/null", 30).outputTrim();
+        if (!origin.contains("@")) return -1;
+        String used = run("zfs get -Hp -o value used " + origin + " 2>/dev/null", 30).outputTrim();
+        return used.matches("[0-9]+") ? Long.parseLong(used) : -1;
+    }
+
+    /** La via di ritorno di reinstallazione piu' recente su questo sistema, o "" se non ce n'e'. */
+    static String newestReinstallWayBack() {
+        String newest = "";
+        for (String line : run("bectl list -H 2>/dev/null | cut -f1", 60).outputTrim().split("\n")) {
+            String n = line.trim();
+            if (REINSTALL_OWN.matcher(n).matches() && n.compareTo(newest) > 0) newest = n;
+        }
+        return newest;
+    }
+
+    /** Prima della reinstallazione completa: come {@link #before}, col nome della reinstallazione. */
+    public static Prepared beforeInstallation(Consumer<String> log) {
+        return create(log, reinstallName(ZonedDateTime.now()));
+    }
+
+    private static Prepared create(Consumer<String> log, String name) {
         String inv = inventory();
         if (!run("bectl check", 30).success()) {
             log.accept(I18n.tr("server.um.x.wbUnsupported"));
             return new Prepared("", inv);
         }
-        String name = nameFor(kind, ZonedDateTime.now());
         Shell.Result c = run("bectl create " + name + " 2>&1", 300);
         boolean listed = run("bectl list -H 2>/dev/null | cut -f1", 60).outputTrim().lines().anyMatch(name::equals);
         if (!c.success() || !listed) {
@@ -112,12 +203,37 @@ public final class PackageWayBack {
         prune(log, KEEP);
     }
 
+    /**
+     * Dopo la reinstallazione completa dal menu. A differenza dei lavori sui pacchetti, li' i
+     * pacchetti uguali non dicono che niente e' cambiato: lo script ferma i servizi, cancella e
+     * riscrive le configurazioni, svuota /var/vmail e ricrea le tabelle di MySQL anche quando non
+     * installa niente di nuovo. Quindi il boot environment si toglie solo se lo script si e'
+     * fermato PRIMA di cambiare qualcosa ({@code systemTouched} falso: non e' arrivato alla fase 1)
+     * e i pacchetti sono uguali; altrimenti resta, si dice come tornarci, e si potano i piu' vecchi.
+     */
+    public static void afterInstallation(Consumer<String> log, Prepared p, boolean systemTouched) {
+        if (p == null || p.name().isEmpty()) return;
+        if (!systemTouched && p.inventory().equals(inventory()) && !p.inventory().isEmpty()) {
+            String err = destroy(p.name());
+            log.accept(err == null ? I18n.tr("server.reinstall.wayBackNotNeeded", Map.of("name", p.name()))
+                                   : I18n.tr("server.um.x.wbPruneFailed", Map.of("name", p.name(), "err", err)));
+            return;
+        }
+        log.accept(I18n.tr("server.reinstall.wayBackKept", Map.of("name", p.name())));
+        prune(log, REINSTALL_OWN, REINSTALL_KEEP, "server.reinstall.wayBackPruned");
+    }
+
     /** Toglie i boot environment dei pacchetti piu' vecchi, tenendo gli ultimi 'keep'. */
     static void prune(Consumer<String> log, int keep) {
+        prune(log, OWN, keep, "server.um.x.wbPruned");
+    }
+
+    /** Toglie i piu' vecchi fra quelli del modello 'own', tenendo gli ultimi 'keep'. */
+    static void prune(Consumer<String> log, java.util.regex.Pattern ownNames, int keep, String prunedKey) {
         List<String> own = new ArrayList<>();
         for (String line : run("bectl list -H 2>/dev/null", 60).outputTrim().split("\n")) {
             String[] f = line.split("\t");
-            if (f.length < 2 || !OWN.matcher(f[0].trim()).matches()) continue;
+            if (f.length < 2 || !ownNames.matcher(f[0].trim()).matches()) continue;
             // N = in uso adesso, R = al prossimo avvio, T = solo al prossimo avvio: mai toccarli.
             if (f[1].contains("N") || f[1].contains("R") || f[1].contains("T")) continue;
             own.add(f[0].trim());
@@ -125,7 +241,7 @@ public final class PackageWayBack {
         java.util.Collections.sort(own);
         for (int i = 0; i < own.size() - keep; i++) {
             String err = destroy(own.get(i));
-            log.accept(err == null ? I18n.tr("server.um.x.wbPruned", Map.of("name", own.get(i), "keep", String.valueOf(keep)))
+            log.accept(err == null ? I18n.tr(prunedKey, Map.of("name", own.get(i), "keep", String.valueOf(keep)))
                                    : I18n.tr("server.um.x.wbPruneFailed", Map.of("name", own.get(i), "err", err)));
         }
     }
@@ -136,7 +252,8 @@ public final class PackageWayBack {
      * promozione lo snapshot d'origine puo' essere quello di un altro boot environment.
      */
     static String destroy(String name) {
-        if (!OWN.matcher(name).matches()) return "not a boot environment made before a package job";
+        if (!OWN.matcher(name).matches() && !REINSTALL_OWN.matcher(name).matches())
+            return "not a boot environment made before a package job or a reinstallation";
         String root = run("zfs list -H -o name / 2>/dev/null", 30).outputTrim();
         String parent = root.contains("/") ? root.substring(0, root.lastIndexOf('/')) : "";
         String origin = parent.isEmpty() ? "" : run("zfs get -H -o value origin " + parent + "/" + name + " 2>/dev/null", 30).outputTrim();

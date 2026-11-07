@@ -31,6 +31,25 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMailTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageQueueTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallLocksTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PendingDbPasswordTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PendingDbPasswordE2ETest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.sqli.SqliteSharedTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.MysqlReconnectTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallWayBackTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallWayBackE2ETest
+    javac -cp target/freebsd-mail-panel-1.0.jar -d tests/planted tests/planted/org/mail_panel/scripts/FullMailServerScript.java
+    java -De2e.vm=yes -cp "tests/planted:tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallJobTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionWatchTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.InstallScriptsTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.InstallScriptVersionTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallReturnE2ETest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.NoBootEnvironmentTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionReportTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockMarksTest
+    expect tests/menu-way-back.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
+    expect tests/menu-reinstall-warning.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
@@ -94,6 +113,16 @@ macchina spenta di colpo durante pkg) e' in due tempi: `-Dmeasure=m7`, poi `rebo
 stampa «M7 IN PKG», poi, a pannello ripartito, il modo `m7-after`. Solo su una macchina di prova.
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdaterRobustnessE2ETest
+
+`MenuReinstall` non e' una prova ma il conduttore della reinstallazione completa dal menu
+(`ReinstallJob.runFromMenu`, la stessa funzione della voce del menu: la lancia staccata con daemon(8)
+e ne segue il registro) su un server dove il pannello e' gia' partito: sblocca i protetti, lancia lo
+script col turno del pannello, li riprotegge. Ferma la
+posta, svuota `/var/vmail` e cambia la password di MySQL del pannello: solo su un clone di un boot
+environment, e da una COPIA della cartella del pannello se questa sta in `/home` (fuori dai boot
+environment). Come e' stata usata sulla VM, con i tentativi di concorrenza a meta': reperto 154.
+
+    cd <copia della cartella del pannello> && java -cp "<tests compilate>:freebsd-mail-panel-1.0.jar" org.mail_panel.system.MenuReinstall
 
 Le quattro prove che fanno lavori veri (questa, `InstallScriptDriftTest`,
 `PackageReplacementE2ETest`, `PostfixMapsJobsE2ETest`) alla fine tolgono i boot environment che
@@ -186,7 +215,15 @@ solo pacchetto Playwright, senza il suo Chromium):
     NODE_PATH=$(npm root -g) node tests/limits-statistics-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/packages-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/csp-browser-test.js $D
+
+Sul Mac basta il pacchetto Playwright, senza il suo Chromium: con `CHROMIUM` le prove usano il Chrome
+installato (tutte lo leggono dal 07/11/2026, reperto 177). Il pacchetto si puo' tenere fuori dal progetto:
+
+    mkdir -p $PW && (cd $PW && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts playwright)
+    CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" NODE_PATH=$PW/node_modules \
+        node tests/way-back-browser-test.js $D [cartella-per-le-foto]
 
 L'accesso senza password invece gira sul server vero (LoginE2EServer), con il MySQL di prova, e
 Chromium con un autenticatore virtuale. Il server parte da una cartella vuota con il jar dentro:
@@ -312,6 +349,106 @@ chiedere il turno nello stesso istante (lo prende uno solo), controlla che il tu
 quando il lavoro fallisce, che l'elenco di un lavoro interrotto non venga sovrascritto, che un
 elenco non scritto venga detto, e che con quell'elenco su disco non parta nessun lavoro che
 installa o aggiorna, mentre rimettere le protezioni resta possibile.
+
+**InstallLocksTest** — la reinstallazione completa su un server coi pacchetti protetti
+(`InstallLocks`), con un pkg finto per i guasti che pkg vero non da': uno sblocco che dice si' e
+non sblocca, una lettura delle protezioni che non risponde, una riprotezione che fallisce, pkg che
+esplode a meta'. Per ognuno: se lo script puo' partire, che cosa resta protetto, se l'elenco su
+disco (e il record del lavoro accanto) si chiude o resta, se il turno si libera.
+
+**PackageTurnAcrossProcessesTest** — il turno dei pacchetti fra processi: un secondo processo
+vero (`TurnHolder`) lo tiene, e questo non lo prende, non riprotegge l'elenco dell'altro
+all'avvio, non applica la regola dei blocchi (e lo dice); ucciso l'altro con kill -9, l'elenco si
+riprotegge con l'avviso che nomina il lavoro interrotto. Poi `lockf(1)` contro il pannello, nei
+due sensi, e la parte del turno di `install_mail_server.sh` (dal testo vero, fino al controllo dei
+protetti: non arriva mai alla fase 1) dal menu, a mano, con le variabili messe a mano. Da root,
+sulla VM: tutto in una cartella di `/var/tmp`, pkg solo in lettura. Reperto 153.
+
+**PendingDbPasswordTest** — la password MySQL nuova del pannello resta in attesa finche' MySQL non
+la conosce (`PendingDbPassword`, reperto 157), con un MySQL finto: lo script che esce prima di
+MySQL (si tiene la vecchia), quello che ci arriva (si adotta la nuova), MySQL muto (non si decide,
+e l'installazione dopo riusa quella in attesa), la password in attesa che non si scrive, la copia
+di Postfix per i server rotti dalla versione di prima (adottata solo se MySQL la accetta e solo se
+e' dello stesso utente). Gira ovunque, ma si lancia sulla VM come le altre.
+
+**PendingDbPasswordE2ETest** — lo stesso con MySQL vero e il corpo vero dell'installazione
+(`Main.installOnTurn`): al posto di `install_mail_server.sh` uno script piantato che esce prima di
+MySQL, fallisce dopo, riesce, o uccide il pannello con kill -9 prima o dopo aver cambiato la
+password; poi l'avvio (`settleAtStartup`), anche col turno dei pacchetti tenuto da un altro
+processo e con MySQL che non risponde (porta 1). Dopo ogni giro: il pannello entra in MySQL
+(`Main.connectFromConfig`)? Ogni giro ha cartella, SQLite e file dei segreti suoi, e un utente
+MySQL di prova (`e2e_pending`) che alla fine si toglie; la password di root la legge dal file dei
+segreti vero. Si accende solo con `-De2e.vm=yes`, da root, con MySQL acceso.
+
+**SqliteSharedTest** — il database SQLite del pannello usato da due processi insieme, come il
+servizio `--web` e il menu dalla stessa cartella (reperto 160): un processo fa le letture del servizio
+e resta acceso, un altro scrive quello che scrive la reinstallazione, tutto subito e senza
+`SQLITE_BUSY`; poi una scrittura tenuta 6 secondi dall'uno e l'altro che aspetta e riesce (6 e non 3:
+sqlite-jdbc aspetta gia' 3 secondi di suo). NON vede il ResultSet che `startWebServer` teneva aperto
+per tutta la vita del servizio: quello lo vede solo la reinstallazione dal menu col servizio vero
+acceso, sul clone (reperto 161).
+
+**MysqlReconnectTest** — il pannello acceso si ricollega a MySQL con la password che c'e' adesso nel
+file dei segreti, non con quella dell'avvio. MySQL vero, utente di prova `e2e_reconnect` tolto alla
+fine; `-De2e.vm=yes`, da root.
+
+**InstallWayBackTest** — la via di ritorno della reinstallazione senza bectl: il passo che la crea gira
+col turno e prima dello sblocco, un suo rifiuto ferma tutto, e `Main.installOnTurn` dice «ha cambiato
+il sistema» solo se lo script (piantato) arriva alla fase 1.
+
+**ReinstallWayBackE2ETest** — la stessa con bectl vero: quando il boot environment resta e quando si
+toglie, e alla fine gli stessi boot environment e snapshot di prima. Crea e toglie boot environment:
+solo su un clone, e si rifiuta di partire (codice 2) se ci sono gia' vie di ritorno dei lavori sui
+pacchetti, che la potatura toglierebbe.
+
+**ReinstallJobTest** — la reinstallazione completa staccata dal menu (`ReinstallJob`, reperto 163): il
+menu ucciso, il terminale del menu che si chiude (SIGHUP al suo gruppo), un secondo menu aperto a
+meta', la reinstallazione stessa uccisa (e un «servizio» col guardiano che se ne accorge da solo,
+reperto 166). Script piantato, il resto vero (JVM staccata, turno, pkg,
+bectl): solo su un clone, `-De2e.vm=yes`, da root; si rifiuta di partire se ci sono gia' vie di
+ritorno di reinstallazioni o un elenco di pacchetti sbloccati.
+
+**InterruptionWatchTest** — il guardiano del servizio acceso (`UpdateManager.watchOnce`, reperto 166):
+quando NON tocca l'elenco dei pacchetti sbloccati (l'elenco dell'aggiornamento della JVM, chi l'ha
+scritto ancora vivo, un lavoro di questo processo, il turno tenuto da un altro processo) e il testo
+dell'avviso di una reinstallazione interrotta. Senza pkg: il caso che riprotegge davvero e'
+`ReinstallJobTest` J4.
+
+**InstallScriptsTest** — gli script d'installazione su disco sono sempre quelli del jar che gira
+(`InstallScripts`, reperto 169): scrittura tutto o niente, lo script vecchio riscritto, quelli che nessuno
+scrive piu' messi da parte, l'impronta del jar dopo la `#!`; con `-De2e.vm=yes` anche un avvio vero del
+pannello che lo fa.
+
+**InstallScriptVersionTest** — `install_mail_server.sh` lanciato a mano si ferma se e' di un'altra
+versione del pannello di quella del servizio, prima di cambiare qualunque cosa. Script vero, da root,
+sulla VM: si ferma sempre prima della fase 1, e rimette rc.conf.
+
+**ReinstallReturnE2ETest** — tornare alla via di ritorno di una reinstallazione con la posta arrivata dopo
+fusa dentro (`ReinstallReturn`, reperto 170), con bectl vero e senza riavviare; tutto rimesso nell'ordine
+giusto (bectl activate promuove). Solo su un clone.
+
+**NoBootEnvironmentTest** — un sistema senza boot environment (un bectl finto davanti nel PATH che
+fallisce sempre): la via di ritorno non si crea e lo si dice, lo spazio non si misura, il ritorno rifiuta
+ogni nome, la scheda dice che non ci sono (reperto 172).
+
+**InterruptionReportTest** — la reinstallazione interrotta nel rapporto periodico: la cosa piu' urgente,
+col suo titolo e il comando per tornare indietro; un lavoro qualunque resta com'era. Con `-De2e.vm=yes`
+anche i dati veri del rapporto (`UpdateManager.reportData`). Reperto 172.
+
+**LockMarksTest** — il cartello «bloccato dal pannello» su tutti e soli i bloccati. Con `-De2e.vm=yes`
+anche la prova 5, che sblocca TUTTI i pacchetti (solo su un clone) e rimette blocchi e cartelli come li ha
+trovati: senza nessun bloccato `pkg lock -l` esce con 1, e i cartelli rimasti non se ne andavano mai
+(reperto 173).
+
+**menu-way-back.exp** — la voce 6 del menu a schermo, in un terminale vero (`ssh -tt`), con expect: va
+preparata sul clone una copia del pannello, una via di ritorno vera (`MakeReinstallWayBack`) e l'avviso di
+una reinstallazione interrotta; dopo, la via di ritorno e' quella del prossimo avvio e la posta e' ferma,
+e va rimesso tutto (reperto 174). Lanterna ridisegna solo le celle che cambiano: si aspetta una riga che
+arriva intera, non una qualunque.
+
+`ReinstallJobTest` vuole la classe ombra di `FullMailServerScript` (`tests/planted`) davanti al jar: la
+reinstallazione riscrive sempre lo script dal suo jar, e senza l'ombra eseguirebbe quello vero (la prova lo
+controlla e si rifiuta). `MenuGoBack` e' il conduttore della voce 6 del menu, come `MenuReinstall`.
 
 **AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
 un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un

@@ -97,6 +97,9 @@ public class LockMarksTest {
             System.out.println("  --   pkg vero: pkg non c'e' su questa macchina, salto");
         } else {
             onRealPkg();
+            // --- 5. Nessun pacchetto bloccato (reperto 173): sblocca tutto, solo su un clone ---
+            if ("yes".equals(System.getProperty("e2e.vm"))) withNothingLocked();
+            else System.out.println("  --   nessun pacchetto bloccato: serve -De2e.vm=yes (sblocca tutto, su un clone)");
         }
 
         System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
@@ -143,6 +146,37 @@ public class LockMarksTest {
             for (String n : markedBefore) if (!now.contains(n)) sh(UpdateManager.markCommand(n));
         }
         check("  e la prova lascia i cartelli come li ha trovati", markedNow().equals(markedBefore));
+    }
+
+    /**
+     * Senza nessun pacchetto bloccato "pkg lock -l" esce con 1, e la sincronizzazione lo prendeva
+     * per un errore e non toglieva niente. Si sbloccano tutti, si mette un cartello su un pacchetto
+     * qualunque, e la sincronizzazione deve toglierlo. Poi blocchi e cartelli come prima.
+     */
+    private static void withNothingLocked() {
+        Set<String> lockedBefore = new TreeSet<>(List.of(sh("pkg query -e '%k = 1' '%n'").split("\n")));
+        lockedBefore.removeIf(String::isBlank);
+        Set<String> markedBefore = markedNow();
+        String any = sh("pkg query -a '%n' | head -1").trim();
+        try {
+            sh("pkg unlock -a -y");
+            check("nessun bloccato: pkg lock -l esce con 1 (il tranello)",
+                 !Shell.runShell(Duration.ofSeconds(30), "pkg lock -l").success());
+            sh(UpdateManager.markCommand(any));
+            int[] done = UpdateManager.syncLockMarks();
+            check("  il cartello su " + any + ", che non e' bloccato, se ne va (" + done[1] + " tolti)",
+                 !markedNow().contains(any) && done[1] >= 1);
+            check("  e nessun cartello resta su un pacchetto sbloccato", markedNow().isEmpty());
+        } finally {
+            for (String n : lockedBefore) sh("pkg lock -y " + n);
+            Set<String> now = markedNow();
+            for (String n : now) if (!markedBefore.contains(n)) sh("pkg annotate -y -D " + n + " " + UpdateManager.MARK_KEY);
+            for (String n : markedBefore) if (!now.contains(n)) sh(UpdateManager.markCommand(n));
+        }
+        Set<String> lockedAfter = new TreeSet<>(List.of(sh("pkg query -e '%k = 1' '%n'").split("\n")));
+        lockedAfter.removeIf(String::isBlank);
+        check("  e la prova rimette blocchi e cartelli come li ha trovati",
+             lockedAfter.equals(lockedBefore) && markedNow().equals(markedBefore));
     }
 
     private static Set<String> markedNow() {

@@ -1,0 +1,46 @@
+#!/usr/bin/expect -f
+# La voce 6 del menu del pannello, a schermo, dentro un terminale vero (ssh -tt) sul clone di prova:
+# l'avviso all'apertura (una reinstallazione interrotta), la voce 6, la conferma (Cancel e' il
+# predefinito: Tab e poi Invio per OK), il ritorno, «no» al riavvio, Invio, e l'uscita dal menu.
+# Uso, dal Mac: expect tests/menu-way-back.exp <chiave ssh> <host> <cartella del pannello sul clone> <jar>
+set timeout 90
+set key [lindex $argv 0]
+set host [lindex $argv 1]
+set dir [lindex $argv 2]
+set jar [lindex $argv 3]
+log_user 0
+spawn ssh -tt -i $key -o BatchMode=yes root@$host "cd $dir && TERM=xterm exec java -jar $jar"
+proc step {what pattern} {
+    expect {
+        -re $pattern { puts "  OK   $what" }
+        timeout { puts "  FAILED $what (non arrivato: $pattern)"; exit 1 }
+        eof { puts "  FAILED $what (il menu e' uscito)"; exit 1 }
+    }
+}
+step "il menu si apre col benvenuto" "Welcome to FreeBSD Mail Panel"
+send "\r"
+step "l'avviso: l'ultima reinstallazione non e' finita, scegli 6 o 4" "did not finish"
+send "\r"
+step "nessuna finestra «Created ... script» da chiudere: subito le voci del menu" "Select an option"
+step "c'e' la voce 6" "6\\) Go back to the server before"
+send "\033\[B\033\[B\033\[B\033\[B\033\[B"
+send "\r"
+# Lanterna ridisegna solo le celle che cambiano: una frase sopra il menu arriva a pezzi se alcune
+# lettere coincidono con quelle sotto («Go b» + «ck»). Questa, con lo schermo 80x24 di ssh -tt,
+# arriva intera.
+step "la conferma" "arrived after it is kept"
+send "\t"
+send "\r"
+step "il ritorno parte" "\\\[WAY BACK\\\] reinstall-before-"
+step "e attiva la via di ritorno per il prossimo avvio" "is the system of the next start"
+step "chiede se riavviare" "Restart the server now"
+send "no\r"
+step "non riavvia, e dice come farlo dopo" "Not restarted"
+step "aspetta Invio" "Press ENTER"
+send "\r"
+step "torna al menu" "Select an option"
+send "\t"
+send "\r"
+expect eof
+puts "  OK   uscito dal menu"
+exit 0

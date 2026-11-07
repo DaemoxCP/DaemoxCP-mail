@@ -180,6 +180,8 @@ public class RolesTest {
         check("/api/updates: reading the status is system.view, rebooting is system.manage",
                 "system.view".equals(routes.get("/api/updates").permissionFor("POST", "updates_status"))
                 && "system.manage".equals(routes.get("/api/updates").permissionFor("POST", "reboot_now")));
+        check("/api/updates: going back to the server before a reinstallation is system.manage (reperto 172)",
+                "system.manage".equals(routes.get("/api/updates").permissionFor("POST", "reinstall_way_back")));
         check("/api/admins: the vault key asks vault.manage", "vault.manage".equals(routes.get("/api/admins").permissionFor("POST", "vault_backup_key")));
         check("Account for every role, Settings for the superadmin", "account.self".equals(routes.get("/account").readPermission())
                 && "settings.manage".equals(routes.get("/settings").readPermission()));
@@ -219,6 +221,19 @@ public class RolesTest {
         check("admin cannot open Administrators", send("GET", "/admins", null, admin).statusCode() == 403);
         check("admin cannot export the vault key", refused(send("POST", "/api/admins", "{\"action\":\"vault_backup_key\"}", admin)));
         check("admin cannot change the firewall", refused(send("POST", "/api/firewall", "{\"action\":\"apply\"}", admin)));
+        // Il pulsante «torna al server di prima della reinstallazione» (ReinstallReturn, reperto 170).
+        check("viewer cannot go back to the server before a reinstallation", refused(send("POST", "/api/updates",
+                "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\",\"confirm\":\"GO BACK\"}", viewer)));
+        check("admin cannot either (system.manage is superadmin's)", refused(send("POST", "/api/updates",
+                "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\",\"confirm\":\"GO BACK\"}", admin)));
+        HttpResponse<String> back = send("POST", "/api/updates",
+                "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\"}", superadmin);
+        check("superadmin without the confirmation: refused by the handler, nothing touched", back.statusCode() == 200
+                && back.body().contains("\"success\":false") && !back.body().contains("reinstall-before-2000-01-01-000000"));
+        back = send("POST", "/api/updates",
+                "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\",\"confirm\":\"GO BACK\"}", superadmin);
+        check("superadmin with the confirmation reaches the way back, which refuses a name that is not there", back.statusCode() == 200
+                && back.body().contains("\"success\":false") && back.body().contains("reinstall-before-2000-01-01-000000"));
         HttpResponse<String> reboot = send("POST", "/api/updates", "{\"action\":\"reboot_now\"}", superadmin);
         check("superadmin passes (and the handler still asks for the written confirmation)", reboot.statusCode() == 200
                 && reboot.body().contains("\"success\":false"));

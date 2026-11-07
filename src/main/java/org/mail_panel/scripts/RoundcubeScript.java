@@ -31,6 +31,31 @@ public class RoundcubeScript {
                 exit 1
             fi
 
+            # La password dell'utente MySQL della webmail (roundcube) la passa il pannello
+            # nell'ambiente, dal suo file dei segreti. Prima lo script la prendeva da
+            # /usr/local/etc/mail/mysql_password, la password dell'utente del pannello, che
+            # il pannello non scrive piu': senza file non creava ne' il database ne' l'utente.
+            if [ -z "${ROUNDCUBE_DB_PASSWORD}" ]; then
+                echo "Error: ROUNDCUBE_DB_PASSWORD not in the environment"
+                exit 1
+            fi
+
+            # MySQL da root: con la password che il pannello passa nell'ambiente (MYSQL_ROOT_PASSWORD,
+            # quando MySQL l'ha installato lui) in un file di opzioni in una cartella 700, mai
+            # sulla riga di comando; senza, dal socket come un MySQL appena installato.
+            MYSQL_WORK=$(mktemp -d /var/tmp/mailpanel-roundcube.XXXXXXXX) || exit 1
+            trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
+            if [ -n "${MYSQL_ROOT_PASSWORD}" ]; then
+                cat > "$MYSQL_WORK/root.cnf" << EOCNF
+[client]
+user=root
+password="${MYSQL_ROOT_PASSWORD}"
+EOCNF
+                mysql_root() { mysql --defaults-extra-file="$MYSQL_WORK/root.cnf" "$@"; }
+            else
+                mysql_root() { mysql -u root "$@"; }
+            fi
+
             #############################################
             # PHASE 1: COMPLETE CLEANUP
             #############################################
@@ -54,10 +79,7 @@ public class RoundcubeScript {
             rm -f /usr/local/etc/nginx/sites-enabled/roundcube.conf 2>/dev/null || true
 
             echo "[CLEANUP] Dropping Roundcube database..."
-            if [ -f /usr/local/etc/mail/mysql_password ]; then
-                MAILPANEL_PASS=$(cat /usr/local/etc/mail/mysql_password)
-                mysql -u mailpanel -p"${MAILPANEL_PASS}" -h 127.0.0.1 -e "DROP DATABASE IF EXISTS roundcubemail;" 2>/dev/null || true
-            fi
+            mysql_root -e "DROP DATABASE IF EXISTS roundcubemail;" 2>/dev/null || true
 
             echo "[CLEANUP] Removing rc.conf entries..."
             sysrc -x php_fpm_enable 2>/dev/null || true
@@ -99,16 +121,19 @@ PHPINI
 
             # Create Roundcube database
             echo "[3/5] Creating Roundcube database..."
-            if [ -f /usr/local/etc/mail/mysql_password ]; then
-                MAILPANEL_PASS=$(cat /usr/local/etc/mail/mysql_password)
-                mysql -u root -h 127.0.0.1 << SQLEOF || true
+            # L'utente roundcube ha i privilegi sul solo database della webmail. Prima la GRANT
+            # aveva "IDENTIFIED BY", che MySQL 8 rifiuta: l'utente non nasceva affatto.
+            if ! mysql_root << SQLEOF
 CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-GRANT ALL PRIVILEGES ON roundcubemail.* TO 'roundcube'@'127.0.0.1' IDENTIFIED BY '${MAILPANEL_PASS}';
+""" + org.mail_panel.system.RoundcubeDbUser.shellAccountSql("${ROUNDCUBE_DB_PASSWORD}", "mailpanel") + """
 FLUSH PRIVILEGES;
 SQLEOF
-                # Import Roundcube schema
-                mysql -u roundcube -p"${MAILPANEL_PASS}" -h 127.0.0.1 roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
+            then
+                echo "Error: cannot create the webmail database or its MySQL user"
+                exit 1
             fi
+            # Le tabelle le fa root: la password di roundcube non va sulla riga di comando
+            mysql_root roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
 
             # Generate random DES key
             RANDOM_KEY=$(openssl rand -hex 12)
@@ -123,7 +148,7 @@ SQLEOF
 \\$config = [];
 
 // Database
-\\$config['db_dsnw'] = 'mysql://roundcube:${MAILPANEL_PASS}@127.0.0.1/roundcubemail';
+\\$config['db_dsnw'] = 'mysql://roundcube:${ROUNDCUBE_DB_PASSWORD}@127.0.0.1/roundcubemail';
 
 // IMAP
 \\$config['default_host'] = 'ssl://127.0.0.1';
@@ -257,18 +282,8 @@ NGINXCONF
         return this.data;
     }
 
+    /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
     public void write_file() {
-        File scriptFile = new File(SCRIPT_PATH);
-        if (scriptFile.exists()) {
-            return;
-        }
-
-        try (FileWriter writer = new FileWriter(SCRIPT_PATH)) {
-            writer.write(this.data);
-            scriptFile.setExecutable(true);
-            this.writed = true;
-        } catch (IOException e) {
-            System.out.println("Error writing script: " + e.getMessage());
-        }
+        this.writed = InstallScripts.write(SCRIPT_PATH, this.data);
     }
 }

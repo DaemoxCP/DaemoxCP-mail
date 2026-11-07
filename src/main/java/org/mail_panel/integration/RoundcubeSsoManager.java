@@ -44,8 +44,9 @@ public class RoundcubeSsoManager {
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
 
-    // Master user settings
-    private static final String MASTER_USER = "admin";
+    // Master user settings. In Roundcube chi entra cosi' e' "casella*admin" (la riga di users e il
+    // registro degli accessi lo dicono): RoundcubeDbUser lo usa per scegliere la casella di prova.
+    public static final String MASTER_USER = "admin";
     private static final String MASTER_PASSWORD_FILE = "/var/db/mailpanel/dovecot_master.key";
 
     private final MailDatabase database;

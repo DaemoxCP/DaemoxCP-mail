@@ -6,13 +6,26 @@ public class database {
     Connection connection;
     Connection connection_mysql;
 
+    /**
+     * Quanto aspetta una scrittura se il database e' occupato da un altro processo, prima di
+     * arrendersi con SQLITE_BUSY. Il database lo usano insieme il servizio --web e il menu (o un
+     * comando da console) avviati dalla stessa cartella. sqlite-jdbc aspetta gia' 3 secondi di suo:
+     * misurato sulla VM il 06/11/2026 (reperto 160), il jar di prima falliva dopo 3 secondi a
+     * scrittura. Il difetto del reperto 156 non era l'attesa ma il lock tenuto per sempre dalle
+     * letture lasciate aperte (sotto). Quindici secondi sono il margine per una scrittura lunga
+     * dell'altro processo: una tenuta di 6 secondi passa con 15, con 3 no (misurato).
+     */
+    static final int BUSY_TIMEOUT_MS = 15_000;
+
     public database() {
         Connection conn = null;
         try {
             String url = "jdbc:sqlite:database/mail_panel.db";
             conn = DriverManager.getConnection(url);
             if (conn != null) {
-                DatabaseMetaData meta = conn.getMetaData();
+                try (Statement s = conn.createStatement()) {
+                    s.execute("PRAGMA busy_timeout = " + BUSY_TIMEOUT_MS);
+                }
             }
             this.connection = conn;
         } catch (SQLException e) {
@@ -38,9 +51,7 @@ public class database {
 
     public Integer check_tables() {
         Integer count = 0;
-        try {
-            DatabaseMetaData meta = this.connection.getMetaData();
-            ResultSet resultSet = meta.getTables(null, null, "config", new String[]{"TABLE"});
+        try (ResultSet resultSet = this.connection.getMetaData().getTables(null, null, "config", new String[]{"TABLE"})) {
             if (resultSet.next()) {
                 count++;
             }
@@ -51,9 +62,35 @@ public class database {
         return count;
     }
 
+    /*
+     * Ogni statement si chiude, sempre, anche quelli di sola lettura. In SQLite uno statement
+     * lasciato a meta' (un executeQuery senza chiusura, un ResultSet letto fino alla prima riga e
+     * abbandonato) tiene aperta la lettura, e con lei il lock SHARED sul file: nessun altro
+     * processo puo' piu' scrivere finche' la JVM non lo raccoglie. Il servizio --web chiama questi
+     * metodi a ogni avvio e a ogni richiesta, e il menu avviato dalla stessa cartella finiva in
+     * SQLITE_BUSY su nome del server, flag dei servizi e configurazione MySQL (reperto 156).
+     */
+
+    /** Vero se la colonna esiste: la si legge, e lo statement si chiude prima di tornare. */
+    boolean columnExists(String column) {
+        try (PreparedStatement check = connection.prepareStatement("SELECT " + column + " FROM config LIMIT 1");
+             ResultSet rs = check.executeQuery()) {
+            return true;
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    /** Un comando che non legge niente, chiuso subito. */
+    void execute(String sql) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.executeUpdate();
+        }
+    }
+
     public boolean create_tables() {
         try {
-            PreparedStatement preparedStatement = connection.prepareStatement("""
+            execute("""
                 CREATE TABLE config (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     mail_panel_port TEXT DEFAULT '2096',
@@ -79,7 +116,6 @@ public class database {
                     roundcube_ssl_key TEXT DEFAULT ''
                 )
                 """);
-            preparedStatement.executeUpdate();
             return true;
         } catch (SQLException e) {
             System.out.println(e.getMessage());
@@ -88,38 +124,20 @@ public class database {
     }
 
     public void ensureMailHostnameColumn() {
+        if (columnExists("mail_hostname")) return;
         try {
-            // Check if column exists
-            PreparedStatement check = connection.prepareStatement(
-                "SELECT mail_hostname FROM config LIMIT 1");
-            check.executeQuery();
-        } catch (SQLException e) {
-            // Column doesn't exist, add it
-            try {
-                PreparedStatement alter = connection.prepareStatement(
-                    "ALTER TABLE config ADD COLUMN mail_hostname TEXT DEFAULT ''");
-                alter.executeUpdate();
-            } catch (SQLException e2) {
-                // Silent fail
-            }
+            execute("ALTER TABLE config ADD COLUMN mail_hostname TEXT DEFAULT ''");
+        } catch (SQLException e2) {
+            // Silent fail
         }
     }
 
     public void ensureSslChainColumn() {
+        if (columnExists("mail_panel_ssl_chain")) return;
         try {
-            // Check if column exists
-            PreparedStatement check = connection.prepareStatement(
-                "SELECT mail_panel_ssl_chain FROM config LIMIT 1");
-            check.executeQuery();
-        } catch (SQLException e) {
-            // Column doesn't exist, add it
-            try {
-                PreparedStatement alter = connection.prepareStatement(
-                    "ALTER TABLE config ADD COLUMN mail_panel_ssl_chain TEXT DEFAULT ''");
-                alter.executeUpdate();
-            } catch (SQLException e2) {
-                // Silent fail
-            }
+            execute("ALTER TABLE config ADD COLUMN mail_panel_ssl_chain TEXT DEFAULT ''");
+        } catch (SQLException e2) {
+            // Silent fail
         }
     }
 
@@ -134,18 +152,11 @@ public class database {
 
         for (String colDef : columns) {
             String colName = colDef.split(" ")[0];
+            if (columnExists(colName)) continue;
             try {
-                PreparedStatement check = connection.prepareStatement(
-                    "SELECT " + colName + " FROM config LIMIT 1");
-                check.executeQuery();
-            } catch (SQLException e) {
-                try {
-                    PreparedStatement alter = connection.prepareStatement(
-                        "ALTER TABLE config ADD COLUMN " + colDef);
-                    alter.executeUpdate();
-                } catch (SQLException e2) {
-                    // Silent fail
-                }
+                execute("ALTER TABLE config ADD COLUMN " + colDef);
+            } catch (SQLException e2) {
+                // Silent fail
             }
         }
     }
@@ -153,36 +164,18 @@ public class database {
     public void ensurePostfixColumn() {
         // Ensure postfix_installed column exists
         // Migrate from old opensmtpd_installed if it exists
+        if (columnExists("postfix_installed")) return;     // Column exists, nothing to do
         try {
-            // Check if postfix_installed already exists
-            PreparedStatement check = connection.prepareStatement(
-                "SELECT postfix_installed FROM config LIMIT 1");
-            check.executeQuery();
-            // Column exists, nothing to do
-        } catch (SQLException e) {
-            // postfix_installed doesn't exist, check if old opensmtpd_installed exists
-            try {
-                PreparedStatement check2 = connection.prepareStatement(
-                    "SELECT opensmtpd_installed FROM config LIMIT 1");
-                check2.executeQuery();
+            if (columnExists("opensmtpd_installed")) {
                 // Old column exists - add new column and copy data
-                try {
-                    connection.prepareStatement(
-                        "ALTER TABLE config ADD COLUMN postfix_installed INTEGER DEFAULT 0").executeUpdate();
-                    connection.prepareStatement(
-                        "UPDATE config SET postfix_installed = opensmtpd_installed").executeUpdate();
-                } catch (SQLException e3) {
-                    // Silent fail
-                }
-            } catch (SQLException e2) {
+                execute("ALTER TABLE config ADD COLUMN postfix_installed INTEGER DEFAULT 0");
+                execute("UPDATE config SET postfix_installed = opensmtpd_installed");
+            } else {
                 // Neither column exists, add postfix_installed
-                try {
-                    connection.prepareStatement(
-                        "ALTER TABLE config ADD COLUMN postfix_installed INTEGER DEFAULT 0").executeUpdate();
-                } catch (SQLException e3) {
-                    // Silent fail
-                }
+                execute("ALTER TABLE config ADD COLUMN postfix_installed INTEGER DEFAULT 0");
             }
+        } catch (SQLException e3) {
+            // Silent fail
         }
     }
 

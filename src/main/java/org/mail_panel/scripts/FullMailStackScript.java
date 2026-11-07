@@ -29,6 +29,14 @@ public class FullMailStackScript {
                 exit 1
             fi
 
+            # La password dell'utente MySQL della webmail (roundcube): la passa il pannello
+            # nell'ambiente, dal suo file dei segreti. Prima la webmail usava la stessa password
+            # dell'utente del pannello, e chi la leggeva in config.inc.php entrava anche come lui.
+            if [ -z "${ROUNDCUBE_DB_PASSWORD}" ]; then
+                echo "Error: ROUNDCUBE_DB_PASSWORD not in the environment"
+                exit 1
+            fi
+
             #############################################
             # PHASE 1: COMPLETE CLEANUP (if reinstalling)
             #############################################
@@ -291,8 +299,7 @@ public class FullMailStackScript {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
             CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-            CREATE USER IF NOT EXISTS 'roundcube'@'127.0.0.1' IDENTIFIED BY '${MAILSERVER_PASS}';
-            GRANT ALL PRIVILEGES ON roundcubemail.* TO 'roundcube'@'127.0.0.1';
+            """ + org.mail_panel.system.RoundcubeDbUser.shellAccountSql("${ROUNDCUBE_DB_PASSWORD}", "mailpanel") + """
 
             FLUSH PRIVILEGES;
             SQLEOF
@@ -668,7 +675,7 @@ NGINXCONF
 
             cat > /usr/local/www/roundcube/config/config.inc.php << RCCONF
 <?php
-\\$config['db_dsnw'] = 'mysql://roundcube:${MAILSERVER_PASS}@127.0.0.1/roundcubemail';
+\\$config['db_dsnw'] = 'mysql://roundcube:${ROUNDCUBE_DB_PASSWORD}@127.0.0.1/roundcubemail';
 \\$config['default_host'] = 'ssl://127.0.0.1';
 \\$config['default_port'] = 993;
 \\$config['smtp_server'] = 'tls://127.0.0.1';
