@@ -30,7 +30,7 @@
                     if (!chk.ok && chk.fix_description) html += '<div class="small text-info mt-1"><i class="fas fa-magic me-1" aria-hidden="true"></i>' + escapeHtmlUb(chk.fix_description) + '</div>';
                     html += '</div>';
                     if (!chk.ok && chk.fix_action) {
-                        html += '<button class="btn btn-warning btn-sm" data-action="' + escHtml(chk.fix_action) + '" onclick="runUbFix(this.dataset.action, this)">';
+                        html += '<button class="btn btn-warning btn-sm" data-action="' + escHtml(chk.fix_action) + '" data-on-click="runUbFix(this.dataset.action, this)">';
                         html += '<i class="fas fa-wrench me-1" aria-hidden="true"></i>' + escHtml(t('sec.fix'));
                         html += '</button>';
                     }
@@ -93,7 +93,7 @@
                     html += '<div class="d-flex align-items-start gap-2 mb-2">' + icon +
                         '<div class="flex-grow-1"><div>' + badge + ' <strong>' + escapeHtmlUb(s.label) + '</strong></div>';
                     if (s.message) html += '<div class="small text-muted">' + escapeHtmlUb(s.message) + '</div>';
-                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>' + escHtml(t('sj.output')) + '</summary><pre class="mb-0 mt-1" style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtmlUb(s.output) + '</pre></details>';
+                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>' + escHtml(t('sj.output')) + '</summary><pre class="mb-0 mt-1" data-style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtmlUb(s.output) + '</pre></details>';
                     html += '</div></div>';
                 });
                 stepsEl.innerHTML = html;
@@ -169,7 +169,7 @@
                         if (!chk.ok && chk.fix_description) html += '<div class="small text-info mt-1"><i class="fas fa-magic me-1" aria-hidden="true"></i>' + escapeHtmlCav(chk.fix_description) + '</div>';
                         html += '</div>';
                         if (!chk.ok && chk.fix_action) {
-                            html += '<button class="btn btn-warning btn-sm" data-action="' + escHtml(chk.fix_action) + '" onclick="runCavFix(this.dataset.action, this)">';
+                            html += '<button class="btn btn-warning btn-sm" data-action="' + escHtml(chk.fix_action) + '" data-on-click="runCavFix(this.dataset.action, this)">';
                             html += '<i class="fas fa-wrench me-1" aria-hidden="true"></i>' + escHtml(t('sec.fix'));
                             html += '</button>';
                         }
@@ -232,7 +232,7 @@
                     html += '<div class="d-flex align-items-start gap-2 mb-2">' + icon +
                         '<div class="flex-grow-1"><div>' + badge + ' <strong>' + escapeHtmlCav(s.label) + '</strong></div>';
                     if (s.message) html += '<div class="small text-muted">' + escapeHtmlCav(s.message) + '</div>';
-                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>' + escHtml(t('sj.output')) + '</summary><pre class="mb-0 mt-1" style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtmlCav(s.output) + '</pre></details>';
+                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>' + escHtml(t('sj.output')) + '</summary><pre class="mb-0 mt-1" data-style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtmlCav(s.output) + '</pre></details>';
                     html += '</div></div>';
                 });
                 stepsEl.innerHTML = html;
@@ -273,7 +273,7 @@
                 let html = '<div class="alert ' + alertClass + ' mb-2">' + icon + escapeHtmlCav(data.message || t('shu.unknownResult')) + '</div>';
                 if (data.scan_output) {
                     html += '<details class="small"><summary>' + escHtml(t('sj.outputOf')) + ' clamdscan</summary>';
-                    html += '<pre class="mb-0 mt-1" style="font-size:0.8rem;max-height:200px;overflow:auto">' + escapeHtmlCav(data.scan_output) + '</pre>';
+                    html += '<pre class="mb-0 mt-1" data-style="font-size:0.8rem;max-height:200px;overflow:auto">' + escapeHtmlCav(data.scan_output) + '</pre>';
                     html += '</details>';
                 }
                 html += '<div class="small text-muted mt-2"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>' + escHtml(t('shu.eicarInfo')) + '</div>';
@@ -397,10 +397,10 @@
                             <td><span class="ip-badge">${escapeHtmlPermaban(item.ip)}</span></td>
                             <td>${item.at_runtime ? '<span class="badge bg-success">' + escHtml(t('shu.inPf')) + '</span>' : '<span class="badge bg-warning text-dark">' + escHtml(t('shu.notInPf')) + '</span>'}</td>
                             <td>
-                                <button class="btn btn-sm btn-outline-success" data-ip="${escHtml(item.ip)}" onclick="permabanRemove(this.dataset.ip)" title="${escHtml(t('shu.unban'))}" aria-label="${escHtml(t('shu.unban'))}">
+                                <button class="btn btn-sm btn-outline-success" data-ip="${escHtml(item.ip)}" data-on-click="permabanRemove(this.dataset.ip)" title="${escHtml(t('shu.unban'))}" aria-label="${escHtml(t('shu.unban'))}">
                                     <i class="fas fa-unlock" aria-hidden="true"></i>
                                 </button>
-                                <button class="btn btn-link btn-sm p-0 ms-1" data-ip="${escHtml(item.ip)}" onclick="showIpInfo(this.dataset.ip)" title="${escHtml(t('sec.ipInfo'))}" aria-label="${escHtml(t('sec.ipInfo'))}">
+                                <button class="btn btn-link btn-sm p-0 ms-1" data-ip="${escHtml(item.ip)}" data-on-click="showIpInfo(this.dataset.ip)" title="${escHtml(t('sec.ipInfo'))}" aria-label="${escHtml(t('sec.ipInfo'))}">
                                     <i class="fas fa-info-circle" aria-hidden="true"></i>
                                 </button>
                             </td>

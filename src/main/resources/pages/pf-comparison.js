@@ -76,7 +76,7 @@
                             // misura NON e' riuscita, e l'evidenza che serve a capire perche' e'
                             // esattamente cio' che chi guarda deve avere sotto gli occhi.
                             outcome += '<details class="small mt-2" open><summary>' + escHtml(t('cpf.whatSees')) + '</summary>' +
-                                     '<pre class="mt-1 mb-0" style="white-space:pre-wrap;max-height:400px;overflow:auto">' +
+                                     '<pre class="mt-1 mb-0" data-style="white-space:pre-wrap;max-height:400px;overflow:auto">' +
                                      escapeHtml(pieces.join('\n\n')) + '</pre></details>';
                     } else if (j.missing_table) {
                         outcome = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(f2b > 0 ? tn('cpf.noTableBans', f2b) : t('cpf.noTable')) + '</span>';

@@ -163,7 +163,10 @@ public class RolesTest {
         Set<String> pub = new HashSet<>();
         routes.forEach((p, a) -> { if (a.kind() == Access.Kind.PUBLIC) pub.add(p); });
         check("public: only sign-in, setup, static files, dictionary, language, logout, autoconfig, MTA-STS and the webmail's own",
-                pub.equals(Set.of("/autoconfig", "/mta-sts", "/fa", "/vendor", "/i18n/", "/api/language", "/", "/index", "/api/login",
+                // /assets/ (reperto 178): gli script e gli stili delle pagine come file. E' pubblica come
+                // /vendor, ma il gestore da' quelli delle pagine protette solo a chi e' entrato
+                // (lo prova LoginRoutesTest).
+                pub.equals(Set.of("/autoconfig", "/mta-sts", "/fa", "/vendor", "/i18n/", "/assets/", "/api/language", "/", "/index", "/api/login",
                         "/setup", "/api/logout", org.mail_panel.integration.WebmailPasswordConfig.PATH, "/api/internal/mailbox-vault")));
         StringBuilder mismatch = new StringBuilder();
         for (Layout.Section s : Layout.MENU)

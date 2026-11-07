@@ -14,6 +14,12 @@
 //   7. Roles: a viewer signs in with an email code, sees a reduced menu, "Read only" and
 //      refusals; promoted to operator, the mailboxes become editable; deleted, the session ends.
 //
+// With REMOTE=root@<host> (and REMOTE_KEY=<ssh key>) the server and the panel's console commands run
+// on that machine over ssh, in the folder given as argument (with the jar and, in TESTS_CLASSES, the
+// compiled tests): here only the browser runs. That is how it runs against the FreeBSD test
+// machine (reperto 178): servers and Java do not run on the Mac. PORT picks the port (the test
+// machine's firewall lets the panel's 2096 through).
+//
 // Usage (from the project root, after mvn package, with the test MySQL of README.md):
 //   D=$(mktemp -d) && cp target/freebsd-mail-panel-1.0.jar $D/
 //   MYSQL="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova" \
@@ -22,11 +28,22 @@ const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const csp = require('./browser-csp');
 
 const dir = process.argv[2];
 const shots = process.argv[3];
 const root = path.join(__dirname, '..');
-const PORT = 19000 + Math.floor(Math.random() * 1000);
+const REMOTE = process.env.REMOTE || '';
+const SSH = ['-o', 'BatchMode=yes'].concat(process.env.REMOTE_KEY ? ['-i', process.env.REMOTE_KEY] : []);
+const HOST_IP = REMOTE ? REMOTE.replace(/^.*@/, '') : '127.0.0.1';
+const PORT = Number(process.env.PORT) || 19000 + Math.floor(Math.random() * 1000);
+// Un comando per la shell remota, con ogni argomento fra apici.
+const q = a => "'" + String(a).replace(/'/g, "'\\''") + "'";
+// L'indirizzo da cui il server vede arrivare il browser: in locale il loopback, da remoto quello del
+// Mac come lo vede la macchina di prova (lo stesso da cui arriva ssh).
+const CLIENT_IP_OF = () => REMOTE ? remote('echo "${SSH_CLIENT%% *}"').trim() : '127.0.0.1';
+let CLIENT_IP = '127.0.0.1';
+function remote(cmd, opts) { return execFileSync('ssh', SSH.concat([REMOTE, cmd]), Object.assign({ encoding: 'utf8' }, opts || {})); }
 const BASE = 'https://panel.localhost:' + PORT;
 const JAR = path.join(dir, 'freebsd-mail-panel-1.0.jar');
 const PROPS = (process.env.MYSQL || '').split(' ').filter(Boolean)
@@ -39,15 +56,20 @@ function check(what, ok) {
 
 function mails() {
     const f = path.join(dir, 'mail.log');
-    if (!fs.existsSync(f)) return [];
-    return fs.readFileSync(f, 'utf8').split('\n.\n').filter(m => m.trim()).map(m => ({
+    const text = REMOTE ? remote('cat ' + q(f) + ' 2>/dev/null || true') : (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '');
+    if (!text) return [];
+    return text.split('\n.\n').filter(m => m.trim()).map(m => ({
         to: (m.match(/^TO (.*)$/m) || [])[1], subject: (m.match(/^SUBJECT (.*)$/m) || [])[1],
         code: (m.match(/\b(\d{6})\b/) || [])[1] }));
 }
 
 function startServer() {
-    const server = spawn('java', PROPS.concat(['-cp', path.join(root, 'tests') + ':' + JAR,
-        'org.mail_panel.webserver.LoginE2EServer', String(PORT)]), { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+    // TESTS_CLASSES: le classi di prova compilate altrove, per non lasciarle in tests/.
+    const javaArgs = PROPS.concat(['-cp', (process.env.TESTS_CLASSES || path.join(root, 'tests')) + ':' + JAR,
+        'org.mail_panel.webserver.LoginE2EServer', String(PORT)]);
+    const server = REMOTE
+        ? spawn('ssh', SSH.concat([REMOTE, 'cd ' + q(dir) + ' && exec java ' + javaArgs.map(q).join(' ')]), { stdio: ['ignore', 'ignore', 'pipe'] })
+        : spawn('java', javaArgs, { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
     let log = '';
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('server did not start:\n' + log)), 90000);
@@ -62,6 +84,8 @@ function startServer() {
 // The certificate is trusted by its public key, as a real one would be: WebAuthn refuses pages
 // with a certificate error, so "ignore HTTPS errors" would not do.
 function spki() {
+    if (REMOTE) return remote('openssl x509 -in ' + q(path.join(dir, 'c.pem')) + ' -pubkey -noout | openssl pkey -pubin -outform der'
+        + ' | openssl dgst -sha256 -binary | openssl base64 -A').trim();
     const pub = execFileSync('openssl', ['x509', '-in', path.join(dir, 'c.pem'), '-pubkey', '-noout']);
     const der = execFileSync('openssl', ['pkey', '-pubin', '-outform', 'der'], { input: pub });
     return execFileSync('openssl', ['dgst', '-sha256', '-binary'], { input: der }).toString('base64');
@@ -70,8 +94,10 @@ function spki() {
 // A console command of the panel, run where the server runs (same SQLite, MySQL and keys).
 function console_(...args) {
     try {
-        const out = execFileSync('java', PROPS.concat(['-cp', JAR, 'org.mail_panel.Main'], args),
-            { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        const javaArgs = PROPS.concat(['-cp', JAR, 'org.mail_panel.Main'], args);
+        const out = REMOTE
+            ? remote('cd ' + q(dir) + ' && java ' + javaArgs.map(q).join(' '), { stdio: ['ignore', 'pipe', 'pipe'] })
+            : execFileSync('java', javaArgs, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
         return { status: 0, out: out, err: '' };
     } catch (e) {
         return { status: e.status, out: String(e.stdout || ''), err: String(e.stderr || '') };
@@ -84,13 +110,16 @@ async function shot(page, name) {
 
 (async () => {
     const server = await startServer();
-    const browser = await chromium.launch({ args: ['--host-resolver-rules=MAP panel.localhost 127.0.0.1',
+    CLIENT_IP = CLIENT_IP_OF();
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined, args: ['--host-resolver-rules=MAP panel.localhost ' + HOST_IP,
         '--ignore-certificate-errors-spki-list=' + spki()] });
     try {
         const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
         const page = await context.newPage();
         const errors = [];
         page.on('pageerror', e => errors.push(e.message));
+        // Le violazioni della Content-Security-Policy che manda il server vero (reperto 178).
+        csp.watch(page, errors);
         page.on('dialog', d => d.accept());
         const cdp = await context.newCDPSession(page);
         await cdp.send('WebAuthn.enable');
@@ -159,13 +188,13 @@ async function shot(page, name) {
         check('confirmed: the page shows the login email', true);
         const sessionsText = await page.locator('#sessionsList').innerText();
         check('the open sessions: this one, with the browser and the IP address', /this one/.test(sessionsText) && /Chrome/.test(sessionsText)
-            && /127\.0\.0\.1/.test(sessionsText));
+            && sessionsText.includes(CLIENT_IP));
         await shot(page, 'account');
 
         console.log('\n== 3. Settings: the vault key asks for a confirmation ==');
-        check('Account has no vault card (it is in Settings, for the superadmin)', await page.locator('button[onclick="vaultBackupKey()"]').count() === 0);
+        check('Account has no vault card (it is in Settings, for the superadmin)', await page.locator('button[data-on-click="vaultBackupKey()"]').count() === 0);
         await page.goto(BASE + '/settings');
-        await page.click('button[onclick="vaultBackupKey()"]');
+        await page.click('button[data-on-click="vaultBackupKey()"]');
         await page.waitForSelector('#stepUpModal.show');
         check('the confirmation window offers the passkey and an email code', await page.locator('#stepUpPasskeyBtn').isEnabled()
             && await page.locator('#stepUpEmailBtn').isEnabled());
@@ -221,6 +250,7 @@ async function shot(page, name) {
         const other = await browser.newContext({ locale: 'en-US', ignoreHTTPSErrors: true });
         const viewer = await other.newPage();
         viewer.on('pageerror', e => errors.push('viewer: ' + e.message));
+        csp.watch(viewer, errors);
         await viewer.goto(BASE + '/index');
         const sentBefore = mails().length;
         await viewer.fill('#email', 'second@example.org');
@@ -254,7 +284,7 @@ async function shot(page, name) {
         await page.waitForFunction(() => document.getElementById('adminsBody').innerText.includes('second@example.org'));
         check('the roles table comes from the real permissions', (await page.locator('#roleMatrix thead .role-badge').count()) === 4
             && (await page.locator('#roleMatrix td[data-role="viewer"] .fa-pen').count()) === 0);
-        await page.locator('#adminsBody tr', { hasText: 'second' }).locator('button[onclick^="editAdmin"]').click();
+        await page.locator('#adminsBody tr', { hasText: 'second' }).locator('button[data-on-click^="editAdmin"]').click();
         await page.waitForSelector('#editAdminModal.show');
         await page.selectOption('#editRole', 'operator');
         await page.click('#editAdminModal .btn-primary');
@@ -262,7 +292,7 @@ async function shot(page, name) {
         await viewer.goto(BASE + '/mailboxes');
         check('promoted to operator: the mailboxes are editable at the next page, no new sign-in',
             await viewer.locator('.topbar-readonly').count() === 0);
-        await page.locator('#adminsBody tr', { hasText: 'second' }).locator('button[onclick^="deleteAdmin"]').click();
+        await page.locator('#adminsBody tr', { hasText: 'second' }).locator('button[data-on-click^="deleteAdmin"]').click();
         await page.waitForFunction(() => !document.getElementById('adminsBody').innerText.includes('second@example.org'));
         await viewer.goto(BASE + '/home');
         check('deleted: the next page is the sign-in page', ['/', '/index'].includes(new URL(viewer.url()).pathname));
@@ -282,6 +312,8 @@ async function shot(page, name) {
     } finally {
         await browser.close();
         server.kill();
+        // Chiudere ssh non ferma il server dall'altra parte.
+        if (REMOTE) { try { remote('pkill -f ' + q('LoginE2EServer ' + PORT) + ' || true'); } catch (e) { } }
     }
     console.log(failures === 0 ? '\nAll checks passed.' : '\nFailed checks: ' + failures);
     process.exit(failures === 0 ? 0 : 1);

@@ -10,6 +10,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const csp = require('./browser-csp');
 
 const pages = process.argv[2];
 const shots = process.argv[3];
@@ -33,8 +34,9 @@ async function serve(route) {
         const f = path.join(pages, PAGES[p] + (language === 'it' ? '' : '.' + language) + '.html');
         const html = fs.readFileSync(f, 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test')
             .replace(/\{\{THEME\}\}/g, theme).replace(/\{\{COLOR_SCHEME\}\}/g, theme === 'auto' ? 'light dark' : theme);
-        return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
+        return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html, headers: csp.headers(pages) });
     }
+    if (p.startsWith('/assets/')) return csp.asset(route, pages, p);
     if (p.startsWith('/i18n/')) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(pages, p)) });
     if (p.startsWith('/vendor/') || p.startsWith('/fa/')) {
         const f = path.join(resources, p);
@@ -63,6 +65,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
+    csp.watch(page, errors);
 
     console.log('\n== The sidebar ==');
     await page.goto(BASE + '/home');

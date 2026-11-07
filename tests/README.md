@@ -194,7 +194,15 @@ legge soltanto (SELECT VERSION()).
 Le pagine generate dal pannello in Chromium, con Playwright e il server simulato. PageGenerator le
 scrive complete come le manda il server, con la cornice e i testi: nome.html in italiano e
 nome.en.html in inglese, piu' i dizionari degli script in i18n/ (da servire come /i18n/it.js e
-/i18n/en.js):
+/i18n/en.js). Dal 07/11/2026 (reperto 178) le pagine non hanno piu' script ne' stili in linea: sono
+file in assets/ (da servire come /assets/...), e csp.txt e' la Content-Security-Policy del pannello.
+Ogni prova li serve e manda la politica con `tests/browser-csp.js`, e una violazione e' un errore
+della pagina.
+
+**Dove gira cosa.** PageGenerator e le prove Java girano sulla macchina di prova FreeBSD
+(192.168.1.20), mai sul Mac; sul Mac solo il browser: le pagine generate sulla VM si copiano sul Mac,
+e le prove da browser girano li' (anche col Chrome installato, `CHROMIUM=".../Google Chrome"`, e il
+solo pacchetto Playwright, senza il suo Chromium):
 
     D=$(mktemp -d)
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java
@@ -208,6 +216,7 @@ nome.en.html in inglese, piu' i dizionari degli script in i18n/ (da servire come
     NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/packages-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/csp-browser-test.js $D
 
 Sul Mac basta il pacchetto Playwright, senza il suo Chromium: con `CHROMIUM` le prove usano il Chrome
 installato (tutte lo leggono dal 07/11/2026, reperto 177). Il pacchetto si puo' tenere fuori dal progetto:
@@ -221,6 +230,13 @@ Chromium con un autenticatore virtuale. Il server parte da una cartella vuota co
 
     D=$(mktemp -d) && cp target/freebsd-mail-panel-1.0.jar $D/
     MYSQL="$P" NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [cartella-per-le-foto]
+
+Col server sulla macchina di prova e il browser sul Mac (come va fatta): una cartella sulla VM col jar,
+le prove compilate sulla VM, il MySQL di prova acceso li', il servizio del pannello del clone fermo
+(la prova usa la sua porta 2096, l'unica che il firewall della VM lascia passare):
+
+    REMOTE=root@192.168.1.20 REMOTE_KEY=~/.ssh/freebsd_test_vm PORT=2096 TESTS_CLASSES=/var/tmp/csp/tc \
+    MYSQL="$P" NODE_PATH=... node tests/login-browser-test.js /var/tmp/csp/login [cartella-per-le-foto]
 
 ## Cosa provano
 
@@ -599,6 +615,15 @@ un server gia' avviato: al primo avvio passano nel file dei segreti (600, cartel
 si svuotano; quello che il pannello salva dopo va nel file; un valore scritto da una versione vecchia
 vince all'avvio dopo; la chiave PEM torna identica; con il file non scrivibile il valore resta in
 SQLite e si legge lo stesso; database/ 700 e mail_panel.db 600.
+
+**csp-browser-test.js** — ogni pagina generata in Chromium con la Content-Security-Policy del
+pannello (senza 'unsafe-inline', reperto 178): nessuna violazione, nessun gestore on...= o stile in
+linea nel DOM, ogni data-on-* nella lingua di panel-actions.js e solo con funzioni del pannello, ogni
+data-style applicato, e le funzioni chiamate dall'HTML che gli script costruiscono dopo esistono.
+
+**PageAssetsTest** — gli script e gli stili come file (PageAssets), chi puo' averli, la scrittura e la
+pulizia, la politica, le pagine generate e i sorgenti senza codice in linea. La parte sui sorgenti va
+lanciata dalla radice del progetto (sulla VM, da una copia).
 
 **login-browser-test.js** — l'accesso in Chromium con un autenticatore virtuale, sul server vero:
 il primo accesso con il codice della console (java ... Main --access-code), la passkey creata nella

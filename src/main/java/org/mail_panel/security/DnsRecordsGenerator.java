@@ -366,7 +366,7 @@ public class DnsRecordsGenerator {
         StringBuilder sb = new StringBuilder("<table class=\"table table-sm\">\n");
         for (int i = 0; i < rows.length; i++) {
             sb.append("<tr><td").append(i == 0 ? " width=\"120\"" : "").append("><strong>").append(rows[i][0])
-              .append("</strong></td><td").append(rows[i].length > 2 ? " style=\"word-break:break-all\"" : "")
+              .append("</strong></td><td").append(rows[i].length > 2 ? " data-style=\"word-break:break-all\"" : "")
               .append(">").append(rows[i][1]).append("</td></tr>\n");
         }
         return sb.append("</table>\n").toString();

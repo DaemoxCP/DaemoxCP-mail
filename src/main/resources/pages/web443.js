@@ -28,20 +28,20 @@
             // vuoto che sembra un difetto grafico.
             h += '<div class="small text-muted mb-2">' + escHtml(t('w4.whatInstalled')) + '</div>';
             if (c && c.success && c.configuration)
-                h += '<pre class="small p-2 border rounded mb-2" style="max-height:22rem;overflow:auto">'
+                h += '<pre class="small p-2 border rounded mb-2" data-style="max-height:22rem;overflow:auto">'
                    + updEsc(c.configuration) + '</pre>';
             else
                 h += '<div class="alert alert-warning py-2 small mb-2">' + escHtml(t('w4.noPreview', { reason: (c && c.error) || t('w4.unknownReason') })) + '</div>';
 
             h += '<div class="d-flex gap-2 flex-wrap">'
-               + (inc.ok ? '' : '<button class="btn btn-sm btn-warning" onclick="w443Include()">'
+               + (inc.ok ? '' : '<button class="btn btn-sm btn-warning" data-on-click="w443Include()">'
                               + '<i class="fas fa-plus me-1" aria-hidden="true"></i>' + escHtml(t('w4.addInclude')) + '</button>')
                + '<button class="btn btn-sm btn-outline-warning"'
                + (inc.ok ? '' : ' disabled title="' + escHtml(t('w4.includeFirst')) + '"')
-               + ' onclick="w443Install()">'
+               + ' data-on-click="w443Install()">'
                + '<i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>' + escHtml(s.installed ? t('w4.reinstall') : t('w4.open'))
                + '</button>'
-               + '<button class="btn btn-sm btn-outline-secondary" onclick="w443Jail()">'
+               + '<button class="btn btn-sm btn-outline-secondary" data-on-click="w443Jail()">'
                + '<i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('w4.enableJail')) + '</button>'
                + '</div><div id="w443Outcome" class="mt-2"></div>';
 
@@ -53,7 +53,7 @@
                 ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('wd.unknown')) + '</span>'
                 : (state ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
                          : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>');
-            return '<tr><td style="width:2rem">' + i + '</td><td class="small">' + whatItem
+            return '<tr><td data-style="width:2rem">' + i + '</td><td class="small">' + whatItem
                  + '<div class="text-muted">' + noteText + '</div></td></tr>';
         }
 

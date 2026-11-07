@@ -60,15 +60,15 @@
                 if (x.otherTxt > 0)
                     state += '<div class="small text-muted mt-1">' + escHtml(tn('ad.otherTxt', x.otherTxt)) + '</div>';
                 if (x.content)
-                    state += '<div class="small mt-1" style="word-break:break-all"><code>' + adEsc(x.content) + '</code></div>';
+                    state += '<div class="small mt-1" data-style="word-break:break-all"><code>' + adEsc(x.content) + '</code></div>';
 
                 let proposal;
                 if (x.locked) {
                     proposal = '<div class="small text-danger">' + adEsc(x.locked) + '</div>';
                 } else {
-                    proposal = '<code class="small" style="word-break:break-all">' + adEsc(x.proposed) + '</code>';
+                    proposal = '<code class="small" data-style="word-break:break-all">' + adEsc(x.proposed) + '</code>';
                     if (x.which === 'dmarc' && !x.exists)
-                        proposal += '<div class="mt-1"><select class="form-select form-select-sm" id="adPolicy" style="max-width:22rem" aria-label="' + escHtml(t('ad.policy')) + '">'
+                        proposal += '<div class="mt-1"><select class="form-select form-select-sm" id="adPolicy" data-style="max-width:22rem" aria-label="' + escHtml(t('ad.policy')) + '">'
                                   + '<option value="none" selected>p=none &mdash; ' + escHtml(t('ad.pNone')) + '</option>'
                                   + '<option value="quarantine">p=quarantine &mdash; ' + escHtml(t('ad.pQuarantine')) + '</option>'
                                   + '<option value="reject">p=reject &mdash; ' + escHtml(t('ad.pReject')) + '</option>'
@@ -84,12 +84,12 @@
                         '<option value="' + v + '"' + (v === x.currentPolicy ? ' selected' : '') + '>p='
                         + v + '</option>').join('');
                     actionItem = '<select class="form-select form-select-sm mb-1" id="adPolicyNew" aria-label="' + escHtml(t('ad.policy')) + '">' + option + '</select>'
-                           + '<button class="btn btn-sm btn-outline-warning" onclick="autoDnsChangePolicy()">'
+                           + '<button class="btn btn-sm btn-outline-warning" data-on-click="autoDnsChangePolicy()">'
                            + '<i class="fas fa-pen me-1" aria-hidden="true"></i>' + escHtml(t('ad.changePolicy')) + '</button>';
                 } else if (x.exists || x.locked) {
                     actionItem = '<span class="small text-muted">' + escHtml(x.exists ? t('ad.nothingToDo') : t('ad.cannotCreate')) + '</span>';
                 } else {
-                    actionItem = '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreate(\'' + adEsc(x.which) + '\')">'
+                    actionItem = '<button class="btn btn-sm btn-outline-success" data-on-click="autoDnsCreate(\'' + adEsc(x.which) + '\')">'
                            + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('ad.create')) + '</button>';
                 }
 
@@ -136,12 +136,12 @@
                  + '<div class="fw-bold mb-1"><i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.fwdTitle')) + '</div>'
                  + '<div class="small text-muted mb-3">' + escHtml(t('ad.fwdHint', { address: reportList.address })) + ' <strong>' + escHtml(t('ad.recommended')) + '</strong></div>'
                  + '<label class="form-label small mb-1" for="adDestination">' + escHtml(t('ad.fwdTo', { address: reportList.address })) + '</label>'
-                 + '<select class="form-select form-select-sm mb-2" id="adDestination" onchange="adDestinationChange()">'
+                 + '<select class="form-select form-select-sm mb-2" id="adDestination" data-on-change="adDestinationChange()">'
                  + '<option value="">' + escHtml(t('ad.loadingAddresses')) + '</option></select>'
                  + '<input type="email" class="form-control form-control-sm mb-2 d-none" id="adDestinationOther" '
                  + 'placeholder="' + escHtml(t('al.destPh')) + '" aria-label="' + escHtml(t('ad.otherAddress')) + '" autocomplete="off">'
                  + '<div class="small text-muted mb-2 d-none" id="adDestinationOtherNote">' + escHtml(t('ad.otherAddressNote')) + '</div>'
-                 + '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreateAlias()">'
+                 + '<button class="btn btn-sm btn-outline-success" data-on-click="autoDnsCreateAlias()">'
                  + '<i class="fas fa-share me-1" aria-hidden="true"></i>' + escHtml(t('ad.createFwd')) + '</button>'
                  + '</div></div>'
 
@@ -149,7 +149,7 @@
                  + '<div class="col-lg-6"><div class="border rounded p-3 h-100">'
                  + '<div class="fw-bold mb-1"><i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.boxTitle', { address: reportList.address })) + '</div>'
                  + '<div class="small text-muted mb-3">' + escHtml(t('ad.boxHint')) + '</div>'
-                 + '<button class="btn btn-sm btn-outline-secondary" onclick="autoDnsCreateMailbox()">'
+                 + '<button class="btn btn-sm btn-outline-secondary" data-on-click="autoDnsCreateMailbox()">'
                  + '<i class="fas fa-inbox me-1" aria-hidden="true"></i>' + escHtml(t('ad.createBox')) + '</button>'
                  + '</div></div>'
 
@@ -218,7 +218,7 @@
             if (r.success && r.password)
                 h += '<div class="alert alert-warning py-2 small mb-0 mt-2">'
                    + '<i class="fas fa-key me-1" aria-hidden="true"></i><strong>' + escHtml(t('ad.passwordOf', { address: r.address })) + '</strong> '
-                   + '<code style="font-size:1.05em">' + adEsc(r.password) + '</code><br>'
+                   + '<code data-style="font-size:1.05em">' + adEsc(r.password) + '</code><br>'
                    + escHtml(t('ad.passwordKept')) + '</div>';
             el.innerHTML = h;
             // Non si ricarica da soli: la ricarica cancellerebbe la password dallo schermo.
@@ -242,7 +242,7 @@
                   + '<strong>' + escHtml(t('ad.optTitle')) + '</strong>'
                   + '<span class="small text-muted ms-2">' + escHtml(t('ad.optSubtitle')) + '</span></span>'
                   + (missingOnes > 1
-                     ? '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreateAllOptional()">'
+                     ? '<button class="btn btn-sm btn-outline-success" data-on-click="autoDnsCreateAllOptional()">'
                        + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('ad.createAllMissing', { n: missingOnes })) + '</button>'
                      : '')
                   + '</div><div class="card-body">'
@@ -256,12 +256,12 @@
                 else if (x.exists) state = '<span class="badge bg-success">' + escHtml(t('ad.exists')) + '</span>';
                 else state = '<span class="badge bg-warning text-dark">' + escHtml(t('ad.missing')) + '</span>';
                 if (x.content)
-                    state += '<div class="small mt-1" style="word-break:break-all"><code>'
+                    state += '<div class="small mt-1" data-style="word-break:break-all"><code>'
                            + adEsc(x.content) + '</code></div>';
 
                 const actionItem = (x.exists || x.conflict)
                     ? '<span class="small text-muted">' + escHtml(x.exists ? t('ad.nothingToDo') : t('ad.byHand')) + '</span>'
-                    : '<button class="btn btn-sm btn-outline-success" onclick="autoDnsCreateOptional(\'' + adEsc(x.which) + '\')">'
+                    : '<button class="btn btn-sm btn-outline-success" data-on-click="autoDnsCreateOptional(\'' + adEsc(x.which) + '\')">'
                       + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('ad.create')) + '</button>';
 
                 h += '<tr class="upd-cell"><td><strong>' + adEsc(x.type) + '</strong><br>'
@@ -272,7 +272,7 @@
                         + '<span class="text-secondary">' + adEsc(x.premise) + '</span></div>'
                       : '') + '</td>'
                    + '<td>' + state + '</td>'
-                   + '<td><code class="small" style="word-break:break-all">' + adEsc(x.proposed) + '</code></td>'
+                   + '<td><code class="small" data-style="word-break:break-all">' + adEsc(x.proposed) + '</code></td>'
                    + '<td class="text-end">' + actionItem + '</td></tr>';
 
                 if (x.warning || x.conflict)
@@ -345,9 +345,9 @@
 
             el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
                          + '<div class="mb-1">' + adEsc(a.note) + '</div>'
-                         + '<div><span class="text-muted">' + escHtml(t('ad.before')) + '</span> <code style="word-break:break-all">'
+                         + '<div><span class="text-muted">' + escHtml(t('ad.before')) + '</span> <code data-style="word-break:break-all">'
                          + adEsc(a.before) + '</code></div>'
-                         + '<div><span class="text-muted">' + escHtml(t('ad.after')) + '</span> <code style="word-break:break-all">'
+                         + '<div><span class="text-muted">' + escHtml(t('ad.after')) + '</span> <code data-style="word-break:break-all">'
                          + adEsc(a.after) + '</code></div></div>';
 
             const warning = fresh === 'reject' ? '\n\n' + t('ad.warnReject')
@@ -376,11 +376,11 @@
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-1">'
                   + adEsc(r.note || r.error) + '</div>';
             if (r.content)
-                h += '<div class="small text-muted mb-1">' + escHtml(t('ad.alreadyThere')) + ' <code style="word-break:break-all">'
+                h += '<div class="small text-muted mb-1">' + escHtml(t('ad.alreadyThere')) + ' <code data-style="word-break:break-all">'
                    + adEsc(r.content) + '</code></div>';
             if (r.name && r.value)
                 h += '<div class="small text-muted"><code>' + adEsc(r.name) + '</code> &rarr; <code '
-                   + 'style="word-break:break-all">' + adEsc(r.value) + '</code></div>';
+                   + 'data-style="word-break:break-all">' + adEsc(r.value) + '</code></div>';
             el.innerHTML = h;
             if (r.success) setTimeout(autoDnsLoad, 1200);
             else if (r.mailboxMissing) setTimeout(autoDnsLoad, 300);
@@ -408,7 +408,7 @@
             el.innerHTML = '<div class="alert alert-info py-2 small mb-2">'
                          + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.running')) + '</div>'
                          + '<pre id="adLog" class="small p-2 border rounded mb-0" '
-                         + 'style="max-height:26rem;overflow:auto"></pre>';
+                         + 'data-style="max-height:26rem;overflow:auto"></pre>';
             adFollow(r.jobId);
         }
 

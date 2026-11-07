@@ -36,11 +36,11 @@
             ];
             let h = '<div class="d-flex gap-2 align-items-end flex-wrap mb-3">'
                   + '<div><label class="form-label small mb-1" for="stsMode">' + escHtml(t('sts.mode')) + '</label>'
-                  + '<select class="form-select form-select-sm" id="stsMode" style="min-width:min(26rem,100%)">'
+                  + '<select class="form-select form-select-sm" id="stsMode" data-style="min-width:min(26rem,100%)">'
                   + modes.map(m => '<option value="' + m[0] + '"' + (m[0] === r.mode ? ' selected' : '') + '>'
                                 + stsEsc(m[1]) + '</option>').join('')
                   + '</select></div>'
-                  + '<button class="btn btn-sm btn-outline-warning" onclick="stsChangeMode()">'
+                  + '<button class="btn btn-sm btn-outline-warning" data-on-click="stsChangeMode()">'
                   + '<i class="fas fa-pen me-1" aria-hidden="true"></i>' + escHtml(t('sts.changeMode')) + '</button></div>';
 
             h += '<div class="small text-muted mb-1">' + escHtml(t('sts.served')) + '</div>'
@@ -58,7 +58,7 @@
                    + (p.ok ? ' ' + escHtml(t('sts.answersOk'))
                            : '<div class="text-muted">' + stsEsc(p.error || '') + '</div>') + '</td>'
                    + '<td class="text-end">' + (p.ok
-                       ? '<button class="btn btn-sm btn-outline-success" onclick="stsPublish()">'
+                       ? '<button class="btn btn-sm btn-outline-success" data-on-click="stsPublish()">'
                          + '<i class="fas fa-cloud-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('sts.publish')) + '</button>'
                        : '<span class="small text-muted">' + escHtml(t('sts.mustAnswerFirst')) + '</span>') + '</td></tr>';
             });

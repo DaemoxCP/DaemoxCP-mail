@@ -44,8 +44,8 @@
                             ? '<span class="text-muted small">' + escHtml(t('dns.none')) + '</span>'
                             : linkedDomains.map(d => '<span class="badge bg-info text-dark me-1">' + escapeHtmlCf(d) + '</span>').join('')) + '</td>';
                         html += '<td class="text-end text-nowrap">';
-                        html += '<button class="btn btn-sm btn-outline-primary me-1" title="' + escHtml(t('common.edit')) + '" aria-label="' + escHtml(t('common.edit')) + ' ' + escapeHtmlCf(a.label) + '" onclick="cfEditOpen(' + a.id + ')"><i class="fas fa-pen" aria-hidden="true"></i></button>';
-                        html += '<button class="btn btn-sm btn-outline-danger" title="' + escHtml(t('dns.remove')) + '" aria-label="' + escHtml(t('dns.remove')) + ' ' + escapeHtmlCf(a.label) + '" onclick="cfDeleteAccount(' + a.id + ', \'' + safeLabel + '\')"><i class="fas fa-trash" aria-hidden="true"></i></button>';
+                        html += '<button class="btn btn-sm btn-outline-primary me-1" title="' + escHtml(t('common.edit')) + '" aria-label="' + escHtml(t('common.edit')) + ' ' + escapeHtmlCf(a.label) + '" data-on-click="cfEditOpen(' + a.id + ')"><i class="fas fa-pen" aria-hidden="true"></i></button>';
+                        html += '<button class="btn btn-sm btn-outline-danger" title="' + escHtml(t('dns.remove')) + '" aria-label="' + escHtml(t('dns.remove')) + ' ' + escapeHtmlCf(a.label) + '" data-on-click="cfDeleteAccount(' + a.id + ', \'' + safeLabel + '\')"><i class="fas fa-trash" aria-hidden="true"></i></button>';
                         html += '</td>';
                         html += '</tr>';
                         // Riga di edit (nascosta finché non clicchi la matita)
@@ -55,8 +55,8 @@
                         html += '  <div class="col-md-3"><label class="form-label small mb-1" for="cfEditEmail-' + a.id + '">' + escHtml(t('dns.cfEmail')) + '</label><input type="email" class="form-control form-control-sm" id="cfEditEmail-' + a.id + '" value="' + escapeHtmlCf(a.email || '') + '" placeholder="' + escHtml(t('dns.optional')) + '"></div>';
                         html += '  <div class="col-md-4"><label class="form-label small mb-1" for="cfEditToken-' + a.id + '">' + escHtml(t('dns.cfNewToken')) + ' <small class="text-muted">' + escHtml(t('dns.cfNewTokenHint')) + '</small></label><input type="password" class="form-control form-control-sm" id="cfEditToken-' + a.id + '" placeholder="' + escHtml(t('dns.cfNewTokenPh')) + '" autocomplete="off"></div>';
                         html += '  <div class="col-md-2 text-end">';
-                        html += '    <button class="btn btn-sm btn-primary me-1" onclick="cfEditSave(' + a.id + ')"><i class="fas fa-save" aria-hidden="true"></i> ' + escHtml(t('common.save')) + '</button>';
-                        html += '    <button class="btn btn-sm btn-secondary" onclick="cfEditClose(' + a.id + ')" aria-label="' + escHtml(t('common.cancel')) + '"><i class="fas fa-times" aria-hidden="true"></i></button>';
+                        html += '    <button class="btn btn-sm btn-primary me-1" data-on-click="cfEditSave(' + a.id + ')"><i class="fas fa-save" aria-hidden="true"></i> ' + escHtml(t('common.save')) + '</button>';
+                        html += '    <button class="btn btn-sm btn-secondary" data-on-click="cfEditClose(' + a.id + ')" aria-label="' + escHtml(t('common.cancel')) + '"><i class="fas fa-times" aria-hidden="true"></i></button>';
                         html += '  </div>';
                         html += '</div>';
                         html += '</td></tr>';
@@ -74,7 +74,7 @@
                     cfDomainsCf.forEach(d => {
                         html += '<tr>';
                         html += '<td><code>' + escapeHtmlCf(d.domain) + '</code></td>';
-                        html += '<td><select class="form-select form-select-sm" aria-label="' + escHtml(t('dns.rotationMode')) + ' ' + escapeHtmlCf(d.domain) + '" onchange="cfAssignDomain(' + d.id + ', this.value)">';
+                        html += '<td><select class="form-select form-select-sm" aria-label="' + escHtml(t('dns.rotationMode')) + ' ' + escapeHtmlCf(d.domain) + '" data-on-change="cfAssignDomain(' + d.id + ', this.value)">';
                         const cur = d.cloudflare_account_id || 0;
                         html += '<option value="0"' + (cur === 0 ? ' selected' : '') + '>' + escHtml(t('dns.manualMode')) + '</option>';
                         cfAccounts.forEach(a => {
@@ -252,18 +252,18 @@
                         html += ' <small class="text-muted">' + escHtml(t('dns.onZone', { zone: r.dnsZone })) + '</small>';
                     }
                     html += '</div>';
-                    html += '<button type="button" class="btn btn-link p-0 copy-btn" onclick="copyToClipboard(this.parentElement.parentElement)" title="' + escHtml(t('common.copy')) + '" aria-label="' + escHtml(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button>';
+                    html += '<button type="button" class="btn btn-link p-0 copy-btn" data-on-click="copyToClipboard(this.parentElement.parentElement)" title="' + escHtml(t('common.copy')) + '" aria-label="' + escHtml(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button>';
                     html += '</div>';
                     html += '<div class="mt-2"><strong>' + escHtml(t('dns.recName')) + '</strong> <code class="record-name">' + escHtml(r.name) + '</code></div>';
                     // Si mostra il valore COMPLETO quando esiste: per MX e SRV "value" contiene
                     // la sola destinazione, e sotto un'etichetta che dice "consigliato" quello
                     // sarebbe un record da copiare a cui mancano dei campi.
-                    html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValue')) + '</strong> <code class="record-value" style="word-break:break-all">' + escHtml(r.fullValue || r.value) + '</code></div>';
+                    html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValue')) + '</strong> <code class="record-value" data-style="word-break:break-all">' + escHtml(r.fullValue || r.value) + '</code></div>';
                     html += '<small class="text-muted">' + r.description + '</small>';
                     // Area dettagli verifica (popolata dopo verifyDnsAuto)
                     html += '<div class="record-verify-detail mt-2" data-detail-key="' + recordKey + '"></div>';
                     if (r.explanation) {
-                        html += '<details class="mt-2"><summary><i class="fas fa-cog me-1" aria-hidden="true"></i>' + escHtml(t('dns.cfInstructions')) + '</summary><div class="mt-2 p-3 bg-white border rounded" style="font-size:0.9rem">' + r.explanation + '</div></details>';
+                        html += '<details class="mt-2"><summary><i class="fas fa-cog me-1" aria-hidden="true"></i>' + escHtml(t('dns.cfInstructions')) + '</summary><div class="mt-2 p-3 bg-white border rounded" data-style="font-size:0.9rem">' + r.explanation + '</div></details>';
                     }
                     html += '</div>';
                 });
@@ -370,7 +370,7 @@
                             if (real) {
                                 const brief = real.length > 140 ? real.substring(0, 140) + '…' : real;
                                 ok += '<div class="mt-1"><span class="text-muted">' + escHtml(t('dns.published')) + '</span> '
-                                    + '<code class="small" style="word-break:break-all">' + escapeHtmlBl(brief) + '</code></div>';
+                                    + '<code class="small" data-style="word-break:break-all">' + escapeHtmlBl(brief) + '</code></div>';
                             }
                             detailWrap.innerHTML = ok + '</div>';
                         }
@@ -593,8 +593,8 @@
                     '<div class="small text-muted">' + relText + '</div>';
                 if (showFixButtons) {
                     html += '<div class="mt-2 d-flex gap-1 flex-wrap">';
-                    html += '<button class="btn btn-sm btn-outline-warning" onclick="resetLastRotationTimestamp()" title="' + escHtml(t('dns.resetNowHint')) + '"><i class="fas fa-sync-alt me-1" aria-hidden="true"></i>' + escHtml(t('dns.resetNow')) + '</button>';
-                    html += '<button class="btn btn-sm btn-outline-secondary" onclick="clearLastRotationTimestamp()" title="' + escHtml(t('dns.clearTsHint')) + '"><i class="fas fa-eraser me-1" aria-hidden="true"></i>' + escHtml(t('dns.clearTs')) + '</button>';
+                    html += '<button class="btn btn-sm btn-outline-warning" data-on-click="resetLastRotationTimestamp()" title="' + escHtml(t('dns.resetNowHint')) + '"><i class="fas fa-sync-alt me-1" aria-hidden="true"></i>' + escHtml(t('dns.resetNow')) + '</button>';
+                    html += '<button class="btn btn-sm btn-outline-secondary" data-on-click="clearLastRotationTimestamp()" title="' + escHtml(t('dns.clearTsHint')) + '"><i class="fas fa-eraser me-1" aria-hidden="true"></i>' + escHtml(t('dns.clearTs')) + '</button>';
                     html += '</div>';
                 }
                 lastEl.innerHTML = html;

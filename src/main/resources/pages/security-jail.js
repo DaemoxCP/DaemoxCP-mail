@@ -13,6 +13,14 @@
         }
 
         // ===== Postfix Aliases =====
+        // Il testo grezzo della jail, sotto la sua scheda. Era una catena di parentElement nel gestore
+        // in linea; i gestori adesso chiamano solo funzioni (panel-actions.js, reperto 178).
+        function toggleJailRaw(button, name) {
+            const box = button.parentElement && button.parentElement.parentElement && button.parentElement.parentElement.parentElement;
+            const raw = box && box.querySelector('.jail-raw-' + CSS.escape(name));
+            if (raw) raw.classList.toggle('d-none');
+        }
+
         function paliasEscape(s) {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
@@ -42,7 +50,7 @@
                     // un lavoro che sta qui dentro.
                     body.innerHTML = '<div class="alert alert-warning m-2 mb-0">'
                         + '<strong>' + escHtml(t('sj.notRunning')) + '</strong> ' + escHtml(t('sj.notRunningHint')) + ''
-                        + '<button class="btn btn-sm btn-warning ms-2" onclick="startFail2banFromPanel()">'
+                        + '<button class="btn btn-sm btn-warning ms-2" data-on-click="startFail2banFromPanel()">'
                         + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('sj.startNow')) + '</button></div>';
                     return;
                 }
@@ -74,7 +82,7 @@
 
             let html = '<div class="card mb-3"><div class="card-header py-1 px-2 d-flex justify-content-between align-items-center bg-light">';
             html += '<div><strong><code>' + paliasEscape(name) + '</code></strong>' + cbBadge + tbBadge + '</div>';
-            html += '<button class="btn btn-sm btn-link p-0" onclick="this.parentElement.parentElement.parentElement.querySelector(\'.jail-raw-' + paliasEscape(name) + '\').classList.toggle(\'d-none\')"><i class="fas fa-terminal me-1" aria-hidden="true"></i>' + escHtml(t('sj.raw')) + '</button>';
+            html += '<button class="btn btn-sm btn-link p-0" data-on-click="toggleJailRaw(this, \'' + paliasEscape(name) + '\')"><i class="fas fa-terminal me-1" aria-hidden="true"></i>' + escHtml(t('sj.raw')) + '</button>';
             html += '</div>';
             html += '<div class="card-body p-2 small">';
             html += '<table class="table table-sm table-borderless mb-2"><tbody>';
@@ -95,13 +103,13 @@
             html += '</div>';
 
             if (j.banned_ips_raw) {
-                html += '<div class="mb-2"><strong class="small">' + escHtml(t('sj.bannedList')) + '</strong> <code class="small" style="word-break:break-all">' + paliasEscape(j.banned_ips_raw) + '</code></div>';
+                html += '<div class="mb-2"><strong class="small">' + escHtml(t('sj.bannedList')) + '</strong> <code class="small" data-style="word-break:break-all">' + paliasEscape(j.banned_ips_raw) + '</code></div>';
             }
 
             // Output RAW del comando "fail2ban-client status <jail>" — chiuso di default
             html += '<div class="jail-raw-' + paliasEscape(name) + ' d-none">';
             html += '<div class="small text-muted mb-1"><i class="fas fa-terminal me-1" aria-hidden="true"></i>' + escHtml(t('sj.outputOf')) + ' <code>fail2ban-client status ' + paliasEscape(name) + '</code></div>';
-            html += '<pre class="bg-dark text-light p-2 small rounded mb-0" style="font-size:0.75rem;white-space:pre-wrap">' + paliasEscape(j.status_raw || '') + '</pre>';
+            html += '<pre class="bg-dark text-light p-2 small rounded mb-0" data-style="font-size:0.75rem;white-space:pre-wrap">' + paliasEscape(j.status_raw || '') + '</pre>';
             html += '</div>';
 
             html += '</div></div>';
@@ -126,7 +134,7 @@
                 }
             }
             return '<tr>' +
-                '<td style="width:130px;vertical-align:top"><code class="text-primary">' + escHtml(key) + '</code></td>' +
+                '<td data-style="width:130px;vertical-align:top"><code class="text-primary">' + escHtml(key) + '</code></td>' +
                 '<td><strong>' + display + '</strong>' + (descr ? '<br><small class="text-muted">' + escHtml(descr) + '</small>' : '') + '</td>' +
                 '</tr>';
         }
@@ -183,7 +191,7 @@
             }
             html += '<table class="table table-sm align-middle mb-0">';
             const exists = '<span class="badge bg-success">' + escHtml(t('sj.exists')) + '</span>', missing = '<span class="badge bg-danger">' + escHtml(t('ad.missing')) + '</span>';
-            html += '<tr><td class="fw-bold" style="width:30%">' + escHtml(t('sj.source')) + '</td><td><code>' + paliasEscape(data.alias_file || '?') + '</code> ' + (data.source_exists ? exists : missing) + '</td></tr>';
+            html += '<tr><td class="fw-bold" data-style="width:30%">' + escHtml(t('sj.source')) + '</td><td><code>' + paliasEscape(data.alias_file || '?') + '</code> ' + (data.source_exists ? exists : missing) + '</td></tr>';
             html += '<tr><td class="fw-bold">' + escHtml(t('sj.compiled')) + '</td><td><code>' + paliasEscape(data.alias_db_file || '?') + '</code> ' + (data.db_exists ? exists : missing) + (data.db_stale_vs_source ? ' <span class="badge bg-warning text-dark">' + escHtml(t('sj.stale')) + '</span>' : '') + '</td></tr>';
             if (data.alias_database_raw) {
                 html += '<tr><td class="fw-bold">alias_database (postconf)</td><td><code>' + paliasEscape(data.alias_database_raw) + '</code></td></tr>';
@@ -221,7 +229,7 @@
                 fixBtn.innerHTML = origBtn;
                 let html = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-2"><i class="fas fa-' + (data.success ? 'check' : 'times') + '-circle me-1" aria-hidden="true"></i>' + paliasEscape(data.message || '') + '</div>';
                 if (data.log) {
-                    html += '<pre class="bg-light p-2 rounded small mb-0" style="white-space:pre-wrap">' + paliasEscape(data.log) + '</pre>';
+                    html += '<pre class="bg-light p-2 rounded small mb-0" data-style="white-space:pre-wrap">' + paliasEscape(data.log) + '</pre>';
                 }
                 logEl.innerHTML = html;
                 paliasRender(data);
@@ -248,7 +256,7 @@
             .then(data => {
                 let html = '<div class="alert alert-' + (data.success ? 'success' : 'danger') + ' py-2 mb-2"><i class="fas fa-' + (data.success ? 'check' : 'times') + '-circle me-1" aria-hidden="true"></i>' + paliasEscape(data.message || '') + '</div>';
                 if (data.log) {
-                    html += '<pre class="bg-light p-2 rounded small mb-0" style="white-space:pre-wrap">' + paliasEscape(data.log) + '</pre>';
+                    html += '<pre class="bg-light p-2 rounded small mb-0" data-style="white-space:pre-wrap">' + paliasEscape(data.log) + '</pre>';
                 }
                 logEl.innerHTML = html;
                 paliasRender(data);
@@ -295,7 +303,7 @@
                         }
                         html += '</div>';
                         if (!chk.ok && chk.fix_action) {
-                            html += '<button class="btn btn-warning btn-sm" data-action="' + escHtml(chk.fix_action) + '" onclick="runFhcFix(this.dataset.action, this)">';
+                            html += '<button class="btn btn-warning btn-sm" data-action="' + escHtml(chk.fix_action) + '" data-on-click="runFhcFix(this.dataset.action, this)">';
                             html += '<i class="fas fa-wrench me-1" aria-hidden="true"></i>' + escHtml(t('sec.fix'));
                             html += '</button>';
                         }
@@ -349,7 +357,7 @@
                     html += '<div class="d-flex align-items-start gap-2 mb-2">' + icon +
                         '<div class="flex-grow-1"><div>' + badge + ' <strong>' + escapeHtml(s.label) + '</strong></div>';
                     if (s.message) html += '<div class="small text-muted">' + escapeHtml(s.message) + '</div>';
-                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>' + escHtml(t('sj.output')) + '</summary><pre class="mb-0 mt-1" style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtml(s.output) + '</pre></details>';
+                    if (s.output && s.output.length > 0) html += '<details class="small mt-1"><summary>' + escHtml(t('sj.output')) + '</summary><pre class="mb-0 mt-1" data-style="font-size:0.75rem;max-height:200px;overflow:auto">' + escapeHtml(s.output) + '</pre></details>';
                     html += '</div></div>';
                 });
                 stepsEl.innerHTML = html;
@@ -404,7 +412,7 @@
                               '<i class="fas fa-' + (v.ok ? 'check' : 'times') + ' me-1" aria-hidden="true"></i>' +
                               escapeHtml(v.jail) + ': ' +
                               escapeHtml(v.command || v.note || '') + '</div>';
-                        if (v.log) hh += '<pre class="small mb-2 mt-1" style="white-space:pre-wrap;max-height:220px;overflow:auto">' + escapeHtml(v.log) + '</pre>';
+                        if (v.log) hh += '<pre class="small mb-2 mt-1" data-style="white-space:pre-wrap;max-height:220px;overflow:auto">' + escapeHtml(v.log) + '</pre>';
                     });
                     if (data.message) hh += '<div class="mt-2">' + escapeHtml(data.message) + '</div>';
                     if (el) { el.innerHTML = hh; }

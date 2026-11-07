@@ -20,11 +20,11 @@
                 const uncertain = p.state === 'uncertain';
                 // "incerto" non e' verde: il pannello non ha potuto verificare, e mostrarlo
                 // come fatto sarebbe la bugia che stiamo cercando di togliere dal pannello.
-                h += '<tr class="upd-cell"><td style="width:2rem">'
+                h += '<tr class="upd-cell"><td data-style="width:2rem">'
                    + (done ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('up.pDone')) + '</span>'
                             : uncertain
                               ? '<i class="fas fa-question-circle text-secondary" aria-hidden="true" title="' + escHtml(t('ams.unverifiable')) + '"></i><span class="visually-hidden">' + escHtml(t('ams.unverifiable')) + '</span>'
-                              : '<i class="fas fa-circle text-warning" style="font-size:.6rem" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('up.pTodo')) + '</span>')
+                              : '<i class="fas fa-circle text-warning" data-style="font-size:.6rem" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('up.pTodo')) + '</span>')
                    + '</td><td class="small"><strong>' + (i + 1) + '. ' + updEsc(p.title) + '</strong>'
                    + (p.detail ? '<div class="text-muted">' + updEsc(p.detail) + '</div>' : '')
                    + (p.reason ? '<div class="text-warning">' + updEsc(p.reason) + '</div>' : '')
@@ -33,7 +33,7 @@
             h += '</tbody></table></div>';
 
             if (!r.complete)
-                h += '<button class="btn btn-sm btn-success" onclick="amsEnable()">'
+                h += '<button class="btn btn-sm btn-success" data-on-click="amsEnable()">'
                    + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('ams.run')) + '</button>';
             h += '<div id="amsOutcome" class="mt-2"></div>';
             el.innerHTML = h;
@@ -57,7 +57,7 @@
             el.innerHTML = '<div class="alert alert-info py-2 small mb-2">'
                          + '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.inProgress')) + '</div>'
                          + '<pre id="amsLog" class="small p-2 border rounded mb-0" '
-                         + 'style="max-height:26rem;overflow:auto"></pre>';
+                         + 'data-style="max-height:26rem;overflow:auto"></pre>';
             amsFollow(r.jobId);
         }
 
@@ -75,7 +75,7 @@
                         box.innerHTML = (s.job.status === 'completed'
                                 ? '<i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('ams.done', { s: s.job.elapsedSeconds }))
                                 : '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + escHtml(t('ams.stopped', { error: s.job.errorMessage })))
-                            + ' <button class="btn btn-sm btn-outline-primary ms-2" onclick="amsPlan()">'
+                            + ' <button class="btn btn-sm btn-outline-primary ms-2" data-on-click="amsPlan()">'
                             + escHtml(t('ams.refresh')) + '</button>';
                     }
                     return;

@@ -77,7 +77,7 @@
             if (document.getElementById('home-startup')) {
                 homeState();
                 const f = document.getElementById('home-trust');
-                if (f) f.innerHTML = '<button class="btn btn-sm btn-outline-secondary" onclick="homeTrust()">'
+                if (f) f.innerHTML = '<button class="btn btn-sm btn-outline-secondary" data-on-click="homeTrust()">'
                     + '<i class="fas fa-user-shield me-1" aria-hidden="true"></i>' + homeEsc(t('hs.checkCf')) + '</button>'
                     + '<div class="small text-muted mt-1">' + homeEsc(t('hs.checkCfHint')) + '</div>';
             }
@@ -141,7 +141,7 @@
                              + homeEsc(tn('hs.ageDays', g, { what: whatItem })) + '</span>');
 
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>';
-            h += '<tr><td style="width:15rem"><strong>FreeBSD</strong></td><td><code>'
+            h += '<tr><td data-style="width:15rem"><strong>FreeBSD</strong></td><td><code>'
                + homeEsc(so.userland || '?') + '</code>'
                + (so.arch ? ' <span class="text-muted small">' + homeEsc(so.arch) + '</span>' : '')
                + supportLine(so)

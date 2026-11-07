@@ -22,6 +22,10 @@ import java.lang.reflect.Method;
  * per-request values are left, for the browser tests to fill in. i18n/ holds the two script
  * dictionaries, to be served as /i18n/it.js and /i18n/en.js.
  *
+ * Like the panel (MailPanelContent.generateAllContent), every inline script and style block becomes a
+ * file (PageAssets): assets/ holds them, to be served as /assets/..., and csp.txt holds the
+ * Content-Security-Policy the panel sends, for the browser tests to send it too.
+ *
  * Usage:
  *   javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java
  *   java  -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator /tmp/pages
@@ -42,8 +46,8 @@ public class PageGenerator {
             if (!n.startsWith("get") || !n.endsWith("Html")) continue;
             if (m.getParameterCount() != 0) continue;
             try {
-                String html = String.valueOf(m.invoke(null));
                 String name = n.substring(3, n.length() - 4).toLowerCase();
+                String html = PageAssets.externalize(String.valueOf(m.invoke(null)), name.equals("index") || name.equals("setup"));
                 for (String lang : I18n.LANGUAGES) {
                     String ready = I18n.render(Layout.expand(html, lang, SUPERADMIN), lang);
                     write(new File(dir, name + (lang.equals("it") ? "" : "." + lang) + ".html"), ready);
@@ -55,6 +59,9 @@ public class PageGenerator {
                 skipped++;
             }
         }
+        Layout.registerAssets();
+        PageAssets.writeAll(dir.toPath());
+        write(new File(dir, "csp.txt"), org.mail_panel.webserver.SecurityHeaders.CONTENT_SECURITY_POLICY);
         System.out.println("generated " + done + ", skipped " + skipped);
     }
 
