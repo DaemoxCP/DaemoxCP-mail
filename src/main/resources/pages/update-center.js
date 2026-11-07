@@ -30,7 +30,9 @@
             icon.setAttribute('aria-hidden', 'true');
             const body = ucEl('div', 'flex-grow-1');
             const head = ucEl('div', 'fw-semibold', title);
-            const state = ucEl('span', 'visually-hidden', ' (' + t('uc.kind.' + kind) + ')');
+            // Le chiavi scritte per intero: I18nTest controlla che ogni testo usato esista nelle due lingue.
+            const word = { ok: t('uc.kind.ok'), todo: t('uc.kind.todo'), info: t('uc.kind.info'), error: t('uc.kind.error') }[kind] || '';
+            const state = ucEl('span', 'visually-hidden', ' (' + word + ')');
             head.append(state);
             body.append(head, ucEl('div', 'small', text));
             if (extra) body.append(extra);
